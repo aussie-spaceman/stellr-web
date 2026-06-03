@@ -18,15 +18,33 @@ const FALLBACK_EVENTS = [
   { _id: '3', title: 'North Carolina Space Design Challenge', slug: { current: 'north-carolina-space-design-challenge-2027' }, date: '2027-02-06', venue: "St Mary's School", city: 'Raleigh', state: 'NC', gradeLevel: 'High School', type: 'Space Design Challenge', tagline: 'Push the boundaries of space architecture.', registrationOpen: false, registrationOpenDate: '2026-10-01' },
 ]
 
+interface StellarEvent {
+  _id: string
+  title: string
+  slug: { current: string }
+  type?: string
+  gradeLevel?: string
+  date?: string
+  endDate?: string
+  venue?: string
+  city?: string
+  state?: string
+  tagline?: string
+  image?: { asset: { _ref: string } }
+  registrationOpen?: boolean
+  registrationOpenDate?: string
+  registrationCloseDate?: string
+}
+
 interface PageProps {
   searchParams: { type?: string; grade?: string }
 }
 
 export default async function EventsPage({ searchParams }: PageProps) {
-  const allEvents = await getAllEvents().catch(() => FALLBACK_EVENTS)
-  const events = allEvents?.length ? allEvents : FALLBACK_EVENTS
+  const allEvents: StellarEvent[] = await getAllEvents().catch(() => FALLBACK_EVENTS)
+  const events: StellarEvent[] = allEvents?.length ? allEvents : FALLBACK_EVENTS
 
-  const filtered = events.filter((e: { type?: string; gradeLevel?: string }) => {
+  const filtered = events.filter((e) => {
     if (searchParams.type && e.type !== searchParams.type) return false
     if (searchParams.grade && e.gradeLevel !== searchParams.grade) return false
     return true

@@ -26,7 +26,7 @@ export default async function EventsPage({ searchParams }: PageProps) {
   const allEvents = await getAllEvents().catch(() => FALLBACK_EVENTS)
   const events = allEvents?.length ? allEvents : FALLBACK_EVENTS
 
-  const filtered = events.filter((e) => {
+  const filtered = events.filter((e: { type?: string; gradeLevel?: string }) => {
     if (searchParams.type && e.type !== searchParams.type) return false
     if (searchParams.grade && e.gradeLevel !== searchParams.grade) return false
     return true

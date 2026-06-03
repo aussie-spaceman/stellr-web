@@ -1,0 +1,45 @@
+export const event = {
+  name: 'event',
+  title: 'Event',
+  type: 'document',
+  fields: [
+    { name: 'title', type: 'string', title: 'Event Name' },
+    { name: 'slug', type: 'slug', title: 'Slug', options: { source: 'title' } },
+    {
+      name: 'type',
+      type: 'string',
+      title: 'Type',
+      options: { list: ['Space Design Challenge', 'Environmental Design Challenge', 'Virtual'] },
+    },
+    {
+      name: 'gradeLevel',
+      type: 'string',
+      title: 'Grade Level',
+      options: { list: ['Middle School', 'High School', 'Both'] },
+    },
+    { name: 'date', type: 'date', title: 'Event Date' },
+    { name: 'endDate', type: 'date', title: 'End Date (if multi-day)' },
+    { name: 'venue', type: 'string', title: 'Venue Name' },
+    { name: 'city', type: 'string', title: 'City' },
+    { name: 'state', type: 'string', title: 'State' },
+    { name: 'tagline', type: 'string', title: 'Tagline' },
+    { name: 'description', type: 'array', title: 'Description', of: [{ type: 'block' }] },
+    { name: 'image', type: 'image', title: 'Hero Image', options: { hotspot: true } },
+    { name: 'registrationOpen', type: 'boolean', title: 'Registration Open' },
+    { name: 'registrationOpenDate', type: 'date', title: 'Registration Opens' },
+    { name: 'registrationCloseDate', type: 'date', title: 'Registration Closes' },
+    { name: 'capacity', type: 'number', title: 'Max Participants' },
+    { name: 'eligibility', type: 'string', title: 'Eligibility Notes' },
+    { name: 'featured', type: 'boolean', title: 'Feature on homepage' },
+  ],
+  orderings: [
+    {
+      title: 'Event Date, Soonest First',
+      name: 'dateAsc',
+      by: [{ field: 'date', direction: 'asc' }],
+    },
+  ],
+  preview: {
+    select: { title: 'title', subtitle: 'date', media: 'image' },
+  },
+}

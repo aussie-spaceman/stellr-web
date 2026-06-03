@@ -1,0 +1,36 @@
+{
+  "name": "stellr-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "14.2.5",
+    "react": "^18",
+    "react-dom": "^18",
+    "next-sanity": "^9.0.0",
+    "@sanity/image-url": "^1.0.2",
+    "@sanity/vision": "^3.0.0",
+    "sanity": "^3.0.0",
+    "@sanity/ui": "^2.0.0",
+    "@sanity/icons": "^3.0.0",
+    "react-hook-form": "^7.51.0",
+    "zod": "^3.23.0",
+    "@hookform/resolvers": "^3.4.0",
+    "lucide-react": "^0.378.0",
+    "@vercel/analytics": "^1.3.1"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "tailwindcss": "^3.4.1",
+    "postcss": "^8",
+    "autoprefixer": "^10.0.1"
+  }
+}

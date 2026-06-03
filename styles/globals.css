@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Placeholder brand tokens as CSS custom properties — swap when brand assets arrive */
+:root {
+  --color-navy: #0A0F1E;
+  --color-blue: #2563EB;
+  --color-blue-hover: #1D4ED8;
+  --color-white: #FFFFFF;
+  --color-grey-light: #F3F4F6;
+  --color-grey-mid: #9CA3AF;
+  --color-grey-dark: #374151;
+}
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-white text-brand-navy;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold leading-tight;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg bg-brand-blue text-white font-semibold text-sm transition-colors hover:bg-brand-blue-hover focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-navy text-brand-navy font-semibold text-sm transition-colors hover:bg-brand-navy hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-navy focus:ring-offset-2;
+  }
+
+  .btn-outline-white {
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-white text-white font-semibold text-sm transition-colors hover:bg-white hover:text-brand-navy focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2;
+  }
+
+  .section-padding {
+    @apply py-16 px-4 sm:px-6 lg:px-8;
+  }
+
+  .container-max {
+    @apply max-w-7xl mx-auto;
+  }
+}

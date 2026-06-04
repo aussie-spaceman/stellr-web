@@ -47,7 +47,7 @@ export default async function EventsPage({ searchParams }: PageProps) {
   return (
     <>
       {/* Page header */}
-      <section className="bg-brand-navy text-white py-16 px-4 sm:px-6 lg:px-8">
+      <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-4xl sm:text-5xl font-bold">Upcoming Events</h1>
           <p className="mt-3 text-lg text-gray-300 max-w-xl">

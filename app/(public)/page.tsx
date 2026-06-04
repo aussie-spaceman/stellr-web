@@ -94,7 +94,7 @@ export default async function HomePage() {
   return (
     <>
       {/* ── Hero ─────────────────────────────────────────────────────── */}
-      <section className="relative bg-brand-navy text-white overflow-hidden">
+      <section className="relative bg-brand-blue-dark text-white overflow-hidden">
         <div
           className="absolute inset-0 bg-cover bg-center opacity-20"
           style={{ backgroundImage: "url('/images/hero-stem.jpg')" }}
@@ -135,7 +135,7 @@ export default async function HomePage() {
                 className="flex flex-col items-center gap-3 p-6 bg-white rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all border border-gray-100"
               >
                 <span className="text-3xl">{card.icon}</span>
-                <span className="font-semibold text-brand-navy">{card.label}</span>
+                <span className="font-semibold text-brand-blue-dark">{card.label}</span>
                 <span className="text-xs text-brand-blue flex items-center gap-1">
                   Learn more <ArrowRight size={12} />
                 </span>
@@ -148,7 +148,7 @@ export default async function HomePage() {
       {/* ── What We Do ───────────────────────────────────────────────── */}
       <section className="section-padding">
         <div className="container-max">
-          <h2 className="text-3xl font-bold text-center text-brand-navy mb-12">
+          <h2 className="text-3xl font-bold text-center text-brand-blue-dark mb-12">
             Why Stellr Competitions Work
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -157,7 +157,7 @@ export default async function HomePage() {
                 <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-50 mb-4">
                   <item.icon size={28} className="text-brand-blue" />
                 </div>
-                <h3 className="text-xl font-bold text-brand-navy mb-3">{item.title}</h3>
+                <h3 className="text-xl font-bold text-brand-blue-dark mb-3">{item.title}</h3>
                 <p className="text-brand-grey-dark leading-relaxed">{item.body}</p>
               </div>
             ))}
@@ -169,7 +169,7 @@ export default async function HomePage() {
       <section className="bg-brand-grey-light section-padding">
         <div className="container-max">
           <div className="flex items-center justify-between mb-8">
-            <h2 className="text-3xl font-bold text-brand-navy">Upcoming Events</h2>
+            <h2 className="text-3xl font-bold text-brand-blue-dark">Upcoming Events</h2>
             <Link href="/events" className="text-brand-blue font-semibold text-sm flex items-center gap-1 hover:underline">
               View all <ArrowRight size={14} />
             </Link>
@@ -183,7 +183,7 @@ export default async function HomePage() {
       </section>
 
       {/* ── Testimonials ─────────────────────────────────────────────── */}
-      <section className="bg-brand-navy section-padding">
+      <section className="bg-brand-blue-dark section-padding">
         <div className="container-max">
           <h2 className="text-3xl font-bold text-center text-white mb-10">
             Hear From Our Community
@@ -204,7 +204,7 @@ export default async function HomePage() {
       {/* ── Membership Tiers Preview ─────────────────────────────────── */}
       <section className="section-padding">
         <div className="container-max">
-          <h2 className="text-3xl font-bold text-center text-brand-navy mb-4">
+          <h2 className="text-3xl font-bold text-center text-brand-blue-dark mb-4">
             Find Your Place in the Stellr Community
           </h2>
           <p className="text-center text-brand-grey-dark mb-12 max-w-xl mx-auto">
@@ -225,7 +225,7 @@ export default async function HomePage() {
                     Most Popular
                   </span>
                 )}
-                <h3 className="text-xl font-bold text-brand-navy">{tier.name}</h3>
+                <h3 className="text-xl font-bold text-brand-blue-dark">{tier.name}</h3>
                 <p className="text-2xl font-bold text-brand-blue mt-1">{tier.price}</p>
                 <ul className="mt-4 space-y-2">
                   {tier.benefits.map((b) => (
@@ -249,7 +249,7 @@ export default async function HomePage() {
       {/* ── Email Subscribe ───────────────────────────────────────────── */}
       <section className="bg-brand-grey-light section-padding">
         <div className="container-max max-w-xl mx-auto text-center">
-          <h2 className="text-2xl font-bold text-brand-navy mb-2">Stay in the Loop</h2>
+          <h2 className="text-2xl font-bold text-brand-blue-dark mb-2">Stay in the Loop</h2>
           <p className="text-brand-grey-dark mb-6">
             Get Stellr news, competition dates, and STEM resources in your inbox.
           </p>

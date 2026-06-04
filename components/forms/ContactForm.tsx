@@ -67,7 +67,7 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
       {/* Name */}
       <div>
-        <label htmlFor="name" className="block text-sm font-medium text-brand-navy mb-1">
+        <label htmlFor="name" className="block text-sm font-medium text-brand-blue-dark mb-1">
           Name <span className="text-red-500">*</span>
         </label>
         <input
@@ -85,7 +85,7 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
 
       {/* Email */}
       <div>
-        <label htmlFor="email" className="block text-sm font-medium text-brand-navy mb-1">
+        <label htmlFor="email" className="block text-sm font-medium text-brand-blue-dark mb-1">
           Email <span className="text-red-500">*</span>
         </label>
         <input
@@ -103,7 +103,7 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
 
       {/* Enquiry type */}
       <div>
-        <label htmlFor="type" className="block text-sm font-medium text-brand-navy mb-1">
+        <label htmlFor="type" className="block text-sm font-medium text-brand-blue-dark mb-1">
           Enquiry Type <span className="text-red-500">*</span>
         </label>
         <select
@@ -124,7 +124,7 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
 
       {/* Message */}
       <div>
-        <label htmlFor="message" className="block text-sm font-medium text-brand-navy mb-1">
+        <label htmlFor="message" className="block text-sm font-medium text-brand-blue-dark mb-1">
           Message <span className="text-red-500">*</span>
         </label>
         <textarea

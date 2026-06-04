@@ -26,7 +26,7 @@ export default async function AboutPage() {
   return (
     <>
       {/* ── Page Header ──────────────────────────────────────────────── */}
-      <section className="bg-brand-navy text-white py-16 px-4 sm:px-6 lg:px-8">
+      <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto max-w-3xl">
           <h1 className="text-4xl sm:text-5xl font-bold mb-4">
             We connect students to the future they&apos;re studying for.
@@ -56,7 +56,7 @@ export default async function AboutPage() {
       <section className="section-padding bg-brand-grey-light">
         <div className="container-max max-w-4xl">
           <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">Our Mission</p>
-          <blockquote className="text-2xl sm:text-3xl font-bold text-brand-navy leading-snug">
+          <blockquote className="text-2xl sm:text-3xl font-bold text-brand-blue-dark leading-snug">
             &ldquo;We connect student aspirations for the future to their studies today.&rdquo;
           </blockquote>
           <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -78,7 +78,7 @@ export default async function AboutPage() {
       <section id="team" className="section-padding scroll-mt-20">
         <div className="container-max">
           <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">Our Team</p>
-          <h2 className="text-3xl font-bold text-brand-navy mb-10">The people behind Stellr</h2>
+          <h2 className="text-3xl font-bold text-brand-blue-dark mb-10">The people behind Stellr</h2>
 
           {team.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
@@ -99,7 +99,7 @@ export default async function AboutPage() {
                       </div>
                     )}
                   </div>
-                  <h3 className="font-bold text-brand-navy">{member.name}</h3>
+                  <h3 className="font-bold text-brand-blue-dark">{member.name}</h3>
                   <p className="text-sm text-brand-grey-mid mt-0.5">{member.role}</p>
                   {member.bio && (
                     <p className="text-sm text-brand-grey-dark mt-2 line-clamp-3">{member.bio}</p>
@@ -126,7 +126,7 @@ export default async function AboutPage() {
                   <div className="w-32 h-32 mx-auto rounded-full bg-brand-grey-light flex items-center justify-center mb-4">
                     <span className="text-brand-grey-mid text-sm">Photo</span>
                   </div>
-                  <h3 className="font-bold text-brand-navy">Team Member</h3>
+                  <h3 className="font-bold text-brand-blue-dark">Team Member</h3>
                   <p className="text-sm text-brand-grey-mid mt-0.5">{role}</p>
                 </div>
               ))}

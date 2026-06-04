@@ -63,8 +63,8 @@ export function EventsFilterBar() {
             onClick={() => setParam('grade', opt.value)}
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors border ${
               grade === opt.value
-                ? 'bg-brand-navy text-white border-brand-navy'
-                : 'bg-white text-brand-grey-dark border-gray-200 hover:border-brand-navy hover:text-brand-navy'
+                ? 'bg-brand-blue-dark text-white border-brand-blue-dark'
+                : 'bg-white text-brand-grey-dark border-gray-200 hover:border-brand-blue-dark hover:text-brand-blue-dark'
             }`}
           >
             {opt.label}

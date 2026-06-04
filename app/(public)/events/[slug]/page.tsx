@@ -92,7 +92,7 @@ export default async function EventDetailPage({ params }: PageProps) {
       />
 
       {/* ── Hero ─────────────────────────────────────────────────────── */}
-      <section className="relative bg-brand-navy text-white">
+      <section className="relative bg-brand-blue-dark text-white">
         {event.image ? (
           <div className="relative h-72 sm:h-96">
             <Image
@@ -104,7 +104,7 @@ export default async function EventDetailPage({ params }: PageProps) {
             />
           </div>
         ) : (
-          <div className="h-48 bg-gradient-to-br from-brand-navy to-blue-900" />
+          <div className="h-48 bg-gradient-to-br from-brand-blue-dark to-blue-900" />
         )}
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 pt-8">
@@ -196,7 +196,7 @@ export default async function EventDetailPage({ params }: PageProps) {
 
               {/* Schedule placeholder */}
               <div>
-                <h2 className="text-2xl font-bold text-brand-navy mb-4">Schedule</h2>
+                <h2 className="text-2xl font-bold text-brand-blue-dark mb-4">Schedule</h2>
                 <div className="space-y-3">
                   {[
                     { time: 'Day 1 — 08:30', label: 'Registration & welcome' },
@@ -218,11 +218,11 @@ export default async function EventDetailPage({ params }: PageProps) {
 
               {/* FAQ accordion */}
               <div>
-                <h2 className="text-2xl font-bold text-brand-navy mb-4">Frequently Asked Questions</h2>
+                <h2 className="text-2xl font-bold text-brand-blue-dark mb-4">Frequently Asked Questions</h2>
                 <div className="space-y-3">
                   {PLACEHOLDER_FAQS.map((faq) => (
                     <details key={faq.q} className="group border border-gray-200 rounded-lg">
-                      <summary className="flex items-center justify-between p-4 cursor-pointer font-medium text-brand-navy list-none">
+                      <summary className="flex items-center justify-between p-4 cursor-pointer font-medium text-brand-blue-dark list-none">
                         {faq.q}
                         <span className="ml-4 shrink-0 text-brand-grey-mid group-open:rotate-180 transition-transform">▾</span>
                       </summary>
@@ -236,13 +236,13 @@ export default async function EventDetailPage({ params }: PageProps) {
             {/* Right: details panel */}
             <aside className="space-y-6">
               <div className="bg-brand-grey-light rounded-xl p-6 space-y-4">
-                <h2 className="text-lg font-bold text-brand-navy">Event Details</h2>
+                <h2 className="text-lg font-bold text-brand-blue-dark">Event Details</h2>
 
                 {event.date && (
                   <div className="flex items-start gap-3">
                     <Calendar size={18} className="text-brand-blue mt-0.5 shrink-0" />
                     <div>
-                      <p className="text-sm font-semibold text-brand-navy">Date</p>
+                      <p className="text-sm font-semibold text-brand-blue-dark">Date</p>
                       <p className="text-sm text-brand-grey-dark">{formatDateRange(event.date, event.endDate)}</p>
                     </div>
                   </div>
@@ -252,7 +252,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                   <div className="flex items-start gap-3">
                     <MapPin size={18} className="text-brand-blue mt-0.5 shrink-0" />
                     <div>
-                      <p className="text-sm font-semibold text-brand-navy">Venue</p>
+                      <p className="text-sm font-semibold text-brand-blue-dark">Venue</p>
                       {event.venue && <p className="text-sm text-brand-grey-dark">{event.venue}</p>}
                       {event.city && (
                         <p className="text-sm text-brand-grey-dark">
@@ -267,7 +267,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                   <div className="flex items-start gap-3">
                     <Calendar size={18} className="text-brand-blue mt-0.5 shrink-0" />
                     <div>
-                      <p className="text-sm font-semibold text-brand-navy">Registration Opens</p>
+                      <p className="text-sm font-semibold text-brand-blue-dark">Registration Opens</p>
                       <p className="text-sm text-brand-grey-dark">{formatDate(event.registrationOpenDate)}</p>
                     </div>
                   </div>
@@ -277,7 +277,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                   <div className="flex items-start gap-3">
                     <Calendar size={18} className="text-brand-blue mt-0.5 shrink-0" />
                     <div>
-                      <p className="text-sm font-semibold text-brand-navy">Registration Closes</p>
+                      <p className="text-sm font-semibold text-brand-blue-dark">Registration Closes</p>
                       <p className="text-sm text-brand-grey-dark">{formatDate(event.registrationCloseDate)}</p>
                     </div>
                   </div>
@@ -287,7 +287,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                   <div className="flex items-start gap-3">
                     <Users size={18} className="text-brand-blue mt-0.5 shrink-0" />
                     <div>
-                      <p className="text-sm font-semibold text-brand-navy">Capacity</p>
+                      <p className="text-sm font-semibold text-brand-blue-dark">Capacity</p>
                       <p className="text-sm text-brand-grey-dark">Up to {event.capacity} participants</p>
                     </div>
                   </div>
@@ -297,7 +297,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                   <div className="flex items-start gap-3">
                     <Users size={18} className="text-brand-blue mt-0.5 shrink-0" />
                     <div>
-                      <p className="text-sm font-semibold text-brand-navy">Eligibility</p>
+                      <p className="text-sm font-semibold text-brand-blue-dark">Eligibility</p>
                       <p className="text-sm text-brand-grey-dark">{event.eligibility}</p>
                     </div>
                   </div>
@@ -305,7 +305,7 @@ export default async function EventDetailPage({ params }: PageProps) {
               </div>
 
               {/* Side CTA */}
-              <div className="bg-brand-navy text-white rounded-xl p-6 text-center">
+              <div className="bg-brand-blue-dark text-white rounded-xl p-6 text-center">
                 <p className="font-bold text-lg mb-2">Ready to compete?</p>
                 <p className="text-sm text-gray-300 mb-4">
                   {status === 'open'

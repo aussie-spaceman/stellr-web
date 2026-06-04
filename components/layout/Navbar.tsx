@@ -59,7 +59,7 @@ export function Navbar() {
                       className={`flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                         pathname?.startsWith(link.href)
                           ? 'text-brand-blue'
-                          : 'text-brand-grey-dark hover:text-brand-navy'
+                          : 'text-brand-grey-dark hover:text-brand-blue-dark'
                       }`}
                       aria-expanded={openDropdown === link.label}
                     >
@@ -72,7 +72,7 @@ export function Navbar() {
                           <li key={item.href}>
                             <Link
                               href={item.href}
-                              className="block px-4 py-2 text-sm text-brand-grey-dark hover:bg-brand-grey-light hover:text-brand-navy transition-colors"
+                              className="block px-4 py-2 text-sm text-brand-grey-dark hover:bg-brand-grey-light hover:text-brand-blue-dark transition-colors"
                             >
                               {item.label}
                             </Link>
@@ -87,7 +87,7 @@ export function Navbar() {
                     className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       pathname === link.href
                         ? 'text-brand-blue'
-                        : 'text-brand-grey-dark hover:text-brand-navy'
+                        : 'text-brand-grey-dark hover:text-brand-blue-dark'
                     }`}
                   >
                     {link.label}
@@ -101,7 +101,7 @@ export function Navbar() {
           <div className="hidden lg:flex items-center gap-3">
             <a
               href={`${AUTH_URL}/login`}
-              className="text-sm font-medium text-brand-grey-dark hover:text-brand-navy transition-colors"
+              className="text-sm font-medium text-brand-grey-dark hover:text-brand-blue-dark transition-colors"
             >
               Log In
             </a>
@@ -115,7 +115,7 @@ export function Navbar() {
 
           {/* Mobile menu toggle */}
           <button
-            className="lg:hidden p-2 rounded-md text-brand-grey-dark hover:text-brand-navy"
+            className="lg:hidden p-2 rounded-md text-brand-grey-dark hover:text-brand-blue-dark"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={mobileOpen}
@@ -133,7 +133,7 @@ export function Navbar() {
               <div key={link.href}>
                 <Link
                   href={link.href}
-                  className="block px-3 py-3 text-base font-medium text-brand-navy border-b border-gray-100"
+                  className="block px-3 py-3 text-base font-medium text-brand-blue-dark border-b border-gray-100"
                   onClick={() => setMobileOpen(false)}
                 >
                   {link.label}
@@ -144,7 +144,7 @@ export function Navbar() {
                       <Link
                         key={item.href}
                         href={item.href}
-                        className="block px-3 py-2 text-sm text-brand-grey-dark hover:text-brand-navy"
+                        className="block px-3 py-2 text-sm text-brand-grey-dark hover:text-brand-blue-dark"
                         onClick={() => setMobileOpen(false)}
                       >
                         {item.label}

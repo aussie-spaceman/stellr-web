@@ -41,7 +41,7 @@ export function EventCard({ event }: EventCardProps) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
       {/* Image */}
-      <div className="relative h-44 bg-gradient-to-br from-brand-navy to-blue-900 flex items-center justify-center">
+      <div className="relative h-44 bg-gradient-to-br from-brand-blue-dark to-blue-900 flex items-center justify-center">
         {event.image ? (
           <Image
             src={urlFor(event.image).width(600).height(352).url()}
@@ -72,7 +72,7 @@ export function EventCard({ event }: EventCardProps) {
           </span>
         </div>
 
-        <h3 className="font-bold text-brand-navy mb-1 leading-snug">{event.title}</h3>
+        <h3 className="font-bold text-brand-blue-dark mb-1 leading-snug">{event.title}</h3>
 
         {event.date && (
           <p className="text-sm text-brand-grey-mid">

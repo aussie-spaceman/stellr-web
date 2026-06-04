@@ -157,7 +157,7 @@ function TierCard({ name, price, description, benefits, highlight, badge, cta, h
       {badge && (
         <span className="inline-block text-xs font-bold uppercase tracking-wider text-brand-blue mb-3">{badge}</span>
       )}
-      <h3 className="text-xl font-bold text-brand-navy">{name}</h3>
+      <h3 className="text-xl font-bold text-brand-blue-dark">{name}</h3>
       <p className="text-2xl font-bold text-brand-blue mt-1">{price}</p>
       <p className="text-sm text-brand-grey-mid mt-1 mb-4">{description}</p>
       <ul className="space-y-2 flex-1">
@@ -169,7 +169,7 @@ function TierCard({ name, price, description, benefits, highlight, badge, cta, h
         ))}
       </ul>
       {cta && href && (
-        <a href={href} className={`mt-6 btn-primary w-full justify-center text-sm ${!highlight ? 'bg-brand-navy hover:bg-gray-900' : ''}`}>
+        <a href={href} className={`mt-6 btn-primary w-full justify-center text-sm ${!highlight ? 'bg-brand-blue-dark hover:bg-gray-900' : ''}`}>
           {cta}
         </a>
       )}
@@ -181,7 +181,7 @@ export default function MembershipPage() {
   return (
     <>
       {/* ── Page Header ──────────────────────────────────────────────── */}
-      <section className="bg-brand-navy text-white py-16 px-4 sm:px-6 lg:px-8">
+      <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-4xl sm:text-5xl font-bold mb-4">Find Your Place in the Stellr Community</h1>
           <p className="text-lg text-gray-300 max-w-xl">
@@ -193,7 +193,7 @@ export default function MembershipPage() {
       {/* ── Student Tiers ─────────────────────────────────────────────── */}
       <section className="section-padding">
         <div className="container-max">
-          <h2 className="text-2xl font-bold text-brand-navy mb-2">For Students (Disruptors)</h2>
+          <h2 className="text-2xl font-bold text-brand-blue-dark mb-2">For Students (Disruptors)</h2>
           <p className="text-brand-grey-dark mb-8">Compete, connect, and grow your STEM career from day one.</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {studentTiers.map((tier) => (
@@ -206,7 +206,7 @@ export default function MembershipPage() {
       {/* ── Mentor Tiers ─────────────────────────────────────────────── */}
       <section className="section-padding bg-brand-grey-light">
         <div className="container-max">
-          <h2 className="text-2xl font-bold text-brand-navy mb-2">For Mentors &amp; Alumni (Catalysts)</h2>
+          <h2 className="text-2xl font-bold text-brand-blue-dark mb-2">For Mentors &amp; Alumni (Catalysts)</h2>
           <p className="text-brand-grey-dark mb-8">Give back to the next generation while growing your own network.</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {mentorTiers.map((tier) => (
@@ -219,7 +219,7 @@ export default function MembershipPage() {
       {/* ── Educator Tiers ───────────────────────────────────────────── */}
       <section className="section-padding">
         <div className="container-max">
-          <h2 className="text-2xl font-bold text-brand-navy mb-2">For Educators &amp; Professionals</h2>
+          <h2 className="text-2xl font-bold text-brand-blue-dark mb-2">For Educators &amp; Professionals</h2>
           <p className="text-brand-grey-dark mb-8">Bring your students to the best STEM competition experience in the country.</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {educatorTiers.map((tier) => (
@@ -232,11 +232,11 @@ export default function MembershipPage() {
       {/* ── FAQ ──────────────────────────────────────────────────────── */}
       <section className="section-padding bg-brand-grey-light">
         <div className="container-max max-w-3xl">
-          <h2 className="text-2xl font-bold text-brand-navy mb-8">Frequently Asked Questions</h2>
+          <h2 className="text-2xl font-bold text-brand-blue-dark mb-8">Frequently Asked Questions</h2>
           <div className="space-y-3">
             {faqs.map((faq) => (
               <details key={faq.q} className="group bg-white border border-gray-200 rounded-lg">
-                <summary className="flex items-center justify-between p-5 cursor-pointer font-medium text-brand-navy list-none">
+                <summary className="flex items-center justify-between p-5 cursor-pointer font-medium text-brand-blue-dark list-none">
                   {faq.q}
                   <span className="ml-4 shrink-0 text-brand-grey-mid group-open:rotate-180 transition-transform">▾</span>
                 </summary>
@@ -250,7 +250,7 @@ export default function MembershipPage() {
       {/* ── CTA ──────────────────────────────────────────────────────── */}
       <section className="section-padding">
         <div className="container-max text-center">
-          <h2 className="text-2xl font-bold text-brand-navy mb-4">Ready to get started?</h2>
+          <h2 className="text-2xl font-bold text-brand-blue-dark mb-4">Ready to get started?</h2>
           <div className="flex flex-wrap justify-center gap-4">
             <a href={`${AUTH_URL}/signup`} className="btn-primary text-base px-8 py-4">
               Create Free Account

@@ -47,7 +47,7 @@ export default async function DonatePage() {
   return (
     <>
       {/* ── Hero ─────────────────────────────────────────────────────── */}
-      <section className="bg-brand-navy text-white py-20 px-4 sm:px-6 lg:px-8">
+      <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto max-w-3xl">
           <h1 className="text-4xl sm:text-5xl font-bold mb-6">
             Support the next generation of STEM leaders.
@@ -80,14 +80,14 @@ export default async function DonatePage() {
       {/* ── Impact ───────────────────────────────────────────────────── */}
       <section className="section-padding">
         <div className="container-max">
-          <h2 className="text-3xl font-bold text-brand-navy text-center mb-12">Your Impact</h2>
+          <h2 className="text-3xl font-bold text-brand-blue-dark text-center mb-12">Your Impact</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {impactItems.map((item) => (
               <div key={item.title} className="text-center">
                 <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-50 mb-4">
                   <item.icon size={28} className="text-brand-blue" />
                 </div>
-                <h3 className="text-xl font-bold text-brand-navy mb-2">{item.title}</h3>
+                <h3 className="text-xl font-bold text-brand-blue-dark mb-2">{item.title}</h3>
                 <p className="text-brand-grey-dark leading-relaxed">{item.body}</p>
               </div>
             ))}
@@ -117,12 +117,12 @@ export default async function DonatePage() {
       {donorTestimonials.length > 0 && (
         <section className="section-padding bg-brand-grey-light">
           <div className="container-max max-w-3xl">
-            <h2 className="text-2xl font-bold text-brand-navy mb-8 text-center">From Our Donors</h2>
+            <h2 className="text-2xl font-bold text-brand-blue-dark mb-8 text-center">From Our Donors</h2>
             <div className="space-y-6">
               {donorTestimonials.map((t) => (
                 <blockquote key={t._id} className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
                   <p className="text-brand-grey-dark italic">&ldquo;{t.quote}&rdquo;</p>
-                  <footer className="mt-3 text-sm font-semibold text-brand-navy">
+                  <footer className="mt-3 text-sm font-semibold text-brand-blue-dark">
                     — {t.author}{t.event ? `, ${t.event}` : ''}
                   </footer>
                 </blockquote>

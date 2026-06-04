@@ -6,7 +6,7 @@ interface LogoProps {
 }
 
 export function Logo({ variant = 'dark', className = '' }: LogoProps) {
-  const textColor = variant === 'light' ? 'text-white' : 'text-brand-navy'
+  const textColor = variant === 'light' ? 'text-white' : 'text-brand-blue-dark'
   const dotColor = variant === 'light' ? 'text-blue-400' : 'text-brand-blue'
 
   return (

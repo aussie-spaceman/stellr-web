@@ -47,7 +47,7 @@ export default async function NewsArticlePage({ params }: PageProps) {
   return (
     <>
       {/* ── Hero ─────────────────────────────────────────────────────── */}
-      <section className="bg-brand-navy text-white">
+      <section className="bg-brand-blue-dark text-white">
         {post.coverImage && (
           <div className="relative h-64 sm:h-80">
             <Image
@@ -97,11 +97,11 @@ export default async function NewsArticlePage({ params }: PageProps) {
       {related.length > 0 && (
         <section className="section-padding bg-brand-grey-light">
           <div className="container-max">
-            <h2 className="text-2xl font-bold text-brand-navy mb-8">Related Articles</h2>
+            <h2 className="text-2xl font-bold text-brand-blue-dark mb-8">Related Articles</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {related.map((rel: { _id: string; title: string; slug: { current: string }; publishedAt?: string; category?: string; excerpt?: string; coverImage?: { asset: { _ref: string } } }) => (
                 <article key={rel._id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-                  <div className="relative h-40 bg-gradient-to-br from-brand-navy to-blue-900">
+                  <div className="relative h-40 bg-gradient-to-br from-brand-blue-dark to-blue-900">
                     {rel.coverImage && (
                       <Image
                         src={urlFor(rel.coverImage).width(400).height(240).url()}
@@ -115,7 +115,7 @@ export default async function NewsArticlePage({ params }: PageProps) {
                     {rel.publishedAt && (
                       <p className="text-xs text-brand-grey-mid mb-1">{formatDate(rel.publishedAt)}</p>
                     )}
-                    <h3 className="font-bold text-brand-navy text-sm leading-snug mb-2">{rel.title}</h3>
+                    <h3 className="font-bold text-brand-blue-dark text-sm leading-snug mb-2">{rel.title}</h3>
                     <Link
                       href={`/news/${rel.slug.current}`}
                       className="inline-flex items-center gap-1 text-xs font-semibold text-brand-blue hover:underline"
@@ -133,7 +133,7 @@ export default async function NewsArticlePage({ params }: PageProps) {
       {/* ── Subscribe Strip ───────────────────────────────────────────── */}
       <section className="section-padding">
         <div className="container-max max-w-xl mx-auto text-center">
-          <h2 className="text-2xl font-bold text-brand-navy mb-2">Stay in the Loop</h2>
+          <h2 className="text-2xl font-bold text-brand-blue-dark mb-2">Stay in the Loop</h2>
           <p className="text-brand-grey-dark mb-6">
             Get Stellr news, competition dates, and STEM resources in your inbox.
           </p>

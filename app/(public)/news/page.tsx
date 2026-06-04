@@ -50,7 +50,7 @@ export default async function NewsPage({ searchParams }: PageProps) {
   return (
     <>
       {/* ── Page Header ──────────────────────────────────────────────── */}
-      <section className="bg-brand-navy text-white py-16 px-4 sm:px-6 lg:px-8">
+      <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-4xl sm:text-5xl font-bold mb-3">News &amp; Announcements</h1>
           <p className="text-lg text-gray-300">The latest from Stellr Education.</p>
@@ -84,7 +84,7 @@ export default async function NewsPage({ searchParams }: PageProps) {
               {filtered.map((post) => (
                 <article key={post._id} className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col">
                   {/* Cover image */}
-                  <div className="relative h-48 bg-gradient-to-br from-brand-navy to-blue-900">
+                  <div className="relative h-48 bg-gradient-to-br from-brand-blue-dark to-blue-900">
                     {post.coverImage ? (
                       <Image
                         src={urlFor(post.coverImage).width(600).height(384).url()}
@@ -109,7 +109,7 @@ export default async function NewsPage({ searchParams }: PageProps) {
                       )}
                     </div>
 
-                    <h2 className="font-bold text-brand-navy leading-snug mb-2">{post.title}</h2>
+                    <h2 className="font-bold text-brand-blue-dark leading-snug mb-2">{post.title}</h2>
 
                     {post.excerpt && (
                       <p className="text-sm text-brand-grey-dark line-clamp-3 flex-1">{post.excerpt}</p>

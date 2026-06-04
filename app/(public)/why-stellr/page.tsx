@@ -35,7 +35,7 @@ function TestimonialBlock({ testimonials }: { testimonials: Testimonial[] }) {
       {testimonials.slice(0, 2).map((t) => (
         <blockquote key={t._id} className="border-l-4 border-brand-blue pl-5 italic text-brand-grey-dark">
           <p>&ldquo;{t.quote}&rdquo;</p>
-          <footer className="mt-2 text-sm font-semibold text-brand-navy not-italic">
+          <footer className="mt-2 text-sm font-semibold text-brand-blue-dark not-italic">
             — {t.author}{t.event ? `, ${t.event}` : ''}
           </footer>
         </blockquote>
@@ -56,7 +56,7 @@ export default async function WhyStellarPage() {
   return (
     <>
       {/* ── Page Header ──────────────────────────────────────────────── */}
-      <section className="bg-brand-navy text-white py-16 px-4 sm:px-6 lg:px-8">
+      <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-4xl sm:text-5xl font-bold mb-4">Why Stellr?</h1>
           <p className="text-lg text-gray-300 mb-8 max-w-xl">
@@ -80,7 +80,7 @@ export default async function WhyStellarPage() {
       <section id="student" className="section-padding scroll-mt-20">
         <div className="container-max max-w-4xl">
           <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">For Students</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-brand-navy mb-6">
+          <h2 className="text-3xl sm:text-4xl font-bold text-brand-blue-dark mb-6">
             Learn what it&apos;s really like to work in industry — before you get there.
           </h2>
           <div className="space-y-4 text-brand-grey-dark">
@@ -118,7 +118,7 @@ export default async function WhyStellarPage() {
       <section id="teacher" className="section-padding bg-brand-grey-light scroll-mt-20">
         <div className="container-max max-w-4xl">
           <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">For Teachers</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-brand-navy mb-6">
+          <h2 className="text-3xl sm:text-4xl font-bold text-brand-blue-dark mb-6">
             One of the only multi-disciplinary STEM competitions available to your students.
           </h2>
           <p className="text-lg text-brand-grey-dark mb-8">
@@ -137,7 +137,7 @@ export default async function WhyStellarPage() {
               </li>
             ))}
           </ul>
-          <div className="mt-8 p-6 bg-brand-navy text-white rounded-xl">
+          <div className="mt-8 p-6 bg-brand-blue-dark text-white rounded-xl">
             <p className="text-2xl font-bold">90%</p>
             <p className="text-blue-200 mt-1">of Stellr participants pursue STEM or medicine at college — a measurable outcome you can point to.</p>
           </div>
@@ -156,7 +156,7 @@ export default async function WhyStellarPage() {
       <section id="parent" className="section-padding scroll-mt-20">
         <div className="container-max max-w-4xl">
           <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">For Parents</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-brand-navy mb-6">
+          <h2 className="text-3xl sm:text-4xl font-bold text-brand-blue-dark mb-6">
             Give your child an experience they&apos;ll talk about for years.
           </h2>
           <p className="text-lg text-brand-grey-dark mb-8">
@@ -166,7 +166,7 @@ export default async function WhyStellarPage() {
             <blockquote className="text-lg italic text-brand-grey-dark">
               &ldquo;My son said it was one of the most exciting, exhilarating, challenging and memorable events in his life.&rdquo;
             </blockquote>
-            <p className="mt-2 text-sm font-semibold text-brand-navy">— Parent, 2022</p>
+            <p className="mt-2 text-sm font-semibold text-brand-blue-dark">— Parent, 2022</p>
           </div>
           <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
@@ -175,7 +175,7 @@ export default async function WhyStellarPage() {
               { title: 'Mentored environment', body: 'Industry professionals guide teams — not just judges, but active mentors.' },
             ].map((item) => (
               <div key={item.title} className="p-5 bg-brand-grey-light rounded-xl">
-                <p className="font-bold text-brand-navy mb-1">{item.title}</p>
+                <p className="font-bold text-brand-blue-dark mb-1">{item.title}</p>
                 <p className="text-sm text-brand-grey-dark">{item.body}</p>
               </div>
             ))}
@@ -195,7 +195,7 @@ export default async function WhyStellarPage() {
       <section id="mentor" className="section-padding bg-brand-grey-light scroll-mt-20">
         <div className="container-max max-w-4xl">
           <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">For Mentors</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-brand-navy mb-6">
+          <h2 className="text-3xl sm:text-4xl font-bold text-brand-blue-dark mb-6">
             Give back. Grow your network. Stay connected to the next generation.
           </h2>
           <div className="space-y-4 text-brand-grey-dark">
@@ -207,7 +207,7 @@ export default async function WhyStellarPage() {
             </p>
           </div>
           <div className="mt-6 p-5 bg-white rounded-xl border border-gray-200">
-            <p className="font-bold text-brand-navy mb-1">Alumni upgrade</p>
+            <p className="font-bold text-brand-blue-dark mb-1">Alumni upgrade</p>
             <p className="text-sm text-brand-grey-dark">
               Former student participants automatically receive Alumni membership upon graduating — staying connected to the Stellr community as they enter industry.
             </p>
@@ -227,7 +227,7 @@ export default async function WhyStellarPage() {
       <section id="donor" className="section-padding scroll-mt-20">
         <div className="container-max max-w-4xl">
           <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">For Donors &amp; Sponsors</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-brand-navy mb-6">
+          <h2 className="text-3xl sm:text-4xl font-bold text-brand-blue-dark mb-6">
             Invest in the next generation of STEM leaders.
           </h2>
           <div className="space-y-4 text-brand-grey-dark">
@@ -246,14 +246,14 @@ export default async function WhyStellarPage() {
               { title: 'Legacy giving', body: 'Make a lasting contribution to STEM education in the US.' },
             ].map((item) => (
               <div key={item.title} className="p-5 bg-brand-grey-light rounded-xl">
-                <p className="font-bold text-brand-navy mb-1">{item.title}</p>
+                <p className="font-bold text-brand-blue-dark mb-1">{item.title}</p>
                 <p className="text-sm text-brand-grey-dark">{item.body}</p>
               </div>
             ))}
           </div>
           <div className="mt-8 p-6 bg-brand-grey-light rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <div className="flex-1">
-              <p className="font-bold text-brand-navy">Download Sponsor Prospectus</p>
+              <p className="font-bold text-brand-blue-dark">Download Sponsor Prospectus</p>
               <p className="text-sm text-brand-grey-dark mt-1">Full sponsorship packages, reach statistics, and impact data.</p>
             </div>
             <Link href="/contact?type=sponsorship" className="btn-primary shrink-0">

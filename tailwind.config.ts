@@ -9,19 +9,28 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Placeholder brand tokens — swap for final brand palette when assets arrive
         brand: {
-          navy:    '#0A0F1E',
-          blue:    '#2563EB',
-          'blue-hover': '#1D4ED8',
-          white:   '#FFFFFF',
-          'grey-light': '#F3F4F6',
-          'grey-mid':   '#9CA3AF',
-          'grey-dark':  '#374151',
+          blue:         '#0d439d',
+          'blue-dark':  '#051535',
+          orange:       '#dda33b',
+          'orange-alt': '#da6220',
+          white:        '#fefefe',
+          grey:         '#969696',
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Archivo Black', 'system-ui', 'sans-serif'],
+        heading: ['Norwester', 'system-ui', 'sans-serif'],
+        subheading: ['Fredoka', 'system-ui', 'sans-serif'],
+        sans: ['Aileron', 'system-ui', 'sans-serif'],
+      },
+      fontSize: {
+        'display': ['60pt', { lineHeight: '1.1' }],
+        'h1':      ['32pt', { lineHeight: '1.2' }],
+        'h2':      ['24pt', { lineHeight: '1.3' }],
+        'h3':      ['16pt', { lineHeight: '1.4' }],
+        'body':    ['12pt', { lineHeight: '1.6' }],
+        'caption': ['9pt',  { lineHeight: '1.4' }],
       },
     },
   },

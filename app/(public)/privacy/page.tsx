@@ -20,9 +20,9 @@ export default function PrivacyPage() {
         <h2 className="text-xl font-bold text-brand-navy">3. Minors</h2>
         <p>Stellr events serve students as young as middle school age. We collect only the minimum data necessary for participation. Parental consent is obtained during event registration for participants under 13.</p>
         <h2 className="text-xl font-bold text-brand-navy">4. Your Rights</h2>
-        <p>You may request access to, correction of, or deletion of your personal data at any time by emailing contact@stellreducation.org.</p>
+        <p>You may request access to, correction of, or deletion of your personal data at any time by emailing david.shaw@insimeducation.com.</p>
         <h2 className="text-xl font-bold text-brand-navy">5. Contact</h2>
-        <p>Questions about this policy: <a href="mailto:contact@stellreducation.org" className="text-brand-blue hover:underline">contact@stellreducation.org</a></p>
+        <p>Questions about this policy: <a href="mailto:david.shaw@insimeducation.com" className="text-brand-blue hover:underline">david.shaw@insimeducation.com</a></p>
       </div>
     </div>
   )

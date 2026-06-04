@@ -50,10 +50,10 @@ export default function ContactPage({ searchParams }: PageProps) {
                   <div>
                     <p className="text-sm font-semibold text-brand-navy">Email</p>
                     <a
-                      href="mailto:contact@stellreducation.org"
+                      href="mailto:david.shaw@insimeducation.com"
                       className="text-sm text-brand-blue hover:underline"
                     >
-                      contact@stellreducation.org
+                      david.shaw@insimeducation.com
                     </a>
                   </div>
                 </div>

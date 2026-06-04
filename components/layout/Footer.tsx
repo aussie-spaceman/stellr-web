@@ -80,10 +80,10 @@ export function Footer() {
         <div className="mt-12 pt-8 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-400">
           <p>© 2026 Stellr Education. All rights reserved.</p>
           <a
-            href="mailto:contact@stellreducation.org"
+            href="mailto:david.shaw@insimeducation.com"
             className="hover:text-white transition-colors"
           >
-            contact@stellreducation.org
+            david.shaw@insimeducation.com
           </a>
         </div>
       </div>

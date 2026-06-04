@@ -18,8 +18,9 @@ export const client = sanityConfigured
 const builder = client ? imageUrlBuilder(client) : null
 
 export function urlFor(source: SanityImageSource) {
-  if (!builder) return { url: () => '' }
-  return builder.image(source)
+  // builder is only null when Sanity isn't configured.
+  // In that case we never have real image sources, so this cast is safe.
+  return builder!.image(source)
 }
 
 // ── GROQ Queries ──────────────────────────────────────────────────────────────

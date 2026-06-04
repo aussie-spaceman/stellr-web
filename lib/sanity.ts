@@ -2,25 +2,32 @@ import { createClient } from 'next-sanity'
 import imageUrlBuilder from '@sanity/image-url'
 import type { SanityImageSource } from '@sanity/image-url/lib/types/types'
 
-export const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!
+export const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
 export const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production'
 const apiVersion = '2024-01-01'
 
-export const client = createClient({
-  projectId,
-  dataset,
-  apiVersion,
-  useCdn: true,
-})
+// Only create the client when a real project ID is present.
+// During build without env vars configured, all queries return null/[] via the
+// fallback data in each page — no client needed.
+const sanityConfigured = Boolean(projectId && projectId.length > 0)
 
-const builder = imageUrlBuilder(client)
+export const client = sanityConfigured
+  ? createClient({ projectId: projectId!, dataset, apiVersion, useCdn: true })
+  : null
+
+const builder = client ? imageUrlBuilder(client) : null
+
 export function urlFor(source: SanityImageSource) {
+  if (!builder) return { url: () => '' }
   return builder.image(source)
 }
 
 // ── GROQ Queries ──────────────────────────────────────────────────────────────
+// Every query returns null when Sanity is not configured.
+// Pages handle null by falling back to static seed data.
 
 export async function getFeaturedEvents() {
+  if (!client) return null
   return client.fetch(`
     *[_type == "event" && featured == true] | order(date asc) [0...3] {
       _id, title, slug, type, gradeLevel, date, endDate,
@@ -31,6 +38,7 @@ export async function getFeaturedEvents() {
 }
 
 export async function getAllEvents() {
+  if (!client) return null
   return client.fetch(`
     *[_type == "event"] | order(date asc) {
       _id, title, slug, type, gradeLevel, date, endDate,
@@ -41,6 +49,7 @@ export async function getAllEvents() {
 }
 
 export async function getEventBySlug(slug: string) {
+  if (!client) return null
   return client.fetch(
     `*[_type == "event" && slug.current == $slug][0] {
       _id, title, slug, type, gradeLevel, date, endDate,
@@ -53,6 +62,7 @@ export async function getEventBySlug(slug: string) {
 }
 
 export async function getFeaturedTestimonials() {
+  if (!client) return null
   return client.fetch(`
     *[_type == "testimonial" && featured == true] {
       _id, quote, author, role, event, videoUrl, photo
@@ -61,6 +71,7 @@ export async function getFeaturedTestimonials() {
 }
 
 export async function getTestimonialsByRole(role: string) {
+  if (!client) return null
   return client.fetch(
     `*[_type == "testimonial" && role == $role] {
       _id, quote, author, role, event, videoUrl, photo
@@ -70,6 +81,7 @@ export async function getTestimonialsByRole(role: string) {
 }
 
 export async function getTeamMembers() {
+  if (!client) return null
   return client.fetch(`
     *[_type == "teamMember"] | order(order asc) {
       _id, name, role, bio, photo, linkedIn
@@ -78,6 +90,7 @@ export async function getTeamMembers() {
 }
 
 export async function getAllNewsPosts() {
+  if (!client) return null
   return client.fetch(`
     *[_type == "newsPost"] | order(publishedAt desc) {
       _id, title, slug, publishedAt, category, excerpt, coverImage
@@ -86,6 +99,7 @@ export async function getAllNewsPosts() {
 }
 
 export async function getNewsPostBySlug(slug: string) {
+  if (!client) return null
   return client.fetch(
     `*[_type == "newsPost" && slug.current == $slug][0] {
       _id, title, slug, publishedAt, category, excerpt, body, coverImage
@@ -95,6 +109,7 @@ export async function getNewsPostBySlug(slug: string) {
 }
 
 export async function getRelatedNewsPosts(category: string, excludeId: string) {
+  if (!client) return null
   return client.fetch(
     `*[_type == "newsPost" && category == $category && _id != $excludeId] | order(publishedAt desc) [0...3] {
       _id, title, slug, publishedAt, category, excerpt, coverImage
@@ -104,5 +119,6 @@ export async function getRelatedNewsPosts(category: string, excludeId: string) {
 }
 
 export async function getSiteSettings() {
+  if (!client) return null
   return client.fetch(`*[_type == "siteSettings"][0]`)
 }

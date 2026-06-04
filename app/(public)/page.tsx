@@ -77,13 +77,6 @@ interface StellarEvent {
   registrationCloseDate?: string
 }
 
-// Fallback events shown before Sanity is seeded
-const FALLBACK_EVENTS: StellarEvent[] = [
-  { _id: '1', title: 'Nevada Space Design Challenge', slug: { current: 'nevada-space-design-challenge-2026' }, date: '2026-11-06', endDate: '2026-11-07', city: 'Las Vegas', state: 'NV', gradeLevel: 'High School', type: 'Space Design Challenge', registrationOpen: false, registrationOpenDate: '2026-08-01' },
-  { _id: '2', title: 'Minnesota Environmental Design Challenge', slug: { current: 'minnesota-environmental-design-challenge-2026' }, date: '2026-11-24', city: 'Mankato', state: 'MN', gradeLevel: 'High School', type: 'Environmental Design Challenge', registrationOpen: false, registrationOpenDate: '2026-08-01' },
-  { _id: '3', title: 'North Carolina Space Design Challenge', slug: { current: 'north-carolina-space-design-challenge-2027' }, date: '2027-02-06', city: 'Raleigh', state: 'NC', gradeLevel: 'High School', type: 'Space Design Challenge', registrationOpen: false, registrationOpenDate: '2026-10-01' },
-]
-
 export default async function HomePage() {
   const authUrl = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
@@ -94,7 +87,7 @@ export default async function HomePage() {
 
   const events: StellarEvent[] = featuredEvents.status === 'fulfilled' && featuredEvents.value?.length
     ? featuredEvents.value
-    : FALLBACK_EVENTS
+    : []
 
   const testimonialData = testimonials.status === 'fulfilled' ? testimonials.value ?? [] : []
 

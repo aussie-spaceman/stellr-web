@@ -9,57 +9,7 @@ import { PortableText } from 'next-sanity'
 
 export const revalidate = 3600
 
-// Fallback data for the 3 confirmed events before Sanity is seeded
-const FALLBACK_EVENTS: Record<string, FallbackEvent> = {
-  'nevada-space-design-challenge-2026': {
-    _id: '1',
-    title: 'Nevada Space Design Challenge',
-    slug: { current: 'nevada-space-design-challenge-2026' },
-    type: 'Space Design Challenge',
-    gradeLevel: 'High School',
-    date: '2026-11-06',
-    endDate: '2026-11-07',
-    venue: 'UNLV',
-    city: 'Las Vegas',
-    state: 'NV',
-    tagline: 'Design a habitat for the next generation of space explorers.',
-    registrationOpen: false,
-    registrationOpenDate: '2026-08-01',
-    eligibility: 'Open to high school students (grades 9–12). Teams of 4–6.',
-  },
-  'minnesota-environmental-design-challenge-2026': {
-    _id: '2',
-    title: 'Minnesota Environmental Design Challenge',
-    slug: { current: 'minnesota-environmental-design-challenge-2026' },
-    type: 'Environmental Design Challenge',
-    gradeLevel: 'High School',
-    date: '2026-11-24',
-    venue: 'MSU Mankato',
-    city: 'Mankato',
-    state: 'MN',
-    tagline: 'Engineer solutions to real-world environmental problems.',
-    registrationOpen: false,
-    registrationOpenDate: '2026-08-01',
-    eligibility: 'Open to high school students (grades 9–12). Teams of 4–6.',
-  },
-  'north-carolina-space-design-challenge-2027': {
-    _id: '3',
-    title: 'North Carolina Space Design Challenge',
-    slug: { current: 'north-carolina-space-design-challenge-2027' },
-    type: 'Space Design Challenge',
-    gradeLevel: 'High School',
-    date: '2027-02-06',
-    venue: "St Mary's School",
-    city: 'Raleigh',
-    state: 'NC',
-    tagline: 'Push the boundaries of space architecture.',
-    registrationOpen: false,
-    registrationOpenDate: '2026-10-01',
-    eligibility: 'Open to high school students (grades 9–12). Teams of 4–6.',
-  },
-}
-
-interface FallbackEvent {
+interface EventData {
   _id: string
   title: string
   slug: { current: string }
@@ -85,7 +35,7 @@ interface PageProps {
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const event = await getEventBySlug(params.slug).catch(() => null) ?? FALLBACK_EVENTS[params.slug]
+  const event: EventData | null = await getEventBySlug(params.slug).catch(() => null)
   if (!event) return { title: 'Event Not Found' }
   return {
     title: event.title,
@@ -110,7 +60,7 @@ const PLACEHOLDER_FAQS = [
 ]
 
 export default async function EventDetailPage({ params }: PageProps) {
-  const event = await getEventBySlug(params.slug).catch(() => null) ?? FALLBACK_EVENTS[params.slug]
+  const event: EventData | null = await getEventBySlug(params.slug).catch(() => null)
   if (!event) notFound()
 
   const authUrl = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'

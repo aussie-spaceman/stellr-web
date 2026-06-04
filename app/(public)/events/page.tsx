@@ -11,12 +11,6 @@ export const metadata: Metadata = {
 
 export const revalidate = 3600
 
-// Fallback events before Sanity is seeded
-const FALLBACK_EVENTS = [
-  { _id: '1', title: 'Nevada Space Design Challenge', slug: { current: 'nevada-space-design-challenge-2026' }, date: '2026-11-06', endDate: '2026-11-07', venue: 'UNLV', city: 'Las Vegas', state: 'NV', gradeLevel: 'High School', type: 'Space Design Challenge', tagline: 'Design a habitat for the next generation of space explorers.', registrationOpen: false, registrationOpenDate: '2026-08-01' },
-  { _id: '2', title: 'Minnesota Environmental Design Challenge', slug: { current: 'minnesota-environmental-design-challenge-2026' }, date: '2026-11-24', venue: 'MSU Mankato', city: 'Mankato', state: 'MN', gradeLevel: 'High School', type: 'Environmental Design Challenge', tagline: 'Engineer solutions to real-world environmental problems.', registrationOpen: false, registrationOpenDate: '2026-08-01' },
-  { _id: '3', title: 'North Carolina Space Design Challenge', slug: { current: 'north-carolina-space-design-challenge-2027' }, date: '2027-02-06', venue: "St Mary's School", city: 'Raleigh', state: 'NC', gradeLevel: 'High School', type: 'Space Design Challenge', tagline: 'Push the boundaries of space architecture.', registrationOpen: false, registrationOpenDate: '2026-10-01' },
-]
 
 interface StellarEvent {
   _id: string
@@ -41,8 +35,8 @@ interface PageProps {
 }
 
 export default async function EventsPage({ searchParams }: PageProps) {
-  const allEvents: StellarEvent[] = await getAllEvents().catch(() => FALLBACK_EVENTS)
-  const events: StellarEvent[] = allEvents?.length ? allEvents : FALLBACK_EVENTS
+  const allEvents: StellarEvent[] = await getAllEvents().catch(() => []) ?? []
+  const events: StellarEvent[] = allEvents
 
   const filtered = events.filter((e) => {
     if (searchParams.type && e.type !== searchParams.type) return false

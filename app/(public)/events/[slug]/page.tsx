@@ -64,7 +64,6 @@ export default async function EventDetailPage({ params }: PageProps) {
   const event: EventData | null = await getEventBySlug(params.slug).catch(() => null)
   if (!event) notFound()
 
-  const authUrl = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
   const status = registrationStatus(event.registrationOpen ?? false, event.registrationOpenDate, event.registrationCloseDate)
   const { label: statusLabel, className: statusClass } = statusConfig[status]
 
@@ -144,7 +143,7 @@ export default async function EventDetailPage({ params }: PageProps) {
           {/* Hero CTAs */}
           <div className="mt-8 flex flex-wrap gap-4">
             <a
-              href={`${authUrl}/register/${params.slug}`}
+              href={`/register/${params.slug}`}
               className="btn-primary text-base px-8 py-4"
             >
               Register Now
@@ -316,7 +315,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                 </p>
                 {status !== 'closed' && (
                   <a
-                    href={`${authUrl}/register/${params.slug}`}
+                    href={`/register/${params.slug}`}
                     className="btn-primary w-full justify-center text-sm"
                   >
                     {status === 'open' ? 'Register Now' : 'Get Notified'}
@@ -340,13 +339,13 @@ export default async function EventDetailPage({ params }: PageProps) {
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <a
-              href={`${authUrl}/register/${params.slug}?type=individual`}
+              href={`/register/${params.slug}/individual`}
               className="btn-outline-white text-base px-8 py-4"
             >
               Register as an Individual
             </a>
             <a
-              href={`${authUrl}/register/${params.slug}?type=group`}
+              href={`/register/${params.slug}/group`}
               className="bg-white text-brand-blue font-semibold text-base px-8 py-4 rounded-lg hover:bg-blue-50 transition-colors"
             >
               Register a Group

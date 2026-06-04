@@ -103,4 +103,16 @@
   .container-max {
     @apply max-w-7xl mx-auto;
   }
+
+  .input-field {
+    @apply w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-brand-blue-dark bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent placeholder:text-gray-400;
+  }
+
+  .label-text {
+    @apply block text-sm font-medium text-brand-blue-dark mb-1;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-blue text-brand-blue font-semibold text-sm transition-colors hover:bg-brand-blue hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
+  }
 }

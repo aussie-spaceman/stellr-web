@@ -14,7 +14,8 @@ const config: Config = {
           'blue-dark':  '#051535',
           orange:       '#dda33b',
           'orange-alt': '#da6220',
-          white:        '#fefefe',
+          white:        '#fefefe',  /* backgrounds only */
+          'white-text': '#ffffff',  /* pure white for text/icons */
           grey:         '#969696',
         },
       },

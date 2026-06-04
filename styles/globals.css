@@ -62,7 +62,8 @@
   --color-orange:       #dda33b;
   --color-orange-alt:   #da6220;
   /* Neutral */
-  --color-white:        #fefefe;
+  --color-white:        #fefefe;  /* backgrounds only */
+  --color-white-text:   #ffffff;  /* pure white for text/icons */
   --color-grey:         #969696;
 }
 
@@ -84,15 +85,15 @@
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg bg-brand-blue text-brand-white font-semibold text-sm transition-colors hover:bg-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg bg-brand-blue text-brand-white-text font-semibold text-sm transition-colors hover:bg-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-blue text-brand-blue font-semibold text-sm transition-colors hover:bg-brand-blue hover:text-brand-white focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-blue text-brand-blue font-semibold text-sm transition-colors hover:bg-brand-blue hover:text-brand-white-text focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
   }
 
   .btn-outline-white {
-    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-white text-brand-white font-semibold text-sm transition-colors hover:bg-brand-white hover:text-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-white focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg border-2 border-brand-white-text text-brand-white-text font-semibold text-sm transition-colors hover:bg-brand-white hover:text-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-white-text focus:ring-offset-2;
   }
 
   .section-padding {

@@ -6,6 +6,7 @@ import { MapPin, Calendar, Users, ExternalLink } from 'lucide-react'
 import { getEventBySlug, urlFor } from '@/lib/sanity'
 import { formatDateRange, formatDate, registrationStatus } from '@/lib/utils'
 import { PortableText } from 'next-sanity'
+import type { PortableTextBlock } from '@portabletext/types'
 
 export const revalidate = 3600
 
@@ -22,7 +23,7 @@ interface EventData {
   state?: string
   tagline?: string
   image?: { asset: { _ref: string } }
-  description?: unknown[]
+  description?: PortableTextBlock[]
   registrationOpen?: boolean
   registrationOpenDate?: string
   registrationCloseDate?: string

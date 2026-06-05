@@ -1,13 +1,14 @@
 import Link from 'next/link'
-import { CheckCircle, Download } from 'lucide-react'
+import { CheckCircle, Download, ExternalLink } from 'lucide-react'
 
 interface PageProps {
   params: { slug: string }
-  searchParams: { id?: string; type?: string }
+  searchParams: { id?: string; type?: string; payment?: string; spreadsheet?: string }
 }
 
 export default function ConfirmationPage({ params, searchParams }: PageProps) {
   const isGroup = searchParams.type === 'group'
+  const spreadsheetUrl = searchParams.spreadsheet ? decodeURIComponent(searchParams.spreadsheet) : null
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-16">
@@ -22,13 +23,33 @@ export default function ConfirmationPage({ params, searchParams }: PageProps) {
 
         <p className="text-gray-600 mb-6">
           {isGroup
-            ? 'Thank you for registering your group. A confirmation email has been sent to you, and an invoice will follow within 1–2 business days. Your registration will be confirmed upon receipt of payment.'
-            : 'Thank you for registering. A confirmation email has been sent to your inbox. Your spot is pending — we\'ll confirm once we\'ve reviewed your entry.'}
+            ? 'Thank you for registering your group. A confirmation email has been sent to you.'
+            : 'Thank you for registering. A confirmation email will be sent once your payment is processed.'}
         </p>
 
         {searchParams.id && (
           <div className="bg-gray-100 rounded-lg px-4 py-3 mb-6 text-sm text-gray-600">
             Reference ID: <span className="font-mono font-medium">{searchParams.id}</span>
+          </div>
+        )}
+
+        {/* Google Sheet link — spreadsheet path */}
+        {spreadsheetUrl && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6 text-left">
+            <p className="font-semibold text-brand-blue-dark mb-1">Your Team Member Spreadsheet</p>
+            <p className="text-sm text-gray-600 mb-3">
+              A pre-formatted Google Sheet has been shared with your email. Fill in your team member details and return it to Stellr when complete.
+            </p>
+            <a
+              href={spreadsheetUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-primary inline-flex items-center gap-2 text-sm"
+            >
+              Open Google Sheet
+              <ExternalLink size={14} />
+            </a>
+            <p className="text-xs text-gray-400 mt-2">A link to this sheet has also been sent to your email.</p>
           </div>
         )}
 
@@ -38,34 +59,37 @@ export default function ConfirmationPage({ params, searchParams }: PageProps) {
             <ul className="space-y-2 text-sm text-gray-600">
               <li className="flex items-start gap-2">
                 <span className="text-green-500 mt-0.5">✓</span>
-                Confirmation email sent to the teacher/coordinator
+                Confirmation email sent to the teacher / coordinator
               </li>
-              <li className="flex items-start gap-2">
-                <span className="text-brand-blue mt-0.5">→</span>
-                Invoice issued within 1–2 business days
-              </li>
+              {spreadsheetUrl ? (
+                <li className="flex items-start gap-2">
+                  <span className="text-brand-blue mt-0.5">→</span>
+                  Complete the team member spreadsheet and return it to Stellr
+                </li>
+              ) : (
+                <li className="flex items-start gap-2">
+                  <span className="text-brand-blue mt-0.5">→</span>
+                  Invoice issued within 1–2 business days (if paying by invoice)
+                </li>
+              )}
               <li className="flex items-start gap-2">
                 <span className="text-brand-blue mt-0.5">→</span>
                 Registration confirmed upon payment receipt
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-brand-blue mt-0.5">→</span>
-                Parental permission forms will be sent via DocuSign to each student
+                Parental permission forms sent via DocuSign to each student
               </li>
             </ul>
           ) : (
             <ul className="space-y-2 text-sm text-gray-600">
               <li className="flex items-start gap-2">
                 <span className="text-green-500 mt-0.5">✓</span>
-                Confirmation email sent to you
+                Payment processed
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-brand-blue mt-0.5">→</span>
-                Registration reviewed and confirmed by Stellr
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-brand-blue mt-0.5">→</span>
-                Payment processed upon confirmation
+                Confirmation email with your Membership ID sent to your inbox
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-brand-blue mt-0.5">→</span>
@@ -75,7 +99,8 @@ export default function ConfirmationPage({ params, searchParams }: PageProps) {
           )}
         </div>
 
-        {isGroup && searchParams.id && (
+        {/* CSV download — add_now group path (no spreadsheet) */}
+        {isGroup && !spreadsheetUrl && searchParams.id && (
           <div className="mb-4">
             <a
               href={`/api/registrations/${searchParams.id}/spreadsheet`}

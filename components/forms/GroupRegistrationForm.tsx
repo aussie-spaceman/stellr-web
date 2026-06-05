@@ -1,92 +1,335 @@
 'use client'
 
 import { useState } from 'react'
-import { useForm, useFieldArray } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import FieldError from '@/components/forms/FieldError'
 
-const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
+// ── Constants ─────────────────────────────────────────────────────────────────
 const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
 const GENDERS = ['Male', 'Female', 'Other']
-const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC']
+const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
+const ETHNICITIES = ['Pacific Islander', 'Hispanic', 'White (Caucasian)', 'Black', 'Native American', 'Asian', 'Prefer Not To Say']
+const DIETARY = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Vegetarian', 'Vegan', 'Other']
+const HS_GRADES = ['9', '10', '11', '12']
 
-const participantSchema = z.object({
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface AdultData {
+  first_name: string; last_name: string; email: string; phone: string
+  date_of_birth: string; gender: string; t_shirt_size: string
+  dietary_requirements: string[]; health_conditions: string
+}
+
+interface StudentData {
+  first_name: string; last_name: string; email: string; phone: string
+  date_of_birth: string; grade: string; gender: string; t_shirt_size: string
+  health_conditions: string
+  emergency_contact_first_name: string; emergency_contact_last_name: string
+  emergency_contact_email: string; emergency_contact_phone: string
+}
+
+function emptyAdult(): AdultData {
+  return { first_name: '', last_name: '', email: '', phone: '', date_of_birth: '', gender: '', t_shirt_size: '', dietary_requirements: [], health_conditions: '' }
+}
+
+function emptyStudent(): StudentData {
+  return { first_name: '', last_name: '', email: '', phone: '', date_of_birth: '', grade: '', gender: '', t_shirt_size: '', health_conditions: '', emergency_contact_first_name: '', emergency_contact_last_name: '', emergency_contact_email: '', emergency_contact_phone: '' }
+}
+
+// ── Teacher schema ────────────────────────────────────────────────────────────
+const teacherSchema = z.object({
   first_name: z.string().min(1, 'Required'),
   last_name: z.string().min(1, 'Required'),
   email: z.string().email('Valid email required'),
-  phone: z.string().min(7, 'Required'),
+  phone: z.string().min(7, 'Valid phone required'),
   date_of_birth: z.string().min(1, 'Required'),
-  grade: z.string().min(1, 'Required'),
   gender: z.string().min(1, 'Required'),
   t_shirt_size: z.string().min(1, 'Required'),
-  emergency_contact_first_name: z.string().min(1, 'Required'),
-  emergency_contact_last_name: z.string().min(1, 'Required'),
-  emergency_contact_email: z.string().email('Valid email required'),
-  emergency_contact_phone: z.string().min(7, 'Required'),
-  health_conditions: z.string().optional(),
-})
-
-const schema = z.object({
-  teacher_first_name: z.string().min(1, 'Required'),
-  teacher_last_name: z.string().min(1, 'Required'),
-  teacher_email: z.string().email('Valid email required'),
   school_name: z.string().min(1, 'Required'),
   school_address_street: z.string().min(1, 'Required'),
   school_address_city: z.string().min(1, 'Required'),
   school_address_state: z.string().min(1, 'Required'),
-  school_address_zip: z.string().min(5, 'Valid ZIP required'),
-  participants: z.array(participantSchema).min(2, 'At least 2 students required'),
+  school_address_zip: z.string().min(1, 'Required'),
+  ethnicity: z.array(z.string()).min(1, 'Select at least one'),
+  dietary_requirements: z.array(z.string()).min(1, 'Select at least one'),
+  health_conditions: z.string().optional(),
 })
+type TeacherFormData = z.infer<typeof teacherSchema>
 
-type FormData = z.infer<typeof schema>
-
-const emptyParticipant = {
-  first_name: '', last_name: '', email: '', phone: '',
-  date_of_birth: '', grade: '', gender: '', t_shirt_size: '',
-  emergency_contact_first_name: '', emergency_contact_last_name: '',
-  emergency_contact_email: '', emergency_contact_phone: '',
-  health_conditions: '',
+// ── Shared: multi-checkbox ────────────────────────────────────────────────────
+function MultiCheckboxes({ label, note, options, selected, onChange, error }: {
+  label: string; note?: string; options: string[]
+  selected: string[]; onChange: (v: string[]) => void; error?: string
+}) {
+  return (
+    <div>
+      <p className="font-semibold text-brand-blue-dark mb-1">{label}</p>
+      {note && <p className="text-xs text-gray-400 mb-2">{note}</p>}
+      <div className="grid grid-cols-2 gap-2">
+        {options.map(opt => (
+          <label key={opt} className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={selected.includes(opt)}
+              onChange={() => onChange(selected.includes(opt) ? selected.filter(v => v !== opt) : [...selected, opt])}
+              className="rounded border-gray-300 text-brand-blue" />
+            {opt}
+          </label>
+        ))}
+      </div>
+      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+    </div>
+  )
 }
 
-export default function GroupRegistrationForm({
-  eventSlug,
-  eventTitle,
-  capacity,
-}: {
-  eventSlug: string
-  eventTitle: string
-  capacity?: number
+// ── Number stepper ────────────────────────────────────────────────────────────
+function NumberStepper({ label, value, min, max, onChange, note }: {
+  label: string; value: number; min: number; max: number; onChange: (n: number) => void; note?: string
 }) {
+  return (
+    <div>
+      <label className="label-text">{label}</label>
+      <div className="flex items-center gap-3 mt-1">
+        <button type="button" onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min}
+          className="w-9 h-9 rounded-full border border-gray-300 flex items-center justify-center text-lg font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-40">
+          −
+        </button>
+        <span className="w-10 text-center font-semibold text-brand-blue-dark text-lg">{value}</span>
+        <button type="button" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}
+          className="w-9 h-9 rounded-full border border-gray-300 flex items-center justify-center text-lg font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-40">
+          +
+        </button>
+      </div>
+      {note && <p className="text-xs text-gray-400 mt-1">{note}</p>}
+    </div>
+  )
+}
+
+// ── Adult accordion ───────────────────────────────────────────────────────────
+function AdultAccordion({ index, data, onChange, expanded, onToggle }: {
+  index: number; data: AdultData
+  onChange: (field: keyof AdultData, value: string | string[]) => void
+  expanded: boolean; onToggle: () => void
+}) {
+  const label = data.first_name && data.last_name ? `${data.first_name} ${data.last_name}` : `Additional Adult ${index + 1}`
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <button type="button" onClick={onToggle}
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 text-left">
+        <span className="font-medium text-brand-blue-dark text-sm">{label}</span>
+        {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+      </button>
+      {expanded && (
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div><label className="label-text">First Name *</label><input value={data.first_name} onChange={e => onChange('first_name', e.target.value)} className="input-field" /></div>
+            <div><label className="label-text">Last Name *</label><input value={data.last_name} onChange={e => onChange('last_name', e.target.value)} className="input-field" /></div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div><label className="label-text">Email *</label><input type="email" value={data.email} onChange={e => onChange('email', e.target.value)} className="input-field" /></div>
+            <div><label className="label-text">Phone *</label><input type="tel" value={data.phone} onChange={e => onChange('phone', e.target.value)} className="input-field" /></div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div><label className="label-text">Date of Birth *</label><input type="date" value={data.date_of_birth} onChange={e => onChange('date_of_birth', e.target.value)} className="input-field" /></div>
+            <div>
+              <label className="label-text">Gender *</label>
+              <select value={data.gender} onChange={e => onChange('gender', e.target.value)} className="input-field">
+                <option value="">Select…</option>{GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label-text">T-Shirt Size *</label>
+              <select value={data.t_shirt_size} onChange={e => onChange('t_shirt_size', e.target.value)} className="input-field">
+                <option value="">Select…</option>{T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <MultiCheckboxes label="Dietary Requirements *" note="Select all that apply" options={DIETARY}
+            selected={data.dietary_requirements} onChange={v => onChange('dietary_requirements', v)} />
+          <div>
+            <label className="label-text">Health Conditions / Allergies</label>
+            <textarea value={data.health_conditions} onChange={e => onChange('health_conditions', e.target.value)} className="input-field resize-none" rows={2} placeholder="Leave blank if none." />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Student accordion ─────────────────────────────────────────────────────────
+function StudentAccordion({ index, data, onChange, expanded, onToggle }: {
+  index: number; data: StudentData
+  onChange: (field: keyof StudentData, value: string) => void
+  expanded: boolean; onToggle: () => void
+}) {
+  const label = data.first_name && data.last_name ? `${data.first_name} ${data.last_name}` : `Student ${index + 1}`
+  const isHS = data.grade ? HS_GRADES.includes(data.grade) : true
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <button type="button" onClick={onToggle}
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 text-left">
+        <span className="font-medium text-brand-blue-dark text-sm">{label}</span>
+        {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+      </button>
+      {expanded && (
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div><label className="label-text">First Name *</label><input value={data.first_name} onChange={e => onChange('first_name', e.target.value)} className="input-field" /></div>
+            <div><label className="label-text">Last Name *</label><input value={data.last_name} onChange={e => onChange('last_name', e.target.value)} className="input-field" /></div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div><label className="label-text">Email *</label><input type="email" value={data.email} onChange={e => onChange('email', e.target.value)} className="input-field" /></div>
+            <div><label className="label-text">Phone *</label><input type="tel" value={data.phone} onChange={e => onChange('phone', e.target.value)} className="input-field" /></div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="col-span-2 sm:col-span-1"><label className="label-text">Date of Birth *</label><input type="date" value={data.date_of_birth} onChange={e => onChange('date_of_birth', e.target.value)} className="input-field" /></div>
+            <div>
+              <label className="label-text">Grade *</label>
+              <select value={data.grade} onChange={e => onChange('grade', e.target.value)} className="input-field">
+                <option value="">Select…</option>{GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label-text">Gender *</label>
+              <select value={data.gender} onChange={e => onChange('gender', e.target.value)} className="input-field">
+                <option value="">Select…</option>{GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label-text">T-Shirt *</label>
+              <select value={data.t_shirt_size} onChange={e => onChange('t_shirt_size', e.target.value)} className="input-field">
+                <option value="">Select…</option>{T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label-text">Health Conditions / Allergies</label>
+            <textarea value={data.health_conditions} onChange={e => onChange('health_conditions', e.target.value)} className="input-field resize-none" rows={2} placeholder="Leave blank if none." />
+          </div>
+          {isHS && (
+            <div className="border-t border-gray-100 pt-4 space-y-4">
+              <div>
+                <p className="font-semibold text-brand-blue-dark text-sm">Emergency Contact</p>
+                <p className="text-xs text-gray-400">Required for High School students</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label className="label-text">First Name *</label><input value={data.emergency_contact_first_name} onChange={e => onChange('emergency_contact_first_name', e.target.value)} className="input-field" /></div>
+                <div><label className="label-text">Last Name *</label><input value={data.emergency_contact_last_name} onChange={e => onChange('emergency_contact_last_name', e.target.value)} className="input-field" /></div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label className="label-text">Email *</label><input type="email" value={data.emergency_contact_email} onChange={e => onChange('emergency_contact_email', e.target.value)} className="input-field" /></div>
+                <div><label className="label-text">Phone *</label><input type="tel" value={data.emergency_contact_phone} onChange={e => onChange('emergency_contact_phone', e.target.value)} className="input-field" /></div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+export default function GroupRegistrationForm({ eventSlug, eventTitle }: { eventSlug: string; eventTitle: string }) {
+  const router = useRouter()
+  const [step, setStep] = useState<1 | 2>(1)
+
+  const { register, trigger, getValues, watch, setValue, formState: { errors } } = useForm<TeacherFormData>({
+    resolver: zodResolver(teacherSchema),
+    defaultValues: { ethnicity: [], dietary_requirements: [] },
+  })
+  const ethnicity = watch('ethnicity') ?? []
+  const dietary = watch('dietary_requirements') ?? []
+
+  const [adultCount, setAdultCount] = useState(1)
+  const [studentCount, setStudentCount] = useState(2)
+  const [detailsMethod, setDetailsMethod] = useState<'add_now' | 'spreadsheet'>('add_now')
+  const [paymentMethod, setPaymentMethod] = useState<'invoice' | 'card'>('invoice')
+  const [additionalAdults, setAdditionalAdults] = useState<AdultData[]>([])
+  const [students, setStudents] = useState<StudentData[]>([emptyStudent(), emptyStudent()])
+  const [expandedAdult, setExpandedAdult] = useState<number | null>(null)
+  const [expandedStudent, setExpandedStudent] = useState<number | null>(0)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [expandedIdx, setExpandedIdx] = useState<number | null>(0)
-  const router = useRouter()
 
-  const {
-    register,
-    handleSubmit,
-    control,
-    formState: { errors },
-  } = useForm<FormData>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      participants: [emptyParticipant, emptyParticipant],
-    },
-  })
+  function handleAdultCountChange(n: number) {
+    setAdultCount(n)
+    const need = n - 1
+    setAdditionalAdults(prev => prev.length < need ? [...prev, ...Array.from({ length: need - prev.length }, emptyAdult)] : prev.slice(0, need))
+  }
 
-  const { fields, append, remove } = useFieldArray({ control, name: 'participants' })
+  function handleStudentCountChange(n: number) {
+    setStudentCount(n)
+    setStudents(prev => prev.length < n ? [...prev, ...Array.from({ length: n - prev.length }, emptyStudent)] : prev.slice(0, n))
+  }
 
-  async function onSubmit(data: FormData) {
+  function updateAdult(i: number, field: keyof AdultData, value: string | string[]) {
+    setAdditionalAdults(prev => prev.map((a, idx) => idx === i ? { ...a, [field]: value } : a))
+  }
+
+  function updateStudent(i: number, field: keyof StudentData, value: string) {
+    setStudents(prev => prev.map((s, idx) => idx === i ? { ...s, [field]: value } : s))
+  }
+
+  async function goToStep2() {
+    const valid = await trigger()
+    if (valid) setStep(2)
+  }
+
+  function deriveAgeBracket(dob: string, grade?: string): string {
+    if (!dob) return 'Adult'
+    const age = Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000))
+    if (age < 18 || (grade && HS_GRADES.includes(grade))) return 'High School'
+    if (grade?.startsWith('College') || grade === 'Grad / PhD') return 'College'
+    return 'Adult'
+  }
+
+  function validateParticipants(): string | null {
+    if (detailsMethod !== 'add_now') return null
+    for (let i = 0; i < additionalAdults.length; i++) {
+      const a = additionalAdults[i]
+      if (!a.first_name || !a.last_name || !a.email || !a.phone || !a.date_of_birth || !a.gender || !a.t_shirt_size || a.dietary_requirements.length === 0)
+        return `Additional Adult ${i + 1}: please complete all required fields`
+    }
+    for (let i = 0; i < students.length; i++) {
+      const s = students[i]
+      if (!s.first_name || !s.last_name || !s.email || !s.phone || !s.date_of_birth || !s.grade || !s.gender || !s.t_shirt_size)
+        return `Student ${i + 1}: please complete all required fields`
+      if (HS_GRADES.includes(s.grade) && (!s.emergency_contact_first_name || !s.emergency_contact_last_name || !s.emergency_contact_email || !s.emergency_contact_phone))
+        return `Student ${i + 1}: emergency contact is required for High School students`
+    }
+    return null
+  }
+
+  async function handleFinalSubmit() {
     setSubmitting(true)
     setError(null)
+
+    const participantError = validateParticipants()
+    if (participantError) {
+      setError(participantError)
+      setSubmitting(false)
+      return
+    }
+
     try {
+      const teacherData = getValues()
+
       const res = await fetch('/api/register/group', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, event_slug: eventSlug, event_title: eventTitle }),
+        body: JSON.stringify({
+          event_slug: eventSlug,
+          event_title: eventTitle,
+          teacher: { ...teacherData, age_bracket: deriveAgeBracket(teacherData.date_of_birth), event_role: 'Teacher' },
+          adult_count: adultCount,
+          student_count: studentCount,
+          total_participants: adultCount + studentCount,
+          details_method: detailsMethod,
+          payment_method: paymentMethod,
+          additional_adults: detailsMethod === 'add_now' ? additionalAdults.map(a => ({ ...a, age_bracket: deriveAgeBracket(a.date_of_birth), event_role: 'Adult' })) : [],
+          students: detailsMethod === 'add_now' ? students.map(s => ({ ...s, age_bracket: deriveAgeBracket(s.date_of_birth, s.grade), event_role: 'School Student' })) : [],
+        }),
       })
 
       if (!res.ok) {
@@ -94,267 +337,164 @@ export default function GroupRegistrationForm({
         throw new Error(body.error ?? 'Registration failed')
       }
 
-      const { registrationId } = await res.json()
-      router.push(`/register/${eventSlug}/confirmation?id=${registrationId}&type=group`)
+      const { registrationId, checkoutUrl, spreadsheetUrl } = await res.json()
+
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl
+      } else {
+        const params = new URLSearchParams({ id: registrationId, type: 'group' })
+        if (spreadsheetUrl) params.set('spreadsheet', encodeURIComponent(spreadsheetUrl))
+        router.push(`/register/${eventSlug}/confirmation?${params.toString()}`)
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.')
       setSubmitting(false)
     }
   }
 
-  const participantErrors = errors.participants
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-      {/* Teacher / Coordinator Details */}
-      <div>
-        <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Teacher / Coordinator Details</h2>
-        <p className="text-sm text-gray-600 mb-5">The invoice will be sent to this email address.</p>
+  // ── Step 1: Teacher details ───────────────────────────────────────────────
+  if (step === 1) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Your Details</h2>
+          <p className="text-sm text-gray-600">Step 2 of 4 — Teacher / Coordinator information</p>
+        </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+          <h3 className="font-semibold text-brand-blue-dark">Personal Information</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div><label className="label-text">First Name *</label><input {...register('first_name')} className="input-field" /><FieldError message={errors.first_name?.message} /></div>
+            <div><label className="label-text">Last Name *</label><input {...register('last_name')} className="input-field" /><FieldError message={errors.last_name?.message} /></div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div><label className="label-text">Email Address *</label><input {...register('email')} type="email" className="input-field" /><FieldError message={errors.email?.message} /></div>
+            <div><label className="label-text">Phone Number *</label><input {...register('phone')} type="tel" className="input-field" /><FieldError message={errors.phone?.message} /></div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div><label className="label-text">Date of Birth *</label><input {...register('date_of_birth')} type="date" className="input-field" /><FieldError message={errors.date_of_birth?.message} /></div>
             <div>
-              <label className="label-text">First Name *</label>
-              <input {...register('teacher_first_name')} className="input-field" />
-              <FieldError message={errors.teacher_first_name?.message} />
+              <label className="label-text">Gender *</label>
+              <select {...register('gender')} className="input-field"><option value="">Select…</option>{GENDERS.map(g => <option key={g} value={g}>{g}</option>)}</select>
+              <FieldError message={errors.gender?.message} />
             </div>
             <div>
-              <label className="label-text">Last Name *</label>
-              <input {...register('teacher_last_name')} className="input-field" />
-              <FieldError message={errors.teacher_last_name?.message} />
+              <label className="label-text">T-Shirt Size *</label>
+              <select {...register('t_shirt_size')} className="input-field"><option value="">Select…</option>{T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}</select>
+              <FieldError message={errors.t_shirt_size?.message} />
             </div>
           </div>
+        </div>
 
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+          <h3 className="font-semibold text-brand-blue-dark">School</h3>
+          <div><label className="label-text">School Name *</label><input {...register('school_name')} className="input-field" /><FieldError message={errors.school_name?.message} /></div>
+          <div><label className="label-text">Street Address *</label><input {...register('school_address_street')} className="input-field" /><FieldError message={errors.school_address_street?.message} /></div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="col-span-2"><label className="label-text">City *</label><input {...register('school_address_city')} className="input-field" /><FieldError message={errors.school_address_city?.message} /></div>
+            <div><label className="label-text">State *</label><input {...register('school_address_state')} className="input-field" placeholder="CA" /><FieldError message={errors.school_address_state?.message} /></div>
+            <div><label className="label-text">ZIP *</label><input {...register('school_address_zip')} className="input-field" /><FieldError message={errors.school_address_zip?.message} /></div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+          <MultiCheckboxes label="Ethnicity *" note="Select all that apply" options={ETHNICITIES} selected={ethnicity}
+            onChange={v => setValue('ethnicity', v, { shouldValidate: true })} error={errors.ethnicity?.message} />
+          <MultiCheckboxes label="Dietary Requirements *" note="Select all that apply" options={DIETARY} selected={dietary}
+            onChange={v => setValue('dietary_requirements', v, { shouldValidate: true })} error={errors.dietary_requirements?.message} />
           <div>
-            <label className="label-text">Email Address *</label>
-            <input {...register('teacher_email')} type="email" className="input-field" />
-            <FieldError message={errors.teacher_email?.message} />
+            <label className="label-text">Health Conditions / Allergies</label>
+            <textarea {...register('health_conditions')} className="input-field resize-none" rows={3} placeholder="Leave blank if none." />
           </div>
+        </div>
 
-          <div>
-            <label className="label-text">School Name *</label>
-            <input {...register('school_name')} className="input-field" placeholder="Lincoln High School" />
-            <FieldError message={errors.school_name?.message} />
-          </div>
+        <button type="button" onClick={goToStep2} className="btn-primary w-full py-3">
+          Continue — Group Details →
+        </button>
+      </div>
+    )
+  }
 
-          <div>
-            <label className="label-text">Street Address *</label>
-            <input {...register('school_address_street')} className="input-field" />
-            <FieldError message={errors.school_address_street?.message} />
-          </div>
+  // ── Step 2: Group details ────────────────────────────────────────────────
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Group Details</h2>
+        <p className="text-sm text-gray-600">Step 3 of 4 — Group size, member details, and payment</p>
+      </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="col-span-2">
-              <label className="label-text">City *</label>
-              <input {...register('school_address_city')} className="input-field" />
-              <FieldError message={errors.school_address_city?.message} />
-            </div>
-            <div>
-              <label className="label-text">State *</label>
-              <select {...register('school_address_state')} className="input-field">
-                <option value="">—</option>
-                {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <FieldError message={errors.school_address_state?.message} />
-            </div>
-            <div>
-              <label className="label-text">ZIP *</label>
-              <input {...register('school_address_zip')} className="input-field" maxLength={10} />
-              <FieldError message={errors.school_address_zip?.message} />
-            </div>
-          </div>
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+        <h3 className="font-semibold text-brand-blue-dark">Group Size</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+          <NumberStepper label="How many adults will be in the group?" value={adultCount} min={1} max={2}
+            onChange={handleAdultCountChange} note="Includes yourself as teacher / coordinator. Maximum 2." />
+          <NumberStepper label="How many students will be in the group?" value={studentCount} min={2} max={20}
+            onChange={handleStudentCountChange}
+            note={studentCount >= 20 ? 'For groups larger than 20, contact Stellr directly for custom registration.' : 'Minimum 2. Maximum 20.'} />
+        </div>
+        <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark">
+          Total participants: <strong>{adultCount + studentCount}</strong>
         </div>
       </div>
 
-      {/* Participants */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-xl font-bold text-brand-blue-dark">Participants</h2>
-          <span className="text-sm text-gray-400">{fields.length} student{fields.length !== 1 ? 's' : ''}</span>
-        </div>
-        <p className="text-sm text-gray-600 mb-5">
-          Minimum 2 students required.
-          {capacity ? ` Maximum ${capacity} participants for this event.` : ''}
-        </p>
-
-        {typeof participantErrors === 'object' && 'message' in participantErrors && (
-          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-            {(participantErrors as { message?: string }).message}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <h3 className="font-semibold text-brand-blue-dark">How do you want to provide team member details?</h3>
+        <select value={detailsMethod} onChange={e => setDetailsMethod(e.target.value as 'add_now' | 'spreadsheet')} className="input-field">
+          <option value="add_now">Add them now via this screen</option>
+          <option value="spreadsheet">Download a pre-populated spreadsheet and deliver details later</option>
+        </select>
+        {detailsMethod === 'spreadsheet' && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+            A Google Sheet pre-formatted with all required fields will be created for your group and shared to your email. Complete it at your own pace and return it to Stellr.
           </div>
         )}
+      </div>
 
-        <div className="space-y-3">
-          {fields.map((field, idx) => {
-            const pErrors = (participantErrors as Record<number, Record<string, { message?: string }>> | undefined)?.[idx]
-            const isOpen = expandedIdx === idx
+      {detailsMethod === 'add_now' && (
+        <>
+          {additionalAdults.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="font-semibold text-brand-blue-dark">Additional Adults</h3>
+              {additionalAdults.map((adult, i) => (
+                <AdultAccordion key={i} index={i} data={adult}
+                  onChange={(field, value) => updateAdult(i, field, value)}
+                  expanded={expandedAdult === i} onToggle={() => setExpandedAdult(expandedAdult === i ? null : i)} />
+              ))}
+            </div>
+          )}
 
-            return (
-              <div key={field.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                {/* Accordion header */}
-                <button
-                  type="button"
-                  onClick={() => setExpandedIdx(isOpen ? null : idx)}
-                  className="w-full flex items-center justify-between px-5 py-4 text-left"
-                >
-                  <span className="font-medium text-brand-blue-dark">
-                    Student {idx + 1}
-                    {field.first_name && field.last_name
-                      ? ` — ${field.first_name} ${field.last_name}`
-                      : ''}
-                  </span>
-                  <div className="flex items-center gap-3">
-                    {fields.length > 2 && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); remove(idx) }}
-                        className="text-red-400 hover:text-red-600 p-1"
-                        aria-label="Remove student"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    )}
-                    <span className="text-gray-400 text-sm">{isOpen ? '▲' : '▼'}</span>
-                  </div>
-                </button>
+          <div className="space-y-3">
+            <h3 className="font-semibold text-brand-blue-dark">Students</h3>
+            {students.map((student, i) => (
+              <StudentAccordion key={i} index={i} data={student}
+                onChange={(field, value) => updateStudent(i, field, value)}
+                expanded={expandedStudent === i} onToggle={() => setExpandedStudent(expandedStudent === i ? null : i)} />
+            ))}
+          </div>
+        </>
+      )}
 
-                {isOpen && (
-                  <div className="px-5 pb-5 space-y-4 border-t border-gray-100">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
-                      <div>
-                        <label className="label-text">First Name *</label>
-                        <input {...register(`participants.${idx}.first_name`)} className="input-field" />
-                        <FieldError message={pErrors?.first_name?.message} />
-                      </div>
-                      <div>
-                        <label className="label-text">Last Name *</label>
-                        <input {...register(`participants.${idx}.last_name`)} className="input-field" />
-                        <FieldError message={pErrors?.last_name?.message} />
-                      </div>
-                    </div>
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <h3 className="font-semibold text-brand-blue-dark">How do you want to pay?</h3>
+        <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as 'invoice' | 'card')} className="input-field">
+          <option value="invoice">Have an invoice emailed to me</option>
+          <option value="card">Pay now via credit card</option>
+        </select>
+        {paymentMethod === 'invoice' && <p className="text-sm text-gray-500">An invoice will be emailed to you within 1–2 business days. Registration is confirmed upon payment.</p>}
+        {paymentMethod === 'card' && <p className="text-sm text-gray-500">You'll be redirected to a secure Stripe checkout page to pay for all {adultCount + studentCount} participants.</p>}
+      </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="label-text">Email *</label>
-                        <input {...register(`participants.${idx}.email`)} type="email" className="input-field" />
-                        <FieldError message={pErrors?.email?.message} />
-                      </div>
-                      <div>
-                        <label className="label-text">Phone *</label>
-                        <input {...register(`participants.${idx}.phone`)} type="tel" className="input-field" />
-                        <FieldError message={pErrors?.phone?.message} />
-                      </div>
-                    </div>
+      {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">{error}</div>}
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <label className="label-text">Date of Birth *</label>
-                        <input {...register(`participants.${idx}.date_of_birth`)} type="date" className="input-field" />
-                        <FieldError message={pErrors?.date_of_birth?.message} />
-                      </div>
-                      <div>
-                        <label className="label-text">Grade *</label>
-                        <select {...register(`participants.${idx}.grade`)} className="input-field">
-                          <option value="">Select…</option>
-                          {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
-                        </select>
-                        <FieldError message={pErrors?.grade?.message} />
-                      </div>
-                      <div>
-                        <label className="label-text">Gender *</label>
-                        <select {...register(`participants.${idx}.gender`)} className="input-field">
-                          <option value="">Select…</option>
-                          {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-                        </select>
-                        <FieldError message={pErrors?.gender?.message} />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="label-text">T-Shirt Size *</label>
-                      <select {...register(`participants.${idx}.t_shirt_size`)} className="input-field w-full sm:w-40">
-                        <option value="">Select…</option>
-                        {T_SHIRT_SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                      <FieldError message={pErrors?.t_shirt_size?.message} />
-                    </div>
-
-                    <div className="border-t border-gray-100 pt-4">
-                      <p className="text-sm font-semibold text-brand-blue-dark mb-3">Emergency Contact</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="label-text">First Name *</label>
-                          <input {...register(`participants.${idx}.emergency_contact_first_name`)} className="input-field" />
-                          <FieldError message={pErrors?.emergency_contact_first_name?.message} />
-                        </div>
-                        <div>
-                          <label className="label-text">Last Name *</label>
-                          <input {...register(`participants.${idx}.emergency_contact_last_name`)} className="input-field" />
-                          <FieldError message={pErrors?.emergency_contact_last_name?.message} />
-                        </div>
-                        <div>
-                          <label className="label-text">Email *</label>
-                          <input {...register(`participants.${idx}.emergency_contact_email`)} type="email" className="input-field" />
-                          <FieldError message={pErrors?.emergency_contact_email?.message} />
-                        </div>
-                        <div>
-                          <label className="label-text">Phone *</label>
-                          <input {...register(`participants.${idx}.emergency_contact_phone`)} type="tel" className="input-field" />
-                          <FieldError message={pErrors?.emergency_contact_phone?.message} />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="label-text">Health Conditions / Allergies</label>
-                      <textarea
-                        {...register(`participants.${idx}.health_conditions`)}
-                        className="input-field resize-none"
-                        rows={2}
-                        placeholder="Leave blank if none"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        <button
-          type="button"
-          onClick={() => { append(emptyParticipant); setExpandedIdx(fields.length) }}
-          className="mt-4 flex items-center gap-2 text-brand-blue text-sm font-medium hover:underline"
-        >
-          <Plus size={16} /> Add another student
+      <div className="flex gap-3">
+        <button type="button" onClick={() => setStep(1)} className="btn-outline flex-1 py-3">← Back</button>
+        <button type="button" onClick={handleFinalSubmit} disabled={submitting}
+          className="btn-primary flex-1 py-3 disabled:opacity-60">
+          {submitting ? 'Submitting…' : paymentMethod === 'card' ? 'Continue to Payment →' : 'Submit Registration'}
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 text-sm text-brand-blue-dark space-y-1">
-        <p className="font-semibold">What happens next?</p>
-        <ul className="list-disc list-inside text-gray-600 space-y-1">
-          <li>You&apos;ll receive a confirmation email with a summary of your group registration</li>
-          <li>An invoice will be issued to <strong>{'{your email}'}</strong> within 1–2 business days</li>
-          <li>Registration is confirmed upon receipt of payment</li>
-        </ul>
-      </div>
-
-      <button
-        type="submit"
-        disabled={submitting}
-        className="btn-primary w-full py-4 text-base disabled:opacity-60"
-      >
-        {submitting ? 'Submitting…' : `Submit Group Registration (${fields.length} students)`}
-      </button>
-
-      <p className="text-xs text-gray-400 text-center">
-        By submitting you confirm all participant details are accurate and you have permission to submit on their behalf.
-      </p>
-    </form>
+      <p className="text-xs text-gray-400 text-center">By submitting you confirm all details are accurate.</p>
+    </div>
   )
 }

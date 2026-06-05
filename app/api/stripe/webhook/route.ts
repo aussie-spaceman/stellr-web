@@ -1,12 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
-import { sendEmail, individualConfirmationEmail } from '@/lib/email'
+import { sendEmail, individualConfirmationEmail, groupPaymentConfirmedEmail } from '@/lib/email'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
   if (!key) throw new Error('STRIPE_SECRET_KEY not set')
   return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
+}
+
+async function confirmRegistration(registrationId: string, isGroup: boolean) {
+  const db = supabaseServer()
+
+  await db.from('registrations').update({ status: 'confirmed' }).eq('id', registrationId)
+
+  if (isGroup) {
+    // Send payment confirmed email to teacher
+    const { data: reg } = await db.from('registrations')
+      .select('event_title, teacher_first_name, teacher_email')
+      .eq('id', registrationId).maybeSingle()
+
+    if (reg) {
+      const r = reg as { event_title: string; teacher_first_name: string | null; teacher_email: string | null }
+      if (r.teacher_email) {
+        const emailContent = groupPaymentConfirmedEmail({
+          teacherFirstName: r.teacher_first_name ?? 'there',
+          eventTitle: r.event_title,
+          registrationId,
+        })
+        await sendEmail({ to: r.teacher_email, ...emailContent })
+      }
+    }
+  } else {
+    // Send individual confirmation email with membership ID
+    const { data: participant } = await db.from('participants')
+      .select('first_name, last_name, email, membership_id')
+      .eq('registration_id', registrationId).maybeSingle()
+
+    const { data: reg } = await db.from('registrations')
+      .select('event_title').eq('id', registrationId).maybeSingle()
+
+    if (participant && reg) {
+      const p = participant as { first_name: string; last_name: string; email: string; membership_id: string }
+      const r = reg as { event_title: string }
+      const emailContent = individualConfirmationEmail({
+        firstName: p.first_name, lastName: p.last_name,
+        membershipId: p.membership_id, eventTitle: r.event_title,
+        registrationId,
+      })
+      await sendEmail({ to: p.email, ...emailContent })
+    }
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -28,55 +72,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object as Stripe.Checkout.Session
-    const registrationId = session.metadata?.registrationId ?? session.client_reference_id
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as Stripe.Checkout.Session
+      const registrationId = session.metadata?.registrationId ?? session.client_reference_id
+      const isGroup = session.metadata?.isGroup === 'true'
 
-    if (!registrationId) {
-      console.error('[stripe/webhook] No registrationId in session metadata')
-      return NextResponse.json({ ok: true })
-    }
-
-    const db = supabaseServer()
-
-    // Confirm the registration
-    const { error: updateErr } = await db
-      .from('registrations')
-      .update({ status: 'confirmed' })
-      .eq('id', registrationId)
-
-    if (updateErr) {
-      console.error('[stripe/webhook] Failed to confirm registration:', updateErr)
-      return NextResponse.json({ error: 'DB update failed' }, { status: 500 })
-    }
-
-    // Fetch participant to send confirmation email
-    const { data: participant } = await db
-      .from('participants')
-      .select('first_name, last_name, email, membership_id, registration_id')
-      .eq('registration_id', registrationId)
-      .maybeSingle()
-
-    const { data: registration } = await db
-      .from('registrations')
-      .select('event_title')
-      .eq('id', registrationId)
-      .maybeSingle()
-
-    if (participant && registration) {
-      try {
-        const emailContent = individualConfirmationEmail({
-          firstName: (participant as { first_name: string }).first_name,
-          lastName: (participant as { last_name: string }).last_name,
-          membershipId: (participant as { membership_id: string }).membership_id,
-          eventTitle: (registration as { event_title: string }).event_title,
-          registrationId,
-        })
-        await sendEmail({ to: (participant as { email: string }).email, ...emailContent })
-      } catch (emailErr) {
-        console.error('[stripe/webhook] Confirmation email failed (non-fatal):', emailErr)
+      if (registrationId) {
+        await confirmRegistration(registrationId, isGroup)
       }
     }
+
+    if (event.type === 'invoice.paid') {
+      const invoice = event.data.object as Stripe.Invoice
+      const registrationId = invoice.metadata?.registrationId
+      const isGroup = invoice.metadata?.isGroup === 'true'
+
+      if (registrationId) {
+        await confirmRegistration(registrationId, isGroup)
+      }
+    }
+  } catch (err) {
+    console.error('[stripe/webhook] Handler error:', err)
+    return NextResponse.json({ error: 'Handler failed' }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true })

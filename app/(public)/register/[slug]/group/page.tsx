@@ -45,7 +45,6 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
         <GroupRegistrationForm
           eventSlug={params.slug}
           eventTitle={event.title}
-          capacity={event.capacity}
         />
       </div>
     </div>

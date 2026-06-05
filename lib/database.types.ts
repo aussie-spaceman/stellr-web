@@ -31,7 +31,7 @@ export interface ParticipantRow {
   email: string
   phone: string
   date_of_birth: string
-  grade: string
+  grade: string | null
   gender: string
   ethnicity: string[]
   t_shirt_size: string
@@ -40,10 +40,10 @@ export interface ParticipantRow {
   event_role: string
   dietary_requirements: string[]
   health_conditions: string | null
-  emergency_contact_first_name: string
-  emergency_contact_last_name: string
-  emergency_contact_email: string
-  emergency_contact_phone: string
+  emergency_contact_first_name: string | null
+  emergency_contact_last_name: string | null
+  emergency_contact_email: string | null
+  emergency_contact_phone: string | null
   membership_id: string
   company_name: string | null
   award: string | null

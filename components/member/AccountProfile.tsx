@@ -24,7 +24,11 @@ interface Member {
   ec_phone: string | null
   health_conditions: string | null
   member_schools: Array<{ is_current: boolean; schools: { name: string } }>
+  member_ethnicities: Array<{ ethnicity_option_id: string }>
+  member_allergies: Array<{ allergy_option_id: string }>
 }
+
+interface Option { id: string; name: string }
 
 interface ClerkUser {
   imageUrl: string | null
@@ -33,6 +37,8 @@ interface ClerkUser {
 interface Props {
   member: Member
   clerkUser: ClerkUser | null
+  ethnicityOptions: Option[]
+  allergyOptions: Option[]
 }
 
 function formatGrade(grade: string | null) {
@@ -44,20 +50,35 @@ function formatGrade(grade: string | null) {
     .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function AccountProfile({ member, clerkUser }: Props) {
+export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOptions }: Props) {
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(false)
   const [phone, setPhone] = useState(member.phone ?? '')
   const [discord, setDiscord] = useState(member.discord_handle ?? '')
+  const [selectedEthnicities, setSelectedEthnicities] = useState<string[]>(
+    member.member_ethnicities?.map((e) => e.ethnicity_option_id) ?? []
+  )
+  const [selectedAllergies, setSelectedAllergies] = useState<string[]>(
+    member.member_allergies?.map((a) => a.allergy_option_id) ?? []
+  )
 
   const currentSchool = member.member_schools?.find((s) => s.is_current)
+
+  function toggleOption(list: string[], setList: (v: string[]) => void, id: string) {
+    setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id])
+  }
 
   async function handleSave() {
     setLoading(true)
     await fetch('/api/members/me', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, discord_handle: discord }),
+      body: JSON.stringify({
+        phone,
+        discord_handle: discord,
+        ethnicity_ids: selectedEthnicities,
+        allergy_ids: selectedAllergies,
+      }),
     })
     setLoading(false)
     setSaved(true)
@@ -114,8 +135,9 @@ export function AccountProfile({ member, clerkUser }: Props) {
         )}
       </dl>
 
-      <div className="space-y-4 border-t border-gray-100 pt-4">
+      <div className="space-y-5 border-t border-gray-100 pt-5">
         <h3 className="text-sm font-medium text-gray-700">Editable details</h3>
+
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Phone</label>
@@ -136,6 +158,51 @@ export function AccountProfile({ member, clerkUser }: Props) {
             />
           </div>
         </div>
+
+        {/* Ethnicity */}
+        {ethnicityOptions.length > 0 && (
+          <div>
+            <label className="block text-xs text-gray-500 mb-2">
+              Ethnicity <span className="text-gray-400">(select all that apply)</span>
+            </label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {ethnicityOptions.map((opt) => (
+                <label key={opt.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedEthnicities.includes(opt.id)}
+                    onChange={() => toggleOption(selectedEthnicities, setSelectedEthnicities, opt.id)}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  {opt.name}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Allergies / Dietary */}
+        {allergyOptions.length > 0 && (
+          <div>
+            <label className="block text-xs text-gray-500 mb-2">
+              Dietary requirements / Allergies <span className="text-gray-400">(select all that apply)</span>
+            </label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {allergyOptions.map((opt) => (
+                <label key={opt.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedAllergies.includes(opt.id)}
+                    onChange={() => toggleOption(selectedAllergies, setSelectedAllergies, opt.id)}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  {opt.name}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
         <button
           onClick={handleSave}
           disabled={loading}

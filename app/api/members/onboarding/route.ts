@@ -130,8 +130,9 @@ export async function POST(req: Request) {
 
   // Assign default free membership tier based on role
   const tierName = resolvedBracket === 'high_school' ? 'Explorer'
-    : resolvedBracket === 'college' ? 'Alumni'
+    : resolvedBracket === 'college' ? 'Advisor'
     : resolvedRole === 'teacher' ? 'Educator'
+    : resolvedRole === 'mentor' ? 'Donor'
     : resolvedRole === 'parent' ? 'Parent/Guardian'
     : 'Subscriber'
 

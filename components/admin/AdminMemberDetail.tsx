@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { ROLES_FOR_BRACKET, DEFAULT_ROLE_FOR_BRACKET, getEligibleTierNames } from '@/lib/membership-rules'
+import { EventHistory } from '@/components/member/EventHistory'
 
 interface Member {
   id: string
@@ -32,6 +34,8 @@ interface Member {
     is_complimentary: boolean; membership_tiers: { name: string }
   }>
   member_schools: Array<{ is_current: boolean; schools: { name: string; city: string | null; state: string | null } }>
+  member_ethnicities: Array<{ ethnicity_option_id: string }>
+  member_allergies: Array<{ allergy_option_id: string }>
   event_participations: Array<{
     id: string; event_year: number | null; event_location: string | null
     team_name: string | null; award: string | null
@@ -40,18 +44,24 @@ interface Member {
 
 interface Tier { id: string; name: string }
 interface School { id: string; name: string }
+interface Option { id: string; name: string }
 
-interface Props { member: Member; tiers: Tier[]; schools: School[] }
+interface Props {
+  member: Member
+  tiers: Tier[]
+  schools: School[]
+  ethnicityOptions: Option[]
+  allergyOptions: Option[]
+}
 
 const GRADES = ['grade_9','grade_10','grade_11','grade_12','college_freshman','college_sophomore','college_junior','college_senior','grad_phd']
 const BRACKETS = ['high_school','college','adult']
-const ROLES = ['school_student','mentor','teacher','donor','parent','subscriber']
 
 function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function AdminMemberDetail({ member, tiers, schools }: Props) {
+export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions }: Props) {
   const router = useRouter()
   const [form, setForm] = useState({
     first_name: member.first_name,
@@ -71,6 +81,13 @@ export function AdminMemberDetail({ member, tiers, schools }: Props) {
     ec_phone: member.ec_phone ?? '',
   })
 
+  const [selectedEthnicities, setSelectedEthnicities] = useState<string[]>(
+    member.member_ethnicities?.map((e) => e.ethnicity_option_id) ?? []
+  )
+  const [selectedAllergies, setSelectedAllergies] = useState<string[]>(
+    member.member_allergies?.map((a) => a.allergy_option_id) ?? []
+  )
+
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
@@ -80,13 +97,29 @@ export function AdminMemberDetail({ member, tiers, schools }: Props) {
     setForm((f) => ({ ...f, [field]: value }))
   }
 
+  function handleBracketChange(bracket: string) {
+    const defaultRole = DEFAULT_ROLE_FOR_BRACKET[bracket] ?? ''
+    setForm((f) => ({ ...f, age_bracket: bracket, event_role: defaultRole }))
+  }
+
+  function toggleOption(list: string[], setList: (v: string[]) => void, id: string) {
+    setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id])
+  }
+
+  const eligibleRoles = ROLES_FOR_BRACKET[form.age_bracket] ?? []
+  const eligibleTierNames = getEligibleTierNames(form.age_bracket, form.event_role)
+
   async function handleSave() {
     setSaving(true)
     setError('')
     const res = await fetch(`/api/admin/members/${member.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify({
+        ...form,
+        ethnicity_ids: selectedEthnicities,
+        allergy_ids: selectedAllergies,
+      }),
     })
     setSaving(false)
     if (!res.ok) {
@@ -175,28 +208,41 @@ export function AdminMemberDetail({ member, tiers, schools }: Props) {
             </div>
           </div>
 
-          {/* Membership classification */}
+          {/* Classification */}
           <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
             <h2 className="text-base font-semibold text-gray-900">Classification</h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Age bracket</label>
-                <select value={form.age_bracket} onChange={(e) => set('age_bracket', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <select
+                  value={form.age_bracket}
+                  onChange={(e) => handleBracketChange(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
                   {BRACKETS.map((b) => <option key={b} value={b}>{label(b)}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Event role</label>
-                <select value={form.event_role} onChange={(e) => set('event_role', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                  {ROLES.map((r) => <option key={r} value={r}>{label(r)}</option>)}
+                <select
+                  value={form.event_role}
+                  onChange={(e) => set('event_role', e.target.value)}
+                  disabled={eligibleRoles.length <= 1}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500"
+                >
+                  {eligibleRoles.map((r) => <option key={r} value={r}>{label(r)}</option>)}
                 </select>
+                {eligibleRoles.length <= 1 && (
+                  <p className="text-xs text-gray-400 mt-1">Auto-set by age bracket</p>
+                )}
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Grade</label>
-                <select value={form.grade} onChange={(e) => set('grade', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <select
+                  value={form.grade}
+                  onChange={(e) => set('grade', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
                   <option value="">—</option>
                   {GRADES.map((g) => <option key={g} value={g}>{label(g)}</option>)}
                 </select>
@@ -214,6 +260,77 @@ export function AdminMemberDetail({ member, tiers, schools }: Props) {
                 </label>
               </div>
             </div>
+
+            {/* Eligible membership tiers for this bracket/role */}
+            {eligibleTierNames.length > 0 && (
+              <div className="pt-2 border-t border-gray-100">
+                <p className="text-xs text-gray-500 mb-1.5">Eligible membership tiers for this classification:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {eligibleTierNames.map((name) => {
+                    const isActive = activeMembership?.membership_tiers.name === name
+                    return (
+                      <span
+                        key={name}
+                        className={`text-xs px-2 py-1 rounded-full font-medium ${
+                          isActive
+                            ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {name}{isActive ? ' ✓' : ''}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Ethnicity & Allergies */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+            <h2 className="text-base font-semibold text-gray-900">Ethnicity & Dietary</h2>
+
+            {ethnicityOptions.length > 0 && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-2">
+                  Ethnicity <span className="text-gray-400">(select all that apply)</span>
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {ethnicityOptions.map((opt) => (
+                    <label key={opt.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedEthnicities.includes(opt.id)}
+                        onChange={() => toggleOption(selectedEthnicities, setSelectedEthnicities, opt.id)}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      {opt.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {allergyOptions.length > 0 && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-2">
+                  Dietary requirements / Allergies <span className="text-gray-400">(select all that apply)</span>
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {allergyOptions.map((opt) => (
+                    <label key={opt.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedAllergies.includes(opt.id)}
+                        onChange={() => toggleOption(selectedAllergies, setSelectedAllergies, opt.id)}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      {opt.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Emergency contact */}
@@ -239,34 +356,12 @@ export function AdminMemberDetail({ member, tiers, schools }: Props) {
             </div>
           </div>
 
-          {/* Event history */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-4">Event history</h2>
-            {member.event_participations.length === 0 ? (
-              <p className="text-sm text-gray-500">No events recorded.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
-                    <th className="pb-2">Year</th>
-                    <th className="pb-2">Location</th>
-                    <th className="pb-2">Company</th>
-                    <th className="pb-2">Award</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {member.event_participations.map((p) => (
-                    <tr key={p.id}>
-                      <td className="py-2">{p.event_year ?? '—'}</td>
-                      <td className="py-2">{p.event_location ?? '—'}</td>
-                      <td className="py-2">{p.team_name ?? '—'}</td>
-                      <td className="py-2">{p.award ?? '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+          {/* Event Activity */}
+          <EventHistory
+            participations={member.event_participations ?? []}
+            editable
+            adminMemberId={member.id}
+          />
         </div>
 
         {/* Sidebar */}

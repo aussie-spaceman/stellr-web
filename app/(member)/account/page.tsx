@@ -12,27 +12,29 @@ export default async function AccountPage() {
   if (!userId) redirect('/sign-in')
 
   const clerkUserRaw = await currentUser()
-  // Extract only serializable fields before passing to Client Components
   const clerkUser = clerkUserRaw
     ? { imageUrl: clerkUserRaw.imageUrl ?? null }
     : null
   const db = supabaseServer()
 
-  const { data: member } = await db
-    .from('members')
-    .select(`
-      *,
-      member_schools(*, schools(*)),
-      member_memberships(*, membership_tiers(*)),
-      member_ethnicities(*, ethnicity_options(*)),
-      member_allergies(*, allergy_options(*)),
-      event_participations(*)
-    `)
-    .eq('clerk_user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle()
+  const [{ data: member }, { data: ethnicityOptions }, { data: allergyOptions }] = await Promise.all([
+    db
+      .from('members')
+      .select(`
+        *,
+        member_schools(*, schools(*)),
+        member_memberships(*, membership_tiers(*)),
+        member_ethnicities(ethnicity_option_id),
+        member_allergies(allergy_option_id),
+        event_participations(*)
+      `)
+      .eq('clerk_user_id', userId)
+      .eq('is_active', true)
+      .maybeSingle(),
+    db.from('ethnicity_options').select('id, name').order('name'),
+    db.from('allergy_options').select('id, name').order('name'),
+  ])
 
-  // If no member record exists yet (edge case), redirect to complete onboarding
   if (!member) redirect('/account/onboarding')
 
   const activeMembership = member.member_memberships
@@ -52,8 +54,16 @@ export default async function AccountPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <AccountProfile member={member} clerkUser={clerkUser} />
-          <EventHistory participations={member.event_participations ?? []} />
+          <AccountProfile
+            member={member}
+            clerkUser={clerkUser}
+            ethnicityOptions={ethnicityOptions ?? []}
+            allergyOptions={allergyOptions ?? []}
+          />
+          <EventHistory
+            participations={member.event_participations ?? []}
+            editable
+          />
         </div>
         <div>
           <MembershipCard membership={activeMembership} member={member} />

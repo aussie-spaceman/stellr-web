@@ -53,12 +53,20 @@ export default async function AdminMembersPage({
           <h1 className="text-2xl font-bold text-gray-900">Members</h1>
           <p className="text-sm text-gray-500 mt-0.5">{count ?? 0} total</p>
         </div>
-        <a
-          href="/api/admin/members/export"
-          className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
-        >
-          Export CSV
-        </a>
+        <div className="flex gap-2">
+          <a
+            href="/admin/members/new"
+            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700"
+          >
+            + Add member
+          </a>
+          <a
+            href="/api/admin/members/export"
+            className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+          >
+            Export CSV
+          </a>
+        </div>
       </div>
 
       <MemberTable

@@ -8,50 +8,119 @@ import { Logo } from './Logo'
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
+const audienceLinks = [
+  { label: 'For Students', href: '/community/students' },
+  { label: 'For Educators', href: '/community/educators' },
+  { label: 'For Sponsors', href: '/network/sponsors' },
+]
+
 const navLinks = [
-  { label: 'Events', href: '/events' },
   {
-    label: 'Why Stellr',
-    href: '/why-stellr',
+    label: 'Events',
+    href: '/events',
     dropdown: [
-      { label: 'Students', href: '/why-stellr#student' },
-      { label: 'Teachers', href: '/why-stellr#teacher' },
-      { label: 'Parents', href: '/why-stellr#parent' },
-      { label: 'Mentors', href: '/why-stellr#mentor' },
-      { label: 'Donors', href: '/why-stellr#donor' },
+      { label: 'Upcoming Events', href: '/events' },
+      { label: 'Competition Calendar', href: '/events#calendar' },
+      { label: 'Host an Event', href: '/host-event' },
+      { label: 'Results & Leaderboards', href: '/results' },
     ],
   },
-  { label: 'Membership', href: '/membership' },
+  {
+    label: 'Community',
+    href: '/community',
+    dropdown: [
+      { label: 'Students', href: '/community/students' },
+      { label: 'Educators & Schools', href: '/community/educators' },
+      { label: 'Parents & Families', href: '/community/parents' },
+      { label: 'Mentors', href: '/community/mentors' },
+      { label: 'Alumni', href: '/community/alumni' },
+    ],
+  },
+  {
+    label: 'Network',
+    href: '/network',
+    dropdown: [
+      { label: 'Industry Partners', href: '/network/partners' },
+      { label: 'University Partners', href: '/network/universities' },
+      { label: 'Sponsors', href: '/network/sponsors' },
+      { label: 'Volunteer', href: '/volunteer' },
+    ],
+  },
   {
     label: 'About',
     href: '/about',
     dropdown: [
-      { label: 'Who We Are', href: '/about' },
+      { label: 'Our Mission', href: '/about' },
       { label: 'Our Team', href: '/about#team' },
       { label: 'News', href: '/news' },
+      { label: 'Contact Us', href: '/contact' },
     ],
   },
+]
+
+const getInvolvedLinks = [
   { label: 'Donate', href: '/donate' },
+  { label: 'Become a Mentor', href: '/volunteer#mentor' },
+  { label: 'Become a Sponsor', href: '/network/sponsors' },
+  { label: 'Volunteer', href: '/volunteer' },
+  { label: 'Partner With Us', href: '/network/partners' },
 ]
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const [mobileExpanded, setMobileExpanded] = useState<string | null>(null)
   const pathname = usePathname()
 
-  return (
-    <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8" aria-label="Main navigation">
-        <div className="flex items-center justify-between h-16">
-          <Logo />
+  const toggleMobileSection = (label: string) =>
+    setMobileExpanded((prev) => (prev === label ? null : label))
 
-          {/* Desktop nav */}
-          <ul className="hidden lg:flex items-center gap-1">
-            {navLinks.map((link) => (
-              <li key={link.href} className="relative">
-                {link.dropdown ? (
+  return (
+    <header className="sticky top-0 z-50">
+      {/* ── Tier 1: Utility bar ── */}
+      <div className="bg-brand-blue-dark">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="hidden lg:flex items-center justify-between h-9 text-xs">
+            <div className="flex items-center gap-6">
+              {audienceLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+            <div className="flex items-center gap-5">
+              <a
+                href={`${AUTH_URL}/login`}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                Log In
+              </a>
+              <a
+                href={`${AUTH_URL}/signup`}
+                className="text-brand-orange font-medium hover:text-amber-300 transition-colors"
+              >
+                Create Free Account →
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Tier 2: Main nav ── */}
+      <nav className="bg-white border-b border-gray-100 shadow-sm" aria-label="Main navigation">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <Logo />
+
+            {/* Desktop nav pillars */}
+            <ul className="hidden lg:flex items-center gap-1">
+              {navLinks.map((link) => (
+                <li key={link.href} className="relative">
                   <div
-                    className="relative"
                     onMouseEnter={() => setOpenDropdown(link.label)}
                     onMouseLeave={() => setOpenDropdown(null)}
                   >
@@ -64,10 +133,13 @@ export function Navbar() {
                       aria-expanded={openDropdown === link.label}
                     >
                       {link.label}
-                      <ChevronDown size={14} className={`transition-transform ${openDropdown === link.label ? 'rotate-180' : ''}`} />
+                      <ChevronDown
+                        size={14}
+                        className={`transition-transform ${openDropdown === link.label ? 'rotate-180' : ''}`}
+                      />
                     </button>
-                    {openDropdown === link.label && (
-                      <ul className="absolute top-full left-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50">
+                    {openDropdown === link.label && link.dropdown && (
+                      <ul className="absolute top-full left-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50">
                         {link.dropdown.map((item) => (
                           <li key={item.href}>
                             <Link
@@ -81,93 +153,138 @@ export function Navbar() {
                       </ul>
                     )}
                   </div>
-                ) : (
-                  <Link
-                    href={link.href}
-                    className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      pathname === link.href
-                        ? 'text-brand-blue'
-                        : 'text-brand-grey-dark hover:text-brand-blue-dark'
-                    }`}
-                  >
-                    {link.label}
-                  </Link>
+                </li>
+              ))}
+            </ul>
+
+            {/* Desktop CTAs */}
+            <div className="hidden lg:flex items-center gap-3">
+              {/* Get Involved dropdown */}
+              <div
+                className="relative"
+                onMouseEnter={() => setOpenDropdown('get-involved')}
+                onMouseLeave={() => setOpenDropdown(null)}
+              >
+                <button
+                  className="flex items-center gap-1 px-4 py-2 text-sm font-medium border border-brand-blue text-brand-blue rounded-md hover:bg-blue-50 transition-colors"
+                  aria-expanded={openDropdown === 'get-involved'}
+                >
+                  Get Involved
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform ${openDropdown === 'get-involved' ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {openDropdown === 'get-involved' && (
+                  <ul className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50">
+                    {getInvolvedLinks.map((item) => (
+                      <li key={item.href}>
+                        <Link
+                          href={item.href}
+                          className="block px-4 py-2 text-sm text-brand-grey-dark hover:bg-brand-grey-light hover:text-brand-blue-dark transition-colors"
+                        >
+                          {item.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-              </li>
-            ))}
-          </ul>
+              </div>
 
-          {/* Desktop CTA */}
-          <div className="hidden lg:flex items-center gap-3">
-            <a
-              href={`${AUTH_URL}/login`}
-              className="text-sm font-medium text-brand-grey-dark hover:text-brand-blue-dark transition-colors"
+              {/* Donate */}
+              <Link
+                href="/donate"
+                className="px-4 py-2 text-sm font-heading font-medium bg-brand-orange text-white rounded-md hover:bg-amber-500 transition-colors"
+              >
+                Donate
+              </Link>
+            </div>
+
+            {/* Mobile hamburger */}
+            <button
+              className="lg:hidden p-2 rounded-md text-brand-grey-dark hover:text-brand-blue-dark"
+              onClick={() => setMobileOpen(!mobileOpen)}
+              aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileOpen}
             >
-              Log In
-            </a>
-            <a
-              href={`${AUTH_URL}/signup`}
-              className="btn-primary text-sm"
-            >
-              Join Free
-            </a>
+              {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
           </div>
-
-          {/* Mobile menu toggle */}
-          <button
-            className="lg:hidden p-2 rounded-md text-brand-grey-dark hover:text-brand-blue-dark"
-            onClick={() => setMobileOpen(!mobileOpen)}
-            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
-            aria-expanded={mobileOpen}
-          >
-            {mobileOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
         </div>
       </nav>
 
-      {/* Mobile overlay */}
+      {/* ── Mobile overlay ── */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 top-16 z-40 bg-white overflow-y-auto">
-          <div className="px-4 py-6 space-y-1">
-            {navLinks.map((link) => (
-              <div key={link.href}>
-                <Link
-                  href={link.href}
-                  className="block px-3 py-3 text-base font-medium text-brand-blue-dark border-b border-gray-100"
-                  onClick={() => setMobileOpen(false)}
-                >
-                  {link.label}
-                </Link>
-                {link.dropdown && (
-                  <div className="pl-4 space-y-1 py-2">
-                    {link.dropdown.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className="block px-3 py-2 text-sm text-brand-grey-dark hover:text-brand-blue-dark"
-                        onClick={() => setMobileOpen(false)}
-                      >
-                        {item.label}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
+        <div className="lg:hidden fixed inset-0 top-[calc(2.25rem+4rem)] z-40 bg-white overflow-y-auto">
+          {/* Audience strip */}
+          <div className="bg-brand-blue-dark px-4 py-3 flex gap-5">
+            {audienceLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="text-xs text-gray-400 hover:text-white transition-colors"
+                onClick={() => setMobileOpen(false)}
+              >
+                {link.label}
+              </Link>
             ))}
+          </div>
+
+          <div className="px-4 py-4">
+            {/* Nav sections as accordions */}
+            {[...navLinks, { label: 'Get Involved', href: '/donate', dropdown: getInvolvedLinks }].map(
+              (link) => (
+                <div key={link.label} className="border-b border-gray-100">
+                  <button
+                    className="w-full flex items-center justify-between px-3 py-3 text-base font-medium text-brand-blue-dark"
+                    onClick={() => toggleMobileSection(link.label)}
+                  >
+                    {link.label}
+                    <ChevronDown
+                      size={16}
+                      className={`transition-transform ${mobileExpanded === link.label ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+                  {mobileExpanded === link.label && link.dropdown && (
+                    <div className="pl-4 pb-3 space-y-1">
+                      {link.dropdown.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className="block px-3 py-2 text-sm text-brand-grey-dark hover:text-brand-blue-dark"
+                          onClick={() => setMobileOpen(false)}
+                        >
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            )}
+
+            {/* Auth + Donate CTAs */}
             <div className="pt-6 flex flex-col gap-3">
+              <Link
+                href="/donate"
+                className="block w-full text-center px-4 py-3 bg-brand-orange text-white font-heading font-medium rounded-md hover:bg-amber-500 transition-colors"
+                onClick={() => setMobileOpen(false)}
+              >
+                Donate
+              </Link>
+              <a
+                href={`${AUTH_URL}/signup`}
+                className="block w-full text-center px-4 py-3 bg-brand-blue text-white font-medium rounded-md hover:bg-blue-800 transition-colors"
+                onClick={() => setMobileOpen(false)}
+              >
+                Create Free Account
+              </a>
               <a
                 href={`${AUTH_URL}/login`}
-                className="btn-secondary w-full text-center"
+                className="block w-full text-center px-4 py-3 border border-brand-blue text-brand-blue font-medium rounded-md hover:bg-blue-50 transition-colors"
                 onClick={() => setMobileOpen(false)}
               >
                 Log In
-              </a>
-              <a
-                href={`${AUTH_URL}/signup`}
-                className="btn-primary w-full text-center"
-                onClick={() => setMobileOpen(false)}
-              >
-                Join Free
               </a>
             </div>
           </div>

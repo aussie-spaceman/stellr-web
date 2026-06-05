@@ -29,6 +29,40 @@ const HEADERS = [
   'Emergency Contact Email', 'Emergency Contact Phone',
 ]
 
+const GENDERS = ['Male', 'Female', 'Other']
+const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
+const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
+const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Vegetarian', 'Vegan', 'Other']
+
+function dropdown(sheetId: number, startRow: number, endRow: number, col: number, values: string[]) {
+  return {
+    setDataValidation: {
+      range: { sheetId, startRowIndex: startRow, endRowIndex: endRow, startColumnIndex: col, endColumnIndex: col + 1 },
+      rule: {
+        condition: { type: 'ONE_OF_LIST', values: values.map(v => ({ userEnteredValue: v })) },
+        showCustomUi: true,
+        strict: false,
+      },
+    },
+  }
+}
+
+function greyCell(sheetId: number, rowIndex: number, startCol: number, endCol: number, note: string) {
+  return {
+    repeatCell: {
+      range: { sheetId, startRowIndex: rowIndex, endRowIndex: rowIndex + 1, startColumnIndex: startCol, endColumnIndex: endCol },
+      cell: {
+        userEnteredFormat: {
+          backgroundColor: { red: 0.84, green: 0.84, blue: 0.84 },
+          textFormat: { foregroundColor: { red: 0.55, green: 0.55, blue: 0.55 }, italic: true },
+        },
+        note,
+      },
+      fields: 'userEnteredFormat(backgroundColor,textFormat),note',
+    },
+  }
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -131,11 +165,13 @@ export async function GET(
       },
     })
 
-    // Format header row
+    // Format, protect header, add dropdowns
+    const dataRows = rows.length
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       requestBody: {
         requests: [
+          // Header styling
           {
             repeatCell: {
               range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: HEADERS.length },
@@ -148,6 +184,17 @@ export async function GET(
               fields: 'userEnteredFormat(backgroundColor,textFormat)',
             },
           },
+          // Lock header row
+          {
+            addProtectedRange: {
+              protectedRange: {
+                range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
+                description: 'Header row — do not edit',
+                warningOnly: false,
+                editors: { users: [process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!, OWNER_EMAIL] },
+              },
+            },
+          },
           // Column widths
           ...([130, 80, 120, 120, 200, 130, 120, 90, 110, 140, 200, 180, 180, 180, 200, 180].map((w, i) => ({
             updateDimensionProperties: {
@@ -156,6 +203,24 @@ export async function GET(
               fields: 'pixelSize',
             },
           }))),
+          // Dropdowns for data rows
+          ...(dataRows > 0 ? [
+            dropdown(sheetId, 1, 1 + dataRows, 7, GENDERS),         // Gender
+            dropdown(sheetId, 1, 1 + dataRows, 8, T_SHIRT_SIZES),   // T-Shirt Size
+            dropdown(sheetId, 1, 1 + dataRows, 9, GRADES),          // Grade
+            dropdown(sheetId, 1, 1 + dataRows, 10, DIETARY_OPTIONS), // Dietary Requirements
+          ] : []),
+          // Grey out cells not applicable to Teachers / Adults
+          // Grade (col 9) and Emergency Contacts (cols 12-15) are student-only
+          ...(participants ?? []).flatMap((p: Record<string, unknown>, i: number) => {
+            const role = String(p.event_role ?? '').toLowerCase()
+            if (role === 'student') return []
+            const rowIndex = 1 + i
+            return [
+              greyCell(sheetId, rowIndex, 9,  10, 'Not required for non-student participants'),  // Grade
+              greyCell(sheetId, rowIndex, 12, 16, 'Not required for non-student participants'),  // EC cols
+            ]
+          }),
         ],
       },
     })

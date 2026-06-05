@@ -17,6 +17,8 @@ const config: Config = {
           white:        '#fefefe',  /* backgrounds only */
           'white-text': '#ffffff',  /* pure white for text/icons */
           grey:         '#969696',
+          'grey-dark':  '#374151',
+          'grey-light': '#f3f4f6',
         },
       },
       fontFamily: {

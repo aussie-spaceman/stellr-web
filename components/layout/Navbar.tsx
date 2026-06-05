@@ -13,24 +13,21 @@ const navLinks = [
     label: 'Events',
     href: '/events',
     dropdown: [
-      { label: 'Upcoming Events', href: '/events' },
       { label: 'Why Design Competitions', href: '/events/why-design-competitions' },
-      { label: 'Curriculum Activities', href: '/events/curriculum' },
-      { label: 'Host an Event', href: '/host-event' },
-      { label: 'Register Now', href: '/events/register' },
+      { label: 'Live Challenges', href: '/events/live-challenges' },
+      { label: 'Classroom Based Campaigns', href: '/events/classroom-campaigns' },
+      { label: 'Host An Event', href: '/host-event' },
     ],
   },
   {
     label: 'Community',
     href: '/community',
     dropdown: [
-      { label: 'Join Now', href: '/join' },
       { label: 'School Students', href: '/community/students' },
       { label: 'College Students', href: '/community/college-students' },
       { label: 'Educators & Schools', href: '/community/educators' },
       { label: 'Parents & Families', href: '/community/parents' },
-      { label: 'Mentors', href: '/community/mentors' },
-      { label: 'Alumni', href: '/community/alumni' },
+      { label: 'Volunteer Mentors', href: '/community/mentors' },
     ],
   },
   {
@@ -46,18 +43,17 @@ const navLinks = [
     label: 'About',
     href: '/about',
     dropdown: [
+      { label: 'Impact', href: '/about/impact' },
       { label: 'Our Mission', href: '/about' },
       { label: 'Our Team', href: '/about#team' },
-      { label: 'Impact', href: '/about/impact' },
-      { label: 'Why We Are', href: '/about/why-we-are' },
       { label: 'Contact Us', href: '/contact' },
     ],
   },
 ]
 
 const getInvolvedLinks = [
+  { label: 'Register For An Event', href: '/events/live-challenges' },
   { label: 'Join Our Community', href: '/join' },
-  { label: 'Join Our Network', href: '/network/join' },
   { label: 'Become a Sponsor', href: '/network/corporate' },
   { label: 'Volunteer With Us', href: '/volunteer' },
   { label: 'Partner With Us', href: '/network/partners' },

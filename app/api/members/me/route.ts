@@ -39,6 +39,15 @@ export async function PATCH(req: Request) {
   const body = await req.json()
   const db = supabaseServer()
 
+  const { data: member } = await db
+    .from('members')
+    .select('id')
+    .eq('clerk_user_id', userId)
+    .eq('is_active', true)
+    .single()
+
+  if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+
   // Only allow safe fields to be updated by the member themselves
   const allowed = [
     'nickname', 'phone', 'discord_handle', 'gender',
@@ -51,19 +60,37 @@ export async function PATCH(req: Request) {
     if (key in body) updates[key] = body[key]
   }
 
-  // If grade is being manually set, grade_auto_promote gets set false by DB trigger
-  const { data, error } = await db
-    .from('members')
-    .update(updates)
-    .eq('clerk_user_id', userId)
-    .eq('is_active', true)
-    .select()
-    .single()
+  if (Object.keys(updates).length > 0) {
+    const { error } = await db
+      .from('members')
+      .update(updates)
+      .eq('id', member.id)
 
-  if (error) {
-    console.error('Error updating member:', error)
-    return NextResponse.json({ error: 'Failed to update member' }, { status: 500 })
+    if (error) {
+      console.error('Error updating member:', error)
+      return NextResponse.json({ error: 'Failed to update member' }, { status: 500 })
+    }
   }
 
-  return NextResponse.json({ member: data })
+  // Replace ethnicity selections
+  if ('ethnicity_ids' in body && Array.isArray(body.ethnicity_ids)) {
+    await db.from('member_ethnicities').delete().eq('member_id', member.id)
+    if (body.ethnicity_ids.length > 0) {
+      await db.from('member_ethnicities').insert(
+        body.ethnicity_ids.map((eid: string) => ({ member_id: member.id, ethnicity_option_id: eid }))
+      )
+    }
+  }
+
+  // Replace allergy selections
+  if ('allergy_ids' in body && Array.isArray(body.allergy_ids)) {
+    await db.from('member_allergies').delete().eq('member_id', member.id)
+    if (body.allergy_ids.length > 0) {
+      await db.from('member_allergies').insert(
+        body.allergy_ids.map((aid: string) => ({ member_id: member.id, allergy_option_id: aid }))
+      )
+    }
+  }
+
+  return NextResponse.json({ success: true })
 }

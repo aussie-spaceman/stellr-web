@@ -8,28 +8,25 @@ import { Logo } from './Logo'
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
-const audienceLinks = [
-  { label: 'For Students', href: '/community/students' },
-  { label: 'For Educators', href: '/community/educators' },
-  { label: 'For Sponsors', href: '/network/sponsors' },
-]
-
 const navLinks = [
   {
     label: 'Events',
     href: '/events',
     dropdown: [
       { label: 'Upcoming Events', href: '/events' },
-      { label: 'Competition Calendar', href: '/events#calendar' },
+      { label: 'Why Design Competitions', href: '/events/why-design-competitions' },
+      { label: 'Curriculum Activities', href: '/events/curriculum' },
       { label: 'Host an Event', href: '/host-event' },
-      { label: 'Results & Leaderboards', href: '/results' },
+      { label: 'Register Now', href: '/events/register' },
     ],
   },
   {
     label: 'Community',
     href: '/community',
     dropdown: [
-      { label: 'Students', href: '/community/students' },
+      { label: 'Join Now', href: '/join' },
+      { label: 'School Students', href: '/community/students' },
+      { label: 'College Students', href: '/community/college-students' },
       { label: 'Educators & Schools', href: '/community/educators' },
       { label: 'Parents & Families', href: '/community/parents' },
       { label: 'Mentors', href: '/community/mentors' },
@@ -42,8 +39,7 @@ const navLinks = [
     dropdown: [
       { label: 'Industry Partners', href: '/network/partners' },
       { label: 'University Partners', href: '/network/universities' },
-      { label: 'Sponsors', href: '/network/sponsors' },
-      { label: 'Volunteer', href: '/volunteer' },
+      { label: 'Corporate Partners', href: '/network/corporate' },
     ],
   },
   {
@@ -52,17 +48,18 @@ const navLinks = [
     dropdown: [
       { label: 'Our Mission', href: '/about' },
       { label: 'Our Team', href: '/about#team' },
-      { label: 'News', href: '/news' },
+      { label: 'Impact', href: '/about/impact' },
+      { label: 'Why We Are', href: '/about/why-we-are' },
       { label: 'Contact Us', href: '/contact' },
     ],
   },
 ]
 
 const getInvolvedLinks = [
-  { label: 'Donate', href: '/donate' },
-  { label: 'Become a Mentor', href: '/volunteer#mentor' },
-  { label: 'Become a Sponsor', href: '/network/sponsors' },
-  { label: 'Volunteer', href: '/volunteer' },
+  { label: 'Join Our Community', href: '/join' },
+  { label: 'Join Our Network', href: '/network/join' },
+  { label: 'Become a Sponsor', href: '/network/corporate' },
+  { label: 'Volunteer With Us', href: '/volunteer' },
   { label: 'Partner With Us', href: '/network/partners' },
 ]
 
@@ -80,32 +77,19 @@ export function Navbar() {
       {/* ── Tier 1: Utility bar ── */}
       <div className="bg-brand-blue-dark">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="hidden lg:flex items-center justify-between h-9 text-xs">
-            <div className="flex items-center gap-6">
-              {audienceLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="text-gray-400 hover:text-white transition-colors"
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-            <div className="flex items-center gap-5">
-              <a
-                href={`${AUTH_URL}/login`}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                Log In
-              </a>
-              <a
-                href={`${AUTH_URL}/signup`}
-                className="text-brand-orange font-medium hover:text-amber-300 transition-colors"
-              >
-                Create Free Account →
-              </a>
-            </div>
+          <div className="hidden lg:flex items-center justify-end h-9 text-xs gap-5">
+            <a
+              href={`${AUTH_URL}/login`}
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              Log In
+            </a>
+            <a
+              href={`${AUTH_URL}/signup`}
+              className="text-brand-orange font-medium hover:text-amber-300 transition-colors"
+            >
+              Join Free →
+            </a>
           </div>
         </div>
       </div>
@@ -113,7 +97,7 @@ export function Navbar() {
       {/* ── Tier 2: Main nav ── */}
       <nav className="bg-white border-b border-gray-100 shadow-sm" aria-label="Main navigation">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-20">
             <Logo />
 
             {/* Desktop nav pillars */}
@@ -213,26 +197,12 @@ export function Navbar() {
         </div>
       </nav>
 
-      {/* ── Mobile overlay ── */}
+      {/* ── Mobile overlay (below the main nav bar only — utility bar is hidden on mobile) ── */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 top-[calc(2.25rem+4rem)] z-40 bg-white overflow-y-auto">
-          {/* Audience strip */}
-          <div className="bg-brand-blue-dark px-4 py-3 flex gap-5">
-            {audienceLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="text-xs text-gray-400 hover:text-white transition-colors"
-                onClick={() => setMobileOpen(false)}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </div>
-
+        <div className="lg:hidden fixed inset-0 top-16 z-40 bg-white overflow-y-auto">
           <div className="px-4 py-4">
             {/* Nav sections as accordions */}
-            {[...navLinks, { label: 'Get Involved', href: '/donate', dropdown: getInvolvedLinks }].map(
+            {[...navLinks, { label: 'Get Involved', href: '/get-involved', dropdown: getInvolvedLinks }].map(
               (link) => (
                 <div key={link.label} className="border-b border-gray-100">
                   <button
@@ -277,7 +247,7 @@ export function Navbar() {
                 className="block w-full text-center px-4 py-3 bg-brand-blue text-white font-medium rounded-md hover:bg-blue-800 transition-colors"
                 onClick={() => setMobileOpen(false)}
               >
-                Create Free Account
+                Join Free
               </a>
               <a
                 href={`${AUTH_URL}/login`}

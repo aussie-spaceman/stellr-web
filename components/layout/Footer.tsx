@@ -5,12 +5,15 @@ import { Logo } from './Logo'
 const footerLinks = {
   Events: [
     { label: 'Upcoming Events', href: '/events' },
-    { label: 'Competition Calendar', href: '/events#calendar' },
+    { label: 'Why Design Competitions', href: '/events/why-design-competitions' },
+    { label: 'Curriculum Activities', href: '/events/curriculum' },
     { label: 'Host an Event', href: '/host-event' },
-    { label: 'Results & Leaderboards', href: '/results' },
+    { label: 'Register Now', href: '/events/register' },
   ],
   Community: [
-    { label: 'Students', href: '/community/students' },
+    { label: 'Join Now', href: '/join' },
+    { label: 'School Students', href: '/community/students' },
+    { label: 'College Students', href: '/community/college-students' },
     { label: 'Educators & Schools', href: '/community/educators' },
     { label: 'Parents & Families', href: '/community/parents' },
     { label: 'Mentors', href: '/community/mentors' },
@@ -19,19 +22,20 @@ const footerLinks = {
   Network: [
     { label: 'Industry Partners', href: '/network/partners' },
     { label: 'University Partners', href: '/network/universities' },
-    { label: 'Sponsors', href: '/network/sponsors' },
-    { label: 'Volunteer', href: '/volunteer' },
+    { label: 'Corporate Partners', href: '/network/corporate' },
   ],
   'Get Involved': [
-    { label: 'Donate', href: '/donate' },
-    { label: 'Become a Mentor', href: '/volunteer#mentor' },
-    { label: 'Become a Sponsor', href: '/network/sponsors' },
+    { label: 'Join Our Community', href: '/join' },
+    { label: 'Join Our Network', href: '/network/join' },
+    { label: 'Become a Sponsor', href: '/network/corporate' },
+    { label: 'Volunteer With Us', href: '/volunteer' },
     { label: 'Partner With Us', href: '/network/partners' },
   ],
   About: [
     { label: 'Our Mission', href: '/about' },
     { label: 'Our Team', href: '/about#team' },
-    { label: 'News', href: '/news' },
+    { label: 'Impact', href: '/about/impact' },
+    { label: 'Why We Are', href: '/about/why-we-are' },
     { label: 'Contact Us', href: '/contact' },
     { label: 'Privacy Policy', href: '/privacy' },
   ],
@@ -86,8 +90,8 @@ export function Footer() {
             <div className="col-span-2">
               <Logo variant="light" />
               <p className="mt-4 text-sm text-gray-400 max-w-xs leading-relaxed">
-                The home of STEM education for school students — providing tomorrow's professionals
-                with the skills, relationships, and career pathways they need.
+                The home of STEM education for school students — providing tomorrow&apos;s
+                professionals with the skills, relationships, and career pathways they need.
               </p>
               <div className="mt-6 flex items-center gap-4">
                 {socialLinks.map(({ icon: Icon, label, href }) => (
@@ -111,7 +115,7 @@ export function Footer() {
                 </h3>
                 <ul className="mt-4 space-y-2">
                   {links.map((link) => (
-                    <li key={link.href}>
+                    <li key={link.href + link.label}>
                       <Link
                         href={link.href}
                         className="text-sm text-gray-400 hover:text-white transition-colors"

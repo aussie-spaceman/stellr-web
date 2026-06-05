@@ -13,7 +13,7 @@ export function Logo({ variant = 'dark', className = '' }: LogoProps) {
         src="/images/logo-horiz.svg"
         alt="Stellr Education"
         height={40}
-        className={`h-10 w-auto ${variant === 'light' ? 'brightness-0 invert' : ''}`}
+        className={`h-14 w-auto ${variant === 'light' ? 'brightness-0 invert' : ''}`}
       />
     </Link>
   )

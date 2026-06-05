@@ -26,20 +26,7 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
         </div>
       </div>
 
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-3xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="w-6 h-6 rounded-full bg-green-500 text-white flex items-center justify-center text-xs">✓</span>
-            <span className="text-gray-400">Registration Type</span>
-            <span className="text-gray-300 mx-2">›</span>
-            <span className="w-6 h-6 rounded-full bg-brand-blue text-white flex items-center justify-center text-xs font-bold">2</span>
-            <span className="font-medium text-brand-blue-dark">Group Details</span>
-            <span className="text-gray-300 mx-2">›</span>
-            <span className="w-6 h-6 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center text-xs font-bold">3</span>
-            <span className="text-gray-400">Confirmation</span>
-          </div>
-        </div>
-      </div>
+      {/* Step bar is rendered inside GroupRegistrationForm so it can reflect the current step */}
 
       <div className="max-w-3xl mx-auto px-4 py-10">
         <GroupRegistrationForm

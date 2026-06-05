@@ -15,12 +15,20 @@ const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 
 const ETHNICITIES = ['Pacific Islander', 'Hispanic', 'White (Caucasian)', 'Black', 'Native American', 'Asian', 'Prefer Not To Say']
 const DIETARY = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Vegetarian', 'Vegan', 'Other']
 const HS_GRADES = ['9', '10', '11', '12']
+const US_STATES = [
+  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA',
+  'HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
+  'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
+  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
+  'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY',
+]
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface AdultData {
   first_name: string; last_name: string; email: string; phone: string
   date_of_birth: string; gender: string; t_shirt_size: string
   dietary_requirements: string[]; health_conditions: string
+  existing_membership_id: string
 }
 
 interface StudentData {
@@ -29,14 +37,15 @@ interface StudentData {
   health_conditions: string
   emergency_contact_first_name: string; emergency_contact_last_name: string
   emergency_contact_email: string; emergency_contact_phone: string
+  existing_membership_id: string
 }
 
 function emptyAdult(): AdultData {
-  return { first_name: '', last_name: '', email: '', phone: '', date_of_birth: '', gender: '', t_shirt_size: '', dietary_requirements: [], health_conditions: '' }
+  return { first_name: '', last_name: '', email: '', phone: '', date_of_birth: '', gender: '', t_shirt_size: '', dietary_requirements: [], health_conditions: '', existing_membership_id: '' }
 }
 
 function emptyStudent(): StudentData {
-  return { first_name: '', last_name: '', email: '', phone: '', date_of_birth: '', grade: '', gender: '', t_shirt_size: '', health_conditions: '', emergency_contact_first_name: '', emergency_contact_last_name: '', emergency_contact_email: '', emergency_contact_phone: '' }
+  return { first_name: '', last_name: '', email: '', phone: '', date_of_birth: '', grade: '', gender: '', t_shirt_size: '', health_conditions: '', emergency_contact_first_name: '', emergency_contact_last_name: '', emergency_contact_email: '', emergency_contact_phone: '', existing_membership_id: '' }
 }
 
 // ── Teacher schema ────────────────────────────────────────────────────────────
@@ -58,6 +67,33 @@ const teacherSchema = z.object({
   health_conditions: z.string().optional(),
 })
 type TeacherFormData = z.infer<typeof teacherSchema>
+
+// ── Step bar ──────────────────────────────────────────────────────────────────
+function StepBar({ step }: { step: 1 | 2 }) {
+  const steps = [
+    { n: 1, label: 'Registration Type', done: true },
+    { n: 2, label: 'Your Details', done: step > 1, current: step === 1 },
+    { n: 3, label: 'Group Details', done: false, current: step === 2 },
+    { n: 4, label: 'Confirmation', done: false, current: false },
+  ]
+  return (
+    <div className="bg-white border-b border-gray-200 -mx-4 px-4 py-4 mb-6 sm:-mx-0">
+      <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm flex-wrap">
+        {steps.map((s, i) => (
+          <div key={s.n} className="flex items-center gap-1 sm:gap-2">
+            {i > 0 && <span className="text-gray-300">›</span>}
+            <span className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+              s.done ? 'bg-green-500 text-white' : s.current ? 'bg-brand-blue text-white' : 'bg-gray-200 text-gray-400'
+            }`}>
+              {s.done ? '✓' : s.n}
+            </span>
+            <span className={s.current ? 'font-medium text-brand-blue-dark' : 'text-gray-400'}>{s.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // ── Shared: multi-checkbox ────────────────────────────────────────────────────
 function MultiCheckboxes({ label, note, options, selected, onChange, error }: {
@@ -151,6 +187,12 @@ function AdultAccordion({ index, data, onChange, expanded, onToggle }: {
             <label className="label-text">Health Conditions / Allergies</label>
             <textarea value={data.health_conditions} onChange={e => onChange('health_conditions', e.target.value)} className="input-field resize-none" rows={2} placeholder="Leave blank if none." />
           </div>
+          <div>
+            <label className="label-text">Existing Membership ID</label>
+            <input value={data.existing_membership_id} onChange={e => onChange('existing_membership_id', e.target.value)}
+              className="input-field font-mono" placeholder="e.g. 0000001 — leave blank if new to Stellr" />
+            <p className="text-xs text-gray-400 mt-1">If this person has previously registered with Stellr, enter their Membership ID to prevent duplicate records.</p>
+          </div>
         </div>
       )}
     </div>
@@ -223,6 +265,12 @@ function StudentAccordion({ index, data, onChange, expanded, onToggle }: {
               </div>
             </div>
           )}
+          <div className="border-t border-gray-100 pt-4">
+            <label className="label-text">Existing Membership ID</label>
+            <input value={data.existing_membership_id} onChange={e => onChange('existing_membership_id', e.target.value)}
+              className="input-field font-mono" placeholder="e.g. 0000001 — leave blank if new to Stellr" />
+            <p className="text-xs text-gray-400 mt-1">If this student has previously registered with Stellr, enter their Membership ID to prevent duplicate records.</p>
+          </div>
         </div>
       )}
     </div>
@@ -356,6 +404,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
   if (step === 1) {
     return (
       <div className="space-y-6">
+        <StepBar step={1} />
         <div>
           <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Your Details</h2>
           <p className="text-sm text-gray-600">Step 2 of 4 — Teacher / Coordinator information</p>
@@ -392,7 +441,14 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
           <div><label className="label-text">Street Address *</label><input {...register('school_address_street')} className="input-field" /><FieldError message={errors.school_address_street?.message} /></div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="col-span-2"><label className="label-text">City *</label><input {...register('school_address_city')} className="input-field" /><FieldError message={errors.school_address_city?.message} /></div>
-            <div><label className="label-text">State *</label><input {...register('school_address_state')} className="input-field" placeholder="CA" /><FieldError message={errors.school_address_state?.message} /></div>
+            <div>
+              <label className="label-text">State *</label>
+              <select {...register('school_address_state')} className="input-field">
+                <option value="">Select…</option>
+                {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <FieldError message={errors.school_address_state?.message} />
+            </div>
             <div><label className="label-text">ZIP *</label><input {...register('school_address_zip')} className="input-field" /><FieldError message={errors.school_address_zip?.message} /></div>
           </div>
         </div>
@@ -418,6 +474,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
   // ── Step 2: Group details ────────────────────────────────────────────────
   return (
     <div className="space-y-6">
+      <StepBar step={2} />
       <div>
         <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Group Details</h2>
         <p className="text-sm text-gray-600">Step 3 of 4 — Group size, member details, and payment</p>
@@ -430,7 +487,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
             onChange={handleAdultCountChange} note="Includes yourself as teacher / coordinator. Maximum 2." />
           <NumberStepper label="How many students will be in the group?" value={studentCount} min={2} max={20}
             onChange={handleStudentCountChange}
-            note={studentCount >= 20 ? 'For groups larger than 20, contact Stellr directly for custom registration.' : 'Minimum 2. Maximum 20.'} />
+            note="Minimum 2. Maximum 20. For groups larger than 20, contact Stellr directly for custom registration." />
         </div>
         <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark">
           Total participants: <strong>{adultCount + studentCount}</strong>

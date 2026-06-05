@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { CheckCircle, Download, ExternalLink } from 'lucide-react'
+import { CheckCircle, ExternalLink } from 'lucide-react'
 
 interface PageProps {
   params: { slug: string }
@@ -99,16 +99,19 @@ export default function ConfirmationPage({ params, searchParams }: PageProps) {
           )}
         </div>
 
-        {/* CSV download — add_now group path (no spreadsheet) */}
+        {/* Google Sheet export — add_now group path (participants already in DB) */}
         {isGroup && !spreadsheetUrl && searchParams.id && (
           <div className="mb-4">
             <a
               href={`/api/registrations/${searchParams.id}/spreadsheet`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="btn-outline w-full sm:w-auto inline-flex items-center justify-center gap-2"
             >
-              <Download size={16} />
-              Download Participant List (CSV)
+              <ExternalLink size={16} />
+              Open Participant List as Google Sheet
             </a>
+            <p className="text-xs text-gray-400 mt-2">Opens in Google Sheets with all registered participants pre-filled.</p>
           </div>
         )}
 

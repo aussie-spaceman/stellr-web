@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     )?.email_address
 
     if (!primaryEmail) {
-      return NextResponse.json({ error: 'No primary email found' }, { status: 400 })
+      return NextResponse.json({ received: true, skipped: 'no primary email' })
     }
 
     // Check if a member record already exists for this email (created via event registration)

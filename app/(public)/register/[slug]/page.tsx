@@ -5,11 +5,12 @@ import { getEventBySlug } from '@/lib/sanity'
 import { formatDateRange, registrationStatus } from '@/lib/utils'
 
 interface PageProps {
-  params: { slug: string }
+  params: Promise<{ slug: string }>
 }
 
 export default async function RegisterTypePage({ params }: PageProps) {
-  const event = await getEventBySlug(params.slug).catch(() => null)
+  const { slug } = await params
+  const event = await getEventBySlug(slug).catch(() => null)
   if (!event) notFound()
 
   const status = registrationStatus(
@@ -41,7 +42,7 @@ export default async function RegisterTypePage({ params }: PageProps) {
       <div className="bg-brand-blue-dark text-white py-10 px-4">
         <div className="max-w-2xl mx-auto">
           <Link
-            href={`/events/${params.slug}`}
+            href={`/events/${slug}`}
             className="text-blue-300 text-sm hover:text-white transition-colors mb-4 inline-block"
           >
             ← Back to event
@@ -81,7 +82,7 @@ export default async function RegisterTypePage({ params }: PageProps) {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Link
-            href={`/register/${params.slug}/individual`}
+            href={`/register/${slug}/individual`}
             className="group bg-white rounded-xl border-2 border-gray-200 hover:border-brand-blue p-6 transition-all text-left"
           >
             <div className="w-12 h-12 rounded-full bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center mb-4 transition-colors">
@@ -97,7 +98,7 @@ export default async function RegisterTypePage({ params }: PageProps) {
           </Link>
 
           <Link
-            href={`/register/${params.slug}/group`}
+            href={`/register/${slug}/group`}
             className="group bg-white rounded-xl border-2 border-gray-200 hover:border-brand-blue p-6 transition-all text-left"
           >
             <div className="w-12 h-12 rounded-full bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center mb-4 transition-colors">

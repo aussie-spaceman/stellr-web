@@ -32,11 +32,12 @@ interface EventData {
 }
 
 interface PageProps {
-  params: { slug: string }
+  params: Promise<{ slug: string }>
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const event: EventData | null = await getEventBySlug(params.slug).catch(() => null)
+  const { slug } = await params
+  const event: EventData | null = await getEventBySlug(slug).catch(() => null)
   if (!event) return { title: 'Event Not Found' }
   return {
     title: event.title,
@@ -61,7 +62,8 @@ const PLACEHOLDER_FAQS = [
 ]
 
 export default async function EventDetailPage({ params }: PageProps) {
-  const event: EventData | null = await getEventBySlug(params.slug).catch(() => null)
+  const { slug } = await params
+  const event: EventData | null = await getEventBySlug(slug).catch(() => null)
   if (!event) notFound()
 
   const status = registrationStatus(event.registrationOpen ?? false, event.registrationOpenDate, event.registrationCloseDate)
@@ -80,7 +82,7 @@ export default async function EventDetailPage({ params }: PageProps) {
       address: `${event.city}, ${event.state}`,
     },
     organizer: { '@type': 'Organization', name: 'Stellr Education' },
-    url: `https://www.stellreducation.org/events/${params.slug}`,
+    url: `https://www.stellreducation.org/events/${slug}`,
   }
 
   return (
@@ -143,7 +145,7 @@ export default async function EventDetailPage({ params }: PageProps) {
           {/* Hero CTAs */}
           <div className="mt-8 flex flex-wrap gap-4">
             <a
-              href={`/register/${params.slug}`}
+              href={`/register/${slug}`}
               className="btn-primary text-base px-8 py-4"
             >
               Register Now
@@ -315,7 +317,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                 </p>
                 {status !== 'closed' && (
                   <a
-                    href={`/register/${params.slug}`}
+                    href={`/register/${slug}`}
                     className="btn-primary w-full justify-center text-sm"
                   >
                     {status === 'open' ? 'Register Now' : 'Get Notified'}
@@ -339,13 +341,13 @@ export default async function EventDetailPage({ params }: PageProps) {
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <a
-              href={`/register/${params.slug}/individual`}
+              href={`/register/${slug}/individual`}
               className="btn-outline-white text-base px-8 py-4"
             >
               Register as an Individual
             </a>
             <a
-              href={`/register/${params.slug}/group`}
+              href={`/register/${slug}/group`}
               className="bg-white text-brand-blue font-semibold text-base px-8 py-4 rounded-lg hover:bg-blue-50 transition-colors"
             >
               Register a Group

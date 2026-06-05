@@ -10,7 +10,7 @@ import { SubscribeForm } from '@/components/forms/SubscribeForm'
 export const revalidate = 3600
 
 interface PageProps {
-  params: { slug: string }
+  params: Promise<{ slug: string }>
 }
 
 function formatDate(dateStr: string) {
@@ -25,7 +25,8 @@ const categoryColors: Record<string, string> = {
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const post = await getNewsPostBySlug(params.slug).catch(() => null)
+  const { slug } = await params
+  const post = await getNewsPostBySlug(slug).catch(() => null)
   if (!post) return { title: 'Article Not Found' }
   return {
     title: post.title,
@@ -37,7 +38,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function NewsArticlePage({ params }: PageProps) {
-  const post = await getNewsPostBySlug(params.slug).catch(() => null)
+  const { slug } = await params
+  const post = await getNewsPostBySlug(slug).catch(() => null)
   if (!post) notFound()
 
   const related = post.category

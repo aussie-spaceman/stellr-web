@@ -2,13 +2,15 @@ import Link from 'next/link'
 import { CheckCircle, ExternalLink } from 'lucide-react'
 
 interface PageProps {
-  params: { slug: string }
-  searchParams: { id?: string; type?: string; payment?: string; spreadsheet?: string }
+  params: Promise<{ slug: string }>
+  searchParams: Promise<{ id?: string; type?: string; payment?: string; spreadsheet?: string }>
 }
 
-export default function ConfirmationPage({ params, searchParams }: PageProps) {
-  const isGroup = searchParams.type === 'group'
-  const spreadsheetUrl = searchParams.spreadsheet ? decodeURIComponent(searchParams.spreadsheet) : null
+export default async function ConfirmationPage({ params, searchParams }: PageProps) {
+  const { slug } = await params
+  const { id, type, spreadsheet } = await searchParams
+  const isGroup = type === 'group'
+  const spreadsheetUrl = spreadsheet ? decodeURIComponent(spreadsheet) : null
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-16">
@@ -27,9 +29,9 @@ export default function ConfirmationPage({ params, searchParams }: PageProps) {
             : 'Thank you for registering. A confirmation email will be sent once your payment is processed.'}
         </p>
 
-        {searchParams.id && (
+        {id && (
           <div className="bg-gray-100 rounded-lg px-4 py-3 mb-6 text-sm text-gray-600">
-            Reference ID: <span className="font-mono font-medium">{searchParams.id}</span>
+            Reference ID: <span className="font-mono font-medium">{id}</span>
           </div>
         )}
 
@@ -100,10 +102,10 @@ export default function ConfirmationPage({ params, searchParams }: PageProps) {
         </div>
 
         {/* Google Sheet export — add_now group path (participants already in DB) */}
-        {isGroup && !spreadsheetUrl && searchParams.id && (
+        {isGroup && !spreadsheetUrl && id && (
           <div className="mb-4">
             <a
-              href={`/api/registrations/${searchParams.id}/spreadsheet`}
+              href={`/api/registrations/${id}/spreadsheet`}
               target="_blank"
               rel="noopener noreferrer"
               className="btn-outline w-full sm:w-auto inline-flex items-center justify-center gap-2"
@@ -116,7 +118,7 @@ export default function ConfirmationPage({ params, searchParams }: PageProps) {
         )}
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Link href={`/events/${params.slug}`} className="btn-outline">
+          <Link href={`/events/${slug}`} className="btn-outline">
             Back to Event
           </Link>
           <Link href="/events" className="btn-primary">

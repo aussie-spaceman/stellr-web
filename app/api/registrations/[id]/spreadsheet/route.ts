@@ -31,9 +31,10 @@ const HEADERS = [
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     if (!isGoogleSheetsConfigured()) {
       console.error('[spreadsheet] Google Sheets env vars not configured')
       return NextResponse.json({ error: 'Google Sheets not configured' }, { status: 503 })
@@ -44,7 +45,7 @@ export async function GET(
     const { data: registration, error: regErr } = await db
       .from('registrations')
       .select('id, event_title, school_name, teacher_email, type')
-      .eq('id', params.id)
+      .eq('id', id)
       .maybeSingle()
 
     if (regErr) {
@@ -67,7 +68,7 @@ export async function GET(
     const { data: participants, error: partErr } = await db
       .from('participants')
       .select('membership_id, event_role, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, grade, dietary_requirements, health_conditions, emergency_contact_first_name, emergency_contact_last_name, emergency_contact_email, emergency_contact_phone')
-      .eq('registration_id', params.id)
+      .eq('registration_id', id)
       .order('event_role')
 
     if (partErr) {

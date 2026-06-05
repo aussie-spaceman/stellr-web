@@ -8,13 +8,14 @@ export const metadata: Metadata = {
 }
 
 interface PageProps {
-  searchParams: { type?: string }
+  searchParams: Promise<{ type?: string }>
 }
 
-export default function ContactPage({ searchParams }: PageProps) {
-  const prefillType = searchParams.type === 'mentor'
+export default async function ContactPage({ searchParams }: PageProps) {
+  const { type } = await searchParams
+  const prefillType = type === 'mentor'
     ? 'Volunteer / Mentor'
-    : searchParams.type === 'sponsorship'
+    : type === 'sponsorship'
     ? 'Sponsorship / Donation'
     : undefined
 

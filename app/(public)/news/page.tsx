@@ -25,7 +25,7 @@ interface NewsPost {
 }
 
 interface PageProps {
-  searchParams: { category?: string }
+  searchParams: Promise<{ category?: string }>
 }
 
 function formatDate(dateStr: string) {
@@ -40,9 +40,10 @@ const categoryColors: Record<string, string> = {
 }
 
 export default async function NewsPage({ searchParams }: PageProps) {
+  const { category } = await searchParams
   const allPosts: NewsPost[] = await getAllNewsPosts().catch(() => []) ?? []
 
-  const activeCategory = searchParams.category ?? 'All'
+  const activeCategory = category ?? 'All'
   const filtered = activeCategory === 'All'
     ? allPosts
     : allPosts.filter((p) => p.category === activeCategory)

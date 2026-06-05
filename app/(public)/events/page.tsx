@@ -31,16 +31,17 @@ interface StellarEvent {
 }
 
 interface PageProps {
-  searchParams: { type?: string; grade?: string }
+  searchParams: Promise<{ type?: string; grade?: string }>
 }
 
 export default async function EventsPage({ searchParams }: PageProps) {
+  const { type, grade } = await searchParams
   const allEvents: StellarEvent[] = await getAllEvents().catch(() => []) ?? []
   const events: StellarEvent[] = allEvents
 
   const filtered = events.filter((e) => {
-    if (searchParams.type && e.type !== searchParams.type) return false
-    if (searchParams.grade && e.gradeLevel !== searchParams.grade) return false
+    if (type && e.type !== type) return false
+    if (grade && e.gradeLevel !== grade) return false
     return true
   })
 

@@ -4,11 +4,12 @@ import { formatDateRange } from '@/lib/utils'
 import GroupRegistrationForm from '@/components/forms/GroupRegistrationForm'
 
 interface PageProps {
-  params: { slug: string }
+  params: Promise<{ slug: string }>
 }
 
 export default async function GroupRegistrationPage({ params }: PageProps) {
-  const event = await getEventBySlug(params.slug).catch(() => null)
+  const { slug } = await params
+  const event = await getEventBySlug(slug).catch(() => null)
   if (!event) notFound()
 
   return (
@@ -30,7 +31,7 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
 
       <div className="max-w-3xl mx-auto px-4 py-10">
         <GroupRegistrationForm
-          eventSlug={params.slug}
+          eventSlug={slug}
           eventTitle={event.title}
         />
       </div>

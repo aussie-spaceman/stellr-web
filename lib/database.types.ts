@@ -18,6 +18,12 @@ export interface RegistrationRow {
   school_address_state: string | null
   school_address_zip: string | null
   invoice_requested: boolean
+  registrant_role: 'teacher' | 'student_manager'
+  teacher_poc_first_name: string | null
+  teacher_poc_last_name: string | null
+  teacher_poc_email: string | null
+  member_pays_individually: boolean
+  details_method: 'add_now' | 'spreadsheet' | 'email_link'
 }
 
 export type RegistrationInsert = Omit<RegistrationRow, 'id' | 'created_at' | 'updated_at'>

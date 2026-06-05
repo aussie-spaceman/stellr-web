@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { CheckCircle } from 'lucide-react'
+import { CheckCircle, Download } from 'lucide-react'
 
 interface PageProps {
   params: { slug: string }
@@ -74,6 +74,18 @@ export default function ConfirmationPage({ params, searchParams }: PageProps) {
             </ul>
           )}
         </div>
+
+        {isGroup && searchParams.id && (
+          <div className="mb-4">
+            <a
+              href={`/api/registrations/${searchParams.id}/spreadsheet`}
+              className="btn-outline w-full sm:w-auto inline-flex items-center justify-center gap-2"
+            >
+              <Download size={16} />
+              Download Participant List (CSV)
+            </a>
+          </div>
+        )}
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link href={`/events/${params.slug}`} className="btn-outline">

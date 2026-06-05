@@ -12,7 +12,14 @@ const apiVersion = '2024-01-01'
 const sanityConfigured = Boolean(projectId && projectId.length > 0)
 
 export const client = sanityConfigured
-  ? createClient({ projectId: projectId!, dataset, apiVersion, useCdn: true })
+  ? createClient({
+      projectId: projectId!,
+      dataset,
+      apiVersion,
+      useCdn: false,
+      token: process.env.SANITY_API_TOKEN,
+      perspective: 'published',
+    })
   : null
 
 const builder = client ? imageUrlBuilder(client) : null
@@ -56,7 +63,7 @@ export async function getEventBySlug(slug: string) {
       _id, title, slug, type, gradeLevel, date, endDate,
       venue, city, state, tagline, description, image,
       registrationOpen, registrationOpenDate, registrationCloseDate,
-      capacity, eligibility
+      capacity, eligibility, stripePriceId
     }`,
     { slug }
   )

@@ -31,6 +31,12 @@ export const event = {
     { name: 'capacity', type: 'number', title: 'Max Participants' },
     { name: 'eligibility', type: 'string', title: 'Eligibility Notes' },
     { name: 'featured', type: 'boolean', title: 'Feature on homepage' },
+    {
+      name: 'stripePriceId',
+      type: 'string',
+      title: 'Stripe Price ID',
+      description: 'Individual registration fee — copy the Price ID from Stripe Dashboard (e.g. price_xxxxx). Leave blank for free events.',
+    },
   ],
   orderings: [
     {

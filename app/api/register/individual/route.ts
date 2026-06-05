@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
+import { getEventBySlug } from '@/lib/sanity'
 import type { RegistrationRow, ParticipantRow } from '@/lib/database.types'
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', {
+  apiVersion: '2026-05-27.dahlia',
+})
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
 export async function POST(req: NextRequest) {
   try {
@@ -91,9 +99,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to save participant details' }, { status: 500 })
     }
 
-    // TODO: send confirmation email via Resend
+    // Look up Stripe Price ID from Sanity
+    const event = await getEventBySlug(event_slug)
+    const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId
 
-    return NextResponse.json({ registrationId: regId }, { status: 201 })
+    if (!stripePriceId || !process.env.STRIPE_SECRET_KEY) {
+      // No payment configured — go straight to confirmation
+      return NextResponse.json({ registrationId: regId, checkoutUrl: null }, { status: 201 })
+    }
+
+    // Create Stripe Checkout session
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{ price: stripePriceId, quantity: 1 }],
+      client_reference_id: regId,
+      customer_email: email,
+      metadata: {
+        registrationId: regId,
+        eventSlug: event_slug,
+        participantName: `${first_name} ${last_name}`,
+      },
+      success_url: `${SITE_URL}/register/${event_slug}/confirmation?id=${regId}&type=individual&payment=success`,
+      cancel_url: `${SITE_URL}/register/${event_slug}/individual?cancelled=true`,
+    })
+
+    return NextResponse.json({ registrationId: regId, checkoutUrl: session.url }, { status: 201 })
   } catch (e) {
     console.error('Individual registration error:', e)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

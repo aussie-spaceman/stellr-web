@@ -120,8 +120,12 @@ export default function IndividualRegistrationForm({
         throw new Error(body.error ?? 'Registration failed')
       }
 
-      const { registrationId } = await res.json()
-      router.push(`/register/${eventSlug}/confirmation?id=${registrationId}&type=individual`)
+      const { registrationId, checkoutUrl } = await res.json()
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl
+      } else {
+        router.push(`/register/${eventSlug}/confirmation?id=${registrationId}&type=individual`)
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.')
       setSubmitting(false)

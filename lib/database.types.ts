@@ -44,12 +44,13 @@ export interface ParticipantRow {
   emergency_contact_last_name: string
   emergency_contact_email: string
   emergency_contact_phone: string
+  membership_id: string
   company_name: string | null
   award: string | null
   created_at: string
 }
 
-export type ParticipantInsert = Omit<ParticipantRow, 'id' | 'created_at' | 'company_name' | 'award'>
+export type ParticipantInsert = Omit<ParticipantRow, 'id' | 'created_at' | 'membership_id' | 'company_name' | 'award'>
 
 export interface Database {
   public: {

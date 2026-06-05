@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { sendEmail, groupConfirmationEmail } from '@/lib/email'
 import type { RegistrationRow } from '@/lib/database.types'
 
 export async function POST(req: NextRequest) {
@@ -22,7 +23,6 @@ export async function POST(req: NextRequest) {
     // Duplicate check: any participant email already registered for this event
     const emails: string[] = participants.map((p: { email: string }) => p.email)
 
-    // For each email, check if they have a registration for this event
     const duplicateEmails: string[] = []
     for (const email of emails) {
       const { data: participant } = await db
@@ -113,8 +113,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to save participant details' }, { status: 500 })
     }
 
-    // TODO: send confirmation email to teacher_email via Resend
-    // TODO: trigger invoice generation
+    // Send confirmation email to teacher
+    try {
+      const emailContent = groupConfirmationEmail({
+        teacherFirstName: teacher_first_name,
+        teacherLastName: teacher_last_name,
+        schoolName: school_name,
+        eventTitle: event_title,
+        participantCount: participants.length,
+        registrationId: regId,
+      })
+      await sendEmail({ to: teacher_email, ...emailContent })
+    } catch (emailErr) {
+      console.error('Group confirmation email failed (non-fatal):', emailErr)
+    }
 
     return NextResponse.json({ registrationId: regId }, { status: 201 })
   } catch (e) {

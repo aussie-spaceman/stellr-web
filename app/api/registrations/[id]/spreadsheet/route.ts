@@ -6,13 +6,16 @@ import { google } from 'googleapis'
 function getAuth() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
   const key = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n')
+  const subject = process.env.GOOGLE_IMPERSONATE_USER ?? OWNER_EMAIL
   if (!email || !key) return null
-  return new google.auth.GoogleAuth({
-    credentials: { client_email: email, private_key: key },
+  return new google.auth.JWT({
+    email,
+    key,
     scopes: [
       'https://www.googleapis.com/auth/spreadsheets',
       'https://www.googleapis.com/auth/drive',
     ],
+    subject,
   })
 }
 

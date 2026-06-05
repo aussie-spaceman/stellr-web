@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { ClerkProvider } from '@clerk/nextjs'
 import { Analytics } from '@vercel/analytics/react'
 import { MarketingPixels } from '@/components/analytics/MarketingPixels'
 import '../styles/globals.css'
@@ -40,18 +41,20 @@ const orgSchema = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <head>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(orgSchema) }}
-        />
-      </head>
-      <body>
-        {children}
-        <Analytics />
-        <MarketingPixels />
-      </body>
-    </html>
+    <ClerkProvider>
+      <html lang="en">
+        <head>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(orgSchema) }}
+          />
+        </head>
+        <body>
+          {children}
+          <Analytics />
+          <MarketingPixels />
+        </body>
+      </html>
+    </ClerkProvider>
   )
 }

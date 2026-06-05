@@ -106,9 +106,47 @@ export async function POST(req: NextRequest) {
 
     const regId = (registration as Pick<RegistrationRow, 'id'>).id
 
+    // Upsert all known participants into members table, collect their IDs
+    const allPeople: ParticipantPayload[] = [
+      { ...teacher, event_role: 'teacher' },
+      ...(details_method === 'add_now' ? [
+        ...(additional_adults ?? []),
+        ...(students ?? []),
+      ] : []),
+    ]
+
+    const memberIdMap: Record<string, string | null> = {}
+    for (const p of allPeople) {
+      const dob = new Date(p.date_of_birth)
+      const ageNow = new Date().getFullYear() - dob.getFullYear()
+      const resolvedBracket = ageNow < 18 ? 'high_school' : p.age_bracket
+      const resolvedRole = ageNow < 18 ? 'school_student' : p.event_role
+
+      const { data: memberRow } = await db
+        .from('members')
+        .upsert({
+          email: p.email,
+          first_name: p.first_name,
+          last_name: p.last_name,
+          phone: p.phone,
+          date_of_birth: p.date_of_birth,
+          gender: p.gender,
+          grade: p.grade || null,
+          tshirt_size: p.t_shirt_size || null,
+          age_bracket: resolvedBracket,
+          event_role: resolvedRole,
+          is_active: true,
+        }, { onConflict: 'email', ignoreDuplicates: false })
+        .select('id')
+        .maybeSingle()
+
+      memberIdMap[p.email] = memberRow?.id ?? null
+    }
+
     // Build participant rows
     const buildParticipant = (p: ParticipantPayload) => ({
       registration_id: regId,
+      member_id: memberIdMap[p.email] ?? null,
       first_name: p.first_name, last_name: p.last_name,
       nickname: null as null,
       email: p.email, phone: p.phone,

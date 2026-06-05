@@ -82,9 +82,37 @@ export async function POST(req: NextRequest) {
 
     const regId = (registration as Pick<RegistrationRow, 'id'>).id
 
+    // Upsert member record — creates one if this email hasn't registered before
+    const dob = new Date(date_of_birth)
+    const ageNow = new Date().getFullYear() - dob.getFullYear()
+    const resolvedBracket = ageNow < 18 ? 'high_school' : age_bracket
+    const resolvedRole = ageNow < 18 ? 'school_student' : event_role
+
+    const { data: memberRow } = await db
+      .from('members')
+      .upsert({
+        email,
+        first_name,
+        last_name,
+        nickname: nickname || null,
+        phone,
+        date_of_birth,
+        gender,
+        grade: grade || null,
+        tshirt_size: t_shirt_size || null,
+        age_bracket: resolvedBracket,
+        event_role: resolvedRole,
+        is_active: true,
+      }, { onConflict: 'email', ignoreDuplicates: false })
+      .select('id')
+      .maybeSingle()
+
+    const memberId = memberRow?.id ?? null
+
     // Create participant record
     const { error: partError } = await db.from('participants').insert({
       registration_id: regId,
+      member_id: memberId,
       first_name, last_name, nickname: nickname || null,
       email, phone, date_of_birth, grade, gender,
       ethnicity: ethnicity ?? [],

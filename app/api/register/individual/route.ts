@@ -4,11 +4,13 @@ import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import type { RegistrationRow, ParticipantRow } from '@/lib/database.types'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', {
-  apiVersion: '2026-05-27.dahlia',
-})
-
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
+
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY
+  if (!key) return null
+  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -102,8 +104,9 @@ export async function POST(req: NextRequest) {
     // Look up Stripe Price ID from Sanity
     const event = await getEventBySlug(event_slug)
     const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId
+    const stripe = getStripe()
 
-    if (!stripePriceId || !process.env.STRIPE_SECRET_KEY) {
+    if (!stripePriceId || !stripe) {
       // No payment configured — go straight to confirmation
       return NextResponse.json({ registrationId: regId, checkoutUrl: null }, { status: 201 })
     }

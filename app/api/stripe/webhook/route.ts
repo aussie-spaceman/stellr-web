@@ -3,9 +3,11 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { sendEmail, individualConfirmationEmail } from '@/lib/email'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', {
-  apiVersion: '2026-05-27.dahlia',
-})
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY
+  if (!key) throw new Error('STRIPE_SECRET_KEY not set')
+  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
+}
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text()
@@ -15,6 +17,8 @@ export async function POST(req: NextRequest) {
   if (!sig || !webhookSecret) {
     return NextResponse.json({ error: 'Missing webhook signature or secret' }, { status: 400 })
   }
+
+  const stripe = getStripe()
 
   let event: Stripe.Event
   try {

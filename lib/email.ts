@@ -1,5 +1,5 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY
-const FROM = 'Stellr Education <noreply@stellreducation.org>'
+const FROM = 'Stellr Education <david.shaw@insimeducation.com>'
 
 interface SendEmailOptions {
   to: string

@@ -11,7 +11,11 @@ export default async function AccountPage() {
   const { userId } = await auth()
   if (!userId) redirect('/sign-in')
 
-  const clerkUser = await currentUser()
+  const clerkUserRaw = await currentUser()
+  // Extract only serializable fields before passing to Client Components
+  const clerkUser = clerkUserRaw
+    ? { imageUrl: clerkUserRaw.imageUrl ?? null }
+    : null
   const db = supabaseServer()
 
   const { data: member } = await db

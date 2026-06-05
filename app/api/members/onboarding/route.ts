@@ -1,4 +1,4 @@
-import { auth } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 
@@ -53,27 +53,55 @@ export async function POST(req: Request) {
     }
   }
 
-  // Update the member record created by the Clerk webhook
-  const { error: memberError } = await db
+  // Get the Clerk user's email so we can upsert by email if no member row exists yet
+  // (webhook may not have fired yet in local dev)
+  const { data: existingMember } = await db
     .from('members')
-    .update({
-      age_bracket: resolvedBracket,
-      event_role: resolvedRole,
-      date_of_birth,
-      gender,
-      phone: phone || null,
-      grade: grade || null,
-      tshirt_size: tshirt_size || null,
-      ec_first_name: ec_first_name || null,
-      ec_last_name: ec_last_name || null,
-      ec_email: ec_email || null,
-      ec_phone: ec_phone || null,
-    })
+    .select('id, email, first_name, last_name')
     .eq('clerk_user_id', userId)
+    .maybeSingle()
+
+  const profileUpdates = {
+    clerk_user_id: userId,
+    age_bracket: resolvedBracket,
+    event_role: resolvedRole,
+    date_of_birth,
+    gender,
+    phone: phone || null,
+    grade: grade || null,
+    tshirt_size: tshirt_size || null,
+    ec_first_name: ec_first_name || null,
+    ec_last_name: ec_last_name || null,
+    ec_email: ec_email || null,
+    ec_phone: ec_phone || null,
+    is_active: true,
+  }
+
+  let memberError
+  if (existingMember) {
+    const { error } = await db
+      .from('members')
+      .update(profileUpdates)
+      .eq('id', existingMember.id)
+    memberError = error
+  } else {
+    // Webhook hasn't fired yet — fetch identity from Clerk and create the row now
+    const clerkUser = await currentUser()
+    const primaryEmail = clerkUser?.emailAddresses.find(
+      (e) => e.id === clerkUser.primaryEmailAddressId
+    )?.emailAddress ?? ''
+    const { error } = await db.from('members').insert({
+      ...profileUpdates,
+      first_name: clerkUser?.firstName ?? '',
+      last_name: clerkUser?.lastName ?? '',
+      email: primaryEmail,
+    })
+    memberError = error
+  }
 
   if (memberError) {
-    console.error('Member update error:', memberError)
-    return NextResponse.json({ error: 'Failed to update member' }, { status: 500 })
+    console.error('Member upsert error:', memberError)
+    return NextResponse.json({ error: 'Failed to save member' }, { status: 500 })
   }
 
   // Link to school if provided

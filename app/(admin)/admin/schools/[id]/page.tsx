@@ -38,7 +38,7 @@ export default async function AdminSchoolDetailPage({
   if (!school) notFound()
 
   const allMembers = (members ?? [])
-    .map((ms) => ({ ...(ms.members as Record<string, unknown>), is_current_school: ms.is_current }))
+    .map((ms) => ({ ...(ms.members as unknown as Record<string, unknown>), is_current_school: ms.is_current }))
     .filter((m) => m.is_active !== false)
     .sort((a, b) =>
       `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`)

@@ -37,7 +37,10 @@ CREATE INDEX IF NOT EXISTS sheet_watch_channels_channel_id_idx
 
 ALTER TABLE public.sheet_watch_channels ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "service role full access"
-  ON public.sheet_watch_channels
-  FOR ALL TO service_role
-  USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "service role full access"
+    ON public.sheet_watch_channels
+    FOR ALL TO service_role
+    USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

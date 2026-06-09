@@ -26,8 +26,8 @@ export async function sendEmail({ to, cc, subject, html, text }: SendEmailOption
 
   if (!res.ok) {
     const err = await res.text()
-    console.error('[email] Resend error:', err)
-    throw new Error('Failed to send email')
+    console.error('[email] Resend error sending to', to, '—', err)
+    throw new Error(`Failed to send email: ${err}`)
   }
 }
 

@@ -66,7 +66,26 @@ export async function GET() {
       joinUrl: joinUrlMap[r.id] ?? null,
     }))
 
-    return NextResponse.json({ teams, role: 'group_manager' })
+    // Also return any groups this member has joined as a participant
+    const { data: participations } = await db
+      .from('participants')
+      .select(`
+        id, event_role, first_name, last_name, join_completed_at,
+        registrations(
+          id, event_slug, event_title, school_name, status, created_at,
+          teacher_first_name, teacher_last_name, teacher_email
+        )
+      `)
+      .eq('member_id', member.id)
+      .not('join_completed_at', 'is', null)
+
+    // Exclude any participations that belong to a registration they manage (avoid duplicates)
+    const managedIds = new Set((registrations ?? []).map((r: { id: string }) => r.id))
+    const joinedTeams = (participations ?? []).filter(
+      (p: { registrations: { id: string } | null }) => p.registrations && !managedIds.has(p.registrations.id)
+    )
+
+    return NextResponse.json({ teams, participations: joinedTeams, role: 'group_manager' })
   }
 
   // school_student or other roles: find registrations they're a participant in

@@ -103,6 +103,14 @@ export default function GroupJoinClient({
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
             {error}
+            {error.toLowerCase().includes('profile') && (
+              <p className="mt-2">
+                <Link href="/account/onboarding" className="underline font-medium">
+                  Complete your profile →
+                </Link>{' '}
+                then return to this link to join the group.
+              </p>
+            )}
           </div>
         )}
 

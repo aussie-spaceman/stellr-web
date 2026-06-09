@@ -75,6 +75,7 @@ interface StudentTeam {
 
 function TeacherTeamsView() {
   const [teams, setTeams] = useState<TeamRegistration[]>([])
+  const [participations, setParticipations] = useState<StudentTeam[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -91,6 +92,7 @@ function TeacherTeamsView() {
       .then(data => {
         if (data.error) throw new Error(data.error)
         setTeams(data.teams ?? [])
+        setParticipations(data.participations ?? [])
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
@@ -326,6 +328,43 @@ function TeacherTeamsView() {
           </div>
         )
       })}
+
+      {/* Teams joined as a participant */}
+      {participations.length > 0 && (
+        <div className="mt-8">
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Teams I&apos;ve Joined</h3>
+          <div className="space-y-4">
+            {participations.map(entry => {
+              const reg = entry.registrations
+              return (
+                <div key={entry.id} className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">{reg.event_title}</p>
+                      <p className="text-sm text-gray-500 mt-0.5">{reg.school_name ?? '—'}</p>
+                      {reg.teacher_first_name && (
+                        <p className="text-sm text-gray-500 mt-0.5">
+                          Organiser: {reg.teacher_first_name} {reg.teacher_last_name ?? ''}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
+                        reg.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                        reg.status === 'withdrawn' ? 'bg-red-100 text-red-600' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>{reg.status}</span>
+                      {entry.join_completed_at && (
+                        <p className="text-xs text-green-600 font-medium mt-1">Joined</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Add / Edit modals */}
       {adding && expanded && (

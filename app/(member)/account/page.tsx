@@ -25,7 +25,7 @@ export default async function AccountPage({
   const clerkUser = clerkUserRaw ? { imageUrl: clerkUserRaw.imageUrl ?? null } : null
   const db = supabaseServer()
 
-  const [{ data: member, error: memberError }, { data: ethnicityOptions }, { data: allergyOptions }] = await Promise.all([
+  const [{ data: member }, { data: ethnicityOptions }, { data: allergyOptions }] = await Promise.all([
     db
       .from('members')
       .select(`
@@ -42,7 +42,6 @@ export default async function AccountPage({
     db.from('allergy_options').select('id, name').order('name'),
   ])
 
-  if (memberError) throw new Error(`Member query failed: ${memberError.message}`)
   if (!member) redirect('/account/onboarding')
 
   const activeMembership = member.member_memberships

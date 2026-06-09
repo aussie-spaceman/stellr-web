@@ -70,10 +70,11 @@ export async function GET() {
     const { data: participations } = await db
       .from('participants')
       .select(`
-        id, event_role, first_name, last_name, join_completed_at,
+        id, event_role, first_name, last_name, join_completed_at, individual_payment_status,
         registrations(
           id, event_slug, event_title, school_name, status, created_at,
-          teacher_first_name, teacher_last_name, teacher_email
+          teacher_first_name, teacher_last_name, teacher_email,
+          member_pays_individually, invoice_requested
         )
       `)
       .eq('member_id', member.id)
@@ -95,10 +96,11 @@ export async function GET() {
   const { data: participations, error } = await db
     .from('participants')
     .select(`
-      id, event_role, first_name, last_name, join_completed_at,
+      id, event_role, first_name, last_name, join_completed_at, individual_payment_status,
       registrations(
         id, event_slug, event_title, school_name, status, created_at,
-        teacher_first_name, teacher_last_name, teacher_email
+        teacher_first_name, teacher_last_name, teacher_email,
+        member_pays_individually, invoice_requested
       )
     `)
     .eq('member_id', member.id)

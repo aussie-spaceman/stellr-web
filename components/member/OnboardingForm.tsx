@@ -44,7 +44,7 @@ const GRADES = [
   { value: 'grad_phd', label: 'Grad / PhD' },
 ]
 
-const GENDERS = ['male', 'female', 'other', 'prefer_not_to_say']
+const GENDERS = ['male', 'female', 'other']
 
 export function OnboardingForm({ tiers, existingMember }: Props) {
   const router = useRouter()

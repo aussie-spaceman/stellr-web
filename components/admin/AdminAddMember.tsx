@@ -25,7 +25,7 @@ const GRADES = [
 ]
 
 const BRACKETS = ['high_school', 'college', 'adult']
-const GENDERS = ['male', 'female', 'other', 'prefer_not_to_say']
+const GENDERS = ['male', 'female', 'other']
 const TSHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL_plus']
 
 function label(val: string) {

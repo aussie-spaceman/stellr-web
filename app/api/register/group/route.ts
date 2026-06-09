@@ -7,7 +7,6 @@ import {
   sendEmail,
   groupConfirmationEmail,
   groupMemberIndividualPaymentEmail,
-  groupJoinLinkEmail,
 } from '@/lib/email'
 import { createGroupRegistrationSheet, isGoogleSheetsConfigured } from '@/lib/google-sheets'
 import type { RegistrationRow } from '@/lib/database.types'
@@ -228,16 +227,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to save participant details' }, { status: 500 })
     }
 
-    // ── Google Sheet (spreadsheet path) ──────────────────────────────────────
+    // ── Google Sheet (spreadsheet or email_link path — both get a sheet) ────────
     let spreadsheetUrl: string | null = null
-    if (details_method === 'spreadsheet') {
+    if (details_method === 'spreadsheet' || details_method === 'email_link') {
       if (isGoogleSheetsConfigured()) {
         try {
+          const adultCountForSheet = registrant_role === 'student_manager'
+            ? adult_count          // all adults are "additional" for SM
+            : adult_count - 1      // exclude teacher from additional adult count
           spreadsheetUrl = await createGroupRegistrationSheet({
             eventTitle: event_title,
             schoolName: teacher.school_name,
             teacherEmail: teacher.email,
-            additionalAdultCount: adult_count - 1,
+            additionalAdultCount: adultCountForSheet,
             studentCount: student_count,
           })
         } catch (sheetErr) {
@@ -248,9 +250,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Group join token (email_link path) ────────────────────────────────────
+    // ── Group join token (spreadsheet or email_link path — both get a token) ──
     let joinUrl: string | null = null
-    if (details_method === 'email_link') {
+    if (details_method === 'spreadsheet' || details_method === 'email_link') {
       const token = randomBytes(32).toString('hex')
       const { error: tokenError } = await db.from('group_join_tokens').insert({
         token,
@@ -357,22 +359,7 @@ export async function POST(req: NextRequest) {
     const ccEmails: string[] = []
     if (poc?.email) ccEmails.push(poc.email)
 
-    // ── Send join link email (email_link path) ────────────────────────────────
-    if (joinUrl) {
-      try {
-        const joinEmailContent = groupJoinLinkEmail({
-          registrantFirstName: teacher.first_name,
-          registrantLastName: teacher.last_name,
-          eventTitle: event_title,
-          joinUrl,
-        })
-        await sendEmail({ to: teacher.email, cc: ccEmails, ...joinEmailContent })
-      } catch (joinEmailErr) {
-        console.error('Join link email error (non-fatal):', joinEmailErr)
-      }
-    }
-
-    // ── Confirmation email ────────────────────────────────────────────────────
+    // ── Confirmation email (includes both spreadsheet + join link when available) ─
     try {
       const emailContent = groupConfirmationEmail({
         teacherFirstName: teacher.first_name,
@@ -383,6 +370,7 @@ export async function POST(req: NextRequest) {
         registrationId: regId,
         paymentMethod: payment_method === 'individual' ? 'invoice' : payment_method,
         spreadsheetUrl: spreadsheetUrl ?? undefined,
+        joinUrl: joinUrl ?? undefined,
       })
       await sendEmail({ to: teacher.email, cc: ccEmails, ...emailContent })
     } catch (emailErr) {

@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { useRouter } from 'next/navigation'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import FieldError from '@/components/forms/FieldError'
+import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
@@ -15,13 +16,6 @@ const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 
 const ETHNICITIES = ['Pacific Islander', 'Hispanic', 'White (Caucasian)', 'Black', 'Native American', 'Asian', 'Prefer Not To Say']
 const DIETARY = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Vegetarian', 'Vegan', 'Other']
 const HS_GRADES = ['9', '10', '11', '12']
-const US_STATES = [
-  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA',
-  'HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
-  'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
-  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
-  'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY',
-]
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type RegistrantRole = 'teacher' | 'student_manager'
@@ -52,15 +46,7 @@ function emptyStudent(): StudentData {
   return { first_name: '', last_name: '', email: '', phone: '', date_of_birth: '', grade: '', gender: '', t_shirt_size: '', health_conditions: '', emergency_contact_first_name: '', emergency_contact_last_name: '', emergency_contact_email: '', emergency_contact_phone: '', existing_membership_id: '' }
 }
 
-// ── Schemas ───────────────────────────────────────────────────────────────────
-const schoolFields = {
-  school_name: z.string().min(1, 'Required'),
-  school_address_street: z.string().min(1, 'Required'),
-  school_address_city: z.string().min(1, 'Required'),
-  school_address_state: z.string().min(1, 'Required'),
-  school_address_zip: z.string().min(1, 'Required'),
-}
-
+// ── Schemas (no school fields — school is handled via SchoolSearchInput state) ─
 const teacherSchema = z.object({
   first_name: z.string().min(1, 'Required'),
   last_name: z.string().min(1, 'Required'),
@@ -69,7 +55,6 @@ const teacherSchema = z.object({
   date_of_birth: z.string().min(1, 'Required'),
   gender: z.string().min(1, 'Required'),
   t_shirt_size: z.string().min(1, 'Required'),
-  ...schoolFields,
   ethnicity: z.array(z.string()).min(1, 'Select at least one'),
   dietary_requirements: z.array(z.string()).min(1, 'Select at least one'),
   health_conditions: z.string().optional(),
@@ -85,7 +70,6 @@ const studentManagerSchema = z.object({
   grade: z.string().min(1, 'Required'),
   gender: z.string().min(1, 'Required'),
   t_shirt_size: z.string().min(1, 'Required'),
-  ...schoolFields,
   ethnicity: z.array(z.string()).min(1, 'Select at least one'),
   dietary_requirements: z.array(z.string()).min(1, 'Select at least one'),
   health_conditions: z.string().optional(),
@@ -174,21 +158,30 @@ function NumberStepper({ label, value, min, max, onChange, note }: {
 }
 
 // ── Adult accordion ───────────────────────────────────────────────────────────
-function AdultAccordion({ index, data, onChange, expanded, onToggle }: {
+function AdultAccordion({ index, data, onChange, expanded, onToggle, isPoC }: {
   index: number; data: AdultData
   onChange: (field: keyof AdultData, value: string | string[]) => void
-  expanded: boolean; onToggle: () => void
+  expanded: boolean; onToggle: () => void; isPoC?: boolean
 }) {
-  const label = data.first_name && data.last_name ? `${data.first_name} ${data.last_name}` : `Additional Adult ${index + 1}`
+  const label = data.first_name && data.last_name
+    ? `${data.first_name} ${data.last_name}${isPoC ? ' (Teacher Point of Contact)' : ''}`
+    : isPoC
+      ? 'Teacher Point of Contact (Adult 1)'
+      : `Additional Adult ${index + 1}`
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
+    <div className={`rounded-xl overflow-hidden border ${isPoC ? 'border-amber-200' : 'border-gray-200'}`}>
       <button type="button" onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 text-left">
-        <span className="font-medium text-brand-blue-dark text-sm">{label}</span>
+        className={`w-full flex items-center justify-between px-4 py-3 text-left ${isPoC ? 'bg-amber-50 hover:bg-amber-100' : 'bg-gray-50 hover:bg-gray-100'}`}>
+        <span className={`font-medium text-sm ${isPoC ? 'text-amber-900' : 'text-brand-blue-dark'}`}>{label}</span>
         {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
       </button>
       {expanded && (
         <div className="p-4 space-y-4">
+          {isPoC && (
+            <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+              Pre-filled from your Teacher Point of Contact. Please complete their remaining details so they can be registered as a participant.
+            </p>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div><label className="label-text">First Name *</label><input value={data.first_name} onChange={e => onChange('first_name', e.target.value)} className="input-field" /></div>
             <div><label className="label-text">Last Name *</label><input value={data.last_name} onChange={e => onChange('last_name', e.target.value)} className="input-field" /></div>
@@ -314,6 +307,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
   const [step, setStep] = useState<1 | 2>(1)
   const [registrantRole, setRegistrantRole] = useState<RegistrantRole>('teacher')
 
+  // Two form instances — hooks must be unconditional
   const teacherForm = useForm<TeacherFormData>({
     resolver: zodResolver(teacherSchema),
     defaultValues: { ethnicity: [], dietary_requirements: [] },
@@ -323,7 +317,6 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
     defaultValues: { ethnicity: [], dietary_requirements: [] },
   })
 
-  // Use the active form based on role
   const tf = teacherForm
   const sf = smForm
   const tEthnicity = tf.watch('ethnicity') ?? []
@@ -331,6 +324,13 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
   const sEthnicity = sf.watch('ethnicity') ?? []
   const sDietary = sf.watch('dietary_requirements') ?? []
 
+  // School selection (separate state — SchoolSearchInput owns its own UI)
+  const [teacherSchool, setTeacherSchool] = useState<SchoolSelection | null>(null)
+  const [smSchool, setSmSchool] = useState<SchoolSelection | null>(null)
+  const [schoolError, setSchoolError] = useState<string | null>(null)
+
+  // For teacher: adultCount includes teacher themselves (min=1)
+  // For SM: adultCount = PoC + optional second adult (min=1; PoC always required as participant)
   const [adultCount, setAdultCount] = useState(1)
   const [studentCount, setStudentCount] = useState(2)
   const [detailsMethod, setDetailsMethod] = useState<DetailsMethod>('add_now')
@@ -342,10 +342,47 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  /** Extract PoC data from SM form to pre-populate as Adult 1 */
+  function getPoCAsAdult(): AdultData {
+    const d = sf.getValues()
+    return {
+      first_name: d.teacher_poc_first_name ?? '',
+      last_name: d.teacher_poc_last_name ?? '',
+      email: d.teacher_poc_email ?? '',
+      phone: '',
+      date_of_birth: '',
+      gender: '',
+      t_shirt_size: '',
+      dietary_requirements: [],
+      health_conditions: '',
+      existing_membership_id: '',
+    }
+  }
+
   function handleAdultCountChange(n: number) {
     setAdultCount(n)
-    const need = n - 1
-    setAdditionalAdults(prev => prev.length < need ? [...prev, ...Array.from({ length: need - prev.length }, emptyAdult)] : prev.slice(0, need))
+    if (registrantRole === 'student_manager') {
+      // For SM: all n adults are in additionalAdults (SM is in the teacher field)
+      // additionalAdults[0] is always the PoC
+      setAdditionalAdults(prev => {
+        const poc = prev.length > 0 ? prev[0] : getPoCAsAdult()
+        if (n === 0) return []
+        if (n === 1) return [poc]
+        return [poc, ...(prev.slice(1).length < n - 1
+          ? [...prev.slice(1), ...Array.from({ length: n - 1 - prev.slice(1).length }, emptyAdult)]
+          : prev.slice(1, n))]
+      })
+    } else {
+      // For teacher: teacher is adult 1, additional adults fill the rest
+      const need = n - 1
+      setAdditionalAdults(prev =>
+        prev.length < need
+          ? [...prev, ...Array.from({ length: need - prev.length }, emptyAdult)]
+          : prev.slice(0, need)
+      )
+    }
   }
 
   function handleStudentCountChange(n: number) {
@@ -361,16 +398,6 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
     setStudents(prev => prev.map((s, idx) => idx === i ? { ...s, [field]: value } : s))
   }
 
-  async function goToStep2() {
-    let valid = false
-    if (registrantRole === 'teacher') {
-      valid = await tf.trigger()
-    } else {
-      valid = await sf.trigger()
-    }
-    if (valid) setStep(2)
-  }
-
   function deriveAgeBracket(dob: string, grade?: string): string {
     if (!dob) return 'Adult'
     const age = Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000))
@@ -379,12 +406,73 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
     return 'Adult'
   }
 
+  // ── Resolve school payload from SchoolSelection ──────────────────────────────
+  function resolveSchool(sel: SchoolSelection | null): {
+    school_name: string
+    school_address_street: string | null
+    school_address_city: string | null
+    school_address_state: string | null
+    school_address_zip: string | null
+  } {
+    if (!sel) return { school_name: '', school_address_street: null, school_address_city: null, school_address_state: null, school_address_zip: null }
+    if (sel.type === 'existing') {
+      return { school_name: sel.name, school_address_street: null, school_address_city: null, school_address_state: null, school_address_zip: null }
+    }
+    return {
+      school_name: sel.data.name,
+      school_address_street: sel.data.address_line1 || null,
+      school_address_city: sel.data.city || null,
+      school_address_state: sel.data.state || null,
+      school_address_zip: sel.data.postcode || null,
+    }
+  }
+
+  // ── Step 1 → Step 2 ──────────────────────────────────────────────────────────
+  async function goToStep2() {
+    setSchoolError(null)
+    let valid = false
+    if (registrantRole === 'teacher') {
+      valid = await tf.trigger()
+    } else {
+      valid = await sf.trigger()
+    }
+
+    // Validate school selection
+    const school = registrantRole === 'teacher' ? teacherSchool : smSchool
+    if (!school) {
+      setSchoolError('Please search for and select your school before continuing.')
+      return
+    }
+
+    if (!valid) return
+
+    // For SM: ensure adultCount >= 1 and pre-populate PoC as Adult 1
+    if (registrantRole === 'student_manager') {
+      const poc = getPoCAsAdult()
+      setAdultCount(prev => Math.max(prev, 1))
+      setAdditionalAdults(prev => {
+        if (prev.length === 0) {
+          return [poc]
+        }
+        // Refresh PoC name/email from form (in case they edited step 1)
+        return [
+          { ...prev[0], first_name: poc.first_name, last_name: poc.last_name, email: poc.email },
+          ...prev.slice(1),
+        ]
+      })
+      setExpandedAdult(0) // Open Adult 1 (PoC) by default so user completes their details
+    }
+
+    setStep(2)
+  }
+
+  // ── Validate participants before submit ──────────────────────────────────────
   function validateParticipants(): string | null {
     if (detailsMethod !== 'add_now') return null
     for (let i = 0; i < additionalAdults.length; i++) {
       const a = additionalAdults[i]
       if (!a.first_name || !a.last_name || !a.email || !a.phone || !a.date_of_birth || !a.gender || !a.t_shirt_size || a.dietary_requirements.length === 0)
-        return `Additional Adult ${i + 1}: please complete all required fields`
+        return `${i === 0 && registrantRole === 'student_manager' ? 'Teacher Point of Contact' : `Additional Adult ${i + 1}`}: please complete all required fields`
     }
     for (let i = 0; i < students.length; i++) {
       const s = students[i]
@@ -396,6 +484,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
     return null
   }
 
+  // ── Final submit ──────────────────────────────────────────────────────────────
   async function handleFinalSubmit() {
     setSubmitting(true)
     setError(null)
@@ -409,11 +498,14 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
 
     try {
       let registrantPayload: Record<string, unknown>
+      const activeSchool = registrantRole === 'teacher' ? teacherSchool : smSchool
+      const schoolFields = resolveSchool(activeSchool)
 
       if (registrantRole === 'teacher') {
         const d = tf.getValues()
         registrantPayload = {
           ...d,
+          ...schoolFields,
           age_bracket: deriveAgeBracket(d.date_of_birth),
           event_role: 'Teacher',
         }
@@ -421,6 +513,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
         const d = sf.getValues()
         registrantPayload = {
           ...d,
+          ...schoolFields,
           age_bracket: deriveAgeBracket(d.date_of_birth, d.grade),
           event_role: 'School Student Manager',
         }
@@ -428,6 +521,12 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
 
       const isTeacher = registrantRole === 'teacher'
       const smData = !isTeacher ? sf.getValues() : null
+
+      // For SM: total includes SM(1) + adults(adultCount) + students
+      // For teacher: total includes teacher(counted in adultCount) + students
+      const totalParticipants = registrantRole === 'student_manager'
+        ? 1 + adultCount + studentCount
+        : adultCount + studentCount
 
       const res = await fetch('/api/register/group', {
         method: 'POST',
@@ -444,12 +543,23 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
           } : null,
           adult_count: adultCount,
           student_count: studentCount,
-          total_participants: adultCount + studentCount,
+          total_participants: totalParticipants,
           details_method: detailsMethod,
           payment_method: paymentMethod,
           member_pays_individually: paymentMethod === 'individual',
-          additional_adults: detailsMethod === 'add_now' ? additionalAdults.map(a => ({ ...a, age_bracket: deriveAgeBracket(a.date_of_birth), event_role: 'Adult' })) : [],
-          students: detailsMethod === 'add_now' ? students.map(s => ({ ...s, age_bracket: deriveAgeBracket(s.date_of_birth, s.grade), event_role: 'School Student' })) : [],
+          // For SM: all additional_adults entries are genuinely additional (PoC is adults[0])
+          // For teacher: additional_adults excludes teacher themselves
+          additional_adults: detailsMethod === 'add_now'
+            ? additionalAdults.map((a, i) => ({
+                ...a,
+                age_bracket: deriveAgeBracket(a.date_of_birth),
+                // PoC (SM adult 0) is a Teacher role; all others are Adult
+                event_role: registrantRole === 'student_manager' && i === 0 ? 'Teacher' : 'Adult',
+              }))
+            : [],
+          students: detailsMethod === 'add_now'
+            ? students.map(s => ({ ...s, age_bracket: deriveAgeBracket(s.date_of_birth, s.grade), event_role: 'School Student' }))
+            : [],
         }),
       })
 
@@ -473,7 +583,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
     }
   }
 
-  // ── Step 1: Registrant details ────────────────────────────────────────────
+  // ── Step 1: Registrant details ─────────────────────────────────────────────
   if (step === 1) {
     return (
       <div className="space-y-6">
@@ -502,6 +612,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
 
         {registrantRole === 'teacher' ? (
           <>
+            {/* Teacher personal info */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
               <h3 className="font-semibold text-brand-blue-dark">Personal Information</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -527,23 +638,17 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
               </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+            {/* Teacher school — SchoolSearchInput */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
               <h3 className="font-semibold text-brand-blue-dark">School</h3>
-              <div><label className="label-text">School Name *</label><input {...tf.register('school_name')} className="input-field" /><FieldError message={tf.formState.errors.school_name?.message} /></div>
-              <div><label className="label-text">Street Address *</label><input {...tf.register('school_address_street')} className="input-field" /><FieldError message={tf.formState.errors.school_address_street?.message} /></div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="col-span-2"><label className="label-text">City *</label><input {...tf.register('school_address_city')} className="input-field" /><FieldError message={tf.formState.errors.school_address_city?.message} /></div>
-                <div>
-                  <label className="label-text">State *</label>
-                  <select {...tf.register('school_address_state')} className="input-field">
-                    <option value="">Select…</option>{US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <FieldError message={tf.formState.errors.school_address_state?.message} />
-                </div>
-                <div><label className="label-text">ZIP *</label><input {...tf.register('school_address_zip')} className="input-field" /><FieldError message={tf.formState.errors.school_address_zip?.message} /></div>
+              <div>
+                <label className="label-text">School Name *</label>
+                <SchoolSearchInput onChange={setTeacherSchool} />
+                {schoolError && !teacherSchool && <p className="text-xs text-red-500 mt-1">{schoolError}</p>}
               </div>
             </div>
 
+            {/* Teacher additional info */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
               <MultiCheckboxes label="Ethnicity *" note="Select all that apply" options={ETHNICITIES} selected={tEthnicity}
                 onChange={v => tf.setValue('ethnicity', v, { shouldValidate: true })} error={tf.formState.errors.ethnicity?.message} />
@@ -557,7 +662,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
           </>
         ) : (
           <>
-            {/* Student Manager personal info */}
+            {/* SM personal info */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
               <h3 className="font-semibold text-brand-blue-dark">Personal Information</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -590,25 +695,17 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
               </div>
             </div>
 
-            {/* School */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+            {/* SM school — SchoolSearchInput */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
               <h3 className="font-semibold text-brand-blue-dark">School</h3>
-              <div><label className="label-text">School Name *</label><input {...sf.register('school_name')} className="input-field" /><FieldError message={sf.formState.errors.school_name?.message} /></div>
-              <div><label className="label-text">Street Address *</label><input {...sf.register('school_address_street')} className="input-field" /><FieldError message={sf.formState.errors.school_address_street?.message} /></div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="col-span-2"><label className="label-text">City *</label><input {...sf.register('school_address_city')} className="input-field" /><FieldError message={sf.formState.errors.school_address_city?.message} /></div>
-                <div>
-                  <label className="label-text">State *</label>
-                  <select {...sf.register('school_address_state')} className="input-field">
-                    <option value="">Select…</option>{US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <FieldError message={sf.formState.errors.school_address_state?.message} />
-                </div>
-                <div><label className="label-text">ZIP *</label><input {...sf.register('school_address_zip')} className="input-field" /><FieldError message={sf.formState.errors.school_address_zip?.message} /></div>
+              <div>
+                <label className="label-text">School Name *</label>
+                <SchoolSearchInput onChange={setSmSchool} />
+                {schoolError && !smSchool && <p className="text-xs text-red-500 mt-1">{schoolError}</p>}
               </div>
             </div>
 
-            {/* Additional info */}
+            {/* SM additional info */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
               <MultiCheckboxes label="Ethnicity *" note="Select all that apply" options={ETHNICITIES} selected={sEthnicity}
                 onChange={v => sf.setValue('ethnicity', v, { shouldValidate: true })} error={sf.formState.errors.ethnicity?.message} />
@@ -620,7 +717,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
               </div>
             </div>
 
-            {/* Emergency contact — HS student */}
+            {/* SM emergency contact */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
               <div>
                 <h3 className="font-semibold text-brand-blue-dark">Emergency Contact</h3>
@@ -640,7 +737,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
             <div className="bg-amber-50 rounded-xl border border-amber-200 p-6 space-y-5">
               <div>
                 <h3 className="font-semibold text-amber-900">Teacher Point of Contact</h3>
-                <p className="text-xs text-amber-700 mt-0.5">Nominate a teacher who will be cc'd on all group correspondence. They are not the primary contact — that's you — but they'll be kept informed.</p>
+                <p className="text-xs text-amber-700 mt-0.5">Nominate a teacher who will be cc'd on all group correspondence. They are not the primary contact — that's you — but they'll be kept informed. Their details will be pre-filled as Adult 1 in the next step.</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div><label className="label-text">First Name *</label><input {...sf.register('teacher_poc_first_name')} className="input-field" /><FieldError message={sf.formState.errors.teacher_poc_first_name?.message} /></div>
@@ -662,9 +759,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
     )
   }
 
-  // ── Step 2: Group details ─────────────────────────────────────────────────
-  const paymentMethodLabel = registrantRole === 'student_manager' ? 'you' : 'you'
-
+  // ── Step 2: Group details ──────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <StepBar step={2} />
@@ -676,15 +771,27 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
         <h3 className="font-semibold text-brand-blue-dark">Group Size</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-          <NumberStepper label="How many adults will be in the group?" value={adultCount} min={registrantRole === 'student_manager' ? 0 : 1} max={2}
-            onChange={handleAdultCountChange} note={registrantRole === 'student_manager' ? 'Optional. Maximum 2.' : 'Includes yourself as teacher / coordinator. Maximum 2.'} />
+          <NumberStepper
+            label="How many adults will be in the group?"
+            value={adultCount}
+            min={registrantRole === 'student_manager' ? 1 : 1}
+            max={2}
+            onChange={handleAdultCountChange}
+            note={registrantRole === 'student_manager'
+              ? 'Includes your Teacher Point of Contact. Maximum 2.'
+              : 'Includes yourself as teacher / coordinator. Maximum 2.'}
+          />
           <NumberStepper label="How many students will be in the group?" value={studentCount} min={2} max={20}
             onChange={handleStudentCountChange}
             note="Minimum 2. Maximum 20. For groups larger than 20, contact Stellr directly for custom registration." />
         </div>
         <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark">
-          Total participants: <strong>{adultCount + studentCount}</strong>
-          {registrantRole === 'student_manager' && <span className="ml-1 text-xs text-gray-500">(including yourself)</span>}
+          Total participants: <strong>
+            {registrantRole === 'student_manager'
+              ? 1 + adultCount + studentCount
+              : adultCount + studentCount}
+          </strong>
+          {registrantRole === 'student_manager' && <span className="ml-1 text-xs text-gray-500">(including yourself as Student Manager)</span>}
         </div>
       </div>
 
@@ -697,13 +804,13 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
         </select>
         {detailsMethod === 'spreadsheet' && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
-            A Google Sheet pre-formatted with all required fields will be created for your group and shared to your email. Complete it at your own pace and return it to Stellr.
+            You&apos;ll receive both a pre-populated Google Sheet <strong>and</strong> a forwardable registration link via email — use whichever works best for your group.
           </div>
         )}
         {detailsMethod === 'email_link' && (
           <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark space-y-1">
-            <p className="font-medium">You'll receive an email with a registration link to forward to your group members.</p>
-            <p className="text-gray-500 text-xs">Each member will click the link, sign in or create a free Stellr account, and confirm their participation. You'll be notified as each member completes their registration.</p>
+            <p className="font-medium">You&apos;ll receive both a forwardable registration link <strong>and</strong> a pre-populated spreadsheet via email.</p>
+            <p className="text-gray-500 text-xs">Each member who uses the link will sign in or create a free Stellr account and confirm their participation. You&apos;ll be notified as each member completes their registration.</p>
           </div>
         )}
       </div>
@@ -712,9 +819,12 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
         <>
           {additionalAdults.length > 0 && (
             <div className="space-y-3">
-              <h3 className="font-semibold text-brand-blue-dark">Additional Adults</h3>
+              <h3 className="font-semibold text-brand-blue-dark">
+                {registrantRole === 'student_manager' ? 'Adults' : 'Additional Adults'}
+              </h3>
               {additionalAdults.map((adult, i) => (
                 <AdultAccordion key={i} index={i} data={adult}
+                  isPoC={registrantRole === 'student_manager' && i === 0}
                   onChange={(field, value) => updateAdult(i, field, value)}
                   expanded={expandedAdult === i} onToggle={() => setExpandedAdult(expandedAdult === i ? null : i)} />
               ))}
@@ -735,12 +845,17 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <h3 className="font-semibold text-brand-blue-dark">How will the group pay?</h3>
         <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)} className="input-field">
-          <option value="invoice">Have an invoice emailed to {paymentMethodLabel}</option>
+          <option value="invoice">Have an invoice emailed to you</option>
           <option value="card">Pay now via credit card</option>
           <option value="individual">Group members will pay individually</option>
         </select>
         {paymentMethod === 'invoice' && <p className="text-sm text-gray-500">An invoice will be emailed to you within 1–2 business days. Registration is confirmed upon payment.</p>}
-        {paymentMethod === 'card' && <p className="text-sm text-gray-500">You'll be redirected to a secure Stripe checkout page to pay for all {adultCount + studentCount} participants.</p>}
+        {paymentMethod === 'card' && (
+          <p className="text-sm text-gray-500">
+            You&apos;ll be redirected to a secure Stripe checkout page to pay for all{' '}
+            {registrantRole === 'student_manager' ? 1 + adultCount + studentCount : adultCount + studentCount} participants.
+          </p>
+        )}
         {paymentMethod === 'individual' && (
           <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark space-y-1">
             <p className="font-medium">Each group member will receive an individual payment link via email.</p>

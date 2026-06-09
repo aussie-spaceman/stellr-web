@@ -69,11 +69,11 @@ export function individualConfirmationEmail({
 
 export function groupConfirmationEmail({
   teacherFirstName, teacherLastName, schoolName, eventTitle,
-  participantCount, registrationId, paymentMethod, spreadsheetUrl,
+  participantCount, registrationId, paymentMethod, spreadsheetUrl, joinUrl,
 }: {
   teacherFirstName: string; teacherLastName: string; schoolName: string
   eventTitle: string; participantCount: number; registrationId: string
-  paymentMethod: 'invoice' | 'card'; spreadsheetUrl?: string
+  paymentMethod: 'invoice' | 'card'; spreadsheetUrl?: string; joinUrl?: string
 }) {
   const subject = `Group Registration Received — ${eventTitle}`
 
@@ -82,11 +82,27 @@ export function groupConfirmationEmail({
     : '<li style="margin-bottom:8px">Your card payment has been processed. Registration is confirmed.</li>'
 
   const sheetSection = spreadsheetUrl ? `
-    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:24px 0">
-      <p style="margin:0 0 8px;font-weight:600;color:#1e3a5f">Team Member Details Spreadsheet</p>
-      <p style="margin:0 0 12px;font-size:14px;color:#374151">Your pre-formatted spreadsheet has been shared with you. Please complete it and return to Stellr.</p>
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0">
+      <p style="margin:0 0 8px;font-weight:600;color:#1e3a5f">📄 Option 1 — Pre-Populated Spreadsheet</p>
+      <p style="margin:0 0 12px;font-size:14px;color:#374151">Fill in your group members' details using this pre-formatted Google Sheet, then return it to Stellr.</p>
       <a href="${spreadsheetUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:600">Open Google Sheet →</a>
     </div>
+  ` : ''
+
+  const joinSection = joinUrl ? `
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0">
+      <p style="margin:0 0 8px;font-weight:600;color:#14532d">🔗 Option 2 — Email Registration Link</p>
+      <p style="margin:0 0 12px;font-size:14px;color:#374151">Forward this link to your group members. Each member clicks it, signs in or creates a free Stellr account, and confirms their participation. You'll be notified as each member completes their registration.</p>
+      <a href="${joinUrl}" style="display:inline-block;background:#166534;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:600">Copy Registration Link →</a>
+      <p style="margin:10px 0 0;font-size:11px;color:#6b7280;word-break:break-all">${joinUrl}</p>
+    </div>
+  ` : ''
+
+  const bothOptions = (sheetSection || joinSection) ? `
+    <p style="font-weight:600;color:#374151;margin-bottom:4px">Group member details — two options:</p>
+    <p style="font-size:13px;color:#6b7280;margin-top:0 0 12px">Use whichever works best for you, or both.</p>
+    ${sheetSection}
+    ${joinSection}
   ` : ''
 
   const html = `
@@ -105,7 +121,7 @@ export function groupConfirmationEmail({
           <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">Total Participants</td><td style="padding:12px 16px">${participantCount}</td></tr>
           <tr><td style="padding:12px 16px;font-weight:600;color:#374151">Reference #</td><td style="padding:12px 16px;font-family:monospace;color:#6b7280;font-size:12px">${registrationId}</td></tr>
         </table>
-        ${sheetSection}
+        ${bothOptions}
         <p style="font-weight:600;color:#374151;margin-bottom:8px">What happens next:</p>
         <ul style="color:#6b7280;font-size:14px;line-height:1.8;padding-left:20px">
           ${paymentNote}
@@ -119,11 +135,12 @@ export function groupConfirmationEmail({
       </div>
     </div>
   `
-  const sheetText = spreadsheetUrl ? `\n\nTeam Member Spreadsheet: ${spreadsheetUrl}` : ''
+  const sheetText = spreadsheetUrl ? `\n\nOption 1 — Google Sheet: ${spreadsheetUrl}` : ''
+  const joinText = joinUrl ? `\n\nOption 2 — Registration Link: ${joinUrl}` : ''
   const paymentText = paymentMethod === 'invoice'
     ? 'An invoice will be emailed within 1–2 business days.'
     : 'Card payment processed — registration confirmed.'
-  const text = `Hi ${teacherFirstName},\n\nGroup registration received for ${eventTitle}.\n\nSchool: ${schoolName}\nParticipants: ${participantCount}\nReference #: ${registrationId}\n\n${paymentText}${sheetText}\n\n— Stellr Education`
+  const text = `Hi ${teacherFirstName},\n\nGroup registration received for ${eventTitle}.\n\nSchool: ${schoolName}\nParticipants: ${participantCount}\nReference #: ${registrationId}\n\n${paymentText}${sheetText}${joinText}\n\n— Stellr Education`
   return { subject, html, text }
 }
 

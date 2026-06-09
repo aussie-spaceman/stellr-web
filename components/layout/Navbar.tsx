@@ -101,6 +101,7 @@ export function Navbar() {
               {navLinks.map((link) => (
                 <li key={link.href} className="relative">
                   <div
+                    className="pb-1"
                     onMouseEnter={() => setOpenDropdown(link.label)}
                     onMouseLeave={() => setOpenDropdown(null)}
                   >
@@ -141,7 +142,7 @@ export function Navbar() {
             <div className="hidden lg:flex items-center gap-3">
               {/* Get Involved dropdown */}
               <div
-                className="relative"
+                className="relative pb-1"
                 onMouseEnter={() => setOpenDropdown('get-involved')}
                 onMouseLeave={() => setOpenDropdown(null)}
               >

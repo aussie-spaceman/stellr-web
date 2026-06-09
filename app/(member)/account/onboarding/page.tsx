@@ -24,12 +24,6 @@ export default async function OnboardingPage() {
     .select('*')
     .order('sort_order')
 
-  const { data: schools } = await db
-    .from('schools')
-    .select('id, name')
-    .eq('is_active', true)
-    .order('name')
-
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
@@ -38,7 +32,7 @@ export default async function OnboardingPage() {
           Tell us a bit about yourself to get the most out of your Stellr membership.
         </p>
       </div>
-      <OnboardingForm tiers={tiers ?? []} schools={schools ?? []} existingMember={member} />
+      <OnboardingForm tiers={tiers ?? []} existingMember={member} />
     </div>
   )
 }

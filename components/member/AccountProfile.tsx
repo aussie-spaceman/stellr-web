@@ -39,6 +39,7 @@ interface Props {
   clerkUser: ClerkUser | null
   ethnicityOptions: Option[]
   allergyOptions: Option[]
+  readOnly?: boolean
 }
 
 function formatGrade(grade: string | null) {
@@ -50,7 +51,7 @@ function formatGrade(grade: string | null) {
     .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOptions }: Props) {
+export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOptions, readOnly = false }: Props) {
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(false)
   const [phone, setPhone] = useState(member.phone ?? '')
@@ -203,13 +204,15 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
           </div>
         )}
 
-        <button
-          onClick={handleSave}
-          disabled={loading}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
-        >
-          {loading ? 'Saving…' : saved ? 'Saved ✓' : 'Save changes'}
-        </button>
+        {!readOnly && (
+          <button
+            onClick={handleSave}
+            disabled={loading}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {loading ? 'Saving…' : saved ? 'Saved ✓' : 'Save changes'}
+          </button>
+        )}
       </div>
     </div>
   )

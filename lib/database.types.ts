@@ -12,6 +12,7 @@ export interface RegistrationRow {
   teacher_first_name: string | null
   teacher_last_name: string | null
   teacher_email: string | null
+  teacher_member_id: string | null
   school_name: string | null
   school_address_street: string | null
   school_address_city: string | null
@@ -24,6 +25,7 @@ export interface RegistrationRow {
   teacher_poc_email: string | null
   member_pays_individually: boolean
   details_method: 'add_now' | 'spreadsheet' | 'email_link'
+  spreadsheet_id: string | null
 }
 
 export type RegistrationInsert = Omit<RegistrationRow, 'id' | 'created_at' | 'updated_at'>
@@ -53,8 +55,22 @@ export interface ParticipantRow {
   membership_id: string
   company_name: string | null
   award: string | null
+  individual_payment_status: 'pending' | 'paid' | null
+  join_completed_at: string | null
   created_at: string
 }
+
+export interface GroupJoinTokenRow {
+  id: string
+  token: string
+  registration_id: string
+  event_slug: string
+  event_title: string
+  created_at: string
+  expires_at: string
+}
+
+export type GroupJoinTokenInsert = Omit<GroupJoinTokenRow, 'id' | 'created_at'>
 
 export type ParticipantInsert = Omit<ParticipantRow, 'id' | 'created_at' | 'membership_id' | 'company_name' | 'award'>
 

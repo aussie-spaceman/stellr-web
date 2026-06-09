@@ -106,7 +106,7 @@ export default async function RegisterTypePage({ params }: PageProps) {
             </div>
             <h3 className="font-bold text-brand-blue-dark text-lg mb-1">Group / Team</h3>
             <p className="text-sm text-gray-600 mb-4">
-              I&apos;m a teacher or coach registering a group of students. An invoice will be issued to me.
+              I&apos;m a teacher, coach, or student manager registering a group. Choose your role in the next step.
             </p>
             <span className="text-brand-blue text-sm font-medium group-hover:underline">
               Register a Group →

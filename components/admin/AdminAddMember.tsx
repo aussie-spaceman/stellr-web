@@ -4,12 +4,11 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ROLES_FOR_BRACKET, DEFAULT_ROLE_FOR_BRACKET, getEligibleTierNames } from '@/lib/membership-rules'
+import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
 
-interface School { id: string; name: string }
 interface Tier { id: string; name: string }
 
 interface Props {
-  schools: School[]
   tiers: Tier[]
 }
 
@@ -38,7 +37,7 @@ function ageFromDob(dob: string): number | null {
   return new Date().getFullYear() - new Date(dob).getFullYear()
 }
 
-export function AdminAddMember({ schools, tiers }: Props) {
+export function AdminAddMember({ tiers }: Props) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -56,14 +55,14 @@ export function AdminAddMember({ schools, tiers }: Props) {
     tshirt_size: '',
     discord_handle: '',
     health_conditions: '',
-    school_id: '',
-    new_school_name: '',
     ec_first_name: '',
     ec_last_name: '',
     ec_email: '',
     ec_phone: '',
     tier_id: '',
   })
+
+  const [schoolSelection, setSchoolSelection] = useState<SchoolSelection | null>(null)
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }))
@@ -96,10 +95,24 @@ export function AdminAddMember({ schools, tiers }: Props) {
       return
     }
     setSaving(true)
+    const schoolPayload =
+      schoolSelection?.type === 'existing'
+        ? { school_id: schoolSelection.id }
+        : schoolSelection?.type === 'new'
+        ? {
+            school_id: 'new',
+            new_school_name: schoolSelection.data.name,
+            new_school_address_line1: schoolSelection.data.address_line1,
+            new_school_address_line2: schoolSelection.data.address_line2,
+            new_school_city: schoolSelection.data.city,
+            new_school_state: schoolSelection.data.state,
+            new_school_postcode: schoolSelection.data.postcode,
+          }
+        : {}
     const res = await fetch('/api/admin/members', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, ...schoolPayload }),
     })
     setSaving(false)
     if (!res.ok) {
@@ -285,27 +298,8 @@ export function AdminAddMember({ schools, tiers }: Props) {
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
               <h2 className="text-base font-semibold text-gray-900">School</h2>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">School</label>
-                <select
-                  value={form.school_id}
-                  onChange={(e) => set('school_id', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">Select existing school…</option>
-                  {schools.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                  <option value="new">+ Add new school</option>
-                </select>
-                {form.school_id === 'new' && (
-                  <input
-                    type="text"
-                    placeholder="School name"
-                    value={form.new_school_name}
-                    onChange={(e) => set('new_school_name', e.target.value)}
-                    className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                )}
+                <label className="block text-xs text-gray-500 mb-1">School name</label>
+                <SchoolSearchInput onChange={setSchoolSelection} />
               </div>
             </div>
           )}

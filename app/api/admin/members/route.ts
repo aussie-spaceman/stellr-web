@@ -19,6 +19,8 @@ export async function POST(req: Request) {
     age_bracket, event_role,
     grade, tshirt_size,
     school_id, new_school_name,
+    new_school_address_line1, new_school_address_line2,
+    new_school_city, new_school_state, new_school_postcode,
     ec_first_name, ec_last_name, ec_email, ec_phone,
     health_conditions, discord_handle,
     tier_id,
@@ -72,7 +74,14 @@ export async function POST(req: Request) {
     } else {
       const { data: newSchool, error: schoolError } = await db
         .from('schools')
-        .insert({ name: new_school_name.trim() })
+        .insert({
+          name: new_school_name.trim(),
+          address_line1: new_school_address_line1?.trim() || null,
+          address_line2: new_school_address_line2?.trim() || null,
+          city: new_school_city?.trim() || null,
+          state: new_school_state?.trim() || null,
+          postcode: new_school_postcode?.trim() || null,
+        })
         .select('id')
         .single()
       if (schoolError) {

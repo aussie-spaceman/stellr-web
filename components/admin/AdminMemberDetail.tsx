@@ -154,6 +154,12 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           )}
         </div>
         <div className="flex gap-3">
+          <Link
+            href={`/admin/members/${member.id}/view-as`}
+            className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+          >
+            View as member
+          </Link>
           <button
             onClick={handleSave}
             disabled={saving}

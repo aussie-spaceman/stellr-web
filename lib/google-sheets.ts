@@ -22,6 +22,105 @@ export function isGoogleSheetsConfigured() {
   return Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY)
 }
 
+// ── Sync helpers ──────────────────────────────────────────────────────────────
+
+export interface SheetParticipant {
+  membership_id: string
+  type: string
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  date_of_birth: string
+  gender: string
+  t_shirt_size: string
+  grade: string
+  dietary_requirements: string[]
+  health_conditions: string
+  ec_first_name: string
+  ec_last_name: string
+  ec_email: string
+  ec_phone: string
+}
+
+export async function readSheetParticipants(spreadsheetId: string): Promise<SheetParticipant[]> {
+  const auth = getAuth()
+  if (!auth) throw new Error('Google service account not configured')
+
+  const sheets = google.sheets({ version: 'v4', auth })
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: 'Participants!A2:P',
+    valueRenderOption: 'UNFORMATTED_VALUE',
+  })
+
+  const rows = res.data.values ?? []
+  return rows
+    .filter(row => row.length > 0 && row[0] && !String(row[0]).startsWith('<'))
+    .map(row => ({
+      membership_id: String(row[0] ?? ''),
+      type: String(row[1] ?? ''),
+      first_name: String(row[2] ?? ''),
+      last_name: String(row[3] ?? ''),
+      email: String(row[4] ?? ''),
+      phone: String(row[5] ?? ''),
+      date_of_birth: String(row[6] ?? ''),
+      gender: String(row[7] ?? ''),
+      t_shirt_size: String(row[8] ?? ''),
+      grade: String(row[9] ?? ''),
+      dietary_requirements: row[10] ? String(row[10]).split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+      health_conditions: String(row[11] ?? ''),
+      ec_first_name: String(row[12] ?? ''),
+      ec_last_name: String(row[13] ?? ''),
+      ec_email: String(row[14] ?? ''),
+      ec_phone: String(row[15] ?? ''),
+    }))
+}
+
+// ── Watch / push notification helpers ────────────────────────────────────────
+
+export interface WatchChannelResult {
+  channel_id: string
+  resource_id: string
+  expiration: Date
+}
+
+export async function watchSheet(spreadsheetId: string, channelId: string): Promise<WatchChannelResult> {
+  const auth = getAuth()
+  if (!auth) throw new Error('Google service account not configured')
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
+  const drive = google.drive({ version: 'v3', auth })
+
+  const expirationMs = Date.now() + 6 * 24 * 60 * 60 * 1000 // 6 days (Google max is 7)
+
+  const res = await drive.files.watch({
+    fileId: spreadsheetId,
+    requestBody: {
+      id: channelId,
+      type: 'web_hook',
+      address: `${siteUrl}/api/webhooks/google-sheets`,
+      expiration: String(expirationMs),
+    },
+  })
+
+  return {
+    channel_id: res.data.id!,
+    resource_id: res.data.resourceId!,
+    expiration: new Date(Number(res.data.expiration)),
+  }
+}
+
+export async function stopWatchChannel(channelId: string, resourceId: string): Promise<void> {
+  const auth = getAuth()
+  if (!auth) return
+
+  const drive = google.drive({ version: 'v3', auth })
+  await drive.channels.stop({ requestBody: { id: channelId, resourceId } }).catch(() => {
+    // best-effort — channel may have already expired
+  })
+}
+
 const HEADERS = [
   'Membership ID', 'Type', 'First Name', 'Last Name', 'Email', 'Phone',
   'Date of Birth', 'Gender', 'T-Shirt Size', 'Grade',

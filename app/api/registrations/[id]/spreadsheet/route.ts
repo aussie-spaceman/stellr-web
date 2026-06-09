@@ -78,7 +78,7 @@ export async function GET(
 
     const { data: registration, error: regErr } = await db
       .from('registrations')
-      .select('id, event_title, school_name, teacher_email, type')
+      .select('id, event_title, school_name, teacher_email, type, spreadsheet_id')
       .eq('id', id)
       .maybeSingle()
 
@@ -92,11 +92,17 @@ export async function GET(
 
     const reg = registration as {
       id: string; event_title: string; school_name: string | null
-      teacher_email: string | null; type: string
+      teacher_email: string | null; type: string; spreadsheet_id: string | null
     }
 
     if (reg.type !== 'group') {
       return NextResponse.json({ error: 'Only available for group registrations' }, { status: 400 })
+    }
+
+    // Return existing sheet URL rather than creating a new one each time
+    if (reg.spreadsheet_id) {
+      const existingUrl = `https://docs.google.com/spreadsheets/d/${reg.spreadsheet_id}/edit`
+      return NextResponse.redirect(existingUrl, { status: 302 })
     }
 
     const { data: participants, error: partErr } = await db
@@ -240,6 +246,9 @@ export async function GET(
         sendNotificationEmail: false,
       })
     }
+
+    // Persist the spreadsheet_id so future visits reuse this sheet
+    await db.from('registrations').update({ spreadsheet_id: spreadsheetId }).eq('id', id)
 
     const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`
     return NextResponse.redirect(url, { status: 302 })

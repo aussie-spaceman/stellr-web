@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
 
 interface Tier {
   id: string
@@ -12,11 +13,6 @@ interface Tier {
   age_bracket: string | null
 }
 
-interface School {
-  id: string
-  name: string
-}
-
 interface ExistingMember {
   id: string
   age_bracket: string
@@ -25,12 +21,12 @@ interface ExistingMember {
 
 interface Props {
   tiers: Tier[]
-  schools: School[]
   existingMember: ExistingMember | null
 }
 
 const ROLES = [
   { value: 'school_student', label: 'Student (High School)', bracket: 'high_school' },
+  { value: 'school_student_manager', label: 'Student Manager (leads a group)', bracket: 'high_school' },
   { value: 'mentor', label: 'Mentor / Volunteer', bracket: 'college' },
   { value: 'teacher', label: 'Teacher / Educator', bracket: 'adult' },
   { value: 'parent', label: 'Parent / Guardian', bracket: 'adult' },
@@ -50,7 +46,7 @@ const GRADES = [
 
 const GENDERS = ['male', 'female', 'other', 'prefer_not_to_say']
 
-export function OnboardingForm({ tiers, schools, existingMember }: Props) {
+export function OnboardingForm({ tiers, existingMember }: Props) {
   const router = useRouter()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -63,14 +59,14 @@ export function OnboardingForm({ tiers, schools, existingMember }: Props) {
     gender: '',
     phone: '',
     grade: '',
-    school_id: '',
-    new_school_name: '',
     tshirt_size: '',
     ec_first_name: '',
     ec_last_name: '',
     ec_email: '',
     ec_phone: '',
   })
+
+  const [schoolSelection, setSchoolSelection] = useState<SchoolSelection | null>(null)
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }))
@@ -84,10 +80,25 @@ export function OnboardingForm({ tiers, schools, existingMember }: Props) {
     setLoading(true)
     setError('')
     try {
+      const schoolPayload =
+        schoolSelection?.type === 'existing'
+          ? { school_id: schoolSelection.id }
+          : schoolSelection?.type === 'new'
+          ? {
+              school_id: 'new',
+              new_school_name: schoolSelection.data.name,
+              new_school_address_line1: schoolSelection.data.address_line1,
+              new_school_address_line2: schoolSelection.data.address_line2,
+              new_school_city: schoolSelection.data.city,
+              new_school_state: schoolSelection.data.state,
+              new_school_postcode: schoolSelection.data.postcode,
+            }
+          : {}
+
       const res = await fetch('/api/members/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, ...schoolPayload }),
       })
       if (!res.ok) {
         const data = await res.json()
@@ -105,6 +116,7 @@ export function OnboardingForm({ tiers, schools, existingMember }: Props) {
   const eligibleTiers = tiers.filter(
     (t) => !t.age_bracket || t.age_bracket === form.age_bracket
   )
+  void eligibleTiers
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-8">
@@ -222,30 +234,11 @@ export function OnboardingForm({ tiers, schools, existingMember }: Props) {
             </div>
           )}
 
-          {/* School selection */}
+          {/* School — only shown for non-adults */}
           {form.age_bracket !== 'adult' && (
             <div>
               <label className="block text-xs text-gray-500 mb-1">School</label>
-              <select
-                value={form.school_id}
-                onChange={(e) => set('school_id', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">Select existing school…</option>
-                {schools.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-                <option value="new">+ Add new school</option>
-              </select>
-              {form.school_id === 'new' && (
-                <input
-                  type="text"
-                  placeholder="School name"
-                  value={form.new_school_name}
-                  onChange={(e) => set('new_school_name', e.target.value)}
-                  className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              )}
+              <SchoolSearchInput onChange={setSchoolSelection} />
             </div>
           )}
 

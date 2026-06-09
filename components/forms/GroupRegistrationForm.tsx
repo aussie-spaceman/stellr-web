@@ -24,6 +24,10 @@ const US_STATES = [
 ]
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+type RegistrantRole = 'teacher' | 'student_manager'
+type DetailsMethod = 'add_now' | 'spreadsheet' | 'email_link'
+type PaymentMethod = 'invoice' | 'card' | 'individual'
+
 interface AdultData {
   first_name: string; last_name: string; email: string; phone: string
   date_of_birth: string; gender: string; t_shirt_size: string
@@ -48,7 +52,15 @@ function emptyStudent(): StudentData {
   return { first_name: '', last_name: '', email: '', phone: '', date_of_birth: '', grade: '', gender: '', t_shirt_size: '', health_conditions: '', emergency_contact_first_name: '', emergency_contact_last_name: '', emergency_contact_email: '', emergency_contact_phone: '', existing_membership_id: '' }
 }
 
-// ── Teacher schema ────────────────────────────────────────────────────────────
+// ── Schemas ───────────────────────────────────────────────────────────────────
+const schoolFields = {
+  school_name: z.string().min(1, 'Required'),
+  school_address_street: z.string().min(1, 'Required'),
+  school_address_city: z.string().min(1, 'Required'),
+  school_address_state: z.string().min(1, 'Required'),
+  school_address_zip: z.string().min(1, 'Required'),
+}
+
 const teacherSchema = z.object({
   first_name: z.string().min(1, 'Required'),
   last_name: z.string().min(1, 'Required'),
@@ -57,16 +69,35 @@ const teacherSchema = z.object({
   date_of_birth: z.string().min(1, 'Required'),
   gender: z.string().min(1, 'Required'),
   t_shirt_size: z.string().min(1, 'Required'),
-  school_name: z.string().min(1, 'Required'),
-  school_address_street: z.string().min(1, 'Required'),
-  school_address_city: z.string().min(1, 'Required'),
-  school_address_state: z.string().min(1, 'Required'),
-  school_address_zip: z.string().min(1, 'Required'),
+  ...schoolFields,
   ethnicity: z.array(z.string()).min(1, 'Select at least one'),
   dietary_requirements: z.array(z.string()).min(1, 'Select at least one'),
   health_conditions: z.string().optional(),
 })
 type TeacherFormData = z.infer<typeof teacherSchema>
+
+const studentManagerSchema = z.object({
+  first_name: z.string().min(1, 'Required'),
+  last_name: z.string().min(1, 'Required'),
+  email: z.string().email('Valid email required'),
+  phone: z.string().min(7, 'Valid phone required'),
+  date_of_birth: z.string().min(1, 'Required'),
+  grade: z.string().min(1, 'Required'),
+  gender: z.string().min(1, 'Required'),
+  t_shirt_size: z.string().min(1, 'Required'),
+  ...schoolFields,
+  ethnicity: z.array(z.string()).min(1, 'Select at least one'),
+  dietary_requirements: z.array(z.string()).min(1, 'Select at least one'),
+  health_conditions: z.string().optional(),
+  emergency_contact_first_name: z.string().min(1, 'Required'),
+  emergency_contact_last_name: z.string().min(1, 'Required'),
+  emergency_contact_email: z.string().email('Valid email required'),
+  emergency_contact_phone: z.string().min(7, 'Valid phone required'),
+  teacher_poc_first_name: z.string().min(1, 'Required'),
+  teacher_poc_last_name: z.string().min(1, 'Required'),
+  teacher_poc_email: z.string().email('Valid email required'),
+})
+type StudentManagerFormData = z.infer<typeof studentManagerSchema>
 
 // ── Step bar ──────────────────────────────────────────────────────────────────
 function StepBar({ step }: { step: 1 | 2 }) {
@@ -281,18 +312,29 @@ function StudentAccordion({ index, data, onChange, expanded, onToggle }: {
 export default function GroupRegistrationForm({ eventSlug, eventTitle }: { eventSlug: string; eventTitle: string }) {
   const router = useRouter()
   const [step, setStep] = useState<1 | 2>(1)
+  const [registrantRole, setRegistrantRole] = useState<RegistrantRole>('teacher')
 
-  const { register, trigger, getValues, watch, setValue, formState: { errors } } = useForm<TeacherFormData>({
+  const teacherForm = useForm<TeacherFormData>({
     resolver: zodResolver(teacherSchema),
     defaultValues: { ethnicity: [], dietary_requirements: [] },
   })
-  const ethnicity = watch('ethnicity') ?? []
-  const dietary = watch('dietary_requirements') ?? []
+  const smForm = useForm<StudentManagerFormData>({
+    resolver: zodResolver(studentManagerSchema),
+    defaultValues: { ethnicity: [], dietary_requirements: [] },
+  })
+
+  // Use the active form based on role
+  const tf = teacherForm
+  const sf = smForm
+  const tEthnicity = tf.watch('ethnicity') ?? []
+  const tDietary = tf.watch('dietary_requirements') ?? []
+  const sEthnicity = sf.watch('ethnicity') ?? []
+  const sDietary = sf.watch('dietary_requirements') ?? []
 
   const [adultCount, setAdultCount] = useState(1)
   const [studentCount, setStudentCount] = useState(2)
-  const [detailsMethod, setDetailsMethod] = useState<'add_now' | 'spreadsheet'>('add_now')
-  const [paymentMethod, setPaymentMethod] = useState<'invoice' | 'card'>('invoice')
+  const [detailsMethod, setDetailsMethod] = useState<DetailsMethod>('add_now')
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('invoice')
   const [additionalAdults, setAdditionalAdults] = useState<AdultData[]>([])
   const [students, setStudents] = useState<StudentData[]>([emptyStudent(), emptyStudent()])
   const [expandedAdult, setExpandedAdult] = useState<number | null>(null)
@@ -320,7 +362,12 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
   }
 
   async function goToStep2() {
-    const valid = await trigger()
+    let valid = false
+    if (registrantRole === 'teacher') {
+      valid = await tf.trigger()
+    } else {
+      valid = await sf.trigger()
+    }
     if (valid) setStep(2)
   }
 
@@ -361,7 +408,26 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
     }
 
     try {
-      const teacherData = getValues()
+      let registrantPayload: Record<string, unknown>
+
+      if (registrantRole === 'teacher') {
+        const d = tf.getValues()
+        registrantPayload = {
+          ...d,
+          age_bracket: deriveAgeBracket(d.date_of_birth),
+          event_role: 'Teacher',
+        }
+      } else {
+        const d = sf.getValues()
+        registrantPayload = {
+          ...d,
+          age_bracket: deriveAgeBracket(d.date_of_birth, d.grade),
+          event_role: 'School Student Manager',
+        }
+      }
+
+      const isTeacher = registrantRole === 'teacher'
+      const smData = !isTeacher ? sf.getValues() : null
 
       const res = await fetch('/api/register/group', {
         method: 'POST',
@@ -369,12 +435,19 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
         body: JSON.stringify({
           event_slug: eventSlug,
           event_title: eventTitle,
-          teacher: { ...teacherData, age_bracket: deriveAgeBracket(teacherData.date_of_birth), event_role: 'Teacher' },
+          registrant_role: registrantRole,
+          teacher: registrantPayload,
+          teacher_poc: smData ? {
+            first_name: smData.teacher_poc_first_name,
+            last_name: smData.teacher_poc_last_name,
+            email: smData.teacher_poc_email,
+          } : null,
           adult_count: adultCount,
           student_count: studentCount,
           total_participants: adultCount + studentCount,
           details_method: detailsMethod,
           payment_method: paymentMethod,
+          member_pays_individually: paymentMethod === 'individual',
           additional_adults: detailsMethod === 'add_now' ? additionalAdults.map(a => ({ ...a, age_bracket: deriveAgeBracket(a.date_of_birth), event_role: 'Adult' })) : [],
           students: detailsMethod === 'add_now' ? students.map(s => ({ ...s, age_bracket: deriveAgeBracket(s.date_of_birth, s.grade), event_role: 'School Student' })) : [],
         }),
@@ -400,69 +473,187 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
     }
   }
 
-  // ── Step 1: Teacher details ───────────────────────────────────────────────
+  // ── Step 1: Registrant details ────────────────────────────────────────────
   if (step === 1) {
     return (
       <div className="space-y-6">
         <StepBar step={1} />
         <div>
           <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Your Details</h2>
-          <p className="text-sm text-gray-600">Step 2 of 4 — Teacher / Coordinator information</p>
+          <p className="text-sm text-gray-600">Step 2 of 4 — Your information as the group organiser</p>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
-          <h3 className="font-semibold text-brand-blue-dark">Personal Information</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div><label className="label-text">First Name *</label><input {...register('first_name')} className="input-field" /><FieldError message={errors.first_name?.message} /></div>
-            <div><label className="label-text">Last Name *</label><input {...register('last_name')} className="input-field" /><FieldError message={errors.last_name?.message} /></div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div><label className="label-text">Email Address *</label><input {...register('email')} type="email" className="input-field" /><FieldError message={errors.email?.message} /></div>
-            <div><label className="label-text">Phone Number *</label><input {...register('phone')} type="tel" className="input-field" /><FieldError message={errors.phone?.message} /></div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div><label className="label-text">Date of Birth *</label><input {...register('date_of_birth')} type="date" className="input-field" /><FieldError message={errors.date_of_birth?.message} /></div>
-            <div>
-              <label className="label-text">Gender *</label>
-              <select {...register('gender')} className="input-field"><option value="">Select…</option>{GENDERS.map(g => <option key={g} value={g}>{g}</option>)}</select>
-              <FieldError message={errors.gender?.message} />
-            </div>
-            <div>
-              <label className="label-text">T-Shirt Size *</label>
-              <select {...register('t_shirt_size')} className="input-field"><option value="">Select…</option>{T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}</select>
-              <FieldError message={errors.t_shirt_size?.message} />
-            </div>
+        {/* Role selector */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+          <h3 className="font-semibold text-brand-blue-dark">I am registering as a…</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button type="button" onClick={() => setRegistrantRole('teacher')}
+              className={`text-left px-4 py-3 rounded-lg border-2 text-sm transition-colors ${registrantRole === 'teacher' ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-gray-200 hover:border-gray-300 text-gray-700'}`}>
+              <span className="font-semibold block mb-0.5">Teacher / Coordinator</span>
+              <span className="text-xs text-gray-500">I am an adult educator bringing students to this event</span>
+            </button>
+            <button type="button" onClick={() => setRegistrantRole('student_manager')}
+              className={`text-left px-4 py-3 rounded-lg border-2 text-sm transition-colors ${registrantRole === 'student_manager' ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-gray-200 hover:border-gray-300 text-gray-700'}`}>
+              <span className="font-semibold block mb-0.5">Student Manager</span>
+              <span className="text-xs text-gray-500">I am a high school student organising a group for this event</span>
+            </button>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
-          <h3 className="font-semibold text-brand-blue-dark">School</h3>
-          <div><label className="label-text">School Name *</label><input {...register('school_name')} className="input-field" /><FieldError message={errors.school_name?.message} /></div>
-          <div><label className="label-text">Street Address *</label><input {...register('school_address_street')} className="input-field" /><FieldError message={errors.school_address_street?.message} /></div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="col-span-2"><label className="label-text">City *</label><input {...register('school_address_city')} className="input-field" /><FieldError message={errors.school_address_city?.message} /></div>
-            <div>
-              <label className="label-text">State *</label>
-              <select {...register('school_address_state')} className="input-field">
-                <option value="">Select…</option>
-                {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <FieldError message={errors.school_address_state?.message} />
+        {registrantRole === 'teacher' ? (
+          <>
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+              <h3 className="font-semibold text-brand-blue-dark">Personal Information</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label className="label-text">First Name *</label><input {...tf.register('first_name')} className="input-field" /><FieldError message={tf.formState.errors.first_name?.message} /></div>
+                <div><label className="label-text">Last Name *</label><input {...tf.register('last_name')} className="input-field" /><FieldError message={tf.formState.errors.last_name?.message} /></div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label className="label-text">Email Address *</label><input {...tf.register('email')} type="email" className="input-field" /><FieldError message={tf.formState.errors.email?.message} /></div>
+                <div><label className="label-text">Phone Number *</label><input {...tf.register('phone')} type="tel" className="input-field" /><FieldError message={tf.formState.errors.phone?.message} /></div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div><label className="label-text">Date of Birth *</label><input {...tf.register('date_of_birth')} type="date" className="input-field" /><FieldError message={tf.formState.errors.date_of_birth?.message} /></div>
+                <div>
+                  <label className="label-text">Gender *</label>
+                  <select {...tf.register('gender')} className="input-field"><option value="">Select…</option>{GENDERS.map(g => <option key={g} value={g}>{g}</option>)}</select>
+                  <FieldError message={tf.formState.errors.gender?.message} />
+                </div>
+                <div>
+                  <label className="label-text">T-Shirt Size *</label>
+                  <select {...tf.register('t_shirt_size')} className="input-field"><option value="">Select…</option>{T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                  <FieldError message={tf.formState.errors.t_shirt_size?.message} />
+                </div>
+              </div>
             </div>
-            <div><label className="label-text">ZIP *</label><input {...register('school_address_zip')} className="input-field" /><FieldError message={errors.school_address_zip?.message} /></div>
-          </div>
-        </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
-          <MultiCheckboxes label="Ethnicity *" note="Select all that apply" options={ETHNICITIES} selected={ethnicity}
-            onChange={v => setValue('ethnicity', v, { shouldValidate: true })} error={errors.ethnicity?.message} />
-          <MultiCheckboxes label="Dietary Requirements *" note="Select all that apply" options={DIETARY} selected={dietary}
-            onChange={v => setValue('dietary_requirements', v, { shouldValidate: true })} error={errors.dietary_requirements?.message} />
-          <div>
-            <label className="label-text">Health Conditions / Allergies</label>
-            <textarea {...register('health_conditions')} className="input-field resize-none" rows={3} placeholder="Leave blank if none." />
-          </div>
-        </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+              <h3 className="font-semibold text-brand-blue-dark">School</h3>
+              <div><label className="label-text">School Name *</label><input {...tf.register('school_name')} className="input-field" /><FieldError message={tf.formState.errors.school_name?.message} /></div>
+              <div><label className="label-text">Street Address *</label><input {...tf.register('school_address_street')} className="input-field" /><FieldError message={tf.formState.errors.school_address_street?.message} /></div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="col-span-2"><label className="label-text">City *</label><input {...tf.register('school_address_city')} className="input-field" /><FieldError message={tf.formState.errors.school_address_city?.message} /></div>
+                <div>
+                  <label className="label-text">State *</label>
+                  <select {...tf.register('school_address_state')} className="input-field">
+                    <option value="">Select…</option>{US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <FieldError message={tf.formState.errors.school_address_state?.message} />
+                </div>
+                <div><label className="label-text">ZIP *</label><input {...tf.register('school_address_zip')} className="input-field" /><FieldError message={tf.formState.errors.school_address_zip?.message} /></div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+              <MultiCheckboxes label="Ethnicity *" note="Select all that apply" options={ETHNICITIES} selected={tEthnicity}
+                onChange={v => tf.setValue('ethnicity', v, { shouldValidate: true })} error={tf.formState.errors.ethnicity?.message} />
+              <MultiCheckboxes label="Dietary Requirements *" note="Select all that apply" options={DIETARY} selected={tDietary}
+                onChange={v => tf.setValue('dietary_requirements', v, { shouldValidate: true })} error={tf.formState.errors.dietary_requirements?.message} />
+              <div>
+                <label className="label-text">Health Conditions / Allergies</label>
+                <textarea {...tf.register('health_conditions')} className="input-field resize-none" rows={3} placeholder="Leave blank if none." />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Student Manager personal info */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+              <h3 className="font-semibold text-brand-blue-dark">Personal Information</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label className="label-text">First Name *</label><input {...sf.register('first_name')} className="input-field" /><FieldError message={sf.formState.errors.first_name?.message} /></div>
+                <div><label className="label-text">Last Name *</label><input {...sf.register('last_name')} className="input-field" /><FieldError message={sf.formState.errors.last_name?.message} /></div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label className="label-text">Email Address *</label><input {...sf.register('email')} type="email" className="input-field" /><FieldError message={sf.formState.errors.email?.message} /></div>
+                <div><label className="label-text">Phone Number *</label><input {...sf.register('phone')} type="tel" className="input-field" /><FieldError message={sf.formState.errors.phone?.message} /></div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div><label className="label-text">Date of Birth *</label><input {...sf.register('date_of_birth')} type="date" className="input-field" /><FieldError message={sf.formState.errors.date_of_birth?.message} /></div>
+                <div>
+                  <label className="label-text">Grade *</label>
+                  <select {...sf.register('grade')} className="input-field">
+                    <option value="">Select…</option>{['9','10','11','12'].map(g => <option key={g} value={g}>Grade {g}</option>)}
+                  </select>
+                  <FieldError message={sf.formState.errors.grade?.message} />
+                </div>
+                <div>
+                  <label className="label-text">Gender *</label>
+                  <select {...sf.register('gender')} className="input-field"><option value="">Select…</option>{GENDERS.map(g => <option key={g} value={g}>{g}</option>)}</select>
+                  <FieldError message={sf.formState.errors.gender?.message} />
+                </div>
+                <div>
+                  <label className="label-text">T-Shirt Size *</label>
+                  <select {...sf.register('t_shirt_size')} className="input-field"><option value="">Select…</option>{T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                  <FieldError message={sf.formState.errors.t_shirt_size?.message} />
+                </div>
+              </div>
+            </div>
+
+            {/* School */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+              <h3 className="font-semibold text-brand-blue-dark">School</h3>
+              <div><label className="label-text">School Name *</label><input {...sf.register('school_name')} className="input-field" /><FieldError message={sf.formState.errors.school_name?.message} /></div>
+              <div><label className="label-text">Street Address *</label><input {...sf.register('school_address_street')} className="input-field" /><FieldError message={sf.formState.errors.school_address_street?.message} /></div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="col-span-2"><label className="label-text">City *</label><input {...sf.register('school_address_city')} className="input-field" /><FieldError message={sf.formState.errors.school_address_city?.message} /></div>
+                <div>
+                  <label className="label-text">State *</label>
+                  <select {...sf.register('school_address_state')} className="input-field">
+                    <option value="">Select…</option>{US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <FieldError message={sf.formState.errors.school_address_state?.message} />
+                </div>
+                <div><label className="label-text">ZIP *</label><input {...sf.register('school_address_zip')} className="input-field" /><FieldError message={sf.formState.errors.school_address_zip?.message} /></div>
+              </div>
+            </div>
+
+            {/* Additional info */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+              <MultiCheckboxes label="Ethnicity *" note="Select all that apply" options={ETHNICITIES} selected={sEthnicity}
+                onChange={v => sf.setValue('ethnicity', v, { shouldValidate: true })} error={sf.formState.errors.ethnicity?.message} />
+              <MultiCheckboxes label="Dietary Requirements *" note="Select all that apply" options={DIETARY} selected={sDietary}
+                onChange={v => sf.setValue('dietary_requirements', v, { shouldValidate: true })} error={sf.formState.errors.dietary_requirements?.message} />
+              <div>
+                <label className="label-text">Health Conditions / Allergies</label>
+                <textarea {...sf.register('health_conditions')} className="input-field resize-none" rows={3} placeholder="Leave blank if none." />
+              </div>
+            </div>
+
+            {/* Emergency contact — HS student */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+              <div>
+                <h3 className="font-semibold text-brand-blue-dark">Emergency Contact</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Required for High School student participants</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label className="label-text">First Name *</label><input {...sf.register('emergency_contact_first_name')} className="input-field" /><FieldError message={sf.formState.errors.emergency_contact_first_name?.message} /></div>
+                <div><label className="label-text">Last Name *</label><input {...sf.register('emergency_contact_last_name')} className="input-field" /><FieldError message={sf.formState.errors.emergency_contact_last_name?.message} /></div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label className="label-text">Email *</label><input {...sf.register('emergency_contact_email')} type="email" className="input-field" /><FieldError message={sf.formState.errors.emergency_contact_email?.message} /></div>
+                <div><label className="label-text">Phone *</label><input {...sf.register('emergency_contact_phone')} type="tel" className="input-field" /><FieldError message={sf.formState.errors.emergency_contact_phone?.message} /></div>
+              </div>
+            </div>
+
+            {/* Teacher Point of Contact */}
+            <div className="bg-amber-50 rounded-xl border border-amber-200 p-6 space-y-5">
+              <div>
+                <h3 className="font-semibold text-amber-900">Teacher Point of Contact</h3>
+                <p className="text-xs text-amber-700 mt-0.5">Nominate a teacher who will be cc'd on all group correspondence. They are not the primary contact — that's you — but they'll be kept informed.</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label className="label-text">First Name *</label><input {...sf.register('teacher_poc_first_name')} className="input-field" /><FieldError message={sf.formState.errors.teacher_poc_first_name?.message} /></div>
+                <div><label className="label-text">Last Name *</label><input {...sf.register('teacher_poc_last_name')} className="input-field" /><FieldError message={sf.formState.errors.teacher_poc_last_name?.message} /></div>
+              </div>
+              <div>
+                <label className="label-text">Teacher Email *</label>
+                <input {...sf.register('teacher_poc_email')} type="email" className="input-field" />
+                <FieldError message={sf.formState.errors.teacher_poc_email?.message} />
+              </div>
+            </div>
+          </>
+        )}
 
         <button type="button" onClick={goToStep2} className="btn-primary w-full py-3">
           Continue — Group Details →
@@ -471,7 +662,9 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
     )
   }
 
-  // ── Step 2: Group details ────────────────────────────────────────────────
+  // ── Step 2: Group details ─────────────────────────────────────────────────
+  const paymentMethodLabel = registrantRole === 'student_manager' ? 'you' : 'you'
+
   return (
     <div className="space-y-6">
       <StepBar step={2} />
@@ -483,26 +676,34 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
         <h3 className="font-semibold text-brand-blue-dark">Group Size</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-          <NumberStepper label="How many adults will be in the group?" value={adultCount} min={1} max={2}
-            onChange={handleAdultCountChange} note="Includes yourself as teacher / coordinator. Maximum 2." />
+          <NumberStepper label="How many adults will be in the group?" value={adultCount} min={registrantRole === 'student_manager' ? 0 : 1} max={2}
+            onChange={handleAdultCountChange} note={registrantRole === 'student_manager' ? 'Optional. Maximum 2.' : 'Includes yourself as teacher / coordinator. Maximum 2.'} />
           <NumberStepper label="How many students will be in the group?" value={studentCount} min={2} max={20}
             onChange={handleStudentCountChange}
             note="Minimum 2. Maximum 20. For groups larger than 20, contact Stellr directly for custom registration." />
         </div>
         <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark">
           Total participants: <strong>{adultCount + studentCount}</strong>
+          {registrantRole === 'student_manager' && <span className="ml-1 text-xs text-gray-500">(including yourself)</span>}
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <h3 className="font-semibold text-brand-blue-dark">How do you want to provide team member details?</h3>
-        <select value={detailsMethod} onChange={e => setDetailsMethod(e.target.value as 'add_now' | 'spreadsheet')} className="input-field">
+        <select value={detailsMethod} onChange={e => setDetailsMethod(e.target.value as DetailsMethod)} className="input-field">
           <option value="add_now">Add them now via this screen</option>
           <option value="spreadsheet">Download a pre-populated spreadsheet and deliver details later</option>
+          <option value="email_link">Email a registration link to group members</option>
         </select>
         {detailsMethod === 'spreadsheet' && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
             A Google Sheet pre-formatted with all required fields will be created for your group and shared to your email. Complete it at your own pace and return it to Stellr.
+          </div>
+        )}
+        {detailsMethod === 'email_link' && (
+          <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark space-y-1">
+            <p className="font-medium">You'll receive an email with a registration link to forward to your group members.</p>
+            <p className="text-gray-500 text-xs">Each member will click the link, sign in or create a free Stellr account, and confirm their participation. You'll be notified as each member completes their registration.</p>
           </div>
         )}
       </div>
@@ -532,13 +733,20 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <h3 className="font-semibold text-brand-blue-dark">How do you want to pay?</h3>
-        <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as 'invoice' | 'card')} className="input-field">
-          <option value="invoice">Have an invoice emailed to me</option>
+        <h3 className="font-semibold text-brand-blue-dark">How will the group pay?</h3>
+        <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)} className="input-field">
+          <option value="invoice">Have an invoice emailed to {paymentMethodLabel}</option>
           <option value="card">Pay now via credit card</option>
+          <option value="individual">Group members will pay individually</option>
         </select>
         {paymentMethod === 'invoice' && <p className="text-sm text-gray-500">An invoice will be emailed to you within 1–2 business days. Registration is confirmed upon payment.</p>}
         {paymentMethod === 'card' && <p className="text-sm text-gray-500">You'll be redirected to a secure Stripe checkout page to pay for all {adultCount + studentCount} participants.</p>}
+        {paymentMethod === 'individual' && (
+          <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark space-y-1">
+            <p className="font-medium">Each group member will receive an individual payment link via email.</p>
+            <p className="text-gray-500 text-xs">Payment links are sent once each member is confirmed in the system — either now (if adding details today) or when they complete their self-registration.</p>
+          </div>
+        )}
       </div>
 
       {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">{error}</div>}

@@ -3,12 +3,13 @@ const FROM = 'Stellr Education <david.shaw@insimeducation.com>'
 
 interface SendEmailOptions {
   to: string
+  cc?: string[]
   subject: string
   html: string
   text: string
 }
 
-export async function sendEmail({ to, subject, html, text }: SendEmailOptions) {
+export async function sendEmail({ to, cc, subject, html, text }: SendEmailOptions) {
   if (!RESEND_API_KEY) {
     console.log('[email] No RESEND_API_KEY — would have sent to:', to, subject)
     return
@@ -20,7 +21,7 @@ export async function sendEmail({ to, subject, html, text }: SendEmailOptions) {
       Authorization: `Bearer ${RESEND_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from: FROM, to: [to], subject, html, text }),
+    body: JSON.stringify({ from: FROM, to: [to], cc: cc ?? [], subject, html, text }),
   })
 
   if (!res.ok) {
@@ -123,6 +124,135 @@ export function groupConfirmationEmail({
     ? 'An invoice will be emailed within 1–2 business days.'
     : 'Card payment processed — registration confirmed.'
   const text = `Hi ${teacherFirstName},\n\nGroup registration received for ${eventTitle}.\n\nSchool: ${schoolName}\nParticipants: ${participantCount}\nReference #: ${registrationId}\n\n${paymentText}${sheetText}\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
+export function groupMemberIndividualPaymentEmail({
+  memberFirstName, memberLastName, eventTitle, registrationId, paymentUrl,
+}: {
+  memberFirstName: string; memberLastName: string
+  eventTitle: string; registrationId: string; paymentUrl: string
+}) {
+  const subject = `Complete your payment — ${eventTitle}`
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#1e3a5f;margin-top:0">Complete Your Registration</h2>
+        <p>Hi ${memberFirstName},</p>
+        <p>You've been registered for <strong>${eventTitle}</strong> as part of a group. To confirm your spot, please complete your individual payment.</p>
+        <div style="margin:28px 0;text-align:center">
+          <a href="${paymentUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600">Pay Now →</a>
+        </div>
+        <p style="color:#6b7280;font-size:14px">If you have any questions, reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
+        <p style="color:#6b7280;font-size:12px">Reference: <span style="font-family:monospace">${registrationId}</span></p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `Hi ${memberFirstName} ${memberLastName},\n\nYou've been registered for ${eventTitle}. Please complete your payment:\n\n${paymentUrl}\n\nReference: ${registrationId}\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
+export function groupJoinLinkEmail({
+  registrantFirstName, registrantLastName, eventTitle, joinUrl,
+}: {
+  registrantFirstName: string; registrantLastName: string
+  eventTitle: string; joinUrl: string
+}) {
+  const subject = `Share with your group — ${eventTitle} registration link`
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#1e3a5f;margin-top:0">Your Group Registration Link</h2>
+        <p>Hi ${registrantFirstName},</p>
+        <p>Your group registration for <strong>${eventTitle}</strong> has been submitted. Forward the link below to your group members so they can complete their registration details.</p>
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:20px;margin:24px 0">
+          <p style="margin:0 0 12px;font-weight:600;color:#1e3a5f;font-size:14px">Group Registration Link</p>
+          <p style="margin:0 0 16px;font-size:13px;color:#374151">Each group member should click this link, sign in (or create a free account), and confirm their participation.</p>
+          <a href="${joinUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-size:14px;font-weight:600">Open Registration Link →</a>
+          <p style="margin:12px 0 0;font-size:11px;color:#6b7280;word-break:break-all">${joinUrl}</p>
+        </div>
+        <p style="font-weight:600;color:#374151;margin-bottom:8px">How it works:</p>
+        <ul style="color:#6b7280;font-size:14px;line-height:1.8;padding-left:20px">
+          <li>Share this email (or just the link) with each member of your group</li>
+          <li>Each member clicks the link and signs in or creates a free Stellr account</li>
+          <li>They confirm they're joining your group for ${eventTitle}</li>
+          <li>You'll receive a notification each time a member completes their registration</li>
+        </ul>
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `Hi ${registrantFirstName} ${registrantLastName},\n\nForward this link to your group members for ${eventTitle}:\n\n${joinUrl}\n\nEach member should click the link, sign in or create an account, and confirm their participation. You'll be notified when each member completes their registration.\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
+export function groupMemberJoinedEmail({
+  registrantFirstName, memberFirstName, memberLastName, memberEmail, eventTitle, memberCount, totalExpected,
+}: {
+  registrantFirstName: string; memberFirstName: string; memberLastName: string
+  memberEmail: string; eventTitle: string; memberCount: number; totalExpected: number
+}) {
+  const subject = `${memberFirstName} ${memberLastName} has joined your group — ${eventTitle}`
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#1e3a5f;margin-top:0">New Group Member Registered</h2>
+        <p>Hi ${registrantFirstName},</p>
+        <p><strong>${memberFirstName} ${memberLastName}</strong> (${memberEmail}) has completed their registration for <strong>${eventTitle}</strong>.</p>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
+          <p style="margin:0;font-weight:600;color:#166534">Group progress: ${memberCount} of ${totalExpected} members registered</p>
+        </div>
+        <p style="color:#6b7280;font-size:14px">Log in to your member portal to view the full status of your group.</p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `Hi ${registrantFirstName},\n\n${memberFirstName} ${memberLastName} (${memberEmail}) has registered for your group at ${eventTitle}.\n\nGroup progress: ${memberCount} of ${totalExpected} members registered.\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
+export function studentLeftTeamEmail({
+  teacherFirstName, studentFirstName, studentLastName, studentEmail, eventTitle,
+}: {
+  teacherFirstName: string; studentFirstName: string; studentLastName: string
+  studentEmail: string; eventTitle: string
+}) {
+  const subject = `${studentFirstName} ${studentLastName} has left your team — ${eventTitle}`
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#1e3a5f;margin-top:0">Team Member Removed</h2>
+        <p>Hi ${teacherFirstName},</p>
+        <p><strong>${studentFirstName} ${studentLastName}</strong> (${studentEmail}) has removed themselves from your team for <strong>${eventTitle}</strong>.</p>
+        <p style="color:#6b7280;font-size:14px">You may want to update your team details or find a replacement. Log in to your member portal to manage your team.</p>
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `Hi ${teacherFirstName},\n\n${studentFirstName} ${studentLastName} (${studentEmail}) has removed themselves from your team for ${eventTitle}.\n\nLog in to your member portal to manage your team.\n\n— Stellr Education`
   return { subject, html, text }
 }
 

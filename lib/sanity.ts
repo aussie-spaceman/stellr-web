@@ -36,9 +36,11 @@ export function urlFor(source: SanityImageSource) {
 
 export async function getFeaturedEvents() {
   if (!client) return null
+  // Only surface live events on the homepage — campaigns have their own page.
+  // The !defined(activityType) guard keeps existing documents visible before migration.
   return client.fetch(`
-    *[_type == "event" && featured == true] | order(date asc) [0...3] {
-      _id, title, slug, type, gradeLevel, date, endDate,
+    *[_type == "event" && featured == true && (activityType == "live_event" || !defined(activityType))] | order(date asc) [0...3] {
+      _id, title, slug, type, gradeLevel, date, endDate, activityType, setting,
       venue, city, state, tagline, image, registrationOpen,
       registrationOpenDate, registrationCloseDate
     }
@@ -47,11 +49,22 @@ export async function getFeaturedEvents() {
 
 export async function getAllEvents() {
   if (!client) return null
+  // Excludes campaigns — those are fetched via getAllCampaigns().
   return client.fetch(`
-    *[_type == "event"] | order(date asc) {
-      _id, title, slug, type, gradeLevel, date, endDate,
+    *[_type == "event" && (activityType == "live_event" || !defined(activityType))] | order(date asc) {
+      _id, title, slug, type, gradeLevel, date, endDate, activityType, setting,
       venue, city, state, tagline, image, registrationOpen,
       registrationOpenDate, registrationCloseDate, featured
+    }
+  `)
+}
+
+export async function getAllCampaigns() {
+  if (!client) return null
+  return client.fetch(`
+    *[_type == "event" && activityType == "campaign"] | order(date asc) {
+      _id, title, slug, type, term, date, endDate,
+      registrationOpen, registrationCloseDate, tagline, image
     }
   `)
 }
@@ -60,7 +73,7 @@ export async function getEventBySlug(slug: string) {
   if (!client) return null
   return client.fetch(
     `*[_type == "event" && slug.current == $slug][0] {
-      _id, title, slug, type, gradeLevel, date, endDate,
+      _id, title, slug, type, gradeLevel, date, endDate, activityType, setting, term,
       venue, city, state, tagline, description, image,
       registrationOpen, registrationOpenDate, registrationCloseDate,
       capacity, eligibility, stripePriceId

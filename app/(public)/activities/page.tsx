@@ -1,12 +1,41 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { CheckCircle, Clock, Globe, Award } from 'lucide-react'
+import { getAllCampaigns } from '@/lib/sanity'
 
 export const metadata: Metadata = {
   title: 'Activities | Stellr Education',
   description:
     'Download Stellr competition curriculum material and run a Design Campaign in your classroom, at your own pace.',
 }
+
+export const revalidate = 3600
+
+interface Campaign {
+  _id: string
+  title: string
+  slug?: { current: string }
+  type?: string
+  term?: string
+  date?: string
+  endDate?: string
+  registrationOpen?: boolean
+  registrationCloseDate?: string
+}
+
+function campaignStatus(c: Campaign): string {
+  if (c.registrationOpen === false) return 'Closed'
+  if (c.registrationOpen === true) return 'Open'
+  const today = new Date().toISOString().split('T')[0]
+  if (c.date && c.date > today) return 'Coming soon'
+  if (c.endDate && c.endDate < today) return 'Closed'
+  return 'Open'
+}
+
+const FALLBACK_CAMPAIGNS: Campaign[] = [
+  { _id: 'fallback-1', title: '2027 Space Design Campaign', term: 'Fall 2026', date: '2026-09-01', endDate: '2026-12-15' },
+  { _id: 'fallback-2', title: '2027 Environmental Design Campaign', term: 'Spring 2027', date: '2027-01-15', endDate: '2027-05-30' },
+]
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
@@ -31,10 +60,6 @@ const campaignBenefits = [
   },
 ]
 
-const campaigns = [
-  { name: '2027 Space Design Campaign', season: 'Fall 2026', status: 'Open' },
-  { name: '2027 Environmental Design Campaign', season: 'Spring 2027', status: 'Coming soon' },
-]
 
 const materialTiers = [
   {
@@ -84,7 +109,9 @@ const materialTiers = [
   },
 ]
 
-export default function ActivitiesPage() {
+export default async function ActivitiesPage() {
+  const sanityData = await getAllCampaigns().catch(() => null)
+  const campaigns: Campaign[] = (sanityData as Campaign[] | null) ?? FALLBACK_CAMPAIGNS
   return (
     <>
       {/* Hero */}
@@ -165,28 +192,37 @@ export default function ActivitiesPage() {
             The following Campaigns are currently available. Register your class to enter the
             competition, or download the material to use as standalone curriculum.
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {campaigns.map((c) => (
-              <div
-                key={c.name}
-                className="border border-gray-200 rounded-xl p-6 flex items-start justify-between gap-4"
-              >
-                <div>
-                  <h3 className="font-bold text-brand-blue-dark mb-1">{c.name}</h3>
-                  <p className="text-sm text-brand-grey-dark">{c.season}</p>
-                </div>
-                <span
-                  className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${
-                    c.status === 'Open'
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  {c.status}
-                </span>
-              </div>
-            ))}
-          </div>
+          {campaigns.length === 0 ? (
+            <p className="text-brand-grey-dark">No campaigns are currently listed. Check back soon.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {campaigns.map((c) => {
+                const status = campaignStatus(c)
+                return (
+                  <div
+                    key={c._id}
+                    className="border border-gray-200 rounded-xl p-6 flex items-start justify-between gap-4"
+                  >
+                    <div>
+                      <h3 className="font-bold text-brand-blue-dark mb-1">{c.title}</h3>
+                      {c.term && <p className="text-sm text-brand-grey-dark">{c.term}</p>}
+                    </div>
+                    <span
+                      className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                        status === 'Open'
+                          ? 'bg-green-100 text-green-800'
+                          : status === 'Closed'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}
+                    >
+                      {status}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </section>
 

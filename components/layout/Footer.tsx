@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Linkedin, Instagram, Facebook, Youtube, Twitter } from 'lucide-react'
+import { Linkedin, Instagram, Facebook, Twitter } from 'lucide-react'
 import { Logo } from './Logo'
 
 const footerLinks = {
@@ -38,11 +38,10 @@ const footerLinks = {
 }
 
 const socialLinks = [
-  { icon: Linkedin, label: 'LinkedIn', href: '#' },
-  { icon: Instagram, label: 'Instagram', href: '#' },
-  { icon: Facebook, label: 'Facebook', href: '#' },
-  { icon: Youtube, label: 'YouTube', href: '#' },
-  { icon: Twitter, label: 'X / Twitter', href: '#' },
+  { icon: Linkedin, label: 'LinkedIn', href: 'https://www.linkedin.com/company/industry-simulation-education/' },
+  { icon: Instagram, label: 'Instagram', href: 'https://www.instagram.com/insimeducation/' },
+  { icon: Facebook, label: 'Facebook', href: 'https://www.facebook.com/insimeducation/' },
+  { icon: Twitter, label: 'X / Twitter', href: 'https://x.com/InSimEducation' },
 ]
 
 export function Footer() {
@@ -95,6 +94,8 @@ export function Footer() {
                     key={label}
                     href={href}
                     aria-label={label}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="text-gray-500 hover:text-white transition-colors"
                   >
                     <Icon size={18} />

@@ -294,11 +294,18 @@ function TeacherTeamsView() {
                     <span className="font-medium">{students}</span> students
                     {adults > 0 && <>, <span className="font-medium">{adults}</span> adults</>}
                   </p>
-                  <span className={`inline-flex text-xs px-2 py-0.5 rounded-full mt-1 font-medium capitalize ${
-                    team.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                    team.status === 'withdrawn' ? 'bg-red-100 text-red-600' :
-                    'bg-yellow-100 text-yellow-700'
-                  }`}>{team.status}</span>
+                  <span
+                    className={`inline-flex text-xs px-2 py-0.5 rounded-full mt-1 font-medium capitalize ${
+                      team.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                      team.status === 'withdrawn' ? 'bg-red-100 text-red-600' :
+                      'bg-yellow-100 text-yellow-700'
+                    }`}
+                    title={
+                      team.status === 'confirmed' ? 'Registration confirmed by Stellr.' :
+                      team.status === 'withdrawn' ? 'Registration has been withdrawn.' :
+                      'Registration received — Stellr will confirm once reviewed.'
+                    }
+                  >{team.status}</span>
                 </div>
                 <svg className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -406,7 +413,7 @@ function TeacherTeamsView() {
                             <td className="py-2.5 pr-4">
                               {p.join_completed_at
                                 ? <span className="text-xs text-green-600 font-medium">Joined</span>
-                                : <span className="text-xs text-yellow-600 font-medium">Pending</span>
+                                : <span className="text-xs text-yellow-600 font-medium" title="This participant hasn't completed the join link yet — they need to click the link sent to their email to confirm their details.">Pending</span>
                               }
                             </td>
                             {fullTeam.registration.member_pays_individually && (

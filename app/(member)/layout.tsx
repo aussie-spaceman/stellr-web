@@ -1,7 +1,11 @@
-import { UserButton } from '@clerk/nextjs'
+import { auth } from '@clerk/nextjs/server'
 import Link from 'next/link'
+import { NavUserButton } from '@/components/layout/NavUserButton'
 
-export default function MemberLayout({ children }: { children: React.ReactNode }) {
+export default async function MemberLayout({ children }: { children: React.ReactNode }) {
+  const { sessionClaims } = await auth()
+  const isAdmin = (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200">
@@ -13,7 +17,7 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
             <Link href="/account" className="text-gray-600 hover:text-gray-900">
               My Account
             </Link>
-            <UserButton />
+            <NavUserButton isAdmin={isAdmin} />
           </nav>
         </div>
       </header>

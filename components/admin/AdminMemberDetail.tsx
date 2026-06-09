@@ -45,6 +45,16 @@ interface Member {
 interface Tier { id: string; name: string }
 interface School { id: string; name: string }
 interface Option { id: string; name: string }
+interface Registration {
+  id: string
+  event_title: string | null
+  event_slug: string | null
+  school_name: string | null
+  status: string | null
+  created_at: string
+  registrant_role: string | null
+  type: string | null
+}
 
 interface Props {
   member: Member
@@ -52,6 +62,7 @@ interface Props {
   schools: School[]
   ethnicityOptions: Option[]
   allergyOptions: Option[]
+  registrations: Registration[]
 }
 
 const GRADES = ['grade_9','grade_10','grade_11','grade_12','college_freshman','college_sophomore','college_junior','college_senior','grad_phd']
@@ -61,7 +72,7 @@ function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions }: Props) {
+export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations }: Props) {
   const router = useRouter()
   const [form, setForm] = useState({
     first_name: member.first_name,
@@ -368,6 +379,40 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
             editable
             adminMemberId={member.id}
           />
+
+          {/* Group registrations (teacher / student manager) */}
+          {registrations.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h2 className="text-base font-semibold text-gray-900 mb-4">Group Registrations (Organiser)</h2>
+              <div className="space-y-3">
+                {registrations.map((reg) => (
+                  <div key={reg.id} className="flex items-start justify-between py-3 border-b border-gray-100 last:border-0">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{reg.event_title ?? reg.event_slug ?? '—'}</p>
+                      {reg.school_name && (
+                        <p className="text-xs text-gray-500 mt-0.5">{reg.school_name}</p>
+                      )}
+                      {reg.registrant_role && (
+                        <p className="text-xs text-gray-400 mt-0.5 capitalize">{reg.registrant_role.replace(/_/g, ' ')}</p>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
+                        reg.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                        reg.status === 'withdrawn' ? 'bg-red-100 text-red-600' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {reg.status ?? 'pending'}
+                      </span>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {new Date(reg.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Sidebar */}

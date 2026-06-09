@@ -10,41 +10,49 @@ const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreduc
 
 const navLinks = [
   {
-    label: 'Events',
-    href: '/events',
+    label: 'Educate',
+    href: '/educate',
     dropdown: [
-      { label: 'Why Design Competitions', href: '/events/why-design-competitions' },
-      { label: 'Live Challenges', href: '/events/live-challenges' },
-      { label: 'Classroom Based Campaigns', href: '/events/classroom-campaigns' },
-      { label: 'Host An Event', href: '/host-event' },
+      { label: 'Competitions', href: '/competitions' },
+      { label: 'Activities', href: '/activities' },
+      { label: 'Events', href: '/events' },
+      { label: 'Host An Event', href: '/host-an-event' },
     ],
   },
   {
     label: 'Community',
     href: '/community',
     dropdown: [
-      { label: 'School Students', href: '/community/students' },
-      { label: 'College Students', href: '/community/college-students' },
-      { label: 'Educators & Schools', href: '/community/educators' },
-      { label: 'Parents & Families', href: '/community/parents' },
-      { label: 'Volunteer Mentors', href: '/community/mentors' },
+      { label: 'Membership', href: '/membership' },
+      { label: 'For Students', href: '/students' },
+      { label: 'For Educators & Schools', href: '/educators' },
+      { label: 'For Volunteers & Mentors', href: '/mentors' },
+    ],
+  },
+  {
+    label: 'Academy',
+    href: '/academy',
+    dropdown: [
+      { label: 'Training', href: '/training' },
+      { label: 'Mentoring', href: '/mentoring' },
+      { label: 'Coaching', href: '/coaching' },
     ],
   },
   {
     label: 'Network',
     href: '/network',
     dropdown: [
-      { label: 'Industry Partners', href: '/network/partners' },
-      { label: 'University Partners', href: '/network/universities' },
-      { label: 'Corporate Partners', href: '/network/corporate' },
+      { label: 'Industry Partners', href: '/network#industry' },
+      { label: 'University Partners', href: '/network#university' },
+      { label: 'Corporate Partners', href: '/network#corporate' },
     ],
   },
   {
     label: 'About',
     href: '/about',
     dropdown: [
-      { label: 'Impact', href: '/about/impact' },
-      { label: 'Our Mission', href: '/about' },
+      { label: 'Impact', href: '/impact' },
+      { label: 'Mission', href: '/about#mission' },
       { label: 'Our Team', href: '/about#team' },
       { label: 'Contact Us', href: '/contact' },
     ],
@@ -52,11 +60,12 @@ const navLinks = [
 ]
 
 const getInvolvedLinks = [
-  { label: 'Register For An Event', href: '/events/live-challenges' },
-  { label: 'Join Our Community', href: '/join' },
-  { label: 'Become a Sponsor', href: '/network/corporate' },
-  { label: 'Volunteer With Us', href: '/volunteer' },
-  { label: 'Partner With Us', href: '/network/partners' },
+  { label: 'Register For An Event', href: '/events' },
+  { label: 'Download Curriculum Material', href: '/activities' },
+  { label: 'Join Our Community', href: '/sign-up' },
+  { label: 'Become A Sponsor', href: '/contribute#donate' },
+  { label: 'Volunteer With Us', href: '/contribute' },
+  { label: 'Partner With Us', href: '/network' },
 ]
 
 export function Navbar() {

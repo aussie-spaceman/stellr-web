@@ -82,7 +82,10 @@ export async function GET() {
     // Exclude any participations that belong to a registration they manage (avoid duplicates)
     const managedIds = new Set((registrations ?? []).map((r: { id: string }) => r.id))
     const joinedTeams = (participations ?? []).filter(
-      (p: { registrations: { id: string } | null }) => p.registrations && !managedIds.has(p.registrations.id)
+      (p: { registrations: { id: string }[] | { id: string } | null }) => {
+        const reg = Array.isArray(p.registrations) ? p.registrations[0] : p.registrations
+        return reg && !managedIds.has(reg.id)
+      }
     )
 
     return NextResponse.json({ teams, participations: joinedTeams, role: 'group_manager' })

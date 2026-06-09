@@ -1,4 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
+import Link from 'next/link'
 
 export const metadata = { title: 'Admin — Schools' }
 
@@ -37,7 +38,9 @@ export default async function AdminSchoolsPage() {
             {[...active, ...inactive].map((school) => (
               <tr key={school.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium text-gray-900">
-                  {school.name}
+                  <Link href={`/admin/schools/${school.id}`} className="text-indigo-600 hover:text-indigo-800">
+                    {school.name}
+                  </Link>
                   {school.address_line1 && (
                     <p className="text-xs text-gray-400 font-normal mt-0.5">
                       {[school.address_line1, school.address_line2].filter(Boolean).join(', ')}
@@ -48,11 +51,18 @@ export default async function AdminSchoolsPage() {
                 <td className="px-4 py-3 text-gray-600">{school.state ?? '—'}</td>
                 <td className="px-4 py-3 text-gray-600">{school.postcode ?? '—'}</td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${
-                    school.is_active !== false
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}>
+                  <span
+                    className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${
+                      school.is_active !== false
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-gray-100 text-gray-500'
+                    }`}
+                    title={
+                      school.is_active !== false
+                        ? 'Active — this school is visible in search and can be selected for new registrations.'
+                        : 'Inactive — this school is hidden from search and cannot be selected for new registrations.'
+                    }
+                  >
                     {school.is_active !== false ? 'Active' : 'Inactive'}
                   </span>
                 </td>

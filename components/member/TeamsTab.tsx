@@ -152,13 +152,28 @@ function JoinedTeamsView({
                 )}
               </div>
               <div className="text-right shrink-0">
-                <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
-                  reg.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                  reg.status === 'withdrawn' ? 'bg-red-100 text-red-600' :
-                  'bg-yellow-100 text-yellow-700'
-                }`}>{reg.status}</span>
+                <span
+                  className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
+                    reg.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                    reg.status === 'withdrawn' ? 'bg-red-100 text-red-600' :
+                    'bg-yellow-100 text-yellow-700'
+                  }`}
+                  title={
+                    reg.status === 'confirmed' ? 'Registration confirmed by Stellr — cleared to participate.' :
+                    reg.status === 'withdrawn' ? 'Registration has been withdrawn and is no longer active.' :
+                    'Registration received — awaiting Stellr confirmation.'
+                  }
+                >{reg.status}</span>
                 <div className="mt-1.5">
-                  <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${style}`}>
+                  <span
+                    className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${style}`}
+                    title={
+                      label === 'Paid' ? 'Payment has been received for this registration.' :
+                      label === 'Payment Required' ? 'Individual payment required — use the Pay Now button below to complete.' :
+                      label === 'Invoice sent to organiser' ? 'An invoice has been raised and sent to the group organiser.' :
+                      'Registration fee is covered by the group organiser — no individual payment needed.'
+                    }
+                  >
                     {label}
                   </span>
                 </div>
@@ -412,17 +427,24 @@ function TeacherTeamsView() {
                             <td className="py-2.5 pr-4 text-gray-500">{p.grade ?? '—'}</td>
                             <td className="py-2.5 pr-4">
                               {p.join_completed_at
-                                ? <span className="text-xs text-green-600 font-medium">Joined</span>
+                                ? <span className="text-xs text-green-600 font-medium" title="This participant has completed the join link and confirmed their details.">Joined</span>
                                 : <span className="text-xs text-yellow-600 font-medium" title="This participant hasn't completed the join link yet — they need to click the link sent to their email to confirm their details.">Pending</span>
                               }
                             </td>
                             {fullTeam.registration.member_pays_individually && (
                               <td className="py-2.5 pr-4">
-                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                                  p.individual_payment_status === 'paid'
-                                    ? 'bg-green-100 text-green-700'
-                                    : 'bg-amber-100 text-amber-700'
-                                }`}>
+                                <span
+                                  className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                    p.individual_payment_status === 'paid'
+                                      ? 'bg-green-100 text-green-700'
+                                      : 'bg-amber-100 text-amber-700'
+                                  }`}
+                                  title={
+                                    p.individual_payment_status === 'paid'
+                                      ? 'Payment has been received for this participant.'
+                                      : 'Payment has not yet been received for this participant.'
+                                  }
+                                >
                                   {p.individual_payment_status === 'paid' ? 'Paid' : 'Not Yet Paid'}
                                 </span>
                               </td>

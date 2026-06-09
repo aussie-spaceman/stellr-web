@@ -29,6 +29,7 @@ export async function POST(req: Request) {
       event_location: event_location || null,
       team_name: team_name || null,
       award: award || null,
+      status: 'pending',
     })
     .select()
     .single()

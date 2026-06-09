@@ -22,12 +22,13 @@ export async function DELETE(
 
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
 
-  // Ensure the record belongs to this member
+  // Only allow deleting pending records — approved records are locked by admin
   const { error } = await db
     .from('event_participations')
     .delete()
     .eq('id', id)
     .eq('member_id', member.id)
+    .eq('status', 'pending')
 
   if (error) {
     console.error('Event participation delete error:', error)

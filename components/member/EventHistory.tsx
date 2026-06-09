@@ -9,6 +9,7 @@ interface Participation {
   event_location: string | null
   team_name: string | null
   award: string | null
+  status?: string | null
 }
 
 interface Props {
@@ -78,7 +79,9 @@ export function EventHistory({ participations: initialParticipations, editable =
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-gray-900">Event Activity</h2>
+        <h2 className="text-base font-semibold text-gray-900">
+          {adminMemberId ? 'Event Activity' : 'Log Historical Event Activity'}
+        </h2>
         {editable && !adding && (
           <button
             onClick={() => setAdding(true)}
@@ -88,6 +91,12 @@ export function EventHistory({ participations: initialParticipations, editable =
           </button>
         )}
       </div>
+
+      {!adminMemberId && !adding && (
+        <p className="text-xs text-gray-400 mb-4">
+          Log past Stellr events you&apos;ve participated in. Submissions are reviewed by an admin before appearing on your profile.
+        </p>
+      )}
 
       {adding && (
         <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
@@ -173,17 +182,25 @@ export function EventHistory({ participations: initialParticipations, editable =
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {p.status === 'pending' && (
+                  <span
+                    className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium"
+                    title="Submitted and awaiting admin approval before appearing on your profile."
+                  >
+                    Pending review
+                  </span>
+                )}
                 {p.award && (
                   <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full font-medium">
                     {p.award}
                   </span>
                 )}
-                {editable && (
+                {editable && (p.status === 'pending' || adminMemberId) && (
                   <button
                     onClick={() => handleDelete(p.id)}
                     disabled={deletingId === p.id}
                     className="text-gray-300 hover:text-red-400 text-sm disabled:opacity-50 ml-1"
-                    title="Remove"
+                    title={p.status === 'pending' ? 'Withdraw submission' : 'Remove'}
                   >
                     ×
                   </button>

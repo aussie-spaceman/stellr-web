@@ -33,7 +33,7 @@ interface Member {
     id: string; renewal_status: string; started_at: string; expires_at: string | null
     is_complimentary: boolean; membership_tiers: { name: string }
   }>
-  member_schools: Array<{ is_current: boolean; schools: { name: string; city: string | null; state: string | null } }>
+  member_schools: Array<{ is_current: boolean; school_id: string; schools: { name: string; city: string | null; state: string | null } }>
   member_ethnicities: Array<{ ethnicity_option_id: string }>
   member_allergies: Array<{ allergy_option_id: string }>
   event_participations: Array<{
@@ -65,7 +65,29 @@ interface Props {
   registrations: Registration[]
 }
 
-const GRADES = ['grade_9','grade_10','grade_11','grade_12','college_freshman','college_sophomore','college_junior','college_senior','grad_phd']
+const TIER_TOOLTIPS: Record<string, string> = {
+  'Explorer': 'Free tier — public content, competition listings, and basic community access.',
+  'Pathfinder': 'Paid tier ($60/yr) — full community access and event registration. Also awarded free for one year to event participants.',
+  'Scholar': 'Award winner tier ($120/yr) — all Pathfinder benefits plus exclusive content. Awarded to competition winners.',
+}
+
+const REG_STATUS_TOOLTIPS: Record<string, string> = {
+  confirmed: 'Registration confirmed by Stellr — cleared to participate.',
+  pending: 'Registration received — awaiting Stellr confirmation.',
+  withdrawn: 'Registration has been withdrawn and is no longer active.',
+}
+
+const GRADES = [
+  { value: 'grade_9', label: 'Grade 9' },
+  { value: 'grade_10', label: 'Grade 10' },
+  { value: 'grade_11', label: 'Grade 11' },
+  { value: 'grade_12', label: 'Grade 12' },
+  { value: 'college_freshman', label: 'College Freshman' },
+  { value: 'college_sophomore', label: 'College Sophomore' },
+  { value: 'college_junior', label: 'College Junior' },
+  { value: 'college_senior', label: 'College Senior' },
+  { value: 'grad_phd', label: 'Grad / PhD' },
+]
 const BRACKETS = ['high_school','college','adult']
 
 function label(val: string) {
@@ -119,6 +141,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
 
   const eligibleRoles = ROLES_FOR_BRACKET[form.age_bracket] ?? []
   const eligibleTierNames = getEligibleTierNames(form.age_bracket, form.event_role)
+  const showGrade = form.age_bracket === 'high_school' || form.age_bracket === 'college'
 
   async function handleSave() {
     setSaving(true)
@@ -253,18 +276,26 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                   <p className="text-xs text-gray-400 mt-1">Auto-set by age bracket</p>
                 )}
               </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Grade</label>
-                <select
-                  value={form.grade}
-                  onChange={(e) => set('grade', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">—</option>
-                  {GRADES.map((g) => <option key={g} value={g}>{label(g)}</option>)}
-                </select>
-              </div>
-              <div className="flex items-center gap-2 pt-5">
+              {showGrade && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Grade / Year</label>
+                  <select
+                    value={form.grade}
+                    onChange={(e) => set('grade', e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Select…</option>
+                    {GRADES.filter((g) =>
+                      form.age_bracket === 'high_school'
+                        ? g.value.startsWith('grade_')
+                        : !g.value.startsWith('grade_')
+                    ).map((g) => (
+                      <option key={g.value} value={g.value}>{g.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className={`flex items-center gap-2 ${showGrade ? 'pt-5' : 'pt-1'}`}>
                 <input
                   type="checkbox"
                   id="auto_promote"
@@ -293,6 +324,11 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                             ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300'
                             : 'bg-gray-100 text-gray-600'
                         }`}
+                        title={
+                          isActive
+                            ? `Currently active tier. ${TIER_TOOLTIPS[name] ?? ''}`
+                            : `Eligible for this classification. ${TIER_TOOLTIPS[name] ?? ''}`
+                        }
                       >
                         {name}{isActive ? ' ✓' : ''}
                       </span>
@@ -397,11 +433,14 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                       )}
                     </div>
                     <div className="text-right shrink-0">
-                      <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
-                        reg.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                        reg.status === 'withdrawn' ? 'bg-red-100 text-red-600' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
+                      <span
+                        className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
+                          reg.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                          reg.status === 'withdrawn' ? 'bg-red-100 text-red-600' :
+                          'bg-yellow-100 text-yellow-700'
+                        }`}
+                        title={REG_STATUS_TOOLTIPS[reg.status ?? 'pending'] ?? reg.status ?? 'pending'}
+                      >
                         {reg.status ?? 'pending'}
                       </span>
                       <p className="text-xs text-gray-400 mt-1">
@@ -435,7 +474,10 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                   </div>
                 )}
                 {activeMembership.is_complimentary && (
-                  <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">
+                  <span
+                    className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full"
+                    title="This membership was provided at no charge — typically awarded for event participation or granted by an admin."
+                  >
                     Complimentary
                   </span>
                 )}
@@ -451,9 +493,14 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
             </h2>
             {currentSchool ? (
               <div className="text-sm">
-                <p className="font-medium text-gray-900">{currentSchool.schools.name}</p>
+                <Link
+                  href={`/admin/schools/${currentSchool.school_id}`}
+                  className="font-medium text-indigo-600 hover:text-indigo-800"
+                >
+                  {currentSchool.schools.name}
+                </Link>
                 {(currentSchool.schools.city || currentSchool.schools.state) && (
-                  <p className="text-gray-500">
+                  <p className="text-gray-500 mt-0.5">
                     {[currentSchool.schools.city, currentSchool.schools.state].filter(Boolean).join(', ')}
                   </p>
                 )}

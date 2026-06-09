@@ -42,6 +42,12 @@ interface Props {
 const BRACKETS = ['high_school', 'college', 'adult']
 const ROLES = ['school_student', 'mentor', 'teacher', 'donor', 'parent', 'subscriber']
 
+const TIER_TOOLTIPS: Record<string, string> = {
+  'Explorer': 'Free tier — public content, competition listings, and basic community access.',
+  'Pathfinder': 'Paid tier ($60/yr) — full community access and event registration. Also awarded free for one year to event participants.',
+  'Scholar': 'Award winner tier ($120/yr) — all Pathfinder benefits plus exclusive content. Awarded to competition winners.',
+}
+
 function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
@@ -141,7 +147,10 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
                   <td className="px-4 py-3 text-gray-600">{label(m.event_role)}</td>
                   <td className="px-4 py-3">
                     {activeTier ? (
-                      <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">
+                      <span
+                        className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full"
+                        title={TIER_TOOLTIPS[activeTier] ?? `Active membership tier: ${activeTier}`}
+                      >
                         {activeTier}
                       </span>
                     ) : (

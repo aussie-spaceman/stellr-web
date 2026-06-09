@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY
-const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'david.shaw@insimeducation.com'
+const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
 
 export async function POST(req: Request) {
   try {

@@ -3,34 +3,39 @@ import { Linkedin, Instagram, Facebook, Twitter } from 'lucide-react'
 import { Logo } from './Logo'
 
 const footerLinks = {
-  Events: [
-    { label: 'Why Design Competitions', href: '/events/why-design-competitions' },
-    { label: 'Live Challenges', href: '/events/live-challenges' },
-    { label: 'Classroom Based Campaigns', href: '/events/classroom-campaigns' },
-    { label: 'Host An Event', href: '/host-event' },
+  Educate: [
+    { label: 'Competitions', href: '/competitions' },
+    { label: 'Activities', href: '/activities' },
+    { label: 'Events', href: '/events' },
+    { label: 'Host An Event', href: '/host-an-event' },
   ],
   Community: [
-    { label: 'School Students', href: '/community/students' },
-    { label: 'College Students', href: '/community/college-students' },
-    { label: 'Educators & Schools', href: '/community/educators' },
-    { label: 'Parents & Families', href: '/community/parents' },
-    { label: 'Volunteer Mentors', href: '/community/mentors' },
+    { label: 'Membership', href: '/membership' },
+    { label: 'For Students', href: '/students' },
+    { label: 'For Educators & Schools', href: '/educators' },
+    { label: 'For Volunteers & Mentors', href: '/mentors' },
+  ],
+  Academy: [
+    { label: 'Training', href: '/training' },
+    { label: 'Mentoring', href: '/mentoring' },
+    { label: 'Coaching', href: '/coaching' },
   ],
   Network: [
-    { label: 'Industry Partners', href: '/network/partners' },
-    { label: 'University Partners', href: '/network/universities' },
-    { label: 'Corporate Partners', href: '/network/corporate' },
+    { label: 'Industry Partners', href: '/network#industry' },
+    { label: 'University Partners', href: '/network#university' },
+    { label: 'Corporate Partners', href: '/network#corporate' },
   ],
   'Get Involved': [
-    { label: 'Register For An Event', href: '/events/live-challenges' },
-    { label: 'Join Our Community', href: '/join' },
-    { label: 'Become a Sponsor', href: '/network/corporate' },
-    { label: 'Volunteer With Us', href: '/volunteer' },
-    { label: 'Partner With Us', href: '/network/partners' },
+    { label: 'Register For An Event', href: '/events' },
+    { label: 'Download Curriculum', href: '/activities' },
+    { label: 'Join Our Community', href: '/sign-up' },
+    { label: 'Become A Sponsor', href: '/contribute#donate' },
+    { label: 'Volunteer With Us', href: '/contribute' },
+    { label: 'Partner With Us', href: '/network' },
   ],
   About: [
-    { label: 'Impact', href: '/about/impact' },
-    { label: 'Our Mission', href: '/about' },
+    { label: 'Impact', href: '/impact' },
+    { label: 'Mission', href: '/about#mission' },
     { label: 'Our Team', href: '/about#team' },
     { label: 'Contact Us', href: '/contact' },
     { label: 'Privacy Policy', href: '/privacy' },
@@ -80,7 +85,7 @@ export function Footer() {
       {/* ── Main footer ── */}
       <div className="bg-brand-blue-dark text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
-          <div className="grid grid-cols-2 lg:grid-cols-7 gap-8 lg:gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-8 gap-8 lg:gap-6">
             {/* Brand column */}
             <div className="col-span-2">
               <Logo variant="light" />

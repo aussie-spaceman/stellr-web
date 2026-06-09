@@ -31,7 +31,7 @@ const orgSchema = {
   logo: 'https://www.stellreducation.org/images/stellr-logo.png',
   contactPoint: {
     '@type': 'ContactPoint',
-    email: 'david.shaw@insimeducation.com',
+    email: 'hello@stellreducation.org',
     contactType: 'customer service',
   },
   sameAs: [

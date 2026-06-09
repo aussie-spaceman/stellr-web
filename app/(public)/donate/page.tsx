@@ -138,8 +138,8 @@ export default async function DonatePage() {
           <p className="text-brand-grey-dark text-sm bg-brand-grey-light rounded-xl p-4 border border-gray-200">
             <strong>Tax receipts:</strong> Donors receive an email receipt for tax purposes following their contribution.
             For questions about donation processing, contact{' '}
-            <a href="mailto:david.shaw@insimeducation.com" className="text-brand-blue hover:underline">
-              david.shaw@insimeducation.com
+            <a href="mailto:hello@stellreducation.org" className="text-brand-blue hover:underline">
+              hello@stellreducation.org
             </a>.
           </p>
 

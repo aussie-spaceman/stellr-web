@@ -1,0 +1,152 @@
+'use client'
+
+import { useState } from 'react'
+
+export interface EnvelopeRow {
+  id: string
+  envelope_id: string
+  status: string
+  signer_name: string
+  signer_email: string
+  minor_name: string
+  event_title: string
+  event_slug: string
+  sent_at: string
+  completed_at: string | null
+  declined_at: string | null
+  reminder_sent_at: string | null
+  participant_id: string
+  member_id: string | null
+}
+
+const STATUS_STYLES: Record<string, { label: string; cls: string }> = {
+  sent:      { label: 'Awaiting signature', cls: 'bg-amber-100 text-amber-700'  },
+  delivered: { label: 'Viewed',             cls: 'bg-blue-100 text-blue-700'    },
+  completed: { label: 'Signed',             cls: 'bg-green-100 text-green-700'  },
+  declined:  { label: 'Declined',           cls: 'bg-red-100 text-red-600'      },
+  voided:    { label: 'Voided',             cls: 'bg-gray-100 text-gray-500'    },
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const { label, cls } = STATUS_STYLES[status] ?? { label: status, cls: 'bg-gray-100 text-gray-500' }
+  return <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
+}
+
+function fmt(iso: string | null) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+const FILTER_OPTIONS = ['all', 'sent', 'delivered', 'completed', 'declined', 'voided'] as const
+
+export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
+  const [envelopes, setEnvelopes] = useState(initial)
+  const [filter, setFilter]       = useState<string>('all')
+  const [resending, setResending] = useState<string | null>(null)
+  const [msg, setMsg]             = useState<{ text: string; error: boolean } | null>(null)
+
+  async function handleResend(env: EnvelopeRow) {
+    setResending(env.id)
+    setMsg(null)
+    try {
+      const res  = await fetch(`/api/admin/docusigns/${env.id}/resend`, { method: 'POST' })
+      const data = await res.json() as { error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Resend failed')
+      setEnvelopes(prev =>
+        prev.map(e => e.id === env.id ? { ...e, reminder_sent_at: new Date().toISOString() } : e),
+      )
+      setMsg({ text: `Reminder re-sent for ${env.minor_name}.`, error: false })
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : 'Failed to resend', error: true })
+    } finally {
+      setResending(null)
+    }
+  }
+
+  const filtered = filter === 'all' ? envelopes : envelopes.filter(e => e.status === filter)
+  const countFor = (s: string) => envelopes.filter(e => e.status === s).length
+
+  return (
+    <div className="space-y-4">
+      {/* Status filter pills */}
+      <div className="flex gap-2 flex-wrap">
+        {FILTER_OPTIONS.map(s => (
+          <button
+            key={s}
+            onClick={() => setFilter(s)}
+            className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+              filter === s
+                ? 'bg-indigo-600 text-white border-indigo-600'
+                : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+            }`}
+          >
+            {s === 'all' ? `All (${envelopes.length})` : `${s.charAt(0).toUpperCase() + s.slice(1)} (${countFor(s)})`}
+          </button>
+        ))}
+      </div>
+
+      {msg && (
+        <div className={`text-sm rounded-lg px-4 py-2 border ${
+          msg.error
+            ? 'bg-red-50 border-red-200 text-red-700'
+            : 'bg-blue-50 border-blue-200 text-blue-700'
+        }`}>
+          {msg.text}
+        </div>
+      )}
+
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-sm text-gray-400">
+          No consent forms{filter !== 'all' ? ` with status "${filter}"` : ''}.
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50 text-left">
+                {['Participant', 'Event', 'Guardian', 'Status', 'Sent', 'Signed', ''].map(h => (
+                  <th key={h} className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide whitespace-nowrap">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filtered.map(env => (
+                <tr key={env.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{env.minor_name}</td>
+                  <td className="px-4 py-3 text-gray-600 max-w-[200px]">
+                    <span className="block truncate" title={env.event_title}>{env.event_title}</span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">
+                    <div className="font-medium">{env.signer_name}</div>
+                    <div className="text-xs text-gray-400">{env.signer_email}</div>
+                  </td>
+                  <td className="px-4 py-3"><StatusBadge status={env.status} /></td>
+                  <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                    <div>{fmt(env.sent_at)}</div>
+                    {env.reminder_sent_at && (
+                      <div className="text-gray-400 mt-0.5">Reminded {fmt(env.reminder_sent_at)}</div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{fmt(env.completed_at)}</td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    {env.status !== 'completed' && env.status !== 'voided' && (
+                      <button
+                        onClick={() => handleResend(env)}
+                        disabled={resending === env.id}
+                        className="text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-50"
+                      >
+                        {resending === env.id ? 'Sending…' : 'Re-send'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}

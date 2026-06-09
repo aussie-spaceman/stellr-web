@@ -6,6 +6,7 @@ import { MembershipCard } from '@/components/member/MembershipCard'
 import { EventHistory } from '@/components/member/EventHistory'
 import { TeamsTab } from '@/components/member/TeamsTab'
 import { BillingHistory } from '@/components/member/BillingHistory'
+import { DocusignsSection } from '@/components/member/DocusignsSection'
 import Link from 'next/link'
 
 export const metadata = { title: 'My Account' }
@@ -104,6 +105,7 @@ export default async function AccountPage({
               allergyOptions={allergyOptions ?? []}
             />
             <EventHistory participations={member.event_participations ?? []} editable />
+            <DocusignsSection />
           </div>
           <div>
             <MembershipCard membership={activeMembership} member={member} />

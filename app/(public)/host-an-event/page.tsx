@@ -106,10 +106,10 @@ export default function HostAnEventPage() {
                 <p className="text-sm text-gray-300">
                   If you&rsquo;d prefer to talk before submitting, reach out directly at{' '}
                   <a
-                    href="mailto:david.shaw@insimeducation.com"
+                    href="mailto:hello@stellreducation.org"
                     className="text-brand-orange hover:underline"
                   >
-                    david.shaw@insimeducation.com
+                    hello@stellreducation.org
                   </a>
                   .
                 </p>

@@ -51,10 +51,10 @@ export default async function ContactPage({ searchParams }: PageProps) {
                   <div>
                     <p className="text-sm font-semibold text-brand-blue-dark">Email</p>
                     <a
-                      href="mailto:david.shaw@insimeducation.com"
+                      href="mailto:hello@stellreducation.org"
                       className="text-sm text-brand-blue hover:underline"
                     >
-                      david.shaw@insimeducation.com
+                      hello@stellreducation.org
                     </a>
                   </div>
                 </div>

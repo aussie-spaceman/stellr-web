@@ -85,5 +85,26 @@ export async function GET(
     }
   }
 
-  return NextResponse.json({ registration: { ...registration, joinUrl }, watchActive })
+  // Fetch DocuSign envelopes for all participants in this team
+  const participantIds = (registration.participants as { id: string }[]).map(p => p.id)
+  const docusignEnvelopes: Record<string, {
+    id: string; status: string; signer_name: string; signer_email: string
+    sent_at: string; completed_at: string | null; reminder_sent_at: string | null
+  }> = {}
+
+  if (participantIds.length > 0) {
+    const { data: envelopes } = await db
+      .from('docusign_envelopes')
+      .select('id, participant_id, status, signer_name, signer_email, sent_at, completed_at, reminder_sent_at')
+      .in('participant_id', participantIds)
+
+    for (const e of envelopes ?? []) {
+      docusignEnvelopes[e.participant_id] = {
+        id: e.id, status: e.status, signer_name: e.signer_name, signer_email: e.signer_email,
+        sent_at: e.sent_at, completed_at: e.completed_at, reminder_sent_at: e.reminder_sent_at,
+      }
+    }
+  }
+
+  return NextResponse.json({ registration: { ...registration, joinUrl, docusignEnvelopes }, watchActive })
 }

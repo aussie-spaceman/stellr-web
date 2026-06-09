@@ -273,6 +273,105 @@ export function studentLeftTeamEmail({
   return { subject, html, text }
 }
 
+export function docusignSentToMinorEmail({
+  firstName, guardianName, guardianEmail, eventTitle,
+}: {
+  firstName: string; guardianName: string; guardianEmail: string; eventTitle: string
+}) {
+  const subject = `Action required — parental consent for ${eventTitle}`
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#1e3a5f;margin-top:0">Parental Consent Required</h2>
+        <p>Hi ${firstName},</p>
+        <p>We have sent a parental consent form to <strong>${guardianName}</strong> (${guardianEmail}) for your participation in <strong>${eventTitle}</strong>.</p>
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:24px 0">
+          <p style="margin:0;font-size:14px;color:#92400e">
+            <strong>Your registration is not yet confirmed.</strong> Your parent or guardian needs to review and sign the consent form before your spot is secured. Please let them know to check their inbox.
+          </p>
+        </div>
+        <p style="color:#6b7280;font-size:14px">They will receive a separate email from DocuSign with a link to review and sign. If they haven't received it, ask them to check their spam folder.</p>
+        <p style="color:#6b7280;font-size:14px">We will send a reminder if the form hasn't been signed within one week. Once signed, you'll receive a confirmation email with a copy of the completed form.</p>
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `Hi ${firstName},\n\nA parental consent form has been sent to ${guardianName} (${guardianEmail}) for your participation in ${eventTitle}.\n\nYour registration is not yet confirmed until the form is signed. Please ask your parent or guardian to check their inbox for an email from DocuSign.\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
+export function docusignReminderToMinorEmail({
+  firstName, guardianName, eventTitle,
+}: {
+  firstName: string; guardianName: string; eventTitle: string
+}) {
+  const subject = `Reminder — parental consent still required for ${eventTitle}`
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#1e3a5f;margin-top:0">Consent Form Reminder</h2>
+        <p>Hi ${firstName},</p>
+        <p>We haven't received a signed consent form from <strong>${guardianName}</strong> for your participation in <strong>${eventTitle}</strong>.</p>
+        <p>We've sent them another reminder via DocuSign. Please let them know to check their inbox (and spam folder) for an email from DocuSign.</p>
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:24px 0">
+          <p style="margin:0;font-size:14px;color:#92400e">
+            <strong>Your registration remains unconfirmed</strong> until the consent form is signed. Please follow up with your parent or guardian as soon as possible.
+          </p>
+        </div>
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `Hi ${firstName},\n\nWe haven't received a signed consent form from ${guardianName} for ${eventTitle}. We've sent them another reminder.\n\nYour registration remains unconfirmed until the form is signed.\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
+export function docusignCompletedToMinorEmail({
+  firstName, guardianName, eventTitle, downloadUrl,
+}: {
+  firstName: string; guardianName: string; eventTitle: string; downloadUrl: string
+}) {
+  const subject = `Consent form signed — ${eventTitle}`
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#1e3a5f;margin-top:0">Consent Form Signed</h2>
+        <p>Hi ${firstName},</p>
+        <p>Great news — <strong>${guardianName}</strong> has signed the parental consent form for your participation in <strong>${eventTitle}</strong>.</p>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
+          <p style="margin:0;font-weight:600;color:#14532d">Your registration is now confirmed!</p>
+        </div>
+        <p style="color:#374151;font-size:14px">A copy of the signed form is available to download from your member portal, or use the button below:</p>
+        <div style="margin:24px 0;text-align:center">
+          <a href="${downloadUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;font-weight:600">Download Consent Form →</a>
+        </div>
+        <p style="color:#6b7280;font-size:14px">DocuSign has also sent a copy directly to ${guardianName}.</p>
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `Hi ${firstName},\n\n${guardianName} has signed the parental consent form for ${eventTitle}. Your registration is confirmed!\n\nDownload the signed form: ${downloadUrl}\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
 export function groupPaymentConfirmedEmail({
   teacherFirstName, eventTitle, registrationId,
 }: {

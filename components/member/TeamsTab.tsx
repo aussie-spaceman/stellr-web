@@ -41,6 +41,16 @@ interface Participant {
   individual_payment_status: string | null
 }
 
+interface DocuSignEnvelope {
+  id: string
+  status: string
+  signer_name: string
+  signer_email: string
+  sent_at: string
+  completed_at: string | null
+  reminder_sent_at: string | null
+}
+
 interface TeamRegistration {
   id: string
   event_slug: string
@@ -60,6 +70,7 @@ interface TeamRegistration {
   details_method: string | null
   joinUrl: string | null
   participants: Participant[]
+  docusignEnvelopes: Record<string, DocuSignEnvelope>
 }
 
 interface StudentTeam {
@@ -204,6 +215,30 @@ function JoinedTeamsView({
   )
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function participantIsMinor(dob: string): boolean {
+  if (!dob) return false
+  const d = new Date(dob)
+  const eighteenth = new Date(d.getFullYear() + 18, d.getMonth(), d.getDate())
+  return new Date() < eighteenth
+}
+
+const CONSENT_STYLES: Record<string, { label: string; cls: string }> = {
+  sent:      { label: 'Awaiting',  cls: 'bg-amber-100 text-amber-700'  },
+  delivered: { label: 'Viewed',   cls: 'bg-blue-100 text-blue-700'    },
+  completed: { label: 'Signed',   cls: 'bg-green-100 text-green-700'  },
+  declined:  { label: 'Declined', cls: 'bg-red-100 text-red-600'      },
+  voided:    { label: 'Voided',   cls: 'bg-gray-100 text-gray-500'    },
+}
+
+function ConsentBadge({ status }: { status: string }) {
+  const { label, cls } = CONSENT_STYLES[status] ?? { label: status, cls: 'bg-gray-100 text-gray-500' }
+  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
+}
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+
 // ── Teacher view ──────────────────────────────────────────────────────────────
 
 function TeacherTeamsView() {
@@ -218,6 +253,8 @@ function TeacherTeamsView() {
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
+  const [resendingConsent, setResendingConsent] = useState<string | null>(null)
+  const [consentMsg, setConsentMsg] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/members/teams')
@@ -274,6 +311,27 @@ function TeacherTeamsView() {
       fetch(`/api/members/teams/${expanded}`)
         .then(r => r.json())
         .then(d => { if (!d.error) setFullTeam(d) })
+    }
+  }
+
+  async function handleConsentResend(registrationId: string, participantId: string) {
+    setResendingConsent(participantId)
+    setConsentMsg(null)
+    try {
+      const res = await fetch(
+        `/api/members/teams/${registrationId}/participants/${participantId}/docusign-resend`,
+        { method: 'POST' },
+      )
+      const data = await res.json() as { error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Resend failed')
+      setConsentMsg('Reminder sent to parent/guardian.')
+      const r = await fetch(`/api/members/teams/${registrationId}`)
+      const d = await r.json()
+      if (!d.error) setFullTeam(d)
+    } catch (e) {
+      setConsentMsg(e instanceof Error ? e.message : 'Failed to resend')
+    } finally {
+      setResendingConsent(null)
     }
   }
 
@@ -398,6 +456,9 @@ function TeacherTeamsView() {
                 {syncMsg && (
                   <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">{syncMsg}</p>
                 )}
+                {consentMsg && (
+                  <p className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2">{consentMsg}</p>
+                )}
 
                 {/* Participants table */}
                 {fullTeam.registration.participants.length === 0 ? (
@@ -412,6 +473,7 @@ function TeacherTeamsView() {
                           <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Type</th>
                           <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Grade</th>
                           <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
+                          <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Consent</th>
                           {fullTeam.registration.member_pays_individually && (
                             <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Payment</th>
                           )}
@@ -419,53 +481,78 @@ function TeacherTeamsView() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {fullTeam.registration.participants.map(p => (
-                          <tr key={p.id} className="hover:bg-gray-50">
-                            <td className="py-2.5 pr-4">{p.first_name} {p.last_name}</td>
-                            <td className="py-2.5 pr-4 text-gray-500">{p.email}</td>
-                            <td className="py-2.5 pr-4 capitalize">{p.event_role}</td>
-                            <td className="py-2.5 pr-4 text-gray-500">{p.grade ?? '—'}</td>
-                            <td className="py-2.5 pr-4">
-                              {p.join_completed_at
-                                ? <span className="text-xs text-green-600 font-medium" title="This participant has completed the join link and confirmed their details.">Joined</span>
-                                : <span className="text-xs text-yellow-600 font-medium" title="This participant hasn't completed the join link yet — they need to click the link sent to their email to confirm their details.">Pending</span>
-                              }
-                            </td>
-                            {fullTeam.registration.member_pays_individually && (
+                        {fullTeam.registration.participants.map(p => {
+                          const envelope = fullTeam.registration.docusignEnvelopes?.[p.id]
+                          const isMinor = participantIsMinor(p.date_of_birth)
+                          const canResend = envelope &&
+                            envelope.status !== 'completed' &&
+                            envelope.status !== 'voided' &&
+                            (Date.now() - new Date(envelope.sent_at).getTime()) >= SEVEN_DAYS_MS
+
+                          return (
+                            <tr key={p.id} className="hover:bg-gray-50">
+                              <td className="py-2.5 pr-4">{p.first_name} {p.last_name}</td>
+                              <td className="py-2.5 pr-4 text-gray-500">{p.email}</td>
+                              <td className="py-2.5 pr-4 capitalize">{p.event_role}</td>
+                              <td className="py-2.5 pr-4 text-gray-500">{p.grade ?? '—'}</td>
                               <td className="py-2.5 pr-4">
-                                <span
-                                  className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                                    p.individual_payment_status === 'paid'
-                                      ? 'bg-green-100 text-green-700'
-                                      : 'bg-amber-100 text-amber-700'
-                                  }`}
-                                  title={
-                                    p.individual_payment_status === 'paid'
-                                      ? 'Payment has been received for this participant.'
-                                      : 'Payment has not yet been received for this participant.'
-                                  }
-                                >
-                                  {p.individual_payment_status === 'paid' ? 'Paid' : 'Not Yet Paid'}
-                                </span>
+                                {p.join_completed_at
+                                  ? <span className="text-xs text-green-600 font-medium" title="Participant has confirmed their details.">Joined</span>
+                                  : <span className="text-xs text-yellow-600 font-medium" title="Awaiting the participant to confirm via join link.">Pending</span>
+                                }
                               </td>
-                            )}
-                            <td className="py-2.5 text-right space-x-2">
-                              <button
-                                onClick={() => setEditing(p)}
-                                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => handleRemoveParticipant(team.id, p.id)}
-                                disabled={removing === p.id}
-                                className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
-                              >
-                                Remove
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                              <td className="py-2.5 pr-4">
+                                {!isMinor ? (
+                                  <span className="text-xs text-gray-400">N/A</span>
+                                ) : envelope ? (
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <ConsentBadge status={envelope.status} />
+                                    {canResend && (
+                                      <button
+                                        onClick={() => handleConsentResend(team.id, p.id)}
+                                        disabled={resendingConsent === p.id}
+                                        className="text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-50"
+                                        title={`Re-send consent to ${envelope.signer_name}`}
+                                      >
+                                        {resendingConsent === p.id ? 'Sending…' : 'Remind'}
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400" title="No consent form on file for this participant.">—</span>
+                                )}
+                              </td>
+                              {fullTeam.registration.member_pays_individually && (
+                                <td className="py-2.5 pr-4">
+                                  <span
+                                    className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                      p.individual_payment_status === 'paid'
+                                        ? 'bg-green-100 text-green-700'
+                                        : 'bg-amber-100 text-amber-700'
+                                    }`}
+                                  >
+                                    {p.individual_payment_status === 'paid' ? 'Paid' : 'Not Yet Paid'}
+                                  </span>
+                                </td>
+                              )}
+                              <td className="py-2.5 text-right space-x-2">
+                                <button
+                                  onClick={() => setEditing(p)}
+                                  className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleRemoveParticipant(team.id, p.id)}
+                                  disabled={removing === p.id}
+                                  className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
+                                >
+                                  Remove
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>

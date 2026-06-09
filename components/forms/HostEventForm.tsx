@@ -4,14 +4,13 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { SchoolSearchInput, type SchoolSelection } from '@/components/member/SchoolSearchInput'
 
 const schema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Please enter a valid email address'),
   phone: z.string().min(7, 'Please enter a valid phone number'),
-  address: z.string().min(5, 'Please enter your facility address'),
-  companySchool: z.string().min(2, 'Please enter your organization name'),
   venueCapacity: z.string().min(1, 'Please provide an approximate capacity'),
   preferredTiming: z.string().min(1, 'Please indicate your preferred timing'),
   preferredDuration: z.string().min(1, 'Please indicate your preferred event duration'),
@@ -24,6 +23,15 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
+function schoolSelectionToFields(selection: SchoolSelection): { companySchool: string; address: string } {
+  if (selection.type === 'existing') {
+    return { companySchool: selection.name, address: '' }
+  }
+  const { name, address_line1, address_line2, city, state, postcode } = selection.data
+  const address = [address_line1, address_line2, city, state, postcode].filter(Boolean).join(', ')
+  return { companySchool: name, address }
+}
+
 const inputClass = (error: boolean) =>
   `w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue ${
     error ? 'border-red-400' : 'border-gray-200'
@@ -31,6 +39,8 @@ const inputClass = (error: boolean) =>
 
 export function HostEventForm() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [school, setSchool] = useState<SchoolSelection | null>(null)
+  const [schoolError, setSchoolError] = useState('')
 
   const {
     register,
@@ -39,12 +49,18 @@ export function HostEventForm() {
   } = useForm<FormData>({ resolver: zodResolver(schema) })
 
   async function onSubmit(data: FormData) {
+    if (!school) {
+      setSchoolError('Please select or add your organization.')
+      return
+    }
+    setSchoolError('')
     setStatus('loading')
+    const { companySchool, address } = schoolSelectionToFields(school)
     try {
       const res = await fetch('/api/host-event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, companySchool, address }),
       })
       setStatus(res.ok ? 'success' : 'error')
     } catch {
@@ -147,35 +163,11 @@ export function HostEventForm() {
           Facility Details
         </legend>
         <div>
-          <label htmlFor="companySchool" className="block text-sm font-medium text-brand-blue-dark mb-1">
-            Company / School Name <span className="text-red-500">*</span>
+          <label className="block text-sm font-medium text-brand-blue-dark mb-1">
+            Company / School <span className="text-red-500">*</span>
           </label>
-          <input
-            id="companySchool"
-            type="text"
-            {...register('companySchool')}
-            className={inputClass(!!errors.companySchool)}
-            placeholder="Springfield High School"
-          />
-          {errors.companySchool && (
-            <p className="mt-1 text-xs text-red-500">{errors.companySchool.message}</p>
-          )}
-        </div>
-        <div>
-          <label htmlFor="address" className="block text-sm font-medium text-brand-blue-dark mb-1">
-            Facility Address <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="address"
-            type="text"
-            autoComplete="street-address"
-            {...register('address')}
-            className={inputClass(!!errors.address)}
-            placeholder="123 Main St, Springfield, IL 62701"
-          />
-          {errors.address && (
-            <p className="mt-1 text-xs text-red-500">{errors.address.message}</p>
-          )}
+          <SchoolSearchInput onChange={(s) => { setSchool(s); if (s) setSchoolError('') }} />
+          {schoolError && <p className="mt-1 text-xs text-red-500">{schoolError}</p>}
         </div>
         <div>
           <label htmlFor="venueCapacity" className="block text-sm font-medium text-brand-blue-dark mb-1">
@@ -286,8 +278,8 @@ export function HostEventForm() {
       {status === 'error' && (
         <p className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
           Something went wrong sending your submission. Please try again or email us directly at{' '}
-          <a href="mailto:david.shaw@insimeducation.com" className="underline">
-            david.shaw@insimeducation.com
+          <a href="mailto:hello@stellreducation.org" className="underline">
+            hello@stellreducation.org
           </a>
           .
         </p>

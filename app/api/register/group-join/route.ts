@@ -3,7 +3,8 @@ import { auth } from '@clerk/nextjs/server'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
-import { sendEmail, groupMemberJoinedEmail, groupMemberIndividualPaymentEmail } from '@/lib/email'
+import { sendEmail, groupMemberJoinedEmail, groupMemberIndividualPaymentEmail, docusignSentToMinorEmail } from '@/lib/email'
+import { createConsentEnvelope, isMinor } from '@/lib/docusign'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
   const paymentStatus = memberPaysIndividually ? 'pending' : null
 
   // Insert participant row
-  const { error: partError } = await db.from('participants').insert({
+  const { data: partRow, error: partError } = await db.from('participants').insert({
     registration_id: registrationId,
     member_id: member.id,
     first_name: member.first_name,
@@ -96,11 +97,42 @@ export async function POST(req: NextRequest) {
     emergency_contact_phone: member.ec_phone ?? null,
     individual_payment_status: paymentStatus,
     join_completed_at: new Date().toISOString(),
-  })
+  }).select('id').single()
 
-  if (partError) {
+  if (partError || !partRow) {
     console.error('Group join participant insert error:', partError)
     return NextResponse.json({ error: 'Failed to complete registration. Please try again.' }, { status: 500 })
+  }
+
+  // Trigger DocuSign consent for minor group members
+  if (isMinor(member.date_of_birth ?? '') && member.ec_email && member.ec_first_name) {
+    const guardianName = [member.ec_first_name, member.ec_last_name].filter(Boolean).join(' ')
+    try {
+      const envelopeId = await createConsentEnvelope({
+        minorFirstName: member.first_name,
+        minorLastName:  member.last_name,
+        guardianName,
+        guardianEmail:  member.ec_email,
+        eventTitle,
+      })
+      await db.from('docusign_envelopes').insert({
+        participant_id: partRow.id,
+        member_id:      member.id,
+        event_slug:     eventSlug,
+        event_title:    eventTitle,
+        envelope_id:    envelopeId,
+        status:         'sent',
+        signer_name:    guardianName,
+        signer_email:   member.ec_email,
+        minor_name:     `${member.first_name} ${member.last_name}`,
+      })
+      await sendEmail({
+        to: member.email,
+        ...docusignSentToMinorEmail({ firstName: member.first_name, guardianName, guardianEmail: member.ec_email, eventTitle }),
+      })
+    } catch (dsErr) {
+      console.error('[docusign] Group join envelope creation failed (non-fatal):', dsErr)
+    }
   }
 
   // Count total members who have completed their join

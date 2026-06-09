@@ -158,7 +158,7 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
       {status === 'error' && (
         <p className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
           Something went wrong sending your message. Please try again or email us directly at{' '}
-          <a href="mailto:david.shaw@insimeducation.com" className="underline">david.shaw@insimeducation.com</a>.
+          <a href="mailto:hello@stellreducation.org" className="underline">hello@stellreducation.org</a>.
         </p>
       )}
 

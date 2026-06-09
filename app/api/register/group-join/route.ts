@@ -109,11 +109,15 @@ export async function POST(req: NextRequest) {
     const guardianName = [member.ec_first_name, member.ec_last_name].filter(Boolean).join(' ')
     try {
       const envelopeId = await createConsentEnvelope({
-        minorFirstName: member.first_name,
-        minorLastName:  member.last_name,
+        minorFirstName:  member.first_name,
+        minorLastName:   member.last_name,
+        minorDateOfBirth: member.date_of_birth ?? undefined,
         guardianName,
-        guardianEmail:  member.ec_email,
+        guardianEmail:   member.ec_email,
+        guardianPhone:   member.ec_phone ?? undefined,
         eventTitle,
+        schoolName:      (reg.school_name as string) || undefined,
+        schoolState:     (reg.school_address_state as string) || undefined,
       })
       await db.from('docusign_envelopes').insert({
         participant_id: partRow.id,

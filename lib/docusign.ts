@@ -91,11 +91,15 @@ function consentDocBase64(minor: string, guardian: string, event: string): strin
 // ── Public interface ──────────────────────────────────────────────────────────
 
 export interface EnvelopeParams {
-  minorFirstName: string
-  minorLastName:  string
-  guardianName:   string
-  guardianEmail:  string
-  eventTitle:     string
+  minorFirstName:  string
+  minorLastName:   string
+  minorDateOfBirth?: string
+  guardianName:    string
+  guardianEmail:   string
+  guardianPhone?:  string
+  eventTitle:      string
+  schoolName?:     string
+  schoolState?:    string
 }
 
 export async function createConsentEnvelope(p: EnvelopeParams): Promise<string> {
@@ -113,9 +117,14 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<string> 
         email:    p.guardianEmail,
         tabs: {
           textTabs: [
-            { tabLabel: 'MinorName',    value: minorName      },
-            { tabLabel: 'EventTitle',   value: p.eventTitle   },
-            { tabLabel: 'GuardianName', value: p.guardianName },
+            { tabLabel: 'MinorName',       value: minorName               },
+            { tabLabel: 'MinorDateOfBirth', value: p.minorDateOfBirth ?? '' },
+            { tabLabel: 'EventTitle',      value: p.eventTitle            },
+            { tabLabel: 'GuardianName',    value: p.guardianName          },
+            { tabLabel: 'GuardianEmail',   value: p.guardianEmail         },
+            { tabLabel: 'GuardianPhone',   value: p.guardianPhone  ?? ''  },
+            { tabLabel: 'SchoolName',      value: p.schoolName     ?? ''  },
+            { tabLabel: 'SchoolState',     value: p.schoolState    ?? ''  },
           ],
         },
       }],

@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
       dietary_requirements, health_conditions,
       emergency_contact_first_name, emergency_contact_last_name,
       emergency_contact_email, emergency_contact_phone,
+      school_address_state,
     } = body
 
     if (!event_slug || !email || !first_name || !last_name) {
@@ -136,11 +137,15 @@ export async function POST(req: NextRequest) {
       const guardianName = [emergency_contact_first_name, emergency_contact_last_name].filter(Boolean).join(' ')
       try {
         const envelopeId = await createConsentEnvelope({
-          minorFirstName: first_name,
-          minorLastName:  last_name,
+          minorFirstName:  first_name,
+          minorLastName:   last_name,
+          minorDateOfBirth: date_of_birth,
           guardianName,
-          guardianEmail:  emergency_contact_email,
-          eventTitle:     event_title,
+          guardianEmail:   emergency_contact_email,
+          guardianPhone:   emergency_contact_phone || undefined,
+          eventTitle:      event_title,
+          schoolName:      school_name || undefined,
+          schoolState:     school_address_state || undefined,
         })
         await db.from('docusign_envelopes').insert({
           participant_id: partRow.id,

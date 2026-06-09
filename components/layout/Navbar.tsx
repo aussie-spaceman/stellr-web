@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ChevronDown, Menu, X } from 'lucide-react'
@@ -63,7 +63,19 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pathname = usePathname()
+
+  /** Open a dropdown and cancel any pending close timer. */
+  const openMenu = (label: string) => {
+    if (closeTimer.current) clearTimeout(closeTimer.current)
+    setOpenDropdown(label)
+  }
+
+  /** Schedule closing — cancelled if cursor enters the trigger or dropdown within 150 ms. */
+  const scheduleClose = () => {
+    closeTimer.current = setTimeout(() => setOpenDropdown(null), 150)
+  }
 
   const toggleMobileSection = (label: string) =>
     setMobileExpanded((prev) => (prev === label ? null : label))
@@ -100,10 +112,10 @@ export function Navbar() {
             <ul className="hidden lg:flex items-center gap-1">
               {navLinks.map((link) => (
                 <li key={link.href} className="relative">
+                  {/* Trigger wrapper */}
                   <div
-                    className="pb-1"
-                    onMouseEnter={() => setOpenDropdown(link.label)}
-                    onMouseLeave={() => setOpenDropdown(null)}
+                    onMouseEnter={() => openMenu(link.label)}
+                    onMouseLeave={scheduleClose}
                   >
                     <button
                       className={`flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
@@ -119,21 +131,27 @@ export function Navbar() {
                         className={`transition-transform ${openDropdown === link.label ? 'rotate-180' : ''}`}
                       />
                     </button>
-                    {openDropdown === link.label && link.dropdown && (
-                      <ul className="absolute top-full left-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50">
-                        {link.dropdown.map((item) => (
-                          <li key={item.href}>
-                            <Link
-                              href={item.href}
-                              className="block px-4 py-2 text-sm text-brand-grey-dark hover:bg-brand-grey-light hover:text-brand-blue-dark transition-colors"
-                            >
-                              {item.label}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
                   </div>
+
+                  {/* Dropdown — shares the same open/close handlers so cursor can move freely */}
+                  {openDropdown === link.label && link.dropdown && (
+                    <ul
+                      className="absolute top-full left-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50"
+                      onMouseEnter={() => openMenu(link.label)}
+                      onMouseLeave={scheduleClose}
+                    >
+                      {link.dropdown.map((item) => (
+                        <li key={item.href}>
+                          <Link
+                            href={item.href}
+                            className="block px-4 py-2 text-sm text-brand-grey-dark hover:bg-brand-grey-light hover:text-brand-blue-dark transition-colors"
+                          >
+                            {item.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>
@@ -141,23 +159,31 @@ export function Navbar() {
             {/* Desktop CTAs */}
             <div className="hidden lg:flex items-center gap-3">
               {/* Get Involved dropdown */}
-              <div
-                className="relative pb-1"
-                onMouseEnter={() => setOpenDropdown('get-involved')}
-                onMouseLeave={() => setOpenDropdown(null)}
-              >
-                <button
-                  className="flex items-center gap-1 px-4 py-2 text-sm font-medium border border-brand-blue text-brand-blue rounded-md hover:bg-blue-50 transition-colors"
-                  aria-expanded={openDropdown === 'get-involved'}
+              <div className="relative">
+                {/* Trigger wrapper */}
+                <div
+                  onMouseEnter={() => openMenu('get-involved')}
+                  onMouseLeave={scheduleClose}
                 >
-                  Get Involved
-                  <ChevronDown
-                    size={14}
-                    className={`transition-transform ${openDropdown === 'get-involved' ? 'rotate-180' : ''}`}
-                  />
-                </button>
+                  <button
+                    className="flex items-center gap-1 px-4 py-2 text-sm font-medium border border-brand-blue text-brand-blue rounded-md hover:bg-blue-50 transition-colors"
+                    aria-expanded={openDropdown === 'get-involved'}
+                  >
+                    Get Involved
+                    <ChevronDown
+                      size={14}
+                      className={`transition-transform ${openDropdown === 'get-involved' ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+                </div>
+
+                {/* Dropdown */}
                 {openDropdown === 'get-involved' && (
-                  <ul className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50">
+                  <ul
+                    className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50"
+                    onMouseEnter={() => openMenu('get-involved')}
+                    onMouseLeave={scheduleClose}
+                  >
                     {getInvolvedLinks.map((item) => (
                       <li key={item.href}>
                         <Link

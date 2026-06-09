@@ -61,10 +61,12 @@ export async function getAllEvents() {
 
 export async function getAllCampaigns() {
   if (!client) return null
+  // Ordered by year asc, then season desc ('spring' > 'fall' alphabetically,
+  // which matches chronological order within a year: Spring Jan–Apr, Fall Aug–Dec).
   return client.fetch(`
-    *[_type == "event" && activityType == "campaign"] | order(date asc) {
-      _id, title, slug, type, term, date, endDate,
-      registrationOpen, registrationCloseDate, tagline, image
+    *[_type == "event" && activityType == "campaign"] | order(campaignYear asc, season desc) {
+      _id, title, slug, type, season, campaignYear,
+      registrationOpen, tagline, image
     }
   `)
 }

@@ -8,9 +8,7 @@ export const event = {
     { name: 'slug', type: 'slug', title: 'Slug', options: { source: 'title' } },
 
     // ── Activity Type ─────────────────────────────────────────────────────────
-    // This is the primary discriminator. Live Events are facilitated by Stellr
-    // staff at a fixed date/venue. Campaigns are asynchronous, educator-led
-    // activities running over an academic term — billed and displayed differently.
+    // Primary discriminator — controls which fields are visible below.
     {
       name: 'activityType',
       title: 'Activity Type',
@@ -49,31 +47,63 @@ export const event = {
       options: { list: ['Middle School', 'High School', 'Both'] },
     },
 
-    // ── Dates ─────────────────────────────────────────────────────────────────
+    // ── Campaign-only: Season & Year ──────────────────────────────────────────
+    // Selecting a season determines all campaign dates automatically:
+    //   Fall   → Campaign: Aug 15 – Dec 15  |  Registration: Aug 1 – Nov 30
+    //   Spring → Campaign: Jan 1  – Apr 30  |  Registration: Dec 1 (prior yr) – Mar 31
+    {
+      name: 'season',
+      title: 'Season',
+      type: 'string',
+      description:
+        'Fall — Campaign runs Aug 15 – Dec 15. Registration opens Aug 1, closes Nov 30.\n' +
+        'Spring — Campaign runs Jan 1 – Apr 30. Registration opens Dec 1 (prior year), closes Mar 31.',
+      options: {
+        list: [
+          { title: 'Fall', value: 'fall' },
+          { title: 'Spring', value: 'spring' },
+        ],
+        layout: 'radio',
+      },
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType !== 'campaign',
+      validation: (Rule: { custom: (fn: (v: unknown, ctx: { document?: Record<string, unknown> }) => true | string) => unknown }) =>
+        Rule.custom((value, context) => {
+          if (context.document?.activityType === 'campaign' && !value) return 'Season is required for campaigns'
+          return true
+        }),
+    },
+    {
+      name: 'campaignYear',
+      title: 'Campaign Year',
+      type: 'number',
+      description: 'The calendar year the campaign takes place in — e.g. 2026 for Fall 2026, 2027 for Spring 2027.',
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType !== 'campaign',
+      validation: (Rule: { custom: (fn: (v: unknown, ctx: { document?: Record<string, unknown> }) => true | string) => unknown }) =>
+        Rule.custom((value, context) => {
+          if (context.document?.activityType === 'campaign' && !value) return 'Campaign year is required'
+          return true
+        }),
+    },
+
+    // ── Live Event-only: Dates ────────────────────────────────────────────────
     {
       name: 'date',
       type: 'date',
-      title: 'Start Date',
-      description: 'Live Events: event date. Campaigns: term start date.',
+      title: 'Event Date',
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType === 'campaign',
     },
     {
       name: 'endDate',
       type: 'date',
-      title: 'End Date',
-      description: 'Live Events: last day if multi-day. Campaigns: term end date.',
-    },
-
-    // ── Campaign-only ─────────────────────────────────────────────────────────
-    {
-      name: 'term',
-      title: 'Term / Season Label',
-      type: 'string',
-      description: 'Display label for the academic term, e.g. "Fall 2026" or "Spring 2027".',
+      title: 'End Date (if multi-day)',
       hidden: ({ document }: { document?: Record<string, unknown> }) =>
-        document?.activityType !== 'campaign',
+        document?.activityType === 'campaign',
     },
 
-    // ── Live Event-only ───────────────────────────────────────────────────────
+    // ── Live Event-only: Venue ────────────────────────────────────────────────
     {
       name: 'setting',
       title: 'Setting',
@@ -117,10 +147,31 @@ export const event = {
     { name: 'image', type: 'image', title: 'Hero Image', options: { hotspot: true } },
 
     // ── Registration ──────────────────────────────────────────────────────────
+    // For campaigns, registrationOpen is a manual on/off toggle.
+    // Registration dates are automatic (derived from season+year) — not stored.
+    // For live events, all three fields apply.
     { name: 'registrationOpen', type: 'boolean', title: 'Registration Open' },
-    { name: 'registrationOpenDate', type: 'date', title: 'Registration Opens' },
-    { name: 'registrationCloseDate', type: 'date', title: 'Registration Closes' },
-    { name: 'capacity', type: 'number', title: 'Max Participants' },
+    {
+      name: 'registrationOpenDate',
+      type: 'date',
+      title: 'Registration Opens',
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType === 'campaign',
+    },
+    {
+      name: 'registrationCloseDate',
+      type: 'date',
+      title: 'Registration Closes',
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType === 'campaign',
+    },
+    {
+      name: 'capacity',
+      type: 'number',
+      title: 'Max Participants',
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType === 'campaign',
+    },
     { name: 'eligibility', type: 'string', title: 'Eligibility Notes' },
 
     // ── Settings ──────────────────────────────────────────────────────────────
@@ -142,6 +193,16 @@ export const event = {
       name: 'dateAsc',
       by: [{ field: 'date', direction: 'asc' }],
     },
+    {
+      title: 'Campaign Year & Season',
+      name: 'campaignAsc',
+      by: [
+        { field: 'campaignYear', direction: 'asc' },
+        // 'spring' sorts after 'fall' alphabetically, which is correct:
+        // within a given year, Spring (Jan–Apr) comes before Fall (Aug–Dec)
+        { field: 'season', direction: 'desc' },
+      ],
+    },
   ],
 
   preview: {
@@ -149,15 +210,25 @@ export const event = {
       title: 'title',
       activityType: 'activityType',
       date: 'date',
+      season: 'season',
+      campaignYear: 'campaignYear',
       media: 'image',
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     prepare(selection: Record<string, any>) {
-      const { title, activityType, date, media } = selection
-      const typeLabel = activityType === 'campaign' ? 'Campaign' : 'Live Event'
+      const { title, activityType, date, season, campaignYear, media } = selection
+      if (activityType === 'campaign') {
+        const seasonLabel =
+          season === 'fall'
+            ? `Fall ${campaignYear ?? ''}`
+            : season === 'spring'
+              ? `Spring ${campaignYear ?? ''}`
+              : ''
+        return { title, subtitle: `Campaign · ${seasonLabel}`.trim(), media }
+      }
       return {
         title,
-        subtitle: `${typeLabel}${date ? ` · ${date}` : ''}`,
+        subtitle: `Live Event${date ? ` · ${date}` : ''}`,
         media,
       }
     },

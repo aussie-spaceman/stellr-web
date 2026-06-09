@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { CheckCircle, Clock, Globe, Award } from 'lucide-react'
 import { getAllCampaigns } from '@/lib/sanity'
+import { getCampaignDates, campaignStatusFromDates, type CampaignSeason } from '@/lib/campaigns'
 
 export const metadata: Metadata = {
   title: 'Activities | Stellr Education',
@@ -16,25 +17,14 @@ interface Campaign {
   title: string
   slug?: { current: string }
   type?: string
-  term?: string
-  date?: string
-  endDate?: string
+  season?: CampaignSeason
+  campaignYear?: number
   registrationOpen?: boolean
-  registrationCloseDate?: string
-}
-
-function campaignStatus(c: Campaign): string {
-  if (c.registrationOpen === false) return 'Closed'
-  if (c.registrationOpen === true) return 'Open'
-  const today = new Date().toISOString().split('T')[0]
-  if (c.date && c.date > today) return 'Coming soon'
-  if (c.endDate && c.endDate < today) return 'Closed'
-  return 'Open'
 }
 
 const FALLBACK_CAMPAIGNS: Campaign[] = [
-  { _id: 'fallback-1', title: '2027 Space Design Campaign', term: 'Fall 2026', date: '2026-09-01', endDate: '2026-12-15' },
-  { _id: 'fallback-2', title: '2027 Environmental Design Campaign', term: 'Spring 2027', date: '2027-01-15', endDate: '2027-05-30' },
+  { _id: 'fallback-1', title: '2027 Space Design Campaign', season: 'fall', campaignYear: 2026 },
+  { _id: 'fallback-2', title: '2027 Environmental Design Campaign', season: 'spring', campaignYear: 2027 },
 ]
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
@@ -197,7 +187,12 @@ export default async function ActivitiesPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {campaigns.map((c) => {
-                const status = campaignStatus(c)
+                const dates = c.season && c.campaignYear
+                  ? getCampaignDates(c.season, c.campaignYear)
+                  : null
+                const status = dates
+                  ? campaignStatusFromDates(dates, c.registrationOpen)
+                  : 'Coming soon'
                 return (
                   <div
                     key={c._id}
@@ -205,7 +200,9 @@ export default async function ActivitiesPage() {
                   >
                     <div>
                       <h3 className="font-bold text-brand-blue-dark mb-1">{c.title}</h3>
-                      {c.term && <p className="text-sm text-brand-grey-dark">{c.term}</p>}
+                      {dates && (
+                        <p className="text-sm text-brand-grey-dark">{dates.label}</p>
+                      )}
                     </div>
                     <span
                       className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${

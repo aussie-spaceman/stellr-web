@@ -13,6 +13,11 @@ export default function PrivacyPage() {
         <p className="text-sm text-brand-grey-mid italic">
           Effective Date: 09 June 2026 &nbsp;·&nbsp; Last Updated: 09 June 2026
         </p>
+        <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
+          <strong>Recent update:</strong> This policy has been updated to reflect our use of
+          DocuSign for electronic parental consent for minor participants, and to provide additional
+          disclosures regarding FERPA and our electronic consent record practices.
+        </p>
 
         {/* 1. Introduction */}
         <h2 className="text-xl font-bold text-brand-blue-dark">1. Introduction</h2>
@@ -32,33 +37,54 @@ export default function PrivacyPage() {
         </p>
 
         {/* 2. Minors & COPPA */}
-        <h2 className="text-xl font-bold text-brand-blue-dark">2. A Note About Minors and COPPA</h2>
+        <h2 className="text-xl font-bold text-brand-blue-dark">2. A Note About Minors, COPPA, and FERPA</h2>
         <p>
           Our Services are directed to school students, many of whom are under the age of 18, and
           some of whom may be under the age of 13. We comply with the{' '}
-          <strong>Children&rsquo;s Online Privacy Protection Act (COPPA)</strong>.
+          <strong>Children&rsquo;s Online Privacy Protection Act (COPPA)</strong> and, where
+          applicable, the <strong>Family Educational Rights and Privacy Act (FERPA)</strong>.
         </p>
         <ul className="list-disc pl-6 space-y-2">
           <li>
-            <strong>Users under 13:</strong> We do not knowingly collect personal information from
-            children under 13 without <strong>verifiable parental consent</strong>. If we discover
-            we have collected such information without consent, we will delete it promptly. Parents
-            or guardians may contact us at{' '}
+            <strong>Participants under 18:</strong> When an individual under 18 registers for a
+            Stellr event, we require verifiable parental or legal guardian consent before confirming
+            their participation. We collect this consent electronically via{' '}
+            <strong>DocuSign</strong>, a FERPA-compliant electronic signature provider. A consent
+            form is automatically sent to the parent or guardian email address provided at
+            registration. We will not confirm participation for a minor until this consent is
+            received.
+          </li>
+          <li>
+            <strong>Participants under 13:</strong> We do not knowingly collect personal information
+            from children under 13 without the verifiable parental consent described above. If we
+            discover we have collected such information without consent, we will delete it promptly.
+            Parents or guardians may contact us at{' '}
             <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
               privacy@stellreducation.org
             </a>{' '}
             to review, correct, or request deletion of their child&rsquo;s information.
           </li>
           <li>
-            <strong>Users aged 13–17:</strong> We encourage parents and guardians to review this
-            Policy and discuss it with their child. Certain data (such as medical and dietary
-            information) may require explicit parental consent regardless of age.
+            <strong>Parent and guardian data:</strong> When we collect consent, we collect the
+            consenting parent or guardian&rsquo;s full name and email address. This information is
+            used solely to administer the consent process and is not used for marketing or shared
+            beyond what is necessary.
           </li>
           <li>
-            <strong>School-facilitated registrations:</strong> When a school or teacher registers
-            students on their behalf, we rely on that school or educator to have obtained appropriate
-            parental authorisation in accordance with applicable law, including COPPA and the Family
-            Educational Rights and Privacy Act (FERPA).
+            <strong>FERPA — school-facilitated registrations:</strong> When a school, teacher, or
+            student manager registers a group of students, the data involved (student names, school
+            affiliation, grade level) may constitute education records under FERPA. Stellr acts as
+            a &ldquo;school official&rdquo; in these circumstances and processes education records
+            only for the purpose of administering competition participation. We enter into a data
+            processing agreement with schools before processing their students&rsquo; education
+            records. Our electronic consent provider, DocuSign, is bound by a FERPA-compliant data
+            processing agreement with Stellr.
+          </li>
+          <li>
+            <strong>Participants aged 13–17 in individually-registered events:</strong> We
+            encourage parents and guardians to review this Policy and discuss it with their child.
+            The DocuSign consent process described above applies to all minor participants regardless
+            of whether registration was individual or school-facilitated.
           </li>
         </ul>
 
@@ -140,12 +166,32 @@ export default function PrivacyPage() {
           <li>Cookies and similar tracking technologies (see Section 9)</li>
         </ul>
 
+        <h3 className="text-lg font-semibold text-brand-blue-dark">3.10 Parent and Guardian Information (Consent Records)</h3>
+        <ul className="list-disc pl-6 space-y-1">
+          <li>
+            Full name of the consenting parent or legal guardian, as provided at registration or
+            in the emergency contact fields
+          </li>
+          <li>Email address of the consenting parent or legal guardian</li>
+          <li>
+            Electronic consent records — the executed consent form, signing timestamp, IP address
+            of the signing device, and envelope status — generated and held by DocuSign on
+            Stellr&rsquo;s behalf
+          </li>
+        </ul>
+        <p className="text-sm text-brand-grey-mid">
+          Parent and guardian information is collected solely for the purpose of obtaining and
+          recording consent for a minor&rsquo;s event participation. It is not used for marketing
+          and is not shared beyond what is necessary to administer the consent process.
+        </p>
+
         {/* 4. How We Collect */}
         <h2 className="text-xl font-bold text-brand-blue-dark">4. How We Collect Information</h2>
         <p>We collect personal information in the following ways:</p>
         <ul className="list-disc pl-6 space-y-2">
           <li><strong>Directly from you</strong> when you register, create an account, complete forms, or communicate with us</li>
           <li><strong>From parents or guardians</strong> providing consent or registering on behalf of a minor</li>
+          <li><strong>Via electronic consent forms</strong> sent to parents or guardians through DocuSign when a minor participant registers; the executed form and signing metadata are returned to us by DocuSign upon completion</li>
           <li><strong>From schools and educators</strong> facilitating group registrations</li>
           <li><strong>Automatically</strong> through cookies and analytics tools when you use our platform</li>
           <li><strong>From payment processors</strong> who provide transaction confirmation data</li>
@@ -165,7 +211,8 @@ export default function PrivacyPage() {
             <tbody>
               {[
                 ['Registering and managing competition participation', 'Identity, school, age, account data'],
-                ['Verifying age eligibility', 'Date of birth / age'],
+                ['Verifying age eligibility and triggering parental consent', 'Date of birth / age'],
+                ['Obtaining verifiable parental consent for minor participants', 'Parent/guardian name and email; minor name and event details (processed by DocuSign)'],
                 ['Providing access to the online community', 'Account / login credentials'],
                 ['Communicating with participants about competitions and results', 'Contact information'],
                 ['Ensuring participant safety at in-person events', 'Medical and dietary requirements'],
@@ -204,14 +251,41 @@ export default function PrivacyPage() {
         <p>We do not sell, rent, or trade your personal information. We may share information only in the following circumstances:</p>
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">7.1 Service Providers</h3>
-        <p>We engage trusted third-party vendors to assist in delivering our Services, including:</p>
-        <ul className="list-disc pl-6 space-y-1">
-          <li>Payment processors (e.g., for registration fees)</li>
-          <li>Cloud hosting and database providers</li>
-          <li>Email communication platforms</li>
-          <li>Event management tools</li>
-        </ul>
-        <p>These providers are contractually required to handle your data securely and only as directed by us.</p>
+        <p>We engage trusted third-party vendors to assist in delivering our Services. Our current subprocessors include:</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse border border-gray-200">
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Provider</th>
+                <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Purpose</th>
+                <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Data Shared</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ['Stripe', 'Payment processing', 'Name, billing address, payment card data'],
+                ['Supabase', 'Cloud database and hosting', 'All account and registration data'],
+                ['Clerk', 'User authentication and identity', 'Name, email, login credentials'],
+                ['Resend', 'Transactional email delivery', 'Name, email address'],
+                ['DocuSign', 'Electronic parental consent forms (minor participants only)', 'Minor name, event title, parent/guardian name and email; FERPA-compliant DPA in place'],
+                ['Vercel', 'Website hosting and delivery', 'Usage/technical data'],
+                ['Sanity', 'Content management', 'No personal data'],
+              ].map(([provider, purpose, data]) => (
+                <tr key={provider} className="even:bg-gray-50">
+                  <td className="border border-gray-200 px-4 py-2 font-medium">{provider}</td>
+                  <td className="border border-gray-200 px-4 py-2">{purpose}</td>
+                  <td className="border border-gray-200 px-4 py-2 text-xs text-brand-grey-mid">{data}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p>
+          All providers are contractually required to handle your data securely, use it only as
+          directed by us, and not disclose it to third parties for their own commercial purposes.
+          Where required by applicable law, we have executed data processing agreements with each
+          provider.
+        </p>
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">7.2 Schools and Educators</h3>
         <p>
@@ -245,6 +319,41 @@ export default function PrivacyPage() {
           transferred to a successor organisation, subject to the same privacy protections described
           here.
         </p>
+
+        <h3 className="text-lg font-semibold text-brand-blue-dark">7.7 FERPA — Education Records</h3>
+        <p>
+          When a school or teacher registers a group of students for a Stellr event, the student
+          data involved (including names, school affiliation, and grade level) may constitute{' '}
+          <strong>education records</strong> under FERPA. In those circumstances:
+        </p>
+        <ul className="list-disc pl-6 space-y-2">
+          <li>
+            Stellr processes education records solely for the purpose of administering competition
+            participation — a legitimate educational interest consistent with FERPA.
+          </li>
+          <li>
+            We do not use education records for advertising, product development, or any purpose
+            beyond what is necessary for the event.
+          </li>
+          <li>
+            We enter into a <strong>school official data processing agreement</strong> with the
+            registering school or institution before processing their students&rsquo; education
+            records. This agreement specifies how data may be used and prohibits unauthorised
+            disclosure.
+          </li>
+          <li>
+            Our electronic consent provider, <strong>DocuSign</strong>, is bound by a FERPA-compliant
+            data processing agreement with Stellr and is prohibited from using education record data
+            for any commercial purpose.
+          </li>
+          <li>
+            Schools and parents may exercise their FERPA rights by contacting us at{' '}
+            <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+              privacy@stellreducation.org
+            </a>
+            .
+          </li>
+        </ul>
 
         {/* 8. Sensitive Information */}
         <h2 className="text-xl font-bold text-brand-blue-dark">8. Sensitive Information</h2>
@@ -286,6 +395,8 @@ export default function PrivacyPage() {
                 ['Account and competition records', 'Duration of account'],
                 ['Medical and dietary information', 'Duration of account'],
                 ['Payment transaction records', '7 years (US tax/accounting requirements)'],
+                ['Electronic consent records (DocuSign)', '7 years from date of signing (legal record of parental consent)'],
+                ['Parent/guardian contact information', 'Duration of account, or until the associated minor participant record is deleted'],
                 ['Photos and videos', 'Until you request removal, or indefinitely'],
                 ['Technical/usage logs', 'Generally 12 months, with minor exceptions on a platform-specific basis'],
               ].map(([type, period]) => (
@@ -344,6 +455,27 @@ export default function PrivacyPage() {
             </a>
           </li>
         </ul>
+
+        <h3 className="text-lg font-semibold text-brand-blue-dark">Schools and Educators (FERPA Rights)</h3>
+        <p>
+          Schools whose students&rsquo; education records are processed by Stellr have the right to:
+        </p>
+        <ul className="list-disc pl-6 space-y-2">
+          <li>Inspect and review education records held by Stellr relating to their students</li>
+          <li>Request correction of inaccurate education records</li>
+          <li>Request deletion of education records upon withdrawal from an event</li>
+          <li>
+            Receive a copy of any data processing agreement between Stellr and DocuSign covering
+            student education records
+          </li>
+        </ul>
+        <p>
+          Contact us at{' '}
+          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+            privacy@stellreducation.org
+          </a>{' '}
+          with the subject line <strong>FERPA Request</strong>.
+        </p>
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">California Residents (CCPA/CPRA)</h3>
         <p>California residents have additional rights under the California Consumer Privacy Act:</p>

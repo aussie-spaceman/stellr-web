@@ -83,8 +83,8 @@ export async function GET(
       .maybeSingle()
 
     if (regErr) {
-      console.error('[spreadsheet] DB error:', regErr)
-      return NextResponse.json({ error: 'Database error' }, { status: 500 })
+      console.error('[spreadsheet] Registration DB error:', regErr)
+      return NextResponse.json({ error: 'Database error', detail: regErr.message }, { status: 500 })
     }
     if (!registration) {
       return NextResponse.json({ error: 'Registration not found' }, { status: 404 })
@@ -113,7 +113,7 @@ export async function GET(
 
     if (partErr) {
       console.error('[spreadsheet] Participants DB error:', partErr)
-      return NextResponse.json({ error: 'Database error' }, { status: 500 })
+      return NextResponse.json({ error: 'Database error', detail: partErr.message }, { status: 500 })
     }
 
     const rows = (participants ?? []).map((p: Record<string, unknown>) => {

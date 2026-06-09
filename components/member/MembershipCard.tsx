@@ -64,7 +64,10 @@ export function MembershipCard({ membership, member }: Props) {
       <div className="mb-4">
         <div className="flex items-center justify-between">
           <span className="text-xl font-bold text-gray-900">{tier.name}</span>
-          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium">
+          <span
+            className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium"
+            title="Your membership is current and active."
+          >
             Active
           </span>
         </div>

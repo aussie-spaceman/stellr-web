@@ -191,7 +191,10 @@ export function EventHistory({ participations: initialParticipations, editable =
                   </span>
                 )}
                 {p.award && (
-                  <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full font-medium">
+                  <span
+                    className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full font-medium"
+                    title={`Award received at this event: ${p.award}`}
+                  >
                     {p.award}
                   </span>
                 )}

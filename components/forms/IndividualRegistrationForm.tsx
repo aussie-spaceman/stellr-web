@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
 import FieldError from '@/components/forms/FieldError'
+import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
 
 const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
 const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
@@ -23,7 +24,6 @@ const schema = z.object({
   date_of_birth: z.string().min(1, 'Required'),
   grade: z.string().min(1, 'Required'),
   gender: z.string().min(1, 'Required'),
-  school_name: z.string().min(1, 'Required'),
   t_shirt_size: z.string().min(1, 'Required'),
   // Step 2 — Emergency contact + health
   emergency_contact_first_name: z.string().min(1, 'Required'),
@@ -54,6 +54,8 @@ export default function IndividualRegistrationForm({
   const [step, setStep] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [schoolSelection, setSchoolSelection] = useState<SchoolSelection | null>(null)
+  const [schoolError, setSchoolError] = useState<string | null>(null)
   const router = useRouter()
 
   const {
@@ -83,12 +85,37 @@ export default function IndividualRegistrationForm({
     setValue(field, updated, { shouldValidate: true })
   }
 
+  function resolveSchool() {
+    if (!schoolSelection) return { school_name: '', school_address_street: null, school_address_city: null, school_address_state: null, school_address_zip: null }
+    if (schoolSelection.type === 'existing') {
+      return {
+        school_name: schoolSelection.name,
+        school_address_street: null,
+        school_address_city: null,
+        school_address_state: null,
+        school_address_zip: null,
+      }
+    }
+    return {
+      school_name: schoolSelection.data.name,
+      school_address_street: schoolSelection.data.address_line1 ?? null,
+      school_address_city: schoolSelection.data.city ?? null,
+      school_address_state: schoolSelection.data.state ?? null,
+      school_address_zip: schoolSelection.data.postcode ?? null,
+    }
+  }
+
   async function nextStep() {
     const step1Fields: (keyof FormData)[] = [
       'first_name', 'last_name', 'email', 'phone', 'date_of_birth',
-      'grade', 'gender', 'school_name', 't_shirt_size',
+      'grade', 'gender', 't_shirt_size',
     ]
     const valid = await trigger(step === 1 ? step1Fields : undefined)
+    if (!schoolSelection) {
+      setSchoolError('Please select your school')
+      return
+    }
+    setSchoolError(null)
     if (valid) setStep((s) => s + 1)
   }
 
@@ -108,6 +135,7 @@ export default function IndividualRegistrationForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...data,
+          ...resolveSchool(),
           event_slug: eventSlug,
           event_title: eventTitle,
           age_bracket,
@@ -210,9 +238,11 @@ export default function IndividualRegistrationForm({
             </div>
 
             <div>
-              <label className="label-text">School Name *</label>
-              <input {...register('school_name')} className="input-field" placeholder="Lincoln High School" />
-              <FieldError message={errors.school_name?.message} />
+              <label className="label-text">School *</label>
+              <SchoolSearchInput
+                onChange={(sel) => { setSchoolSelection(sel); setSchoolError(null) }}
+              />
+              {schoolError && <FieldError message={schoolError} />}
             </div>
           </div>
 

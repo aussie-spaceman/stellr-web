@@ -46,10 +46,14 @@ export async function POST(req: NextRequest) {
       member_pays_individually = false,
       additional_adults,
       students,
+      school_dpa_agreed,
     } = body
 
     if (!event_slug || !teacher?.email || !teacher?.first_name || !teacher?.last_name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+    if (!school_dpa_agreed) {
+      return NextResponse.json({ error: 'You must accept the School Data Processing Agreement to continue' }, { status: 400 })
     }
     if (student_count < 2) {
       return NextResponse.json({ error: 'A minimum of 2 students is required' }, { status: 400 })
@@ -120,6 +124,7 @@ export async function POST(req: NextRequest) {
       member_pays_individually,
       details_method,
       withdrawn_at: null,
+      school_dpa_agreed_at: new Date().toISOString(),
     }).select('id').single()
 
     if (regError || !registration) {

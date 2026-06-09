@@ -26,6 +26,7 @@ export interface RegistrationRow {
   member_pays_individually: boolean
   details_method: 'add_now' | 'spreadsheet' | 'email_link'
   spreadsheet_id: string | null
+  school_dpa_agreed_at: string | null
 }
 
 export type RegistrationInsert = Omit<RegistrationRow, 'id' | 'created_at' | 'updated_at'>

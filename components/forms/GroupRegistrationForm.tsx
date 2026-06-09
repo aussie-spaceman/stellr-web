@@ -341,6 +341,8 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
   const [expandedStudent, setExpandedStudent] = useState<number | null>(0)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dpaAgreed, setDpaAgreed] = useState(false)
+  const [dpaError, setDpaError] = useState(false)
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -496,6 +498,12 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
       return
     }
 
+    if (!dpaAgreed) {
+      setDpaError(true)
+      setSubmitting(false)
+      return
+    }
+
     try {
       let registrantPayload: Record<string, unknown>
       const activeSchool = registrantRole === 'teacher' ? teacherSchool : smSchool
@@ -560,6 +568,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
           students: detailsMethod === 'add_now'
             ? students.map(s => ({ ...s, age_bracket: deriveAgeBracket(s.date_of_birth, s.grade), event_role: 'School Student' }))
             : [],
+          school_dpa_agreed: dpaAgreed,
         }),
       })
 
@@ -862,6 +871,34 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
             <p className="text-gray-500 text-xs">Payment links are sent once each member is confirmed in the system — either now (if adding details today) or when they complete their self-registration.</p>
           </div>
         )}
+      </div>
+
+      {/* FERPA School Data Processing Agreement */}
+      <div className={`bg-white rounded-xl border p-6 space-y-3 ${dpaError ? 'border-red-300' : 'border-gray-200'}`}>
+        <h3 className="font-semibold text-brand-blue-dark">School Data Processing Agreement</h3>
+        <p className="text-sm text-gray-600">
+          By registering a group of students, your school is sharing education records (including student names,
+          dates of birth, grades, and school details) with Stellr Education. Under FERPA, this requires your
+          school to act as a &ldquo;school official&rdquo; and agree to Stellr&apos;s data processing terms.
+        </p>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={dpaAgreed}
+            onChange={e => { setDpaAgreed(e.target.checked); if (e.target.checked) setDpaError(false) }}
+            className="mt-0.5 rounded border-gray-300 text-brand-blue flex-shrink-0"
+          />
+          <span className="text-sm text-gray-700">
+            I confirm that I am authorised to share student data on behalf of my school, and I agree to
+            Stellr Education&apos;s{' '}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-brand-blue underline">
+              Privacy Policy
+            </a>{' '}
+            and school data processing terms, including the use of DocuSign to collect parental consent
+            for minor participants.
+          </span>
+        </label>
+        {dpaError && <p className="text-xs text-red-500">You must accept the School Data Processing Agreement to submit this registration.</p>}
       </div>
 
       {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">{error}</div>}

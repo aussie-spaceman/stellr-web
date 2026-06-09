@@ -460,6 +460,28 @@ function TeacherTeamsView() {
                   <p className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2">{consentMsg}</p>
                 )}
 
+                {/* Consent summary */}
+                {(() => {
+                  const minors = fullTeam.registration.participants.filter(p => participantIsMinor(p.date_of_birth))
+                  if (minors.length === 0) return null
+                  const envelopes = fullTeam.registration.docusignEnvelopes ?? {}
+                  const signed   = minors.filter(p => envelopes[p.id]?.status === 'completed').length
+                  const pending  = minors.filter(p => envelopes[p.id] && envelopes[p.id].status !== 'completed' && envelopes[p.id].status !== 'voided' && envelopes[p.id].status !== 'declined').length
+                  const problem  = minors.filter(p => envelopes[p.id]?.status === 'declined' || envelopes[p.id]?.status === 'voided').length
+                  const missing  = minors.filter(p => !envelopes[p.id]).length
+                  const allDone  = signed === minors.length
+                  return (
+                    <div className={`rounded-lg px-4 py-3 text-sm flex flex-wrap gap-x-4 gap-y-1 ${allDone ? 'bg-green-50 border border-green-100' : 'bg-amber-50 border border-amber-100'}`}>
+                      <span className={`font-medium ${allDone ? 'text-green-700' : 'text-amber-800'}`}>
+                        Parental consent: {signed}/{minors.length} signed
+                      </span>
+                      {pending  > 0 && <span className="text-amber-700 text-xs self-center">{pending} awaiting</span>}
+                      {problem  > 0 && <span className="text-red-600 text-xs self-center">{problem} declined/voided</span>}
+                      {missing  > 0 && <span className="text-gray-500 text-xs self-center">{missing} not yet sent</span>}
+                    </div>
+                  )
+                })()}
+
                 {/* Participants table */}
                 {fullTeam.registration.participants.length === 0 ? (
                   <p className="text-sm text-gray-500">No participants added yet.</p>
@@ -505,21 +527,31 @@ function TeacherTeamsView() {
                                 {!isMinor ? (
                                   <span className="text-xs text-gray-400">N/A</span>
                                 ) : envelope ? (
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <ConsentBadge status={envelope.status} />
-                                    {canResend && (
-                                      <button
-                                        onClick={() => handleConsentResend(team.id, p.id)}
-                                        disabled={resendingConsent === p.id}
-                                        className="text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-50"
-                                        title={`Re-send consent to ${envelope.signer_name}`}
-                                      >
-                                        {resendingConsent === p.id ? 'Sending…' : 'Remind'}
-                                      </button>
-                                    )}
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <ConsentBadge status={envelope.status} />
+                                      {canResend && (
+                                        <button
+                                          onClick={() => handleConsentResend(team.id, p.id)}
+                                          disabled={resendingConsent === p.id}
+                                          className="text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-50"
+                                        >
+                                          {resendingConsent === p.id ? 'Sending…' : 'Remind'}
+                                        </button>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-gray-400 leading-tight">
+                                      {envelope.signer_name}
+                                      {envelope.signer_email && <> &middot; {envelope.signer_email}</>}
+                                    </p>
+                                    <p className="text-xs text-gray-400">
+                                      Sent {new Date(envelope.sent_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                      {envelope.completed_at && <> &middot; Signed {new Date(envelope.completed_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</>}
+                                      {envelope.reminder_sent_at && !envelope.completed_at && <> &middot; Reminded {new Date(envelope.reminder_sent_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</>}
+                                    </p>
                                   </div>
                                 ) : (
-                                  <span className="text-xs text-gray-400" title="No consent form on file for this participant.">—</span>
+                                  <span className="text-xs text-gray-400">—</span>
                                 )}
                               </td>
                               {fullTeam.registration.member_pays_individually && (

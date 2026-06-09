@@ -25,7 +25,7 @@ export async function POST(
     .maybeSingle()
 
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-  if (member.event_role !== 'teacher') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (member.event_role !== 'teacher' && member.event_role !== 'school_student_manager') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { data: registration } = await db
     .from('registrations')

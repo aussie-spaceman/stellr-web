@@ -37,7 +37,6 @@ export default async function AccountPage({
         event_participations(*)
       `)
       .eq('clerk_user_id', userId)
-      .eq('is_active', true)
       .maybeSingle(),
     db.from('ethnicity_options').select('id, name').order('name'),
     db.from('allergy_options').select('id, name').order('name'),

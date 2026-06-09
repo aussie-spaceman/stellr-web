@@ -11,6 +11,58 @@ function getStripe() {
 
 // ── Event registration helpers ────────────────────────────────────────────────
 
+async function markIndividualPayment(registrationId: string, participantEmail: string) {
+  const db = supabaseServer()
+
+  // Mark this participant as paid
+  await db
+    .from('participants')
+    .update({ individual_payment_status: 'paid' })
+    .eq('registration_id', registrationId)
+    .eq('email', participantEmail)
+
+  // Send payment confirmation to the participant
+  const { data: participant } = await db
+    .from('participants')
+    .select('first_name, last_name, email, membership_id')
+    .eq('registration_id', registrationId)
+    .eq('email', participantEmail)
+    .maybeSingle()
+
+  const { data: reg } = await db
+    .from('registrations')
+    .select('event_title')
+    .eq('id', registrationId)
+    .maybeSingle()
+
+  if (participant && reg) {
+    const p = participant as { first_name: string; last_name: string; email: string; membership_id: string }
+    const r = reg as { event_title: string }
+    const emailContent = individualConfirmationEmail({
+      firstName: p.first_name,
+      lastName: p.last_name,
+      membershipId: p.membership_id,
+      eventTitle: r.event_title,
+      registrationId,
+    })
+    await sendEmail({ to: p.email, ...emailContent })
+  }
+
+  // If all participants in this registration have now paid, confirm the registration
+  const { data: stillPending } = await db
+    .from('participants')
+    .select('id')
+    .eq('registration_id', registrationId)
+    .eq('individual_payment_status', 'pending')
+
+  if (!stillPending || stillPending.length === 0) {
+    await db
+      .from('registrations')
+      .update({ status: 'confirmed' })
+      .eq('id', registrationId)
+  }
+}
+
 async function confirmRegistration(registrationId: string, isGroup: boolean) {
   const db = supabaseServer()
 
@@ -131,8 +183,14 @@ export async function POST(req: NextRequest) {
         if (memberId && tierId && subscriptionId) {
           await activateMembership(memberId, tierId, billingInterval ?? 'annual', subscriptionId)
         }
+      } else if (session.metadata?.isIndividualGroupPayment === 'true') {
+        // Individual member payment within a group registration
+        const { registrationId, participantEmail } = session.metadata
+        if (registrationId && participantEmail) {
+          await markIndividualPayment(registrationId, participantEmail)
+        }
       } else {
-        // Event registration purchase
+        // Event registration purchase (whole group or individual)
         const registrationId = session.metadata?.registrationId ?? session.client_reference_id
         const isGroup = session.metadata?.isGroup === 'true'
         if (registrationId) {

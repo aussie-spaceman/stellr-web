@@ -54,7 +54,7 @@ export default async function AccountPage({
   const isGroupManager = member.event_role === 'teacher' || member.event_role === 'school_student_manager'
   const isStudent = member.event_role === 'school_student'
   const showTeams = isGroupManager || isStudent
-  const showBilling = isGroupManager
+  const showBilling = true // all members can see their participation payment history
 
   // Resolve active tab
   let activeTab: Tab = 'profile'

@@ -68,7 +68,125 @@ interface StudentTeam {
   first_name: string
   last_name: string
   join_completed_at: string | null
-  registrations: TeamRegistration
+  individual_payment_status: string | null
+  registrations: {
+    id: string
+    event_slug: string
+    event_title: string
+    school_name: string | null
+    status: string
+    created_at: string
+    teacher_first_name: string | null
+    teacher_last_name: string | null
+    teacher_email: string | null
+    member_pays_individually?: boolean
+    invoice_requested?: boolean
+  }
+}
+
+// ── Joined teams view (shared between teacher + student paths) ────────────────
+
+function JoinedTeamsView({
+  participations,
+  onLeft,
+}: {
+  participations: StudentTeam[]
+  onLeft: (participantId: string) => void
+}) {
+  const [leaving, setLeaving] = useState<string | null>(null)
+  const [payingId, setPayingId] = useState<string | null>(null)
+  const [payError, setPayError] = useState<string | null>(null)
+
+  async function handleLeave(participantId: string, registrationId: string) {
+    if (!confirm('Are you sure you want to leave this team? Your organiser will be notified.')) return
+    setLeaving(participantId)
+    await fetch(`/api/members/teams/${registrationId}/participants/${participantId}`, { method: 'DELETE' })
+    onLeft(participantId)
+    setLeaving(null)
+  }
+
+  async function handlePay(registrationId: string, participantId: string) {
+    setPayingId(participantId)
+    setPayError(null)
+    try {
+      const res = await fetch(`/api/members/teams/${registrationId}/payment-link`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || !data.url) throw new Error(data.error ?? 'Could not generate payment link')
+      window.location.href = data.url
+    } catch (e: unknown) {
+      setPayError(e instanceof Error ? e.message : 'Something went wrong')
+      setPayingId(null)
+    }
+  }
+
+  function paymentInfo(entry: StudentTeam, reg: StudentTeam['registrations']): { label: string; style: string } {
+    if (reg.member_pays_individually) {
+      if (entry.individual_payment_status === 'paid') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
+      if (entry.individual_payment_status === 'pending') return { label: 'Payment Required', style: 'bg-amber-100 text-amber-700' }
+    }
+    if (reg.invoice_requested) return { label: 'Invoice sent to organiser', style: 'bg-blue-100 text-blue-700' }
+    return { label: 'Paid by group', style: 'bg-green-100 text-green-700' }
+  }
+
+  return (
+    <div className="space-y-4">
+      {payError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{payError}</div>
+      )}
+      {participations.map(entry => {
+        const reg = Array.isArray(entry.registrations) ? entry.registrations[0] : entry.registrations
+        if (!reg) return null
+        const { label, style } = paymentInfo(entry, reg)
+        const paymentPending = reg.member_pays_individually && entry.individual_payment_status === 'pending'
+
+        return (
+          <div key={entry.id} className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-medium text-gray-900">{reg.event_title}</p>
+                <p className="text-sm text-gray-500 mt-0.5">{reg.school_name ?? '—'}</p>
+                {reg.teacher_first_name && (
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    Organiser: {reg.teacher_first_name} {reg.teacher_last_name ?? ''}
+                  </p>
+                )}
+              </div>
+              <div className="text-right shrink-0">
+                <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
+                  reg.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                  reg.status === 'withdrawn' ? 'bg-red-100 text-red-600' :
+                  'bg-yellow-100 text-yellow-700'
+                }`}>{reg.status}</span>
+                <div className="mt-1.5">
+                  <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${style}`}>
+                    {label}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-4 flex-wrap">
+              {paymentPending && (
+                <button
+                  onClick={() => handlePay(reg.id, entry.id)}
+                  disabled={payingId === entry.id}
+                  className="text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg px-4 py-1.5 disabled:opacity-50"
+                >
+                  {payingId === entry.id ? 'Redirecting…' : 'Pay Now →'}
+                </button>
+              )}
+              <button
+                onClick={() => handleLeave(entry.id, reg.id)}
+                disabled={leaving === entry.id}
+                className="text-sm text-red-500 hover:text-red-700 font-medium disabled:opacity-50 ml-auto"
+              >
+                {leaving === entry.id ? 'Leaving…' : 'Leave team'}
+              </button>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 // ── Teacher view ──────────────────────────────────────────────────────────────
@@ -333,36 +451,10 @@ function TeacherTeamsView() {
       {participations.length > 0 && (
         <div className="mt-8">
           <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Teams I&apos;ve Joined</h3>
-          <div className="space-y-4">
-            {participations.map(entry => {
-              const reg = entry.registrations
-              return (
-                <div key={entry.id} className="bg-white rounded-xl border border-gray-200 p-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900">{reg.event_title}</p>
-                      <p className="text-sm text-gray-500 mt-0.5">{reg.school_name ?? '—'}</p>
-                      {reg.teacher_first_name && (
-                        <p className="text-sm text-gray-500 mt-0.5">
-                          Organiser: {reg.teacher_first_name} {reg.teacher_last_name ?? ''}
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
-                        reg.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                        reg.status === 'withdrawn' ? 'bg-red-100 text-red-600' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>{reg.status}</span>
-                      {entry.join_completed_at && (
-                        <p className="text-xs text-green-600 font-medium mt-1">Joined</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          <JoinedTeamsView
+            participations={participations}
+            onLeft={(pid) => setParticipations(prev => prev.filter(p => p.id !== pid))}
+          />
         </div>
       )}
 
@@ -405,11 +497,10 @@ function TeacherTeamsView() {
 
 // ── Student view ──────────────────────────────────────────────────────────────
 
-function StudentTeamsView({ memberId }: { memberId: string }) {
+function StudentTeamsView({ memberId: _memberId }: { memberId: string }) {
   const [teams, setTeams] = useState<StudentTeam[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [leaving, setLeaving] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/members/teams')
@@ -422,65 +513,19 @@ function StudentTeamsView({ memberId }: { memberId: string }) {
       .finally(() => setLoading(false))
   }, [])
 
-  async function handleLeave(participantId: string, registrationId: string) {
-    if (!confirm('Are you sure you want to leave this team? Your teacher will be notified.')) return
-    setLeaving(participantId)
-    await fetch(`/api/members/teams/${registrationId}/participants/${participantId}`, { method: 'DELETE' })
-    setTeams(prev => prev.filter(t => t.id !== participantId))
-    setLeaving(null)
-  }
-
   if (loading) return <p className="text-sm text-gray-400 py-4">Loading your teams…</p>
   if (error) return <p className="text-sm text-red-600 py-4">{error}</p>
 
-  return (
-    <div className="space-y-4">
-      {teams.length === 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-          <p className="text-gray-500 text-sm">You haven&apos;t been added to any teams yet.</p>
-          <p className="text-gray-400 text-xs mt-1">When a teacher registers a group event and adds you, it will appear here.</p>
-        </div>
-      )}
+  if (teams.length === 0) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+        <p className="text-gray-500 text-sm">You haven&apos;t been added to any teams yet.</p>
+        <p className="text-gray-400 text-xs mt-1">When a teacher registers a group event and adds you, it will appear here.</p>
+      </div>
+    )
+  }
 
-      {teams.map(entry => {
-        const reg = entry.registrations
-        return (
-          <div key={entry.id} className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="font-medium text-gray-900">{reg.event_title}</p>
-                <p className="text-sm text-gray-500 mt-0.5">{reg.school_name ?? '—'}</p>
-                {reg.teacher_first_name && (
-                  <p className="text-sm text-gray-500 mt-0.5">
-                    Teacher: {reg.teacher_first_name} {reg.teacher_last_name ?? ''}
-                  </p>
-                )}
-              </div>
-              <div className="text-right">
-                <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
-                  reg.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                  reg.status === 'withdrawn' ? 'bg-red-100 text-red-600' :
-                  'bg-yellow-100 text-yellow-700'
-                }`}>{reg.status}</span>
-                {entry.join_completed_at && (
-                  <p className="text-xs text-green-600 font-medium mt-1">Joined</p>
-                )}
-              </div>
-            </div>
-            <div className="mt-4 border-t border-gray-100 pt-4">
-              <button
-                onClick={() => handleLeave(entry.id, reg.id)}
-                disabled={leaving === entry.id}
-                className="text-sm text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
-              >
-                {leaving === entry.id ? 'Leaving…' : 'Leave this team'}
-              </button>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
+  return <JoinedTeamsView participations={teams} onLeft={(pid) => setTeams(prev => prev.filter(t => t.id !== pid))} />
 }
 
 // ── Exports ───────────────────────────────────────────────────────────────────

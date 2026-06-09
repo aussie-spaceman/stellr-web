@@ -9,7 +9,7 @@ function getStripe() {
   return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
 }
 
-// GET /api/members/billing — returns all Stripe invoices for this member
+// GET /api/members/billing — returns Stripe invoices + participation payment history
 export async function GET() {
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
@@ -18,35 +18,55 @@ export async function GET() {
 
   const { data: member } = await db
     .from('members')
-    .select('id, stripe_customer_id')
+    .select('id, stripe_customer_id, event_role')
     .eq('clerk_user_id', userId)
     .eq('is_active', true)
     .maybeSingle()
 
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-  if (!member.stripe_customer_id) return NextResponse.json({ invoices: [] })
 
-  const stripe = getStripe()
+  // ── Stripe invoices (only when they have a Stripe customer record) ────────────
+  let invoices: object[] = []
+  if (member.stripe_customer_id) {
+    try {
+      const stripe = getStripe()
+      const invoiceList = await stripe.invoices.list({
+        customer: member.stripe_customer_id,
+        limit: 100,
+        expand: ['data.charge'],
+      })
+      invoices = invoiceList.data.map(inv => ({
+        id: inv.id,
+        number: inv.number,
+        created: inv.created,
+        due_date: inv.due_date,
+        status: inv.status,
+        amount_due: inv.amount_due,
+        amount_paid: inv.amount_paid,
+        currency: inv.currency,
+        description: inv.description ?? inv.lines.data[0]?.description ?? null,
+        pdf_url: inv.invoice_pdf,
+        hosted_url: inv.hosted_invoice_url,
+      }))
+    } catch (err) {
+      console.error('[billing] Stripe error:', err)
+    }
+  }
 
-  const invoiceList = await stripe.invoices.list({
-    customer: member.stripe_customer_id,
-    limit: 100,
-    expand: ['data.charge'],
-  })
+  // ── Participation payment history (all roles) ─────────────────────────────────
+  const { data: participations } = await db
+    .from('participants')
+    .select(`
+      id, event_role, join_completed_at, individual_payment_status,
+      registrations(
+        id, event_slug, event_title, school_name, status, created_at,
+        member_pays_individually, invoice_requested,
+        teacher_first_name, teacher_last_name
+      )
+    `)
+    .eq('member_id', member.id)
+    .not('join_completed_at', 'is', null)
+    .order('join_completed_at', { ascending: false })
 
-  const invoices = invoiceList.data.map(inv => ({
-    id: inv.id,
-    number: inv.number,
-    created: inv.created,
-    due_date: inv.due_date,
-    status: inv.status,
-    amount_due: inv.amount_due,
-    amount_paid: inv.amount_paid,
-    currency: inv.currency,
-    description: inv.description ?? inv.lines.data[0]?.description ?? null,
-    pdf_url: inv.invoice_pdf,
-    hosted_url: inv.hosted_invoice_url,
-  }))
-
-  return NextResponse.json({ invoices })
+  return NextResponse.json({ invoices, participations: participations ?? [] })
 }

@@ -31,6 +31,10 @@ const DS_STATUS_MAP: Record<string, string> = {
   'envelope-voided':    'voided',
 }
 
+export async function GET() {
+  return NextResponse.json({ ok: true })
+}
+
 export async function POST(req: Request) {
   const rawBody = await req.text()
 

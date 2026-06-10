@@ -53,6 +53,7 @@ export interface ParticipantRow {
   emergency_contact_last_name: string | null
   emergency_contact_email: string | null
   emergency_contact_phone: string | null
+  emergency_contact_relationship: string | null
   membership_id: string
   company_name: string | null
   award: string | null

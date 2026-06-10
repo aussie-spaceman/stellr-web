@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import FieldError from '@/components/forms/FieldError'
 import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
-import { T_SHIRT_SIZES, GENDERS, GRADES, HS_GRADES, ETHNICITIES, DIETARY, deriveAgeBracket } from '@/lib/registration-constants'
+import { T_SHIRT_SIZES, GENDERS, GRADES, HS_GRADES, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, deriveAgeBracket } from '@/lib/registration-constants'
 import { resolveSchoolPayload } from '@/lib/school-utils'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -29,6 +29,7 @@ interface StudentData {
   health_conditions: string
   emergency_contact_first_name: string; emergency_contact_last_name: string
   emergency_contact_email: string; emergency_contact_phone: string
+  emergency_contact_relationship: string
   existing_membership_id: string
 }
 
@@ -37,7 +38,7 @@ function emptyAdult(): AdultData {
 }
 
 function emptyStudent(): StudentData {
-  return { first_name: '', last_name: '', email: '', phone: '', date_of_birth: '', grade: '', gender: '', t_shirt_size: '', health_conditions: '', emergency_contact_first_name: '', emergency_contact_last_name: '', emergency_contact_email: '', emergency_contact_phone: '', existing_membership_id: '' }
+  return { first_name: '', last_name: '', email: '', phone: '', date_of_birth: '', grade: '', gender: '', t_shirt_size: '', health_conditions: '', emergency_contact_first_name: '', emergency_contact_last_name: '', emergency_contact_email: '', emergency_contact_phone: '', emergency_contact_relationship: '', existing_membership_id: '' }
 }
 
 // ── Schemas (no school fields — school is handled via SchoolSearchInput state) ─
@@ -71,6 +72,7 @@ const studentManagerSchema = z.object({
   emergency_contact_last_name: z.string().min(1, 'Required'),
   emergency_contact_email: z.string().email('Valid email required'),
   emergency_contact_phone: z.string().min(7, 'Valid phone required'),
+  emergency_contact_relationship: z.string().min(1, 'Required'),
   teacher_poc_first_name: z.string().min(1, 'Required'),
   teacher_poc_last_name: z.string().min(1, 'Required'),
   teacher_poc_email: z.string().email('Valid email required'),
@@ -281,6 +283,12 @@ function StudentAccordion({ index, data, onChange, expanded, onToggle }: {
                 <div><label className="label-text">Email *</label><input type="email" value={data.emergency_contact_email} onChange={e => onChange('emergency_contact_email', e.target.value)} className="input-field" /></div>
                 <div><label className="label-text">Phone *</label><input type="tel" value={data.emergency_contact_phone} onChange={e => onChange('emergency_contact_phone', e.target.value)} className="input-field" /></div>
               </div>
+              <div>
+                <label className="label-text">Relationship To Participant *</label>
+                <select value={data.emergency_contact_relationship} onChange={e => onChange('emergency_contact_relationship', e.target.value)} className="input-field">
+                  <option value="">Select…</option>{EMERGENCY_RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
             </div>
           )}
           <div className="border-t border-gray-100 pt-4">
@@ -445,7 +453,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
       const s = students[i]
       if (!s.first_name || !s.last_name || !s.email || !s.phone || !s.date_of_birth || !s.grade || !s.gender || !s.t_shirt_size)
         return `Student ${i + 1}: please complete all required fields`
-      if (HS_GRADES.includes(s.grade) && (!s.emergency_contact_first_name || !s.emergency_contact_last_name || !s.emergency_contact_email || !s.emergency_contact_phone))
+      if (HS_GRADES.includes(s.grade) && (!s.emergency_contact_first_name || !s.emergency_contact_last_name || !s.emergency_contact_email || !s.emergency_contact_phone || !s.emergency_contact_relationship))
         return `Student ${i + 1}: emergency contact is required for High School students`
     }
     return null
@@ -704,6 +712,13 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div><label className="label-text">Email *</label><input {...sf.register('emergency_contact_email')} type="email" className="input-field" /><FieldError message={sf.formState.errors.emergency_contact_email?.message} /></div>
                 <div><label className="label-text">Phone *</label><input {...sf.register('emergency_contact_phone')} type="tel" className="input-field" /><FieldError message={sf.formState.errors.emergency_contact_phone?.message} /></div>
+              </div>
+              <div>
+                <label className="label-text">Relationship To Participant *</label>
+                <select {...sf.register('emergency_contact_relationship')} className="input-field">
+                  <option value="">Select…</option>{EMERGENCY_RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+                <FieldError message={sf.formState.errors.emergency_contact_relationship?.message} />
               </div>
             </div>
 

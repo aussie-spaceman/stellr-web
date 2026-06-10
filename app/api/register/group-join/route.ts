@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   // Load the member record
   const { data: member } = await db
     .from('members')
-    .select('id, first_name, last_name, email, phone, date_of_birth, gender, grade, tshirt_size, age_bracket, event_role, ec_first_name, ec_last_name, ec_email, ec_phone')
+    .select('id, first_name, last_name, email, phone, date_of_birth, gender, grade, tshirt_size, age_bracket, event_role, ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship')
     .eq('clerk_user_id', userId)
     .eq('is_active', true)
     .maybeSingle()
@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
     emergency_contact_last_name: member.ec_last_name ?? null,
     emergency_contact_email: member.ec_email ?? null,
     emergency_contact_phone: member.ec_phone ?? null,
+    emergency_contact_relationship: member.ec_relationship ?? null,
     individual_payment_status: paymentStatus,
     join_completed_at: new Date().toISOString(),
   }).select('id').single()
@@ -115,6 +116,7 @@ export async function POST(req: NextRequest) {
         guardianName,
         guardianEmail:   member.ec_email,
         guardianPhone:   member.ec_phone ?? undefined,
+        relationship:    member.ec_relationship ?? undefined,
         eventTitle,
         schoolName:      (reg.school_name as string) || undefined,
         schoolState:     (reg.school_address_state as string) || undefined,

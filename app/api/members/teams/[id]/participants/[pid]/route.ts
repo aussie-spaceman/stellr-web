@@ -42,6 +42,7 @@ export async function PATCH(
     'event_role', 'dietary_requirements', 'health_conditions',
     'emergency_contact_first_name', 'emergency_contact_last_name',
     'emergency_contact_email', 'emergency_contact_phone',
+    'emergency_contact_relationship',
   ]
   const updates: Record<string, unknown> = {}
   for (const key of allowed) {

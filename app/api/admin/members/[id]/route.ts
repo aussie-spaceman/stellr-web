@@ -21,7 +21,7 @@ export async function PATCH(
     'first_name', 'last_name', 'nickname', 'phone', 'email', 'discord_handle',
     'date_of_birth', 'gender', 'age_bracket', 'event_role',
     'grade', 'grade_auto_promote', 'tshirt_size',
-    'ec_first_name', 'ec_last_name', 'ec_email', 'ec_phone',
+    'ec_first_name', 'ec_last_name', 'ec_email', 'ec_phone', 'ec_relationship',
     'health_conditions', 'is_active',
   ]
   const updates: Record<string, unknown> = {}

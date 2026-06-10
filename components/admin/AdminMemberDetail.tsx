@@ -29,6 +29,7 @@ interface Member {
   ec_last_name: string | null
   ec_email: string | null
   ec_phone: string | null
+  ec_relationship: string | null
   member_memberships: Array<{
     id: string; renewal_status: string; started_at: string; expires_at: string | null
     is_complimentary: boolean; membership_tiers: { name: string }
@@ -112,6 +113,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
     ec_last_name: member.ec_last_name ?? '',
     ec_email: member.ec_email ?? '',
     ec_phone: member.ec_phone ?? '',
+    ec_relationship: member.ec_relationship ?? '',
   })
 
   const [selectedEthnicities, setSelectedEthnicities] = useState<string[]>(
@@ -406,6 +408,19 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                   />
                 </div>
               ))}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Relationship to participant</label>
+                <select
+                  value={form.ec_relationship}
+                  onChange={(e) => set('ec_relationship', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Select…</option>
+                  {['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher'].map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 

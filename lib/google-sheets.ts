@@ -41,6 +41,7 @@ export interface SheetParticipant {
   ec_last_name: string
   ec_email: string
   ec_phone: string
+  ec_relationship: string
 }
 
 export async function readSheetParticipants(spreadsheetId: string): Promise<SheetParticipant[]> {
@@ -50,7 +51,7 @@ export async function readSheetParticipants(spreadsheetId: string): Promise<Shee
   const sheets = google.sheets({ version: 'v4', auth })
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: 'Participants!A2:P',
+    range: 'Participants!A2:Q',
     valueRenderOption: 'UNFORMATTED_VALUE',
   })
 
@@ -74,6 +75,7 @@ export async function readSheetParticipants(spreadsheetId: string): Promise<Shee
       ec_last_name: String(row[13] ?? ''),
       ec_email: String(row[14] ?? ''),
       ec_phone: String(row[15] ?? ''),
+      ec_relationship: String(row[16] ?? ''),
     }))
 }
 
@@ -127,19 +129,22 @@ const HEADERS = [
   'Dietary Requirements', 'Health Conditions',
   'Emergency Contact First Name', 'Emergency Contact Last Name',
   'Emergency Contact Email', 'Emergency Contact Phone',
+  'Emergency Contact Relationship',
 ]
 
-const COL_WIDTHS = [130, 80, 120, 120, 200, 130, 120, 90, 110, 140, 200, 180, 180, 180, 200, 180]
+const COL_WIDTHS = [130, 80, 120, 120, 200, 130, 120, 90, 110, 140, 200, 180, 180, 180, 200, 180, 200]
 
 // Column indices (0-based)
 const COL_GRADE = 9
 const COL_EC_START = 12
-const COL_EC_END = 16 // exclusive
+const COL_EC_END = 17 // exclusive — includes Relationship (col 16)
+const COL_EC_RELATIONSHIP = 16
 
 const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
 const GENDERS = ['Male', 'Female', 'Other']
 const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
 const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Vegetarian', 'Vegan', 'Other']
+const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
 
 const GREY = { red: 0.84, green: 0.84, blue: 0.84 }
 const GREY_TEXT = { red: 0.55, green: 0.55, blue: 0.55 }
@@ -197,11 +202,11 @@ export async function createGroupRegistrationSheet({
   if (totalDataRows > 0) {
     const adultRows = Array.from({ length: additionalAdultCount }, () => [
       '<new adult registrant>', 'Adult', '', '', '', '', '', '', '', 'N/A — Adult',
-      '', '', 'N/A — Adult', 'N/A — Adult', 'N/A — Adult', 'N/A — Adult',
+      '', '', 'N/A — Adult', 'N/A — Adult', 'N/A — Adult', 'N/A — Adult', 'N/A — Adult',
     ])
     const studentRows = Array.from({ length: studentCount }, () => [
       '<new student registrant>', 'Student', '', '', '', '', '', '', '', '',
-      '', '', '', '', '', '',
+      '', '', '', '', '', '', '',
     ])
     await sheets.spreadsheets.values.update({
       spreadsheetId,
@@ -307,6 +312,13 @@ export async function createGroupRegistrationSheet({
       1 + additionalAdultCount, 1 + totalDataRows,
       COL_GRADE, COL_GRADE + 1,
       GRADES,
+    ))
+    // Dropdown: Emergency Contact Relationship — student rows only
+    requests.push(dataValidation(
+      sheetId,
+      1 + additionalAdultCount, 1 + totalDataRows,
+      COL_EC_RELATIONSHIP, COL_EC_RELATIONSHIP + 1,
+      EMERGENCY_RELATIONSHIPS,
     ))
   }
 

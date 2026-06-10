@@ -49,6 +49,7 @@ create table if not exists public.participants (
   emergency_contact_last_name     text not null,
   emergency_contact_email         text not null,
   emergency_contact_phone         text not null,
+  emergency_contact_relationship  text,  -- maps to DocuSign tab "MinorRelationship"
   company_name                    text,  -- assigned by admin pre-event
   award                           text,  -- set post-event
   created_at                      timestamptz not null default now()

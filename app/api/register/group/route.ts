@@ -26,6 +26,7 @@ interface ParticipantPayload {
   dietary_requirements?: string[]; health_conditions?: string
   emergency_contact_first_name?: string; emergency_contact_last_name?: string
   emergency_contact_email?: string; emergency_contact_phone?: string
+  emergency_contact_relationship?: string
 }
 
 interface TeacherPoC {
@@ -211,6 +212,7 @@ export async function POST(req: NextRequest) {
       emergency_contact_last_name: p.emergency_contact_last_name || null,
       emergency_contact_email: p.emergency_contact_email || null,
       emergency_contact_phone: p.emergency_contact_phone || null,
+      emergency_contact_relationship: p.emergency_contact_relationship || null,
       individual_payment_status: paymentStatus ?? null,
     })
 
@@ -227,6 +229,7 @@ export async function POST(req: NextRequest) {
       emergency_contact_last_name: teacher.emergency_contact_last_name,
       emergency_contact_email: teacher.emergency_contact_email,
       emergency_contact_phone: teacher.emergency_contact_phone,
+      emergency_contact_relationship: teacher.emergency_contact_relationship,
     })
 
     const participantRows = [registrantRow]

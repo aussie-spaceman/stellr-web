@@ -41,6 +41,7 @@ export async function POST(
     'event_role', 'dietary_requirements', 'health_conditions',
     'emergency_contact_first_name', 'emergency_contact_last_name',
     'emergency_contact_email', 'emergency_contact_phone',
+    'emergency_contact_relationship',
   ]
   const insert: Record<string, unknown> = { registration_id: registrationId }
   for (const key of allowed) {

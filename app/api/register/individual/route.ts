@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
       dietary_requirements, health_conditions,
       emergency_contact_first_name, emergency_contact_last_name,
       emergency_contact_email, emergency_contact_phone,
+      emergency_contact_relationship,
       school_address_state,
     } = body
 
@@ -124,6 +125,7 @@ export async function POST(req: NextRequest) {
       health_conditions: health_conditions || null,
       emergency_contact_first_name, emergency_contact_last_name,
       emergency_contact_email, emergency_contact_phone,
+      emergency_contact_relationship: emergency_contact_relationship || null,
     }).select('id').single()
 
     if (partError || !partRow) {
@@ -143,6 +145,7 @@ export async function POST(req: NextRequest) {
           guardianName,
           guardianEmail:   emergency_contact_email,
           guardianPhone:   emergency_contact_phone || undefined,
+          relationship:    emergency_contact_relationship || undefined,
           eventTitle:      event_title,
           schoolName:      school_name || undefined,
           schoolState:     school_address_state || undefined,

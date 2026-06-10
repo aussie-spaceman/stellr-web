@@ -27,12 +27,14 @@ const HEADERS = [
   'Dietary Requirements', 'Health Conditions',
   'Emergency Contact First Name', 'Emergency Contact Last Name',
   'Emergency Contact Email', 'Emergency Contact Phone',
+  'Emergency Contact Relationship',
 ]
 
 const GENDERS = ['Male', 'Female', 'Other']
 const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
 const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
 const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
+const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
 
 function dropdown(sheetId: number, startRow: number, endRow: number, col: number, values: string[]) {
   return {
@@ -107,7 +109,7 @@ export async function GET(
 
     const { data: participants, error: partErr } = await db
       .from('participants')
-      .select('membership_id, event_role, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, grade, dietary_requirements, health_conditions, emergency_contact_first_name, emergency_contact_last_name, emergency_contact_email, emergency_contact_phone')
+      .select('membership_id, event_role, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, grade, dietary_requirements, health_conditions, emergency_contact_first_name, emergency_contact_last_name, emergency_contact_email, emergency_contact_phone, emergency_contact_relationship')
       .eq('registration_id', id)
       .order('event_role')
 
@@ -126,6 +128,7 @@ export async function GET(
         p.grade ?? '', dietary, p.health_conditions ?? '',
         p.emergency_contact_first_name ?? '', p.emergency_contact_last_name ?? '',
         p.emergency_contact_email ?? '', p.emergency_contact_phone ?? '',
+        p.emergency_contact_relationship ?? '',
       ]
     })
 
@@ -202,7 +205,7 @@ export async function GET(
             },
           },
           // Column widths
-          ...([130, 80, 120, 120, 200, 130, 120, 90, 110, 140, 200, 180, 180, 180, 200, 180].map((w, i) => ({
+          ...([130, 80, 120, 120, 200, 130, 120, 90, 110, 140, 200, 180, 180, 180, 200, 180, 200].map((w, i) => ({
             updateDimensionProperties: {
               range: { sheetId, dimension: 'COLUMNS', startIndex: i, endIndex: i + 1 },
               properties: { pixelSize: w },
@@ -215,16 +218,17 @@ export async function GET(
             dropdown(sheetId, 1, 1 + dataRows, 8, T_SHIRT_SIZES),   // T-Shirt Size
             dropdown(sheetId, 1, 1 + dataRows, 9, GRADES),          // Grade
             dropdown(sheetId, 1, 1 + dataRows, 10, DIETARY_OPTIONS), // Dietary Requirements
+            dropdown(sheetId, 1, 1 + dataRows, 16, EMERGENCY_RELATIONSHIPS), // Emergency Contact Relationship
           ] : []),
           // Grey out cells not applicable to Teachers / Adults
-          // Grade (col 9) and Emergency Contacts (cols 12-15) are student-only
+          // Grade (col 9) and Emergency Contacts (cols 12-16) are student-only
           ...(participants ?? []).flatMap((p: Record<string, unknown>, i: number) => {
             const role = String(p.event_role ?? '').toLowerCase()
             if (role === 'student') return []
             const rowIndex = 1 + i
             return [
               greyCell(sheetId, rowIndex, 9,  10, 'Not required for non-student participants'),  // Grade
-              greyCell(sheetId, rowIndex, 12, 16, 'Not required for non-student participants'),  // EC cols
+              greyCell(sheetId, rowIndex, 12, 17, 'Not required for non-student participants'),  // EC cols
             ]
           }),
         ],

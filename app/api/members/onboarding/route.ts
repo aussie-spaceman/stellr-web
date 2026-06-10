@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     grade, tshirt_size, school_id, new_school_name,
     new_school_address_line1, new_school_address_line2,
     new_school_city, new_school_state, new_school_postcode,
-    ec_first_name, ec_last_name, ec_email, ec_phone,
+    ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship,
   } = body
 
   if (!date_of_birth || !gender || !event_role) {
@@ -83,6 +83,7 @@ export async function POST(req: Request) {
     ec_last_name: ec_last_name || null,
     ec_email: ec_email || null,
     ec_phone: ec_phone || null,
+    ec_relationship: ec_relationship || null,
     is_active: true,
   }
 

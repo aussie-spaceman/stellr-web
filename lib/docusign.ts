@@ -7,7 +7,9 @@ const ENV = {
   integrationKey: process.env.DOCUSIGN_INTEGRATION_KEY   ?? '',
   userId:         process.env.DOCUSIGN_USER_ID           ?? '',
   privateKey:     (process.env.DOCUSIGN_PRIVATE_KEY      ?? '').replace(/\\n/g, '\n'),
-  templateId:     process.env.DOCUSIGN_TEMPLATE_ID       ?? '',
+  templateId:       process.env.DOCUSIGN_TEMPLATE_ID         ?? '', // minor / guardian consent
+  adultTemplateId:  process.env.DOCUSIGN_ADULT_TEMPLATE_ID   ?? '', // adult participation agreement
+  mentorTemplateId: process.env.DOCUSIGN_MENTOR_TEMPLATE_ID  ?? '', // mentor participation agreement
   connectHmacKey: process.env.DOCUSIGN_CONNECT_HMAC_KEY  ?? '',
 }
 
@@ -97,6 +99,7 @@ export interface EnvelopeParams {
   guardianName:    string
   guardianEmail:   string
   guardianPhone?:  string
+  relationship?:   string
   eventTitle:      string
   schoolName?:     string
   schoolState?:    string
@@ -123,6 +126,7 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<string> 
             { tabLabel: 'GuardianName',    value: p.guardianName          },
             { tabLabel: 'GuardianEmail',   value: p.guardianEmail         },
             { tabLabel: 'GuardianPhone',   value: p.guardianPhone  ?? ''  },
+            { tabLabel: 'MinorRelationship', value: p.relationship ?? ''  },
             { tabLabel: 'SchoolName',      value: p.schoolName     ?? ''  },
             { tabLabel: 'SchoolState',     value: p.schoolState    ?? ''  },
           ],
@@ -166,6 +170,89 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<string> 
 
   const res = await dsRequest('/envelopes', { method: 'POST', body: JSON.stringify(body) })
   if (!res.ok) throw new Error(`DocuSign create envelope failed: ${await res.text()}`)
+  const data = await res.json() as { envelopeId: string }
+  return data.envelopeId
+}
+
+// ── Adult & Mentor participation agreements ────────────────────────────────────
+// Self-signed envelopes (the participant is the signer). TeacherPhone / MentorPhone
+// are sourced from the participant's existing `phone` column, mirroring how
+// GuardianPhone is populated from emergency_contact_phone on the minor consent form.
+
+export interface AdultAgreementParams {
+  firstName:    string
+  lastName:     string
+  email:        string
+  phone?:       string
+  eventTitle:   string
+  schoolName?:  string
+  schoolState?: string
+}
+
+export async function createAdultAgreementEnvelope(p: AdultAgreementParams): Promise<string> {
+  if (!ENV.adultTemplateId) throw new Error('DOCUSIGN_ADULT_TEMPLATE_ID not configured')
+  const fullName = `${p.firstName} ${p.lastName}`
+
+  const body = {
+    status:        'sent',
+    emailSubject:  `Participation Agreement — ${p.eventTitle}`,
+    templateId:    ENV.adultTemplateId,
+    templateRoles: [{
+      roleName: 'Adult',
+      name:     fullName,
+      email:    p.email,
+      tabs: {
+        textTabs: [
+          { tabLabel: 'TeacherName',  value: fullName            },
+          { tabLabel: 'TeacherEmail', value: p.email             },
+          { tabLabel: 'TeacherPhone', value: p.phone      ?? ''  },
+          { tabLabel: 'EventTitle',   value: p.eventTitle        },
+          { tabLabel: 'SchoolName',   value: p.schoolName ?? ''  },
+          { tabLabel: 'SchoolState',  value: p.schoolState ?? '' },
+        ],
+      },
+    }],
+  }
+
+  const res = await dsRequest('/envelopes', { method: 'POST', body: JSON.stringify(body) })
+  if (!res.ok) throw new Error(`DocuSign create adult envelope failed: ${await res.text()}`)
+  const data = await res.json() as { envelopeId: string }
+  return data.envelopeId
+}
+
+export interface MentorAgreementParams {
+  firstName:  string
+  lastName:   string
+  email:      string
+  phone?:     string
+  eventTitle: string
+}
+
+export async function createMentorAgreementEnvelope(p: MentorAgreementParams): Promise<string> {
+  if (!ENV.mentorTemplateId) throw new Error('DOCUSIGN_MENTOR_TEMPLATE_ID not configured')
+  const fullName = `${p.firstName} ${p.lastName}`
+
+  const body = {
+    status:        'sent',
+    emailSubject:  `Mentor Participation Agreement — ${p.eventTitle}`,
+    templateId:    ENV.mentorTemplateId,
+    templateRoles: [{
+      roleName: 'Mentor',
+      name:     fullName,
+      email:    p.email,
+      tabs: {
+        textTabs: [
+          { tabLabel: 'MentorName',  value: fullName      },
+          { tabLabel: 'MentorEmail', value: p.email       },
+          { tabLabel: 'MentorPhone', value: p.phone ?? '' },
+          { tabLabel: 'EventTitle',  value: p.eventTitle  },
+        ],
+      },
+    }],
+  }
+
+  const res = await dsRequest('/envelopes', { method: 'POST', body: JSON.stringify(body) })
+  if (!res.ok) throw new Error(`DocuSign create mentor envelope failed: ${await res.text()}`)
   const data = await res.json() as { envelopeId: string }
   return data.envelopeId
 }

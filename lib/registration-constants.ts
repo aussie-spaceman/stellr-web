@@ -4,6 +4,8 @@ export const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sopho
 export const HS_GRADES = ['9', '10', '11', '12']
 export const ETHNICITIES = ['Pacific Islander', 'Hispanic', 'White (Caucasian)', 'Black', 'Native American', 'Asian', 'Prefer Not To Say']
 export const DIETARY = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
+// Emergency contact "Relationship To Participant" — maps to DocuSign tab "MinorRelationship"
+export const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
 
 export function deriveAgeBracket(dob: string, grade?: string): 'High School' | 'College' | 'Adult' {
   if (!dob) return 'Adult'

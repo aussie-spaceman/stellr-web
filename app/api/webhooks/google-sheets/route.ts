@@ -78,6 +78,7 @@ export async function POST(req: NextRequest) {
         emergency_contact_last_name: row.ec_last_name || null,
         emergency_contact_email: row.ec_email || null,
         emergency_contact_phone: row.ec_phone || null,
+        emergency_contact_relationship: row.ec_relationship || null,
         event_role: row.type?.toLowerCase() === 'adult' ? 'adult' : 'student',
         age_bracket: row.type?.toLowerCase() === 'adult' ? 'adult' : 'high_school',
         school_name: '',

@@ -19,6 +19,7 @@ interface ParticipantData {
   emergency_contact_last_name: string
   emergency_contact_email: string
   emergency_contact_phone: string
+  emergency_contact_relationship: string
 }
 
 const EMPTY: ParticipantData = {
@@ -27,13 +28,14 @@ const EMPTY: ParticipantData = {
   event_role: 'student', dietary_requirements: [],
   health_conditions: '', emergency_contact_first_name: '',
   emergency_contact_last_name: '', emergency_contact_email: '',
-  emergency_contact_phone: '',
+  emergency_contact_phone: '', emergency_contact_relationship: '',
 }
 
 const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
 const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
 const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
 const GENDERS = ['Male', 'Female', 'Other']
+const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
 
 interface Props {
   registrationId: string
@@ -273,6 +275,17 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
                     value={form.emergency_contact_phone}
                     onChange={e => set('emergency_contact_phone', e.target.value)}
                   />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Relationship to participant</label>
+                  <select
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                    value={form.emergency_contact_relationship}
+                    onChange={e => set('emergency_contact_relationship', e.target.value)}
+                  >
+                    <option value="">Select…</option>
+                    {EMERGENCY_RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
                 </div>
               </div>
             </div>

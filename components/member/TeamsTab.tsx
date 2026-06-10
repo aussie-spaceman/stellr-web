@@ -37,6 +37,7 @@ interface Participant {
   emergency_contact_last_name: string | null
   emergency_contact_email: string | null
   emergency_contact_phone: string | null
+  emergency_contact_relationship: string | null
   join_completed_at: string | null
   member_id: string | null
   individual_payment_status: string | null
@@ -623,6 +624,7 @@ function TeacherTeamsView() {
             emergency_contact_last_name: editing.emergency_contact_last_name ?? '',
             emergency_contact_email: editing.emergency_contact_email ?? '',
             emergency_contact_phone: editing.emergency_contact_phone ?? '',
+            emergency_contact_relationship: editing.emergency_contact_relationship ?? '',
           }}
           onSaved={handleParticipantSaved}
           onCancel={() => setEditing(null)}

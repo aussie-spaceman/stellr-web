@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { useRouter } from 'next/navigation'
 import FieldError from '@/components/forms/FieldError'
 import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
-import { GRADES, T_SHIRT_SIZES, GENDERS, ETHNICITIES, DIETARY, deriveAgeBracket } from '@/lib/registration-constants'
+import { GRADES, T_SHIRT_SIZES, GENDERS, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, deriveAgeBracket } from '@/lib/registration-constants'
 import { resolveSchoolPayload } from '@/lib/school-utils'
 
 const schema = z.object({
@@ -26,6 +26,7 @@ const schema = z.object({
   emergency_contact_last_name: z.string().min(1, 'Required'),
   emergency_contact_email: z.string().email('Valid email required'),
   emergency_contact_phone: z.string().min(7, 'Valid phone required'),
+  emergency_contact_relationship: z.string().min(1, 'Required'),
   ethnicity: z.array(z.string()).min(1, 'Select at least one'),
   dietary_requirements: z.array(z.string()).min(1, 'Select at least one'),
   health_conditions: z.string().optional(),
@@ -252,6 +253,15 @@ export default function IndividualRegistrationForm({
                 <input {...register('emergency_contact_phone')} type="tel" className="input-field" />
                 <FieldError message={errors.emergency_contact_phone?.message} />
               </div>
+            </div>
+
+            <div>
+              <label className="label-text">Relationship To Participant *</label>
+              <select {...register('emergency_contact_relationship')} className="input-field">
+                <option value="">Select…</option>
+                {EMERGENCY_RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+              <FieldError message={errors.emergency_contact_relationship?.message} />
             </div>
           </div>
 

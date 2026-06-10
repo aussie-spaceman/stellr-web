@@ -27,6 +27,7 @@ const GRADES = [
 const BRACKETS = ['high_school', 'college', 'adult']
 const GENDERS = ['male', 'female', 'other']
 const TSHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL_plus']
+const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
 
 function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -59,6 +60,7 @@ export function AdminAddMember({ tiers }: Props) {
     ec_last_name: '',
     ec_email: '',
     ec_phone: '',
+    ec_relationship: '',
     tier_id: '',
   })
 
@@ -324,6 +326,17 @@ export function AdminAddMember({ tiers }: Props) {
                   />
                 </div>
               ))}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Relationship to participant</label>
+                <select
+                  value={form.ec_relationship}
+                  onChange={(e) => set('ec_relationship', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Select…</option>
+                  {EMERGENCY_RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
             </div>
           </div>
 

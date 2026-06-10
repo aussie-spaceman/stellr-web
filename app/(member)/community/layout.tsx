@@ -4,6 +4,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NavUserButton } from '@/components/layout/NavUserButton'
 import { NotificationBell } from '@/components/community/NotificationBell'
 import { getCurrentMember } from '@/lib/community'
+import { getHostCaps } from '@/lib/sessions'
 
 export const metadata = { title: 'Community' }
 
@@ -24,13 +25,18 @@ export default async function CommunityLayout({
   const isAdmin =
     (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
 
+  const caps = await getHostCaps(member.id)
+
   const nav = [
     { href: '/community', label: 'Spaces' },
     { href: '/community/events', label: 'Events' },
     { href: '/community/training', label: 'Training' },
+    { href: '/community/coaching', label: 'Coaching' },
+    { href: '/community/mentoring', label: 'Mentoring' },
     { href: '/community/resources', label: 'Resources' },
     { href: '/community/members', label: 'Directory' },
     { href: '/community/search', label: 'Search' },
+    ...(caps.canCoach || caps.canMentor ? [{ href: '/community/hosting', label: 'Hosting' }] : []),
   ]
 
   return (

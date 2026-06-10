@@ -6,6 +6,7 @@ import { RichTextContent } from '@/components/community/RichTextContent'
 import { ReactionBar } from '@/components/community/ReactionBar'
 import { CommentForm } from '@/components/community/CommentForm'
 import { Comment, type CommentNode } from '@/components/community/Comment'
+import { FlagButton } from '@/components/community/FlagButton'
 
 type AuthorRel =
   | { first_name: string | null; last_name: string | null }
@@ -122,12 +123,13 @@ export default async function PostDetailPage({
         <div className="mt-4">
           <RichTextContent doc={post.body_json} />
         </div>
-        <div className="mt-4 border-t border-gray-100 pt-3">
+        <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
           <ReactionBar
             targetType="post"
             targetId={post.id}
             initial={groupReactions(reactions, post.id, member.id)}
           />
+          <FlagButton contentType="post" contentId={post.id} />
         </div>
       </article>
 

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { auth } from '@clerk/nextjs/server'
 import { NavUserButton } from '@/components/layout/NavUserButton'
+import { NotificationBell } from '@/components/community/NotificationBell'
 import { getCurrentMember } from '@/lib/community'
 
 export const metadata = { title: 'Community' }
@@ -50,7 +51,8 @@ export default async function CommunityLayout({
               ))}
             </nav>
           </div>
-          <div className="flex items-center gap-6 text-sm">
+          <div className="flex items-center gap-4 text-sm">
+            <NotificationBell />
             <Link href="/account" className="text-gray-600 hover:text-gray-900">
               My Account
             </Link>

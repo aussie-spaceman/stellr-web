@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { RichTextContent } from './RichTextContent'
 import { CommentForm } from './CommentForm'
 import { ReactionBar } from './ReactionBar'
+import { FlagButton } from './FlagButton'
 
 export interface CommentNode {
   id: string
@@ -40,16 +41,19 @@ export function Comment({ node, depth = 0 }: { node: CommentNode; depth?: number
           <span>{timeAgo(node.createdAt)}</span>
         </div>
         <RichTextContent doc={node.bodyJson} />
-        <div className="mt-2 flex items-center gap-3">
-          <ReactionBar targetType="comment" targetId={node.id} initial={node.reactions} />
-          {canNest && (
-            <button
-              onClick={() => setReplying((r) => !r)}
-              className="text-xs font-medium text-gray-500 hover:text-gray-700"
-            >
-              Reply
-            </button>
-          )}
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <ReactionBar targetType="comment" targetId={node.id} initial={node.reactions} />
+            {canNest && (
+              <button
+                onClick={() => setReplying((r) => !r)}
+                className="text-xs font-medium text-gray-500 hover:text-gray-700"
+              >
+                Reply
+              </button>
+            )}
+          </div>
+          <FlagButton contentType="comment" contentId={node.id} />
         </div>
         {replying && (
           <div className="mt-3">

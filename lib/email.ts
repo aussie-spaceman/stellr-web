@@ -399,3 +399,53 @@ export function groupPaymentConfirmedEmail({
   const text = `Hi ${teacherFirstName},\n\nPayment received for ${eventTitle}. Your group registration is confirmed.\n\nReference #: ${registrationId}\n\n— Stellr Education`
   return { subject, html, text }
 }
+
+// ── Community notification emails (FR-COM-06) ────────────────────────────────
+
+export function communityReplyEmail({
+  recipientFirstName,
+  actorName,
+  postTitle,
+  postUrl,
+}: {
+  recipientFirstName: string
+  actorName: string
+  postTitle: string
+  postUrl: string
+}) {
+  const subject = `${actorName} replied to your post — Stellr Community`
+  const html = `
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px">
+      <p style="font-size:16px;color:#111827">Hi ${recipientFirstName},</p>
+      <p style="color:#374151"><strong>${actorName}</strong> replied to your post <em>${postTitle}</em> in the Stellr Community.</p>
+      <a href="${postUrl}" style="display:inline-block;margin:16px 0;padding:10px 20px;background:#111827;color:#fff;border-radius:6px;text-decoration:none;font-size:14px">View reply</a>
+      <p style="color:#9ca3af;font-size:12px">You're receiving this because you posted in the Stellr Community. <a href="${postUrl}" style="color:#6b7280">Manage preferences</a> from your account settings.</p>
+    </div>
+  `
+  const text = `Hi ${recipientFirstName},\n\n${actorName} replied to your post "${postTitle}".\n\nView it here: ${postUrl}\n\n— Stellr Community`
+  return { subject, html, text }
+}
+
+export function communityAnnouncementEmail({
+  recipientFirstName,
+  title,
+  body,
+  url,
+}: {
+  recipientFirstName: string
+  title: string
+  body: string
+  url: string
+}) {
+  const subject = `New announcement: ${title} — Stellr Community`
+  const html = `
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px">
+      <p style="font-size:16px;color:#111827">Hi ${recipientFirstName},</p>
+      <h2 style="font-size:18px;color:#111827;margin:0 0 8px">${title}</h2>
+      <p style="color:#374151">${body}</p>
+      <a href="${url}" style="display:inline-block;margin:16px 0;padding:10px 20px;background:#111827;color:#fff;border-radius:6px;text-decoration:none;font-size:14px">Read in community</a>
+    </div>
+  `
+  const text = `Hi ${recipientFirstName},\n\nNew announcement: ${title}\n\n${body}\n\nRead it here: ${url}\n\n— Stellr Community`
+  return { subject, html, text }
+}

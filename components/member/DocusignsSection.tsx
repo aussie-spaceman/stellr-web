@@ -17,6 +17,8 @@ interface Envelope {
 interface Props {
   dateOfBirth?: string | null
   eventRole?: string | null
+  initialEnvelopes?: Envelope[]
+  adminDownload?: boolean
 }
 
 export const ENVELOPE_STATUS_STYLES: Record<string, { label: string; cls: string }> = {
@@ -71,22 +73,26 @@ const URGENCY_CLS: Record<string, string> = {
   expired: 'text-red-600 font-medium',
 }
 
-export function DocusignsSection({ dateOfBirth, eventRole }: Props = {}) {
-  const [envelopes, setEnvelopes]     = useState<Envelope[]>([])
-  const [loading, setLoading]         = useState(true)
+export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adminDownload }: Props = {}) {
+  const [envelopes, setEnvelopes]     = useState<Envelope[]>(initialEnvelopes ?? [])
+  const [loading, setLoading]         = useState(!initialEnvelopes)
   const [downloading, setDownloading] = useState<string | null>(null)
 
   useEffect(() => {
+    if (initialEnvelopes) return
     fetch('/api/members/docusigns')
       .then(r => r.json())
       .then(data => setEnvelopes(data.envelopes ?? []))
       .finally(() => setLoading(false))
-  }, [])
+  }, [initialEnvelopes])
 
   async function handleDownload(id: string, minorName: string) {
     setDownloading(id)
+    const downloadUrl = adminDownload
+      ? `/api/admin/docusigns/${id}/download`
+      : `/api/members/docusigns/${id}/download`
     try {
-      const res = await fetch(`/api/members/docusigns/${id}/download`)
+      const res = await fetch(downloadUrl)
       if (!res.ok) throw new Error('Download failed')
       const blob = await res.blob()
       const url  = URL.createObjectURL(blob)

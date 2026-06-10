@@ -5,6 +5,7 @@ import { MembershipCard } from '@/components/member/MembershipCard'
 import { EventHistory } from '@/components/member/EventHistory'
 import { TeamsTab } from '@/components/member/TeamsTab'
 import { BillingHistory } from '@/components/member/BillingHistory'
+import { DocusignsSection } from '@/components/member/DocusignsSection'
 import { ViewAsBanner } from '@/components/admin/ViewAsBanner'
 
 export const metadata = { title: 'Admin — View As Member' }
@@ -21,6 +22,7 @@ export default async function ViewAsMemberPage({
     { data: member },
     { data: ethnicityOptions },
     { data: allergyOptions },
+    { data: docusignEnvelopes },
   ] = await Promise.all([
     db
       .from('members')
@@ -36,6 +38,11 @@ export default async function ViewAsMemberPage({
       .maybeSingle(),
     db.from('ethnicity_options').select('id, name').order('name'),
     db.from('allergy_options').select('id, name').order('name'),
+    db
+      .from('docusign_envelopes')
+      .select('id, envelope_id, status, signer_name, signer_email, minor_name, event_title, sent_at, completed_at, reminder_sent_at')
+      .eq('member_id', id)
+      .order('sent_at', { ascending: false }),
   ])
 
   if (!member) notFound()
@@ -74,6 +81,12 @@ export default async function ViewAsMemberPage({
               readOnly
             />
             <EventHistory participations={member.event_participations ?? []} editable={false} />
+            <DocusignsSection
+              initialEnvelopes={docusignEnvelopes ?? []}
+              dateOfBirth={member.date_of_birth}
+              eventRole={member.event_role}
+              adminDownload
+            />
             {showTeams && (
               <div>
                 <h2 className="text-base font-semibold text-gray-900 mb-3">Teams</h2>

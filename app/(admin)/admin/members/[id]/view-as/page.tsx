@@ -40,7 +40,7 @@ export default async function ViewAsMemberPage({
     db.from('allergy_options').select('id, name').order('name'),
     db
       .from('docusign_envelopes')
-      .select('id, envelope_id, status, signer_name, signer_email, minor_name, event_title, sent_at, completed_at, reminder_sent_at')
+      .select('id, envelope_id, status, envelope_type, signer_name, signer_email, minor_name, event_title, sent_at, completed_at, reminder_sent_at')
       .eq('member_id', id)
       .order('sent_at', { ascending: false }),
   ])

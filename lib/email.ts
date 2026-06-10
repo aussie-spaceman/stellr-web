@@ -373,6 +373,109 @@ export function docusignCompletedToMinorEmail({
   return { subject, html, text }
 }
 
+// ── Adult / Mentor self-signed participation agreements ────────────────────────
+// The signer is the participant themselves (no guardian), so these address the
+// recipient directly. agreementLabel distinguishes the Adult vs Mentor document.
+
+export function docusignSentToSignerEmail({
+  firstName, eventTitle, agreementLabel,
+}: {
+  firstName: string; eventTitle: string; agreementLabel: string
+}) {
+  const subject = `Action required — ${agreementLabel} for ${eventTitle}`
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#1e3a5f;margin-top:0">Signature Required</h2>
+        <p>Hi ${firstName},</p>
+        <p>We've sent you the <strong>${agreementLabel}</strong> for <strong>${eventTitle}</strong> via DocuSign.</p>
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:24px 0">
+          <p style="margin:0;font-size:14px;color:#92400e">
+            <strong>Your registration is not yet confirmed.</strong> Please review and sign the agreement to secure your place.
+          </p>
+        </div>
+        <p style="color:#6b7280;font-size:14px">You'll receive a separate email from DocuSign with a link to review and sign. If it hasn't arrived, please check your spam folder.</p>
+        <p style="color:#6b7280;font-size:14px">We'll send a reminder if the agreement hasn't been signed within one week. Once signed, you'll receive a confirmation with a copy of the completed document.</p>
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `Hi ${firstName},\n\nWe've sent you the ${agreementLabel} for ${eventTitle} via DocuSign. Your registration is not yet confirmed until it's signed. Please check your inbox for an email from DocuSign.\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
+export function docusignReminderToSignerEmail({
+  firstName, eventTitle, agreementLabel,
+}: {
+  firstName: string; eventTitle: string; agreementLabel: string
+}) {
+  const subject = `Reminder — ${agreementLabel} still required for ${eventTitle}`
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#1e3a5f;margin-top:0">Agreement Reminder</h2>
+        <p>Hi ${firstName},</p>
+        <p>We haven't yet received your signed <strong>${agreementLabel}</strong> for <strong>${eventTitle}</strong>.</p>
+        <p>We've sent you another reminder via DocuSign. Please check your inbox (and spam folder) for an email from DocuSign.</p>
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:24px 0">
+          <p style="margin:0;font-size:14px;color:#92400e">
+            <strong>Your registration remains unconfirmed</strong> until the agreement is signed. Please sign it as soon as possible.
+          </p>
+        </div>
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `Hi ${firstName},\n\nWe haven't received your signed ${agreementLabel} for ${eventTitle}. We've sent another reminder via DocuSign.\n\nYour registration remains unconfirmed until it's signed.\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
+export function docusignCompletedToSignerEmail({
+  firstName, eventTitle, downloadUrl, agreementLabel,
+}: {
+  firstName: string; eventTitle: string; downloadUrl: string; agreementLabel: string
+}) {
+  const subject = `${agreementLabel} signed — ${eventTitle}`
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#1e3a5f;margin-top:0">Agreement Signed</h2>
+        <p>Hi ${firstName},</p>
+        <p>Thank you — your <strong>${agreementLabel}</strong> for <strong>${eventTitle}</strong> has been signed.</p>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
+          <p style="margin:0;font-weight:600;color:#14532d">Your registration is now confirmed!</p>
+        </div>
+        <p style="color:#374151;font-size:14px">A copy of the signed agreement is available to download from your member portal, or use the button below:</p>
+        <div style="margin:24px 0;text-align:center">
+          <a href="${downloadUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;font-weight:600">Download Agreement →</a>
+        </div>
+        <p style="color:#6b7280;font-size:14px">DocuSign has also sent a copy directly to your email.</p>
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `Hi ${firstName},\n\nYour ${agreementLabel} for ${eventTitle} has been signed. Your registration is confirmed!\n\nDownload the signed agreement: ${downloadUrl}\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
 export function groupPaymentConfirmedEmail({
   teacherFirstName, eventTitle, registrationId,
 }: {

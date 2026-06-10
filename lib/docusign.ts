@@ -291,3 +291,21 @@ export function isMinor(dateOfBirth: string): boolean {
   const eighteenth = new Date(dob.getFullYear() + 18, dob.getMonth(), dob.getDate())
   return new Date() < eighteenth
 }
+
+export type AgreementType = 'minor' | 'adult' | 'mentor'
+
+// Which DocuSign agreement (if any) a participant needs, based on age and role:
+//   • under 18                         → minor parental-consent form
+//   • adult registering as a mentor    → mentor participation agreement
+//   • any other adult attendee         → adult participation agreement
+//   • adult school student (edge case) → none
+export function classifyAgreement(
+  eventRole: string | null | undefined,
+  dateOfBirth: string | null | undefined,
+): AgreementType | null {
+  if (dateOfBirth && isMinor(dateOfBirth)) return 'minor'
+  const role = (eventRole ?? '').toLowerCase().replace(/\s+/g, '_')
+  if (role === 'mentor') return 'mentor'
+  if (!role || role === 'school_student') return null
+  return 'adult'
+}

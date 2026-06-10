@@ -9,6 +9,7 @@ import {
   groupMemberIndividualPaymentEmail,
 } from '@/lib/email'
 import { createGroupRegistrationSheet, isGoogleSheetsConfigured } from '@/lib/google-sheets'
+import { dispatchAgreement } from '@/lib/docusign-agreements'
 import type { RegistrationRow } from '@/lib/database.types'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
@@ -240,11 +241,42 @@ export async function POST(req: NextRequest) {
       for (const s of (students ?? [])) participantRows.push(buildParticipant(s, payStatus))
     }
 
-    const { error: partError } = await db.from('participants').insert(participantRows)
+    const { data: insertedParts, error: partError } = await db
+      .from('participants')
+      .insert(participantRows)
+      .select('id, email')
     if (partError) {
       console.error('Participant insert error:', partError)
       await db.from('registrations').delete().eq('id', regId)
       return NextResponse.json({ error: 'Failed to save participant details' }, { status: 500 })
+    }
+
+    // ── DocuSign agreements for everyone entered now ──────────────────────────
+    // Each participant gets the right document by age/role: minors → parental
+    // consent, adult attendees → Adult agreement, mentors → Mentor agreement.
+    // Sequential to avoid DocuSign rate limits; all calls are non-fatal.
+    const partIdByEmail = new Map((insertedParts ?? []).map(r => [r.email, r.id]))
+    for (const row of participantRows) {
+      const participantId = partIdByEmail.get(row.email)
+      if (!participantId) continue
+      await dispatchAgreement(db, {
+        participantId,
+        memberId:          row.member_id,
+        eventSlug:         event_slug,
+        eventTitle:        event_title,
+        firstName:         row.first_name,
+        lastName:          row.last_name,
+        email:             row.email,
+        phone:             row.phone,
+        dateOfBirth:       row.date_of_birth,
+        eventRole:         row.event_role,
+        schoolName:        row.school_name,
+        schoolState:       teacher.school_address_state,
+        guardianFirstName: row.emergency_contact_first_name,
+        guardianLastName:  row.emergency_contact_last_name,
+        guardianEmail:     row.emergency_contact_email,
+        guardianPhone:     row.emergency_contact_phone,
+      })
     }
 
     // ── Google Sheet (spreadsheet or email_link path — both get a sheet) ────────

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 interface Envelope {
   id: string
   status: string
+  envelope_type?: string
   signer_name: string
   signer_email: string
   minor_name: string
@@ -12,6 +13,12 @@ interface Envelope {
   sent_at: string
   completed_at: string | null
   reminder_sent_at: string | null
+}
+
+const TYPE_LABEL: Record<string, string> = {
+  minor:  'Parental Consent',
+  adult:  'Participation Agreement',
+  mentor: 'Mentor Participation Agreement',
 }
 
 interface Props {
@@ -86,11 +93,12 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
       .finally(() => setLoading(false))
   }, [initialEnvelopes])
 
-  async function handleDownload(id: string, minorName: string) {
+  async function handleDownload(id: string, subjectName: string, type?: string) {
     setDownloading(id)
     const downloadUrl = adminDownload
       ? `/api/admin/docusigns/${id}/download`
       : `/api/members/docusigns/${id}/download`
+    const prefix = type === 'adult' || type === 'mentor' ? 'agreement' : 'consent'
     try {
       const res = await fetch(downloadUrl)
       if (!res.ok) throw new Error('Download failed')
@@ -98,7 +106,7 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
-      a.download = `consent-${minorName.replace(/\s+/g, '-').toLowerCase()}.pdf`
+      a.download = `${prefix}-${subjectName.replace(/\s+/g, '-').toLowerCase()}.pdf`
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
@@ -110,15 +118,16 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
 
   if (loading || envelopes.length === 0) return null
 
-  const graduated  = memberHasGraduated(dateOfBirth, eventRole)
-  const hasPending = envelopes.some(e => e.status === 'sent' || e.status === 'delivered')
+  const graduated      = memberHasGraduated(dateOfBirth, eventRole)
+  const hasMinorForms  = envelopes.some(e => (e.envelope_type ?? 'minor') === 'minor')
+  const hasPending     = envelopes.some(e => e.status === 'sent' || e.status === 'delivered')
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <h2 className="text-base font-semibold text-gray-900 mb-1">Parental Consent Forms</h2>
-      <p className="text-xs text-gray-500 mb-4">Sent to your parent or guardian via DocuSign.</p>
+      <h2 className="text-base font-semibold text-gray-900 mb-1">Agreements &amp; Consent Forms</h2>
+      <p className="text-xs text-gray-500 mb-4">Your DocuSign participation agreements and parental consent forms.</p>
 
-      {graduated && (
+      {graduated && hasMinorForms && (
         <div className="mb-4 rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-xs text-blue-700">
           You are no longer registered as a school student. Historical consent records are kept below
           for reference. Future registrations as a mentor or adult do not require parental consent.
@@ -127,16 +136,23 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
 
       <div className="divide-y divide-gray-100">
         {envelopes.map(env => {
-          const expiry    = env.completed_at ? getExpiryInfo(env.completed_at) : null
-          const showExpiry = expiry && !graduated
+          const type       = env.envelope_type ?? 'minor'
+          const isMinorEnv = type === 'minor'
+          const expiry     = env.completed_at ? getExpiryInfo(env.completed_at) : null
+          // Hide expiry only on historical minor consent (the member has aged out);
+          // adult/mentor agreements always show their current expiry.
+          const showExpiry = expiry && !(isMinorEnv && graduated)
 
           return (
             <div key={env.id} className="flex items-start justify-between gap-4 py-3.5">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-gray-900">{env.event_title}</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Sent to {env.signer_name} &middot; {env.signer_email}
-                </p>
+                <p className="text-xs text-gray-500 mt-0.5">{TYPE_LABEL[type] ?? 'Agreement'}</p>
+                {isMinorEnv && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Sent to {env.signer_name} &middot; {env.signer_email}
+                  </p>
+                )}
                 <p className="text-xs text-gray-400 mt-0.5">
                   {fmt(env.sent_at)}
                   {env.completed_at && <> &middot; Signed {fmt(env.completed_at)}</>}
@@ -144,7 +160,7 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
                 {showExpiry && (
                   <p className={`text-xs mt-1 ${URGENCY_CLS[expiry.urgency]}`}>{expiry.label}</p>
                 )}
-                {graduated && (
+                {isMinorEnv && graduated && (
                   <p className="text-xs text-gray-400 mt-1 italic">Historical record</p>
                 )}
               </div>
@@ -152,7 +168,7 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
                 <EnvelopeStatusBadge status={env.status} />
                 {env.status === 'completed' && (
                   <button
-                    onClick={() => handleDownload(env.id, env.minor_name)}
+                    onClick={() => handleDownload(env.id, env.minor_name, type)}
                     disabled={downloading === env.id}
                     className="text-xs text-brand-blue hover:text-brand-blue-dark font-medium disabled:opacity-50"
                   >
@@ -165,7 +181,7 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
         })}
       </div>
 
-      {hasPending && !graduated && (
+      {hasPending && (
         <p className="text-xs text-gray-400 mt-4 pt-3 border-t border-gray-100">
           A reminder will be sent automatically if the form isn&apos;t signed within 7 days.
         </p>

@@ -46,6 +46,7 @@ interface Participant {
 interface DocuSignEnvelope {
   id: string
   status: string
+  envelope_type: string
   signer_name: string
   signer_email: string
   sent_at: string
@@ -229,6 +230,12 @@ function participantIsMinor(dob: string): boolean {
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
+const CONSENT_TYPE_LABEL: Record<string, string> = {
+  minor:  'Parental consent',
+  adult:  'Participation agreement',
+  mentor: 'Mentor agreement',
+}
+
 // ── Teacher view ──────────────────────────────────────────────────────────────
 
 function TeacherTeamsView() {
@@ -314,7 +321,7 @@ function TeacherTeamsView() {
       )
       const data = await res.json() as { error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Resend failed')
-      setConsentMsg('Reminder sent to parent/guardian.')
+      setConsentMsg('Reminder sent.')
       const r = await fetch(`/api/members/teams/${registrationId}`)
       const d = await r.json()
       if (!d.error) setFullTeam(d)
@@ -472,6 +479,28 @@ function TeacherTeamsView() {
                   )
                 })()}
 
+                {/* Agreement summary (adults & mentors) */}
+                {(() => {
+                  const envelopes = fullTeam.registration.docusignEnvelopes ?? {}
+                  const adults = fullTeam.registration.participants.filter(
+                    p => !participantIsMinor(p.date_of_birth) && envelopes[p.id],
+                  )
+                  if (adults.length === 0) return null
+                  const signed  = adults.filter(p => envelopes[p.id]?.status === 'completed').length
+                  const pending = adults.filter(p => { const s = envelopes[p.id]?.status; return s && s !== 'completed' && s !== 'voided' && s !== 'declined' }).length
+                  const problem = adults.filter(p => { const s = envelopes[p.id]?.status; return s === 'declined' || s === 'voided' }).length
+                  const allDone = signed === adults.length
+                  return (
+                    <div className={`rounded-lg px-4 py-3 text-sm flex flex-wrap gap-x-4 gap-y-1 ${allDone ? 'bg-green-50 border border-green-100' : 'bg-amber-50 border border-amber-100'}`}>
+                      <span className={`font-medium ${allDone ? 'text-green-700' : 'text-amber-800'}`}>
+                        Participation agreements: {signed}/{adults.length} signed
+                      </span>
+                      {pending > 0 && <span className="text-amber-700 text-xs self-center">{pending} awaiting</span>}
+                      {problem > 0 && <span className="text-red-600 text-xs self-center">{problem} declined/voided</span>}
+                    </div>
+                  )
+                })()}
+
                 {/* Participants table */}
                 {fullTeam.registration.participants.length === 0 ? (
                   <p className="text-sm text-gray-500">No participants added yet.</p>
@@ -485,7 +514,7 @@ function TeacherTeamsView() {
                           <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Type</th>
                           <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Grade</th>
                           <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
-                          <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Consent</th>
+                          <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Consent / Agreement</th>
                           {fullTeam.registration.member_pays_individually && (
                             <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Payment</th>
                           )}
@@ -514,9 +543,7 @@ function TeacherTeamsView() {
                                 }
                               </td>
                               <td className="py-2.5 pr-4">
-                                {!isMinor ? (
-                                  <span className="text-xs text-gray-400">N/A</span>
-                                ) : envelope ? (
+                                {envelope ? (
                                   <div className="space-y-1">
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <EnvelopeStatusBadge status={envelope.status} />
@@ -531,6 +558,9 @@ function TeacherTeamsView() {
                                       )}
                                     </div>
                                     <p className="text-xs text-gray-400 leading-tight">
+                                      {CONSENT_TYPE_LABEL[envelope.envelope_type] ?? 'Agreement'}
+                                    </p>
+                                    <p className="text-xs text-gray-400 leading-tight">
                                       {envelope.signer_name}
                                       {envelope.signer_email && <> &middot; {envelope.signer_email}</>}
                                     </p>
@@ -540,8 +570,10 @@ function TeacherTeamsView() {
                                       {envelope.reminder_sent_at && !envelope.completed_at && <> &middot; Reminded {new Date(envelope.reminder_sent_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</>}
                                     </p>
                                   </div>
-                                ) : (
+                                ) : isMinor ? (
                                   <span className="text-xs text-gray-400">—</span>
+                                ) : (
+                                  <span className="text-xs text-gray-400">N/A</span>
                                 )}
                               </td>
                               {fullTeam.registration.member_pays_individually && (

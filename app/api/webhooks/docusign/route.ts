@@ -1,8 +1,9 @@
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { verifyConnectHmac } from '@/lib/docusign'
-import { sendEmail, docusignCompletedToMinorEmail } from '@/lib/email'
+import { verifyConnectHmac, type AgreementType } from '@/lib/docusign'
+import { AGREEMENT_LABEL } from '@/lib/docusign-agreements'
+import { sendEmail, docusignCompletedToMinorEmail, docusignCompletedToSignerEmail } from '@/lib/email'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -70,7 +71,7 @@ export async function POST(req: Request) {
     .from('docusign_envelopes')
     .update(update)
     .eq('envelope_id', envelopeId)
-    .select('id, member_id, minor_name, signer_name, event_title')
+    .select('id, member_id, envelope_type, minor_name, signer_name, event_title')
     .maybeSingle()
 
   if (!envelope) {
@@ -87,12 +88,20 @@ export async function POST(req: Request) {
 
     if (member) {
       const downloadUrl = `${SITE_URL}/account?tab=profile`
-      const content = docusignCompletedToMinorEmail({
-        firstName:    member.first_name,
-        guardianName: envelope.signer_name,
-        eventTitle:   envelope.event_title,
-        downloadUrl,
-      })
+      const type = (envelope.envelope_type ?? 'minor') as AgreementType
+      const content = type === 'minor'
+        ? docusignCompletedToMinorEmail({
+            firstName:    member.first_name,
+            guardianName: envelope.signer_name,
+            eventTitle:   envelope.event_title,
+            downloadUrl,
+          })
+        : docusignCompletedToSignerEmail({
+            firstName:     member.first_name,
+            eventTitle:    envelope.event_title,
+            downloadUrl,
+            agreementLabel: AGREEMENT_LABEL[type],
+          })
       try {
         await sendEmail({ to: member.email, ...content })
       } catch (err) {

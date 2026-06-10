@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { resendEnvelope } from '@/lib/docusign'
-import { sendEmail, docusignReminderToMinorEmail } from '@/lib/email'
+import { resendEnvelope, type AgreementType } from '@/lib/docusign'
+import { AGREEMENT_LABEL } from '@/lib/docusign-agreements'
+import { sendEmail, docusignReminderToMinorEmail, docusignReminderToSignerEmail } from '@/lib/email'
 
 // GET /api/cron/docusign-reminders
 // Vercel cron calls this daily at 09:00 UTC (see vercel.json).
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   const { data: envelopes } = await db
     .from('docusign_envelopes')
-    .select('id, envelope_id, minor_name, signer_name, event_title, member_id')
+    .select('id, envelope_id, envelope_type, minor_name, signer_name, event_title, member_id')
     .in('status', ['sent', 'delivered'])
     .lt('sent_at', sevenDaysAgo)
     .is('reminder_sent_at', null)
@@ -44,11 +45,18 @@ export async function GET(req: NextRequest) {
 
       const member = env.member_id ? memberById.get(env.member_id) : null
       if (member) {
-        const content = docusignReminderToMinorEmail({
-          firstName:    member.first_name,
-          guardianName: env.signer_name,
-          eventTitle:   env.event_title,
-        })
+        const type = (env.envelope_type ?? 'minor') as AgreementType
+        const content = type === 'minor'
+          ? docusignReminderToMinorEmail({
+              firstName:    member.first_name,
+              guardianName: env.signer_name,
+              eventTitle:   env.event_title,
+            })
+          : docusignReminderToSignerEmail({
+              firstName:      member.first_name,
+              eventTitle:     env.event_title,
+              agreementLabel: AGREEMENT_LABEL[type],
+            })
         await sendEmail({ to: member.email, ...content })
       }
 

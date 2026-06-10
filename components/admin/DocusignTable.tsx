@@ -6,6 +6,7 @@ export interface EnvelopeRow {
   id: string
   envelope_id: string
   status: string
+  envelope_type?: string
   signer_name: string
   signer_email: string
   minor_name: string
@@ -68,7 +69,8 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
-      a.download = `consent-${env.minor_name.replace(/\s+/g, '-').toLowerCase()}.pdf`
+      const prefix = env.envelope_type === 'adult' || env.envelope_type === 'mentor' ? 'agreement' : 'consent'
+      a.download = `${prefix}-${env.minor_name.replace(/\s+/g, '-').toLowerCase()}.pdf`
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
@@ -137,7 +139,7 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50 text-left">
-                {['Participant', 'Event', 'Guardian', 'Status', 'Sent', 'Signed', 'Expires', ''].map(h => (
+                {['Participant', 'Type', 'Event', 'Signer', 'Status', 'Sent', 'Signed', 'Expires', ''].map(h => (
                   <th key={h} className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide whitespace-nowrap">
                     {h}
                   </th>
@@ -148,6 +150,7 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
               {filtered.map(env => (
                 <tr key={env.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{env.minor_name}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap capitalize">{env.envelope_type ?? 'minor'}</td>
                   <td className="px-4 py-3 text-gray-600 max-w-[200px]">
                     <span className="block truncate" title={env.event_title}>{env.event_title}</span>
                   </td>

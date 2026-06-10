@@ -3,8 +3,7 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import type { RegistrationRow, ParticipantRow } from '@/lib/database.types'
-import { createConsentEnvelope, isMinor } from '@/lib/docusign'
-import { sendEmail, docusignSentToMinorEmail } from '@/lib/email'
+import { dispatchAgreement } from '@/lib/docusign-agreements'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -134,41 +133,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to save participant details' }, { status: 500 })
     }
 
-    // Trigger DocuSign consent for minor participants
-    if (isMinor(date_of_birth) && emergency_contact_email && emergency_contact_first_name) {
-      const guardianName = [emergency_contact_first_name, emergency_contact_last_name].filter(Boolean).join(' ')
-      try {
-        const envelopeId = await createConsentEnvelope({
-          minorFirstName:  first_name,
-          minorLastName:   last_name,
-          minorDateOfBirth: date_of_birth,
-          guardianName,
-          guardianEmail:   emergency_contact_email,
-          guardianPhone:   emergency_contact_phone || undefined,
-          relationship:    emergency_contact_relationship || undefined,
-          eventTitle:      event_title,
-          schoolName:      school_name || undefined,
-          schoolState:     school_address_state || undefined,
-        })
-        await db.from('docusign_envelopes').insert({
-          participant_id: partRow.id,
-          member_id:      memberId,
-          event_slug,
-          event_title,
-          envelope_id:    envelopeId,
-          status:         'sent',
-          signer_name:    guardianName,
-          signer_email:   emergency_contact_email,
-          minor_name:     `${first_name} ${last_name}`,
-        })
-        await sendEmail({
-          to: email,
-          ...docusignSentToMinorEmail({ firstName: first_name, guardianName, guardianEmail: emergency_contact_email, eventTitle: event_title }),
-        })
-      } catch (dsErr) {
-        console.error('[docusign] Envelope creation failed (non-fatal):', dsErr)
-      }
-    }
+    // Trigger the appropriate DocuSign agreement (minor consent, or self-signed
+    // adult/mentor participation agreement) for this participant.
+    await dispatchAgreement(db, {
+      participantId:     partRow.id,
+      memberId,
+      eventSlug:         event_slug,
+      eventTitle:        event_title,
+      firstName:         first_name,
+      lastName:          last_name,
+      email,
+      phone,
+      dateOfBirth:       date_of_birth,
+      eventRole:         event_role,
+      schoolName:        school_name,
+      schoolState:       school_address_state,
+      guardianFirstName: emergency_contact_first_name,
+      guardianLastName:  emergency_contact_last_name,
+      guardianEmail:     emergency_contact_email,
+      guardianPhone:     emergency_contact_phone,
+      relationship:      emergency_contact_relationship,
+    })
 
     // Look up Stripe Price ID from Sanity
     const event = await getEventBySlug(event_slug)

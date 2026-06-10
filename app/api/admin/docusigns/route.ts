@@ -12,7 +12,7 @@ export async function GET() {
 
   const { data: envelopes } = await db
     .from('docusign_envelopes')
-    .select('id, envelope_id, status, signer_name, signer_email, minor_name, event_title, event_slug, sent_at, completed_at, declined_at, reminder_sent_at, participant_id, member_id')
+    .select('id, envelope_id, status, envelope_type, signer_name, signer_email, minor_name, event_title, event_slug, sent_at, completed_at, declined_at, reminder_sent_at, participant_id, member_id')
     .order('sent_at', { ascending: false })
 
   return NextResponse.json({ envelopes: envelopes ?? [] })

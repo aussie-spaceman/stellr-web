@@ -3,8 +3,8 @@ import { auth } from '@clerk/nextjs/server'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
-import { sendEmail, groupMemberJoinedEmail, groupMemberIndividualPaymentEmail, docusignSentToMinorEmail } from '@/lib/email'
-import { createConsentEnvelope, isMinor } from '@/lib/docusign'
+import { sendEmail, groupMemberJoinedEmail, groupMemberIndividualPaymentEmail } from '@/lib/email'
+import { dispatchAgreement } from '@/lib/docusign-agreements'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -105,41 +105,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to complete registration. Please try again.' }, { status: 500 })
   }
 
-  // Trigger DocuSign consent for minor group members
-  if (isMinor(member.date_of_birth ?? '') && member.ec_email && member.ec_first_name) {
-    const guardianName = [member.ec_first_name, member.ec_last_name].filter(Boolean).join(' ')
-    try {
-      const envelopeId = await createConsentEnvelope({
-        minorFirstName:  member.first_name,
-        minorLastName:   member.last_name,
-        minorDateOfBirth: member.date_of_birth ?? undefined,
-        guardianName,
-        guardianEmail:   member.ec_email,
-        guardianPhone:   member.ec_phone ?? undefined,
-        relationship:    member.ec_relationship ?? undefined,
-        eventTitle,
-        schoolName:      (reg.school_name as string) || undefined,
-        schoolState:     (reg.school_address_state as string) || undefined,
-      })
-      await db.from('docusign_envelopes').insert({
-        participant_id: partRow.id,
-        member_id:      member.id,
-        event_slug:     eventSlug,
-        event_title:    eventTitle,
-        envelope_id:    envelopeId,
-        status:         'sent',
-        signer_name:    guardianName,
-        signer_email:   member.ec_email,
-        minor_name:     `${member.first_name} ${member.last_name}`,
-      })
-      await sendEmail({
-        to: member.email,
-        ...docusignSentToMinorEmail({ firstName: member.first_name, guardianName, guardianEmail: member.ec_email, eventTitle }),
-      })
-    } catch (dsErr) {
-      console.error('[docusign] Group join envelope creation failed (non-fatal):', dsErr)
-    }
-  }
+  // Trigger the appropriate DocuSign agreement (minor consent, or self-signed
+  // adult/mentor participation agreement) based on the member's age and role.
+  await dispatchAgreement(db, {
+    participantId:     partRow.id,
+    memberId:          member.id,
+    eventSlug,
+    eventTitle,
+    firstName:         member.first_name,
+    lastName:          member.last_name,
+    email:             member.email,
+    phone:             member.phone,
+    dateOfBirth:       member.date_of_birth,
+    eventRole:         member.event_role,
+    schoolName:        (reg.school_name as string) || undefined,
+    schoolState:       (reg.school_address_state as string) || undefined,
+    guardianFirstName: member.ec_first_name,
+    guardianLastName:  member.ec_last_name,
+    guardianEmail:     member.ec_email,
+    guardianPhone:     member.ec_phone,
+    relationship:      member.ec_relationship,
+  })
 
   // Count total members who have completed their join
   const { count: joinedCount } = await db

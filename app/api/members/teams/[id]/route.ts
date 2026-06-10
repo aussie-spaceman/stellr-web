@@ -76,7 +76,7 @@ export async function GET(
       : Promise.resolve({ data: null }),
     participantIds.length > 0
       ? db.from('docusign_envelopes')
-          .select('id, participant_id, status, signer_name, signer_email, sent_at, completed_at, reminder_sent_at')
+          .select('id, participant_id, status, envelope_type, signer_name, signer_email, sent_at, completed_at, reminder_sent_at')
           .in('participant_id', participantIds)
       : Promise.resolve({ data: null }),
   ])
@@ -92,12 +92,13 @@ export async function GET(
   }
 
   const docusignEnvelopes: Record<string, {
-    id: string; status: string; signer_name: string; signer_email: string
+    id: string; status: string; envelope_type: string; signer_name: string; signer_email: string
     sent_at: string; completed_at: string | null; reminder_sent_at: string | null
   }> = {}
   for (const e of envelopes ?? []) {
     docusignEnvelopes[e.participant_id] = {
-      id: e.id, status: e.status, signer_name: e.signer_name, signer_email: e.signer_email,
+      id: e.id, status: e.status, envelope_type: e.envelope_type ?? 'minor',
+      signer_name: e.signer_name, signer_email: e.signer_email,
       sent_at: e.sent_at, completed_at: e.completed_at, reminder_sent_at: e.reminder_sent_at,
     }
   }

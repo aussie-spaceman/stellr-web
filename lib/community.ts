@@ -57,9 +57,10 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
       member_memberships(renewal_status, started_at, membership_tiers(name, is_free))
     `)
     .eq('clerk_user_id', userId)
+    .neq('is_active', false)
     .maybeSingle()
 
-  if (!member || !member.is_active) return null
+  if (!member) return null
 
   // The Supabase client types the nested join loosely (membership_tiers can come
   // back as an object or array depending on cardinality), so normalize here.

@@ -57,46 +57,35 @@ export default async function CommunitySearchPage({
       .filter((w) => w.length > 2)
       .join(' & ')
 
-    const queries: Promise<void>[] = []
-
-    if (tsQuery) {
-      queries.push(
-        db
+    const fetchBodySearch = tsQuery
+      ? db
           .from('community_posts')
           .select('id, title, body_text, created_at, community_spaces(slug, name)')
           .eq('status', 'published')
           .textSearch('body_text', tsQuery, { config: 'english', type: 'websearch' })
           .limit(8)
-          .then(({ data }) => { if (data) posts = data as PostResult[] })
-      )
-    }
+      : null
 
-    // Title ilike catch (covers short queries where tsquery would fail)
-    queries.push(
+    const [bodyResult, titleResult, resourceResult] = await Promise.all([
+      fetchBodySearch ?? Promise.resolve({ data: null }),
       db
         .from('community_posts')
         .select('id, title, body_text, created_at, community_spaces(slug, name)')
         .eq('status', 'published')
         .ilike('title', `%${trimmedQ}%`)
-        .limit(8)
-        .then(({ data }) => {
-          if (data) {
-            const existing = new Set(posts.map((p) => p.id))
-            posts = [...posts, ...(data as PostResult[]).filter((p) => !existing.has(p.id))].slice(0, 10)
-          }
-        })
-    )
-
-    queries.push(
+        .limit(8),
       db
         .from('community_resources')
         .select('id, title, description, file_type')
         .or(`title.ilike.%${trimmedQ}%,description.ilike.%${trimmedQ}%`)
-        .limit(6)
-        .then(({ data }) => { if (data) resources = data as ResourceResult[] })
-    )
+        .limit(6),
+    ])
 
-    await Promise.all(queries)
+    const bodyPosts = (bodyResult.data ?? []) as PostResult[]
+    const titlePosts = (titleResult.data ?? []) as PostResult[]
+    const existing = new Set(bodyPosts.map((p) => p.id))
+    posts = [...bodyPosts, ...titlePosts.filter((p) => !existing.has(p.id))].slice(0, 10)
+    resources = (resourceResult.data ?? []) as ResourceResult[]
   }
 
   const total = posts.length + resources.length

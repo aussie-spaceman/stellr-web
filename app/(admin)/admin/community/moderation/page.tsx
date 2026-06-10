@@ -11,7 +11,7 @@ export default async function AdminModerationPage({
   const { status = 'pending' } = await searchParams
   const db = supabaseServer()
 
-  const { data: flags } = await db
+  const { data: flagsRaw } = await db
     .from('community_flags')
     .select(`
       id, content_type, content_id, reason, status, created_at,
@@ -20,6 +20,14 @@ export default async function AdminModerationPage({
     `)
     .eq('status', status)
     .order('created_at', { ascending: false })
+
+  // Normalise the aliased join columns from array shape to object shape.
+  type FlagRaw = typeof flagsRaw extends (infer T)[] | null ? T : never
+  const flags = (flagsRaw ?? []).map((f: FlagRaw) => ({
+    ...f,
+    flagged_by_member: Array.isArray(f.flagged_by_member) ? f.flagged_by_member[0] ?? null : f.flagged_by_member,
+    resolved_by_member: Array.isArray(f.resolved_by_member) ? f.resolved_by_member[0] ?? null : f.resolved_by_member,
+  }))
 
   return (
     <div className="space-y-6">

@@ -33,7 +33,6 @@ export interface CommunityMember {
   first_name: string | null
   last_name: string | null
   email: string | null
-  school_name: string | null
   /** Highest paid status across the member's active memberships. */
   hasPaidTier: boolean
   /** Display name of the active tier, if any. */
@@ -52,7 +51,7 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
   const { data: member } = await db
     .from('members')
     .select(`
-      id, first_name, last_name, email, school_name,
+      id, first_name, last_name, email,
       member_memberships(renewal_status, started_at, membership_tiers(name, is_free))
     `)
     .eq('clerk_user_id', userId)
@@ -83,7 +82,6 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
     first_name: member.first_name,
     last_name: member.last_name,
     email: member.email,
-    school_name: member.school_name,
     hasPaidTier,
     activeTierName: primaryTier?.name ?? null,
   } satisfies CommunityMember

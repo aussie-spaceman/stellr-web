@@ -1,6 +1,7 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { fireCampaignEvent } from '@/lib/email-campaigns'
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
@@ -165,6 +166,17 @@ export async function POST(req: Request) {
         renewal_status: 'active',
         is_complimentary: false,
       })
+    }
+  }
+
+  // Fire the member.created event for any active welcome campaigns. Best-effort
+  // and idempotent — the campaign send ledger dedups, so repeat profile saves
+  // can't re-send. Never let a campaign error break onboarding.
+  if (memberId) {
+    try {
+      await fireCampaignEvent('member.created', memberId)
+    } catch (e) {
+      console.error('[onboarding] member.created campaign event failed:', e)
     }
   }
 

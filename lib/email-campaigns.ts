@@ -6,7 +6,7 @@
 // NB: lib/campaigns.ts is unrelated (Fall/Spring program registration windows).
 
 import { supabaseServer } from '@/lib/supabase'
-import { sendEmail } from '@/lib/email'
+import { sendEmail, MARKETING_FROM } from '@/lib/email'
 import { renderCampaignEmail } from '@/lib/email-render'
 import { memberMergeVars, type CampaignMember } from '@/lib/email-vars'
 
@@ -38,7 +38,10 @@ interface AudienceMember extends CampaignMember {
  * suppression is ALWAYS applied on top of the filter — a campaign can never
  * widen its reach past members who have opted out.
  */
-export async function resolveAudience(audience: Audience): Promise<AudienceMember[]> {
+export async function resolveAudience(
+  audience: Audience,
+  opts?: { memberIds?: string[] },
+): Promise<AudienceMember[]> {
   const db = supabaseServer()
 
   let q = db
@@ -46,6 +49,13 @@ export async function resolveAudience(audience: Audience): Promise<AudienceMembe
     .select('id, first_name, last_name, email, membership_id, age_bracket, marketing_unsubscribe_token')
     .eq('marketing_consent', true)
     .not('email', 'is', null)
+
+  // Scope to specific members (event hooks pass a single id — avoids loading the
+  // whole base just to check one recipient).
+  if (opts?.memberIds) {
+    if (opts.memberIds.length === 0) return []
+    q = q.in('id', opts.memberIds)
+  }
 
   if (audience.activeOnly) q = q.eq('is_active', true)
   if (audience.excludeMinors) q = q.neq('age_bracket', MINOR_AGE_BRACKET) // also drops null age (conservative)
@@ -140,7 +150,7 @@ export async function sendToMembers(
     let error: string | null = null
     try {
       const { subject, html, text } = renderCampaignEmail(template, vars, unsub)
-      await sendEmail({ to: m.email, subject, html, text })
+      await sendEmail({ to: m.email, from: MARKETING_FROM, subject, html, text })
       result.sent++
     } catch (e) {
       status = 'failed'
@@ -234,10 +244,9 @@ export async function fireCampaignEvent(eventKey: string, memberId: string, dedu
   for (const c of campaigns) {
     const template = await loadTemplate(c.template_id)
     if (!template) continue
-    // Resolve the member through the campaign's audience so consent/minor/tier
-    // rules still apply to event sends.
-    const audience = await resolveAudience((c.audience ?? {}) as Audience)
-    const target = audience.find((m) => m.id === memberId)
+    // Resolve just this member through the campaign's audience so consent/minor/
+    // tier rules still apply to event sends.
+    const [target] = await resolveAudience((c.audience ?? {}) as Audience, { memberIds: [memberId] })
     if (!target) continue
     await sendToMembers(c.id, template, [target], dedupKey)
   }

@@ -6,6 +6,11 @@
 const BRAND_NAVY = '#1e3a5f'
 const FOOTER_BG = '#f3f4f6'
 
+// CAN-SPAM requires a valid physical postal address on marketing email. Shown
+// only when an unsubscribe link is present (i.e. marketing, not transactional).
+const MARKETING_POSTAL_ADDRESS =
+  process.env.MARKETING_POSTAL_ADDRESS ?? '7533 S Center View CT STE R, West Jordan, Utah 84084'
+
 interface LayoutOptions {
   heading: string
   bodyHtml: string
@@ -26,7 +31,7 @@ export function emailLayout({ heading, bodyHtml, preheader, unsubscribeUrl }: La
       ${bodyHtml}
     </div>
     <div style="background:${FOOTER_BG};padding:16px 32px;text-align:center;color:#6b7280;font-size:12px;line-height:1.5">
-      Stellr Education${unsubscribeUrl ? `<br/><a href="${unsubscribeUrl}" style="color:#6b7280">Unsubscribe from these emails</a>` : ''}
+      Stellr Education${unsubscribeUrl ? `<br/>${escapeHtml(MARKETING_POSTAL_ADDRESS)}<br/><a href="${unsubscribeUrl}" style="color:#6b7280">Unsubscribe from these emails</a>` : ''}
     </div>
   </div>`
 }

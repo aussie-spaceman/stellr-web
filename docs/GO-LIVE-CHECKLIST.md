@@ -50,8 +50,11 @@ www↔app experience and is the critical path.
 
 ---
 
-## 3. Payments (Stripe)
+> Run `npm run verify:prod` ([scripts/verify-prod-services.ts](../scripts/verify-prod-services.ts)) any time for a read-only check of Stripe (key mode + every DB price ID resolves live) and DocuSign (sandbox vs prod + templates exist).
 
+## 3. Payments (Stripe) — ✅ VERIFIED LIVE (2026-06-10)
+
+- [x] Live key valid (account Insimeducation) and **all 8 membership price IDs resolve live + active** under it (verified via `npm run verify:prod`). No test-price trap.
 - [ ] Swap to **live** keys in Vercel: `STRIPE_SECRET_KEY` (sk_live), `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (pk_live).
 - [ ] Create the **live** Stripe webhook → endpoint `https://app.stellreducation.org/api/stripe/webhook`; set its live signing secret in Vercel.
 - [ ] `NEXT_PUBLIC_DONATION_URL` set to the live donation/payment link.
@@ -59,7 +62,28 @@ www↔app experience and is the critical path.
 
 ---
 
-## 4. E-signature (DocuSign) — production
+## 4. E-signature (DocuSign) — ❌ STILL SANDBOX (2026-06-10)
+
+> Verified `account-d.docusign.com` + `demo.docusign.net` — envelopes are non-binding demo envelopes. **Production requires the DocuSign Go-Live promotion** (≈20 successful demo API calls → promote the integration key in DocuSign admin), then a prod account ID + **re-granted JWT consent** + the **3 templates recreated in the prod account** (the demo template GUIDs change). Also confirm Vercel's `DOCUSIGN_*` vars aren't still demo.
+
+### 4a. Go-Live promotion — step by step
+
+DocuSign requires promoting the JWT integration key from demo to production; it is **not** just an env swap. Order matters.
+
+1. **Hit the API-call threshold in demo.** DocuSign won't let you promote until the integration key has logged **≥ 20 successful API calls** in the demo environment (with an acceptable success rate). You already have some from real demo registrations; `npm run verify:prod` adds a few per run (1 auth + 3 template reads). Check progress in **DocuSign Admin (demo) → Integrations → Apps and Keys → your app → API request logging** (enable logging if off, then accrue calls).
+2. **Start the promotion.** In the demo account, **Apps and Keys → your integration key → Actions → "Start" / "Go-Live"**. DocuSign runs an automated review of the logged calls. Most JWT integrations are approved automatically within minutes; if flagged, address the listed issues and resubmit.
+3. **Get a production DocuSign account** (the org's real, paid account) if you don't have one. Promotion makes the *app* eligible for prod, but the account itself is separate.
+4. **Add the integration key to the production account.** In **Apps and Keys** on the *production* account, the promoted integration key (client ID) appears or is added. **Add your RSA keypair** there (you can reuse the same public key as demo, or generate a fresh prod keypair — if fresh, that becomes the new `DOCUSIGN_PRIVATE_KEY`). Set the redirect URI.
+5. **Find the production account ID + base URI (region-specific).** After auth, call `GET https://account.docusign.com/oauth/userinfo` — the response's `accounts[]` gives the prod `account_id` and `base_uri` (e.g. `https://na3.docusign.net`, `na4`, `eu`, `au`, `ca`). The base path env is that `base_uri` + `/restapi`. Using the wrong region's base path is a common cause of 401/404s.
+6. **Re-grant JWT consent on production.** Consent is per-environment. Have the impersonated user (`DOCUSIGN_USER_ID`) open: `https://account.docusign.com/oauth/auth?response_type=code&scope=signature%20impersonation&client_id=<PROD_INTEGRATION_KEY>&redirect_uri=<your_redirect>` and approve.
+7. **Recreate the 3 templates in the production account.** Templates are account-scoped — the demo GUIDs (`92433f1d…`, `c3e40b62…`, `2af13604…`) do **not** exist in prod. Either download each from demo and upload to prod, or rebuild them. **Then update all three `DOCUSIGN_*_TEMPLATE_ID` envs** with the new prod GUIDs.
+8. **Re-confirm tab labels + roles match exactly** in the prod templates (a mismatch silently leaves fields blank):
+   - minor/guardian: `MinorName`, `MinorDateOfBirth`, `EventTitle`, `GuardianName`, `GuardianEmail`, `GuardianPhone`, `MinorRelationship`, `SchoolName`, `SchoolState`
+   - adult (role `Adult`): `TeacherName`, `TeacherEmail`, `TeacherPhone`, `EventTitle`, `SchoolName`, `SchoolState`
+   - mentor (+ `StellrRepresentative` role at routing order 1): `MentorName`, `MentorEmail`, `MentorPhone`, `EventTitle`
+9. **Set prod Connect webhook + HMAC** (see below), then **re-run `npm run verify:prod`** — it should now print `environment: PRODUCTION` and resolve all three prod templates.
+
+Then complete the env + webhook items below.
 
 - [ ] Switch from sandbox to production endpoints in Vercel:
   - [ ] `DOCUSIGN_OAUTH_URL=https://account.docusign.com`

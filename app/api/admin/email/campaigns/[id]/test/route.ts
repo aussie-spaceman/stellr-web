@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
-import { sendEmail } from '@/lib/email'
+import { sendEmail, MARKETING_FROM } from '@/lib/email'
 import { renderCampaignEmail } from '@/lib/email-render'
 import { MERGE_FIELDS } from '@/lib/email-vars'
 import { loadTemplate, appUrl } from '@/lib/email-campaigns'
@@ -33,7 +33,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   try {
     const { subject, html, text } = renderCampaignEmail(template, exampleVars, unsub)
-    await sendEmail({ to: parsed.data.email, subject: `[TEST] ${subject}`, html, text })
+    await sendEmail({ to: parsed.data.email, from: MARKETING_FROM, subject: `[TEST] ${subject}`, html, text })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to send test' }, { status: 400 })
   }

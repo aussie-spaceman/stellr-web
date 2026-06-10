@@ -1,6 +1,11 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const FROM = 'Stellr Education <david.shaw@insimeducation.com>'
 
+// Marketing/campaign sender — a separate, DNS-authenticated subdomain so bulk
+// sends build (or burn) reputation independently of transactional mail above.
+export const MARKETING_FROM =
+  process.env.MARKETING_FROM ?? 'Stellr Education <hello@mail.stellreducation.org>'
+
 interface EmailAttachment {
   filename: string
   /** Base64-encoded file content (Resend `content` field). */
@@ -10,6 +15,8 @@ interface EmailAttachment {
 
 interface SendEmailOptions {
   to: string
+  /** Override the default transactional sender (e.g. MARKETING_FROM for campaigns). */
+  from?: string
   cc?: string[]
   replyTo?: string
   subject: string
@@ -18,7 +25,7 @@ interface SendEmailOptions {
   attachments?: EmailAttachment[]
 }
 
-export async function sendEmail({ to, cc, replyTo, subject, html, text, attachments }: SendEmailOptions) {
+export async function sendEmail({ to, from, cc, replyTo, subject, html, text, attachments }: SendEmailOptions) {
   if (!RESEND_API_KEY) {
     console.log('[email] No RESEND_API_KEY — would have sent to:', to, subject)
     return
@@ -31,7 +38,7 @@ export async function sendEmail({ to, cc, replyTo, subject, html, text, attachme
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: FROM,
+      from: from ?? FROM,
       to: [to],
       cc: cc ?? [],
       reply_to: replyTo,

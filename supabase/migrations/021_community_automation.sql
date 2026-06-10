@@ -1,4 +1,4 @@
--- Migration 019: Community automation support.
+-- Migration 021: Community automation support.
 --   * sent_reminders   — dedupe ledger so scheduled jobs don't re-notify
 --   * session_credits  — purchased extra coaching/mentoring sessions (Stripe)
 --   * members.graduation_year — drives the July-1 Alumni auto-upgrade

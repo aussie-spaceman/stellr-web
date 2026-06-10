@@ -57,6 +57,7 @@ export async function dispatchAgreement(
       const envelopeId = await createConsentEnvelope({
         minorFirstName:   ctx.firstName,
         minorLastName:    ctx.lastName,
+        minorEmail:       ctx.email,
         minorDateOfBirth: ctx.dateOfBirth ?? undefined,
         guardianName,
         guardianEmail:    ctx.guardianEmail,

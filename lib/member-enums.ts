@@ -11,19 +11,16 @@
 
 export const VALID_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'] as const
 export const VALID_AGE_BRACKETS = ['adult', 'high_school', 'college'] as const
-export const VALID_EVENT_ROLES = ['teacher', 'school_student', 'mentor', 'subscriber', 'parent'] as const
+// 'adult' and 'school_student_manager' require migration 016 to exist in the enum.
+export const VALID_EVENT_ROLES = [
+  'teacher', 'school_student', 'school_student_manager', 'mentor', 'subscriber', 'parent', 'adult',
+] as const
 export const VALID_GRADES = [
   'grade_9', 'grade_10', 'grade_11', 'grade_12',
   'college_freshman', 'college_sophomore', 'college_junior', 'college_senior', 'grad_phd',
 ] as const
-// tshirt_size enum tops out at 2XL — the form's "3XL (or larger)" has no enum value.
-export const VALID_TSHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL'] as const
-
-// Canonical enum values that have no 1:1 form value, mapped to the closest valid one.
-const ROLE_FALLBACKS: Record<string, string> = {
-  adult: 'subscriber',                       // generic adult attendee — no dedicated enum value
-  school_student_manager: 'school_student',  // DB enum lacks SM; manager perms come via teacher_member_id
-}
+// '3XL (or larger)' requires migration 016 to exist in the enum.
+export const VALID_TSHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)'] as const
 
 function canon(v: unknown): string {
   return (v ?? '').toString().trim().toLowerCase().replace(/[\s/-]+/g, '_')
@@ -41,12 +38,11 @@ export function normalizeAgeBracket(v: unknown): string {
   return (VALID_AGE_BRACKETS as readonly string[]).includes(c) ? c : 'adult'
 }
 
-// Event role → enum, applying fallbacks for values the enum can't represent.
-// Defaults to 'subscriber' (the generic member role) when unrecognised.
+// Event role → enum. Defaults to 'subscriber' (the generic member role) when
+// unrecognised. ("School Student Manager" / "Adult" canonicalise to valid values.)
 export function normalizeEventRole(v: unknown): string {
   const c = canon(v)
-  if ((VALID_EVENT_ROLES as readonly string[]).includes(c)) return c
-  return ROLE_FALLBACKS[c] ?? 'subscriber'
+  return (VALID_EVENT_ROLES as readonly string[]).includes(c) ? c : 'subscriber'
 }
 
 // Grade → enum, or null when unrecognised (column is nullable). Bare numerics

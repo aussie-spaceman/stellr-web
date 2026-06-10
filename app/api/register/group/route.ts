@@ -9,6 +9,7 @@ import {
   groupMemberIndividualPaymentEmail,
 } from '@/lib/email'
 import { createGroupRegistrationSheet, isGoogleSheetsConfigured } from '@/lib/google-sheets'
+import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt } from '@/lib/member-enums'
 import type { RegistrationRow } from '@/lib/database.types'
@@ -194,6 +195,26 @@ export async function POST(req: NextRequest) {
     const registrantMemberId = memberIdMap[teacher.email]
     if (registrantMemberId) {
       await db.from('registrations').update({ teacher_member_id: registrantMemberId }).eq('id', regId)
+    }
+
+    // Provision a Clerk account + sign-in token so the registrant is silently
+    // signed in on the confirmation step and can immediately open their group's
+    // sheet from the member portal — no manual sign-up required. Non-fatal: a
+    // Clerk hiccup must not fail the registration.
+    let signInToken: string | null = null
+    try {
+      const provisioned = await ensureClerkUserAndSignInToken(
+        teacher.email, teacher.first_name, teacher.last_name,
+      )
+      signInToken = provisioned.signInToken
+      // Eagerly link the Clerk id to the member row (the user.created webhook
+      // also does this, but we can't rely on its timing for the immediate
+      // ownership check on the sheet endpoint).
+      if (registrantMemberId) {
+        await db.from('members').update({ clerk_user_id: provisioned.clerkUserId }).eq('id', registrantMemberId)
+      }
+    } catch (clerkErr) {
+      console.error('Clerk provisioning (non-fatal):', clerkErr)
     }
 
     // Build participant rows
@@ -448,7 +469,7 @@ export async function POST(req: NextRequest) {
       console.error('Confirmation email failed (non-fatal):', emailErr)
     }
 
-    return NextResponse.json({ registrationId: regId, checkoutUrl, spreadsheetUrl: promptSpreadsheetUrl }, { status: 201 })
+    return NextResponse.json({ registrationId: regId, checkoutUrl, spreadsheetUrl: promptSpreadsheetUrl, signInToken }, { status: 201 })
   } catch (e) {
     console.error('Group registration error:', e)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

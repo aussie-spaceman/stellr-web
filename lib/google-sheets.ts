@@ -336,19 +336,20 @@ export async function createGroupRegistrationSheet({
   await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } })
 
   // ── Share ───────────────────────────────────────────────────────────────────
+  // Anyone with the link can edit: the registrant opens it immediately without a
+  // Google sign-in. App-level gating (the authenticated, ownership-checked sheet
+  // endpoint) controls who can obtain the link in the first place.
   await drive.permissions.create({
     fileId: spreadsheetId,
-    requestBody: { type: 'user', role: 'writer', emailAddress: teacherEmail },
-    sendNotificationEmail: false,
+    requestBody: { type: 'anyone', role: 'writer' },
   })
 
-  if (teacherEmail.toLowerCase() !== OWNER_EMAIL.toLowerCase()) {
-    await drive.permissions.create({
-      fileId: spreadsheetId,
-      requestBody: { type: 'user', role: 'writer', emailAddress: OWNER_EMAIL },
-      sendNotificationEmail: false,
-    })
-  }
+  // Keep the owner as an explicit editor so it stays in their Drive.
+  await drive.permissions.create({
+    fileId: spreadsheetId,
+    requestBody: { type: 'user', role: 'writer', emailAddress: OWNER_EMAIL },
+    sendNotificationEmail: false,
+  })
 
   return { spreadsheetId, url: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit` }
 }

@@ -263,21 +263,18 @@ export async function GET(
       },
     })
 
-    // Share with teacher and owner
-    if (reg.teacher_email) {
-      await drive.permissions.create({
-        fileId: spreadsheetId,
-        requestBody: { type: 'user', role: 'writer', emailAddress: reg.teacher_email },
-        sendNotificationEmail: false,
-      })
-    }
-    if (!reg.teacher_email || reg.teacher_email.toLowerCase() !== OWNER_EMAIL.toLowerCase()) {
-      await drive.permissions.create({
-        fileId: spreadsheetId,
-        requestBody: { type: 'user', role: 'writer', emailAddress: OWNER_EMAIL },
-        sendNotificationEmail: false,
-      })
-    }
+    // Anyone with the link can edit — access to the link itself is gated by this
+    // endpoint's auth + ownership check above. Keep the owner as an explicit
+    // editor so the sheet stays in their Drive.
+    await drive.permissions.create({
+      fileId: spreadsheetId,
+      requestBody: { type: 'anyone', role: 'writer' },
+    })
+    await drive.permissions.create({
+      fileId: spreadsheetId,
+      requestBody: { type: 'user', role: 'writer', emailAddress: OWNER_EMAIL },
+      sendNotificationEmail: false,
+    })
 
     // Persist the spreadsheet_id so future visits reuse this sheet
     await db.from('registrations').update({ spreadsheet_id: spreadsheetId }).eq('id', id)

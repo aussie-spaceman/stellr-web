@@ -5,6 +5,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@clerk/nextjs'
+import { useSignIn } from '@clerk/nextjs/legacy'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import FieldError from '@/components/forms/FieldError'
 import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
@@ -306,6 +308,8 @@ function StudentAccordion({ index, data, onChange, expanded, onToggle }: {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function GroupRegistrationForm({ eventSlug, eventTitle }: { eventSlug: string; eventTitle: string }) {
   const router = useRouter()
+  const { signIn, setActive, isLoaded: signInLoaded } = useSignIn()
+  const { isSignedIn } = useAuth()
   const [step, setStep] = useState<1 | 2>(1)
   const [registrantRole, setRegistrantRole] = useState<RegistrantRole>('teacher')
 
@@ -550,7 +554,22 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
         throw new Error(body.error ?? 'Registration failed')
       }
 
-      const { registrationId, checkoutUrl, spreadsheetUrl } = await res.json()
+      const { registrationId, checkoutUrl, spreadsheetUrl, signInToken } = await res.json()
+
+      // Silently sign the registrant in (Clerk ticket flow) so they land on the
+      // confirmation step already authenticated and can open their group's sheet
+      // from the member portal without a separate sign-up. Non-fatal — if it
+      // fails they can still sign in later with the same email.
+      if (signInToken && !isSignedIn && signInLoaded && signIn) {
+        try {
+          const result = await signIn.create({ strategy: 'ticket', ticket: signInToken })
+          if (result.status === 'complete' && result.createdSessionId) {
+            await setActive({ session: result.createdSessionId })
+          }
+        } catch (signInErr) {
+          console.error('Auto sign-in failed (non-fatal):', signInErr)
+        }
+      }
 
       if (checkoutUrl) {
         window.location.href = checkoutUrl

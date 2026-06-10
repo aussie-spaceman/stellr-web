@@ -10,6 +10,8 @@ const ENV = {
   templateId:       process.env.DOCUSIGN_TEMPLATE_ID         ?? '', // minor / guardian consent
   adultTemplateId:  process.env.DOCUSIGN_ADULT_TEMPLATE_ID   ?? '', // adult participation agreement
   mentorTemplateId: process.env.DOCUSIGN_MENTOR_TEMPLATE_ID  ?? '', // mentor participation agreement
+  stellrRepName:  process.env.DOCUSIGN_STELLR_REP_NAME  ?? 'Stellr Education',
+  stellrRepEmail: process.env.DOCUSIGN_STELLR_REP_EMAIL ?? '', // counter-signer on mentor agreements
   connectHmacKey: process.env.DOCUSIGN_CONNECT_HMAC_KEY  ?? '',
 }
 
@@ -84,7 +86,9 @@ function consentDocBase64(minor: string, guardian: string, event: string): strin
     '  4. I have read and agree to the Stellr Education Terms & Conditions.',
     '',
     '',
-    'Signature: ________________________   Date: ________________',
+    'Guardian Signature: ____________________   Guardian Date: ____________',
+    '',
+    'Participant Signature: _________________   Participant Date: __________',
     '',
   ].join('\n')
   return Buffer.from(text).toString('base64')
@@ -95,6 +99,7 @@ function consentDocBase64(minor: string, guardian: string, event: string): strin
 export interface EnvelopeParams {
   minorFirstName:  string
   minorLastName:   string
+  minorEmail:      string
   minorDateOfBirth?: string
   guardianName:    string
   guardianEmail:   string
@@ -110,30 +115,65 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<string> 
   let body: object
 
   if (ENV.templateId) {
+    // Guardian + minor sign concurrently (identical routingOrder). The 'Minor'
+    // role must exist on the DocuSign template; it is only added when the minor
+    // has an email on file.
+    const templateRoles: object[] = [{
+      roleName:     'Guardian',
+      name:         p.guardianName,
+      email:        p.guardianEmail,
+      routingOrder: '1',
+      tabs: {
+        textTabs: [
+          { tabLabel: 'MinorName',       value: minorName               },
+          { tabLabel: 'MinorDateOfBirth', value: p.minorDateOfBirth ?? '' },
+          { tabLabel: 'EventTitle',      value: p.eventTitle            },
+          { tabLabel: 'GuardianName',    value: p.guardianName          },
+          { tabLabel: 'GuardianEmail',   value: p.guardianEmail         },
+          { tabLabel: 'GuardianPhone',   value: p.guardianPhone  ?? ''  },
+          { tabLabel: 'MinorRelationship', value: p.relationship ?? ''  },
+          { tabLabel: 'SchoolName',      value: p.schoolName     ?? ''  },
+          { tabLabel: 'SchoolState',     value: p.schoolState    ?? ''  },
+        ],
+      },
+    }]
+    if (p.minorEmail) {
+      templateRoles.push({
+        roleName:     'Minor',
+        name:         minorName,
+        email:        p.minorEmail,
+        routingOrder: '1',
+      })
+    }
     body = {
-      status:        'sent',
-      emailSubject:  `Parental Consent Required — ${p.eventTitle}`,
-      templateId:    ENV.templateId,
-      templateRoles: [{
-        roleName: 'Guardian',
-        name:     p.guardianName,
-        email:    p.guardianEmail,
-        tabs: {
-          textTabs: [
-            { tabLabel: 'MinorName',       value: minorName               },
-            { tabLabel: 'MinorDateOfBirth', value: p.minorDateOfBirth ?? '' },
-            { tabLabel: 'EventTitle',      value: p.eventTitle            },
-            { tabLabel: 'GuardianName',    value: p.guardianName          },
-            { tabLabel: 'GuardianEmail',   value: p.guardianEmail         },
-            { tabLabel: 'GuardianPhone',   value: p.guardianPhone  ?? ''  },
-            { tabLabel: 'MinorRelationship', value: p.relationship ?? ''  },
-            { tabLabel: 'SchoolName',      value: p.schoolName     ?? ''  },
-            { tabLabel: 'SchoolState',     value: p.schoolState    ?? ''  },
-          ],
-        },
-      }],
+      status:       'sent',
+      emailSubject: `Parental Consent Required — ${p.eventTitle}`,
+      templateId:   ENV.templateId,
+      templateRoles,
     }
   } else {
+    const signers: object[] = [{
+      email:        p.guardianEmail,
+      name:         p.guardianName,
+      recipientId:  '1',
+      routingOrder: '1',
+      tabs: {
+        signHereTabs:   [{ anchorString: 'Guardian Signature:', anchorXOffset: '130', anchorYOffset: '-5', anchorUnits: 'pixels' }],
+        dateSignedTabs: [{ anchorString: 'Guardian Date:',      anchorXOffset: '90',  anchorYOffset: '-5', anchorUnits: 'pixels' }],
+      },
+    }]
+    if (p.minorEmail) {
+      signers.push({
+        email:        p.minorEmail,
+        name:         minorName,
+        recipientId:  '2',
+        routingOrder: '1',
+        tabs: {
+          signHereTabs:   [{ anchorString: 'Participant Signature:', anchorXOffset: '140', anchorYOffset: '-5', anchorUnits: 'pixels' }],
+          dateSignedTabs: [{ anchorString: 'Participant Date:',      anchorXOffset: '95',  anchorYOffset: '-5', anchorUnits: 'pixels' }],
+        },
+      })
+    }
     body = {
       status:       'sent',
       emailSubject: `Parental Consent Required — ${p.eventTitle}`,
@@ -143,28 +183,7 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<string> 
         fileExtension:  'txt',
         documentBase64: consentDocBase64(minorName, p.guardianName, p.eventTitle),
       }],
-      recipients: {
-        signers: [{
-          email:        p.guardianEmail,
-          name:         p.guardianName,
-          recipientId:  '1',
-          routingOrder: '1',
-          tabs: {
-            signHereTabs: [{
-              anchorString:  'Signature:',
-              anchorXOffset: '80',
-              anchorYOffset: '-5',
-              anchorUnits:   'pixels',
-            }],
-            dateSignedTabs: [{
-              anchorString:  'Date:',
-              anchorXOffset: '55',
-              anchorYOffset: '-5',
-              anchorUnits:   'pixels',
-            }],
-          },
-        }],
-      },
+      recipients: { signers },
     }
   }
 
@@ -232,23 +251,37 @@ export async function createMentorAgreementEnvelope(p: MentorAgreementParams): P
   if (!ENV.mentorTemplateId) throw new Error('DOCUSIGN_MENTOR_TEMPLATE_ID not configured')
   const fullName = `${p.firstName} ${p.lastName}`
 
+  // Mentor + Stellr representative counter-sign concurrently (identical
+  // routingOrder). The 'StellrRepresentative' role must exist on the template;
+  // it is only added when DOCUSIGN_STELLR_REP_EMAIL is configured.
+  const templateRoles: object[] = [{
+    roleName:     'Mentor',
+    name:         fullName,
+    email:        p.email,
+    routingOrder: '1',
+    tabs: {
+      textTabs: [
+        { tabLabel: 'MentorName',  value: fullName      },
+        { tabLabel: 'MentorEmail', value: p.email       },
+        { tabLabel: 'MentorPhone', value: p.phone ?? '' },
+        { tabLabel: 'EventTitle',  value: p.eventTitle  },
+      ],
+    },
+  }]
+  if (ENV.stellrRepEmail) {
+    templateRoles.push({
+      roleName:     'StellrRepresentative',
+      name:         ENV.stellrRepName,
+      email:        ENV.stellrRepEmail,
+      routingOrder: '1',
+    })
+  }
+
   const body = {
-    status:        'sent',
-    emailSubject:  `Mentor Participation Agreement — ${p.eventTitle}`,
-    templateId:    ENV.mentorTemplateId,
-    templateRoles: [{
-      roleName: 'Mentor',
-      name:     fullName,
-      email:    p.email,
-      tabs: {
-        textTabs: [
-          { tabLabel: 'MentorName',  value: fullName      },
-          { tabLabel: 'MentorEmail', value: p.email       },
-          { tabLabel: 'MentorPhone', value: p.phone ?? '' },
-          { tabLabel: 'EventTitle',  value: p.eventTitle  },
-        ],
-      },
-    }],
+    status:       'sent',
+    emailSubject: `Mentor Participation Agreement — ${p.eventTitle}`,
+    templateId:   ENV.mentorTemplateId,
+    templateRoles,
   }
 
   const res = await dsRequest('/envelopes', { method: 'POST', body: JSON.stringify(body) })

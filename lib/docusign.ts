@@ -117,25 +117,26 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<string> 
   if (ENV.templateId) {
     // Guardian + minor sign concurrently (identical routingOrder). The 'Minor'
     // role must exist on the DocuSign template; it is only added when the minor
-    // has an email on file.
+    // has an email on file. The informational text tabs are sent on BOTH roles
+    // so each field prefills regardless of which recipient owns it in the
+    // template (DocuSign ignores tab values a recipient doesn't own).
+    const sharedTextTabs = [
+      { tabLabel: 'MinorName',        value: minorName               },
+      { tabLabel: 'MinorDateOfBirth', value: p.minorDateOfBirth ?? '' },
+      { tabLabel: 'EventTitle',       value: p.eventTitle            },
+      { tabLabel: 'GuardianName',     value: p.guardianName          },
+      { tabLabel: 'GuardianEmail',    value: p.guardianEmail         },
+      { tabLabel: 'GuardianPhone',    value: p.guardianPhone   ?? '' },
+      { tabLabel: 'MinorRelationship', value: p.relationship   ?? '' },
+      { tabLabel: 'SchoolName',       value: p.schoolName      ?? '' },
+      { tabLabel: 'SchoolState',      value: p.schoolState     ?? '' },
+    ]
     const templateRoles: object[] = [{
       roleName:     'Guardian',
       name:         p.guardianName,
       email:        p.guardianEmail,
       routingOrder: '1',
-      tabs: {
-        textTabs: [
-          { tabLabel: 'MinorName',       value: minorName               },
-          { tabLabel: 'MinorDateOfBirth', value: p.minorDateOfBirth ?? '' },
-          { tabLabel: 'EventTitle',      value: p.eventTitle            },
-          { tabLabel: 'GuardianName',    value: p.guardianName          },
-          { tabLabel: 'GuardianEmail',   value: p.guardianEmail         },
-          { tabLabel: 'GuardianPhone',   value: p.guardianPhone  ?? ''  },
-          { tabLabel: 'MinorRelationship', value: p.relationship ?? ''  },
-          { tabLabel: 'SchoolName',      value: p.schoolName     ?? ''  },
-          { tabLabel: 'SchoolState',     value: p.schoolState    ?? ''  },
-        ],
-      },
+      tabs: { textTabs: sharedTextTabs },
     }]
     if (p.minorEmail) {
       templateRoles.push({
@@ -143,6 +144,7 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<string> 
         name:         minorName,
         email:        p.minorEmail,
         routingOrder: '1',
+        tabs: { textTabs: sharedTextTabs },
       })
     }
     body = {

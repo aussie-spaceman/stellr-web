@@ -26,6 +26,8 @@ export default async function CommunityLayout({
 
   const nav = [
     { href: '/community', label: 'Spaces' },
+    { href: '/community/events', label: 'Events' },
+    { href: '/community/training', label: 'Training' },
     { href: '/community/resources', label: 'Resources' },
     { href: '/community/members', label: 'Directory' },
     { href: '/community/search', label: 'Search' },

@@ -37,6 +37,8 @@ export interface CommunityMember {
   hasPaidTier: boolean
   /** Display name of the active tier, if any. */
   activeTierName: string | null
+  /** tier_id of every active membership — used by the entitlement engine. */
+  activeTierIds: string[]
 }
 
 /**
@@ -52,7 +54,7 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
     .from('members')
     .select(`
       id, first_name, last_name, email,
-      member_memberships(renewal_status, started_at, membership_tiers(name, is_free))
+      member_memberships(renewal_status, started_at, tier_id, membership_tiers(name, is_free))
     `)
     .eq('clerk_user_id', userId)
     .maybeSingle()
@@ -64,6 +66,7 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
   type RawMembership = {
     renewal_status: string
     started_at: string
+    tier_id: string | null
     membership_tiers: { name: string; is_free: boolean } | { name: string; is_free: boolean }[] | null
   }
 
@@ -76,6 +79,9 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
 
   const primaryTier = activeMemberships[0] ? tierOf(activeMemberships[0]) : null
   const hasPaidTier = activeMemberships.some((m) => tierOf(m)?.is_free === false)
+  const activeTierIds = activeMemberships
+    .map((m) => m.tier_id)
+    .filter((id): id is string => !!id)
 
   return {
     id: member.id,
@@ -84,7 +90,79 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
     email: member.email,
     hasPaidTier,
     activeTierName: primaryTier?.name ?? null,
+    activeTierIds,
   } satisfies CommunityMember
+}
+
+// ─── Entitlement engine (content_entitlements, migration 017) ──────────────
+// The flexible tier→content gating map. While the business is still mapping out
+// which tiers get which gated content, gating is editable at runtime via the
+// admin matrix UI — no code or schema change required.
+//
+// Resolution rule: if ANY entitlement row exists for a (target_type, target_ref),
+// access is decided ONLY by the table. If NO rows exist for that target, callers
+// fall back to the legacy min_tier_rank path so existing content is unaffected.
+
+export type EntitlementTargetType =
+  | 'space'
+  | 'resource'
+  | 'training_module'
+  | 'event_material'
+  | 'campaign_material'
+  | 'mentoring'
+  | 'coaching'
+
+export type AccessLevel = 'view' | 'download' | 'enroll' | 'host'
+
+/**
+ * Whether `member` is entitled to a specific target at (at least) `accessLevel`.
+ *
+ * Returns one of:
+ *   - true  → an entitlement row grants this tier the access
+ *   - false → entitlement rows exist for this target but none match the member
+ *   - null  → NO entitlement rows configured for this target; caller should fall
+ *             back to legacy min_tier_rank gating (memberMeetsTier)
+ */
+export async function memberHasEntitlement(
+  member: CommunityMember,
+  targetType: EntitlementTargetType,
+  targetRef: string,
+  accessLevel: AccessLevel = 'view'
+): Promise<boolean | null> {
+  const db = supabaseServer()
+  // Match the specific target OR a category-wide ('*') grant.
+  const { data: rows } = await db
+    .from('content_entitlements')
+    .select('tier_id, access_level, target_ref')
+    .eq('target_type', targetType)
+    .in('target_ref', [targetRef, '*'])
+
+  if (!rows || rows.length === 0) return null // not configured → legacy fallback
+
+  // Higher access levels imply the lower ones (download implies view, etc.).
+  const rank: Record<AccessLevel, number> = { view: 0, download: 1, enroll: 2, host: 3 }
+  const needed = rank[accessLevel]
+  const tierSet = new Set(member.activeTierIds)
+
+  return rows.some(
+    (r) => tierSet.has(r.tier_id) && rank[r.access_level as AccessLevel] >= needed
+  )
+}
+
+/**
+ * Combined gate: entitlement table first, legacy min_tier_rank as fallback.
+ * Use this everywhere content has a min_tier_rank column.
+ */
+export async function memberCanAccess(
+  member: CommunityMember,
+  targetType: EntitlementTargetType,
+  targetRef: string,
+  minTierRank: number,
+  accessLevel: AccessLevel = 'view'
+): Promise<boolean> {
+  const entitled = await memberHasEntitlement(member, targetType, targetRef, accessLevel)
+  if (entitled !== null) return entitled
+  return memberMeetsTier(member, minTierRank)
 }
 
 /**

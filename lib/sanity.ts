@@ -104,6 +104,25 @@ export async function getEventBySlug(slug: string) {
   )
 }
 
+// Minimal event/campaign metadata for a set of slugs — used by the Community
+// Event/Campaign portal to distinguish live events from campaigns (FR-COM-13)
+// and to resolve a slug to its Sanity _id (the entitlement/material target_ref).
+export interface EventMeta {
+  _id: string
+  title: string
+  slug: { current: string }
+  activityType?: string
+  date?: string
+}
+
+export async function getEventsBySlugs(slugs: string[]): Promise<EventMeta[]> {
+  if (!client || slugs.length === 0) return []
+  return client.fetch(
+    `*[_type == "event" && slug.current in $slugs]{ _id, title, slug, activityType, date }`,
+    { slugs }
+  )
+}
+
 export async function getFeaturedTestimonials() {
   if (!client) return null
   return client.fetch(`

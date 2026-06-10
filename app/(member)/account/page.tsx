@@ -7,6 +7,7 @@ import { EventHistory } from '@/components/member/EventHistory'
 import { TeamsTab } from '@/components/member/TeamsTab'
 import { BillingHistory } from '@/components/member/BillingHistory'
 import { DocusignsSection } from '@/components/member/DocusignsSection'
+import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
 import Link from 'next/link'
 
 export const metadata = { title: 'My Account' }
@@ -44,6 +45,12 @@ export default async function AccountPage({
   ])
 
   if (!member) redirect('/account/onboarding')
+
+  const { data: directoryPrefs } = await db
+    .from('member_directory_prefs')
+    .select('is_visible, show_school, show_region')
+    .eq('member_id', member.id)
+    .maybeSingle()
 
   const activeMembership = member.member_memberships
     ?.filter((m: { renewal_status: string }) => m.renewal_status === 'active')
@@ -104,6 +111,12 @@ export default async function AccountPage({
               ethnicityOptions={ethnicityOptions ?? []}
               allergyOptions={allergyOptions ?? []}
             />
+            <div className="rounded-xl border border-gray-200 bg-white p-5">
+              <h2 className="mb-4 text-base font-semibold text-gray-900">Community directory</h2>
+              <DirectoryPrefsForm
+                initial={directoryPrefs ?? { is_visible: false, show_school: true, show_region: true }}
+              />
+            </div>
             <EventHistory participations={member.event_participations ?? []} editable />
             <DocusignsSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
           </div>

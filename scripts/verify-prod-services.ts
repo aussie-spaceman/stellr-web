@@ -41,7 +41,7 @@ async function checkStripe() {
 
   // Validate the key works at all.
   try {
-    const acct = await stripe.accounts.retrieve()
+    const acct = await stripe.accounts.retrieve(null) // null id → account for the API key
     console.log(ok(`key valid — account ${acct.id} (${acct.settings?.dashboard?.display_name ?? 'n/a'})`))
   } catch (e: any) {
     console.log(bad(`key rejected by Stripe: ${e.message}`))

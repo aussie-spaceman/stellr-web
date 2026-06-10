@@ -55,54 +55,50 @@ export async function GET(
     }
   }
 
-  // Check if watch channel is active
-  const { data: watchChannel } = await db
-    .from('sheet_watch_channels')
-    .select('expiration')
-    .eq('registration_id', id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  // Watch channel, join token, and DocuSign envelopes are independent — fetch in parallel
+  const regAny = registration as Record<string, unknown>
+  const participantIds = (registration.participants as { id: string }[]).map(p => p.id)
+
+  const [{ data: watchChannel }, { data: token }, { data: envelopes }] = await Promise.all([
+    db.from('sheet_watch_channels')
+      .select('expiration')
+      .eq('registration_id', id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    regAny.details_method === 'email_link'
+      ? db.from('group_join_tokens')
+          .select('token, expires_at')
+          .eq('registration_id', id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    participantIds.length > 0
+      ? db.from('docusign_envelopes')
+          .select('id, participant_id, status, signer_name, signer_email, sent_at, completed_at, reminder_sent_at')
+          .in('participant_id', participantIds)
+      : Promise.resolve({ data: null }),
+  ])
 
   const watchActive = watchChannel
     ? new Date(watchChannel.expiration) > new Date()
     : false
 
-  // Attach join URL for email_link registrations
   let joinUrl: string | null = null
-  const regAny = registration as Record<string, unknown>
-  if (regAny.details_method === 'email_link') {
+  if (token && new Date((token as { expires_at: string }).expires_at) > new Date()) {
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
-    const { data: token } = await db
-      .from('group_join_tokens')
-      .select('token, expires_at')
-      .eq('registration_id', id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (token && new Date((token as { expires_at: string }).expires_at) > new Date()) {
-      joinUrl = `${siteUrl}/register/${regAny.event_slug}/join/${(token as { token: string }).token}`
-    }
+    joinUrl = `${siteUrl}/register/${regAny.event_slug}/join/${(token as { token: string }).token}`
   }
 
-  // Fetch DocuSign envelopes for all participants in this team
-  const participantIds = (registration.participants as { id: string }[]).map(p => p.id)
   const docusignEnvelopes: Record<string, {
     id: string; status: string; signer_name: string; signer_email: string
     sent_at: string; completed_at: string | null; reminder_sent_at: string | null
   }> = {}
-
-  if (participantIds.length > 0) {
-    const { data: envelopes } = await db
-      .from('docusign_envelopes')
-      .select('id, participant_id, status, signer_name, signer_email, sent_at, completed_at, reminder_sent_at')
-      .in('participant_id', participantIds)
-
-    for (const e of envelopes ?? []) {
-      docusignEnvelopes[e.participant_id] = {
-        id: e.id, status: e.status, signer_name: e.signer_name, signer_email: e.signer_email,
-        sent_at: e.sent_at, completed_at: e.completed_at, reminder_sent_at: e.reminder_sent_at,
-      }
+  for (const e of envelopes ?? []) {
+    docusignEnvelopes[e.participant_id] = {
+      id: e.id, status: e.status, signer_name: e.signer_name, signer_email: e.signer_email,
+      sent_at: e.sent_at, completed_at: e.completed_at, reminder_sent_at: e.reminder_sent_at,
     }
   }
 

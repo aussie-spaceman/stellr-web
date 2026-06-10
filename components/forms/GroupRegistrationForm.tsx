@@ -8,14 +8,8 @@ import { useRouter } from 'next/navigation'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import FieldError from '@/components/forms/FieldError'
 import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
-const GENDERS = ['Male', 'Female', 'Other']
-const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
-const ETHNICITIES = ['Pacific Islander', 'Hispanic', 'White (Caucasian)', 'Black', 'Native American', 'Asian', 'Prefer Not To Say']
-const DIETARY = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
-const HS_GRADES = ['9', '10', '11', '12']
+import { T_SHIRT_SIZES, GENDERS, GRADES, HS_GRADES, ETHNICITIES, DIETARY, deriveAgeBracket } from '@/lib/registration-constants'
+import { resolveSchoolPayload } from '@/lib/school-utils'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type RegistrantRole = 'teacher' | 'student_manager'
@@ -400,35 +394,6 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
     setStudents(prev => prev.map((s, idx) => idx === i ? { ...s, [field]: value } : s))
   }
 
-  function deriveAgeBracket(dob: string, grade?: string): string {
-    if (!dob) return 'Adult'
-    const age = Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000))
-    if (age < 18 || (grade && HS_GRADES.includes(grade))) return 'High School'
-    if (grade?.startsWith('College') || grade === 'Grad / PhD') return 'College'
-    return 'Adult'
-  }
-
-  // ── Resolve school payload from SchoolSelection ──────────────────────────────
-  function resolveSchool(sel: SchoolSelection | null): {
-    school_name: string
-    school_address_street: string | null
-    school_address_city: string | null
-    school_address_state: string | null
-    school_address_zip: string | null
-  } {
-    if (!sel) return { school_name: '', school_address_street: null, school_address_city: null, school_address_state: null, school_address_zip: null }
-    if (sel.type === 'existing') {
-      return { school_name: sel.name, school_address_street: null, school_address_city: null, school_address_state: null, school_address_zip: null }
-    }
-    return {
-      school_name: sel.data.name,
-      school_address_street: sel.data.address_line1 || null,
-      school_address_city: sel.data.city || null,
-      school_address_state: sel.data.state || null,
-      school_address_zip: sel.data.postcode || null,
-    }
-  }
-
   // ── Step 1 → Step 2 ──────────────────────────────────────────────────────────
   async function goToStep2() {
     setSchoolError(null)
@@ -507,7 +472,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
     try {
       let registrantPayload: Record<string, unknown>
       const activeSchool = registrantRole === 'teacher' ? teacherSchool : smSchool
-      const schoolFields = resolveSchool(activeSchool)
+      const schoolFields = resolveSchoolPayload(activeSchool)
 
       if (registrantRole === 'teacher') {
         const d = tf.getValues()

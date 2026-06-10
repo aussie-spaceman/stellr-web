@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowRight, Users, Trophy, Rocket } from 'lucide-react'
-import { getFeaturedEvents, getFeaturedTestimonials } from '@/lib/sanity'
+import { getFeaturedEvents, getFeaturedTestimonials, type StellarEvent } from '@/lib/sanity'
 import { EventCard } from '@/components/ui/EventCard'
 import { TestimonialCarousel } from '@/components/sections/TestimonialCarousel'
 import { SubscribeForm } from '@/components/forms/SubscribeForm'
@@ -58,24 +58,6 @@ const membershipTiers = [
     benefits: ['Award winner tier', 'All Pathfinder benefits', 'Exclusive scholar content'],
   },
 ]
-
-interface StellarEvent {
-  _id: string
-  title: string
-  slug: { current: string }
-  type?: string
-  gradeLevel?: string
-  date?: string
-  endDate?: string
-  venue?: string
-  city?: string
-  state?: string
-  tagline?: string
-  image?: { asset: { _ref: string } }
-  registrationOpen?: boolean
-  registrationOpenDate?: string
-  registrationCloseDate?: string
-}
 
 export default async function HomePage() {
   const authUrl = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'

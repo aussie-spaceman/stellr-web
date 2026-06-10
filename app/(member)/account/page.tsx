@@ -105,7 +105,7 @@ export default async function AccountPage({
               allergyOptions={allergyOptions ?? []}
             />
             <EventHistory participations={member.event_participations ?? []} editable />
-            <DocusignsSection />
+            <DocusignsSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
           </div>
           <div>
             <MembershipCard membership={activeMembership} member={member} />

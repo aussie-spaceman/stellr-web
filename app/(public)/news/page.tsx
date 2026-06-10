@@ -3,6 +3,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowRight } from 'lucide-react'
 import { getAllNewsPosts, urlFor } from '@/lib/sanity'
+import { formatDate } from '@/lib/utils'
+import { categoryColors } from '@/lib/news-utils'
 
 export const metadata: Metadata = {
   title: 'News & Announcements',
@@ -28,16 +30,6 @@ interface PageProps {
   searchParams: Promise<{ category?: string }>
 }
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-}
-
-const categoryColors: Record<string, string> = {
-  'Announcement': 'bg-blue-50 text-brand-blue',
-  'Event Results': 'bg-green-50 text-green-700',
-  'STEM News': 'bg-purple-50 text-purple-700',
-  'Community': 'bg-orange-50 text-orange-700',
-}
 
 export default async function NewsPage({ searchParams }: PageProps) {
   const { category } = await searchParams

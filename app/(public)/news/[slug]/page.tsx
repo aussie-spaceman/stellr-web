@@ -5,6 +5,8 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { PortableText } from 'next-sanity'
 import { getNewsPostBySlug, getRelatedNewsPosts, urlFor } from '@/lib/sanity'
+import { formatDate } from '@/lib/utils'
+import { categoryColors } from '@/lib/news-utils'
 import { SubscribeForm } from '@/components/forms/SubscribeForm'
 
 export const revalidate = 3600
@@ -13,16 +15,6 @@ interface PageProps {
   params: Promise<{ slug: string }>
 }
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-}
-
-const categoryColors: Record<string, string> = {
-  'Announcement': 'bg-blue-50 text-brand-blue',
-  'Event Results': 'bg-green-50 text-green-700',
-  'STEM News': 'bg-purple-50 text-purple-700',
-  'Community': 'bg-orange-50 text-orange-700',
-}
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params

@@ -159,16 +159,16 @@ export function SchoolSearchInput({ onChange }: Props) {
     }
   }
 
-  const inputClass = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+  const inputClass = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue'
 
   if (mode === 'selected') {
     return (
-      <div className="flex items-center gap-2 border border-indigo-300 bg-indigo-50 rounded-lg px-3 py-2">
-        <span className="flex-1 text-sm text-indigo-800 font-medium">{selectedName}</span>
+      <div className="flex items-center gap-2 border border-brand-blue bg-blue-50 rounded-lg px-3 py-2">
+        <span className="flex-1 text-sm text-brand-blue-dark font-medium">{selectedName}</span>
         <button
           type="button"
           onClick={handleClearSelection}
-          className="text-indigo-400 hover:text-indigo-600 text-xs"
+          className="text-brand-blue/50 hover:text-brand-blue text-xs"
           aria-label="Clear school selection"
         >
           ✕
@@ -202,7 +202,7 @@ export function SchoolSearchInput({ onChange }: Props) {
           type="button"
           onClick={handleLookupAddress}
           disabled={lookingUp || !newSchool.name.trim()}
-          className="w-full text-xs text-indigo-600 border border-indigo-200 rounded-lg py-1.5 px-3 hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="w-full text-xs text-brand-blue border border-blue-200 rounded-lg py-1.5 px-3 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           {lookingUp ? 'Searching…' : '🔍 Find address automatically'}
         </button>
@@ -298,7 +298,7 @@ export function SchoolSearchInput({ onChange }: Props) {
                   <button
                     type="button"
                     onMouseDown={(e) => { e.preventDefault(); handleSelectExisting(school) }}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-50 flex flex-col"
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 flex flex-col"
                   >
                     <span className="font-medium text-gray-800">{school.name}</span>
                     {(school.city || school.state) && (
@@ -320,7 +320,7 @@ export function SchoolSearchInput({ onChange }: Props) {
             <button
               type="button"
               onMouseDown={(e) => { e.preventDefault(); handleAddNew() }}
-              className="w-full text-left px-4 py-2.5 text-sm text-indigo-600 hover:bg-indigo-50 font-medium"
+              className="w-full text-left px-4 py-2.5 text-sm text-brand-blue hover:bg-blue-50 font-medium"
             >
               + Add "{query}" as a new school
             </button>

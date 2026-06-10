@@ -28,26 +28,28 @@ export async function GET(req: NextRequest) {
 
   if (!envelopes?.length) return NextResponse.json({ processed: 0 })
 
+  // Prefetch all minor-participant emails in one query instead of one per envelope
+  const memberIds = [...new Set(envelopes.map(e => e.member_id).filter(Boolean))]
+  const { data: members } = memberIds.length > 0
+    ? await db.from('members').select('id, email, first_name').in('id', memberIds)
+    : { data: [] }
+  const memberById = new Map((members ?? []).map(m => [m.id, m]))
+
+  // Resends stay sequential: parallel calls risk DocuSign rate limits, and the
+  // per-envelope reminder_sent_at update keeps the job resumable if it dies mid-run.
   let processed = 0
   for (const env of envelopes) {
     try {
       await resendEnvelope(env.envelope_id)
 
-      if (env.member_id) {
-        const { data: member } = await db
-          .from('members')
-          .select('email, first_name')
-          .eq('id', env.member_id)
-          .maybeSingle()
-
-        if (member) {
-          const content = docusignReminderToMinorEmail({
-            firstName:    member.first_name,
-            guardianName: env.signer_name,
-            eventTitle:   env.event_title,
-          })
-          await sendEmail({ to: member.email, ...content })
-        }
+      const member = env.member_id ? memberById.get(env.member_id) : null
+      if (member) {
+        const content = docusignReminderToMinorEmail({
+          firstName:    member.first_name,
+          guardianName: env.signer_name,
+          eventTitle:   env.event_title,
+        })
+        await sendEmail({ to: member.email, ...content })
       }
 
       await db

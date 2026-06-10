@@ -113,11 +113,6 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
     }
   }
 
-  const eligibleTiers = tiers.filter(
-    (t) => !t.age_bracket || t.age_bracket === form.age_bracket
-  )
-  void eligibleTiers
-
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-8">
       {/* Step indicator */}
@@ -125,7 +120,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
         {[1, 2, 3].map((s) => (
           <div
             key={s}
-            className={`h-1.5 flex-1 rounded-full ${s <= step ? 'bg-indigo-600' : 'bg-gray-200'}`}
+            className={`h-1.5 flex-1 rounded-full ${s <= step ? 'bg-brand-blue' : 'bg-gray-200'}`}
           />
         ))}
       </div>
@@ -140,7 +135,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
                 onClick={() => handleRoleSelect(r)}
                 className={`text-left px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
                   form.event_role === r.value
-                    ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                    ? 'border-brand-blue bg-blue-50 text-brand-blue'
                     : 'border-gray-200 hover:border-gray-300 text-gray-700'
                 }`}
               >
@@ -151,7 +146,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
           <button
             onClick={() => setStep(2)}
             disabled={!form.event_role}
-            className="w-full mt-4 bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40"
+            className="w-full mt-4 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-800 disabled:opacity-40"
           >
             Continue
           </button>
@@ -169,7 +164,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
                 type="date"
                 value={form.date_of_birth}
                 onChange={(e) => set('date_of_birth', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
             <div>
@@ -177,7 +172,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
               <select
                 value={form.gender}
                 onChange={(e) => set('gender', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               >
                 <option value="">Select…</option>
                 {GENDERS.map((g) => (
@@ -195,7 +190,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
               type="tel"
               value={form.phone}
               onChange={(e) => set('phone', e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
             />
           </div>
 
@@ -206,7 +201,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
                 <select
                   value={form.grade}
                   onChange={(e) => set('grade', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 >
                   <option value="">Select…</option>
                   {GRADES.filter((g) =>
@@ -223,7 +218,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
                 <select
                   value={form.tshirt_size}
                   onChange={(e) => set('tshirt_size', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 >
                   <option value="">Select…</option>
                   {['S','M','L','XL','2XL','3XL_plus'].map((s) => (
@@ -249,7 +244,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
             <button
               onClick={() => setStep(3)}
               disabled={!form.date_of_birth || !form.gender}
-              className="flex-1 bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40"
+              className="flex-1 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-800 disabled:opacity-40"
             >
               Continue
             </button>
@@ -269,7 +264,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
                 type="text"
                 value={form.ec_first_name}
                 onChange={(e) => set('ec_first_name', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
             <div>
@@ -278,7 +273,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
                 type="text"
                 value={form.ec_last_name}
                 onChange={(e) => set('ec_last_name', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
           </div>
@@ -290,7 +285,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
                 type="email"
                 value={form.ec_email}
                 onChange={(e) => set('ec_email', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
             <div>
@@ -299,7 +294,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
                 type="tel"
                 value={form.ec_phone}
                 onChange={(e) => set('ec_phone', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
           </div>
@@ -313,7 +308,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
             <button
               onClick={handleSubmit}
               disabled={loading}
-              className="flex-1 bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+              className="flex-1 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-800 disabled:opacity-50"
             >
               {loading ? 'Saving…' : 'Complete profile'}
             </button>

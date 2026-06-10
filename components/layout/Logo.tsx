@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 
 interface LogoProps {
   variant?: 'dark' | 'light'
@@ -8,11 +9,11 @@ interface LogoProps {
 export function Logo({ variant = 'dark', className = '' }: LogoProps) {
   return (
     <Link href="/" className={`inline-flex items-center ${className}`} aria-label="Stellr Education — home">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      <Image
         src="/images/logo-horiz.svg"
         alt="Stellr Education"
-        height={40}
+        width={200}
+        height={56}
         className={`h-14 w-auto ${variant === 'light' ? 'brightness-0 invert' : ''}`}
       />
     </Link>

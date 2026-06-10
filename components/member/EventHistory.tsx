@@ -85,7 +85,7 @@ export function EventHistory({ participations: initialParticipations, editable =
         {editable && !adding && (
           <button
             onClick={() => setAdding(true)}
-            className="flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+            className="flex items-center gap-1 text-sm font-medium text-brand-blue hover:text-brand-blue-dark"
           >
             <span className="text-lg leading-none">+</span> Add activity
           </button>
@@ -111,7 +111,7 @@ export function EventHistory({ participations: initialParticipations, editable =
                 placeholder={String(CURRENT_YEAR)}
                 value={form.event_year}
                 onChange={(e) => setForm((f) => ({ ...f, event_year: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
             <div>
@@ -121,7 +121,7 @@ export function EventHistory({ participations: initialParticipations, editable =
                 placeholder="City, State"
                 value={form.event_location}
                 onChange={(e) => setForm((f) => ({ ...f, event_location: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
             <div>
@@ -131,7 +131,7 @@ export function EventHistory({ participations: initialParticipations, editable =
                 placeholder="Team / company name"
                 value={form.team_name}
                 onChange={(e) => setForm((f) => ({ ...f, team_name: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
             <div>
@@ -141,7 +141,7 @@ export function EventHistory({ participations: initialParticipations, editable =
                 placeholder="e.g. 1st Place"
                 value={form.award}
                 onChange={(e) => setForm((f) => ({ ...f, award: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
           </div>
@@ -149,7 +149,7 @@ export function EventHistory({ participations: initialParticipations, editable =
             <button
               onClick={handleAdd}
               disabled={saving}
-              className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+              className="bg-brand-blue text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-800 disabled:opacity-50"
             >
               {saving ? 'Saving…' : 'Save'}
             </button>

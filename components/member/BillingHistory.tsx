@@ -192,12 +192,12 @@ export function BillingHistory() {
                     </td>
                     <td className="px-6 py-4 text-right space-x-3">
                       {inv.pdf_url && (
-                        <a href={inv.pdf_url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 text-xs font-medium">
+                        <a href={inv.pdf_url} target="_blank" rel="noopener noreferrer" className="text-brand-blue hover:text-brand-blue-dark text-xs font-medium">
                           PDF
                         </a>
                       )}
                       {inv.hosted_url && (
-                        <a href={inv.hosted_url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 text-xs font-medium">
+                        <a href={inv.hosted_url} target="_blank" rel="noopener noreferrer" className="text-brand-blue hover:text-brand-blue-dark text-xs font-medium">
                           View
                         </a>
                       )}

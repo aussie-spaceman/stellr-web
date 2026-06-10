@@ -4,6 +4,10 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import FieldError from '@/components/forms/FieldError'
+
+const inputClass = (hasError: boolean) =>
+  `w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue ${hasError ? 'border-red-400' : 'border-gray-200'}`
 
 const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -75,12 +79,10 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
           type="text"
           autoComplete="name"
           {...register('name')}
-          className={`w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue ${
-            errors.name ? 'border-red-400' : 'border-gray-200'
-          }`}
+          className={inputClass(!!errors.name)}
           placeholder="Your full name"
         />
-        {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
+        <FieldError message={errors.name?.message} />
       </div>
 
       {/* Email */}
@@ -93,12 +95,10 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
           type="email"
           autoComplete="email"
           {...register('email')}
-          className={`w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue ${
-            errors.email ? 'border-red-400' : 'border-gray-200'
-          }`}
+          className={inputClass(!!errors.email)}
           placeholder="your@email.com"
         />
-        {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email.message}</p>}
+        <FieldError message={errors.email?.message} />
       </div>
 
       {/* Enquiry type */}
@@ -109,9 +109,7 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
         <select
           id="type"
           {...register('type')}
-          className={`w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue bg-white ${
-            errors.type ? 'border-red-400' : 'border-gray-200'
-          }`}
+          className={`${inputClass(!!errors.type)} bg-white`}
         >
           {ENQUIRY_TYPES.map((opt) => (
             <option key={opt.value} value={opt.value} disabled={opt.value === ''}>
@@ -119,7 +117,7 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
             </option>
           ))}
         </select>
-        {errors.type && <p className="mt-1 text-xs text-red-500">{errors.type.message}</p>}
+        <FieldError message={errors.type?.message} />
       </div>
 
       {/* Message */}
@@ -131,12 +129,10 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
           id="message"
           rows={5}
           {...register('message')}
-          className={`w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none ${
-            errors.message ? 'border-red-400' : 'border-gray-200'
-          }`}
+          className={`${inputClass(!!errors.message)} resize-none`}
           placeholder="How can we help?"
         />
-        {errors.message && <p className="mt-1 text-xs text-red-500">{errors.message.message}</p>}
+        <FieldError message={errors.message?.message} />
       </div>
 
       {/* Consent */}
@@ -152,7 +148,7 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
             <a href="/privacy" className="text-brand-blue hover:underline">Privacy Policy</a>.
           </span>
         </label>
-        {errors.consent && <p className="mt-1 text-xs text-red-500">{errors.consent.message}</p>}
+        <FieldError message={errors.consent?.message} />
       </div>
 
       {status === 'error' && (

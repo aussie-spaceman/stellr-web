@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Linkedin, Instagram, Facebook, Twitter } from 'lucide-react'
 import { Logo } from './Logo'
+import { SubscribeForm } from '@/components/forms/SubscribeForm'
 
 const footerLinks = {
   Educate: [
@@ -64,20 +65,9 @@ export function Footer() {
                 Future engineers start here — get updates on events, opportunities, and more.
               </p>
             </div>
-            <form className="flex gap-2 w-full sm:w-auto">
-              <input
-                type="email"
-                placeholder="Your email address"
-                className="flex-1 sm:w-64 px-4 py-2 rounded-md text-sm text-brand-blue-dark placeholder-gray-400 bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange"
-                required
-              />
-              <button
-                type="submit"
-                className="px-5 py-2 bg-brand-orange text-white text-sm font-heading font-medium rounded-md hover:bg-amber-500 transition-colors whitespace-nowrap"
-              >
-                Subscribe
-              </button>
-            </form>
+            <div className="w-full sm:w-auto sm:min-w-80">
+              <SubscribeForm />
+            </div>
           </div>
         </div>
       </div>

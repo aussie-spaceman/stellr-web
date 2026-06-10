@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { SchoolSearchInput, type SchoolSelection } from '@/components/member/SchoolSearchInput'
+import FieldError from '@/components/forms/FieldError'
 
 const schema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -100,9 +101,7 @@ export function HostEventForm() {
               className={inputClass(!!errors.firstName)}
               placeholder="Jane"
             />
-            {errors.firstName && (
-              <p className="mt-1 text-xs text-red-500">{errors.firstName.message}</p>
-            )}
+            <FieldError message={errors.firstName?.message} />
           </div>
           <div>
             <label htmlFor="lastName" className="block text-sm font-medium text-brand-blue-dark mb-1">
@@ -116,9 +115,7 @@ export function HostEventForm() {
               className={inputClass(!!errors.lastName)}
               placeholder="Smith"
             />
-            {errors.lastName && (
-              <p className="mt-1 text-xs text-red-500">{errors.lastName.message}</p>
-            )}
+            <FieldError message={errors.lastName?.message} />
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -134,9 +131,7 @@ export function HostEventForm() {
               className={inputClass(!!errors.email)}
               placeholder="jane@example.com"
             />
-            {errors.email && (
-              <p className="mt-1 text-xs text-red-500">{errors.email.message}</p>
-            )}
+            <FieldError message={errors.email?.message} />
           </div>
           <div>
             <label htmlFor="phone" className="block text-sm font-medium text-brand-blue-dark mb-1">
@@ -150,9 +145,7 @@ export function HostEventForm() {
               className={inputClass(!!errors.phone)}
               placeholder="+1 (555) 000-0000"
             />
-            {errors.phone && (
-              <p className="mt-1 text-xs text-red-500">{errors.phone.message}</p>
-            )}
+            <FieldError message={errors.phone?.message} />
           </div>
         </div>
       </fieldset>
@@ -180,9 +173,7 @@ export function HostEventForm() {
             className={inputClass(!!errors.venueCapacity)}
             placeholder="e.g. 50–100 students"
           />
-          {errors.venueCapacity && (
-            <p className="mt-1 text-xs text-red-500">{errors.venueCapacity.message}</p>
-          )}
+          <FieldError message={errors.venueCapacity?.message} />
         </div>
       </fieldset>
 
@@ -202,9 +193,7 @@ export function HostEventForm() {
             className={inputClass(!!errors.preferredTiming)}
             placeholder="e.g. Spring 2026, or February–March"
           />
-          {errors.preferredTiming && (
-            <p className="mt-1 text-xs text-red-500">{errors.preferredTiming.message}</p>
-          )}
+          <FieldError message={errors.preferredTiming?.message} />
         </div>
         <div>
           <label htmlFor="preferredDuration" className="block text-sm font-medium text-brand-blue-dark mb-1">
@@ -217,9 +206,7 @@ export function HostEventForm() {
             className={inputClass(!!errors.preferredDuration)}
             placeholder="e.g. Full day, weekend, or 2–3 weeks part-time"
           />
-          {errors.preferredDuration && (
-            <p className="mt-1 text-xs text-red-500">{errors.preferredDuration.message}</p>
-          )}
+          <FieldError message={errors.preferredDuration?.message} />
         </div>
       </fieldset>
 
@@ -270,9 +257,7 @@ export function HostEventForm() {
             .
           </span>
         </label>
-        {errors.consent && (
-          <p className="mt-1 text-xs text-red-500">{errors.consent.message}</p>
-        )}
+        <FieldError message={errors.consent?.message} />
       </div>
 
       {status === 'error' && (

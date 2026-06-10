@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { ParticipantForm } from './ParticipantForm'
+import { EnvelopeStatusBadge } from './DocusignsSection'
 import { Copy, Check } from 'lucide-react'
 
 function CopyButton({ text }: { text: string }) {
@@ -9,7 +10,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={() => { navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) }) }}
-      className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+      className="inline-flex items-center gap-1 text-xs text-brand-blue hover:text-brand-blue-dark font-medium"
     >
       {copied ? <Check size={12} /> : <Copy size={12} />}
       {copied ? 'Copied!' : 'Copy link'}
@@ -195,7 +196,7 @@ function JoinedTeamsView({
                 <button
                   onClick={() => handlePay(reg.id, entry.id)}
                   disabled={payingId === entry.id}
-                  className="text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg px-4 py-1.5 disabled:opacity-50"
+                  className="text-sm font-medium text-white bg-brand-blue hover:bg-blue-800 rounded-lg px-4 py-1.5 disabled:opacity-50"
                 >
                   {payingId === entry.id ? 'Redirecting…' : 'Pay Now →'}
                 </button>
@@ -224,18 +225,6 @@ function participantIsMinor(dob: string): boolean {
   return new Date() < eighteenth
 }
 
-const CONSENT_STYLES: Record<string, { label: string; cls: string }> = {
-  sent:      { label: 'Awaiting',  cls: 'bg-amber-100 text-amber-700'  },
-  delivered: { label: 'Viewed',   cls: 'bg-blue-100 text-blue-700'    },
-  completed: { label: 'Signed',   cls: 'bg-green-100 text-green-700'  },
-  declined:  { label: 'Declined', cls: 'bg-red-100 text-red-600'      },
-  voided:    { label: 'Voided',   cls: 'bg-gray-100 text-gray-500'    },
-}
-
-function ConsentBadge({ status }: { status: string }) {
-  const { label, cls } = CONSENT_STYLES[status] ?? { label: status, cls: 'bg-gray-100 text-gray-500' }
-  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
-}
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -406,7 +395,7 @@ function TeacherTeamsView() {
                       <CopyButton text={fullTeam.registration.joinUrl} />
                       <a
                         href={`mailto:?subject=Join our group — ${fullTeam.registration.event_title}&body=Hi,%0A%0APlease use this link to complete your registration:%0A%0A${fullTeam.registration.joinUrl}%0A%0AThanks`}
-                        className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                        className="text-xs text-brand-blue hover:text-brand-blue-dark font-medium"
                       >
                         Share via email ↗
                       </a>
@@ -421,7 +410,7 @@ function TeacherTeamsView() {
                       href={`https://docs.google.com/spreadsheets/d/${fullTeam.registration.spreadsheet_id}/edit`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                      className="inline-flex items-center gap-1.5 text-sm text-brand-blue hover:text-brand-blue-dark font-medium"
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
                       Open Sheet
@@ -447,7 +436,7 @@ function TeacherTeamsView() {
                   )}
                   <button
                     onClick={() => setAdding(true)}
-                    className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg px-3 py-1.5"
+                    className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium text-white bg-brand-blue hover:bg-blue-800 rounded-lg px-3 py-1.5"
                   >
                     + Add participant
                   </button>
@@ -529,12 +518,12 @@ function TeacherTeamsView() {
                                 ) : envelope ? (
                                   <div className="space-y-1">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                      <ConsentBadge status={envelope.status} />
+                                      <EnvelopeStatusBadge status={envelope.status} />
                                       {canResend && (
                                         <button
                                           onClick={() => handleConsentResend(team.id, p.id)}
                                           disabled={resendingConsent === p.id}
-                                          className="text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-50"
+                                          className="text-xs text-brand-blue hover:text-brand-blue-dark font-medium disabled:opacity-50"
                                         >
                                           {resendingConsent === p.id ? 'Sending…' : 'Remind'}
                                         </button>
@@ -570,7 +559,7 @@ function TeacherTeamsView() {
                               <td className="py-2.5 text-right space-x-2">
                                 <button
                                   onClick={() => setEditing(p)}
-                                  className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                                  className="text-xs text-brand-blue hover:text-brand-blue-dark font-medium"
                                 >
                                   Edit
                                 </button>

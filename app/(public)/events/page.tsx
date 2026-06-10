@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
-import { getAllEvents } from '@/lib/sanity'
+import { getAllEvents, type StellarEvent } from '@/lib/sanity'
 import { EventCard } from '@/components/ui/EventCard'
 import { EventsFilterBar } from '@/components/sections/EventsFilterBar'
 
@@ -12,24 +12,6 @@ export const metadata: Metadata = {
 export const revalidate = 3600
 
 
-interface StellarEvent {
-  _id: string
-  title: string
-  slug: { current: string }
-  type?: string
-  gradeLevel?: string
-  date?: string
-  endDate?: string
-  venue?: string
-  city?: string
-  state?: string
-  tagline?: string
-  image?: { asset: { _ref: string } }
-  registrationOpen?: boolean
-  registrationOpenDate?: string
-  registrationCloseDate?: string
-}
-
 interface PageProps {
   searchParams: Promise<{ type?: string; grade?: string }>
 }
@@ -37,9 +19,8 @@ interface PageProps {
 export default async function EventsPage({ searchParams }: PageProps) {
   const { type, grade } = await searchParams
   const allEvents: StellarEvent[] = await getAllEvents().catch(() => []) ?? []
-  const events: StellarEvent[] = allEvents
 
-  const filtered = events.filter((e) => {
+  const filtered = allEvents.filter((e) => {
     if (type && e.type !== type) return false
     if (grade && e.gradeLevel !== grade) return false
     return true

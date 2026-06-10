@@ -1,10 +1,9 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 
-const isProtectedRoute = createRouteMatcher([
-  '/account(.*)',
-  '/admin(.*)',
-])
+const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
+const isCommunityRoute = createRouteMatcher(['/community(.*)'])
+const isAuthRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)'])
 
 // Pages that live on www only — redirect away from app subdomain
 const isPublicOnlyRoute = createRouteMatcher([
@@ -26,29 +25,25 @@ export default clerkMiddleware(async (auth, req) => {
   const isAppSubdomain = host === 'app.stellreducation.org'
   const url = new URL(req.url)
 
-  if (isAppSubdomain) {
-    // Root of app subdomain → members area (or sign-in if not logged in)
-    if (url.pathname === '/') {
-      const { userId } = await auth()
-      const dest = userId ? '/account' : '/sign-in'
-      return NextResponse.redirect(new URL(dest, req.url))
-    }
+  // Resolve auth once and reuse across all branches
+  const needsUserId = isAppSubdomain || isAuthRoute(req) || isCommunityRoute(req)
+  const { userId } = needsUserId ? await auth() : { userId: null }
 
-    // Public-only pages on app subdomain → redirect to www
+  if (isAppSubdomain) {
+    if (url.pathname === '/') {
+      return NextResponse.redirect(new URL(userId ? '/account' : '/sign-in', req.url))
+    }
     if (isPublicOnlyRoute(req)) {
-      return NextResponse.redirect(
-        new URL(url.pathname + url.search, WWW),
-        308,
-      )
+      return NextResponse.redirect(new URL(url.pathname + url.search, WWW), 308)
     }
   }
 
-  // Already-signed-in users visiting auth pages → send to account
-  if (url.pathname.startsWith('/sign-in') || url.pathname.startsWith('/sign-up')) {
-    const { userId } = await auth()
-    if (userId) {
-      return NextResponse.redirect(new URL('/account', req.url))
-    }
+  if (isAuthRoute(req) && userId) {
+    return NextResponse.redirect(new URL('/account', req.url))
+  }
+
+  if (isCommunityRoute(req) && !userId) {
+    return NextResponse.redirect(new URL('/sign-up', req.url))
   }
 
   if (isProtectedRoute(req)) {

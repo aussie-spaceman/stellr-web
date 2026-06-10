@@ -7,12 +7,8 @@ import { z } from 'zod'
 import { useRouter } from 'next/navigation'
 import FieldError from '@/components/forms/FieldError'
 import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
-
-const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
-const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
-const GENDERS = ['Male', 'Female', 'Other']
-const ETHNICITIES = ['Pacific Islander', 'Hispanic', 'White (Caucasian)', 'Black', 'Native American', 'Asian', 'Prefer Not To Say']
-const DIETARY = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
+import { GRADES, T_SHIRT_SIZES, GENDERS, ETHNICITIES, DIETARY, deriveAgeBracket } from '@/lib/registration-constants'
+import { resolveSchoolPayload } from '@/lib/school-utils'
 
 const schema = z.object({
   // Step 1 — Personal
@@ -37,12 +33,6 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
-function deriveAgeBracket(dob: string): 'High School' | 'College' | 'Adult' {
-  const age = Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000))
-  if (age < 18) return 'High School'
-  const hsGrades = ['9', '10', '11', '12']
-  return 'College' // simplified; refined server-side
-}
 
 export default function IndividualRegistrationForm({
   eventSlug,
@@ -85,26 +75,6 @@ export default function IndividualRegistrationForm({
     setValue(field, updated, { shouldValidate: true })
   }
 
-  function resolveSchool() {
-    if (!schoolSelection) return { school_name: '', school_address_street: null, school_address_city: null, school_address_state: null, school_address_zip: null }
-    if (schoolSelection.type === 'existing') {
-      return {
-        school_name: schoolSelection.name,
-        school_address_street: null,
-        school_address_city: null,
-        school_address_state: null,
-        school_address_zip: null,
-      }
-    }
-    return {
-      school_name: schoolSelection.data.name,
-      school_address_street: schoolSelection.data.address_line1 ?? null,
-      school_address_city: schoolSelection.data.city ?? null,
-      school_address_state: schoolSelection.data.state ?? null,
-      school_address_zip: schoolSelection.data.postcode ?? null,
-    }
-  }
-
   async function nextStep() {
     const step1Fields: (keyof FormData)[] = [
       'first_name', 'last_name', 'email', 'phone', 'date_of_birth',
@@ -123,19 +93,14 @@ export default function IndividualRegistrationForm({
     setSubmitting(true)
     setError(null)
     try {
-      const dob = data.date_of_birth
-      const age = Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000))
-      const hsGrades = ['9', '10', '11', '12']
-      const age_bracket = age < 18 || hsGrades.includes(data.grade) ? 'High School'
-        : data.grade.startsWith('College') || data.grade === 'Grad / PhD' ? 'College'
-        : 'Adult'
+      const age_bracket = deriveAgeBracket(data.date_of_birth, data.grade)
 
       const res = await fetch('/api/register/individual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...data,
-          ...resolveSchool(),
+          ...resolveSchoolPayload(schoolSelection),
           event_slug: eventSlug,
           event_title: eventTitle,
           age_bracket,

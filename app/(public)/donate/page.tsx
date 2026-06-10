@@ -48,7 +48,7 @@ export default async function DonatePage() {
     <>
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto max-w-3xl">
+        <div className="max-w-3xl mx-auto">
           <h1 className="text-4xl sm:text-5xl font-bold mb-6">
             Support the next generation of STEM leaders.
           </h1>

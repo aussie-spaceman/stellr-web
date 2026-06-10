@@ -1,0 +1,14 @@
+export const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
+export const GENDERS = ['Male', 'Female', 'Other']
+export const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
+export const HS_GRADES = ['9', '10', '11', '12']
+export const ETHNICITIES = ['Pacific Islander', 'Hispanic', 'White (Caucasian)', 'Black', 'Native American', 'Asian', 'Prefer Not To Say']
+export const DIETARY = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
+
+export function deriveAgeBracket(dob: string, grade?: string): 'High School' | 'College' | 'Adult' {
+  if (!dob) return 'Adult'
+  const age = Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000))
+  if (age < 18 || (grade && HS_GRADES.includes(grade))) return 'High School'
+  if (grade?.startsWith('College') || grade === 'Grad / PhD') return 'College'
+  return 'Adult'
+}

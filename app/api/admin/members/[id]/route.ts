@@ -41,25 +41,29 @@ export async function PATCH(
     return NextResponse.json({ error: 'Update failed' }, { status: 500 })
   }
 
-  // Replace ethnicity selections
+  // Replace ethnicity + allergy selections — independent tables, run concurrently
+  const replacements: Promise<void>[] = []
   if ('ethnicity_ids' in body && Array.isArray(body.ethnicity_ids)) {
-    await db.from('member_ethnicities').delete().eq('member_id', id)
-    if (body.ethnicity_ids.length > 0) {
-      await db.from('member_ethnicities').insert(
-        body.ethnicity_ids.map((eid: string) => ({ member_id: id, ethnicity_option_id: eid }))
-      )
-    }
+    replacements.push((async () => {
+      await db.from('member_ethnicities').delete().eq('member_id', id)
+      if (body.ethnicity_ids.length > 0) {
+        await db.from('member_ethnicities').insert(
+          body.ethnicity_ids.map((eid: string) => ({ member_id: id, ethnicity_option_id: eid }))
+        )
+      }
+    })())
   }
-
-  // Replace allergy selections
   if ('allergy_ids' in body && Array.isArray(body.allergy_ids)) {
-    await db.from('member_allergies').delete().eq('member_id', id)
-    if (body.allergy_ids.length > 0) {
-      await db.from('member_allergies').insert(
-        body.allergy_ids.map((aid: string) => ({ member_id: id, allergy_option_id: aid }))
-      )
-    }
+    replacements.push((async () => {
+      await db.from('member_allergies').delete().eq('member_id', id)
+      if (body.allergy_ids.length > 0) {
+        await db.from('member_allergies').insert(
+          body.allergy_ids.map((aid: string) => ({ member_id: id, allergy_option_id: aid }))
+        )
+      }
+    })())
   }
+  await Promise.all(replacements)
 
   return NextResponse.json({ member: data })
 }

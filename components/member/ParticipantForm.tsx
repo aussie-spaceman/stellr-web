@@ -119,7 +119,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
               <label className="block text-sm font-medium text-gray-700 mb-1">First name <span className="text-red-500">*</span></label>
               <input
                 required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 value={form.first_name}
                 onChange={e => set('first_name', e.target.value)}
               />
@@ -128,7 +128,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
               <label className="block text-sm font-medium text-gray-700 mb-1">Last name <span className="text-red-500">*</span></label>
               <input
                 required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 value={form.last_name}
                 onChange={e => set('last_name', e.target.value)}
               />
@@ -142,7 +142,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
               <input
                 required
                 type="email"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 value={form.email}
                 onChange={e => set('email', e.target.value)}
               />
@@ -150,7 +150,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
               <input
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 value={form.phone}
                 onChange={e => set('phone', e.target.value)}
               />
@@ -163,7 +163,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
               <label className="block text-sm font-medium text-gray-700 mb-1">Date of birth</label>
               <input
                 type="date"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 value={form.date_of_birth}
                 onChange={e => set('date_of_birth', e.target.value)}
               />
@@ -171,7 +171,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
               <select
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 value={form.gender}
                 onChange={e => set('gender', e.target.value)}
               >
@@ -182,7 +182,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">T-shirt size</label>
               <select
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 value={form.t_shirt_size}
                 onChange={e => set('t_shirt_size', e.target.value)}
               >
@@ -197,7 +197,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
               <select
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 value={form.grade}
                 onChange={e => set('grade', e.target.value)}
               >
@@ -230,7 +230,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
             <label className="block text-sm font-medium text-gray-700 mb-1">Health conditions / allergies</label>
             <textarea
               rows={2}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none"
               value={form.health_conditions}
               onChange={e => set('health_conditions', e.target.value)}
             />
@@ -244,7 +244,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">First name</label>
                   <input
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                     value={form.emergency_contact_first_name}
                     onChange={e => set('emergency_contact_first_name', e.target.value)}
                   />
@@ -252,7 +252,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Last name</label>
                   <input
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                     value={form.emergency_contact_last_name}
                     onChange={e => set('emergency_contact_last_name', e.target.value)}
                   />
@@ -261,7 +261,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
                   <label className="block text-xs text-gray-500 mb-1">Email</label>
                   <input
                     type="email"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                     value={form.emergency_contact_email}
                     onChange={e => set('emergency_contact_email', e.target.value)}
                   />
@@ -269,7 +269,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Phone</label>
                   <input
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                     value={form.emergency_contact_phone}
                     onChange={e => set('emergency_contact_phone', e.target.value)}
                   />
@@ -293,7 +293,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium text-white bg-brand-blue rounded-lg hover:bg-blue-800 disabled:opacity-50"
             >
               {saving ? 'Saving…' : (initial?.id ? 'Save changes' : 'Add participant')}
             </button>

@@ -79,25 +79,34 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Duplicate check: participant emails (add_now only)
+    // Duplicate check: participant emails (add_now only) — two batched queries
     if (details_method === 'add_now') {
       const allEmails: string[] = [
         ...(additional_adults ?? []).map((a: ParticipantPayload) => a.email),
         ...(students ?? []).map((s: ParticipantPayload) => s.email),
       ]
-      const duplicates: string[] = []
-      for (const email of allEmails) {
-        const { data: p } = await db.from('participants').select('registration_id').eq('email', email).maybeSingle()
-        if (p) {
-          const { data: reg } = await db.from('registrations').select('event_slug')
-            .eq('id', (p as { registration_id: string }).registration_id).maybeSingle()
-          if (reg && (reg as Pick<RegistrationRow, 'event_slug'>).event_slug === event_slug) {
-            duplicates.push(email)
+      if (allEmails.length > 0) {
+        const { data: existingParticipants } = await db
+          .from('participants')
+          .select('email, registration_id')
+          .in('email', allEmails)
+        const regIds = [...new Set((existingParticipants ?? []).map(p => p.registration_id))]
+        if (regIds.length > 0) {
+          const { data: sameEventRegs } = await db
+            .from('registrations')
+            .select('id')
+            .in('id', regIds)
+            .eq('event_slug', event_slug)
+          const conflictRegIds = new Set((sameEventRegs ?? []).map(r => r.id))
+          const duplicates = [...new Set(
+            (existingParticipants ?? [])
+              .filter(p => conflictRegIds.has(p.registration_id))
+              .map(p => p.email)
+          )]
+          if (duplicates.length > 0) {
+            return NextResponse.json({ error: `Already registered for this event: ${duplicates.join(', ')}` }, { status: 409 })
           }
         }
-      }
-      if (duplicates.length > 0) {
-        return NextResponse.json({ error: `Already registered for this event: ${duplicates.join(', ')}` }, { status: 409 })
       }
     }
 
@@ -143,33 +152,36 @@ export async function POST(req: NextRequest) {
       { ...teacher, event_role: registrant_role === 'student_manager' ? 'school_student_manager' : 'teacher' },
     ]
 
-    // Upsert registrant first so we can get their member ID for teacher_member_id
-    const memberIdMap: Record<string, string | null> = {}
+    // Batch-upsert everyone in one round-trip; dedupe in-batch emails (last wins,
+    // matching the previous serial loop) since Postgres rejects ON CONFLICT
+    // updates that touch the same row twice in one statement.
+    const memberUpsertByEmail = new Map<string, Record<string, unknown>>()
     for (const p of allPeople) {
       const dob = new Date(p.date_of_birth)
       const ageNow = new Date().getFullYear() - dob.getFullYear()
-      const resolvedBracket = ageNow < 18 ? 'high_school' : p.age_bracket
-      const resolvedRole = ageNow < 18 ? (p.event_role === 'school_student_manager' ? 'school_student_manager' : 'school_student') : p.event_role
+      memberUpsertByEmail.set(p.email, {
+        email: p.email,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        phone: p.phone,
+        date_of_birth: p.date_of_birth,
+        gender: p.gender,
+        grade: p.grade || null,
+        tshirt_size: p.t_shirt_size || null,
+        age_bracket: ageNow < 18 ? 'high_school' : p.age_bracket,
+        event_role: ageNow < 18 ? (p.event_role === 'school_student_manager' ? 'school_student_manager' : 'school_student') : p.event_role,
+        is_active: true,
+      })
+    }
 
-      const { data: memberRow } = await db
-        .from('members')
-        .upsert({
-          email: p.email,
-          first_name: p.first_name,
-          last_name: p.last_name,
-          phone: p.phone,
-          date_of_birth: p.date_of_birth,
-          gender: p.gender,
-          grade: p.grade || null,
-          tshirt_size: p.t_shirt_size || null,
-          age_bracket: resolvedBracket,
-          event_role: resolvedRole,
-          is_active: true,
-        }, { onConflict: 'email', ignoreDuplicates: false })
-        .select('id')
-        .maybeSingle()
+    const memberIdMap: Record<string, string | null> = {}
+    const { data: memberRows } = await db
+      .from('members')
+      .upsert([...memberUpsertByEmail.values()], { onConflict: 'email', ignoreDuplicates: false })
+      .select('id, email')
 
-      memberIdMap[p.email] = memberRow?.id ?? null
+    for (const row of memberRows ?? []) {
+      memberIdMap[row.email] = row.id
     }
 
     // Link registrant's member ID to the registration (enables portal team management)
@@ -329,7 +341,7 @@ export async function POST(req: NextRequest) {
         ...(additional_adults ?? []),
         ...(students ?? []),
       ]
-      for (const p of memberParticipants) {
+      await Promise.all(memberParticipants.map(async (p) => {
         try {
           const session = await stripe.checkout.sessions.create({
             mode: 'payment',
@@ -357,7 +369,7 @@ export async function POST(req: NextRequest) {
         } catch (indErr) {
           console.error(`Individual payment session error for ${p.email} (non-fatal):`, indErr)
         }
-      }
+      }))
     }
 
     // ── CC list for confirmation emails ───────────────────────────────────────

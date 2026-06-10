@@ -87,25 +87,28 @@ export async function POST(req: Request) {
   }
 
   let memberError
+  let memberId: string | null = null
   if (existingMember) {
     const { error } = await db
       .from('members')
       .update(profileUpdates)
       .eq('id', existingMember.id)
     memberError = error
+    memberId = existingMember.id
   } else {
     // Webhook hasn't fired yet — fetch identity from Clerk and create the row now
     const clerkUser = await currentUser()
     const primaryEmail = clerkUser?.emailAddresses.find(
       (e) => e.id === clerkUser.primaryEmailAddressId
     )?.emailAddress ?? ''
-    const { error } = await db.from('members').insert({
+    const { data: inserted, error } = await db.from('members').insert({
       ...profileUpdates,
       first_name: clerkUser?.firstName ?? '',
       last_name: clerkUser?.lastName ?? '',
       email: primaryEmail,
-    })
+    }).select('id').single()
     memberError = error
+    memberId = inserted?.id ?? null
   }
 
   if (memberError) {
@@ -121,15 +124,9 @@ export async function POST(req: Request) {
       .update({ is_current: false, ended_at: new Date().toISOString().split('T')[0] })
       .eq('clerk_user_id', userId) // handled via subquery below
 
-    const { data: member } = await db
-      .from('members')
-      .select('id')
-      .eq('clerk_user_id', userId)
-      .single()
-
-    if (member) {
+    if (memberId) {
       await db.from('member_schools').upsert({
-        member_id: member.id,
+        member_id: memberId,
         school_id: resolvedSchoolId,
         is_current: true,
         started_at: new Date().toISOString().split('T')[0],
@@ -151,30 +148,22 @@ export async function POST(req: Request) {
     .eq('name', tierName)
     .maybeSingle()
 
-  if (tier) {
-    const { data: memberRow } = await db
-      .from('members')
+  if (tier && memberId) {
+    const { data: existingMembership } = await db
+      .from('member_memberships')
       .select('id')
-      .eq('clerk_user_id', userId)
-      .single()
+      .eq('member_id', memberId)
+      .eq('renewal_status', 'active')
+      .maybeSingle()
 
-    if (memberRow) {
-      const { data: existingMembership } = await db
-        .from('member_memberships')
-        .select('id')
-        .eq('member_id', memberRow.id)
-        .eq('renewal_status', 'active')
-        .maybeSingle()
-
-      if (!existingMembership) {
-        await db.from('member_memberships').insert({
-          member_id: memberRow.id,
-          tier_id: tier.id,
-          started_at: new Date().toISOString().split('T')[0],
-          renewal_status: 'active',
-          is_complimentary: false,
-        })
-      }
+    if (!existingMembership) {
+      await db.from('member_memberships').insert({
+        member_id: memberId,
+        tier_id: tier.id,
+        started_at: new Date().toISOString().split('T')[0],
+        renewal_status: 'active',
+        is_complimentary: false,
+      })
     }
   }
 

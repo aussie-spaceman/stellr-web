@@ -17,12 +17,21 @@ export async function POST(
   const { id, pid } = await params
   const db = supabaseServer()
 
-  const { data: member } = await db
-    .from('members')
-    .select('id, event_role')
-    .eq('clerk_user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle()
+  const [{ data: member }, { data: reg }, { data: envelope }] = await Promise.all([
+    db.from('members')
+      .select('id, event_role')
+      .eq('clerk_user_id', userId)
+      .eq('is_active', true)
+      .maybeSingle(),
+    db.from('registrations')
+      .select('teacher_member_id')
+      .eq('id', id)
+      .maybeSingle(),
+    db.from('docusign_envelopes')
+      .select('id, envelope_id, status, sent_at')
+      .eq('participant_id', pid)
+      .maybeSingle(),
+  ])
 
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
 
@@ -31,21 +40,9 @@ export async function POST(
   if (!isManager) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // Verify teacher owns this registration
-  const { data: reg } = await db
-    .from('registrations')
-    .select('teacher_member_id')
-    .eq('id', id)
-    .maybeSingle()
-
   if (!reg || reg.teacher_member_id !== member.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
-
-  const { data: envelope } = await db
-    .from('docusign_envelopes')
-    .select('id, envelope_id, status, sent_at')
-    .eq('participant_id', pid)
-    .maybeSingle()
 
   if (!envelope) {
     return NextResponse.json({ error: 'No consent form found for this participant' }, { status: 404 })

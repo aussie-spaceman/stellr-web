@@ -14,22 +14,20 @@ export async function PATCH(
   const { id: registrationId, pid } = await params
   const db = supabaseServer()
 
-  const { data: member } = await db
-    .from('members')
-    .select('id, event_role')
-    .eq('clerk_user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle()
+  const [{ data: member }, { data: registration }] = await Promise.all([
+    db.from('members')
+      .select('id, event_role')
+      .eq('clerk_user_id', userId)
+      .eq('is_active', true)
+      .maybeSingle(),
+    db.from('registrations')
+      .select('id, teacher_member_id')
+      .eq('id', registrationId)
+      .eq('type', 'group')
+      .maybeSingle(),
+  ])
 
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-
-  const { data: registration } = await db
-    .from('registrations')
-    .select('id, teacher_member_id')
-    .eq('id', registrationId)
-    .eq('type', 'group')
-    .maybeSingle()
-
   if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
 
   // Only the teacher who owns this registration can edit participants
@@ -78,30 +76,25 @@ export async function DELETE(
   const { id: registrationId, pid } = await params
   const db = supabaseServer()
 
-  const { data: member } = await db
-    .from('members')
-    .select('id, event_role, first_name, last_name, email')
-    .eq('clerk_user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle()
+  const [{ data: member }, { data: participant }, { data: registration }] = await Promise.all([
+    db.from('members')
+      .select('id, event_role, first_name, last_name, email')
+      .eq('clerk_user_id', userId)
+      .eq('is_active', true)
+      .maybeSingle(),
+    db.from('participants')
+      .select('id, member_id, event_role, first_name, last_name, email')
+      .eq('id', pid)
+      .eq('registration_id', registrationId)
+      .maybeSingle(),
+    db.from('registrations')
+      .select('id, teacher_member_id, teacher_first_name, teacher_email, event_title')
+      .eq('id', registrationId)
+      .maybeSingle(),
+  ])
 
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-
-  const { data: participant } = await db
-    .from('participants')
-    .select('id, member_id, event_role, first_name, last_name, email')
-    .eq('id', pid)
-    .eq('registration_id', registrationId)
-    .maybeSingle()
-
   if (!participant) return NextResponse.json({ error: 'Participant not found' }, { status: 404 })
-
-  const { data: registration } = await db
-    .from('registrations')
-    .select('id, teacher_member_id, teacher_first_name, teacher_email, event_title')
-    .eq('id', registrationId)
-    .maybeSingle()
-
   if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
 
   const isTeacher = member.event_role === 'teacher' && registration.teacher_member_id === member.id

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { CheckCircle } from 'lucide-react'
+import { MaterialTiersGrid } from '@/components/sections/MaterialTiersGrid'
 
 export const metadata: Metadata = {
   title: 'Competitions | Stellr Education',
@@ -32,50 +33,6 @@ const tableRows = [
   { label: 'Facilitator', events: 'Stellr Staff', campaigns: 'Educator' },
   { label: 'Setting', events: 'In-Person OR Virtual', campaigns: 'School OR Classroom' },
   { label: 'Duration', events: 'Fixed', campaigns: 'Variable' },
-]
-
-const materialTiers = [
-  {
-    tier: 'Core Material',
-    badge: 'Free',
-    badgeColor: 'bg-green-100 text-green-800',
-    items: ['Request for Proposal (RFP)', 'Mission Handbook'],
-  },
-  {
-    tier: 'Baseline',
-    badge: 'Subscriber',
-    badgeColor: 'bg-blue-100 text-blue-800',
-    items: [
-      'Delivery Overview',
-      'NSES Curriculum Map',
-      'Worksheets (cost, calculations, schedule etc.)',
-      'Assessment Guides / Marking Rubric',
-      'Student access to Community free training',
-    ],
-  },
-  {
-    tier: 'Advanced',
-    badge: 'Educator Member',
-    badgeColor: 'bg-purple-100 text-purple-800',
-    items: [
-      'Multi-week lesson plans',
-      'Agentic AI Sub-Contractors + PM tools',
-      'Live kick-off and close-out calls',
-      'Student certificates',
-    ],
-  },
-  {
-    tier: 'Premium',
-    badge: 'Premium Member',
-    badgeColor: 'bg-amber-100 text-amber-800',
-    items: [
-      'Weekly mentoring calls (recorded & posted)',
-      'Teacher CTE activity',
-      'Student access to Community paid membership',
-      'Student awards',
-      'Student progression to Finals activity',
-    ],
-  },
 ]
 
 export default function CompetitionsPage() {
@@ -187,31 +144,7 @@ export default function CompetitionsPage() {
               tiers by registering as a Subscriber or Member.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {materialTiers.map((tier) => (
-              <div
-                key={tier.tier}
-                className="border border-gray-200 rounded-xl p-6 flex flex-col gap-4"
-              >
-                <div>
-                  <span
-                    className={`inline-block text-xs font-semibold px-2 py-1 rounded-full ${tier.badgeColor} mb-3`}
-                  >
-                    {tier.badge}
-                  </span>
-                  <h3 className="font-bold text-brand-blue-dark">{tier.tier}</h3>
-                </div>
-                <ul className="space-y-2 flex-1">
-                  {tier.items.map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-sm text-brand-grey-dark">
-                      <CheckCircle size={14} className="text-brand-blue shrink-0 mt-0.5" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
+          <MaterialTiersGrid />
           <div className="mt-8 text-center">
             <Link href="/membership" className="btn-primary inline-flex">
               View Membership Tiers

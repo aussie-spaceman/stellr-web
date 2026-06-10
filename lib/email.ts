@@ -4,12 +4,13 @@ const FROM = 'Stellr Education <david.shaw@insimeducation.com>'
 interface SendEmailOptions {
   to: string
   cc?: string[]
+  replyTo?: string
   subject: string
   html: string
   text: string
 }
 
-export async function sendEmail({ to, cc, subject, html, text }: SendEmailOptions) {
+export async function sendEmail({ to, cc, replyTo, subject, html, text }: SendEmailOptions) {
   if (!RESEND_API_KEY) {
     console.log('[email] No RESEND_API_KEY — would have sent to:', to, subject)
     return
@@ -21,7 +22,7 @@ export async function sendEmail({ to, cc, subject, html, text }: SendEmailOption
       Authorization: `Bearer ${RESEND_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from: FROM, to: [to], cc: cc ?? [], subject, html, text }),
+    body: JSON.stringify({ from: FROM, to: [to], cc: cc ?? [], reply_to: replyTo, subject, html, text }),
   })
 
   if (!res.ok) {

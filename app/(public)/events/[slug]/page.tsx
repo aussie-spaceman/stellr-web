@@ -3,30 +3,15 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { MapPin, Calendar, Users, ExternalLink } from 'lucide-react'
-import { getEventBySlug, urlFor } from '@/lib/sanity'
+import { getEventBySlug, urlFor, type StellarEvent } from '@/lib/sanity'
 import { formatDateRange, formatDate, registrationStatus } from '@/lib/utils'
 import { PortableText } from 'next-sanity'
 import type { PortableTextBlock } from '@portabletext/types'
 
 export const revalidate = 3600
 
-interface EventData {
-  _id: string
-  title: string
-  slug: { current: string }
-  type?: string
-  gradeLevel?: string
-  date?: string
-  endDate?: string
-  venue?: string
-  city?: string
-  state?: string
-  tagline?: string
-  image?: { asset: { _ref: string } }
+interface EventData extends StellarEvent {
   description?: PortableTextBlock[]
-  registrationOpen?: boolean
-  registrationOpenDate?: string
-  registrationCloseDate?: string
   capacity?: number
   eligibility?: string
 }

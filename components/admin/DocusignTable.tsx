@@ -39,11 +39,44 @@ function fmt(iso: string | null) {
 
 const FILTER_OPTIONS = ['all', 'sent', 'delivered', 'completed', 'declined', 'voided'] as const
 
+function fmtExpiry(completedAt: string): { label: string; cls: string } {
+  const expires = new Date(completedAt)
+  expires.setFullYear(expires.getFullYear() + 3)
+  const now = new Date()
+  if (expires < now) return { label: 'Expired', cls: 'text-red-600 font-medium' }
+  const months = Math.round((expires.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 30))
+  const years  = Math.floor(months / 12)
+  const rem    = months % 12
+  const label  = years > 0 ? (rem > 0 ? `${years}yr ${rem}mo` : `${years}yr`) : `${months}mo`
+  const cls    = months < 6 ? 'text-amber-600 font-medium' : 'text-gray-500'
+  return { label: `${label} (${expires.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })})`, cls }
+}
+
 export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
-  const [envelopes, setEnvelopes] = useState(initial)
-  const [filter, setFilter]       = useState<string>('all')
-  const [resending, setResending] = useState<string | null>(null)
-  const [msg, setMsg]             = useState<{ text: string; error: boolean } | null>(null)
+  const [envelopes, setEnvelopes]   = useState(initial)
+  const [filter, setFilter]         = useState<string>('all')
+  const [resending, setResending]   = useState<string | null>(null)
+  const [downloading, setDownloading] = useState<string | null>(null)
+  const [msg, setMsg]               = useState<{ text: string; error: boolean } | null>(null)
+
+  async function handleDownload(env: EnvelopeRow) {
+    setDownloading(env.id)
+    try {
+      const res = await fetch(`/api/admin/docusigns/${env.id}/download`)
+      if (!res.ok) throw new Error('Download failed')
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `consent-${env.minor_name.replace(/\s+/g, '-').toLowerCase()}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : 'Download failed', error: true })
+    } finally {
+      setDownloading(null)
+    }
+  }
 
   async function handleResend(env: EnvelopeRow) {
     setResending(env.id)
@@ -104,7 +137,7 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50 text-left">
-                {['Participant', 'Event', 'Guardian', 'Status', 'Sent', 'Signed', ''].map(h => (
+                {['Participant', 'Event', 'Guardian', 'Status', 'Sent', 'Signed', 'Expires', ''].map(h => (
                   <th key={h} className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide whitespace-nowrap">
                     {h}
                   </th>
@@ -130,7 +163,22 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
                     )}
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{fmt(env.completed_at)}</td>
-                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <td className="px-4 py-3 text-xs whitespace-nowrap">
+                    {env.completed_at
+                      ? (() => { const { label, cls } = fmtExpiry(env.completed_at); return <span className={cls}>{label}</span> })()
+                      : <span className="text-gray-400">—</span>
+                    }
+                  </td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap space-x-3">
+                    {env.status === 'completed' && (
+                      <button
+                        onClick={() => handleDownload(env)}
+                        disabled={downloading === env.id}
+                        className="text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-50"
+                      >
+                        {downloading === env.id ? 'Downloading…' : 'Download PDF'}
+                      </button>
+                    )}
                     {env.status !== 'completed' && env.status !== 'voided' && (
                       <button
                         onClick={() => handleResend(env)}

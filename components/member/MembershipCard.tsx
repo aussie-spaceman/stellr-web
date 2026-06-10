@@ -43,7 +43,7 @@ export function MembershipCard({ membership, member }: Props) {
         <p className="text-sm text-gray-600 mb-4">No active membership found.</p>
         <Link
           href="/membership"
-          className="block w-full text-center bg-indigo-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-indigo-700"
+          className="block w-full text-center bg-brand-blue text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-800"
         >
           View Plans
         </Link>
@@ -96,7 +96,7 @@ export function MembershipCard({ membership, member }: Props) {
           </dd>
         </div>
         {membership.is_complimentary && (
-          <div className="text-xs text-indigo-600 bg-indigo-50 rounded px-2 py-1 mt-2">
+          <div className="text-xs text-brand-blue bg-blue-50 rounded px-2 py-1 mt-2">
             Complimentary year included
           </div>
         )}
@@ -105,7 +105,7 @@ export function MembershipCard({ membership, member }: Props) {
       {isExpiring && (
         <Link
           href="/membership"
-          className="block w-full text-center mt-4 bg-indigo-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-indigo-700"
+          className="block w-full text-center mt-4 bg-brand-blue text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-800"
         >
           Renew Membership
         </Link>

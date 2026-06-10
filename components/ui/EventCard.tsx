@@ -1,27 +1,11 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowRight, Rocket } from 'lucide-react'
-import { urlFor } from '@/lib/sanity'
+import { urlFor, type StellarEvent } from '@/lib/sanity'
 import { formatDateRange, registrationStatus } from '@/lib/utils'
 
 interface EventCardProps {
-  event: {
-    _id: string
-    title: string
-    slug: { current: string }
-    type?: string
-    gradeLevel?: string
-    date?: string
-    endDate?: string
-    venue?: string
-    city?: string
-    state?: string
-    tagline?: string
-    image?: { asset: { _ref: string } }
-    registrationOpen?: boolean
-    registrationOpenDate?: string
-    registrationCloseDate?: string
-  }
+  event: StellarEvent
 }
 
 const statusConfig = {

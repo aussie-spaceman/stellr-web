@@ -30,6 +30,26 @@ export function urlFor(source: SanityImageSource) {
   return builder!.image(source)
 }
 
+// ── Shared types ──────────────────────────────────────────────────────────────
+// Core event shape returned by the event queries below.
+export interface StellarEvent {
+  _id: string
+  title: string
+  slug: { current: string }
+  type?: string
+  gradeLevel?: string
+  date?: string
+  endDate?: string
+  venue?: string
+  city?: string
+  state?: string
+  tagline?: string
+  image?: { asset: { _ref: string } }
+  registrationOpen?: boolean
+  registrationOpenDate?: string
+  registrationCloseDate?: string
+}
+
 // ── GROQ Queries ──────────────────────────────────────────────────────────────
 // Every query returns null when Sanity is not configured.
 // Pages handle null by falling back to static seed data.

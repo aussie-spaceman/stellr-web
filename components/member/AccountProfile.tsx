@@ -146,7 +146,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
             />
           </div>
           <div>
@@ -155,7 +155,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
               type="text"
               value={discord}
               onChange={(e) => setDiscord(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
             />
           </div>
         </div>
@@ -173,7 +173,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
                     type="checkbox"
                     checked={selectedEthnicities.includes(opt.id)}
                     onChange={() => toggleOption(selectedEthnicities, setSelectedEthnicities, opt.id)}
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    className="rounded border-gray-300 text-brand-blue focus:ring-brand-blue"
                   />
                   {opt.name}
                 </label>
@@ -195,7 +195,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
                     type="checkbox"
                     checked={selectedAllergies.includes(opt.id)}
                     onChange={() => toggleOption(selectedAllergies, setSelectedAllergies, opt.id)}
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    className="rounded border-gray-300 text-brand-blue focus:ring-brand-blue"
                   />
                   {opt.name}
                 </label>
@@ -208,7 +208,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
           <button
             onClick={handleSave}
             disabled={loading}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+            className="bg-brand-blue text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-800 disabled:opacity-50"
           >
             {loading ? 'Saving…' : saved ? 'Saved ✓' : 'Save changes'}
           </button>

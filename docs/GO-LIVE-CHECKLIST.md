@@ -43,7 +43,9 @@ www↔app experience and is the critical path.
 - [ ] Production Supabase env in Vercel: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
 - [ ] All migrations `001`–`021` applied to the production DB in filename order (applied manually — no `supabase/config.toml` migration tracking). The earlier `019_` collision is **resolved**: `community_automation` was renumbered `019_`→`021_`, leaving the training pair intact (`019_training_sections` → `020_training_player`, which depends on it).
 - [ ] Confirm the recently-added migrations are applied: `014` (emergency-contact relationship), `015` (Adult/Mentor DocuSign agreements), `016` (member enum values).
-- [ ] **Member enum drift / backfill** (known open item): verify Postgres enums match what `lib/member-enums.ts` sends; run the wider backfill so historical members aren't silently dropped.
+- [ ] **Member enum drift / backfill** (known open item):
+  - [ ] Apply migration `016` (run the 3 `ALTER TYPE … ADD VALUE` statements **individually** — they can't run in a transaction) so enums match what `lib/member-enums.ts` sends.
+  - [ ] Run the backfill for members dropped before the fix: `npx tsx scripts/backfill-members.ts` (dry run) → review output → `npx tsx scripts/backfill-members.ts --apply`. It finds `participants` with `member_id IS NULL`, creates the missing members (skipping any that already exist), and relinks them. **Requires migration 016 applied first**, and `.env.local` pointed at the prod DB.
 - [ ] RLS / tier-gating: community access is enforced in server code (not RLS) — spot-check that gated routes reject non-members in production.
 
 ---

@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/alumni-upgrades",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/campaigns",
+      "schedule": "0 * * * *"
     }
   ]
 }

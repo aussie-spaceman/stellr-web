@@ -54,6 +54,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/admin/community/moderation" className="text-gray-600 hover:text-gray-900">
               Moderation
             </Link>
+            <Link href="/admin/email" className="text-gray-600 hover:text-gray-900">
+              Email
+            </Link>
             <UserButton />
           </nav>
         </div>

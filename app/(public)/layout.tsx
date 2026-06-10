@@ -1,10 +1,10 @@
-import { Navbar } from '@/components/layout/Navbar'
+import { SiteHeader } from '@/components/layout/SiteHeader'
 import { Footer } from '@/components/layout/Footer'
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <Navbar />
+      <SiteHeader />
       <main>{children}</main>
       <Footer />
     </>

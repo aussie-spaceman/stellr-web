@@ -1,6 +1,13 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const FROM = 'Stellr Education <david.shaw@insimeducation.com>'
 
+interface EmailAttachment {
+  filename: string
+  /** Base64-encoded file content (Resend `content` field). */
+  content: string
+  contentType?: string
+}
+
 interface SendEmailOptions {
   to: string
   cc?: string[]
@@ -8,9 +15,10 @@ interface SendEmailOptions {
   subject: string
   html: string
   text: string
+  attachments?: EmailAttachment[]
 }
 
-export async function sendEmail({ to, cc, replyTo, subject, html, text }: SendEmailOptions) {
+export async function sendEmail({ to, cc, replyTo, subject, html, text, attachments }: SendEmailOptions) {
   if (!RESEND_API_KEY) {
     console.log('[email] No RESEND_API_KEY — would have sent to:', to, subject)
     return
@@ -22,7 +30,24 @@ export async function sendEmail({ to, cc, replyTo, subject, html, text }: SendEm
       Authorization: `Bearer ${RESEND_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from: FROM, to: [to], cc: cc ?? [], reply_to: replyTo, subject, html, text }),
+    body: JSON.stringify({
+      from: FROM,
+      to: [to],
+      cc: cc ?? [],
+      reply_to: replyTo,
+      subject,
+      html,
+      text,
+      ...(attachments && attachments.length
+        ? {
+            attachments: attachments.map((a) => ({
+              filename: a.filename,
+              content: a.content,
+              content_type: a.contentType,
+            })),
+          }
+        : {}),
+    }),
   })
 
   if (!res.ok) {

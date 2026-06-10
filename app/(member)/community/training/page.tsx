@@ -1,65 +1,132 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { GraduationCap, Lock, AlertCircle } from 'lucide-react'
+import { GraduationCap, Lock, AlertCircle, BookOpen, Layers, CheckCircle2 } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
-import { listModules, getAssignedModules, type TrainingModuleSummary } from '@/lib/training'
+import {
+  listModules,
+  getAssignedModules,
+  COURSE_TYPE_LABELS,
+  type TrainingModuleSummary,
+} from '@/lib/training'
 import { getMemberEvents } from '@/lib/event-portal'
 
 export const metadata = { title: 'Community · Training' }
 
-function ProgressBadge({ m }: { m: TrainingModuleSummary }) {
-  const done = m.itemCount > 0 && m.completedCount === m.itemCount
+function ProgressRing({ pct, done }: { pct: number; done: boolean }) {
+  const r = 16
+  const c = 2 * Math.PI * r
   return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-        done ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-      }`}
-    >
-      {m.completedCount} of {m.itemCount} complete
-    </span>
+    <div className="relative h-11 w-11 shrink-0">
+      <svg viewBox="0 0 40 40" className="h-11 w-11 -rotate-90">
+        <circle cx="20" cy="20" r={r} fill="none" stroke="currentColor" strokeWidth="4" className="text-gray-100" />
+        <circle
+          cx="20"
+          cy="20"
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c - (c * pct) / 100}
+          className={done ? 'text-green-500' : 'text-gray-900'}
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-gray-700">
+        {done ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : `${pct}%`}
+      </span>
+    </div>
   )
 }
 
 function ModuleCard({ m }: { m: TrainingModuleSummary }) {
+  const pct = m.itemCount > 0 ? Math.round((m.completedCount / m.itemCount) * 100) : 0
+  const done = m.itemCount > 0 && m.completedCount === m.itemCount
+  const started = m.completedCount > 0
+
   const body = (
     <div
-      className={`rounded-lg border bg-white p-4 ${
-        m.canAccess ? 'border-gray-200 hover:border-gray-300' : 'border-gray-200 opacity-75'
+      className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-white transition ${
+        m.canAccess
+          ? 'border-gray-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md'
+          : 'border-gray-200 opacity-80'
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <GraduationCap className="mt-0.5 h-5 w-5 shrink-0 text-gray-400" />
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-gray-900">{m.title}</h3>
-              {!m.canAccess && <Lock className="h-3.5 w-3.5 text-amber-500" />}
-              {m.isMandatory && (
-                <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600">
-                  Mandatory
-                </span>
-              )}
-            </div>
-            {m.description && <p className="mt-0.5 text-sm text-gray-500">{m.description}</p>}
-            {m.dueAt && (
-              <p className="mt-1 flex items-center gap-1 text-xs text-amber-600">
-                <AlertCircle className="h-3.5 w-3.5" />
-                Due {new Date(m.dueAt).toLocaleDateString()}
-              </p>
+      {/* Cover */}
+      <div className="relative flex h-24 items-center justify-center bg-gradient-to-br from-gray-900 to-gray-700">
+        <GraduationCap className="h-9 w-9 text-white/90" />
+        {!m.canAccess && (
+          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+            <Lock className="h-3 w-3" /> Locked
+          </span>
+        )}
+        {m.isMandatory && m.canAccess && (
+          <span className="absolute right-3 top-3 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+            Mandatory
+          </span>
+        )}
+      </div>
+
+      {/* Body */}
+      <div className="flex flex-1 flex-col gap-2 p-4">
+        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+          {COURSE_TYPE_LABELS[m.course_type]}
+        </span>
+        <h3 className="font-semibold leading-snug text-gray-900">{m.title}</h3>
+        {m.description && <p className="line-clamp-2 text-sm text-gray-500">{m.description}</p>}
+
+        {m.dueAt && (
+          <p className="flex items-center gap-1 text-xs font-medium text-amber-600">
+            <AlertCircle className="h-3.5 w-3.5" />
+            Due {new Date(m.dueAt).toLocaleDateString()}
+          </p>
+        )}
+
+        <div className="mt-auto flex items-center justify-between gap-3 pt-2">
+          <div className="flex items-center gap-3 text-xs text-gray-500">
+            {m.sectionCount > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <Layers className="h-3.5 w-3.5" />
+                {m.sectionCount} {m.sectionCount === 1 ? 'section' : 'sections'}
+              </span>
             )}
+            <span className="inline-flex items-center gap-1">
+              <BookOpen className="h-3.5 w-3.5" />
+              {m.itemCount} {m.itemCount === 1 ? 'lesson' : 'lessons'}
+            </span>
           </div>
+          {m.itemCount > 0 && <ProgressRing pct={pct} done={done} />}
         </div>
-        <ProgressBadge m={m} />
+
+        {m.canAccess && (
+          <span className="mt-1 text-xs font-semibold text-gray-900 group-hover:underline">
+            {done ? 'Review course' : started ? 'Continue' : 'Start course'} →
+          </span>
+        )}
       </div>
     </div>
   )
 
   return m.canAccess ? (
-    <Link href={`/community/training/${m.id}`} className="block">
+    <Link href={`/community/training/${m.id}`} className="block h-full">
       {body}
     </Link>
   ) : (
-    <div className="block">{body}</div>
+    <div className="block h-full">{body}</div>
+  )
+}
+
+function Section({ title, modules }: { title: string; modules: TrainingModuleSummary[] }) {
+  if (modules.length === 0) return null
+  return (
+    <section>
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">{title}</h2>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {modules.map((m) => (
+          <ModuleCard key={`${m.id}-${m.event_ref ?? ''}`} m={m} />
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -89,47 +156,15 @@ export default async function TrainingPage() {
         </p>
       </div>
 
-      {assigned.length > 0 && (
-        <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
-            For your events
-          </h2>
-          <div className="space-y-3">
-            {assigned.map((m) => (
-              <ModuleCard key={`${m.id}-${m.event_ref}`} m={m} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {cte.length > 0 && (
-        <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
-            Career &amp; Technical Education (CTE)
-          </h2>
-          <div className="space-y-3">
-            {cte.map((m) => (
-              <ModuleCard key={m.id} m={m} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {general.length > 0 && (
-        <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
-            Library
-          </h2>
-          <div className="space-y-3">
-            {general.map((m) => (
-              <ModuleCard key={m.id} m={m} />
-            ))}
-          </div>
-        </section>
-      )}
+      <Section title="For your events" modules={assigned} />
+      <Section title="Career &amp; Technical Education (CTE)" modules={cte} />
+      <Section title="Library" modules={general} />
 
       {assigned.length === 0 && all.length === 0 && (
-        <p className="text-sm text-gray-500">No training available yet. Check back soon.</p>
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-10 text-center">
+          <GraduationCap className="mx-auto h-8 w-8 text-gray-300" />
+          <p className="mt-2 text-sm text-gray-500">No training available yet. Check back soon.</p>
+        </div>
       )}
     </div>
   )

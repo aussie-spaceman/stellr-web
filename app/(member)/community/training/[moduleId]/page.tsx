@@ -1,8 +1,8 @@
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, BookOpen, Layers, Lock } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
-import { getModule } from '@/lib/training'
+import { getModule, COURSE_TYPE_LABELS } from '@/lib/training'
 import { TrainingItemRow } from '@/components/community/TrainingItemRow'
 
 export const metadata = { title: 'Community · Training Module' }
@@ -40,8 +40,11 @@ export default async function TrainingModulePage({
 
   const pct = mod.itemCount > 0 ? Math.round((mod.completedCount / mod.itemCount) * 100) : 0
 
+  // Sequential lesson numbering across all sections + ungrouped.
+  let counter = 0
+
   return (
-    <div>
+    <div className="mx-auto max-w-3xl">
       <Link
         href="/community/training"
         className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
@@ -50,30 +53,113 @@ export default async function TrainingModulePage({
         Back to Training
       </Link>
 
-      <h1 className="text-2xl font-bold text-gray-900">{mod.title}</h1>
-      {mod.description && <p className="mt-1 text-sm text-gray-500">{mod.description}</p>}
-
-      <div className="mt-4 mb-6">
-        <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
-          <span>
-            {mod.completedCount} of {mod.itemCount} complete
+      {/* Course header */}
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+        <div className="bg-gradient-to-br from-gray-900 to-gray-700 px-6 py-6 text-white">
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-medium">
+            {COURSE_TYPE_LABELS[mod.course_type]}
           </span>
-          <span>{pct}%</span>
+          <h1 className="mt-2 text-2xl font-bold">{mod.title}</h1>
+          {mod.description && <p className="mt-1 max-w-2xl text-sm text-white/75">{mod.description}</p>}
+          <div className="mt-3 flex items-center gap-4 text-xs text-white/70">
+            {mod.sectionCount > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <Layers className="h-3.5 w-3.5" />
+                {mod.sectionCount} {mod.sectionCount === 1 ? 'section' : 'sections'}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1">
+              <BookOpen className="h-3.5 w-3.5" />
+              {mod.itemCount} {mod.itemCount === 1 ? 'lesson' : 'lessons'}
+            </span>
+          </div>
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
-          <div className="h-full bg-green-500 transition-all" style={{ width: `${pct}%` }} />
+
+        {/* Progress bar */}
+        <div className="px-6 py-4">
+          <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-gray-500">
+            <span>
+              {mod.completedCount} of {mod.itemCount} complete
+            </span>
+            <span className={pct === 100 ? 'text-green-600' : 'text-gray-700'}>{pct}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+            <div
+              className={`h-full rounded-full transition-all ${pct === 100 ? 'bg-green-500' : 'bg-gray-900'}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
         </div>
       </div>
 
-      <ul className="space-y-3">
-        {mod.items.map((item) => (
-          <TrainingItemRow key={item.id} item={item} />
-        ))}
-      </ul>
+      {/* Curriculum */}
+      <div className="mt-6 space-y-6">
+        {mod.sections.map((section) => {
+          const start = counter
+          counter += section.items.length
+          const done = section.items.filter((i) => i.completed).length
+          return (
+            <section key={section.id}>
+              <div className="mb-2 flex items-baseline justify-between gap-3">
+                <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-gray-700">
+                  {section.locked && <Lock className="h-3.5 w-3.5 text-amber-500" />}
+                  {section.title}
+                </h2>
+                {section.locked && section.availableAt ? (
+                  <span className="text-xs font-medium text-amber-600">
+                    Unlocks {new Date(section.availableAt).toLocaleDateString()}
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-400">
+                    {done}/{section.items.length}
+                  </span>
+                )}
+              </div>
+              <ul className="space-y-2">
+                {section.items.map((item, i) => (
+                  <TrainingItemRow
+                    key={item.id}
+                    item={item}
+                    index={start + i + 1}
+                    moduleId={mod.id}
+                    locked={section.locked}
+                    availableAt={section.availableAt}
+                  />
+                ))}
+                {section.items.length === 0 && (
+                  <li className="rounded-lg border border-dashed border-gray-200 p-3 text-xs text-gray-400">
+                    No lessons in this section yet.
+                  </li>
+                )}
+              </ul>
+            </section>
+          )
+        })}
 
-      {mod.items.length === 0 && (
-        <p className="text-sm text-gray-500">No lessons in this module yet.</p>
-      )}
+        {mod.ungrouped.length > 0 && (
+          <section>
+            {mod.sections.length > 0 && (
+              <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-700">
+                More lessons
+              </h2>
+            )}
+            <ul className="space-y-2">
+              {mod.ungrouped.map((item, i) => (
+                <TrainingItemRow
+                  key={item.id}
+                  item={item}
+                  index={counter + i + 1}
+                  moduleId={mod.id}
+                />
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {mod.items.length === 0 && (
+          <p className="text-sm text-gray-500">No lessons in this module yet.</p>
+        )}
+      </div>
     </div>
   )
 }

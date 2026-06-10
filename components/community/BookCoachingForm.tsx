@@ -25,12 +25,14 @@ export function BookCoachingForm({ coaches, hasRemaining }: { coaches: Coach[]; 
   const [coachId, setCoachId] = useState(coaches[0]?.id ?? '')
   const [start, setStart] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [needsPurchase, setNeedsPurchase] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const coach = coaches.find((c) => c.id === coachId)
 
   const book = async () => {
     setError(null)
+    setNeedsPurchase(false)
     if (!coachId || !start) {
       setError('Choose a coach and a time.')
       return
@@ -45,10 +47,28 @@ export function BookCoachingForm({ coaches, hasRemaining }: { coaches: Coach[]; 
       const json = await res.json()
       if (!res.ok) {
         setError(json.error ?? 'Could not book.')
+        setNeedsPurchase(Boolean(json.needsPurchase))
         return
       }
       setStart('')
       router.refresh()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Start Stripe Checkout for one additional coaching session.
+  const purchase = async () => {
+    setBusy(true)
+    try {
+      const res = await fetch('/api/community/sessions/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionType: 'coaching' }),
+      })
+      const json = await res.json()
+      if (res.ok && json.url) window.location.href = json.url
+      else setError(json.error ?? 'Could not start purchase.')
     } finally {
       setBusy(false)
     }
@@ -101,13 +121,24 @@ export function BookCoachingForm({ coaches, hasRemaining }: { coaches: Coach[]; 
         className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
       />
       {error && <p className="text-xs text-red-600">{error}</p>}
-      <button
-        onClick={book}
-        disabled={busy}
-        className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-      >
-        {busy ? 'Booking…' : 'Book session'}
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={book}
+          disabled={busy}
+          className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        >
+          {busy ? 'Booking…' : 'Book session'}
+        </button>
+        {needsPurchase && (
+          <button
+            onClick={purchase}
+            disabled={busy}
+            className="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+          >
+            Purchase extra session
+          </button>
+        )}
+      </div>
     </div>
   )
 }

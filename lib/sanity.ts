@@ -123,6 +123,16 @@ export async function getEventsBySlugs(slugs: string[]): Promise<EventMeta[]> {
   )
 }
 
+// Reverse lookup: event _id → slug. Used by the training-reminders cron to map a
+// training_assignment's event_ref (Sanity _id) back to the registration slug.
+export async function getEventsByIds(ids: string[]): Promise<EventMeta[]> {
+  if (!client || ids.length === 0) return []
+  return client.fetch(
+    `*[_type == "event" && _id in $ids]{ _id, title, slug, activityType, date }`,
+    { ids }
+  )
+}
+
 export async function getFeaturedTestimonials() {
   if (!client) return null
   return client.fetch(`

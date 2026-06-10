@@ -16,13 +16,13 @@ export async function GET() {
   const db = supabaseServer()
   const { data } = await db
     .from('training_modules')
-    .select('id, title, description, material_kind, event_ref, min_tier_rank, is_published, display_order, training_items(id)')
+    .select('id, title, description, material_kind, course_type, event_ref, min_tier_rank, is_published, display_order, training_items(id)')
     .order('display_order', { ascending: true })
   return NextResponse.json({ modules: data ?? [] })
 }
 
 // POST — create a module.
-// Body: { title, description?, materialKind?, eventRef?, minTierRank?, displayOrder? }
+// Body: { title, description?, materialKind?, courseType?, startDate?, eventRef?, minTierRank?, displayOrder? }
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const body = await req.json().catch(() => ({}))
@@ -37,6 +37,8 @@ export async function POST(req: Request) {
       title,
       description: body.description?.trim() || null,
       material_kind: body.materialKind ?? 'general',
+      course_type: body.courseType ?? 'self_paced',
+      start_date: body.startDate || null,
       event_ref: body.eventRef || null,
       min_tier_rank: Number.isFinite(body.minTierRank) ? body.minTierRank : 0,
       display_order: Number.isFinite(body.displayOrder) ? body.displayOrder : 0,
@@ -64,6 +66,8 @@ export async function PATCH(req: Request) {
   if (typeof body.title === 'string') patch.title = body.title.trim()
   if (typeof body.description === 'string') patch.description = body.description.trim() || null
   if (typeof body.materialKind === 'string') patch.material_kind = body.materialKind
+  if (typeof body.courseType === 'string') patch.course_type = body.courseType
+  if ('startDate' in body) patch.start_date = body.startDate || null
   if (typeof body.minTierRank === 'number') patch.min_tier_rank = body.minTierRank
   if ('eventRef' in body) patch.event_ref = body.eventRef || null
 

@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Circle, FileText, Video, ExternalLink } from 'lucide-react'
-import { MaterialDownloadButton } from './MaterialDownloadButton'
+import Link from 'next/link'
+import { CheckCircle2, Circle, FileText, Video, Link2, Lock, ChevronRight } from 'lucide-react'
 
 export interface TrainingItemRowData {
   id: string
@@ -13,10 +13,23 @@ export interface TrainingItemRowData {
   completed: boolean
 }
 
-// One lesson within a module: open/download the content, and toggle completion.
-// Completion posts to the progress API and updates the per-module "x of n" count
-// on next load (FR-COM-10: "see my progress as I complete stages").
-export function TrainingItemRow({ item }: { item: TrainingItemRowData }) {
+// One lesson within a module. The row links into the focused lesson player; the
+// checkmark is a quick complete/incomplete toggle that posts to the progress API
+// and updates the per-module "x of n" count (FR-COM-10). Drip-locked lessons are
+// shown but not openable.
+export function TrainingItemRow({
+  item,
+  index,
+  moduleId,
+  locked = false,
+  availableAt = null,
+}: {
+  item: TrainingItemRowData
+  index?: number
+  moduleId: string
+  locked?: boolean
+  availableAt?: string | null
+}) {
   const [completed, setCompleted] = useState(item.completed)
   const [saving, setSaving] = useState(false)
 
@@ -38,54 +51,74 @@ export function TrainingItemRow({ item }: { item: TrainingItemRowData }) {
     }
   }
 
-  const Icon = item.content_kind === 'video' ? Video : FileText
-  const isExternal = item.content_kind === 'google_doc' || item.content_kind === 'link'
+  const Icon =
+    item.content_kind === 'video'
+      ? Video
+      : item.content_kind === 'google_doc' || item.content_kind === 'link'
+        ? Link2
+        : FileText
+
+  const meta = (
+    <>
+      <span className="capitalize">{item.content_kind.replace('_', ' ')}</span>
+      {item.estimated_minutes != null && ` · ~${item.estimated_minutes} min`}
+    </>
+  )
+
+  if (locked) {
+    return (
+      <li className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-gray-50 p-3.5 opacity-80">
+        <div className="flex min-w-0 items-center gap-3">
+          <Lock className="h-5 w-5 shrink-0 text-amber-400" />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-400">
+            <Icon className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="truncate font-medium text-gray-500">
+              {index != null && <span className="text-gray-400">{index}. </span>}
+              {item.title}
+            </h3>
+            <p className="mt-0.5 text-xs text-gray-400">
+              {availableAt ? `Unlocks ${new Date(availableAt).toLocaleDateString()}` : 'Locked'}
+            </p>
+          </div>
+        </div>
+      </li>
+    )
+  }
 
   return (
-    <li className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 bg-white p-4">
-      <div className="flex min-w-0 items-start gap-3">
-        <button
-          onClick={toggle}
-          disabled={saving}
-          aria-label={completed ? 'Mark incomplete' : 'Mark complete'}
-          className="mt-0.5 shrink-0 disabled:opacity-50"
-        >
-          {completed ? (
-            <CheckCircle2 className="h-5 w-5 text-green-600" />
-          ) : (
-            <Circle className="h-5 w-5 text-gray-300" />
-          )}
-        </button>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Icon className="h-4 w-4 shrink-0 text-gray-400" />
-            <h3 className="font-medium text-gray-900">{item.title}</h3>
-          </div>
-          {item.estimated_minutes != null && (
-            <p className="mt-0.5 text-xs text-gray-400">~{item.estimated_minutes} min</p>
-          )}
-        </div>
-      </div>
-
-      <div className="shrink-0">
-        {isExternal && item.external_url ? (
-          <a
-            href={item.external_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            Open
-          </a>
+    <li className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3.5 transition hover:border-gray-300 hover:shadow-sm">
+      <button
+        onClick={toggle}
+        disabled={saving}
+        aria-label={completed ? 'Mark incomplete' : 'Mark complete'}
+        className="shrink-0 transition hover:scale-110 disabled:opacity-50"
+      >
+        {completed ? (
+          <CheckCircle2 className="h-6 w-6 text-green-500" />
         ) : (
-          <MaterialDownloadButton
-            endpoint={`/api/community/training/items/${item.id}/download`}
-            title={item.title}
-            label={item.content_kind === 'video' ? 'Watch' : 'Open'}
-          />
+          <Circle className="h-6 w-6 text-gray-300" />
         )}
-      </div>
+      </button>
+
+      <Link
+        href={`/community/training/${moduleId}/${item.id}`}
+        className="flex min-w-0 flex-1 items-center gap-3"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
+          <Icon className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <h3 className={`truncate font-medium ${completed ? 'text-gray-500' : 'text-gray-900'}`}>
+            {index != null && <span className="text-gray-400">{index}. </span>}
+            {item.title}
+          </h3>
+          <p className="mt-0.5 text-xs text-gray-400">{meta}</p>
+        </div>
+      </Link>
+
+      <ChevronRight className="h-5 w-5 shrink-0 text-gray-300" />
     </li>
   )
 }

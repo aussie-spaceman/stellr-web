@@ -51,6 +51,9 @@ export default async function MentoringPage() {
       <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm">
         <span className="font-semibold text-gray-900">{ent.remaining}</span> of {ent.included} included
         sessions remaining
+        {ent.extraCredits > 0 && (
+          <span className="text-indigo-600"> · {ent.extraCredits} purchased</span>
+        )}
         {ent.expiresAt && (
           <span className="text-gray-500"> · expires {new Date(ent.expiresAt).toLocaleDateString()}</span>
         )}

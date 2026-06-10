@@ -183,6 +183,18 @@ export async function POST(req: NextRequest) {
         if (memberId && tierId && subscriptionId) {
           await activateMembership(memberId, tierId, billingInterval ?? 'annual', subscriptionId)
         }
+      } else if (session.metadata?.type === 'extra_session') {
+        // Purchased extra coaching/mentoring session → grant a credit (FR-COM-11/12)
+        const { memberId, sessionType } = session.metadata
+        if (memberId && (sessionType === 'coaching' || sessionType === 'mentoring')) {
+          const db = supabaseServer()
+          await db.from('session_credits').insert({
+            member_id: memberId,
+            session_type: sessionType,
+            status: 'available',
+            stripe_session_id: session.id,
+          })
+        }
       } else if (session.metadata?.isIndividualGroupPayment === 'true') {
         // Individual member payment within a group registration
         const { registrationId, participantEmail } = session.metadata

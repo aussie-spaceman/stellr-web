@@ -24,6 +24,7 @@ export interface AdminEntitlement {
   session_type: 'coaching' | 'mentoring'
   included_sessions: number
   validity_days: number | null
+  extra_stripe_price_id: string | null
 }
 
 export function SessionsManager({
@@ -195,14 +196,43 @@ function EntitlementsSection({
   busy: boolean
   post: Poster
 }) {
-  const value = (tierId: string, type: 'coaching' | 'mentoring') =>
-    entitlements.find((e) => e.tier_id === tierId && e.session_type === type)?.included_sessions ?? 0
+  const key = (tierId: string, type: string) => `${tierId}:${type}`
+
+  // Seed editable state from existing rows: included count + extra-session price ID.
+  const [cells, setCells] = useState<Record<string, { included: number; priceId: string }>>(() => {
+    const init: Record<string, { included: number; priceId: string }> = {}
+    for (const t of tiers) {
+      for (const ty of ['coaching', 'mentoring'] as const) {
+        const e = entitlements.find((x) => x.tier_id === t.id && x.session_type === ty)
+        init[key(t.id, ty)] = {
+          included: e?.included_sessions ?? 0,
+          priceId: e?.extra_stripe_price_id ?? '',
+        }
+      }
+    }
+    return init
+  })
+
+  const update = (tierId: string, ty: string, patch: Partial<{ included: number; priceId: string }>) =>
+    setCells((prev) => ({ ...prev, [key(tierId, ty)]: { ...prev[key(tierId, ty)], ...patch } }))
+
+  // Save both fields together so neither overwrites the other on the server.
+  const save = (tierId: string, ty: 'coaching' | 'mentoring') => {
+    const c = cells[key(tierId, ty)]
+    post('/api/admin/community/session-entitlements', {
+      tierId,
+      sessionType: ty,
+      includedSessions: c.included,
+      extraStripePriceId: c.priceId || null,
+    })
+  }
 
   return (
     <section>
       <h2 className="mb-1 text-lg font-semibold text-gray-900">Sessions per tier</h2>
       <p className="mb-3 text-sm text-gray-500">
-        How many included coaching / mentoring sessions each membership tier receives. Editable any time.
+        Included coaching / mentoring sessions per tier, and the Stripe Price ID charged for each
+        additional session beyond the included allowance. Editable any time.
       </p>
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
         <table className="w-full text-sm">
@@ -216,25 +246,40 @@ function EntitlementsSection({
           <tbody className="divide-y divide-gray-100">
             {tiers.map((t) => (
               <tr key={t.id}>
-                <td className="px-3 py-2 font-medium text-gray-900">{t.name}</td>
-                {(['coaching', 'mentoring'] as const).map((ty) => (
-                  <td key={ty} className="px-3 py-2">
-                    <input
-                      type="number"
-                      min={0}
-                      defaultValue={value(t.id, ty)}
-                      onBlur={(e) =>
-                        post('/api/admin/community/session-entitlements', {
-                          tierId: t.id,
-                          sessionType: ty,
-                          includedSessions: Number(e.target.value),
-                        })
-                      }
-                      disabled={busy}
-                      className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm"
-                    />
-                  </td>
-                ))}
+                <td className="px-3 py-2 align-top font-medium text-gray-900">{t.name}</td>
+                {(['coaching', 'mentoring'] as const).map((ty) => {
+                  const c = cells[key(t.id, ty)]
+                  return (
+                    <td key={ty} className="px-3 py-2 align-top">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="flex items-center gap-2 text-xs text-gray-500">
+                          <span className="w-14">Included</span>
+                          <input
+                            type="number"
+                            min={0}
+                            value={c.included}
+                            onChange={(e) => update(t.id, ty, { included: Number(e.target.value) })}
+                            onBlur={() => save(t.id, ty)}
+                            disabled={busy}
+                            className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
+                          />
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-gray-500">
+                          <span className="w-14">Extra price</span>
+                          <input
+                            type="text"
+                            value={c.priceId}
+                            onChange={(e) => update(t.id, ty, { priceId: e.target.value })}
+                            onBlur={() => save(t.id, ty)}
+                            placeholder="price_…"
+                            disabled={busy}
+                            className="w-44 rounded-md border border-gray-300 px-2 py-1 font-mono text-xs text-gray-900"
+                          />
+                        </label>
+                      </div>
+                    </td>
+                  )
+                })}
               </tr>
             ))}
           </tbody>

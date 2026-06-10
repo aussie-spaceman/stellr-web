@@ -5,8 +5,17 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ChevronDown, Menu, X } from 'lucide-react'
 import { Logo } from './Logo'
+import { NavUserButton } from './NavUserButton'
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
+
+type NavbarProps = {
+  /** Whether a Clerk session is present. Resolved server-side and passed in so the
+   *  signed-in/signed-out state is correct on first paint (no flash of "Log In"). */
+  isSignedIn?: boolean
+  /** Whether the signed-in user has the admin role (adds Admin panel to the user menu). */
+  isAdmin?: boolean
+}
 
 const navLinks = [
   {
@@ -68,7 +77,7 @@ const getInvolvedLinks = [
   { label: 'Partner With Us', href: '/network' },
 ]
 
-export function Navbar() {
+export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null)
@@ -95,18 +104,32 @@ export function Navbar() {
       <div className="bg-brand-blue-dark">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="hidden lg:flex items-center justify-end h-9 text-xs gap-5">
-            <a
-              href={`${AUTH_URL}/login`}
-              className="text-gray-400 hover:text-white transition-colors"
-            >
-              Log In
-            </a>
-            <a
-              href={`${AUTH_URL}/signup`}
-              className="text-brand-orange font-medium hover:text-amber-300 transition-colors"
-            >
-              Join Free →
-            </a>
+            {isSignedIn ? (
+              <>
+                <a
+                  href={`${AUTH_URL}/account`}
+                  className="text-gray-300 hover:text-white transition-colors"
+                >
+                  My Account
+                </a>
+                <NavUserButton isAdmin={isAdmin} />
+              </>
+            ) : (
+              <>
+                <a
+                  href={`${AUTH_URL}/sign-in`}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  Log In
+                </a>
+                <a
+                  href={`${AUTH_URL}/sign-up`}
+                  className="text-brand-orange font-medium hover:text-amber-300 transition-colors"
+                >
+                  Join Free →
+                </a>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -274,20 +297,32 @@ export function Navbar() {
               >
                 Donate
               </Link>
-              <a
-                href={`${AUTH_URL}/signup`}
-                className="block w-full text-center px-4 py-3 bg-brand-blue text-white font-medium rounded-md hover:bg-blue-800 transition-colors"
-                onClick={() => setMobileOpen(false)}
-              >
-                Join Free
-              </a>
-              <a
-                href={`${AUTH_URL}/login`}
-                className="block w-full text-center px-4 py-3 border border-brand-blue text-brand-blue font-medium rounded-md hover:bg-blue-50 transition-colors"
-                onClick={() => setMobileOpen(false)}
-              >
-                Log In
-              </a>
+              {isSignedIn ? (
+                <a
+                  href={`${AUTH_URL}/account`}
+                  className="block w-full text-center px-4 py-3 bg-brand-blue text-white font-medium rounded-md hover:bg-blue-800 transition-colors"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  My Account
+                </a>
+              ) : (
+                <>
+                  <a
+                    href={`${AUTH_URL}/sign-up`}
+                    className="block w-full text-center px-4 py-3 bg-brand-blue text-white font-medium rounded-md hover:bg-blue-800 transition-colors"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Join Free
+                  </a>
+                  <a
+                    href={`${AUTH_URL}/sign-in`}
+                    className="block w-full text-center px-4 py-3 border border-brand-blue text-brand-blue font-medium rounded-md hover:bg-blue-50 transition-colors"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Log In
+                  </a>
+                </>
+              )}
             </div>
           </div>
         </div>

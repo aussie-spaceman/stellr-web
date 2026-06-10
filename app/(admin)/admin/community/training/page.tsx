@@ -11,7 +11,11 @@ export default async function AdminTrainingPage() {
   const db = supabaseServer()
   const { data: modules } = await db
     .from('training_modules')
-    .select('id, title, description, material_kind, event_ref, min_tier_rank, is_published, training_items(id)')
+    .select(
+      'id, title, description, material_kind, course_type, start_date, event_ref, min_tier_rank, is_published, ' +
+        'training_sections(id, title, display_order, drip_days), ' +
+        'training_items(id, title, content_kind, status, section_id, display_order, estimated_minutes, body)'
+    )
     .order('display_order', { ascending: true })
 
   return (
@@ -24,7 +28,7 @@ export default async function AdminTrainingPage() {
         </p>
       </div>
 
-      <TrainingManager modules={(modules ?? []) as AdminModule[]} />
+      <TrainingManager modules={(modules ?? []) as unknown as AdminModule[]} />
     </div>
   )
 }

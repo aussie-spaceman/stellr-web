@@ -28,7 +28,9 @@ export default async function AdminSessionsPage() {
       .from('mentoring_cohorts')
       .select('id, name, mentor:members!mentoring_cohorts_mentor_member_id_fkey(first_name, last_name), cohort_members(member_id)')
       .eq('is_active', true),
-    db.from('session_entitlements').select('tier_id, session_type, included_sessions, validity_days'),
+    db
+      .from('session_entitlements')
+      .select('tier_id, session_type, included_sessions, validity_days, extra_stripe_price_id'),
   ])
 
   const hosts: AdminHost[] = (hostRows ?? []).map((h) => ({

@@ -2,6 +2,8 @@ import { supabaseServer } from '@/lib/supabase'
 import { type CommunityMember } from '@/lib/community'
 import { getVideoProvider } from '@/lib/video-provider'
 import { notifyMember, notifyMembers } from '@/lib/notify'
+import { sendEmail } from '@/lib/email'
+import { buildIcsAttachment } from '@/lib/ics'
 
 // Core logic for Coaching (1:1, FR-COM-12) and Mentoring (group, FR-COM-11).
 // Coaching: sessions.member_id is the coachee. Mentoring: sessions.cohort_id is
@@ -33,6 +35,8 @@ export interface Entitlement {
   used: number
   remaining: number
   expiresAt: string | null
+  /** Purchased extra sessions available to book on top of the included ones. */
+  extraCredits: number
 }
 
 export async function getEntitlement(
@@ -40,8 +44,18 @@ export async function getEntitlement(
   type: SessionType
 ): Promise<Entitlement> {
   const db = supabaseServer()
+
+  // Purchased extra credits are available regardless of tier.
+  const { count: creditCount } = await db
+    .from('session_credits')
+    .select('id', { count: 'exact', head: true })
+    .eq('member_id', member.id)
+    .eq('session_type', type)
+    .eq('status', 'available')
+  const extraCredits = creditCount ?? 0
+
   if (member.activeTierIds.length === 0) {
-    return { included: 0, used: 0, remaining: 0, expiresAt: null }
+    return { included: 0, used: 0, remaining: 0, expiresAt: null, extraCredits }
   }
 
   const { data: ents } = await db
@@ -99,6 +113,7 @@ export async function getEntitlement(
     used,
     remaining: Math.max(best.included - used, 0),
     expiresAt,
+    extraCredits,
   }
 }
 
@@ -129,6 +144,8 @@ export interface BookResult {
   ok: boolean
   sessionId?: string
   error?: string
+  /** True when booking failed only because the member is out of sessions. */
+  needsPurchase?: boolean
 }
 
 /**
@@ -147,11 +164,18 @@ export async function bookCoaching(
   const caps = await getHostCaps(hostId)
   if (!caps.canCoach) return { ok: false, error: 'Selected coach is not available.' }
 
-  if (!opts.isPaidExtra) {
-    const ent = await getEntitlement(member, 'coaching')
-    if (ent.remaining <= 0) {
-      return { ok: false, error: 'No coaching sessions remaining. Purchase an extra session to continue.' }
+  // Decide whether this booking draws on an included session or a paid credit.
+  const ent = await getEntitlement(member, 'coaching')
+  let usePaidExtra = false
+  if (ent.remaining <= 0) {
+    if (ent.extraCredits <= 0) {
+      return {
+        ok: false,
+        needsPurchase: true,
+        error: 'No coaching sessions remaining. Purchase an extra session to continue.',
+      }
     }
+    usePaidExtra = true
   }
 
   const start = new Date(startIso)
@@ -167,7 +191,7 @@ export async function bookCoaching(
       scheduled_start: start.toISOString(),
       scheduled_end: end.toISOString(),
       status: 'scheduled',
-      is_paid_extra: Boolean(opts.isPaidExtra),
+      is_paid_extra: usePaidExtra,
       created_by: member.id,
     })
     .select('id')
@@ -178,8 +202,18 @@ export async function bookCoaching(
     return { ok: false, error: 'Could not book session.' }
   }
 
+  // Claim a paid credit atomically when not covered by the included allowance.
+  if (usePaidExtra) {
+    await db.rpc('consume_session_credit', {
+      p_member_id: member.id,
+      p_session_type: 'coaching',
+      p_session_id: session.id,
+    })
+  }
+
   await provisionRoom(session.id, opts.title ?? 'Coaching session')
   await db.from('session_participants').insert({ session_id: session.id, member_id: member.id })
+  await sendSessionInvites(session.id)
 
   await notifyMember(hostId, {
     type: 'session',
@@ -251,6 +285,7 @@ export async function scheduleMentoring(
       actorMemberId: hostId,
     })
   }
+  await sendSessionInvites(session.id)
 
   return { ok: true, sessionId: session.id }
 }
@@ -263,6 +298,65 @@ async function provisionRoom(sessionId: string, title: string): Promise<void> {
     .from('sessions')
     .update({ provider: room.provider, provider_room: room.room, join_url: room.joinUrl })
     .eq('id', sessionId)
+}
+
+/**
+ * Email every participant + the host an .ics calendar invite for a session
+ * (FR-COM-11/12). Best-effort: failures are logged, never thrown. Works across
+ * Google/Outlook/Apple without per-user calendar OAuth.
+ */
+async function sendSessionInvites(sessionId: string): Promise<void> {
+  const db = supabaseServer()
+  const { data: s } = await db
+    .from('sessions')
+    .select('id, title, scheduled_start, scheduled_end, join_url, host_member_id')
+    .eq('id', sessionId)
+    .maybeSingle()
+  if (!s) return
+
+  const { data: parts } = await db
+    .from('session_participants')
+    .select('member_id')
+    .eq('session_id', sessionId)
+  const recipientIds = new Set<string>((parts ?? []).map((p) => p.member_id as string))
+  if (s.host_member_id) recipientIds.add(s.host_member_id as string)
+  if (recipientIds.size === 0) return
+
+  const { data: members } = await db
+    .from('members')
+    .select('id, email, first_name')
+    .in('id', [...recipientIds])
+
+  const start = new Date(s.scheduled_start)
+  const end = s.scheduled_end ? new Date(s.scheduled_end) : new Date(start.getTime() + 30 * 60_000)
+  const title = s.title ?? 'Stellr session'
+  const attendeeEmails = (members ?? []).map((m) => m.email).filter((e): e is string => !!e)
+
+  for (const m of members ?? []) {
+    if (!m.email) continue
+    const ics = buildIcsAttachment({
+      uid: `${sessionId}@stellreducation.org`,
+      title,
+      start,
+      end,
+      url: s.join_url ?? undefined,
+      organizerEmail: 'david.shaw@insimeducation.com',
+      attendeeEmails,
+    })
+    try {
+      await sendEmail({
+        to: m.email,
+        subject: `Calendar invite: ${title}`,
+        html: `<p>Hi ${m.first_name ?? 'there'},</p><p>Your ${title} is scheduled for <strong>${start.toLocaleString()}</strong>.</p>${
+          s.join_url ? `<p><a href="${s.join_url}">Join link</a></p>` : ''
+        }<p>The attached invite will add it to your calendar.</p>`,
+        text: `Your ${title} is scheduled for ${start.toLocaleString()}.${s.join_url ? ` Join: ${s.join_url}` : ''}`,
+        attachments: [ics],
+      })
+    } catch (e) {
+      console.error('[sessions] invite email failed:', e)
+    }
+  }
 }
 
 // ─── Host responses (accept / decline / reschedule / complete) ───────────────

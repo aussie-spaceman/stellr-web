@@ -164,7 +164,7 @@ export async function createGroupRegistrationSheet({
   teacherEmail: string
   additionalAdultCount: number
   studentCount: number
-}): Promise<string> {
+}): Promise<{ spreadsheetId: string; url: string }> {
   const auth = getAuth()
   if (!auth) throw new Error('Google service account not configured')
 
@@ -350,7 +350,7 @@ export async function createGroupRegistrationSheet({
     })
   }
 
-  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`
+  return { spreadsheetId, url: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit` }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

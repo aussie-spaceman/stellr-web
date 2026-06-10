@@ -70,17 +70,28 @@ export function individualConfirmationEmail({
 
 export function groupConfirmationEmail({
   teacherFirstName, teacherLastName, schoolName, eventTitle,
-  participantCount, registrationId, paymentMethod, spreadsheetUrl, joinUrl,
+  participantCount, registrationId, paymentMethod, detailsMethod, spreadsheetUrl, joinUrl,
 }: {
   teacherFirstName: string; teacherLastName: string; schoolName: string
   eventTitle: string; participantCount: number; registrationId: string
-  paymentMethod: 'invoice' | 'card'; spreadsheetUrl?: string; joinUrl?: string
+  paymentMethod: 'invoice' | 'card' | 'individual'
+  detailsMethod: 'add_now' | 'spreadsheet' | 'email_link'
+  spreadsheetUrl?: string; joinUrl?: string
 }) {
   const subject = `Group Registration Received — ${eventTitle}`
 
-  const paymentNote = paymentMethod === 'invoice'
-    ? '<li style="margin-bottom:8px">An invoice will be emailed to you within 1–2 business days. Registration is confirmed upon payment.</li>'
-    : '<li style="margin-bottom:8px">Your card payment has been processed. Registration is confirmed.</li>'
+  // ── "What happens next" — dynamic on how payment & registration were chosen ──
+  const paymentNote =
+    paymentMethod === 'card'
+      ? `<li style="margin-bottom:8px"><strong>Payment:</strong> Your card payment for all ${participantCount} participant${participantCount !== 1 ? 's' : ''} has been processed — your group registration is confirmed.</li>`
+    : paymentMethod === 'individual'
+      ? '<li style="margin-bottom:8px"><strong>Payment:</strong> Each group member will receive their own payment link by email. Each member\'s spot is confirmed once they complete their individual payment.</li>'
+      : `<li style="margin-bottom:8px"><strong>Payment:</strong> An invoice for all ${participantCount} participant${participantCount !== 1 ? 's' : ''} will be emailed to you within 1–2 business days. Registration is confirmed once payment is received.</li>`
+
+  const registrationNote =
+    detailsMethod === 'add_now'
+      ? '<li style="margin-bottom:8px"><strong>Member details:</strong> All group member details have been submitted — there\'s nothing further to add.</li>'
+      : '<li style="margin-bottom:8px"><strong>Member details:</strong> Complete your group\'s details using <strong>either</strong> option above — the pre-populated Google Sheet <strong>or</strong> the registration link. We\'ll finalise each member\'s registration as their details come in.</li>'
 
   const sheetSection = spreadsheetUrl ? `
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0">
@@ -126,6 +137,7 @@ export function groupConfirmationEmail({
         <p style="font-weight:600;color:#374151;margin-bottom:8px">What happens next:</p>
         <ul style="color:#6b7280;font-size:14px;line-height:1.8;padding-left:20px">
           ${paymentNote}
+          ${registrationNote}
           <li style="margin-bottom:8px">Parental permission forms sent via DocuSign to each student once confirmed</li>
           <li>Event details and schedule sent closer to the date</li>
         </ul>
@@ -138,10 +150,17 @@ export function groupConfirmationEmail({
   `
   const sheetText = spreadsheetUrl ? `\n\nOption 1 — Google Sheet: ${spreadsheetUrl}` : ''
   const joinText = joinUrl ? `\n\nOption 2 — Registration Link: ${joinUrl}` : ''
-  const paymentText = paymentMethod === 'invoice'
-    ? 'An invoice will be emailed within 1–2 business days.'
-    : 'Card payment processed — registration confirmed.'
-  const text = `Hi ${teacherFirstName},\n\nGroup registration received for ${eventTitle}.\n\nSchool: ${schoolName}\nParticipants: ${participantCount}\nReference #: ${registrationId}\n\n${paymentText}${sheetText}${joinText}\n\n— Stellr Education`
+  const paymentText =
+    paymentMethod === 'card'
+      ? `Payment: card payment for all ${participantCount} participant${participantCount !== 1 ? 's' : ''} processed — registration confirmed.`
+    : paymentMethod === 'individual'
+      ? 'Payment: each group member will receive their own payment link by email; each spot is confirmed once that member pays.'
+      : `Payment: an invoice for all ${participantCount} participant${participantCount !== 1 ? 's' : ''} will be emailed within 1–2 business days; registration is confirmed once paid.`
+  const registrationText =
+    detailsMethod === 'add_now'
+      ? 'Member details: all details submitted — nothing further to add.'
+      : 'Member details: complete your group\'s details using either the Google Sheet or the registration link below (whichever you prefer).'
+  const text = `Hi ${teacherFirstName},\n\nGroup registration received for ${eventTitle}.\n\nSchool: ${schoolName}\nParticipants: ${participantCount}\nReference #: ${registrationId}\n\n${paymentText}\n${registrationText}${sheetText}${joinText}\n\n— Stellr Education`
   return { subject, html, text }
 }
 

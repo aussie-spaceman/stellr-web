@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { auth as clerkAuth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isGoogleSheetsConfigured } from '@/lib/google-sheets'
 import { google } from 'googleapis'
@@ -76,11 +77,17 @@ export async function GET(
       return NextResponse.json({ error: 'Google Sheets not configured' }, { status: 503 })
     }
 
+    // Must be signed in — the sheet contains participant PII.
+    const { userId } = await clerkAuth()
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+    }
+
     const db = supabaseServer()
 
     const { data: registration, error: regErr } = await db
       .from('registrations')
-      .select('id, event_title, school_name, teacher_email, type, spreadsheet_id')
+      .select('id, event_title, school_name, teacher_email, teacher_member_id, type, spreadsheet_id')
       .eq('id', id)
       .maybeSingle()
 
@@ -94,11 +101,32 @@ export async function GET(
 
     const reg = registration as {
       id: string; event_title: string; school_name: string | null
-      teacher_email: string | null; type: string; spreadsheet_id: string | null
+      teacher_email: string | null; teacher_member_id: string | null
+      type: string; spreadsheet_id: string | null
     }
 
     if (reg.type !== 'group') {
       return NextResponse.json({ error: 'Only available for group registrations' }, { status: 400 })
+    }
+
+    // Ownership: only the teacher / student manager who created this registration
+    // (matched by their member account or the email they registered with) may
+    // open the group's sheet.
+    const { data: member } = await db
+      .from('members')
+      .select('id, email')
+      .eq('clerk_user_id', userId)
+      .maybeSingle()
+
+    const m = member as { id: string; email: string | null } | null
+    const isOwner = Boolean(
+      m && (
+        reg.teacher_member_id === m.id ||
+        (reg.teacher_email && m.email && reg.teacher_email.toLowerCase() === m.email.toLowerCase())
+      )
+    )
+    if (!isOwner) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Return existing sheet URL rather than creating a new one each time

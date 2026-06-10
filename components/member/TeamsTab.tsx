@@ -413,17 +413,24 @@ function TeacherTeamsView() {
 
                 {/* Sheet controls */}
                 <div className="flex items-center gap-3 flex-wrap">
-                  {fullTeam.registration.spreadsheet_id && (
-                    <a
-                      href={`https://docs.google.com/spreadsheets/d/${fullTeam.registration.spreadsheet_id}/edit`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-sm text-brand-blue hover:text-brand-blue-dark font-medium"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-                      Open Sheet
-                    </a>
-                  )}
+                  {/* Every group registration has a related Google Sheet. When the
+                      sheet ID is known we link straight to it; otherwise we hit the
+                      on-demand endpoint which generates it, persists the ID, and
+                      redirects (covers older registrations created before sheets
+                      were generated up front). */}
+                  <a
+                    href={
+                      fullTeam.registration.spreadsheet_id
+                        ? `https://docs.google.com/spreadsheets/d/${fullTeam.registration.spreadsheet_id}/edit`
+                        : `/api/registrations/${team.id}/spreadsheet`
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-brand-blue hover:text-brand-blue-dark font-medium"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+                    Open Sheet
+                  </a>
                   {fullTeam.registration.spreadsheet_id && (
                     <button
                       onClick={() => handleSync(team.id)}

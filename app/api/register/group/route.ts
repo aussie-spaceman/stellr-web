@@ -10,6 +10,7 @@ import {
 } from '@/lib/email'
 import { createGroupRegistrationSheet, isGoogleSheetsConfigured } from '@/lib/google-sheets'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
+import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt } from '@/lib/member-enums'
 import type { RegistrationRow } from '@/lib/database.types'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
@@ -167,20 +168,23 @@ export async function POST(req: NextRequest) {
         last_name: p.last_name,
         phone: p.phone,
         date_of_birth: p.date_of_birth,
-        gender: p.gender,
-        grade: p.grade || null,
-        tshirt_size: p.t_shirt_size || null,
-        age_bracket: ageNow < 18 ? 'high_school' : p.age_bracket,
-        event_role: ageNow < 18 ? (p.event_role === 'school_student_manager' ? 'school_student_manager' : 'school_student') : p.event_role,
+        gender: normalizeGender(p.gender),
+        grade: normalizeGrade(p.grade),
+        tshirt_size: normalizeTshirt(p.t_shirt_size),
+        age_bracket: ageNow < 18 ? 'high_school' : normalizeAgeBracket(p.age_bracket),
+        event_role: normalizeEventRole(ageNow < 18 ? (p.event_role === 'school_student_manager' ? 'school_student_manager' : 'school_student') : p.event_role),
         is_active: true,
       })
     }
 
     const memberIdMap: Record<string, string | null> = {}
-    const { data: memberRows } = await db
+    const { data: memberRows, error: memberUpsertError } = await db
       .from('members')
       .upsert([...memberUpsertByEmail.values()], { onConflict: 'email', ignoreDuplicates: false })
       .select('id, email')
+    if (memberUpsertError) {
+      console.error('Member upsert error (non-fatal — participants still created):', memberUpsertError)
+    }
 
     for (const row of memberRows ?? []) {
       memberIdMap[row.email] = row.id
@@ -217,6 +221,8 @@ export async function POST(req: NextRequest) {
       individual_payment_status: paymentStatus ?? null,
     })
 
+    const registrantPayStatus: 'pending' | null =
+      member_pays_individually && details_method === 'add_now' ? 'pending' : null
     const registrantRow = buildParticipant({
       first_name: teacher.first_name, last_name: teacher.last_name,
       email: teacher.email, phone: teacher.phone,
@@ -231,7 +237,7 @@ export async function POST(req: NextRequest) {
       emergency_contact_email: teacher.emergency_contact_email,
       emergency_contact_phone: teacher.emergency_contact_phone,
       emergency_contact_relationship: teacher.emergency_contact_relationship,
-    })
+    }, registrantPayStatus)
 
     const participantRows = [registrantRow]
 
@@ -276,30 +282,35 @@ export async function POST(req: NextRequest) {
         guardianLastName:  row.emergency_contact_last_name,
         guardianEmail:     row.emergency_contact_email,
         guardianPhone:     row.emergency_contact_phone,
+        relationship:      row.emergency_contact_relationship,
       })
     }
 
-    // ── Google Sheet (spreadsheet or email_link path — both get a sheet) ────────
+    // ── Google Sheet (every group registration gets a linked sheet) ────────────
+    // Created up front so the teacher/student-manager can always open it from the
+    // member portal, regardless of the details method they chose on the form.
     let spreadsheetUrl: string | null = null
-    if (details_method === 'spreadsheet' || details_method === 'email_link') {
-      if (isGoogleSheetsConfigured()) {
-        try {
-          const adultCountForSheet = registrant_role === 'student_manager'
-            ? adult_count          // all adults are "additional" for SM
-            : adult_count - 1      // exclude teacher from additional adult count
-          spreadsheetUrl = await createGroupRegistrationSheet({
-            eventTitle: event_title,
-            schoolName: teacher.school_name,
-            teacherEmail: teacher.email,
-            additionalAdultCount: adultCountForSheet,
-            studentCount: student_count,
-          })
-        } catch (sheetErr) {
-          console.error('Google Sheets error (non-fatal):', sheetErr)
-        }
-      } else {
-        console.log('[group] Google Sheets not configured — skipping sheet creation')
+    if (isGoogleSheetsConfigured()) {
+      try {
+        const adultCountForSheet = registrant_role === 'student_manager'
+          ? adult_count          // all adults are "additional" for SM
+          : adult_count - 1      // exclude teacher from additional adult count
+        const sheet = await createGroupRegistrationSheet({
+          eventTitle: event_title,
+          schoolName: teacher.school_name,
+          teacherEmail: teacher.email,
+          additionalAdultCount: adultCountForSheet,
+          studentCount: student_count,
+        })
+        spreadsheetUrl = sheet.url
+        // Persist the sheet ID so the portal "Open Sheet" link, sheet-sync, and the
+        // Google Drive change webhook can all resolve back to this exact sheet.
+        await db.from('registrations').update({ spreadsheet_id: sheet.spreadsheetId }).eq('id', regId)
+      } catch (sheetErr) {
+        console.error('Google Sheets error (non-fatal):', sheetErr)
       }
+    } else {
+      console.log('[group] Google Sheets not configured — skipping sheet creation')
     }
 
     // ── Group join token (spreadsheet or email_link path — both get a token) ──
@@ -319,6 +330,11 @@ export async function POST(req: NextRequest) {
         console.error('Group join token insert error (non-fatal):', tokenError)
       }
     }
+
+    // The sheet is created for every group, but it's only an *action item* (and so
+    // surfaced as an option in the confirmation email / page) when members weren't
+    // entered up front. For add_now the sheet is just a portal record.
+    const promptSpreadsheetUrl = details_method === 'add_now' ? null : spreadsheetUrl
 
     // ── Look up Stripe Price ID ───────────────────────────────────────────────
     const event = await getEventBySlug(event_slug)
@@ -364,15 +380,17 @@ export async function POST(req: NextRequest) {
           isGroup: 'true',
           teacherName: `${teacher.first_name} ${teacher.last_name}`,
         },
-        success_url: spreadsheetUrl
-          ? `${SITE_URL}/register/${event_slug}/confirmation?id=${regId}&type=group&payment=success&spreadsheet=${encodeURIComponent(spreadsheetUrl)}`
+        success_url: promptSpreadsheetUrl
+          ? `${SITE_URL}/register/${event_slug}/confirmation?id=${regId}&type=group&payment=success&spreadsheet=${encodeURIComponent(promptSpreadsheetUrl)}`
           : `${SITE_URL}/register/${event_slug}/confirmation?id=${regId}&type=group&payment=success`,
         cancel_url: `${SITE_URL}/register/${event_slug}/group?cancelled=true`,
       })
       checkoutUrl = session.url
     } else if (member_pays_individually && details_method === 'add_now' && stripePriceId && stripe) {
-      // Create individual checkout sessions for each participant (excluding the registrant)
+      // Create individual checkout sessions for every participant, including the
+      // registrant — their own seat must be billed too when members pay individually.
       const memberParticipants: ParticipantPayload[] = [
+        teacher as ParticipantPayload,
         ...(additional_adults ?? []),
         ...(students ?? []),
       ]
@@ -420,8 +438,9 @@ export async function POST(req: NextRequest) {
         eventTitle: event_title,
         participantCount: total_participants,
         registrationId: regId,
-        paymentMethod: payment_method === 'individual' ? 'invoice' : payment_method,
-        spreadsheetUrl: spreadsheetUrl ?? undefined,
+        paymentMethod: payment_method,
+        detailsMethod: details_method,
+        spreadsheetUrl: promptSpreadsheetUrl ?? undefined,
         joinUrl: joinUrl ?? undefined,
       })
       await sendEmail({ to: teacher.email, cc: ccEmails, ...emailContent })
@@ -429,7 +448,7 @@ export async function POST(req: NextRequest) {
       console.error('Confirmation email failed (non-fatal):', emailErr)
     }
 
-    return NextResponse.json({ registrationId: regId, checkoutUrl, spreadsheetUrl }, { status: 201 })
+    return NextResponse.json({ registrationId: regId, checkoutUrl, spreadsheetUrl: promptSpreadsheetUrl }, { status: 201 })
   } catch (e) {
     console.error('Group registration error:', e)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

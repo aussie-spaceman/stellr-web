@@ -101,19 +101,19 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
           )}
         </div>
 
-        {/* Google Sheet export — add_now group path (participants already in DB) */}
+        {/* Group participant sheet — available from the member portal.
+            The sheet contains participant PII, so it's only accessible to the
+            teacher / student manager who registered, after they sign in. */}
         {isGroup && !spreadsheetUrl && id && (
           <div className="mb-4">
-            <a
-              href={`/api/registrations/${id}/spreadsheet`}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/account?tab=teams"
               className="btn-outline w-full sm:w-auto inline-flex items-center justify-center gap-2"
             >
               <ExternalLink size={16} />
               Open Participant List as Google Sheet
-            </a>
-            <p className="text-xs text-gray-400 mt-2">Opens in Google Sheets with all registered participants pre-filled.</p>
+            </Link>
+            <p className="text-xs text-gray-400 mt-2">Sign in to your member account to open your group&apos;s Google Sheet with all registered participants pre-filled.</p>
           </div>
         )}
 

@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import type { RegistrationRow, ParticipantRow } from '@/lib/database.types'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
+import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt } from '@/lib/member-enums'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -88,10 +89,10 @@ export async function POST(req: NextRequest) {
     // Upsert member record — creates one if this email hasn't registered before
     const dob = new Date(date_of_birth)
     const ageNow = new Date().getFullYear() - dob.getFullYear()
-    const resolvedBracket = ageNow < 18 ? 'high_school' : age_bracket
-    const resolvedRole = ageNow < 18 ? 'school_student' : event_role
+    const resolvedBracket = ageNow < 18 ? 'high_school' : normalizeAgeBracket(age_bracket)
+    const resolvedRole = ageNow < 18 ? 'school_student' : normalizeEventRole(event_role)
 
-    const { data: memberRow } = await db
+    const { data: memberRow, error: memberUpsertError } = await db
       .from('members')
       .upsert({
         email,
@@ -100,15 +101,18 @@ export async function POST(req: NextRequest) {
         nickname: nickname || null,
         phone,
         date_of_birth,
-        gender,
-        grade: grade || null,
-        tshirt_size: t_shirt_size || null,
+        gender: normalizeGender(gender),
+        grade: normalizeGrade(grade),
+        tshirt_size: normalizeTshirt(t_shirt_size),
         age_bracket: resolvedBracket,
         event_role: resolvedRole,
         is_active: true,
       }, { onConflict: 'email', ignoreDuplicates: false })
       .select('id')
       .maybeSingle()
+    if (memberUpsertError) {
+      console.error('Member upsert error (non-fatal — participant still created):', memberUpsertError)
+    }
 
     const memberId = memberRow?.id ?? null
 

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { RequestDeletionButton } from '@/components/member/RequestDeletionButton'
 
 interface Participation {
   id: string
@@ -207,6 +208,11 @@ export function EventHistory({ participations: initialParticipations, editable =
                   >
                     ×
                   </button>
+                )}
+                {/* Approved records can't be removed directly by the member —
+                    deletion goes through admin approval via the Activity Review Log. */}
+                {editable && !adminMemberId && p.status !== 'pending' && (
+                  <RequestDeletionButton entity="event_participation" id={p.id} label="this event activity" className="text-xs text-gray-300 hover:text-red-400 ml-1" />
                 )}
               </div>
             </div>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ROLES_FOR_BRACKET, DEFAULT_ROLE_FOR_BRACKET, getEligibleTierNames } from '@/lib/membership-rules'
 import { EventHistory } from '@/components/member/EventHistory'
+import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 
 interface Member {
   id: string
@@ -218,6 +219,13 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
               Confirm deactivate
             </button>
           )}
+          <DeleteEntityButton
+            entity="member"
+            id={member.id}
+            name={`${member.first_name} ${member.last_name}`}
+            redirectTo="/admin/members"
+            className="border border-red-300 text-red-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-50"
+          />
         </div>
       </div>
 

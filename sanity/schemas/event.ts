@@ -5,7 +5,15 @@ export const event = {
   fields: [
     // ── Identity ─────────────────────────────────────────────────────────────
     { name: 'title', type: 'string', title: 'Event Name' },
-    { name: 'slug', type: 'slug', title: 'Slug', options: { source: 'title' } },
+    {
+      name: 'slug',
+      type: 'slug',
+      title: 'Slug',
+      options: { source: 'title' },
+      // Slug is the join key to registrations/portal data — publishing without one
+      // breaks the admin Events tab and registration links.
+      validation: (Rule: { required: () => unknown }) => Rule.required(),
+    },
 
     // ── Activity Type ─────────────────────────────────────────────────────────
     // Primary discriminator — controls which fields are visible below.

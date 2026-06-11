@@ -35,7 +35,7 @@ END $$;
 -- ─── event_companies ───────────────────────────────────────────────────────
 -- Companies (teams) within an event. Number 1-10; name is optional.
 CREATE TABLE IF NOT EXISTS public.event_companies (
-  id          uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   event_slug  text NOT NULL,
   number      integer NOT NULL CHECK (number BETWEEN 1 AND 10),
   name        text,
@@ -67,7 +67,7 @@ CREATE INDEX IF NOT EXISTS participants_company_id_idx
 -- Event Managers (Clerk role=event_manager) must be assigned to an event
 -- before they can manage it. Admins implicitly manage all events.
 CREATE TABLE IF NOT EXISTS public.event_manager_assignments (
-  id             uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   clerk_user_id  text NOT NULL,
   event_slug     text NOT NULL,
   created_at     timestamptz NOT NULL DEFAULT now(),

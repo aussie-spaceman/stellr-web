@@ -31,10 +31,13 @@ export default async function AdminEventsPage() {
     getAllCampaigns() as Promise<CampaignEvent[] | null>,
   ])
 
-  // Event Managers only see events they've been assigned to
-  const visible = (list: { slug: { current: string } }[] | null) =>
+  // Event Managers only see events they've been assigned to.
+  // Documents without a slug (unfinished CMS drafts) are skipped entirely.
+  const visible = (list: { slug?: { current?: string } | null }[] | null) =>
     (list ?? []).filter(
-      (e) => access.assignedSlugs === null || access.assignedSlugs.includes(e.slug.current)
+      (e) =>
+        e.slug?.current &&
+        (access.assignedSlugs === null || access.assignedSlugs.includes(e.slug.current))
     )
   const visibleEvents = visible(events) as StellarEvent[]
   const visibleCampaigns = visible(campaigns) as CampaignEvent[]

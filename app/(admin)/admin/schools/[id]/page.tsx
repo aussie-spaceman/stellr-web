@@ -1,6 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 
 export const metadata = { title: 'Admin — School Detail' }
 
@@ -77,6 +78,9 @@ export default async function AdminSchoolDetailPage({
               .join(', ')}
           </p>
         )}
+        <div className="mt-3">
+          <DeleteEntityButton entity="school" id={school.id} name={school.name} redirectTo="/admin/schools" />
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

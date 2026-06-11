@@ -134,6 +134,7 @@ async function activateMembership(
     expires_at: expiresAt,
     renewal_status: 'active',
     is_complimentary: false,
+    source: 'stripe',
     stripe_subscription_id: stripeSubscriptionId,
     billing_interval: billingInterval,
   })

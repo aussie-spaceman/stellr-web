@@ -54,7 +54,7 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
     .from('members')
     .select(`
       id, first_name, last_name, email,
-      member_memberships(renewal_status, started_at, tier_id, membership_tiers(name, is_free))
+      member_memberships(renewal_status, started_at, expires_at, tier_id, membership_tiers(name, is_free))
     `)
     .eq('clerk_user_id', userId)
     .maybeSingle()
@@ -66,6 +66,7 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
   type RawMembership = {
     renewal_status: string
     started_at: string
+    expires_at: string | null
     tier_id: string | null
     membership_tiers: { name: string; is_free: boolean } | { name: string; is_free: boolean }[] | null
   }
@@ -73,8 +74,12 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
   const tierOf = (m: RawMembership) =>
     Array.isArray(m.membership_tiers) ? m.membership_tiers[0] ?? null : m.membership_tiers
 
+  // A membership grants access only while active AND not past its expiry — so a
+  // lapsed complimentary grant loses access immediately, before the nightly
+  // expiry cron flips renewal_status.
+  const today = new Date().toISOString().split('T')[0]
   const activeMemberships = ((member.member_memberships ?? []) as unknown as RawMembership[])
-    .filter((m) => m.renewal_status === 'active')
+    .filter((m) => m.renewal_status === 'active' && (!m.expires_at || m.expires_at >= today))
     .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
 
   const primaryTier = activeMemberships[0] ? tierOf(activeMemberships[0]) : null

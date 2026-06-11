@@ -77,6 +77,7 @@ export async function GET(req: NextRequest) {
       started_at: today.toISOString().split('T')[0],
       renewal_status: 'active',
       is_complimentary: true,
+      source: 'system',
     })
 
     await notifyMember(m.id, {

@@ -304,6 +304,17 @@ export async function resendEnvelope(envelopeId: string): Promise<void> {
   if (!resendRes.ok) throw new Error(`DocuSign resend failed: ${await resendRes.text()}`)
 }
 
+// Voids an in-flight envelope. DocuSign only allows voiding envelopes that are
+// not yet completed/declined; for those the API returns an error, which the
+// caller should treat as "nothing to void" rather than a hard failure.
+export async function voidEnvelope(envelopeId: string, reason = 'Record deleted by administrator'): Promise<void> {
+  const res = await dsRequest(`/envelopes/${envelopeId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ status: 'voided', voidedReason: reason }),
+  })
+  if (!res.ok) throw new Error(`DocuSign void failed: ${await res.text()}`)
+}
+
 export async function getEnvelopeDocument(envelopeId: string): Promise<ArrayBuffer> {
   const res = await dsRequest(`/envelopes/${envelopeId}/documents/combined`, {
     headers: { Accept: 'application/pdf' },

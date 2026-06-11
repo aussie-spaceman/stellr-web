@@ -2,6 +2,7 @@ import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { fireCampaignEvent } from '@/lib/email-campaigns'
+import { applyGrantTrigger } from '@/lib/membership-grants'
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
@@ -136,21 +137,11 @@ export async function POST(req: Request) {
     }
   }
 
-  // Assign default free membership tier based on role
-  const tierName = resolvedBracket === 'high_school' ? 'Explorer'
-    : resolvedBracket === 'college' ? 'Advisor'
-    : resolvedRole === 'teacher' ? 'Educator'
-    : resolvedRole === 'mentor' ? 'Donor'
-    : resolvedRole === 'parent' ? 'Parent/Guardian'
-    : 'Subscriber'
-
-  const { data: tier } = await db
-    .from('membership_tiers')
-    .select('id')
-    .eq('name', tierName)
-    .maybeSingle()
-
-  if (tier && memberId) {
+  // Assign the default freemium tier via the 'signup' grant rules (admin-editable
+  // in Membership Studio → Grant rules). The member row now holds resolvedBracket
+  // / resolvedRole, which the rule evaluator matches on. Only when the member has
+  // no active membership yet — never override a paid tier from a prior purchase.
+  if (memberId) {
     const { data: existingMembership } = await db
       .from('member_memberships')
       .select('id')
@@ -159,13 +150,11 @@ export async function POST(req: Request) {
       .maybeSingle()
 
     if (!existingMembership) {
-      await db.from('member_memberships').insert({
-        member_id: memberId,
-        tier_id: tier.id,
-        started_at: new Date().toISOString().split('T')[0],
-        renewal_status: 'active',
-        is_complimentary: false,
-      })
+      try {
+        await applyGrantTrigger(memberId, 'signup', {}, db)
+      } catch (e) {
+        console.error('[onboarding] signup grant failed:', e)
+      }
     }
   }
 

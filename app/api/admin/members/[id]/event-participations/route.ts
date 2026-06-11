@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { applyGrantTrigger } from '@/lib/membership-grants'
 
 function isAdmin(sessionClaims: unknown) {
   return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
@@ -37,5 +38,20 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to create record' }, { status: 500 })
   }
 
-  return NextResponse.json({ participation: data })
+  // Fire membership grant rules: attendance always, plus an award upgrade when an
+  // award is recorded. Rules decide which tier (if any) applies for the member's
+  // role/bracket; an empty rule set is a no-op. Best-effort — never block the save.
+  const grants: Array<{ trigger: string; rule: string | null; granted: boolean }> = []
+  try {
+    const attend = await applyGrantTrigger(memberId, 'event_attendance', {}, db)
+    grants.push({ trigger: 'event_attendance', rule: attend.rule?.name ?? null, granted: attend.granted })
+    if (award) {
+      const won = await applyGrantTrigger(memberId, 'event_award', { award }, db)
+      grants.push({ trigger: 'event_award', rule: won.rule?.name ?? null, granted: won.granted })
+    }
+  } catch (e) {
+    console.error('Admin event participation grant-trigger error:', e)
+  }
+
+  return NextResponse.json({ participation: data, grants })
 }

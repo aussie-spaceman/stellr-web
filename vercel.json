@@ -17,6 +17,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/membership-expiry",
+      "schedule": "0 6 * * *"
+    },
+    {
       "path": "/api/cron/campaigns",
       "schedule": "0 * * * *"
     },

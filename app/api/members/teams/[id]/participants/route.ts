@@ -1,6 +1,8 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { upsertMember } from '@/lib/member-sync'
+import { linkMembersToRegistrationSchool } from '@/lib/school-link'
 
 // POST /api/members/teams/[id]/participants — teacher adds a participant
 export async function POST(
@@ -48,6 +50,24 @@ export async function POST(
     if (key in body) insert[key] = body[key]
   }
 
+  // Upsert a member row (non-fatal) so the person gets a member account, can be
+  // linked to a school, and shows on admin member pages — parity with the
+  // registration routes. The participant is saved regardless of the outcome.
+  const memberId = await upsertMember(db, {
+    email: body.email,
+    first_name: body.first_name,
+    last_name: body.last_name,
+    nickname: body.nickname,
+    phone: body.phone,
+    date_of_birth: body.date_of_birth,
+    gender: body.gender,
+    grade: body.grade,
+    t_shirt_size: body.t_shirt_size,
+    age_bracket: body.age_bracket,
+    event_role: body.event_role,
+  })
+  if (memberId) insert.member_id = memberId
+
   const { data: participant, error } = await db
     .from('participants')
     .insert(insert)
@@ -57,6 +77,11 @@ export async function POST(
   if (error) {
     console.error('[teams/participants] Insert error:', error)
     return NextResponse.json({ error: 'Failed to add participant' }, { status: 500 })
+  }
+
+  // Link the new member to the group's school (from the registration record).
+  if (memberId) {
+    await linkMembersToRegistrationSchool(db, registrationId, [memberId])
   }
 
   return NextResponse.json({ participant }, { status: 201 })

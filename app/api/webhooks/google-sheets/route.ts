@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { readSheetParticipants } from '@/lib/google-sheets'
+import { upsertMember } from '@/lib/member-sync'
+import { linkMembersToRegistrationSchool } from '@/lib/school-link'
 
 // POST /api/webhooks/google-sheets
 // Receives Google Drive push notifications when a watched sheet is modified.
@@ -38,7 +40,7 @@ export async function POST(req: NextRequest) {
 
   const { data: registration } = await db
     .from('registrations')
-    .select('id, spreadsheet_id')
+    .select('id, spreadsheet_id, school_name')
     .eq('id', channel.registration_id)
     .maybeSingle()
 
@@ -48,6 +50,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const sheetRows = await readSheetParticipants(registration.spreadsheet_id)
+    const syncedMemberIds: string[] = []
 
     for (const row of sheetRows) {
       if (!row.first_name && !row.email) continue
@@ -62,6 +65,24 @@ export async function POST(req: NextRequest) {
             : `email.eq.${row.email}`
         )
         .maybeSingle()
+
+      const isAdult = row.type?.toLowerCase() === 'adult'
+
+      // Upsert a member row (non-fatal) so sheet-entered people get a member
+      // account, a school link, and visibility on admin member pages.
+      const memberId = await upsertMember(db, {
+        email: row.email,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        phone: row.phone,
+        date_of_birth: row.date_of_birth || null,
+        gender: row.gender,
+        grade: row.grade || null,
+        t_shirt_size: row.t_shirt_size,
+        age_bracket: isAdult ? 'adult' : 'high_school',
+        event_role: isAdult ? 'adult' : 'school_student',
+      })
+      if (memberId) syncedMemberIds.push(memberId)
 
       const payload = {
         first_name: row.first_name,
@@ -79,9 +100,10 @@ export async function POST(req: NextRequest) {
         emergency_contact_email: row.ec_email || null,
         emergency_contact_phone: row.ec_phone || null,
         emergency_contact_relationship: row.ec_relationship || null,
-        event_role: row.type?.toLowerCase() === 'adult' ? 'adult' : 'student',
-        age_bracket: row.type?.toLowerCase() === 'adult' ? 'adult' : 'high_school',
-        school_name: '',
+        event_role: isAdult ? 'adult' : 'student',
+        age_bracket: isAdult ? 'adult' : 'high_school',
+        school_name: registration.school_name ?? '',
+        ...(memberId ? { member_id: memberId } : {}),
       }
 
       if (existing) {
@@ -90,6 +112,9 @@ export async function POST(req: NextRequest) {
         await db.from('participants').insert({ ...payload, registration_id: registration.id })
       }
     }
+
+    // Link every synced member to the group's school (from the registration).
+    await linkMembersToRegistrationSchool(db, registration.id, syncedMemberIds)
 
     console.log(`[webhook/google-sheets] Synced ${sheetRows.length} rows for registration ${registration.id}`)
   } catch (err) {

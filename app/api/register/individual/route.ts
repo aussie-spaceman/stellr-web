@@ -5,6 +5,7 @@ import { getEventBySlug } from '@/lib/sanity'
 import type { RegistrationRow, ParticipantRow } from '@/lib/database.types'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt } from '@/lib/member-enums'
+import { linkMembersToSchoolByName } from '@/lib/school-link'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -115,6 +116,19 @@ export async function POST(req: NextRequest) {
     }
 
     const memberId = memberRow?.id ?? null
+
+    // Resolve the school to a schools row and link the member to it, so the
+    // school surfaces in /admin/schools and on the member page — not just as
+    // free text on the participant row.
+    if (memberId) {
+      await linkMembersToSchoolByName(db, [memberId], {
+        name: school_name,
+        address_street: body.school_address_street ?? null,
+        address_city: body.school_address_city ?? null,
+        address_state: school_address_state ?? null,
+        address_zip: body.school_address_zip ?? null,
+      })
+    }
 
     // Create participant record
     const { data: partRow, error: partError } = await db.from('participants').insert({

@@ -12,6 +12,7 @@ import { createGroupRegistrationSheet, isGoogleSheetsConfigured } from '@/lib/go
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt } from '@/lib/member-enums'
+import { linkMembersToSchoolByName } from '@/lib/school-link'
 import type { RegistrationRow } from '@/lib/database.types'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
@@ -190,6 +191,17 @@ export async function POST(req: NextRequest) {
     for (const row of memberRows ?? []) {
       memberIdMap[row.email] = row.id
     }
+
+    // Resolve the group's school to a schools row and link every member to it,
+    // so the school surfaces in /admin/schools and on each member page — not
+    // just as free text on the registration/participant rows.
+    await linkMembersToSchoolByName(db, Object.values(memberIdMap), {
+      name: teacher.school_name,
+      address_street: teacher.school_address_street ?? null,
+      address_city: teacher.school_address_city ?? null,
+      address_state: teacher.school_address_state ?? null,
+      address_zip: teacher.school_address_zip ?? null,
+    })
 
     // Link registrant's member ID to the registration (enables portal team management)
     const registrantMemberId = memberIdMap[teacher.email]

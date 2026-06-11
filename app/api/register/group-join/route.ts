@@ -5,6 +5,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import { sendEmail, groupMemberJoinedEmail, groupMemberIndividualPaymentEmail } from '@/lib/email'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
+import { linkMembersToSchoolByName } from '@/lib/school-link'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -104,6 +105,16 @@ export async function POST(req: NextRequest) {
     console.error('Group join participant insert error:', partError)
     return NextResponse.json({ error: 'Failed to complete registration. Please try again.' }, { status: 500 })
   }
+
+  // Link the joining member to the group's school so it surfaces in
+  // /admin/schools and on their member page — not just as participant text.
+  await linkMembersToSchoolByName(db, [member.id], {
+    name: (reg.school_name as string) || null,
+    address_street: (reg.school_address_street as string) || null,
+    address_city: (reg.school_address_city as string) || null,
+    address_state: (reg.school_address_state as string) || null,
+    address_zip: (reg.school_address_zip as string) || null,
+  })
 
   // Trigger the appropriate DocuSign agreement (minor consent, or self-signed
   // adult/mentor participation agreement) based on the member's age and role.

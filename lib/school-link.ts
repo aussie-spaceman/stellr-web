@@ -105,3 +105,31 @@ export async function linkMembersToSchoolByName(
     console.error('[school-link] Linking failed (non-fatal):', e)
   }
 }
+
+// Convenience wrapper for the team/portal paths that don't carry the school
+// inline: look up the group registration's school (free text + address fields)
+// and link every supplied member to it. Non-fatal.
+export async function linkMembersToRegistrationSchool(
+  db: SupabaseClient,
+  registrationId: string,
+  memberIds: (string | null | undefined)[]
+): Promise<void> {
+  try {
+    if (memberIds.filter(Boolean).length === 0) return
+    const { data: reg, error } = await db
+      .from('registrations')
+      .select('school_name, school_address_street, school_address_city, school_address_state, school_address_zip')
+      .eq('id', registrationId)
+      .maybeSingle()
+    if (error || !reg) return
+    await linkMembersToSchoolByName(db, memberIds, {
+      name: reg.school_name,
+      address_street: reg.school_address_street,
+      address_city: reg.school_address_city,
+      address_state: reg.school_address_state,
+      address_zip: reg.school_address_zip,
+    })
+  } catch (e) {
+    console.error('[school-link] Registration-school linking failed (non-fatal):', e)
+  }
+}

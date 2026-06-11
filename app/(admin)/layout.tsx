@@ -2,14 +2,16 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { UserButton } from '@clerk/nextjs'
+import { hasAdminPortalAccess, isAdminClaims } from '@/lib/admin-auth'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { userId, sessionClaims } = await auth()
   if (!userId) redirect('/sign-in')
 
-  // Only allow users with role=admin in Clerk publicMetadata
-  const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
-  if (role !== 'admin') redirect('/account')
+  // Admins see the full portal; Event Managers only the Events section
+  // (middleware redirects them away from other /admin routes).
+  if (!hasAdminPortalAccess(sessionClaims)) redirect('/account')
+  const isAdmin = isAdminClaims(sessionClaims)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -20,10 +22,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               Stellr
             </Link>
             <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">
-              Admin
+              {isAdmin ? 'Admin' : 'Event Manager'}
             </span>
           </div>
           <nav className="flex items-center gap-6 text-sm">
+            {isAdmin && (
+            <>
             <Link href="/admin" className="text-gray-600 hover:text-gray-900">
               Members
             </Link>
@@ -56,6 +60,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </Link>
             <Link href="/admin/email" className="text-gray-600 hover:text-gray-900">
               Email
+            </Link>
+            </>
+            )}
+            <Link href="/admin/events" className="text-gray-600 hover:text-gray-900">
+              Events
             </Link>
             <UserButton />
           </nav>

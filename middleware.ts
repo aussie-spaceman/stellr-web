@@ -2,6 +2,8 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
+const isAdminRoute = createRouteMatcher(['/admin(.*)'])
+const isAdminEventsRoute = createRouteMatcher(['/admin/events(.*)'])
 const isCommunityRoute = createRouteMatcher(['/community(.*)'])
 const isAuthRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)'])
 
@@ -48,6 +50,16 @@ export default clerkMiddleware(async (auth, req) => {
 
   if (isProtectedRoute(req)) {
     await auth.protect()
+  }
+
+  // Event Managers may only enter the Events section of the admin portal;
+  // the admin layout handles redirecting everyone else without a role.
+  if (isAdminRoute(req) && !isAdminEventsRoute(req)) {
+    const { sessionClaims } = await auth()
+    const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
+    if (role === 'event_manager') {
+      return NextResponse.redirect(new URL('/admin/events', req.url))
+    }
   }
 })
 

@@ -29,7 +29,7 @@ export async function GET() {
         spreadsheet_id, registrant_role,
         teacher_poc_first_name, teacher_poc_last_name, teacher_poc_email,
         member_pays_individually, details_method,
-        participants(id, event_role, first_name, last_name, email, join_completed_at, individual_payment_status)
+        participants(id, event_role, first_name, last_name, email, join_completed_at, individual_payment_status, event_companies(number, name))
       `)
       .eq('teacher_member_id', member.id)
       .eq('type', 'group')

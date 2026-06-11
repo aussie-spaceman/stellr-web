@@ -30,7 +30,7 @@ export async function GET(
       spreadsheet_id, registrant_role,
       teacher_poc_first_name, teacher_poc_last_name, teacher_poc_email,
       member_pays_individually, details_method,
-      participants(*)
+      participants(*, event_companies(number, name))
     `)
     .eq('id', id)
     .eq('type', 'group')

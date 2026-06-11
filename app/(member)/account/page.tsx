@@ -7,6 +7,7 @@ import { EventHistory } from '@/components/member/EventHistory'
 import { TeamsTab } from '@/components/member/TeamsTab'
 import { BillingHistory } from '@/components/member/BillingHistory'
 import { DocusignsSection } from '@/components/member/DocusignsSection'
+import { MyRegistrations } from '@/components/member/MyRegistrations'
 import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
 import Link from 'next/link'
 
@@ -51,6 +52,35 @@ export default async function AccountPage({
     .select('is_visible, show_school, show_region')
     .eq('member_id', member.id)
     .maybeSingle()
+
+  // Current event registrations, with Company assignment when set (PRD 6.7)
+  const { data: myParticipantRows } = await db
+    .from('participants')
+    .select(
+      'id, checked_in_at, event_companies(number, name), registrations(event_slug, event_title, status, type)'
+    )
+    .or(`member_id.eq.${member.id},email.eq.${member.email}`)
+  const myRegistrations = (myParticipantRows ?? [])
+    .map((p) => {
+      const reg = p.registrations as unknown as {
+        event_slug: string
+        event_title: string
+        status: string
+        type: string
+      } | null
+      const company = p.event_companies as unknown as { number: number; name: string | null } | null
+      return reg && reg.status !== 'withdrawn'
+        ? {
+            id: p.id as string,
+            eventTitle: reg.event_title,
+            status: reg.status,
+            type: reg.type,
+            checkedInAt: p.checked_in_at as string | null,
+            company,
+          }
+        : null
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null)
 
   const activeMembership = member.member_memberships
     ?.filter((m: { renewal_status: string }) => m.renewal_status === 'active')
@@ -117,6 +147,7 @@ export default async function AccountPage({
                 initial={directoryPrefs ?? { is_visible: false, show_school: true, show_region: true }}
               />
             </div>
+            <MyRegistrations registrations={myRegistrations} />
             <EventHistory participations={member.event_participations ?? []} editable />
             <DocusignsSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
           </div>

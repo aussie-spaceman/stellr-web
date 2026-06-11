@@ -41,6 +41,7 @@ interface Participant {
   join_completed_at: string | null
   member_id: string | null
   individual_payment_status: string | null
+  event_companies?: { number: number; name: string | null } | null
 }
 
 interface DocuSignEnvelope {
@@ -520,6 +521,7 @@ function TeacherTeamsView() {
                           <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Email</th>
                           <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Type</th>
                           <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Grade</th>
+                          <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Company</th>
                           <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
                           <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Consent / Agreement</th>
                           {fullTeam.registration.member_pays_individually && (
@@ -543,6 +545,17 @@ function TeacherTeamsView() {
                               <td className="py-2.5 pr-4 text-gray-500">{p.email}</td>
                               <td className="py-2.5 pr-4 capitalize">{p.event_role}</td>
                               <td className="py-2.5 pr-4 text-gray-500">{p.grade ?? '—'}</td>
+                              <td className="py-2.5 pr-4">
+                                {p.event_companies ? (
+                                  <span className="inline-flex text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700">
+                                    {p.event_companies.name
+                                      ? `${p.event_companies.number} — ${p.event_companies.name}`
+                                      : `Company ${p.event_companies.number}`}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-gray-400">—</span>
+                                )}
+                              </td>
                               <td className="py-2.5 pr-4">
                                 {p.join_completed_at
                                   ? <span className="text-xs text-green-600 font-medium" title="Participant has confirmed their details.">Joined</span>

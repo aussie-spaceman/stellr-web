@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, type CommunityMember } from '@/lib/community'
+import { denormalizeGender, denormalizeGrade, denormalizeTshirt } from '@/lib/member-enums'
 
 // Update #2 — "recognize log in for registration".
 // When a signed-in member starts a registration, pre-fill what we already know
@@ -45,34 +46,49 @@ export async function getRegistrationPrefill(
   if (!m || !m.email) return null
 
   const db = supabaseServer()
-  const { data: last } = await db
-    .from('participants')
-    .select(
-      `first_name, last_name, nickname, phone, date_of_birth, grade, gender,
-       t_shirt_size, ethnicity, dietary_requirements, health_conditions,
-       school_name, emergency_contact_first_name, emergency_contact_last_name,
-       emergency_contact_email, emergency_contact_phone, emergency_contact_relationship`
-    )
-    .eq('member_id', m.id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+
+  // Two sources, in priority order:
+  //   1. the member's most recent participants row — richest (display-string
+  //      values + event-only fields like emergency contact), but only exists
+  //      once they've registered for something before;
+  //   2. the members row — always exists for a signed-in member; columns are
+  //      enums, so denormalize them back to the form's display labels.
+  const [{ data: last }, { data: mem }] = await Promise.all([
+    db
+      .from('participants')
+      .select(
+        `first_name, last_name, nickname, phone, date_of_birth, grade, gender,
+         t_shirt_size, ethnicity, dietary_requirements, health_conditions,
+         school_name, emergency_contact_first_name, emergency_contact_last_name,
+         emergency_contact_email, emergency_contact_phone, emergency_contact_relationship`
+      )
+      .eq('member_id', m.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    db
+      .from('members')
+      .select('first_name, last_name, nickname, phone, date_of_birth, grade, gender, tshirt_size')
+      .eq('id', m.id)
+      .maybeSingle(),
+  ])
 
   const p = (last ?? {}) as Record<string, unknown>
+  const mr = (mem ?? {}) as Record<string, unknown>
   const str = (v: unknown) => (typeof v === 'string' && v.length > 0 ? v : undefined)
   const arr = (v: unknown) => (Array.isArray(v) && v.length > 0 ? (v as string[]) : undefined)
 
   return {
     memberId: m.id,
     email: m.email,
-    first_name: str(p.first_name) ?? m.first_name ?? undefined,
-    last_name: str(p.last_name) ?? m.last_name ?? undefined,
-    nickname: str(p.nickname),
-    phone: str(p.phone),
-    date_of_birth: str(p.date_of_birth),
-    grade: str(p.grade),
-    gender: str(p.gender),
-    t_shirt_size: str(p.t_shirt_size),
+    first_name: str(p.first_name) ?? str(mr.first_name) ?? m.first_name ?? undefined,
+    last_name: str(p.last_name) ?? str(mr.last_name) ?? m.last_name ?? undefined,
+    nickname: str(p.nickname) ?? str(mr.nickname),
+    phone: str(p.phone) ?? str(mr.phone),
+    date_of_birth: str(p.date_of_birth) ?? str(mr.date_of_birth),
+    grade: str(p.grade) ?? denormalizeGrade(mr.grade),
+    gender: str(p.gender) ?? denormalizeGender(mr.gender),
+    t_shirt_size: str(p.t_shirt_size) ?? denormalizeTshirt(mr.tshirt_size),
     ethnicity: arr(p.ethnicity),
     dietary_requirements: arr(p.dietary_requirements),
     health_conditions: str(p.health_conditions),

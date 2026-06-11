@@ -60,3 +60,31 @@ export function normalizeTshirt(v: unknown): string | null {
   const s = (v ?? '').toString().trim()
   return (VALID_TSHIRT_SIZES as readonly string[]).includes(s) ? s : null
 }
+
+// ── Reverse maps (enum → registration-form display string) ────────────────────
+// Used to pre-fill the registration forms from a `members` row, whose columns
+// are enums while the form <select>s use display labels. Return undefined when
+// there's no corresponding form option (e.g. gender 'prefer_not_to_say').
+
+export function denormalizeGender(v: unknown): string | undefined {
+  return { male: 'Male', female: 'Female', other: 'Other' }[canon(v)]
+}
+
+export function denormalizeGrade(v: unknown): string | undefined {
+  const c = canon(v)
+  const m = c.match(/^grade_(9|10|11|12)$/)
+  if (m) return m[1]
+  return {
+    college_freshman: 'College Freshman',
+    college_sophomore: 'College Sophomore',
+    college_junior: 'College Junior',
+    college_senior: 'College Senior',
+    grad_phd: 'Grad / PhD',
+  }[c]
+}
+
+// T-shirt sizes are stored verbatim, so the display value is the stored value.
+export function denormalizeTshirt(v: unknown): string | undefined {
+  const s = (v ?? '').toString().trim()
+  return s.length > 0 ? s : undefined
+}

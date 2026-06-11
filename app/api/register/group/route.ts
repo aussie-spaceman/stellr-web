@@ -13,6 +13,7 @@ import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt } from '@/lib/member-enums'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
+import { getCurrentMember } from '@/lib/community'
 import type { RegistrationRow } from '@/lib/database.types'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
@@ -53,6 +54,15 @@ export async function POST(req: NextRequest) {
       students,
       school_dpa_agreed,
     } = body
+
+    // Option A — when the registrant (teacher / student-manager) is signed in,
+    // their session email is authoritative. This keeps the registrant bound to
+    // their own member row and avoids duplicate/forged identities. Additional
+    // adults and students are unaffected — group logic is otherwise unchanged.
+    const sessionMember = await getCurrentMember().catch(() => null)
+    if (sessionMember?.email && teacher) {
+      teacher.email = sessionMember.email
+    }
 
     if (!event_slug || !teacher?.email || !teacher?.first_name || !teacher?.last_name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -213,20 +223,24 @@ export async function POST(req: NextRequest) {
     // signed in on the confirmation step and can immediately open their group's
     // sheet from the member portal — no manual sign-up required. Non-fatal: a
     // Clerk hiccup must not fail the registration.
+    // Already-signed-in registrants don't need provisioning or a sign-in token —
+    // they have a Clerk session (and clerk_user_id) already.
     let signInToken: string | null = null
-    try {
-      const provisioned = await ensureClerkUserAndSignInToken(
-        teacher.email, teacher.first_name, teacher.last_name,
-      )
-      signInToken = provisioned.signInToken
-      // Eagerly link the Clerk id to the member row (the user.created webhook
-      // also does this, but we can't rely on its timing for the immediate
-      // ownership check on the sheet endpoint).
-      if (registrantMemberId) {
-        await db.from('members').update({ clerk_user_id: provisioned.clerkUserId }).eq('id', registrantMemberId)
+    if (!sessionMember) {
+      try {
+        const provisioned = await ensureClerkUserAndSignInToken(
+          teacher.email, teacher.first_name, teacher.last_name,
+        )
+        signInToken = provisioned.signInToken
+        // Eagerly link the Clerk id to the member row (the user.created webhook
+        // also does this, but we can't rely on its timing for the immediate
+        // ownership check on the sheet endpoint).
+        if (registrantMemberId) {
+          await db.from('members').update({ clerk_user_id: provisioned.clerkUserId }).eq('id', registrantMemberId)
+        }
+      } catch (clerkErr) {
+        console.error('Clerk provisioning (non-fatal):', clerkErr)
       }
-    } catch (clerkErr) {
-      console.error('Clerk provisioning (non-fatal):', clerkErr)
     }
 
     // Build participant rows

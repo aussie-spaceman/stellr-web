@@ -65,26 +65,44 @@ async function cleanupDocusignForEnvelope(envelopeId: string): Promise<ExternalR
   }
 }
 
+// Voids every in-flight envelope whose docusign_envelopes row matches
+// `column = value` (e.g. member_id, participant_id).
+async function cleanupDocusignByColumn(column: string, value: string): Promise<ExternalResult[]> {
+  const db = supabaseServer()
+  const { data: envs } = await db
+    .from('docusign_envelopes')
+    .select('id')
+    .eq(column, value)
+  const out: ExternalResult[] = []
+  for (const env of envs ?? []) {
+    out.push(await cleanupDocusignForEnvelope((env as { id: string }).id))
+  }
+  return out
+}
+
 // Dispatches the external cleanups declared on the entity. `id` is the local row
-// id (member id, docusign_envelopes id, etc.).
+// id (member id, docusign_envelopes id, participant id, registration id, etc.).
 export async function runExternalCleanup(def: EntityDef, id: string): Promise<ExternalResult[]> {
   const kinds: ExternalCleanupKind[] = def.external ?? []
   const results: ExternalResult[] = []
   for (const kind of kinds) {
     if (kind === 'stripe' && def.type === 'member') {
       results.push(await cleanupStripeForMember(id))
-    } else if (kind === 'docusign' && def.type === 'docusign_envelope') {
-      results.push(await cleanupDocusignForEnvelope(id))
     }
-    // For a member, also void any in-flight envelopes tied to them.
-    if (kind === 'docusign' && def.type === 'member') {
-      const db = supabaseServer()
-      const { data: envs } = await db
-        .from('docusign_envelopes')
-        .select('id, envelope_id, status')
-        .eq('member_id', id)
-      for (const env of envs ?? []) {
-        results.push(await cleanupDocusignForEnvelope((env as { id: string }).id))
+    if (kind === 'docusign') {
+      if (def.type === 'docusign_envelope') {
+        results.push(await cleanupDocusignForEnvelope(id))
+      } else if (def.type === 'member') {
+        results.push(...await cleanupDocusignByColumn('member_id', id))
+      } else if (def.type === 'participant') {
+        results.push(...await cleanupDocusignByColumn('participant_id', id))
+      } else if (def.type === 'registration') {
+        // Void envelopes for every participant in the registration.
+        const db = supabaseServer()
+        const { data: parts } = await db.from('participants').select('id').eq('registration_id', id)
+        for (const p of parts ?? []) {
+          results.push(...await cleanupDocusignByColumn('participant_id', (p as { id: string }).id))
+        }
       }
     }
   }

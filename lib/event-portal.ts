@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
-import { getEventsBySlugs } from '@/lib/sanity'
+import { getEventsBySlugs, getAllEvents, getAllCampaigns } from '@/lib/sanity'
+import { registrationStatus } from '@/lib/utils'
 import {
   type CommunityMember,
   memberCanAccess,
@@ -59,6 +60,124 @@ export async function getMemberEvents(member: CommunityMember): Promise<PortalEv
       activityType: m?.activityType ?? 'live_event',
       date: m?.date,
     } satisfies PortalEvent
+  })
+}
+
+/** A row in the member-facing event/campaign catalog. Either something the
+ *  member is already registered for, or an upcoming event/campaign they could
+ *  register for (shown regardless of whether registration is currently open). */
+export interface CatalogEvent {
+  slug: string
+  title: string
+  /** 'live_event' | 'campaign'. */
+  activityType: string
+  date?: string
+  city?: string
+  state?: string
+  /** True when the member is a confirmed participant of this event. */
+  registered: boolean
+  /** Derived registration window state, for the status badge. */
+  status: 'open' | 'coming-soon' | 'closed'
+}
+
+const TWELVE_MONTHS_MS = 365 * 24 * 60 * 60 * 1000
+
+/**
+ * The member-facing catalog (FR-COM-13, "My Events & Campaigns" → browse):
+ *   • every event/campaign the member is registered for, plus
+ *   • all other live events and campaigns available in the next 12 months,
+ *     INCLUDING ones whose registration hasn't opened yet.
+ * Registration-status-agnostic by design — the window, not the open flag,
+ * decides visibility. De-duplicated by slug; registered entries win.
+ */
+export async function getMemberEventCatalog(member: CommunityMember): Promise<CatalogEvent[]> {
+  const now = Date.now()
+  const horizon = now + TWELVE_MONTHS_MS
+  const currentYear = new Date().getFullYear()
+
+  const [registered, allEvents, allCampaigns] = await Promise.all([
+    getMemberEvents(member),
+    getAllEvents().catch(() => null),
+    getAllCampaigns().catch(() => null),
+  ])
+
+  const bySlug = new Map<string, CatalogEvent>()
+
+  // 1) Upcoming live events within the 12-month window (any registration state).
+  type EventDoc = {
+    slug?: { current?: string }
+    title?: string
+    date?: string
+    city?: string
+    state?: string
+    activityType?: string
+    registrationOpen?: boolean
+    registrationOpenDate?: string
+    registrationCloseDate?: string
+  }
+  for (const e of (allEvents ?? []) as EventDoc[]) {
+    const slug = e.slug?.current
+    if (!slug) continue
+    if (e.date) {
+      const t = new Date(e.date).getTime()
+      if (Number.isFinite(t) && (t < now || t > horizon)) continue // outside window
+    }
+    bySlug.set(slug, {
+      slug,
+      title: e.title ?? slug,
+      activityType: e.activityType ?? 'live_event',
+      date: e.date,
+      city: e.city,
+      state: e.state,
+      registered: false,
+      status: registrationStatus(e.registrationOpen ?? false, e.registrationOpenDate, e.registrationCloseDate),
+    })
+  }
+
+  // 2) Current/upcoming campaigns (no fixed date — bound by campaign year).
+  type CampaignDoc = {
+    slug?: { current?: string }
+    title?: string
+    campaignYear?: number
+    registrationOpen?: boolean
+  }
+  for (const c of (allCampaigns ?? []) as CampaignDoc[]) {
+    const slug = c.slug?.current
+    if (!slug) continue
+    if (typeof c.campaignYear === 'number' && c.campaignYear < currentYear) continue // past campaign
+    bySlug.set(slug, {
+      slug,
+      title: c.title ?? slug,
+      activityType: 'campaign',
+      registered: false,
+      status: registrationStatus(c.registrationOpen ?? false),
+    })
+  }
+
+  // 3) Overlay the member's registrations — these always appear, even if the
+  //    event is outside the catalog window (e.g. already started).
+  for (const r of registered) {
+    const existing = bySlug.get(r.slug)
+    if (existing) {
+      existing.registered = true
+    } else {
+      bySlug.set(r.slug, {
+        slug: r.slug,
+        title: r.title,
+        activityType: r.activityType,
+        date: r.date,
+        registered: true,
+        status: 'closed',
+      })
+    }
+  }
+
+  // Sort: dated soonest-first, undated (campaigns) last; stable by title.
+  return [...bySlug.values()].sort((a, b) => {
+    const ta = a.date ? new Date(a.date).getTime() : Number.POSITIVE_INFINITY
+    const tb = b.date ? new Date(b.date).getTime() : Number.POSITIVE_INFINITY
+    if (ta !== tb) return ta - tb
+    return a.title.localeCompare(b.title)
   })
 }
 

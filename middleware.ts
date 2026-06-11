@@ -35,6 +35,13 @@ export default clerkMiddleware(async (auth, req) => {
     if (url.pathname === '/') {
       return NextResponse.redirect(new URL(userId ? '/community' : '/sign-in', req.url))
     }
+    // The events *list* lives in-app on the app subdomain (the member-facing
+    // event/campaign catalog). Serve the member portal page at /events without
+    // changing the URL. Event *detail* and registration still belong to www and
+    // fall through to the public-only redirect below.
+    if (url.pathname === '/events') {
+      return NextResponse.rewrite(new URL('/community/events', req.url))
+    }
     if (isPublicOnlyRoute(req)) {
       return NextResponse.redirect(new URL(url.pathname + url.search, WWW), 308)
     }

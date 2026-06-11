@@ -3,6 +3,11 @@ import Link from 'next/link'
 import { Users, User, Calendar, MapPin } from 'lucide-react'
 import { getEventBySlug } from '@/lib/sanity'
 import { formatDateRange, registrationStatus } from '@/lib/utils'
+import { getCurrentMember } from '@/lib/community'
+import { RegistrationAuthBanner } from '@/components/registration/RegistrationAuthBanner'
+
+const APP = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.stellreducation.org'
+const WWW = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -12,6 +17,10 @@ export default async function RegisterTypePage({ params }: PageProps) {
   const { slug } = await params
   const event = await getEventBySlug(slug).catch(() => null)
   if (!event) notFound()
+
+  const member = await getCurrentMember().catch(() => null)
+  const returnUrl = `${WWW}/register/${slug}`
+  const signInUrl = `${APP}/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`
 
   const status = registrationStatus(
     event.registrationOpen ?? false,
@@ -76,9 +85,19 @@ export default async function RegisterTypePage({ params }: PageProps) {
       {/* Type selector */}
       <div className="max-w-2xl mx-auto px-4 py-12">
         <h2 className="text-xl font-bold text-brand-blue-dark mb-2">How are you registering?</h2>
-        <p className="text-gray-600 mb-8">
+        <p className="text-gray-600 mb-6">
           Individual students register and pay online. Teachers register a group and receive an invoice.
         </p>
+
+        <div className="mb-8">
+          <RegistrationAuthBanner
+            signedIn={!!member}
+            name={[member?.first_name, member?.last_name].filter(Boolean).join(' ') || undefined}
+            email={member?.email ?? undefined}
+            signInUrl={signInUrl}
+            returnUrl={returnUrl}
+          />
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Link
@@ -113,13 +132,6 @@ export default async function RegisterTypePage({ params }: PageProps) {
             </span>
           </Link>
         </div>
-
-        <p className="mt-8 text-xs text-gray-400 text-center">
-          Already have an account?{' '}
-          <a href="#" className="text-brand-blue hover:underline">
-            Log in to pre-fill your details
-          </a>
-        </p>
       </div>
     </div>
   )

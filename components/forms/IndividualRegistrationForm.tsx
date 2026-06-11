@@ -9,6 +9,7 @@ import FieldError from '@/components/forms/FieldError'
 import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
 import { GRADES, T_SHIRT_SIZES, GENDERS, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, deriveAgeBracket } from '@/lib/registration-constants'
 import { resolveSchoolPayload } from '@/lib/school-utils'
+import type { RegistrationPrefill } from '@/lib/registration-prefill'
 
 const schema = z.object({
   // Step 1 — Personal
@@ -38,10 +39,15 @@ type FormData = z.infer<typeof schema>
 export default function IndividualRegistrationForm({
   eventSlug,
   eventTitle,
+  prefill,
 }: {
   eventSlug: string
   eventTitle: string
+  prefill?: RegistrationPrefill | null
 }) {
+  // When the registrant is signed in, the email is authoritative and locked
+  // (Option A) — a logged-in member can only register under their own address.
+  const emailLocked = !!prefill?.email
   const [step, setStep] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -60,8 +66,23 @@ export default function IndividualRegistrationForm({
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      ethnicity: [],
-      dietary_requirements: [],
+      first_name: prefill?.first_name ?? '',
+      last_name: prefill?.last_name ?? '',
+      nickname: prefill?.nickname ?? '',
+      email: prefill?.email ?? '',
+      phone: prefill?.phone ?? '',
+      date_of_birth: prefill?.date_of_birth ?? '',
+      grade: prefill?.grade ?? '',
+      gender: prefill?.gender ?? '',
+      t_shirt_size: prefill?.t_shirt_size ?? '',
+      emergency_contact_first_name: prefill?.emergency_contact_first_name ?? '',
+      emergency_contact_last_name: prefill?.emergency_contact_last_name ?? '',
+      emergency_contact_email: prefill?.emergency_contact_email ?? '',
+      emergency_contact_phone: prefill?.emergency_contact_phone ?? '',
+      emergency_contact_relationship: prefill?.emergency_contact_relationship ?? '',
+      ethnicity: prefill?.ethnicity ?? [],
+      dietary_requirements: prefill?.dietary_requirements ?? [],
+      health_conditions: prefill?.health_conditions ?? '',
     },
   })
 
@@ -158,8 +179,19 @@ export default function IndividualRegistrationForm({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="label-text">Email Address *</label>
-                <input {...register('email')} type="email" className="input-field" placeholder="jane@example.com" />
-                <FieldError message={errors.email?.message} />
+                <input
+                  {...register('email')}
+                  type="email"
+                  className="input-field"
+                  placeholder="jane@example.com"
+                  readOnly={emailLocked}
+                  aria-readonly={emailLocked}
+                />
+                {emailLocked ? (
+                  <p className="mt-1 text-xs text-gray-400">Linked to your Stellr account.</p>
+                ) : (
+                  <FieldError message={errors.email?.message} />
+                )}
               </div>
               <div>
                 <label className="label-text">Phone Number *</label>

@@ -6,6 +6,7 @@ import type { RegistrationRow, ParticipantRow } from '@/lib/database.types'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt } from '@/lib/member-enums'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
+import { getCurrentMember } from '@/lib/community'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const {
       event_slug, event_title,
-      first_name, last_name, nickname, email, phone, date_of_birth,
+      first_name, last_name, nickname, phone, date_of_birth,
       grade, gender, ethnicity, t_shirt_size, school_name,
       age_bracket, event_role,
       dietary_requirements, health_conditions,
@@ -29,6 +30,13 @@ export async function POST(req: NextRequest) {
       emergency_contact_relationship,
       school_address_state,
     } = body
+
+    // Option A — a signed-in member can only register under their own address.
+    // Trust the session email over whatever the client submitted; this prevents
+    // duplicate member rows and forged-identity registrations. Falls back to the
+    // submitted email when there's no resolvable session (e.g. on www).
+    const sessionMember = await getCurrentMember().catch(() => null)
+    const email: string = sessionMember?.email ?? body.email
 
     if (!event_slug || !email || !first_name || !last_name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })

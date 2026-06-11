@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getEventBySlug } from '@/lib/sanity'
 import { formatDateRange } from '@/lib/utils'
+import { getRegistrationPrefill } from '@/lib/registration-prefill'
 import IndividualRegistrationForm from '@/components/forms/IndividualRegistrationForm'
 
 interface PageProps {
@@ -11,6 +12,8 @@ export default async function IndividualRegistrationPage({ params }: PageProps) 
   const { slug } = await params
   const event = await getEventBySlug(slug).catch(() => null)
   if (!event) notFound()
+
+  const prefill = await getRegistrationPrefill().catch(() => null)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -50,6 +53,7 @@ export default async function IndividualRegistrationPage({ params }: PageProps) 
         <IndividualRegistrationForm
           eventSlug={slug}
           eventTitle={event.title}
+          prefill={prefill}
         />
       </div>
     </div>

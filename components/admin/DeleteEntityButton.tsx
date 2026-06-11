@@ -21,6 +21,12 @@ interface Props {
   redirectTo?: string
   /** Hide the permanent-delete option for entities that should only soft-delete. */
   allowHardDelete?: boolean
+  /** Set false for entities with no soft-delete (e.g. participants) — forces hard purge. */
+  softDeletable?: boolean
+  /** Require typing DELETE before a hard purge. Default true. */
+  requireTypedConfirm?: boolean
+  /** Optional custom button label (default "Delete"). */
+  label?: string
   className?: string
 }
 
@@ -34,6 +40,9 @@ export function DeleteEntityButton({
   name,
   redirectTo,
   allowHardDelete = true,
+  softDeletable = true,
+  requireTypedConfirm = true,
+  label,
   className,
 }: Props) {
   const router = useRouter()
@@ -41,14 +50,14 @@ export function DeleteEntityButton({
   const [loading, setLoading] = useState(false)
   const [blockers, setBlockers] = useState<Blocker[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [mode, setMode] = useState<'soft' | 'hard'>('soft')
+  const [mode, setMode] = useState<'soft' | 'hard'>(softDeletable ? 'soft' : 'hard')
   const [confirmText, setConfirmText] = useState('')
 
   async function openDialog() {
     setOpen(true)
     setError(null)
     setBlockers(null)
-    setMode('soft')
+    setMode(softDeletable ? 'soft' : 'hard')
     setConfirmText('')
     setLoading(true)
     try {
@@ -100,7 +109,9 @@ export function DeleteEntityButton({
   }
 
   const hasBlockers = blockers !== null && blockers.length > 0
-  const hardConfirmed = mode === 'soft' || confirmText.trim().toUpperCase() === 'DELETE'
+  const typedOk = !requireTypedConfirm || confirmText.trim().toUpperCase() === 'DELETE'
+  const hardConfirmed = mode === 'soft' || typedOk
+  const showModeChoice = softDeletable && allowHardDelete
 
   return (
     <>
@@ -108,7 +119,7 @@ export function DeleteEntityButton({
         onClick={openDialog}
         className={className ?? 'text-sm font-medium text-red-600 hover:text-red-800 border border-red-200 px-3 py-1.5 rounded-lg'}
       >
-        Delete
+        {label ?? 'Delete'}
       </button>
 
       {open && (
@@ -147,7 +158,7 @@ export function DeleteEntityButton({
             ) : (
               blockers !== null && (
                 <div className="space-y-4">
-                  {allowHardDelete && (
+                  {showModeChoice ? (
                     <div className="space-y-2">
                       <label className="flex items-start gap-2 text-sm text-gray-700">
                         <input type="radio" checked={mode === 'soft'} onChange={() => setMode('soft')} className="mt-0.5" />
@@ -158,9 +169,13 @@ export function DeleteEntityButton({
                         <span><span className="font-medium">Permanently delete</span> — purge from the database. An archive snapshot is kept for support.</span>
                       </label>
                     </div>
+                  ) : (
+                    <p className="text-sm text-gray-700">
+                      This permanently removes <span className="font-medium">{name}</span> from the database. An archive snapshot is kept for support.
+                    </p>
                   )}
 
-                  {mode === 'hard' && (
+                  {mode === 'hard' && requireTypedConfirm && (
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">Type DELETE to confirm</label>
                       <input

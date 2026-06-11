@@ -36,7 +36,7 @@ export function AppHeader({ isAdmin = false, showHosting = false }: AppHeaderPro
   const pathname = usePathname()
 
   const nav: NavSection[] = [
-    { label: 'Competitions', href: '/community/events' },
+    { label: 'Competitions', href: '/events' },
     {
       label: 'Community',
       href: '/community',

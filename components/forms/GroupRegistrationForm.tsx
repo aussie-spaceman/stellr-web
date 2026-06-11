@@ -12,6 +12,7 @@ import FieldError from '@/components/forms/FieldError'
 import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
 import { T_SHIRT_SIZES, GENDERS, GRADES, HS_GRADES, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, deriveAgeBracket } from '@/lib/registration-constants'
 import { resolveSchoolPayload } from '@/lib/school-utils'
+import type { RegistrationPrefill } from '@/lib/registration-prefill'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type RegistrantRole = 'teacher' | 'student_manager'
@@ -306,21 +307,46 @@ function StudentAccordion({ index, data, onChange, expanded, onToggle }: {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function GroupRegistrationForm({ eventSlug, eventTitle }: { eventSlug: string; eventTitle: string }) {
+export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }: { eventSlug: string; eventTitle: string; prefill?: RegistrationPrefill | null }) {
   const router = useRouter()
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn()
   const { isSignedIn } = useAuth()
   const [step, setStep] = useState<1 | 2>(1)
   const [registrantRole, setRegistrantRole] = useState<RegistrantRole>('teacher')
 
+  // When the registrant is signed in, their email is authoritative and locked
+  // (Option A) — only the registrant block is pre-filled; additional adults and
+  // students are still entered as before.
+  const emailLocked = !!prefill?.email
+  const registrantDefaults = {
+    first_name: prefill?.first_name ?? '',
+    last_name: prefill?.last_name ?? '',
+    email: prefill?.email ?? '',
+    phone: prefill?.phone ?? '',
+    date_of_birth: prefill?.date_of_birth ?? '',
+    gender: prefill?.gender ?? '',
+    t_shirt_size: prefill?.t_shirt_size ?? '',
+    ethnicity: prefill?.ethnicity ?? [],
+    dietary_requirements: prefill?.dietary_requirements ?? [],
+    health_conditions: prefill?.health_conditions ?? '',
+  }
+
   // Two form instances — hooks must be unconditional
   const teacherForm = useForm<TeacherFormData>({
     resolver: zodResolver(teacherSchema),
-    defaultValues: { ethnicity: [], dietary_requirements: [] },
+    defaultValues: { ...registrantDefaults },
   })
   const smForm = useForm<StudentManagerFormData>({
     resolver: zodResolver(studentManagerSchema),
-    defaultValues: { ethnicity: [], dietary_requirements: [] },
+    defaultValues: {
+      ...registrantDefaults,
+      grade: prefill?.grade ?? '',
+      emergency_contact_first_name: prefill?.emergency_contact_first_name ?? '',
+      emergency_contact_last_name: prefill?.emergency_contact_last_name ?? '',
+      emergency_contact_email: prefill?.emergency_contact_email ?? '',
+      emergency_contact_phone: prefill?.emergency_contact_phone ?? '',
+      emergency_contact_relationship: prefill?.emergency_contact_relationship ?? '',
+    },
   })
 
   const tf = teacherForm
@@ -621,7 +647,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
                 <div><label className="label-text">Last Name *</label><input {...tf.register('last_name')} className="input-field" /><FieldError message={tf.formState.errors.last_name?.message} /></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div><label className="label-text">Email Address *</label><input {...tf.register('email')} type="email" className="input-field" /><FieldError message={tf.formState.errors.email?.message} /></div>
+                <div><label className="label-text">Email Address *</label><input {...tf.register('email')} type="email" className="input-field" readOnly={emailLocked} aria-readonly={emailLocked} />{emailLocked ? <p className="mt-1 text-xs text-gray-400">Linked to your Stellr account.</p> : <FieldError message={tf.formState.errors.email?.message} />}</div>
                 <div><label className="label-text">Phone Number *</label><input {...tf.register('phone')} type="tel" className="input-field" /><FieldError message={tf.formState.errors.phone?.message} /></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -671,7 +697,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle }: { event
                 <div><label className="label-text">Last Name *</label><input {...sf.register('last_name')} className="input-field" /><FieldError message={sf.formState.errors.last_name?.message} /></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div><label className="label-text">Email Address *</label><input {...sf.register('email')} type="email" className="input-field" /><FieldError message={sf.formState.errors.email?.message} /></div>
+                <div><label className="label-text">Email Address *</label><input {...sf.register('email')} type="email" className="input-field" readOnly={emailLocked} aria-readonly={emailLocked} />{emailLocked ? <p className="mt-1 text-xs text-gray-400">Linked to your Stellr account.</p> : <FieldError message={sf.formState.errors.email?.message} />}</div>
                 <div><label className="label-text">Phone Number *</label><input {...sf.register('phone')} type="tel" className="input-field" /><FieldError message={sf.formState.errors.phone?.message} /></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">

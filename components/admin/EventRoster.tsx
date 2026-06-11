@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { EventRosterData, ParticipantPill, RosterParticipant } from '@/lib/event-admin'
 import type { CompanyRow } from '@/components/admin/EventCompanies'
+import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 
 const PILL_STYLES: Record<ParticipantPill, { label: string; className: string }> = {
   not_paid: { label: 'Not Paid', className: 'bg-red-100 text-red-700' },
@@ -101,11 +102,18 @@ export default function EventRoster({
               }`}
             >
               <div
-                className={`px-4 py-2 text-xs font-semibold uppercase tracking-wide ${
+                className={`px-4 py-2 flex items-center justify-between gap-3 text-xs font-semibold uppercase tracking-wide ${
                   group.type === 'group' ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-50 text-gray-500'
                 }`}
               >
-                {group.type === 'group' ? `Group — ${group.groupLabel}` : 'Individual Registration'}
+                <span>{group.type === 'group' ? `Group — ${group.groupLabel}` : 'Individual Registration'}</span>
+                <DeleteEntityButton
+                  entity="registration"
+                  id={group.registrationId}
+                  name={group.type === 'group' ? `the group "${group.groupLabel}"` : 'this individual registration'}
+                  label={group.type === 'group' ? 'Delete group' : 'Delete registration'}
+                  className="text-xs font-medium text-red-600 hover:text-red-800 normal-case"
+                />
               </div>
               <table className="w-full text-sm bg-white">
                 <thead>
@@ -117,6 +125,7 @@ export default function EventRoster({
                     <th className="px-4 py-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Shirt</th>
                     <th className="px-4 py-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Company</th>
                     <th className="px-4 py-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
+                    <th className="px-4 py-2 font-medium text-gray-500 text-xs uppercase tracking-wide text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -161,6 +170,17 @@ export default function EventRoster({
                           <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${pill.className}`}>
                             {pill.label}
                           </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <DeleteEntityButton
+                            entity="participant"
+                            id={p.id}
+                            name={`${p.first_name} ${p.last_name}`}
+                            label="Delete"
+                            softDeletable={false}
+                            requireTypedConfirm={false}
+                            className="text-xs font-medium text-red-600 hover:text-red-800"
+                          />
                         </td>
                       </tr>
                     )

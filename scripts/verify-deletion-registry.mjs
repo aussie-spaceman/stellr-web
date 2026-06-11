@@ -32,7 +32,8 @@ const CHECKS = [
   ['mentoring_cohorts', 'is_active'],
   ['membership_tiers', 'is_active'],
   ['session_participants', 'member_id'], ['session_participants', 'session_id'],
-  ['docusign_envelopes', 'member_id'],
+  ['docusign_envelopes', 'member_id'], ['docusign_envelopes', 'participant_id'],
+  ['participants', 'registration_id'],
 ]
 
 let ok = 0, bad = 0

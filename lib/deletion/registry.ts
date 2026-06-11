@@ -73,6 +73,11 @@ export const ENTITIES: Record<string, EntityDef> = {
   },
 
   // ---- Registrations / participants --------------------------------------
+  // A registration is the unit for "delete a group" (type='group') or an
+  // individual registration (type='individual'). Soft delete = withdrawn
+  // (recoverable); hard delete cascades participants, their docusign_envelopes,
+  // sheet_watch_channels and group_join_tokens in the DB. External cleanup
+  // voids any in-flight DocuSign envelopes for every participant first.
   registration: {
     type: 'registration',
     table: 'registrations',
@@ -80,7 +85,21 @@ export const ENTITIES: Record<string, EntityDef> = {
     pk: 'id',
     keyType: 'uuid',
     softDelete: { set: { status: 'withdrawn', withdrawn_at: ISO } },
-    // participants, sheet_watch_channels, group_join_tokens cascade in the DB.
+    external: ['docusign'],
+    dependents: [],
+  },
+
+  // A single participant within a registration ("delete a participant from an
+  // event"). No soft-delete column exists, so only hard delete applies; the
+  // participant's docusign_envelopes cascade in the DB and are voided upstream.
+  participant: {
+    type: 'participant',
+    table: 'participants',
+    label: 'Participant',
+    pk: 'id',
+    keyType: 'uuid',
+    softDelete: null,
+    external: ['docusign'],
     dependents: [],
   },
 

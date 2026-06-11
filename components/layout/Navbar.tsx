@@ -107,10 +107,10 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
             {isSignedIn ? (
               <>
                 <a
-                  href={`${AUTH_URL}/account`}
+                  href={`${AUTH_URL}/community`}
                   className="text-gray-300 hover:text-white transition-colors"
                 >
-                  My Account
+                  My Stellr
                 </a>
                 <NavUserButton isAdmin={isAdmin} />
               </>
@@ -299,11 +299,11 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
               </Link>
               {isSignedIn ? (
                 <a
-                  href={`${AUTH_URL}/account`}
+                  href={`${AUTH_URL}/community`}
                   className="block w-full text-center px-4 py-3 bg-brand-blue text-white font-medium rounded-md hover:bg-blue-800 transition-colors"
                   onClick={() => setMobileOpen(false)}
                 >
-                  My Account
+                  My Stellr
                 </a>
               ) : (
                 <>

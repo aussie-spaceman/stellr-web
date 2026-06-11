@@ -33,7 +33,7 @@ export default clerkMiddleware(async (auth, req) => {
 
   if (isAppSubdomain) {
     if (url.pathname === '/') {
-      return NextResponse.redirect(new URL(userId ? '/account' : '/sign-in', req.url))
+      return NextResponse.redirect(new URL(userId ? '/community' : '/sign-in', req.url))
     }
     if (isPublicOnlyRoute(req)) {
       return NextResponse.redirect(new URL(url.pathname + url.search, WWW), 308)

@@ -38,7 +38,28 @@ WHERE nullif(trim(p.school_name), '') IS NOT NULL
   )
 ORDER BY lower(trim(p.school_name));
 
--- 3) Link members to their school via member_schools, derived from their most
+-- 3) Ensure the (member_id, school_id) uniqueness the school-linking design
+--    relies on actually exists. The member_schools table was created without
+--    it, so every `ON CONFLICT (member_id, school_id)` — both this backfill and
+--    the runtime upsert in lib/school-link.ts — errors with 42P10. First
+--    collapse any pre-existing duplicate pairs (keep the current row, else the
+--    most recently started one), then add the unique index. Uses ctid so it
+--    works regardless of the primary key column name.
+DELETE FROM public.member_schools ms
+USING (
+  SELECT ctid,
+         row_number() OVER (
+           PARTITION BY member_id, school_id
+           ORDER BY is_current DESC, started_at DESC NULLS LAST
+         ) AS rn
+  FROM public.member_schools
+) d
+WHERE ms.ctid = d.ctid AND d.rn > 1;
+
+CREATE UNIQUE INDEX IF NOT EXISTS member_schools_member_school_uniq
+  ON public.member_schools (member_id, school_id);
+
+-- 4) Link members to their school via member_schools, derived from their most
 --    recent participant row carrying a school name. Members that already have
 --    a current school link are left untouched.
 INSERT INTO public.member_schools (member_id, school_id, is_current, started_at)

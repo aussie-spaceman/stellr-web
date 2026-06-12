@@ -78,9 +78,10 @@ export async function getRegistrationPrefill(
       .from('members')
       .select(
         `first_name, last_name, nickname, phone, date_of_birth, grade, gender, tshirt_size,
-         age_bracket, event_role, ethnicity, dietary_requirements, health_conditions,
-         emergency_contact_first_name, emergency_contact_last_name, emergency_contact_email,
-         emergency_contact_phone, emergency_contact_relationship`
+         age_bracket, event_role, health_conditions,
+         ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship,
+         member_ethnicities(ethnicity_options!member_ethnicities_ethnicity_option_id_fkey(name)),
+         member_allergies(allergy_options!member_allergies_allergy_option_id_fkey(name))`
       )
       .eq('id', m.id)
       .maybeSingle(),
@@ -98,6 +99,18 @@ export async function getRegistrationPrefill(
   const mr = (mem ?? {}) as Record<string, unknown>
   const str = (v: unknown) => (typeof v === 'string' && v.length > 0 ? v : undefined)
   const arr = (v: unknown) => (Array.isArray(v) && v.length > 0 ? (v as string[]) : undefined)
+  // Option names from the member_ethnicities/member_allergies joins ARE the
+  // form's display strings (Supabase returns each relation as object|array).
+  const joinNames = (rows: unknown, rel: string): string[] | undefined => {
+    if (!Array.isArray(rows)) return undefined
+    const names = rows
+      .map((row) => {
+        const r = (row as Record<string, unknown>)[rel]
+        return (Array.isArray(r) ? r[0] : (r as { name?: string } | null))?.name
+      })
+      .filter((n): n is string => typeof n === 'string' && n.length > 0)
+    return names.length > 0 ? names : undefined
+  }
 
   // Resolve the joined school name (Supabase returns the relation as object|array).
   const sl = (schoolLink ?? null) as { school_id?: string; schools?: { name?: string } | { name?: string }[] } | null
@@ -118,14 +131,14 @@ export async function getRegistrationPrefill(
     grade: str(p.grade) ?? denormalizeGrade(mr.grade),
     gender: str(p.gender) ?? denormalizeGender(mr.gender),
     t_shirt_size: str(p.t_shirt_size) ?? denormalizeTshirt(mr.tshirt_size),
-    ethnicity: arr(p.ethnicity) ?? arr(mr.ethnicity),
-    dietary_requirements: arr(p.dietary_requirements) ?? arr(mr.dietary_requirements),
+    ethnicity: arr(p.ethnicity) ?? joinNames(mr.member_ethnicities, 'ethnicity_options'),
+    dietary_requirements: arr(p.dietary_requirements) ?? joinNames(mr.member_allergies, 'allergy_options'),
     health_conditions: str(p.health_conditions) ?? str(mr.health_conditions),
-    emergency_contact_first_name: str(p.emergency_contact_first_name) ?? str(mr.emergency_contact_first_name),
-    emergency_contact_last_name: str(p.emergency_contact_last_name) ?? str(mr.emergency_contact_last_name),
-    emergency_contact_email: str(p.emergency_contact_email) ?? str(mr.emergency_contact_email),
-    emergency_contact_phone: str(p.emergency_contact_phone) ?? str(mr.emergency_contact_phone),
-    emergency_contact_relationship: str(p.emergency_contact_relationship) ?? str(mr.emergency_contact_relationship),
+    emergency_contact_first_name: str(p.emergency_contact_first_name) ?? str(mr.ec_first_name),
+    emergency_contact_last_name: str(p.emergency_contact_last_name) ?? str(mr.ec_last_name),
+    emergency_contact_email: str(p.emergency_contact_email) ?? str(mr.ec_email),
+    emergency_contact_phone: str(p.emergency_contact_phone) ?? str(mr.ec_phone),
+    emergency_contact_relationship: str(p.emergency_contact_relationship) ?? str(mr.ec_relationship),
     school_name: schoolName,
     school,
   }

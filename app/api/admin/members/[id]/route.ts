@@ -47,9 +47,10 @@ export async function PATCH(
     replacements.push((async () => {
       await db.from('member_ethnicities').delete().eq('member_id', id)
       if (body.ethnicity_ids.length > 0) {
-        await db.from('member_ethnicities').insert(
+        const { error: insertError } = await db.from('member_ethnicities').insert(
           body.ethnicity_ids.map((eid: string) => ({ member_id: id, ethnicity_option_id: eid }))
         )
+        if (insertError) console.error('Admin member ethnicity insert error:', insertError)
       }
     })())
   }
@@ -57,9 +58,10 @@ export async function PATCH(
     replacements.push((async () => {
       await db.from('member_allergies').delete().eq('member_id', id)
       if (body.allergy_ids.length > 0) {
-        await db.from('member_allergies').insert(
+        const { error: insertError } = await db.from('member_allergies').insert(
           body.allergy_ids.map((aid: string) => ({ member_id: id, allergy_option_id: aid }))
         )
+        if (insertError) console.error('Admin member allergy insert error:', insertError)
       }
     })())
   }

@@ -107,14 +107,19 @@ export default function EventRoster({
                 }`}
               >
                 <span>{group.type === 'group' ? `Group — ${group.groupLabel}` : 'Individual Registration'}</span>
-                <DeleteEntityButton
-                  entity="registration"
-                  id={group.registrationId}
-                  name={group.type === 'group' ? `the group "${group.groupLabel}"` : 'this individual registration'}
-                  label={group.type === 'group' ? 'Delete group' : 'Delete registration'}
-                  refundable
-                  className="text-xs font-medium text-red-600 hover:text-red-800 normal-case"
-                />
+                {/* Individual registrations need no header delete — the per-row
+                    "Delete Registration" removes the participant and auto-withdraws
+                    the emptied registration. */}
+                {group.type === 'group' && (
+                  <DeleteEntityButton
+                    entity="registration"
+                    id={group.registrationId}
+                    name={`the group "${group.groupLabel}"`}
+                    label="Delete group"
+                    refundable
+                    className="text-xs font-medium text-red-600 hover:text-red-800 normal-case"
+                  />
+                )}
               </div>
               <table className="w-full text-sm bg-white">
                 <thead>
@@ -177,7 +182,7 @@ export default function EventRoster({
                             entity="participant"
                             id={p.id}
                             name={`${p.first_name} ${p.last_name}'s registration`}
-                            label="Delete"
+                            label="Delete Registration"
                             softDeletable={false}
                             requireTypedConfirm={false}
                             refundable

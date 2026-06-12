@@ -54,19 +54,30 @@ export async function GET() {
   }
 
   // ── Participation payment history (all roles) ─────────────────────────────────
-  const { data: participations } = await db
+  // join_completed_at is only set by the group-join flow; individual registrations
+  // never have it, so those are kept via registrations.type instead.
+  const { data: participationRows } = await db
     .from('participants')
     .select(`
-      id, event_role, join_completed_at, individual_payment_status,
+      id, event_role, join_completed_at, individual_payment_status, school_name,
       registrations(
-        id, event_slug, event_title, school_name, status, created_at,
+        id, event_slug, event_title, school_name, status, created_at, type,
         member_pays_individually, invoice_requested,
         teacher_first_name, teacher_last_name
       )
     `)
     .eq('member_id', member.id)
-    .not('join_completed_at', 'is', null)
-    .order('join_completed_at', { ascending: false })
+
+  type ParticipationReg = { created_at: string; type: string | null }
+  const regOf = (p: { registrations: ParticipationReg | ParticipationReg[] | null }) =>
+    Array.isArray(p.registrations) ? p.registrations[0] : p.registrations
+
+  const participations = (participationRows ?? [])
+    .filter(p => p.join_completed_at !== null || regOf(p)?.type === 'individual')
+    .sort((a, b) => {
+      const dateOf = (p: typeof a) => p.join_completed_at ?? regOf(p)?.created_at ?? ''
+      return dateOf(b).localeCompare(dateOf(a))
+    })
 
   // ── Account credits (issued from cancelled registrations) ────────────────────
   const nowIso = new Date().toISOString()
@@ -79,5 +90,5 @@ export async function GET() {
     .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
     .order('expires_at', { ascending: true, nullsFirst: false })
 
-  return NextResponse.json({ invoices, participations: participations ?? [], credits: creditRows ?? [] })
+  return NextResponse.json({ invoices, participations, credits: creditRows ?? [] })
 }

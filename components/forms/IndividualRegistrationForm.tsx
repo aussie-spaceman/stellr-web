@@ -54,6 +54,11 @@ export default function IndividualRegistrationForm({
   // member shouldn't be asked for student-only fields (Grade) — recognise their
   // age_bracket and present the adult variant instead.
   const isAdultMember = prefill?.age_bracket === 'adult'
+  // Unauthenticated (or non-adult-member) registrants self-identify instead:
+  // the grade list only covers students, so an adult non-student needs this to
+  // reach the Adult bracket and receive the adult participation agreement.
+  const [adultRegistrant, setAdultRegistrant] = useState(false)
+  const isAdult = isAdultMember || adultRegistrant
   const [step, setStep] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -69,6 +74,7 @@ export default function IndividualRegistrationForm({
     watch,
     setValue,
     setError: setFieldError,
+    clearErrors,
     getValues,
     trigger,
     formState: { errors },
@@ -112,8 +118,8 @@ export default function IndividualRegistrationForm({
       'gender', 't_shirt_size',
     ]
     let valid = await trigger(step === 1 ? step1Fields : undefined)
-    // Grade is required for students only; adult members don't see the field.
-    if (!isAdultMember && !getValues('grade')) {
+    // Grade is required for students only; adult registrants don't see the field.
+    if (!isAdult && !getValues('grade')) {
       setFieldError('grade', { type: 'manual', message: 'Required' })
       valid = false
     }
@@ -129,18 +135,28 @@ export default function IndividualRegistrationForm({
     setSubmitting(true)
     setError(null)
     try {
-      const age_bracket = deriveAgeBracket(data.date_of_birth, data.grade)
+      // Adult registrants carry no grade — any value left over from toggling
+      // must not leak into the bracket derivation or the payload.
+      const grade = isAdult ? '' : data.grade
+      const age_bracket = deriveAgeBracket(data.date_of_birth, grade)
 
       const res = await fetch('/api/register/individual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...data,
+          grade,
           ...resolveSchoolPayload(schoolSelection),
           event_slug: eventSlug,
           event_title: eventTitle,
           age_bracket,
-          event_role: age_bracket === 'High School' ? 'School Student' : 'Mentor',
+          // Role drives which DocuSign agreement dispatchAgreement sends:
+          // School Student → minor consent, Mentor → mentor agreement,
+          // Adult → adult participation agreement.
+          event_role:
+            age_bracket === 'High School' ? 'School Student'
+            : age_bracket === 'College' ? 'Mentor'
+            : 'Adult',
         }),
       })
 
@@ -178,6 +194,38 @@ export default function IndividualRegistrationForm({
           )}
 
           <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+            {!isAdultMember && (
+              <div>
+                <label className="label-text">I am registering as *</label>
+                <div className="flex gap-6 mt-1">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="radio"
+                      name="registrant_type"
+                      checked={!adultRegistrant}
+                      onChange={() => setAdultRegistrant(false)}
+                      className="border-gray-300 text-brand-blue"
+                    />
+                    Student
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="radio"
+                      name="registrant_type"
+                      checked={adultRegistrant}
+                      onChange={() => {
+                        setAdultRegistrant(true)
+                        setValue('grade', '')
+                        clearErrors('grade')
+                      }}
+                      className="border-gray-300 text-brand-blue"
+                    />
+                    Adult (not a student)
+                  </label>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="label-text">First Name *</label>
@@ -226,7 +274,7 @@ export default function IndividualRegistrationForm({
                 <input {...register('date_of_birth')} type="date" className="input-field" />
                 <FieldError message={errors.date_of_birth?.message} />
               </div>
-              {!isAdultMember && (
+              {!isAdult && (
                 <div>
                   <label className="label-text">Grade / Year Level *</label>
                   <select {...register('grade')} className="input-field">

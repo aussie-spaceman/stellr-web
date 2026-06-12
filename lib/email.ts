@@ -1,8 +1,22 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY
-const FROM = 'Stellr Education <david.shaw@insimeducation.com>'
 
-// Marketing/campaign sender — a separate, DNS-authenticated subdomain so bulk
-// sends build (or burn) reputation independently of transactional mail above.
+// Transactional sender. Must be on a Resend-verified domain and must NOT be a
+// personal mailbox: Gmail applies the SENT label to inbound mail whose From is
+// the recipient's own address, so mail clients render phantom "duplicate"
+// copies (Inbox + Sent + All Mail) of every email.
+const FROM =
+  process.env.TRANSACTIONAL_FROM ?? 'Stellr Education <no-reply@mail.stellreducation.org>'
+
+// Templates invite members to "reply to this email" — route those replies to a
+// monitored mailbox, since no-reply@ can't receive.
+const DEFAULT_REPLY_TO =
+  process.env.TRANSACTIONAL_REPLY_TO ?? 'david.shaw@insimeducation.com'
+
+// Marketing/campaign sender. Currently shares the mail. subdomain with the
+// transactional default above; once the stellreducation.org apex (or a
+// dedicated transactional subdomain) is verified in Resend, point
+// TRANSACTIONAL_FROM there so bulk sends build (or burn) reputation
+// independently of transactional mail.
 export const MARKETING_FROM =
   process.env.MARKETING_FROM ?? 'Stellr Education <hello@mail.stellreducation.org>'
 
@@ -41,7 +55,7 @@ export async function sendEmail({ to, from, cc, replyTo, subject, html, text, at
       from: from ?? FROM,
       to: [to],
       cc: cc ?? [],
-      reply_to: replyTo,
+      reply_to: replyTo ?? DEFAULT_REPLY_TO,
       subject,
       html,
       text,

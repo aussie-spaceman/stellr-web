@@ -13,6 +13,7 @@ import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt } from '@/lib/member-enums'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
+import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 import { getCurrentMember } from '@/lib/community'
 import type { RegistrationRow } from '@/lib/database.types'
 
@@ -171,9 +172,14 @@ export async function POST(req: NextRequest) {
     // matching the previous serial loop) since Postgres rejects ON CONFLICT
     // updates that touch the same row twice in one statement.
     const memberUpsertByEmail = new Map<string, Record<string, unknown>>()
+    const optionsByEmail = new Map<string, { ethnicity?: string[]; dietary?: string[] }>()
     for (const p of allPeople) {
       const dob = new Date(p.date_of_birth)
       const ageNow = new Date().getFullYear() - dob.getFullYear()
+      optionsByEmail.set(p.email, {
+        ethnicity: (p as { ethnicity?: string[] }).ethnicity,
+        dietary: p.dietary_requirements,
+      })
       memberUpsertByEmail.set(p.email, {
         email: p.email,
         first_name: p.first_name,
@@ -187,14 +193,16 @@ export async function POST(req: NextRequest) {
         event_role: normalizeEventRole(ageNow < 18 ? (p.event_role === 'school_student_manager' ? 'school_student_manager' : 'school_student') : p.event_role),
         is_active: true,
         // Persist the profile so each member doesn't re-enter it next time (028).
-        ethnicity: (p as { ethnicity?: string[] }).ethnicity ?? [],
-        dietary_requirements: p.dietary_requirements ?? [],
+        // Emergency contact goes to the members table's canonical ec_* columns —
+        // the same ones /account, admin, and group-join read (029). Ethnicity and
+        // dietary go to the member_ethnicities/member_allergies join tables below
+        // for the same reason (030).
         health_conditions: p.health_conditions || null,
-        emergency_contact_first_name: p.emergency_contact_first_name || null,
-        emergency_contact_last_name: p.emergency_contact_last_name || null,
-        emergency_contact_email: p.emergency_contact_email || null,
-        emergency_contact_phone: p.emergency_contact_phone || null,
-        emergency_contact_relationship: p.emergency_contact_relationship || null,
+        ec_first_name: p.emergency_contact_first_name || null,
+        ec_last_name: p.emergency_contact_last_name || null,
+        ec_email: p.emergency_contact_email || null,
+        ec_phone: p.emergency_contact_phone || null,
+        ec_relationship: p.emergency_contact_relationship || null,
       })
     }
 
@@ -221,6 +229,15 @@ export async function POST(req: NextRequest) {
       address_state: teacher.school_address_state ?? null,
       address_zip: teacher.school_address_zip ?? null,
     })
+
+    // Persist each member's ethnicity/dietary selections onto the canonical
+    // join tables (030) — same non-fatal contract as school linking.
+    await syncMemberOptionSelections(
+      db,
+      [...optionsByEmail].map(([email, sel]) =>
+        memberIdMap[email] ? { memberId: memberIdMap[email]!, ...sel } : null
+      )
+    )
 
     // Link registrant's member ID to the registration (enables portal team management)
     const registrantMemberId = memberIdMap[teacher.email]

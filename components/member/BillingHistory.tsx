@@ -23,6 +23,7 @@ interface ParticipationReg {
   school_name: string | null
   status: string
   created_at: string
+  type: string | null
   member_pays_individually: boolean
   invoice_requested: boolean
   teacher_first_name: string | null
@@ -34,6 +35,7 @@ interface Participation {
   event_role: string
   join_completed_at: string | null
   individual_payment_status: string | null
+  school_name: string | null
   registrations: ParticipationReg | ParticipationReg[] | null
 }
 
@@ -58,6 +60,11 @@ const STATUS_STYLES: Record<string, string> = {
 }
 
 function paymentLabel(p: Participation, reg: ParticipationReg): { label: string; style: string } {
+  if (reg.type === 'individual') {
+    if (reg.status === 'confirmed') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
+    if (reg.status === 'cancelled') return { label: 'Cancelled', style: 'bg-gray-100 text-gray-500' }
+    return { label: 'Payment Pending', style: 'bg-amber-100 text-amber-700' }
+  }
   if (reg.member_pays_individually) {
     if (p.individual_payment_status === 'paid') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
     if (p.individual_payment_status === 'pending') return { label: 'Payment Pending', style: 'bg-amber-100 text-amber-700' }
@@ -134,10 +141,10 @@ export function BillingHistory() {
                   return (
                     <tr key={p.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 text-gray-600">
-                        {p.join_completed_at ? formatDate(p.join_completed_at) : '—'}
+                        {formatDate(p.join_completed_at ?? reg.created_at)}
                       </td>
                       <td className="px-6 py-4 font-medium text-gray-900">{reg.event_title}</td>
-                      <td className="px-6 py-4 text-gray-500">{reg.school_name ?? '—'}</td>
+                      <td className="px-6 py-4 text-gray-500">{reg.school_name ?? p.school_name ?? '—'}</td>
                       <td className="px-6 py-4 text-gray-500">
                         {reg.teacher_first_name
                           ? `${reg.teacher_first_name} ${reg.teacher_last_name ?? ''}`

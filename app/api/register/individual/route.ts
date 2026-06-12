@@ -6,6 +6,7 @@ import type { RegistrationRow, ParticipantRow } from '@/lib/database.types'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt } from '@/lib/member-enums'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
+import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 import { getCurrentMember } from '@/lib/community'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
@@ -117,14 +118,16 @@ export async function POST(req: NextRequest) {
         event_role: resolvedRole,
         is_active: true,
         // Persist the profile so the member doesn't re-enter it next time (028).
-        ethnicity: ethnicity ?? [],
-        dietary_requirements: dietary_requirements ?? [],
+        // Emergency contact goes to the members table's canonical ec_* columns —
+        // the same ones /account, admin, and group-join read (029). Ethnicity and
+        // dietary go to the member_ethnicities/member_allergies join tables below
+        // for the same reason (030).
         health_conditions: health_conditions || null,
-        emergency_contact_first_name: emergency_contact_first_name || null,
-        emergency_contact_last_name: emergency_contact_last_name || null,
-        emergency_contact_email: emergency_contact_email || null,
-        emergency_contact_phone: emergency_contact_phone || null,
-        emergency_contact_relationship: emergency_contact_relationship || null,
+        ec_first_name: emergency_contact_first_name || null,
+        ec_last_name: emergency_contact_last_name || null,
+        ec_email: emergency_contact_email || null,
+        ec_phone: emergency_contact_phone || null,
+        ec_relationship: emergency_contact_relationship || null,
       }, { onConflict: 'email', ignoreDuplicates: false })
       .select('id')
       .maybeSingle()
@@ -145,6 +148,9 @@ export async function POST(req: NextRequest) {
         address_state: school_address_state ?? null,
         address_zip: body.school_address_zip ?? null,
       })
+      await syncMemberOptionSelections(db, [
+        { memberId, ethnicity, dietary: dietary_requirements },
+      ])
     }
 
     // Create participant record

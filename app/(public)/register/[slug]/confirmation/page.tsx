@@ -119,9 +119,9 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
               className="btn-outline w-full sm:w-auto inline-flex items-center justify-center gap-2"
             >
               <ExternalLink size={16} />
-              Open Participant List as Google Sheet
+              Manage Your Team →
             </Link>
-            <p className="text-xs text-gray-400 mt-2">Sign in to your member account to open your group&apos;s Google Sheet with all registered participants pre-filled.</p>
+            <p className="text-xs text-gray-400 mt-2">Open your team in the member portal to add participants, sync your Google Sheet, and track paperwork — all participant details stay private to you.</p>
           </div>
         )}
 

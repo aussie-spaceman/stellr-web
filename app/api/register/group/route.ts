@@ -69,6 +69,12 @@ export async function POST(req: NextRequest) {
     if (!event_slug || !teacher?.email || !teacher?.first_name || !teacher?.last_name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
+    // A school is mandatory — it drives school linking, the DocuSign SchoolName
+    // tab, and FERPA scoping. The form gates on this too, but enforce it here so
+    // the school can never be silently blank (which left DocuSign school empty).
+    if (!teacher?.school_name || !teacher.school_name.trim()) {
+      return NextResponse.json({ error: 'Please select or add your school before registering.' }, { status: 400 })
+    }
     if (!school_dpa_agreed) {
       return NextResponse.json({ error: 'You must accept the School Data Processing Agreement to continue' }, { status: 400 })
     }
@@ -218,6 +224,25 @@ export async function POST(req: NextRequest) {
 
     for (const row of memberRows ?? []) {
       memberIdMap[row.email] = row.id
+    }
+
+    // Guarantee the registrant's member row. The batched upsert above can drop
+    // *everyone* if a single row violates an enum/date constraint — and if the
+    // registrant is among the dropped, teacher_member_id never gets set and the
+    // Clerk link is skipped, so the organiser lands on a portal that 403s every
+    // team action and shows no teams. Re-upsert the registrant alone (their own
+    // payload, so a bad teammate row can't block them) to recover that case.
+    if (!memberIdMap[teacher.email]) {
+      const registrantPayload = memberUpsertByEmail.get(teacher.email)
+      if (registrantPayload) {
+        const { data: soloRow, error: soloErr } = await db
+          .from('members')
+          .upsert(registrantPayload, { onConflict: 'email', ignoreDuplicates: false })
+          .select('id')
+          .maybeSingle()
+        if (soloErr) console.error('Registrant solo upsert error (non-fatal):', soloErr)
+        if (soloRow?.id) memberIdMap[teacher.email] = soloRow.id
+      }
     }
 
     // Resolve the group's school to a schools row and link every member to it,
@@ -440,6 +465,13 @@ export async function POST(req: NextRequest) {
           name: `${teacher.first_name} ${teacher.last_name}`,
           metadata: { registrationId: regId, eventSlug: event_slug },
         })
+        // Persist the Stripe customer on the registrant's member row so the
+        // invoice (and its receipt) surfaces in /account?tab=billing, which
+        // lists invoices via members.stripe_customer_id. Without this the
+        // invoice exists in Stripe but is invisible to the member.
+        if (registrantMemberId) {
+          await db.from('members').update({ stripe_customer_id: customer.id }).eq('id', registrantMemberId)
+        }
         const priceObj = await stripe.prices.retrieve(stripePriceId)
         await stripe.invoiceItems.create({
           customer: customer.id,
@@ -464,6 +496,9 @@ export async function POST(req: NextRequest) {
         line_items: [{ price: stripePriceId, quantity: total_participants }],
         client_reference_id: regId,
         customer_email: teacher.email,
+        // Always mint a Customer so the receipt is retrievable in the billing tab
+        // (the webhook persists session.customer onto the member row).
+        customer_creation: 'always',
         metadata: {
           registrationId: regId,
           eventSlug: event_slug,

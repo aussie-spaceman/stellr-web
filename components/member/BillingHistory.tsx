@@ -69,7 +69,12 @@ function paymentLabel(p: Participation, reg: ParticipationReg): { label: string;
     if (p.individual_payment_status === 'paid') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
     if (p.individual_payment_status === 'pending') return { label: 'Payment Pending', style: 'bg-amber-100 text-amber-700' }
   }
-  if (reg.invoice_requested) return { label: 'Invoice sent to organiser', style: 'bg-blue-100 text-blue-700' }
+  if (reg.invoice_requested) {
+    // A settled invoice (paid, or auto-settled for $0/free events) confirms the
+    // registration — show Paid rather than the perpetual "Invoice sent" pill.
+    if (reg.status === 'confirmed') return { label: 'Invoice paid', style: 'bg-green-100 text-green-700' }
+    return { label: 'Invoice sent to organiser', style: 'bg-blue-100 text-blue-700' }
+  }
   return { label: 'Paid by group', style: 'bg-green-100 text-green-700' }
 }
 

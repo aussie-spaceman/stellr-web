@@ -140,7 +140,12 @@ function JoinedTeamsView({
       if (entry.individual_payment_status === 'paid') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
       if (entry.individual_payment_status === 'pending') return { label: 'Payment Required', style: 'bg-amber-100 text-amber-700' }
     }
-    if (reg.invoice_requested) return { label: 'Invoice sent to organiser', style: 'bg-blue-100 text-blue-700' }
+    if (reg.invoice_requested) {
+      // A settled invoice (paid, or auto-settled for $0/free events) confirms the
+      // registration — show Paid rather than the perpetual "Invoice sent" pill.
+      if (reg.status === 'confirmed') return { label: 'Invoice paid', style: 'bg-green-100 text-green-700' }
+      return { label: 'Invoice sent to organiser', style: 'bg-blue-100 text-blue-700' }
+    }
     return { label: 'Paid by group', style: 'bg-green-100 text-green-700' }
   }
 
@@ -346,8 +351,28 @@ function TeacherTeamsView() {
       )}
 
       {teams.map(team => {
-        const adults = team.participants.filter(p => p.event_role === 'adult').length
-        const students = team.participants.filter(p => p.event_role !== 'adult').length
+        // Count by actual role — the old "everyone who isn't an adult is a
+        // student" bucket mislabelled a lone teacher as "1 students".
+        const total = team.participants.length
+        const roleCounts: Record<string, number> = {}
+        for (const p of team.participants) {
+          const key = p.event_role === 'school_student_manager' ? 'teacher'
+            : p.event_role === 'school_student' ? 'student'
+            : p.event_role || 'participant'
+          roleCounts[key] = (roleCounts[key] ?? 0) + 1
+        }
+        const ROLE_LABELS: Record<string, [string, string]> = {
+          teacher: ['teacher', 'teachers'],
+          student: ['student', 'students'],
+          adult: ['adult', 'adults'],
+          mentor: ['mentor', 'mentors'],
+        }
+        const roleBreakdown = Object.entries(roleCounts)
+          .map(([role, n]) => {
+            const labels = ROLE_LABELS[role] ?? [role, `${role}s`]
+            return `${n} ${n === 1 ? labels[0] : labels[1]}`
+          })
+          .join(', ')
         const isOpen = expanded === team.id
 
         return (
@@ -363,9 +388,9 @@ function TeacherTeamsView() {
               <div className="flex items-center gap-4">
                 <div className="text-right">
                   <p className="text-sm text-gray-700">
-                    <span className="font-medium">{students}</span> students
-                    {adults > 0 && <>, <span className="font-medium">{adults}</span> adults</>}
+                    <span className="font-medium">{total}</span> participant{total === 1 ? '' : 's'}
                   </p>
+                  {roleBreakdown && <p className="text-xs text-gray-400">{roleBreakdown}</p>}
                   <span
                     className={`inline-flex text-xs px-2 py-0.5 rounded-full mt-1 font-medium capitalize ${
                       team.status === 'confirmed' ? 'bg-green-100 text-green-700' :

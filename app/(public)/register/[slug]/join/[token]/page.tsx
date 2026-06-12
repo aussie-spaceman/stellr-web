@@ -1,5 +1,4 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { supabaseServer } from '@/lib/supabase'
 import GroupJoinClient from './GroupJoinClient'
@@ -11,12 +10,11 @@ interface PageProps {
 export default async function GroupJoinPage({ params }: PageProps) {
   const { slug, token } = await params
 
-  // If not signed in, redirect to sign-in with return URL
+  // Brand-new participants don't need an account up front — they fill their
+  // details on this page and are auto-provisioned + signed in on submit (the
+  // hosted Clerk sign-in widget is timeout-prone and blocks first-timers).
+  // Signed-in members still get the one-click confirm path below.
   const { userId } = await auth()
-  if (!userId) {
-    const returnUrl = `/register/${slug}/join/${token}`
-    redirect(`/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`)
-  }
 
   // Validate the token
   const db = supabaseServer()
@@ -103,6 +101,7 @@ export default async function GroupJoinPage({ params }: PageProps) {
             organiserRole={organiserRole}
             schoolName={reg.school_name}
             memberPaysIndividually={reg.member_pays_individually}
+            isAuthenticated={!!userId}
           />
         )}
       </div>

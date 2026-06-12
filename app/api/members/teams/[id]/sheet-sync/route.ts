@@ -5,6 +5,7 @@ import { readSheetParticipants, watchSheet, isGoogleSheetsConfigured } from '@/l
 import { upsertMember } from '@/lib/member-sync'
 import { linkMembersToRegistrationSchool } from '@/lib/school-link'
 import { recordEventParticipationForRegistration } from '@/lib/event-participation-sync'
+import { ownsTeam } from '@/lib/team-access'
 import { randomUUID } from 'crypto'
 
 // POST /api/members/teams/[id]/sheet-sync
@@ -22,23 +23,26 @@ export async function POST(
 
   const { data: member } = await db
     .from('members')
-    .select('id, event_role')
+    .select('id, email')
     .eq('clerk_user_id', userId)
     .eq('is_active', true)
     .maybeSingle()
 
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-  if (member.event_role !== 'teacher' && member.event_role !== 'school_student_manager') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { data: registration } = await db
     .from('registrations')
-    .select('id, teacher_member_id, spreadsheet_id, event_title, school_name')
+    .select('id, teacher_member_id, teacher_email, spreadsheet_id, event_title, school_name')
     .eq('id', registrationId)
     .eq('type', 'group')
     .maybeSingle()
 
   if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
-  if (registration.teacher_member_id !== member.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // Ownership by member id OR registrant email (see lib/team-access).
+  if (!ownsTeam(member, registration)) {
+    console.warn('[teams/sheet-sync] Access denied', { registrationId, memberId: member.id })
+    return NextResponse.json({ error: 'You do not have access to this team' }, { status: 403 })
+  }
   if (!registration.spreadsheet_id) return NextResponse.json({ error: 'No spreadsheet linked to this team' }, { status: 400 })
 
   if (!isGoogleSheetsConfigured()) {

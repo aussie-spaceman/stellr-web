@@ -5,6 +5,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@clerk/nextjs'
+import { useSignIn } from '@clerk/nextjs/legacy'
 import FieldError from '@/components/forms/FieldError'
 import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
 import { GRADES, T_SHIRT_SIZES, GENDERS, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, deriveAgeBracket } from '@/lib/registration-constants'
@@ -76,6 +78,9 @@ export default function IndividualRegistrationForm({
   )
   const [schoolError, setSchoolError] = useState<string | null>(null)
   const router = useRouter()
+  const { signIn, setActive, isLoaded: signInLoaded } = useSignIn()
+  const { isSignedIn } = useAuth()
+  const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
   const {
     register,
@@ -181,10 +186,33 @@ export default function IndividualRegistrationForm({
         throw new Error(body.error ?? 'Registration failed')
       }
 
-      const { registrationId, checkoutUrl } = await res.json()
+      const { registrationId, checkoutUrl, signInToken } = await res.json()
+
+      // Silently sign a brand-new registrant in (Clerk ticket flow) so they land
+      // in the member portal already authenticated. Non-fatal — if it fails they
+      // can sign in later with the same email. Set before any redirect so the
+      // session cookie survives a detour through Stripe checkout.
+      let signedIn = !!isSignedIn
+      if (signInToken && !isSignedIn && signInLoaded && signIn) {
+        try {
+          const result = await signIn.create({ strategy: 'ticket', ticket: signInToken })
+          if (result.status === 'complete' && result.createdSessionId) {
+            await setActive({ session: result.createdSessionId })
+            signedIn = true
+          }
+        } catch (signInErr) {
+          console.error('Auto sign-in failed (non-fatal):', signInErr)
+        }
+      }
+
       if (checkoutUrl) {
+        // success_url already points at the member portal (/community modal).
         window.location.href = checkoutUrl
+      } else if (signedIn) {
+        // Free registration → straight into the portal with the modal.
+        window.location.href = `${APP_URL}/community?registered=1&type=individual`
       } else {
+        // Couldn't sign them in — fall back to the standalone confirmation page.
         router.push(`/register/${eventSlug}/confirmation?id=${registrationId}&type=individual`)
       }
     } catch (e: unknown) {

@@ -1,7 +1,9 @@
 import Link from 'next/link'
+import { Suspense } from 'react'
 import { Lock } from 'lucide-react'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, memberMeetsTier } from '@/lib/community'
+import { RegistrationSubmittedModal } from '@/components/community/RegistrationSubmittedModal'
 
 export const metadata = { title: 'Community · Spaces' }
 
@@ -29,6 +31,9 @@ export default async function CommunityHomePage() {
 
   return (
     <div>
+      <Suspense fallback={null}>
+        <RegistrationSubmittedModal />
+      </Suspense>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Spaces</h1>
         <p className="text-sm text-gray-500 mt-1">

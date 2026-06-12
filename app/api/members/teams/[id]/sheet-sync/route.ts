@@ -1,11 +1,9 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { readSheetParticipants, watchSheet, isGoogleSheetsConfigured } from '@/lib/google-sheets'
-import { upsertMember } from '@/lib/member-sync'
-import { linkMembersToRegistrationSchool } from '@/lib/school-link'
-import { recordEventParticipationForRegistration } from '@/lib/event-participation-sync'
+import { watchSheet, isGoogleSheetsConfigured } from '@/lib/google-sheets'
 import { ownsTeam } from '@/lib/team-access'
+import { syncParticipantsFromSheet } from '@/lib/sheet-participant-sync'
 import { randomUUID } from 'crypto'
 
 // POST /api/members/teams/[id]/sheet-sync

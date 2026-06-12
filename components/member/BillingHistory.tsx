@@ -37,6 +37,10 @@ interface Participation {
   individual_payment_status: string | null
   school_name: string | null
   registrations: ParticipationReg | ParticipationReg[] | null
+  // Computed server-side: 'self' = this member owes (active "Pay now"),
+  // 'organiser' = a group payment the organiser owes (greyed), null = nothing due.
+  pay_kind?: 'self' | 'organiser' | null
+  is_owner?: boolean
 }
 
 function formatAmount(amount: number, currency: string) {
@@ -90,6 +94,28 @@ export function BillingHistory() {
   const [participations, setParticipations] = useState<Participation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [payingId, setPayingId] = useState<string | null>(null)
+
+  async function handlePay(registrationId: string) {
+    setPayingId(registrationId)
+    try {
+      const res = await fetch('/api/members/billing/payment-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registrationId }),
+      })
+      const data = await res.json()
+      if (res.ok && data.url) {
+        window.location.href = data.url
+      } else {
+        setError(data.error ?? 'Could not start payment. Please try again.')
+        setPayingId(null)
+      }
+    } catch {
+      setError('Could not start payment. Please try again.')
+      setPayingId(null)
+    }
+  }
 
   useEffect(() => {
     fetch('/api/members/billing')
@@ -167,6 +193,29 @@ export function BillingHistory() {
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${style}`}>
                           {label}
                         </span>
+                        {p.pay_kind === 'self' && (
+                          <div className="mt-1">
+                            <button
+                              onClick={() => handlePay(reg.id)}
+                              disabled={payingId === reg.id}
+                              className="text-xs font-medium text-brand-blue hover:text-brand-blue-dark disabled:opacity-50"
+                            >
+                              {payingId === reg.id ? 'Starting…' : 'Pay now →'}
+                            </button>
+                          </div>
+                        )}
+                        {p.pay_kind === 'organiser' && (
+                          <div className="mt-1">
+                            <span
+                              className="text-xs font-medium text-gray-300 cursor-not-allowed"
+                              title={p.is_owner
+                                ? 'Settle this using the invoice below.'
+                                : 'Your group organiser will pay this.'}
+                            >
+                              Pay now →
+                            </span>
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         {receiptAvailable(p, reg) ? (

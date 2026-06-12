@@ -63,12 +63,15 @@ export async function GET() {
       registrations(
         id, event_slug, event_title, school_name, status, created_at, type,
         member_pays_individually, invoice_requested,
-        teacher_first_name, teacher_last_name
+        teacher_first_name, teacher_last_name, teacher_member_id
       )
     `)
     .eq('member_id', member.id)
 
-  type ParticipationReg = { created_at: string; type: string | null }
+  type ParticipationReg = {
+    created_at: string; type: string | null; status?: string | null
+    member_pays_individually?: boolean; teacher_member_id?: string | null
+  }
   const regOf = (p: { registrations: ParticipationReg | ParticipationReg[] | null }) =>
     Array.isArray(p.registrations) ? p.registrations[0] : p.registrations
 
@@ -77,6 +80,25 @@ export async function GET() {
     .sort((a, b) => {
       const dateOf = (p: typeof a) => p.join_completed_at ?? regOf(p)?.created_at ?? ''
       return dateOf(b).localeCompare(dateOf(a))
+    })
+    // Annotate each row with who can pay: 'self' (the member owes — active "Pay
+    // now"), 'organiser' (a group payment the organiser owes — greyed for
+    // members), or null (settled / nothing due). is_owner lets the UI tailor the
+    // organiser message for teachers / student managers.
+    .map(p => {
+      const reg = regOf(p)
+      let pay_kind: 'self' | 'organiser' | null = null
+      if (reg) {
+        const open = reg.status !== 'confirmed' && reg.status !== 'cancelled'
+        if (reg.type === 'individual') {
+          if (open) pay_kind = 'self'
+        } else if (reg.member_pays_individually) {
+          if (p.individual_payment_status === 'pending') pay_kind = 'self'
+        } else if (open) {
+          pay_kind = 'organiser'
+        }
+      }
+      return { ...p, pay_kind, is_owner: !!reg && reg.teacher_member_id === member.id }
     })
 
   // ── Account credits (issued from cancelled registrations) ────────────────────

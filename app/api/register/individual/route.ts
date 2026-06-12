@@ -9,8 +9,13 @@ import { resolveAndLinkSchool } from '@/lib/school-link'
 import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 import { getCurrentMember } from '@/lib/community'
+import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
+const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
+// Where a registrant lands afterwards — the member portal, with a flag the
+// /community page reads to pop the "registration submitted" modal.
+const POST_REGISTER_URL = `${APP_URL}/community?registered=1&type=individual`
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -217,14 +222,31 @@ export async function POST(req: NextRequest) {
       relationship:      emergency_contact_relationship,
     })
 
+    // Provision a Clerk account + sign-in token so a brand-new registrant is
+    // silently signed in and lands in the member portal (/community) afterwards.
+    // Already-signed-in members have a session + clerk_user_id already. Non-fatal
+    // — a Clerk hiccup must never fail the registration.
+    let signInToken: string | null = null
+    if (!sessionMember) {
+      try {
+        const provisioned = await ensureClerkUserAndSignInToken(email, first_name, last_name)
+        signInToken = provisioned.signInToken
+        if (memberId) {
+          await db.from('members').update({ clerk_user_id: provisioned.clerkUserId }).eq('id', memberId)
+        }
+      } catch (clerkErr) {
+        console.error('Clerk provisioning (non-fatal):', clerkErr)
+      }
+    }
+
     // Look up Stripe Price ID from Sanity
     const event = await getEventBySlug(event_slug)
     const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId
     const stripe = getStripe()
 
     if (!stripePriceId || !stripe) {
-      // No payment configured — go straight to confirmation
-      return NextResponse.json({ registrationId: regId, checkoutUrl: null }, { status: 201 })
+      // No payment configured — sign in (client) and go straight to /community.
+      return NextResponse.json({ registrationId: regId, checkoutUrl: null, signInToken }, { status: 201 })
     }
 
     // Create Stripe Checkout session
@@ -241,11 +263,14 @@ export async function POST(req: NextRequest) {
         eventSlug: event_slug,
         participantName: `${first_name} ${last_name}`,
       },
-      success_url: `${SITE_URL}/register/${event_slug}/confirmation?id=${regId}&type=individual&payment=success`,
+      // After payment, land in the member portal with the registration modal —
+      // the client signs the registrant in before redirecting to Stripe, so the
+      // session cookie is already set when they return here.
+      success_url: `${POST_REGISTER_URL}&payment=success`,
       cancel_url: `${SITE_URL}/register/${event_slug}/individual?cancelled=true`,
     })
 
-    return NextResponse.json({ registrationId: regId, checkoutUrl: session.url }, { status: 201 })
+    return NextResponse.json({ registrationId: regId, checkoutUrl: session.url, signInToken }, { status: 201 })
   } catch (e) {
     console.error('Individual registration error:', e)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

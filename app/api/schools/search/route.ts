@@ -1,22 +1,25 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 
 // GET /api/schools/search?q=<query>
+// Public: the school picker lives on the public (www) registration form, so an
+// unauthenticated registrant must be able to search. Only non-sensitive
+// reference data (name/city/state) is returned.
 export async function GET(req: Request) {
-  const { userId } = await auth()
-  if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
-
   const { searchParams } = new URL(req.url)
   const q = searchParams.get('q')?.trim() ?? ''
 
   if (q.length < 2) return NextResponse.json({ schools: [] })
 
   const db = supabaseServer()
+  // Include legacy rows whose is_active was never set (NULL) — schools created
+  // by registration linking / the 024 backfill predate the is_active default,
+  // and excluding them is why existing schools didn't show up in search. Only
+  // schools explicitly deactivated (is_active = false) are hidden.
   const { data } = await db
     .from('schools')
     .select('id, name, city, state')
-    .eq('is_active', true)
+    .or('is_active.is.null,is_active.eq.true')
     .ilike('name', `%${q}%`)
     .order('name')
     .limit(8)

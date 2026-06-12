@@ -25,6 +25,18 @@ interface Member {
 interface Props {
   membership: Membership | null | undefined
   member: Member
+  /** The member's 7-digit Membership ID (from participants.membership_id). */
+  membershipId?: string | null
+}
+
+function MemberIdRow({ membershipId }: { membershipId?: string | null }) {
+  if (!membershipId) return null
+  return (
+    <div className="flex items-center justify-between text-sm mb-4 pb-4 border-b border-gray-100">
+      <span className="text-gray-500">Member ID</span>
+      <span className="font-mono font-medium text-gray-900">{membershipId}</span>
+    </div>
+  )
 }
 
 function formatDate(dateStr: string) {
@@ -33,13 +45,14 @@ function formatDate(dateStr: string) {
   })
 }
 
-export function MembershipCard({ membership, member }: Props) {
+export function MembershipCard({ membership, member, membershipId }: Props) {
   if (!membership) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
           Membership
         </h2>
+        <MemberIdRow membershipId={membershipId} />
         <p className="text-sm text-gray-600 mb-4">No active membership found.</p>
         <Link
           href="/membership"
@@ -60,6 +73,8 @@ export function MembershipCard({ membership, member }: Props) {
       <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
         Membership
       </h2>
+
+      <MemberIdRow membershipId={membershipId} />
 
       <div className="mb-4">
         <div className="flex items-center justify-between">

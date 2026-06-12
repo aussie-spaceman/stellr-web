@@ -14,6 +14,8 @@ interface Envelope {
   completed_at: string | null
   reminder_sent_at: string | null
   reused_from?: string | null
+  signers_total?: number | null
+  signers_completed?: number | null
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -42,6 +44,33 @@ export const ENVELOPE_STATUS_STYLES: Record<string, { label: string; cls: string
 
 export function EnvelopeStatusBadge({ status }: { status: string }) {
   const { label, cls } = ENVELOPE_STATUS_STYLES[status] ?? { label: status, cls: 'bg-gray-100 text-gray-500' }
+  return <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
+}
+
+// Signer-progress pill — mirrors the Event Management roster logic so the portal
+// and admin event views agree: issued (red), partially complete (orange, some
+// but not all signers done), complete (green); plus declined (red), voided
+// (gray), on-file (teal). Needs signers_total / signers_completed (migration
+// 032) to surface the partial state; falls back to the flat status otherwise.
+function EnvelopeProgressBadge({ env }: { env: Envelope }) {
+  const total = env.signers_total ?? 1
+  const completed = env.signers_completed ?? 0
+
+  let label: string
+  let cls: string
+  if (env.reused_from) {
+    label = 'On file'; cls = 'bg-teal-100 text-teal-700'
+  } else if (env.status === 'completed') {
+    label = 'Complete'; cls = 'bg-green-100 text-green-700'
+  } else if (env.status === 'declined') {
+    label = 'Declined'; cls = 'bg-red-100 text-red-600'
+  } else if (env.status === 'voided') {
+    label = 'Voided'; cls = 'bg-gray-100 text-gray-500'
+  } else if (completed > 0 && completed < total) {
+    label = `Partially complete · ${completed} of ${total} signed`; cls = 'bg-orange-100 text-orange-700'
+  } else {
+    label = 'Issued'; cls = 'bg-red-100 text-red-600'
+  }
   return <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
 }
 
@@ -153,9 +182,10 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
                 <p className="text-sm font-medium text-gray-900">{env.event_title}</p>
                 <p className="text-xs text-gray-500 mt-0.5">{TYPE_LABEL[type] ?? 'Agreement'}</p>
                 {isMinorEnv && (
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Sent to {env.signer_name} &middot; {env.signer_email}
-                  </p>
+                  <div className="text-xs text-gray-500 mt-0.5 space-y-0.5">
+                    <p>Parent / guardian: {env.signer_name} &middot; {env.signer_email}</p>
+                    {env.minor_name && <p>Participant: {env.minor_name}</p>}
+                  </div>
                 )}
                 <p className="text-xs text-gray-400 mt-0.5">
                   {env.reused_from ? (
@@ -175,7 +205,7 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
                 )}
               </div>
               <div className="flex items-center gap-3 shrink-0 mt-0.5">
-                <EnvelopeStatusBadge status={env.reused_from ? 'on_file' : env.status} />
+                <EnvelopeProgressBadge env={env} />
                 {env.status === 'completed' && (
                   <button
                     onClick={() => handleDownload(env.id, env.minor_name, type)}

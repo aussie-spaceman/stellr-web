@@ -20,7 +20,7 @@ export async function GET() {
 
   const { data: envelopes } = await db
     .from('docusign_envelopes')
-    .select('id, envelope_id, status, envelope_type, signer_name, signer_email, minor_name, event_title, event_slug, sent_at, completed_at, reminder_sent_at, reused_from')
+    .select('id, envelope_id, status, envelope_type, signer_name, signer_email, minor_name, event_title, event_slug, sent_at, completed_at, reminder_sent_at, reused_from, signers_total, signers_completed')
     .eq('member_id', member.id)
     .order('sent_at', { ascending: false })
 

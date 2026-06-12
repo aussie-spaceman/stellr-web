@@ -57,7 +57,7 @@ export default async function AccountPage({
   const { data: myParticipantRows } = await db
     .from('participants')
     .select(
-      'id, checked_in_at, event_companies(number, name), registrations(event_slug, event_title, status, type)'
+      'id, membership_id, checked_in_at, event_companies(number, name), registrations(event_slug, event_title, status, type)'
     )
     .or(`member_id.eq.${member.id},email.eq.${member.email}`)
   const myRegistrations = (myParticipantRows ?? [])
@@ -81,6 +81,14 @@ export default async function AccountPage({
         : null
     })
     .filter((r): r is NonNullable<typeof r> => r !== null)
+
+  // The member's 7-digit Membership ID lives on their participant rows; surface
+  // the lowest (their original, zero-padded so string sort == numeric order) —
+  // it's the ID they were assigned and that their confirmation email references.
+  const membershipId = (myParticipantRows ?? [])
+    .map((p) => (p as { membership_id?: string | null }).membership_id)
+    .filter((m): m is string => !!m)
+    .sort()[0] ?? null
 
   const activeMembership = member.member_memberships
     ?.filter((m: { renewal_status: string }) => m.renewal_status === 'active')
@@ -152,7 +160,7 @@ export default async function AccountPage({
             <DocusignsSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
           </div>
           <div>
-            <MembershipCard membership={activeMembership} member={member} />
+            <MembershipCard membership={activeMembership} member={member} membershipId={membershipId} />
           </div>
         </div>
       )}

@@ -33,7 +33,7 @@ export default async function AdminMemberPage({
       .eq('id', id)
       .maybeSingle(),
     db.from('membership_tiers').select('id, name').order('sort_order'),
-    db.from('schools').select('id, name').eq('is_active', true).order('name'),
+    db.from('schools').select('id, name').or('is_active.is.null,is_active.eq.true').order('name'),
     db.from('ethnicity_options').select('id, name').order('name'),
     db.from('allergy_options').select('id, name').order('name'),
     db
@@ -45,6 +45,17 @@ export default async function AdminMemberPage({
 
   if (!member) notFound()
 
+  // The member's 7-digit Membership ID lives on their participant rows (assigned
+  // by sequence on first registration). Surface the earliest one — that's the ID
+  // they were given and that the confirmation email references.
+  const { data: firstParticipant } = await db
+    .from('participants')
+    .select('membership_id')
+    .or(`member_id.eq.${member.id},email.eq.${member.email}`)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
   return (
     <AdminMemberDetail
       member={member}
@@ -53,6 +64,7 @@ export default async function AdminMemberPage({
       ethnicityOptions={ethnicityOptions ?? []}
       allergyOptions={allergyOptions ?? []}
       registrations={registrations ?? []}
+      membershipId={(firstParticipant as { membership_id?: string } | null)?.membership_id ?? null}
     />
   )
 }

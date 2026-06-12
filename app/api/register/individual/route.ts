@@ -5,7 +5,8 @@ import { getEventBySlug } from '@/lib/sanity'
 import type { RegistrationRow, ParticipantRow } from '@/lib/database.types'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt } from '@/lib/member-enums'
-import { linkMembersToSchoolByName } from '@/lib/school-link'
+import { resolveAndLinkSchool } from '@/lib/school-link'
+import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 import { getCurrentMember } from '@/lib/community'
 
@@ -139,15 +140,19 @@ export async function POST(req: NextRequest) {
 
     // Resolve the school to a schools row and link the member to it, so the
     // school surfaces in /admin/schools and on the member page — not just as
-    // free text on the participant row.
+    // free text on the participant row. When the registrant picked an existing
+    // school, school_id is authoritative (we link to it, never create a dupe);
+    // otherwise we resolve-or-create by normalized name. resolvedSchool.state is
+    // the canonical state used to fill the DocuSign "State of Residence" tab.
+    const resolvedSchool = await resolveAndLinkSchool(db, memberId ? [memberId] : [], {
+      id: body.school_id ?? null,
+      name: school_name,
+      address_street: body.school_address_street ?? null,
+      address_city: body.school_address_city ?? null,
+      address_state: school_address_state ?? null,
+      address_zip: body.school_address_zip ?? null,
+    })
     if (memberId) {
-      await linkMembersToSchoolByName(db, [memberId], {
-        name: school_name,
-        address_street: body.school_address_street ?? null,
-        address_city: body.school_address_city ?? null,
-        address_state: school_address_state ?? null,
-        address_zip: body.school_address_zip ?? null,
-      })
       await syncMemberOptionSelections(db, [
         { memberId, ethnicity, dietary: dietary_requirements },
       ])
@@ -175,6 +180,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to save participant details' }, { status: 500 })
     }
 
+    // Record this registration in event_participations so it appears in the
+    // "Event Activity" lists on the member portal and admin member page.
+    await recordEventParticipation(db, { memberId, eventSlug: event_slug, eventTitle: event_title })
+
     // Trigger the appropriate DocuSign agreement (minor consent, or self-signed
     // adult/mentor participation agreement) for this participant.
     await dispatchAgreement(db, {
@@ -189,7 +198,10 @@ export async function POST(req: NextRequest) {
       dateOfBirth:       date_of_birth,
       eventRole:         event_role,
       schoolName:        school_name,
-      schoolState:       school_address_state,
+      // Prefer the canonical state on the linked school row — the form only
+      // sends an address (and thus a state) for brand-new schools, so for an
+      // existing-school selection school_address_state is empty.
+      schoolState:       resolvedSchool?.state ?? school_address_state ?? null,
       guardianFirstName: emergency_contact_first_name,
       guardianLastName:  emergency_contact_last_name,
       guardianEmail:     emergency_contact_email,

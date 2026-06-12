@@ -6,6 +6,7 @@ import { getEventBySlug } from '@/lib/sanity'
 import { sendEmail, groupMemberJoinedEmail, groupMemberIndividualPaymentEmail } from '@/lib/email'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
+import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { normalizeEventRole } from '@/lib/member-enums'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
@@ -118,6 +119,9 @@ export async function POST(req: NextRequest) {
     address_state: (reg.school_address_state as string) || null,
     address_zip: (reg.school_address_zip as string) || null,
   })
+
+  // Record the event in the joining member's Event Activity (event_participations).
+  await recordEventParticipation(db, { memberId: member.id, eventSlug, eventTitle })
 
   // Trigger the appropriate DocuSign agreement (minor consent, or self-signed
   // adult/mentor participation agreement) based on the member's age and role.

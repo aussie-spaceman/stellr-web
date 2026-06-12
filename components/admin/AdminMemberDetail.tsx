@@ -65,6 +65,8 @@ interface Props {
   ethnicityOptions: Option[]
   allergyOptions: Option[]
   registrations: Registration[]
+  /** The member's 7-digit Membership ID (from participants.membership_id). */
+  membershipId: string | null
 }
 
 const TIER_TOOLTIPS: Record<string, string> = {
@@ -96,7 +98,7 @@ function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations }: Props) {
+export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, membershipId }: Props) {
   const router = useRouter()
   const [form, setForm] = useState({
     first_name: member.first_name,
@@ -483,6 +485,14 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
               Membership
             </h2>
+            <div className="flex items-center justify-between text-sm mb-3 pb-3 border-b border-gray-100">
+              <span className="text-gray-500">Member ID</span>
+              {membershipId ? (
+                <span className="font-mono font-medium text-gray-900">{membershipId}</span>
+              ) : (
+                <span className="text-gray-400">Not yet assigned</span>
+              )}
+            </div>
             {activeMembership ? (
               <div className="space-y-2 text-sm">
                 <div className="font-semibold text-gray-900 text-base">

@@ -13,6 +13,7 @@ import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt } from '@/lib/member-enums'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
+import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 import { getCurrentMember } from '@/lib/community'
 import type { RegistrationRow } from '@/lib/database.types'
@@ -229,6 +230,15 @@ export async function POST(req: NextRequest) {
       address_state: teacher.school_address_state ?? null,
       address_zip: teacher.school_address_zip ?? null,
     })
+
+    // Record the event in each member's Event Activity (event_participations),
+    // so the group registration surfaces on their member/portal pages — not
+    // just on the event roster. Non-fatal, idempotent per (member, event).
+    await Promise.all(
+      Object.values(memberIdMap).map((memberId) =>
+        recordEventParticipation(db, { memberId, eventSlug: event_slug, eventTitle: event_title })
+      )
+    )
 
     // Persist each member's ethnicity/dietary selections onto the canonical
     // join tables (030) — same non-fatal contract as school linking.

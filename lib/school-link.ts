@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface SchoolDetails {
+  /** When the registrant picked an existing school from search, its id is
+   *  authoritative — we link to it directly and never resolve/create by name
+   *  (which is what spawned duplicate "Alta High School" rows). */
+  id?: string | null
   name: string | null | undefined
   address_street?: string | null
   address_city?: string | null
@@ -8,16 +12,26 @@ export interface SchoolDetails {
   address_zip?: string | null
 }
 
-// Resolve a free-text school name to a schools.id, creating the school row if
-// it doesn't exist yet. Matching is case-insensitive on the trimmed name so
-// registrations don't spawn near-duplicate schools. Returns null when no name
-// was given or the lookup/insert fails (callers treat school linking as
+// Collapse internal whitespace and trim so "Alta  High School " and
+// "Alta High School" resolve to the same row.
+function normalizeName(name: string): string {
+  return name.trim().replace(/\s+/g, ' ')
+}
+
+// Resolve a school selection to a schools.id, creating the school row if it
+// doesn't exist yet. When the caller supplies an explicit `id` (the registrant
+// chose an existing school), that id is used verbatim — no name match, no
+// create. Otherwise the name is matched case-insensitively on its normalized
+// form so registrations don't spawn near-duplicate schools. Returns null when
+// nothing was given or the lookup/insert fails (callers treat school linking as
 // non-fatal — the registration must never fail because of it).
 export async function resolveSchoolId(
   db: SupabaseClient,
   school: SchoolDetails
 ): Promise<string | null> {
-  const name = school.name?.trim()
+  if (school.id) return school.id
+
+  const name = school.name ? normalizeName(school.name) : ''
   if (!name) return null
 
   const { data: existing, error: lookupError } = await db
@@ -36,6 +50,10 @@ export async function resolveSchoolId(
     .from('schools')
     .insert({
       name,
+      // New schools must be active so they show up in the registration search
+      // immediately (the search filters on is_active). Legacy rows created
+      // before this default are repaired by the schools-hardening migration.
+      is_active: true,
       address_line1: school.address_street?.trim() || null,
       city: school.address_city?.trim() || null,
       state: school.address_state?.trim() || null,
@@ -103,6 +121,30 @@ export async function linkMembersToSchoolByName(
     await linkMembersToSchool(db, memberIds, schoolId)
   } catch (e) {
     console.error('[school-link] Linking failed (non-fatal):', e)
+  }
+}
+
+// Like linkMembersToSchoolByName, but also returns the resolved school's id and
+// canonical state. The individual registration route needs the state to fill
+// the DocuSign "State of Residence" tab — and the authoritative value is the
+// stored school's state, not the (usually empty) address fields the form sends
+// for an existing-school selection. Non-fatal: returns null on any failure.
+export async function resolveAndLinkSchool(
+  db: SupabaseClient,
+  memberIds: (string | null | undefined)[],
+  school: SchoolDetails
+): Promise<{ id: string; state: string | null } | null> {
+  try {
+    const schoolId = await resolveSchoolId(db, school)
+    if (!schoolId) return null
+    let state: string | null = school.address_state?.trim() || null
+    const { data } = await db.from('schools').select('state').eq('id', schoolId).maybeSingle()
+    if (data?.state) state = data.state
+    await linkMembersToSchool(db, memberIds, schoolId)
+    return { id: schoolId, state }
+  } catch (e) {
+    console.error('[school-link] resolveAndLinkSchool failed (non-fatal):', e)
+    return null
   }
 }
 

@@ -91,6 +91,14 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-brand-blue mt-0.5">→</span>
+                <span>
+                  <span className="font-medium text-brand-blue-dark">Check your email to sign your DocuSign agreement</span> —
+                  a parental consent form (sent to your parent/guardian for under-18s) or your participation
+                  agreement. Your place isn&apos;t secured until it&apos;s signed.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-brand-blue mt-0.5">→</span>
                 Confirmation email with your Membership ID sent to your inbox
               </li>
               <li className="flex items-start gap-2">

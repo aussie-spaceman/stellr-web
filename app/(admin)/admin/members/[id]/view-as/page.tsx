@@ -40,12 +40,23 @@ export default async function ViewAsMemberPage({
     db.from('allergy_options').select('id, name').order('name'),
     db
       .from('docusign_envelopes')
-      .select('id, envelope_id, status, envelope_type, signer_name, signer_email, minor_name, event_title, sent_at, completed_at, reminder_sent_at, reused_from')
+      .select('id, envelope_id, status, envelope_type, signer_name, signer_email, minor_name, event_title, sent_at, completed_at, reminder_sent_at, reused_from, signers_total, signers_completed')
       .eq('member_id', id)
       .order('sent_at', { ascending: false }),
   ])
 
   if (!member) notFound()
+
+  // The member's 7-digit Membership ID lives on their participant rows; surface
+  // the lowest (zero-padded so string sort == numeric order) — their original.
+  const { data: participantIds } = await db
+    .from('participants')
+    .select('membership_id')
+    .or(`member_id.eq.${member.id},email.eq.${member.email}`)
+  const membershipId = (participantIds ?? [])
+    .map((p) => (p as { membership_id?: string | null }).membership_id)
+    .filter((m): m is string => !!m)
+    .sort()[0] ?? null
 
   const activeMembership = member.member_memberships
     ?.filter((m: { renewal_status: string }) => m.renewal_status === 'active')
@@ -96,7 +107,7 @@ export default async function ViewAsMemberPage({
             {showBilling && <BillingHistory />}
           </div>
           <div>
-            <MembershipCard membership={activeMembership} member={member} />
+            <MembershipCard membership={activeMembership} member={member} membershipId={membershipId} />
           </div>
         </div>
       </div>

@@ -11,6 +11,10 @@ interface Participation {
   team_name: string | null
   award: string | null
   status?: string | null
+  // Set on records auto-created from an event registration (migration 034);
+  // null for member-logged historical activity.
+  event_title?: string | null
+  event_slug?: string | null
 }
 
 interface Props {
@@ -175,9 +179,15 @@ export function EventHistory({ participations: initialParticipations, editable =
             >
               <div>
                 <p className="text-sm font-medium text-gray-900">
-                  {p.event_year ?? '—'}
-                  {p.event_location ? ` · ${p.event_location}` : ''}
+                  {p.event_title
+                    ? p.event_title
+                    : `${p.event_year ?? '—'}${p.event_location ? ` · ${p.event_location}` : ''}`}
                 </p>
+                {p.event_title && (p.event_year || p.event_location) && (
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {[p.event_year, p.event_location].filter(Boolean).join(' · ')}
+                  </p>
+                )}
                 {p.team_name && (
                   <p className="text-xs text-gray-500 mt-0.5">Team: {p.team_name}</p>
                 )}

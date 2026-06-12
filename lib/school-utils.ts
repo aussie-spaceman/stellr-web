@@ -1,6 +1,9 @@
 import type { SchoolSelection } from '@/components/member/SchoolSearchInput'
 
 export interface SchoolPayload {
+  /** Set only when an existing school was picked from search. The server links
+   *  to this id directly instead of re-resolving by name (which created dupes). */
+  school_id: string | null
   school_name: string
   school_address_street: string | null
   school_address_city: string | null
@@ -9,11 +12,12 @@ export interface SchoolPayload {
 }
 
 export function resolveSchoolPayload(sel: SchoolSelection | null): SchoolPayload {
-  if (!sel) return { school_name: '', school_address_street: null, school_address_city: null, school_address_state: null, school_address_zip: null }
+  if (!sel) return { school_id: null, school_name: '', school_address_street: null, school_address_city: null, school_address_state: null, school_address_zip: null }
   if (sel.type === 'existing') {
-    return { school_name: sel.name, school_address_street: null, school_address_city: null, school_address_state: null, school_address_zip: null }
+    return { school_id: sel.id, school_name: sel.name, school_address_street: null, school_address_city: null, school_address_state: null, school_address_zip: null }
   }
   return {
+    school_id: null,
     school_name: sel.data.name,
     school_address_street: sel.data.address_line1 || null,
     school_address_city: sel.data.city || null,

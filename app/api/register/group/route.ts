@@ -26,6 +26,18 @@ function getStripe() {
   return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
 }
 
+// The "minor → school_student" override must never strip an organiser of their
+// role. A teacher / student-manager keeps it regardless of DOB — a test or
+// mistyped birthdate previously downgraded the registrant to school_student,
+// which hid their own group from /account?tab=teams and 403'd team management.
+// Everyone else (students, additional adults, mentors) follows the age rule.
+const ORGANISER_ROLES = new Set(['teacher', 'school_student_manager'])
+function resolveRoleForAge(rawRole: unknown, ageNow: number): string {
+  const role = normalizeEventRole(rawRole)
+  if (ORGANISER_ROLES.has(role)) return role
+  return Number.isFinite(ageNow) && ageNow < 18 ? 'school_student' : role
+}
+
 interface ParticipantPayload {
   first_name: string; last_name: string; email: string; phone: string
   date_of_birth: string; grade?: string; gender: string; t_shirt_size: string
@@ -191,7 +203,7 @@ export async function POST(req: NextRequest) {
         grade: normalizeGrade(p.grade),
         tshirt_size: normalizeTshirt(p.t_shirt_size),
         age_bracket: ageNow < 18 ? 'high_school' : normalizeAgeBracket(p.age_bracket),
-        event_role: normalizeEventRole(ageNow < 18 ? (p.event_role === 'school_student_manager' ? 'school_student_manager' : 'school_student') : p.event_role),
+        event_role: resolveRoleForAge(p.event_role, ageNow),
         is_active: true,
         // Persist the profile so each member doesn't re-enter it next time (028).
         // Emergency contact goes to the members table's canonical ec_* columns —
@@ -295,11 +307,9 @@ export async function POST(req: NextRequest) {
       t_shirt_size: p.t_shirt_size,
       school_name: teacher.school_name as string,
       age_bracket: p.age_bracket,
-      event_role: normalizeEventRole(
-        new Date().getFullYear() - new Date(p.date_of_birth).getFullYear() < 18 &&
-        normalizeEventRole(p.event_role) !== 'school_student_manager'
-          ? 'school_student'
-          : p.event_role
+      event_role: resolveRoleForAge(
+        p.event_role,
+        new Date().getFullYear() - new Date(p.date_of_birth).getFullYear(),
       ),
       dietary_requirements: p.dietary_requirements ?? [],
       health_conditions: p.health_conditions || null,

@@ -37,6 +37,15 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
+// School is mandatory. A selection only counts when it's a real choice — an
+// existing school (has an id) or a new school with a non-empty name. A bare/empty
+// selection (e.g. an "+ Add" click with nothing typed) must not satisfy it.
+function schoolSelectionIsValid(sel: SchoolSelection | null): boolean {
+  if (!sel) return false
+  if (sel.type === 'existing') return !!sel.id
+  return sel.data.name.trim().length > 0
+}
+
 
 export default function IndividualRegistrationForm({
   eventSlug,
@@ -123,7 +132,7 @@ export default function IndividualRegistrationForm({
       setFieldError('grade', { type: 'manual', message: 'Required' })
       valid = false
     }
-    if (!schoolSelection) {
+    if (!schoolSelectionIsValid(schoolSelection)) {
       setSchoolError('Please select your school')
       return
     }
@@ -132,6 +141,13 @@ export default function IndividualRegistrationForm({
   }
 
   async function onSubmit(data: FormData) {
+    // Backstop the mandatory-school rule on submit too — not just on the step-1
+    // gate — so a stale/empty selection can never slip through to the server.
+    if (!schoolSelectionIsValid(schoolSelection)) {
+      setSchoolError('Please select your school')
+      setStep(1)
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {

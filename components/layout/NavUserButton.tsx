@@ -13,7 +13,7 @@ export function NavUserButton({ isAdmin }: { isAdmin: boolean }) {
         <UserButton.Link
           label="My Stellr"
           labelIcon={<Sparkles size={14} />}
-          href={`${AUTH_URL}/community`}
+          href={`${AUTH_URL}/account`}
         />
         {isAdmin && (
           <UserButton.Link

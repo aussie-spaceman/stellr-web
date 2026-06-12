@@ -44,6 +44,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    // School is mandatory — accept either an existing school id or a non-empty
+    // new-school name. Server-side backstop so the requirement holds even if the
+    // client validation is bypassed.
+    const hasSchool = !!body.school_id || (typeof school_name === 'string' && school_name.trim().length > 0)
+    if (!hasSchool) {
+      return NextResponse.json({ error: 'Please select your school.' }, { status: 400 })
+    }
+
     const db = supabaseServer()
 
     // Duplicate check: same email for the same event

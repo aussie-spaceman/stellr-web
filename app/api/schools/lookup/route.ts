@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 
 // GET /api/schools/lookup?name=<school name>
-// Best-effort address lookup via OpenStreetMap Nominatim
+// Best-effort address lookup via OpenStreetMap Nominatim.
+// Public: used by the school picker on the public (www) registration form, so an
+// unauthenticated registrant must be able to call it (returns only a best-effort
+// public address, nothing sensitive).
 export async function GET(req: Request) {
-  const { userId } = await auth()
-  if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
-
   const { searchParams } = new URL(req.url)
   const name = searchParams.get('name')?.trim() ?? ''
   if (!name) return NextResponse.json({ address: null })

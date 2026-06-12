@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import { EMERGENCY_RELATIONSHIPS } from '@/lib/registration-constants'
 
 interface Member {
   id: string
@@ -22,6 +23,7 @@ interface Member {
   ec_last_name: string | null
   ec_email: string | null
   ec_phone: string | null
+  ec_relationship: string | null
   health_conditions: string | null
   member_schools: Array<{ is_current: boolean; schools: { name: string } }>
   member_ethnicities: Array<{ ethnicity_option_id: string }>
@@ -62,6 +64,12 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
   const [selectedAllergies, setSelectedAllergies] = useState<string[]>(
     member.member_allergies?.map((a) => a.allergy_option_id) ?? []
   )
+  const [ecFirst, setEcFirst] = useState(member.ec_first_name ?? '')
+  const [ecLast, setEcLast] = useState(member.ec_last_name ?? '')
+  const [ecEmail, setEcEmail] = useState(member.ec_email ?? '')
+  const [ecPhone, setEcPhone] = useState(member.ec_phone ?? '')
+  const [ecRelationship, setEcRelationship] = useState(member.ec_relationship ?? '')
+  const [healthConditions, setHealthConditions] = useState(member.health_conditions ?? '')
 
   const currentSchool = member.member_schools?.find((s) => s.is_current)
 
@@ -79,6 +87,12 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
         discord_handle: discord,
         ethnicity_ids: selectedEthnicities,
         allergy_ids: selectedAllergies,
+        ec_first_name: ecFirst || null,
+        ec_last_name: ecLast || null,
+        ec_email: ecEmail || null,
+        ec_phone: ecPhone || null,
+        ec_relationship: ecRelationship || null,
+        health_conditions: healthConditions || null,
       }),
     })
     setLoading(false)
@@ -203,6 +217,77 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
             </div>
           </div>
         )}
+
+        {/* Emergency contact — captured at registration, shown/editable here */}
+        <div className="border-t border-gray-100 pt-5 space-y-4">
+          <h3 className="text-sm font-medium text-gray-700">Emergency contact</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">First name</label>
+              <input
+                type="text"
+                value={ecFirst}
+                onChange={(e) => setEcFirst(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Last name</label>
+              <input
+                type="text"
+                value={ecLast}
+                onChange={(e) => setEcLast(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Email</label>
+              <input
+                type="email"
+                value={ecEmail}
+                onChange={(e) => setEcEmail(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Phone</label>
+              <input
+                type="tel"
+                value={ecPhone}
+                onChange={(e) => setEcPhone(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Relationship to you</label>
+              <select
+                value={ecRelationship}
+                onChange={(e) => setEcRelationship(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              >
+                <option value="">Select…</option>
+                {/* Keep a legacy/free-text value selectable even if it's not a current option */}
+                {(EMERGENCY_RELATIONSHIPS.includes(ecRelationship) || !ecRelationship
+                  ? EMERGENCY_RELATIONSHIPS
+                  : [ecRelationship, ...EMERGENCY_RELATIONSHIPS]
+                ).map((rel) => (
+                  <option key={rel} value={rel}>{rel}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Health conditions — captured at registration, shown/editable here */}
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Health conditions</label>
+          <textarea
+            value={healthConditions}
+            onChange={(e) => setHealthConditions(e.target.value)}
+            rows={2}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+          />
+        </div>
 
         {!readOnly && (
           <button

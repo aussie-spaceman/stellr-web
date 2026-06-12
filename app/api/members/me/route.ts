@@ -52,7 +52,7 @@ export async function PATCH(req: Request) {
   const allowed = [
     'nickname', 'phone', 'discord_handle', 'gender',
     'grade', 'tshirt_size', 'profile_photo_url',
-    'ec_first_name', 'ec_last_name', 'ec_email', 'ec_phone',
+    'ec_first_name', 'ec_last_name', 'ec_email', 'ec_phone', 'ec_relationship',
     'health_conditions',
   ]
   const updates: Record<string, unknown> = {}

@@ -34,6 +34,37 @@ ALTER TABLE public.member_ethnicities
 ALTER TABLE public.member_allergies
   DROP COLUMN IF EXISTS allergy_id;
 
+-- More of the same drift: because the live tables predate 005, they also lack
+-- 005's UNIQUE(member_id, option_id) — which the backfill's ON CONFLICT below
+-- needs as its arbiter. Dedupe (ctid-based; the live tables have no id column
+-- guarantee), then add the constraint. Guarded so environments where 005 did
+-- create the tables (constraint already exists) pass through untouched.
+DELETE FROM public.member_ethnicities a
+USING public.member_ethnicities b
+WHERE a.ctid < b.ctid
+  AND a.member_id = b.member_id
+  AND a.ethnicity_option_id = b.ethnicity_option_id;
+
+DELETE FROM public.member_allergies a
+USING public.member_allergies b
+WHERE a.ctid < b.ctid
+  AND a.member_id = b.member_id
+  AND a.allergy_option_id = b.allergy_option_id;
+
+DO $$ BEGIN
+  ALTER TABLE public.member_ethnicities
+    ADD CONSTRAINT member_ethnicities_member_id_ethnicity_option_id_key
+    UNIQUE (member_id, ethnicity_option_id);
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE public.member_allergies
+    ADD CONSTRAINT member_allergies_member_id_allergy_option_id_key
+    UNIQUE (member_id, allergy_option_id);
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
+
 -- The registration form offers Halal and Kosher; the 005 seed list never had
 -- them, so those selections would not resolve to an option row.
 INSERT INTO public.allergy_options (name) VALUES

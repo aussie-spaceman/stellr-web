@@ -18,6 +18,7 @@ export interface EnvelopeRow {
   reminder_sent_at: string | null
   participant_id: string
   member_id: string | null
+  reused_from?: string | null
 }
 
 const STATUS_STYLES: Record<string, { label: string; cls: string }> = {
@@ -26,6 +27,9 @@ const STATUS_STYLES: Record<string, { label: string; cls: string }> = {
   completed: { label: 'Signed',             cls: 'bg-green-100 text-green-700'  },
   declined:  { label: 'Declined',           cls: 'bg-red-100 text-red-600'      },
   voided:    { label: 'Voided',             cls: 'bg-gray-100 text-gray-500'    },
+  // Coverage rows: participant covered by previously signed paperwork
+  // (3-year validity) instead of receiving a new envelope.
+  on_file:   { label: 'On file',            cls: 'bg-teal-100 text-teal-700'    },
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -158,11 +162,17 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
                     <div className="font-medium">{env.signer_name}</div>
                     <div className="text-xs text-gray-400">{env.signer_email}</div>
                   </td>
-                  <td className="px-4 py-3"><StatusBadge status={env.status} /></td>
+                  <td className="px-4 py-3"><StatusBadge status={env.reused_from ? 'on_file' : env.status} /></td>
                   <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
-                    <div>{fmt(env.sent_at)}</div>
-                    {env.reminder_sent_at && (
-                      <div className="text-gray-400 mt-0.5">Reminded {fmt(env.reminder_sent_at)}</div>
+                    {env.reused_from ? (
+                      <div className="text-gray-400">Not sent — covered by prior signing</div>
+                    ) : (
+                      <>
+                        <div>{fmt(env.sent_at)}</div>
+                        {env.reminder_sent_at && (
+                          <div className="text-gray-400 mt-0.5">Reminded {fmt(env.reminder_sent_at)}</div>
+                        )}
+                      </>
                     )}
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{fmt(env.completed_at)}</td>

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   classifyAgreement,
@@ -10,6 +11,7 @@ import {
   sendEmail,
   docusignSentToMinorEmail,
   docusignSentToSignerEmail,
+  docusignOnFileEmail,
 } from './email'
 
 // Human-readable label per agreement type, used in emails and the portal UI.
@@ -17,6 +19,15 @@ export const AGREEMENT_LABEL: Record<AgreementType, string> = {
   minor:  'Parental Consent Form',
   adult:  'Participation Agreement',
   mentor: 'Mentor Participation Agreement',
+}
+
+// Signed paperwork is valid for this long, across all Stellr events.
+export const AGREEMENT_VALIDITY_YEARS = 3
+
+export function agreementExpiry(completedAt: string): Date {
+  const d = new Date(completedAt)
+  d.setFullYear(d.getFullYear() + AGREEMENT_VALIDITY_YEARS)
+  return d
 }
 
 export interface ParticipantContext {
@@ -51,6 +62,24 @@ export async function dispatchAgreement(
   if (!type) return
 
   try {
+    // Paperwork on the member's profile is valid for 3 years across events:
+    // if an unexpired signed agreement of the required type is on record, link
+    // this participant to it instead of issuing a fresh envelope.
+    if (ctx.memberId) {
+      const onFile = await findValidAgreement(db, ctx.memberId, type)
+      if (onFile) {
+        await recordCoverage(db, ctx, type, onFile)
+        await safeEmail(ctx.email, docusignOnFileEmail({
+          firstName:      ctx.firstName,
+          eventTitle:     ctx.eventTitle,
+          agreementLabel: AGREEMENT_LABEL[type],
+          signedOn:       onFile.completedAt,
+          expiresOn:      agreementExpiry(onFile.completedAt).toISOString(),
+        }))
+        return
+      }
+    }
+
     if (type === 'minor') {
       if (!ctx.guardianEmail || !ctx.guardianFirstName) return
       const guardianName = [ctx.guardianFirstName, ctx.guardianLastName].filter(Boolean).join(' ')
@@ -93,6 +122,87 @@ export async function dispatchAgreement(
   } catch (err) {
     console.error(`[docusign] dispatchAgreement (${type}) failed (non-fatal):`, err)
   }
+}
+
+interface ValidAgreement {
+  id:          string
+  completedAt: string
+  signerName:  string
+  signerEmail: string
+}
+
+// Newest unexpired completed agreement of the given type on the member's
+// record, resolved to the root signed envelope (a coverage row's reused_from
+// always points at the originally signed row, so one hop suffices).
+async function findValidAgreement(
+  db: SupabaseClient,
+  memberId: string,
+  type: AgreementType,
+): Promise<ValidAgreement | null> {
+  const cutoff = new Date()
+  cutoff.setFullYear(cutoff.getFullYear() - AGREEMENT_VALIDITY_YEARS)
+
+  const { data, error } = await db
+    .from('docusign_envelopes')
+    .select('id, completed_at, signer_name, signer_email, reused_from')
+    .eq('member_id', memberId)
+    .eq('envelope_type', type)
+    .eq('status', 'completed')
+    .gte('completed_at', cutoff.toISOString())
+    .order('completed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error || !data) return null
+
+  if (!data.reused_from) {
+    return {
+      id:          data.id,
+      completedAt: data.completed_at,
+      signerName:  data.signer_name,
+      signerEmail: data.signer_email,
+    }
+  }
+
+  const { data: root } = await db
+    .from('docusign_envelopes')
+    .select('id, completed_at, signer_name, signer_email')
+    .eq('id', data.reused_from)
+    .eq('status', 'completed')
+    .maybeSingle()
+  if (!root) return null
+  return {
+    id:          root.id,
+    completedAt: root.completed_at,
+    signerName:  root.signer_name,
+    signerEmail: root.signer_email,
+  }
+}
+
+// Records that this participant is covered by previously signed paperwork.
+// The synthetic envelope_id keeps the UNIQUE/NOT NULL constraints satisfied
+// without colliding with real DocuSign GUIDs; completed_at carries the
+// original signature date so expiry tracks the original 3-year window
+// (sent_at defaults to now — the registration time — for list ordering).
+async function recordCoverage(
+  db: SupabaseClient,
+  ctx: ParticipantContext,
+  type: AgreementType,
+  source: ValidAgreement,
+): Promise<void> {
+  await db.from('docusign_envelopes').insert({
+    participant_id: ctx.participantId,
+    member_id:      ctx.memberId,
+    event_slug:     ctx.eventSlug,
+    event_title:    ctx.eventTitle,
+    envelope_id:    `on-file:${randomUUID()}`,
+    envelope_type:  type,
+    status:         'completed',
+    signer_name:    source.signerName,
+    signer_email:   source.signerEmail,
+    minor_name:     `${ctx.firstName} ${ctx.lastName}`,
+    completed_at:   source.completedAt,
+    reused_from:    source.id,
+  })
 }
 
 async function recordEnvelope(

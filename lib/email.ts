@@ -184,7 +184,7 @@ export function groupConfirmationEmail({
         <ul style="color:#6b7280;font-size:14px;line-height:1.8;padding-left:20px">
           ${paymentNote}
           ${registrationNote}
-          <li style="margin-bottom:8px">Parental permission forms sent via DocuSign to each student once confirmed</li>
+          <li style="margin-bottom:8px">Participant agreements and parental permission forms will be issued via DocuSign if not already on record — signed paperwork stays valid for 3 years across Stellr events</li>
           <li>Event details and schedule sent closer to the date</li>
         </ul>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
@@ -360,6 +360,7 @@ export function docusignSentToMinorEmail({
           </p>
         </div>
         <p style="color:#6b7280;font-size:14px">They will receive a separate email from DocuSign with a link to review and sign. If they haven't received it, ask them to check their spam folder.</p>
+        <p style="color:#6b7280;font-size:14px">Once signed, the consent form stays on your member record and remains valid for 3 years across all Stellr events — you won't be asked again until it expires.</p>
         <p style="color:#6b7280;font-size:14px">We will send a reminder if the form hasn't been signed within one week. Once signed, you'll receive a confirmation email with a copy of the completed form.</p>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
       </div>
@@ -464,6 +465,7 @@ export function docusignSentToSignerEmail({
         </div>
         <p style="color:#6b7280;font-size:14px">You'll receive a separate email from DocuSign with a link to review and sign. If it hasn't arrived, please check your spam folder.</p>
         <p style="color:#6b7280;font-size:14px">We'll send a reminder if the agreement hasn't been signed within one week. Once signed, you'll receive a confirmation with a copy of the completed document.</p>
+        <p style="color:#6b7280;font-size:14px">Your signed agreement stays on your member record and remains valid for 3 years across all Stellr events — you won't be asked again until it expires.</p>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
       </div>
       <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
@@ -541,6 +543,41 @@ export function docusignCompletedToSignerEmail({
   return { subject, html, text }
 }
 
+// Sent instead of the "action required" email when a valid agreement of the
+// required type is already on the member's record (3-year validity).
+export function docusignOnFileEmail({
+  firstName, eventTitle, agreementLabel, signedOn, expiresOn,
+}: {
+  firstName: string; eventTitle: string; agreementLabel: string
+  signedOn: string; expiresOn: string
+}) {
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })
+  const subject = `No action needed — ${agreementLabel} already on record`
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#1e3a5f;margin-top:0">Paperwork Already on Record</h2>
+        <p>Hi ${firstName},</p>
+        <p>Good news — the <strong>${agreementLabel}</strong> signed on ${fmt(signedOn)} is already on your Stellr member record, so no new paperwork is needed for <strong>${eventTitle}</strong>.</p>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
+          <p style="margin:0;font-weight:600;color:#14532d">No signature required — your existing agreement covers this event.</p>
+        </div>
+        <p style="color:#6b7280;font-size:14px">Signed agreements are valid for 3 years across all Stellr events. Yours is valid until <strong>${fmt(expiresOn)}</strong>; we'll ask for a new one only after it expires. You can view or download it any time from your member portal.</p>
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `Hi ${firstName},\n\nThe ${agreementLabel} signed on ${fmt(signedOn)} is already on your Stellr member record, so no new paperwork is needed for ${eventTitle}.\n\nSigned agreements are valid for 3 years across all Stellr events — yours is valid until ${fmt(expiresOn)}. You can view or download it from your member portal.\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
 export function groupPaymentConfirmedEmail({
   teacherFirstName, eventTitle, registrationId,
 }: {
@@ -557,7 +594,7 @@ export function groupPaymentConfirmedEmail({
         <p>Hi ${teacherFirstName},</p>
         <p>We've received your payment for <strong>${eventTitle}</strong>. Your group registration is now confirmed.</p>
         <p style="color:#6b7280;font-size:14px">Reference #: <span style="font-family:monospace">${registrationId}</span></p>
-        <p style="color:#6b7280;font-size:14px">We'll be in touch with event details and parental permission forms closer to the date.</p>
+        <p style="color:#6b7280;font-size:14px">We'll be in touch with event details closer to the date. Participant agreements and parental permission forms are issued via DocuSign if not already on record — signed paperwork stays valid for 3 years across Stellr events.</p>
       </div>
       <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
         <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>

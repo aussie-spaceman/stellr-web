@@ -80,7 +80,7 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-brand-blue mt-0.5">→</span>
-                Parental permission forms sent via DocuSign to each student
+                Participant agreements issued via DocuSign to each student, unless valid paperwork is already on record
               </li>
             </ul>
           ) : (

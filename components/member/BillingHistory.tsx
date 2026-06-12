@@ -73,6 +73,13 @@ function paymentLabel(p: Participation, reg: ParticipationReg): { label: string;
   return { label: 'Paid by group', style: 'bg-green-100 text-green-700' }
 }
 
+// A receipt exists once the payment behind this row has settled — the member's
+// own checkout, or the group payment/invoice settled on their behalf.
+function receiptAvailable(p: Participation, reg: ParticipationReg): boolean {
+  if (reg.member_pays_individually) return p.individual_payment_status === 'paid'
+  return reg.status === 'confirmed'
+}
+
 export function BillingHistory() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [participations, setParticipations] = useState<Participation[]>([])
@@ -131,6 +138,7 @@ export function BillingHistory() {
                   <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">School</th>
                   <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Organiser</th>
                   <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Payment</th>
+                  <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Receipt</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -154,6 +162,20 @@ export function BillingHistory() {
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${style}`}>
                           {label}
                         </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {receiptAvailable(p, reg) ? (
+                          <a
+                            href={`/api/members/billing/receipt?participation=${p.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-brand-blue hover:text-brand-blue-dark text-xs font-medium"
+                          >
+                            Download
+                          </a>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
                       </td>
                     </tr>
                   )

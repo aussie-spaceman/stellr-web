@@ -14,11 +14,14 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   const { data: envelope } = await db
     .from('docusign_envelopes')
-    .select('envelope_id, status')
+    .select('envelope_id, status, reused_from')
     .eq('id', id)
     .maybeSingle()
 
   if (!envelope) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (envelope.reused_from) {
+    return NextResponse.json({ error: 'Covered by an agreement already on record — nothing to resend' }, { status: 400 })
+  }
   if (envelope.status === 'completed') {
     return NextResponse.json({ error: 'Envelope already completed' }, { status: 400 })
   }

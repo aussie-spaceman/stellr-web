@@ -13,6 +13,7 @@ interface Envelope {
   sent_at: string
   completed_at: string | null
   reminder_sent_at: string | null
+  reused_from?: string | null
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -34,6 +35,9 @@ export const ENVELOPE_STATUS_STYLES: Record<string, { label: string; cls: string
   completed: { label: 'Signed',             cls: 'bg-green-100 text-green-700' },
   declined:  { label: 'Declined',           cls: 'bg-red-100 text-red-600'     },
   voided:    { label: 'Voided',             cls: 'bg-gray-100 text-gray-500'   },
+  // Coverage rows: the participant was covered by previously signed paperwork
+  // (3-year validity) instead of receiving a new envelope.
+  on_file:   { label: 'On file',            cls: 'bg-teal-100 text-teal-700'   },
 }
 
 export function EnvelopeStatusBadge({ status }: { status: string }) {
@@ -154,8 +158,14 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
                   </p>
                 )}
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {fmt(env.sent_at)}
-                  {env.completed_at && <> &middot; Signed {fmt(env.completed_at)}</>}
+                  {env.reused_from ? (
+                    <>Covered by paperwork signed {env.completed_at ? fmt(env.completed_at) : '—'} &middot; no new signature was needed</>
+                  ) : (
+                    <>
+                      {fmt(env.sent_at)}
+                      {env.completed_at && <> &middot; Signed {fmt(env.completed_at)}</>}
+                    </>
+                  )}
                 </p>
                 {showExpiry && (
                   <p className={`text-xs mt-1 ${URGENCY_CLS[expiry.urgency]}`}>{expiry.label}</p>
@@ -165,7 +175,7 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
                 )}
               </div>
               <div className="flex items-center gap-3 shrink-0 mt-0.5">
-                <EnvelopeStatusBadge status={env.status} />
+                <EnvelopeStatusBadge status={env.reused_from ? 'on_file' : env.status} />
                 {env.status === 'completed' && (
                   <button
                     onClick={() => handleDownload(env.id, env.minor_name, type)}

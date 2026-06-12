@@ -291,18 +291,27 @@ export async function createGroupRegistrationSheet({
     },
   }, 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)'))
 
-  // Adult rows: grey Grade + Emergency Contact columns
-  for (let i = 0; i < additionalAdultCount; i++) {
-    const row = 1 + i
-    requests.push(repeatCell(sheetId, row, row + 1, COL_GRADE, COL_GRADE + 1, {
-      userEnteredFormat: { backgroundColor: GREY, textFormat: { foregroundColor: GREY_TEXT, italic: true } },
-      note: 'Not required for adult participants',
-    }, 'userEnteredFormat(backgroundColor,textFormat),note'))
-    requests.push(repeatCell(sheetId, row, row + 1, COL_EC_START, COL_EC_END, {
-      userEnteredFormat: { backgroundColor: GREY, textFormat: { foregroundColor: GREY_TEXT, italic: true } },
-      note: 'Not required for adult participants',
-    }, 'userEnteredFormat(backgroundColor,textFormat),note'))
+  // Grey out Grade + Emergency Contact for any NON-student row, driven by the
+  // Type column so it follows the dropdown (a static per-row grey only covered
+  // the pre-filled adult rows and didn't react when Type changed, or to mentors
+  // / teachers). Grade + emergency contact are required for students only.
+  const greyWhenNotStudent = {
+    addConditionalFormatRule: {
+      index: 0,
+      rule: {
+        ranges: [
+          { sheetId, startRowIndex: 1, endRowIndex: totalRows, startColumnIndex: COL_GRADE, endColumnIndex: COL_GRADE + 1 },
+          { sheetId, startRowIndex: 1, endRowIndex: totalRows, startColumnIndex: COL_EC_START, endColumnIndex: COL_EC_END },
+        ],
+        booleanRule: {
+          // Relative to each range's first row (sheet row 2); $B locks to the Type column.
+          condition: { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: '=AND($B2<>"",$B2<>"Student")' }] },
+          format: { backgroundColor: GREY, textFormat: { foregroundColor: GREY_TEXT, italic: true } },
+        },
+      },
+    },
   }
+  requests.push(greyWhenNotStudent)
 
   // Buffer rows are left open (no lock) so the teacher can add more participants
   // than the initial count — every row below carries the same dropdowns, so they

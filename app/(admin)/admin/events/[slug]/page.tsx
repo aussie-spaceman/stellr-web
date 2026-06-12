@@ -57,7 +57,8 @@ export default async function AdminEventDetailPage({ params }: { params: Promise
   }))
   const studentCount = roster.groups
     .flatMap((g) => g.participants)
-    .filter((p) => p.event_role === 'school_student').length
+    // Student managers compete as students too — count them for company sizing.
+    .filter((p) => p.event_role === 'school_student' || p.event_role === 'school_student_manager').length
 
   // Refund policy: global default + optional per-event override.
   const [{ data: globalPolicy }, { data: eventPolicy }] = await Promise.all([

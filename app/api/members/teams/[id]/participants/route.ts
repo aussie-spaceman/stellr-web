@@ -6,6 +6,7 @@ import { linkMembersToRegistrationSchool } from '@/lib/school-link'
 import { recordEventParticipationForRegistration } from '@/lib/event-participation-sync'
 import { normalizeEventRole } from '@/lib/member-enums'
 import { ownsTeam } from '@/lib/team-access'
+import { dispatchAgreement } from '@/lib/docusign-agreements'
 
 // POST /api/members/teams/[id]/participants — group organiser adds a participant
 export async function POST(
@@ -29,7 +30,7 @@ export async function POST(
 
   const { data: registration } = await db
     .from('registrations')
-    .select('id, teacher_member_id, teacher_email')
+    .select('id, teacher_member_id, teacher_email, event_slug, event_title, school_name, school_address_state')
     .eq('id', registrationId)
     .eq('type', 'group')
     .maybeSingle()
@@ -112,6 +113,28 @@ export async function POST(
     await linkMembersToRegistrationSchool(db, registrationId, [memberId])
     await recordEventParticipationForRegistration(db, registrationId, [memberId])
   }
+
+  // Issue the correct DocuSign agreement — same paperwork flow as the join link.
+  // Non-fatal: the participant is saved regardless of DocuSign's outcome.
+  await dispatchAgreement(db, {
+    participantId:     participant.id,
+    memberId,
+    eventSlug:         registration.event_slug,
+    eventTitle:        registration.event_title,
+    firstName:         participant.first_name,
+    lastName:          participant.last_name,
+    email:             participant.email,
+    phone:             participant.phone,
+    dateOfBirth:       participant.date_of_birth,
+    eventRole:         participant.event_role,
+    schoolName:        participant.school_name ?? registration.school_name ?? undefined,
+    schoolState:       registration.school_address_state ?? undefined,
+    guardianFirstName: participant.emergency_contact_first_name ?? undefined,
+    guardianLastName:  participant.emergency_contact_last_name ?? undefined,
+    guardianEmail:     participant.emergency_contact_email ?? undefined,
+    guardianPhone:     participant.emergency_contact_phone ?? undefined,
+    relationship:      participant.emergency_contact_relationship ?? undefined,
+  })
 
   return NextResponse.json({ participant }, { status: 201 })
 }

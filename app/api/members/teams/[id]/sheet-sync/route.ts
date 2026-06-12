@@ -30,7 +30,7 @@ export async function POST(
 
   const { data: registration } = await db
     .from('registrations')
-    .select('id, teacher_member_id, teacher_email, spreadsheet_id, event_title, school_name')
+    .select('id, teacher_member_id, teacher_email, spreadsheet_id, event_slug, event_title, school_name, school_address_state')
     .eq('id', registrationId)
     .eq('type', 'group')
     .maybeSingle()
@@ -47,82 +47,16 @@ export async function POST(
     return NextResponse.json({ error: 'Google Sheets not configured' }, { status: 503 })
   }
 
-  // Read sheet rows
-  const sheetRows = await readSheetParticipants(registration.spreadsheet_id)
-
-  let updated = 0
-  let created = 0
-  const syncedMemberIds: string[] = []
-
-  for (const row of sheetRows) {
-    if (!row.first_name && !row.email) continue
-
-    // Try to find existing participant by membership_id or email
-    const { data: existing } = await db
-      .from('participants')
-      .select('id')
-      .eq('registration_id', registrationId)
-      .or(
-        row.membership_id
-          ? `membership_id.eq.${row.membership_id},email.eq.${row.email}`
-          : `email.eq.${row.email}`
-      )
-      .maybeSingle()
-
-    const isAdult = row.type?.toLowerCase() === 'adult'
-
-    // Upsert a member row (non-fatal) so sheet-entered people get a member
-    // account, a school link, and visibility on admin member pages.
-    const memberId = await upsertMember(db, {
-      email: row.email,
-      first_name: row.first_name,
-      last_name: row.last_name,
-      phone: row.phone,
-      date_of_birth: row.date_of_birth || null,
-      gender: row.gender,
-      grade: row.grade || null,
-      t_shirt_size: row.t_shirt_size,
-      age_bracket: isAdult ? 'adult' : 'high_school',
-      event_role: isAdult ? 'adult' : 'school_student',
-    })
-    if (memberId) syncedMemberIds.push(memberId)
-
-    const payload = {
-      first_name: row.first_name,
-      last_name: row.last_name,
-      email: row.email,
-      phone: row.phone,
-      date_of_birth: row.date_of_birth || null,
-      gender: row.gender,
-      t_shirt_size: row.t_shirt_size,
-      grade: row.grade || null,
-      dietary_requirements: row.dietary_requirements,
-      health_conditions: row.health_conditions || null,
-      emergency_contact_first_name: row.ec_first_name || null,
-      emergency_contact_last_name: row.ec_last_name || null,
-      emergency_contact_email: row.ec_email || null,
-      emergency_contact_phone: row.ec_phone || null,
-      emergency_contact_relationship: row.ec_relationship || null,
-      event_role: isAdult ? 'adult' : 'school_student',
-      age_bracket: isAdult ? 'adult' : 'high_school',
-      school_name: registration.school_name ?? '',
-      ...(memberId ? { member_id: memberId } : {}),
-    }
-
-    if (existing) {
-      await db.from('participants').update(payload).eq('id', existing.id)
-      updated++
-    } else {
-      await db.from('participants').insert({ ...payload, registration_id: registrationId })
-      created++
-    }
-  }
-
-  // Link every synced member to the group's school (from the registration).
-  await linkMembersToRegistrationSchool(db, registrationId, syncedMemberIds)
-
-  // Record the event in each synced member's Event Activity (event_participations).
-  await recordEventParticipationForRegistration(db, registrationId, syncedMemberIds)
+  // Upsert members + participants and issue DocuSign for anyone missing it
+  // (shared with the Google-Drive webhook so the two paths never drift).
+  const { created, updated } = await syncParticipantsFromSheet(db, {
+    id: registration.id,
+    spreadsheet_id: registration.spreadsheet_id,
+    school_name: registration.school_name,
+    event_slug: registration.event_slug,
+    event_title: registration.event_title,
+    school_address_state: registration.school_address_state,
+  })
 
   // Register watch channel if not already active
   let watchActive = false

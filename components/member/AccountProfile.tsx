@@ -58,6 +58,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
   const [loading, setLoading] = useState(false)
   const [phone, setPhone] = useState(member.phone ?? '')
   const [discord, setDiscord] = useState(member.discord_handle ?? '')
+  const [nickname, setNickname] = useState(member.nickname ?? '')
   const [selectedEthnicities, setSelectedEthnicities] = useState<string[]>(
     member.member_ethnicities?.map((e) => e.ethnicity_option_id) ?? []
   )
@@ -84,6 +85,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         phone,
+        nickname: nickname || null,
         discord_handle: discord,
         ethnicity_ids: selectedEthnicities,
         allergy_ids: selectedAllergies,
@@ -152,6 +154,17 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
 
       <div className="space-y-5 border-t border-gray-100 pt-5">
         <h3 className="text-sm font-medium text-gray-700">Editable details</h3>
+
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Nickname</label>
+          <input
+            type="text"
+            value={nickname}
+            onChange={(e) => setNickname(e.target.value)}
+            placeholder="What you'd like to be called"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+          />
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>

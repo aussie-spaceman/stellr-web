@@ -23,7 +23,7 @@ const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal',
 const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
 
 interface DetailsForm {
-  type: 'Student' | 'Adult' | 'Mentor'
+  type: 'Student' | 'Adult'
   first_name: string
   last_name: string
   email: string
@@ -224,9 +224,9 @@ export default function GroupJoinClient({
 
         {/* Type */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">I am joining as</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">I am joining as a</label>
           <div className="flex flex-wrap gap-4">
-            {(['Student', 'Adult', 'Mentor'] as const).map(t => (
+            {(['Student', 'Adult'] as const).map(t => (
               <label key={t} className="flex items-center gap-2 cursor-pointer">
                 <input type="radio" name="type" checked={form.type === t} onChange={() => set('type', t)} />
                 <span className="text-sm">{t}</span>

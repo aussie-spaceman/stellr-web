@@ -128,7 +128,9 @@ export async function POST(req: Request, { params }: Params) {
     const memberIds: string[] = []
     for (const reg of regs ?? []) {
       for (const p of (reg.participants as Record<string, unknown>[]) ?? []) {
-        if (p.event_role !== 'school_student') continue
+        // Student managers compete as students too, so they're assigned to a
+        // company alongside school students.
+        if (p.event_role !== 'school_student' && p.event_role !== 'school_student_manager') continue
         const dob = p.date_of_birth as string | null
         students.push({
           participantId: p.id as string,

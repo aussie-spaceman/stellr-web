@@ -24,6 +24,14 @@ export interface Dependent {
   label: string
   // Optional filter so already-soft-deleted children don't count as blockers.
   activeFilter?: { column: string; value: unknown }
+  // Optional: when the "active" flag lives on a JOINED parent rather than on the
+  // dependent row itself (e.g. member_schools links → members.is_active), count a
+  // link only if its parent still exists AND isn't soft-deleted. Applied as an
+  // inner-join filter, so soft-deleted or orphaned parents don't block the delete
+  // (they're already hidden from the admin UI). `removedValue` is the flag value
+  // that means "soft-deleted"; null/anything else counts as active, mirroring the
+  // UI's `is_active !== false`.
+  activeJoin?: { embed: string; column: string; removedValue: unknown }
   // Optional deep-link template for the admin UI, with {id} substituted.
   adminHref?: string
 }

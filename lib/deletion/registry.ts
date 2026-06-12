@@ -45,8 +45,18 @@ export const ENTITIES: Record<string, EntityDef> = {
     softDelete: { set: { is_active: false } },
     memberRequestable: true,
     dependents: [
+      // Only ACTIVE members block. A soft-deleted member is hidden from the
+      // school's member list (the page filters is_active !== false), so its
+      // leftover member_schools row must not silently block the school delete.
+      // The inner join also drops orphaned links whose member no longer exists.
       { table: 'member_schools', fkColumn: 'school_id', label: 'linked members',
-        adminHref: '/admin/schools/{id}' },
+        adminHref: '/admin/schools/{id}',
+        activeJoin: { embed: 'members', column: 'is_active', removedValue: false } },
+    ],
+    // Hard purge clears the (by now inactive/orphan-only) member_schools links
+    // too, so no join rows are left pointing at a deleted school.
+    spans: [
+      { table: 'member_schools', column: 'school_id' },
     ],
   },
 

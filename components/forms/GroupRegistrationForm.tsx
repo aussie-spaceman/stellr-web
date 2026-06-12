@@ -20,34 +20,39 @@ type DetailsMethod = 'add_now' | 'spreadsheet' | 'email_link'
 type PaymentMethod = 'invoice' | 'card' | 'individual'
 
 interface AdultData {
-  first_name: string; last_name: string; email: string; phone: string
+  first_name: string; last_name: string; nickname: string; email: string; phone: string
   date_of_birth: string; gender: string; t_shirt_size: string
-  dietary_requirements: string[]; health_conditions: string
+  ethnicity: string[]; dietary_requirements: string[]; health_conditions: string
   existing_membership_id: string
+  // Set when the organiser entered a Member ID and accepted the match — the
+  // participant is built from that member's on-file record, not the typed fields.
+  linked_member_id: string
 }
 
 interface StudentData {
-  first_name: string; last_name: string; email: string; phone: string
+  first_name: string; last_name: string; nickname: string; email: string; phone: string
   date_of_birth: string; grade: string; gender: string; t_shirt_size: string
-  health_conditions: string
+  ethnicity: string[]; dietary_requirements: string[]; health_conditions: string
   emergency_contact_first_name: string; emergency_contact_last_name: string
   emergency_contact_email: string; emergency_contact_phone: string
   emergency_contact_relationship: string
   existing_membership_id: string
+  linked_member_id: string
 }
 
 function emptyAdult(): AdultData {
-  return { first_name: '', last_name: '', email: '', phone: '', date_of_birth: '', gender: '', t_shirt_size: '', dietary_requirements: [], health_conditions: '', existing_membership_id: '' }
+  return { first_name: '', last_name: '', nickname: '', email: '', phone: '', date_of_birth: '', gender: '', t_shirt_size: '', ethnicity: [], dietary_requirements: [], health_conditions: '', existing_membership_id: '', linked_member_id: '' }
 }
 
 function emptyStudent(): StudentData {
-  return { first_name: '', last_name: '', email: '', phone: '', date_of_birth: '', grade: '', gender: '', t_shirt_size: '', health_conditions: '', emergency_contact_first_name: '', emergency_contact_last_name: '', emergency_contact_email: '', emergency_contact_phone: '', emergency_contact_relationship: '', existing_membership_id: '' }
+  return { first_name: '', last_name: '', nickname: '', email: '', phone: '', date_of_birth: '', grade: '', gender: '', t_shirt_size: '', ethnicity: [], dietary_requirements: [], health_conditions: '', emergency_contact_first_name: '', emergency_contact_last_name: '', emergency_contact_email: '', emergency_contact_phone: '', emergency_contact_relationship: '', existing_membership_id: '', linked_member_id: '' }
 }
 
 // ── Schemas (no school fields — school is handled via SchoolSearchInput state) ─
 const teacherSchema = z.object({
   first_name: z.string().min(1, 'Required'),
   last_name: z.string().min(1, 'Required'),
+  nickname: z.string().optional(),
   email: z.string().email('Valid email required'),
   phone: z.string().min(7, 'Valid phone required'),
   date_of_birth: z.string().min(1, 'Required'),
@@ -62,6 +67,7 @@ type TeacherFormData = z.infer<typeof teacherSchema>
 const studentManagerSchema = z.object({
   first_name: z.string().min(1, 'Required'),
   last_name: z.string().min(1, 'Required'),
+  nickname: z.string().optional(),
   email: z.string().email('Valid email required'),
   phone: z.string().min(7, 'Valid phone required'),
   date_of_birth: z.string().min(1, 'Required'),
@@ -313,6 +319,7 @@ function StudentManagerCard({ data, onEdit }: { data: StudentManagerFormData; on
   const name = `${data.first_name} ${data.last_name}`.trim() || 'You'
   const ec = [data.emergency_contact_first_name, data.emergency_contact_last_name].filter(Boolean).join(' ')
   const summary: { label: string; value: string }[] = [
+    { label: 'Preferred Name', value: data.nickname || '' },
     { label: 'Email', value: data.email },
     { label: 'Phone', value: data.phone },
     { label: 'Date of Birth', value: data.date_of_birth },
@@ -367,6 +374,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
   const registrantDefaults = {
     first_name: prefill?.first_name ?? '',
     last_name: prefill?.last_name ?? '',
+    nickname: prefill?.nickname ?? '',
     email: prefill?.email ?? '',
     phone: prefill?.phone ?? '',
     date_of_birth: prefill?.date_of_birth ?? '',
@@ -700,6 +708,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
                 <div><label className="label-text">First Name *</label><input {...tf.register('first_name')} className="input-field" /><FieldError message={tf.formState.errors.first_name?.message} /></div>
                 <div><label className="label-text">Last Name *</label><input {...tf.register('last_name')} className="input-field" /><FieldError message={tf.formState.errors.last_name?.message} /></div>
               </div>
+              <div><label className="label-text">Preferred Name / Nickname</label><input {...tf.register('nickname')} className="input-field" placeholder="Optional" /></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div><label className="label-text">Email Address *</label><input {...tf.register('email')} type="email" className="input-field" readOnly={emailLocked} aria-readonly={emailLocked} />{emailLocked ? <p className="mt-1 text-xs text-gray-400">Linked to your Stellr account.</p> : <FieldError message={tf.formState.errors.email?.message} />}</div>
                 <div><label className="label-text">Phone Number *</label><input {...tf.register('phone')} type="tel" className="input-field" /><FieldError message={tf.formState.errors.phone?.message} /></div>
@@ -750,6 +759,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
                 <div><label className="label-text">First Name *</label><input {...sf.register('first_name')} className="input-field" /><FieldError message={sf.formState.errors.first_name?.message} /></div>
                 <div><label className="label-text">Last Name *</label><input {...sf.register('last_name')} className="input-field" /><FieldError message={sf.formState.errors.last_name?.message} /></div>
               </div>
+              <div><label className="label-text">Preferred Name / Nickname</label><input {...sf.register('nickname')} className="input-field" placeholder="Optional" /></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div><label className="label-text">Email Address *</label><input {...sf.register('email')} type="email" className="input-field" readOnly={emailLocked} aria-readonly={emailLocked} />{emailLocked ? <p className="mt-1 text-xs text-gray-400">Linked to your Stellr account.</p> : <FieldError message={sf.formState.errors.email?.message} />}</div>
                 <div><label className="label-text">Phone Number *</label><input {...sf.register('phone')} type="tel" className="input-field" /><FieldError message={sf.formState.errors.phone?.message} /></div>
@@ -873,10 +883,12 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
             label={registrantRole === 'student_manager'
               ? 'How many other students will be in the group?'
               : 'How many students will be in the group?'}
-            value={studentCount} min={2} max={20}
+            value={studentCount}
+            min={registrantRole === 'student_manager' ? 1 : 2}
+            max={registrantRole === 'student_manager' ? 19 : 20}
             onChange={handleStudentCountChange}
             note={registrantRole === 'student_manager'
-              ? 'Besides yourself — you’re automatically included as Student 1. Minimum 2, maximum 20.'
+              ? 'Besides yourself — you’re automatically included as Student 1. Minimum 1 other student, up to 19 (20 students total).'
               : 'Minimum 2. Maximum 20. For groups larger than 20, contact Stellr directly for custom registration.'} />
         </div>
         <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark">

@@ -90,7 +90,10 @@ export async function POST(req: NextRequest) {
     if (!school_dpa_agreed) {
       return NextResponse.json({ error: 'You must accept the School Data Processing Agreement to continue' }, { status: 400 })
     }
-    if (student_count < 2) {
+    // A group needs at least 2 students. For a Student Manager that count is
+    // "other students" — the SM is student #1 — so 1 other (2 total) is the floor.
+    const minOtherStudents = registrant_role === 'student_manager' ? 1 : 2
+    if (student_count < minOtherStudents) {
       return NextResponse.json({ error: 'A minimum of 2 students is required' }, { status: 400 })
     }
     if (registrant_role === 'student_manager' && !teacher_poc?.email) {

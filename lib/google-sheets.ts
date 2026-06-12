@@ -94,9 +94,10 @@ export async function readSheetParticipants(spreadsheetId: string): Promise<Shee
 //   • Google Sheets date serials (UNFORMATTED_VALUE returns dates as numbers)
 //   • ISO strings (2008-03-15)
 //   • US (MM/DD/YYYY) and European (DD/MM/YYYY) slash/dash/dot dates, 2- or 4-digit year
-// Ambiguous all-≤12 dates (e.g. 03/04/2008) can't be disambiguated without a
-// locale, so they fall back to US MM/DD — the sheet header note asks teachers to
-// use YYYY-MM-DD to avoid this entirely.
+// Ambiguous all-≤12 raw text dates (e.g. 03/04/2008) can't be disambiguated
+// without a locale, so they fall back to US MM/DD. In practice the DOB column is
+// date-formatted and displays the month by name (DD-MMM-YYYY), so a misparse is
+// visible to the user before they sync.
 function parseSheetDate(value: unknown): string | null {
   if (value == null || value === '') return null
 
@@ -295,23 +296,27 @@ export async function createGroupRegistrationSheet({
   // Type column so it follows the dropdown (a static per-row grey only covered
   // the pre-filled adult rows and didn't react when Type changed, or to mentors
   // / teachers). Grade + emergency contact are required for students only.
-  const greyWhenNotStudent = {
+  //
+  // Each range gets its OWN rule: a single CUSTOM_FORMULA rule spanning two
+  // disjoint ranges doesn't anchor the relative $B2 reference per-row reliably
+  // (one row's Type ended up greying the whole column, so a single Teacher/Adult
+  // row greyed every row). One range per rule anchors $B2 to that range's own
+  // row 2 and advances correctly per row.
+  const greyNotStudentRule = (startCol: number, endCol: number) => ({
     addConditionalFormatRule: {
       index: 0,
       rule: {
-        ranges: [
-          { sheetId, startRowIndex: 1, endRowIndex: totalRows, startColumnIndex: COL_GRADE, endColumnIndex: COL_GRADE + 1 },
-          { sheetId, startRowIndex: 1, endRowIndex: totalRows, startColumnIndex: COL_EC_START, endColumnIndex: COL_EC_END },
-        ],
+        ranges: [{ sheetId, startRowIndex: 1, endRowIndex: totalRows, startColumnIndex: startCol, endColumnIndex: endCol }],
         booleanRule: {
-          // Relative to each range's first row (sheet row 2); $B locks to the Type column.
+          // $B locks to the Type column; row is relative to row 2 (range start).
           condition: { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: '=AND($B2<>"",$B2<>"Student")' }] },
           format: { backgroundColor: GREY, textFormat: { foregroundColor: GREY_TEXT, italic: true } },
         },
       },
     },
-  }
-  requests.push(greyWhenNotStudent)
+  })
+  requests.push(greyNotStudentRule(COL_GRADE, COL_GRADE + 1))
+  requests.push(greyNotStudentRule(COL_EC_START, COL_EC_END))
 
   // Buffer rows are left open (no lock) so the teacher can add more participants
   // than the initial count — every row below carries the same dropdowns, so they
@@ -354,15 +359,16 @@ export async function createGroupRegistrationSheet({
   requests.push(dataValidation(sheetId, 1, lastRow, COL_GRADE, COL_GRADE + 1, GRADES))
   requests.push(dataValidation(sheetId, 1, lastRow, COL_EC_RELATIONSHIP, COL_EC_RELATIONSHIP + 1, EMERGENCY_RELATIONSHIPS))
 
-  // Date of Birth: format the column as an ISO date and note the expected format
-  // so US (MM/DD) and EU (DD/MM) entries don't get silently misread. The reader
-  // (parseSheetDate) also handles slash dates and serials as a safety net.
+  // Date of Birth: display the month as a NAME (DD-MMM-YYYY, e.g. 10-Apr-2016) so
+  // a date is unambiguous regardless of US (MM/DD) vs European (DD/MM) entry — the
+  // user sees the month spelt out and can immediately spot a misparse. The reader
+  // (parseSheetDate) works off the underlying serial, so the display is cosmetic.
   requests.push(repeatCell(sheetId, 1, lastRow, COL_DOB, COL_DOB + 1, {
-    userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'yyyy-mm-dd' } },
+    userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'dd-mmm-yyyy' } },
   }, 'userEnteredFormat.numberFormat'))
   requests.push({
     updateCells: {
-      rows: [{ values: [{ note: 'Enter as YYYY-MM-DD (e.g. 2008-03-15) to avoid US/EU day-month confusion.' }] }],
+      rows: [{ values: [{ note: 'Dates display as DD-MMM-YYYY (e.g. 10-Apr-2016) — the month is spelt out so US and European entries can’t be confused.' }] }],
       fields: 'note',
       start: { sheetId, rowIndex: 0, columnIndex: COL_DOB },
     },

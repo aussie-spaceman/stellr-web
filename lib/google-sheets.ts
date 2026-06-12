@@ -57,15 +57,26 @@ export async function readSheetParticipants(spreadsheetId: string): Promise<Shee
 
   const rows = res.data.values ?? []
   return rows
-    .filter(row => row.length > 0 && row[0] && !String(row[0]).startsWith('<'))
+    // Keep any row the teacher has actually filled in (a name or email), not just
+    // rows that already carry a Stellr-assigned Membership ID. New rows the
+    // teacher adds — including ones still showing the "<new … registrant>"
+    // placeholder in the protected Membership ID column — must still sync.
+    .filter(row => {
+      const firstName = String(row[2] ?? '').trim()
+      const email = String(row[4] ?? '').trim()
+      return Boolean(firstName || email)
+    })
     .map(row => ({
-      membership_id: String(row[0] ?? ''),
+      // The "<new … registrant>" placeholder in col A is not a real id.
+      membership_id: String(row[0] ?? '').startsWith('<') ? '' : String(row[0] ?? ''),
       type: String(row[1] ?? ''),
       first_name: String(row[2] ?? ''),
       last_name: String(row[3] ?? ''),
       email: String(row[4] ?? ''),
       phone: String(row[5] ?? ''),
-      date_of_birth: String(row[6] ?? ''),
+      // DOB may arrive as a Sheets date serial (UNFORMATTED_VALUE), an ISO string,
+      // or a US/EU slash date — normalise all to YYYY-MM-DD (see parseSheetDate).
+      date_of_birth: parseSheetDate(row[6]) ?? '',
       gender: String(row[7] ?? ''),
       t_shirt_size: String(row[8] ?? ''),
       grade: String(row[9] ?? ''),
@@ -77,6 +88,54 @@ export async function readSheetParticipants(spreadsheetId: string): Promise<Shee
       ec_phone: String(row[15] ?? ''),
       ec_relationship: String(row[16] ?? ''),
     }))
+}
+
+// Normalise a Date-of-Birth cell to ISO (YYYY-MM-DD), accepting:
+//   • Google Sheets date serials (UNFORMATTED_VALUE returns dates as numbers)
+//   • ISO strings (2008-03-15)
+//   • US (MM/DD/YYYY) and European (DD/MM/YYYY) slash/dash/dot dates, 2- or 4-digit year
+// Ambiguous all-≤12 dates (e.g. 03/04/2008) can't be disambiguated without a
+// locale, so they fall back to US MM/DD — the sheet header note asks teachers to
+// use YYYY-MM-DD to avoid this entirely.
+function parseSheetDate(value: unknown): string | null {
+  if (value == null || value === '') return null
+
+  // Sheets/Excel serial: 25569 = 1970-01-01 in the 1899-12-30 date system.
+  if (typeof value === 'number' && isFinite(value)) {
+    const ms = Math.round((value - 25569) * 86400 * 1000)
+    const d = new Date(ms)
+    return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
+  }
+
+  const s = String(value).trim()
+  if (!s) return null
+
+  // ISO (unambiguous): YYYY-MM-DD
+  let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
+  if (m) return isoOrNull(+m[1], +m[2], +m[3])
+
+  // D/M/Y or M/D/Y, 2- or 4-digit year
+  m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/)
+  if (m) {
+    const a = +m[1], b = +m[2]
+    let y = +m[3]
+    if (m[3].length === 2) y += y < 50 ? 2000 : 1900
+    let month: number, day: number
+    if (a > 12 && b <= 12) { day = a; month = b }        // unambiguously DD/MM
+    else if (b > 12 && a <= 12) { month = a; day = b }   // unambiguously MM/DD
+    else { month = a; day = b }                          // ambiguous → assume US MM/DD
+    return isoOrNull(y, month, day)
+  }
+
+  // Last resort: let Date try (e.g. "March 5, 2008")
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
+}
+
+function isoOrNull(y: number, mo: number, d: number): string | null {
+  if (!y || !mo || !d || mo > 12 || d > 31) return null
+  const dt = new Date(Date.UTC(y, mo - 1, d))
+  return isNaN(dt.getTime()) ? null : dt.toISOString().slice(0, 10)
 }
 
 // ── Watch / push notification helpers ────────────────────────────────────────
@@ -135,11 +194,14 @@ const HEADERS = [
 const COL_WIDTHS = [130, 80, 120, 120, 200, 130, 120, 90, 110, 140, 200, 180, 180, 180, 200, 180, 200]
 
 // Column indices (0-based)
+const COL_TYPE = 1
+const COL_DOB = 6
 const COL_GRADE = 9
 const COL_EC_START = 12
 const COL_EC_END = 17 // exclusive — includes Relationship (col 16)
 const COL_EC_RELATIONSHIP = 16
 
+const PARTICIPANT_TYPES = ['Student', 'Adult', 'Mentor', 'Teacher']
 const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
 const GENDERS = ['Male', 'Female', 'Other']
 const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
@@ -150,7 +212,6 @@ const GREY = { red: 0.84, green: 0.84, blue: 0.84 }
 const GREY_TEXT = { red: 0.55, green: 0.55, blue: 0.55 }
 const HEADER_BG = { red: 0.118, green: 0.227, blue: 0.373 }
 const WHITE = { red: 1, green: 1, blue: 1 }
-const UNUSED_BG = { red: 0.92, green: 0.92, blue: 0.92 }
 
 export async function createGroupRegistrationSheet({
   eventTitle,
@@ -243,22 +304,9 @@ export async function createGroupRegistrationSheet({
     }, 'userEnteredFormat(backgroundColor,textFormat),note'))
   }
 
-  // Unused rows: grey background + protect
-  if (1 + totalDataRows < totalRows) {
-    requests.push(repeatCell(sheetId, 1 + totalDataRows, totalRows, 0, HEADERS.length, {
-      userEnteredFormat: { backgroundColor: UNUSED_BG },
-    }, 'userEnteredFormat(backgroundColor)'))
-    requests.push({
-      addProtectedRange: {
-        protectedRange: {
-          range: { sheetId, startRowIndex: 1 + totalDataRows, endRowIndex: totalRows },
-          description: 'Unused rows',
-          warningOnly: false,
-          editors: { users: [process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!, OWNER_EMAIL] },
-        },
-      },
-    })
-  }
+  // Buffer rows are left open (no lock) so the teacher can add more participants
+  // than the initial count — every row below carries the same dropdowns, so they
+  // never have to copy/paste formatting from a line above.
 
   // Protect header row
   requests.push({
@@ -272,55 +320,44 @@ export async function createGroupRegistrationSheet({
     },
   })
 
-  // Protect Membership ID column (col A) — warning only so teacher can see it
-  if (totalDataRows > 0) {
-    requests.push({
-      addProtectedRange: {
-        protectedRange: {
-          range: { sheetId, startRowIndex: 1, endRowIndex: 1 + totalDataRows, startColumnIndex: 0, endColumnIndex: 1 },
-          description: 'Membership IDs — assigned by Stellr',
-          warningOnly: true,
-          editors: { users: [process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!, OWNER_EMAIL] },
-        },
+  // Protect Membership ID column (col A) across the whole sheet — warning only,
+  // so the teacher can still type an existing Stellr Member ID into a new row.
+  requests.push({
+    addProtectedRange: {
+      protectedRange: {
+        range: { sheetId, startRowIndex: 1, endRowIndex: totalRows, startColumnIndex: 0, endColumnIndex: 1 },
+        description: 'Membership IDs — assigned by Stellr (leave blank for new people)',
+        warningOnly: true,
+        editors: { users: [process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!, OWNER_EMAIL] },
       },
-    })
+    },
+  })
 
-    // Protect Type column (col B) — warning only
-    requests.push({
-      addProtectedRange: {
-        protectedRange: {
-          range: { sheetId, startRowIndex: 1, endRowIndex: 1 + totalDataRows, startColumnIndex: 1, endColumnIndex: 2 },
-          description: 'Participant type — do not change',
-          warningOnly: true,
-          editors: { users: [process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!, OWNER_EMAIL] },
-        },
-      },
-    })
-  }
+  // Dropdowns on EVERY row (header+1 → end), so pre-filled and buffer rows alike
+  // offer the right options. strict:false keeps the adult "N/A — Adult" notes and
+  // free-typed dietary lists valid. The Type column is a dropdown now (not free
+  // text) and is left editable so teachers can set it on rows they add.
+  const lastRow = totalRows
+  requests.push(dataValidation(sheetId, 1, lastRow, COL_TYPE, COL_TYPE + 1, PARTICIPANT_TYPES))
+  requests.push(dataValidation(sheetId, 1, lastRow, 7, 8, GENDERS))
+  requests.push(dataValidation(sheetId, 1, lastRow, 8, 9, T_SHIRT_SIZES))
+  requests.push(dataValidation(sheetId, 1, lastRow, 10, 11, DIETARY_OPTIONS))
+  requests.push(dataValidation(sheetId, 1, lastRow, COL_GRADE, COL_GRADE + 1, GRADES))
+  requests.push(dataValidation(sheetId, 1, lastRow, COL_EC_RELATIONSHIP, COL_EC_RELATIONSHIP + 1, EMERGENCY_RELATIONSHIPS))
 
-  // Dropdown: Gender (all data rows, col 7)
-  if (totalDataRows > 0) {
-    requests.push(dataValidation(sheetId, 1, 1 + totalDataRows, 7, 8, GENDERS))
-    requests.push(dataValidation(sheetId, 1, 1 + totalDataRows, 8, 9, T_SHIRT_SIZES))
-    requests.push(dataValidation(sheetId, 1, 1 + totalDataRows, 10, 11, DIETARY_OPTIONS))
-  }
-
-  // Dropdown: Grade — student rows only
-  if (studentCount > 0) {
-    requests.push(dataValidation(
-      sheetId,
-      1 + additionalAdultCount, 1 + totalDataRows,
-      COL_GRADE, COL_GRADE + 1,
-      GRADES,
-    ))
-    // Dropdown: Emergency Contact Relationship — student rows only
-    requests.push(dataValidation(
-      sheetId,
-      1 + additionalAdultCount, 1 + totalDataRows,
-      COL_EC_RELATIONSHIP, COL_EC_RELATIONSHIP + 1,
-      EMERGENCY_RELATIONSHIPS,
-    ))
-  }
+  // Date of Birth: format the column as an ISO date and note the expected format
+  // so US (MM/DD) and EU (DD/MM) entries don't get silently misread. The reader
+  // (parseSheetDate) also handles slash dates and serials as a safety net.
+  requests.push(repeatCell(sheetId, 1, lastRow, COL_DOB, COL_DOB + 1, {
+    userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'yyyy-mm-dd' } },
+  }, 'userEnteredFormat.numberFormat'))
+  requests.push({
+    updateCells: {
+      rows: [{ values: [{ note: 'Enter as YYYY-MM-DD (e.g. 2008-03-15) to avoid US/EU day-month confusion.' }] }],
+      fields: 'note',
+      start: { sheetId, rowIndex: 0, columnIndex: COL_DOB },
+    },
+  })
 
   // Column widths
   COL_WIDTHS.forEach((width, idx) => {

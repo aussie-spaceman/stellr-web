@@ -16,11 +16,16 @@ export async function GET(req: Request) {
   // by registration linking / the 024 backfill predate the is_active default,
   // and excluding them is why existing schools didn't show up in search. Only
   // schools explicitly deactivated (is_active = false) are hidden.
+  // Match name, city, or state so a town/state search also surfaces the school
+  // (a name-only ilike missed schools users searched for by city). The two .or()
+  // filters are AND-combined: (active) AND (name/city/state matches). Strip
+  // PostgREST reserved chars (commas/parens) from the user input first.
+  const safe = q.replace(/[(),]/g, ' ')
   const { data } = await db
     .from('schools')
     .select('id, name, city, state')
     .or('is_active.is.null,is_active.eq.true')
-    .ilike('name', `%${q}%`)
+    .or(`name.ilike.%${safe}%,city.ilike.%${safe}%,state.ilike.%${safe}%`)
     .order('name')
     .limit(8)
 

@@ -233,6 +233,9 @@ export async function POST(req: NextRequest) {
       line_items: [{ price: stripePriceId, quantity: 1 }],
       client_reference_id: regId,
       customer_email: email,
+      // Always mint a Customer so the receipt is retrievable in the billing tab
+      // (the webhook persists session.customer onto the member row).
+      customer_creation: 'always',
       metadata: {
         registrationId: regId,
         eventSlug: event_slug,

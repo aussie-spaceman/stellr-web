@@ -36,6 +36,21 @@ async function capturePaymentIntent(
   }
 }
 
+// Persist the Stripe customer created at checkout onto the matching member row
+// (by email) so invoices/receipts surface in /account?tab=billing, which lists
+// them via members.stripe_customer_id. Non-fatal.
+async function persistStripeCustomer(session: Stripe.Checkout.Session) {
+  const customerId = typeof session.customer === 'string' ? session.customer : null
+  const email = session.customer_details?.email ?? session.customer_email ?? null
+  if (!customerId || !email) return
+  const db = supabaseServer()
+  await db
+    .from('members')
+    .update({ stripe_customer_id: customerId })
+    .eq('email', email)
+    .is('stripe_customer_id', null)
+}
+
 async function markIndividualPayment(registrationId: string, participantEmail: string) {
   const db = supabaseServer()
 
@@ -227,6 +242,7 @@ export async function POST(req: NextRequest) {
         if (registrationId && participantEmail) {
           await markIndividualPayment(registrationId, participantEmail)
           await capturePaymentIntent(session, { registrationId, participantEmail })
+          await persistStripeCustomer(session)
         }
       } else {
         // Event registration purchase (whole group or individual)
@@ -235,6 +251,7 @@ export async function POST(req: NextRequest) {
         if (registrationId) {
           await confirmRegistration(registrationId, isGroup)
           await capturePaymentIntent(session, { registrationId })
+          await persistStripeCustomer(session)
         }
       }
 

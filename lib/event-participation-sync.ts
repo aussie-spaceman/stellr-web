@@ -43,3 +43,36 @@ export async function recordEventParticipation(
     console.error('[event-participation] recordEventParticipation failed (non-fatal):', e)
   }
 }
+
+// Convenience wrapper for the team/portal/sheet paths that don't carry the event
+// inline: look up the registration's event slug + title and record participation
+// for every supplied member. Mirrors linkMembersToRegistrationSchool so the
+// sheet-sync, Google-Sheets webhook, and portal add-participant routes stay
+// one-liners. Non-fatal + idempotent.
+export async function recordEventParticipationForRegistration(
+  db: SupabaseClient,
+  registrationId: string,
+  memberIds: (string | null | undefined)[],
+): Promise<void> {
+  try {
+    const ids = [...new Set(memberIds.filter((id): id is string => Boolean(id)))]
+    if (ids.length === 0) return
+    const { data: reg, error } = await db
+      .from('registrations')
+      .select('event_slug, event_title')
+      .eq('id', registrationId)
+      .maybeSingle()
+    if (error || !reg?.event_slug) return
+    await Promise.all(
+      ids.map((memberId) =>
+        recordEventParticipation(db, {
+          memberId,
+          eventSlug: reg.event_slug as string,
+          eventTitle: reg.event_title as string | null,
+        }),
+      ),
+    )
+  } catch (e) {
+    console.error('[event-participation] recordEventParticipationForRegistration failed (non-fatal):', e)
+  }
+}

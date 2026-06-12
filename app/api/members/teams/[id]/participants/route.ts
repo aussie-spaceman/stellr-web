@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { upsertMember } from '@/lib/member-sync'
 import { linkMembersToRegistrationSchool } from '@/lib/school-link'
+import { recordEventParticipationForRegistration } from '@/lib/event-participation-sync'
 import { normalizeEventRole } from '@/lib/member-enums'
 
 // POST /api/members/teams/[id]/participants — teacher adds a participant
@@ -82,9 +83,11 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to add participant' }, { status: 500 })
   }
 
-  // Link the new member to the group's school (from the registration record).
+  // Link the new member to the group's school (from the registration record),
+  // and record the event in their Event Activity (event_participations).
   if (memberId) {
     await linkMembersToRegistrationSchool(db, registrationId, [memberId])
+    await recordEventParticipationForRegistration(db, registrationId, [memberId])
   }
 
   return NextResponse.json({ participant }, { status: 201 })

@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { readSheetParticipants, watchSheet, isGoogleSheetsConfigured } from '@/lib/google-sheets'
 import { upsertMember } from '@/lib/member-sync'
 import { linkMembersToRegistrationSchool } from '@/lib/school-link'
+import { recordEventParticipationForRegistration } from '@/lib/event-participation-sync'
 import { randomUUID } from 'crypto'
 
 // POST /api/members/teams/[id]/sheet-sync
@@ -117,6 +118,9 @@ export async function POST(
 
   // Link every synced member to the group's school (from the registration).
   await linkMembersToRegistrationSchool(db, registrationId, syncedMemberIds)
+
+  // Record the event in each synced member's Event Activity (event_participations).
+  await recordEventParticipationForRegistration(db, registrationId, syncedMemberIds)
 
   // Register watch channel if not already active
   let watchActive = false

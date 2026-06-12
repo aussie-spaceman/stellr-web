@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { readSheetParticipants } from '@/lib/google-sheets'
 import { upsertMember } from '@/lib/member-sync'
 import { linkMembersToRegistrationSchool } from '@/lib/school-link'
+import { recordEventParticipationForRegistration } from '@/lib/event-participation-sync'
 
 // POST /api/webhooks/google-sheets
 // Receives Google Drive push notifications when a watched sheet is modified.
@@ -115,6 +116,9 @@ export async function POST(req: NextRequest) {
 
     // Link every synced member to the group's school (from the registration).
     await linkMembersToRegistrationSchool(db, registration.id, syncedMemberIds)
+
+    // Record the event in each synced member's Event Activity (event_participations).
+    await recordEventParticipationForRegistration(db, registration.id, syncedMemberIds)
 
     console.log(`[webhook/google-sheets] Synced ${sheetRows.length} rows for registration ${registration.id}`)
   } catch (err) {

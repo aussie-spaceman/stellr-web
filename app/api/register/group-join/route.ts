@@ -26,6 +26,7 @@ function getStripe() {
 interface JoinPerson {
   first_name: string
   last_name: string
+  nickname: string | null
   email: string
   phone: string | null
   date_of_birth: string | null
@@ -34,6 +35,7 @@ interface JoinPerson {
   t_shirt_size: string | null
   age_bracket: string
   event_role: string
+  ethnicity: string[]
   dietary_requirements: string[]
   health_conditions: string | null
   ec_first_name: string | null
@@ -85,7 +87,7 @@ export async function POST(req: NextRequest) {
     // ── Signed-in member: their stored profile is authoritative ────────────────
     const { data: member } = await db
       .from('members')
-      .select('id, first_name, last_name, email, phone, date_of_birth, gender, grade, tshirt_size, age_bracket, event_role, ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship')
+      .select('id, first_name, last_name, nickname, email, phone, date_of_birth, gender, grade, tshirt_size, age_bracket, event_role, ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship')
       .eq('clerk_user_id', userId)
       .eq('is_active', true)
       .maybeSingle()
@@ -98,6 +100,7 @@ export async function POST(req: NextRequest) {
     person = {
       first_name: member.first_name,
       last_name: member.last_name,
+      nickname: (member as { nickname?: string | null }).nickname ?? null,
       email: member.email,
       phone: member.phone ?? null,
       date_of_birth: member.date_of_birth ?? null,
@@ -106,6 +109,7 @@ export async function POST(req: NextRequest) {
       t_shirt_size: member.tshirt_size ?? null,
       age_bracket: member.age_bracket,
       event_role: normalizeEventRole(member.event_role ?? 'school_student'),
+      ethnicity: [],
       dietary_requirements: [],
       health_conditions: null,
       ec_first_name: member.ec_first_name ?? null,
@@ -138,6 +142,7 @@ export async function POST(req: NextRequest) {
     person = {
       first_name: firstName,
       last_name: lastName,
+      nickname: str(d.nickname) || null,
       email,
       phone: str(d.phone) || null,
       date_of_birth: dob,
@@ -146,6 +151,7 @@ export async function POST(req: NextRequest) {
       t_shirt_size: normalizeTshirt(d.t_shirt_size),
       age_bracket: isMinor ? 'high_school' : 'adult',
       event_role: eventRole,
+      ethnicity: Array.isArray(d.ethnicity) ? d.ethnicity : [],
       dietary_requirements: Array.isArray(d.dietary_requirements) ? d.dietary_requirements : [],
       health_conditions: str(d.health_conditions) || null,
       ec_first_name: str(d.emergency_contact_first_name) || null,
@@ -163,6 +169,7 @@ export async function POST(req: NextRequest) {
         email: person.email,
         first_name: person.first_name,
         last_name: person.last_name,
+        nickname: person.nickname,
         phone: person.phone,
         date_of_birth: person.date_of_birth,
         gender: person.gender,

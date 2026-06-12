@@ -1,12 +1,17 @@
 'use client'
 
 import { useState } from 'react'
+import { MemberIdLookup, type MemberMatch } from '@/components/forms/MemberIdLookup'
 
 interface ParticipantData {
   id?: string
   membership_id?: string
+  // True when an existing member was linked via Member ID — the route builds the
+  // participant from their on-file record and the other fields are skipped.
+  linked?: boolean
   first_name: string
   last_name: string
+  nickname: string
   email: string
   phone: string
   date_of_birth: string
@@ -14,6 +19,7 @@ interface ParticipantData {
   t_shirt_size: string
   grade: string
   event_role: string
+  ethnicity: string[]
   dietary_requirements: string[]
   health_conditions: string
   emergency_contact_first_name: string
@@ -24,16 +30,17 @@ interface ParticipantData {
 }
 
 const EMPTY: ParticipantData = {
-  membership_id: '',
-  first_name: '', last_name: '', email: '', phone: '',
+  membership_id: '', linked: false,
+  first_name: '', last_name: '', nickname: '', email: '', phone: '',
   date_of_birth: '', gender: '', t_shirt_size: '', grade: '',
-  event_role: 'school_student', dietary_requirements: [],
+  event_role: 'school_student', ethnicity: [], dietary_requirements: [],
   health_conditions: '', emergency_contact_first_name: '',
   emergency_contact_last_name: '', emergency_contact_email: '',
   emergency_contact_phone: '', emergency_contact_relationship: '',
 }
 
 const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
+const ETHNICITIES = ['Pacific Islander', 'Hispanic', 'White (Caucasian)', 'Black', 'Native American', 'Asian', 'Prefer Not To Say']
 const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
 const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
 const GENDERS = ['Male', 'Female', 'Other']
@@ -67,12 +74,25 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
     set('dietary_requirements', current.includes(opt) ? current.filter(d => d !== opt) : [...current, opt])
   }
 
+  function toggleEthnicity(opt: string) {
+    const current = form.ethnicity
+    set('ethnicity', current.includes(opt) ? current.filter(d => d !== opt) : [...current, opt])
+  }
+
+  function acceptMatch(m: MemberMatch) {
+    setForm(prev => ({ ...prev, linked: true, first_name: m.first_name, last_name: m.last_name }))
+  }
+  function unlinkMatch() {
+    setForm(prev => ({ ...prev, linked: false }))
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
-    // Students sign the minor participation agreement, with their emergency
-    // contact as the guardian signer — so it's required for every student.
-    if (isStudent && (
+    // A member linked by ID is built from their on-file record — skip field checks.
+    // Otherwise students sign the minor participation agreement, with their
+    // emergency contact as the guardian signer — so it's required for every student.
+    if (!form.linked && isStudent && (
       !form.emergency_contact_first_name.trim() ||
       !form.emergency_contact_last_name.trim() ||
       !form.emergency_contact_email.trim() ||
@@ -117,6 +137,13 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Member ID lookup — accept a match to reuse an existing member's record */}
+          <MemberIdLookup value={form.membership_id ?? ''} linked={!!form.linked}
+            linkedName={`${form.first_name} ${form.last_name}`.trim()}
+            onChange={v => set('membership_id', v)} onAccept={acceptMatch} onUnlink={unlinkMatch} label="Member ID (optional)" />
+
+          {!form.linked && (
+          <>
           {/* Role */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Participant type</label>
@@ -134,20 +161,6 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
                 </label>
               ))}
             </div>
-          </div>
-
-          {/* Member ID — optional, helps avoid duplicate roster entries */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Member ID <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <input
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-              value={form.membership_id}
-              onChange={(e) => set('membership_id', e.target.value)}
-              placeholder="If this person already has a Stellr Member ID"
-            />
-            <p className="text-xs text-gray-400 mt-1">Enter an existing Member ID to link this entry and prevent duplicates.</p>
           </div>
 
           {/* Name */}
@@ -170,6 +183,17 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
                 onChange={e => set('last_name', e.target.value)}
               />
             </div>
+          </div>
+
+          {/* Preferred name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Preferred name / nickname</label>
+            <input
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              value={form.nickname}
+              onChange={e => set('nickname', e.target.value)}
+              placeholder="Optional"
+            />
           </div>
 
           {/* Email & Phone */}
@@ -243,6 +267,24 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
               </select>
             </div>
           )}
+
+          {/* Ethnicity */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Ethnicity</label>
+            <div className="flex flex-wrap gap-2">
+              {ETHNICITIES.map(opt => (
+                <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.ethnicity.includes(opt)}
+                    onChange={() => toggleEthnicity(opt)}
+                    className="rounded"
+                  />
+                  <span className="text-sm">{opt}</span>
+                </label>
+              ))}
+            </div>
+          </div>
 
           {/* Dietary */}
           <div>
@@ -325,6 +367,8 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
                 </div>
               </div>
             </div>
+          )}
+          </>
           )}
 
           {error && (

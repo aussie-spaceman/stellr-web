@@ -12,6 +12,7 @@ import FieldError from '@/components/forms/FieldError'
 import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
 import { T_SHIRT_SIZES, GENDERS, GRADES, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, deriveAgeBracket } from '@/lib/registration-constants'
 import { resolveSchoolPayload } from '@/lib/school-utils'
+import { MemberIdLookup, type MemberMatch } from '@/components/forms/MemberIdLookup'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -24,9 +25,10 @@ interface AdultData {
   date_of_birth: string; gender: string; t_shirt_size: string
   ethnicity: string[]; dietary_requirements: string[]; health_conditions: string
   existing_membership_id: string
-  // Set when the organiser entered a Member ID and accepted the match — the
-  // participant is built from that member's on-file record, not the typed fields.
-  linked_member_id: string
+  // True when the organiser entered a Member ID and accepted the match — the
+  // route resolves that ID server-side and builds the participant from the
+  // member's on-file record, leaving the other fields untouched.
+  linked: boolean
 }
 
 interface StudentData {
@@ -37,15 +39,15 @@ interface StudentData {
   emergency_contact_email: string; emergency_contact_phone: string
   emergency_contact_relationship: string
   existing_membership_id: string
-  linked_member_id: string
+  linked: boolean
 }
 
 function emptyAdult(): AdultData {
-  return { first_name: '', last_name: '', nickname: '', email: '', phone: '', date_of_birth: '', gender: '', t_shirt_size: '', ethnicity: [], dietary_requirements: [], health_conditions: '', existing_membership_id: '', linked_member_id: '' }
+  return { first_name: '', last_name: '', nickname: '', email: '', phone: '', date_of_birth: '', gender: '', t_shirt_size: '', ethnicity: [], dietary_requirements: [], health_conditions: '', existing_membership_id: '', linked: false }
 }
 
 function emptyStudent(): StudentData {
-  return { first_name: '', last_name: '', nickname: '', email: '', phone: '', date_of_birth: '', grade: '', gender: '', t_shirt_size: '', ethnicity: [], dietary_requirements: [], health_conditions: '', emergency_contact_first_name: '', emergency_contact_last_name: '', emergency_contact_email: '', emergency_contact_phone: '', emergency_contact_relationship: '', existing_membership_id: '', linked_member_id: '' }
+  return { first_name: '', last_name: '', nickname: '', email: '', phone: '', date_of_birth: '', grade: '', gender: '', t_shirt_size: '', ethnicity: [], dietary_requirements: [], health_conditions: '', emergency_contact_first_name: '', emergency_contact_last_name: '', emergency_contact_email: '', emergency_contact_phone: '', emergency_contact_relationship: '', existing_membership_id: '', linked: false }
 }
 
 // ── Schemas (no school fields — school is handled via SchoolSearchInput state) ─
@@ -163,9 +165,10 @@ function NumberStepper({ label, value, min, max, onChange, note }: {
 }
 
 // ── Adult accordion ───────────────────────────────────────────────────────────
-function AdultAccordion({ index, data, onChange, expanded, onToggle, isPoC }: {
+function AdultAccordion({ index, data, onChange, onAccept, onUnlink, expanded, onToggle, isPoC }: {
   index: number; data: AdultData
   onChange: (field: keyof AdultData, value: string | string[]) => void
+  onAccept: (m: MemberMatch) => void; onUnlink: () => void
   expanded: boolean; onToggle: () => void; isPoC?: boolean
 }) {
   const label = data.first_name && data.last_name
@@ -182,46 +185,50 @@ function AdultAccordion({ index, data, onChange, expanded, onToggle, isPoC }: {
       </button>
       {expanded && (
         <div className="p-4 space-y-4">
-          {isPoC && (
+          {isPoC && !data.linked && (
             <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
               Pre-filled from your Teacher Point of Contact. Please complete their remaining details so they can be registered as a participant.
             </p>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div><label className="label-text">First Name *</label><input value={data.first_name} onChange={e => onChange('first_name', e.target.value)} className="input-field" /></div>
-            <div><label className="label-text">Last Name *</label><input value={data.last_name} onChange={e => onChange('last_name', e.target.value)} className="input-field" /></div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div><label className="label-text">Email *</label><input type="email" value={data.email} onChange={e => onChange('email', e.target.value)} className="input-field" /></div>
-            <div><label className="label-text">Phone *</label><input type="tel" value={data.phone} onChange={e => onChange('phone', e.target.value)} className="input-field" /></div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div><label className="label-text">Date of Birth *</label><input type="date" value={data.date_of_birth} onChange={e => onChange('date_of_birth', e.target.value)} className="input-field" /></div>
-            <div>
-              <label className="label-text">Gender *</label>
-              <select value={data.gender} onChange={e => onChange('gender', e.target.value)} className="input-field">
-                <option value="">Select…</option>{GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label-text">T-Shirt Size *</label>
-              <select value={data.t_shirt_size} onChange={e => onChange('t_shirt_size', e.target.value)} className="input-field">
-                <option value="">Select…</option>{T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-          </div>
-          <MultiCheckboxes label="Dietary Requirements *" note="Select all that apply" options={DIETARY}
-            selected={data.dietary_requirements} onChange={v => onChange('dietary_requirements', v)} />
-          <div>
-            <label className="label-text">Health Conditions / Allergies</label>
-            <textarea value={data.health_conditions} onChange={e => onChange('health_conditions', e.target.value)} className="input-field resize-none" rows={2} placeholder="Leave blank if none." />
-          </div>
-          <div>
-            <label className="label-text">Existing Membership ID</label>
-            <input value={data.existing_membership_id} onChange={e => onChange('existing_membership_id', e.target.value)}
-              className="input-field font-mono" placeholder="e.g. 0000001 — leave blank if new to Stellr" />
-            <p className="text-xs text-gray-400 mt-1">If this person has previously registered with Stellr, enter their Membership ID to prevent duplicate records.</p>
-          </div>
+          <MemberIdLookup value={data.existing_membership_id} linked={data.linked}
+            linkedName={`${data.first_name} ${data.last_name}`.trim()}
+            onChange={v => onChange('existing_membership_id', v)} onAccept={onAccept} onUnlink={onUnlink} />
+          {!data.linked && (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label className="label-text">First Name *</label><input value={data.first_name} onChange={e => onChange('first_name', e.target.value)} className="input-field" /></div>
+                <div><label className="label-text">Last Name *</label><input value={data.last_name} onChange={e => onChange('last_name', e.target.value)} className="input-field" /></div>
+              </div>
+              <div><label className="label-text">Preferred Name / Nickname</label><input value={data.nickname} onChange={e => onChange('nickname', e.target.value)} className="input-field" placeholder="Optional" /></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label className="label-text">Email *</label><input type="email" value={data.email} onChange={e => onChange('email', e.target.value)} className="input-field" /></div>
+                <div><label className="label-text">Phone *</label><input type="tel" value={data.phone} onChange={e => onChange('phone', e.target.value)} className="input-field" /></div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div><label className="label-text">Date of Birth *</label><input type="date" value={data.date_of_birth} onChange={e => onChange('date_of_birth', e.target.value)} className="input-field" /></div>
+                <div>
+                  <label className="label-text">Gender *</label>
+                  <select value={data.gender} onChange={e => onChange('gender', e.target.value)} className="input-field">
+                    <option value="">Select…</option>{GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label-text">T-Shirt Size *</label>
+                  <select value={data.t_shirt_size} onChange={e => onChange('t_shirt_size', e.target.value)} className="input-field">
+                    <option value="">Select…</option>{T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+              <MultiCheckboxes label="Ethnicity *" note="Select all that apply" options={ETHNICITIES}
+                selected={data.ethnicity} onChange={v => onChange('ethnicity', v)} />
+              <MultiCheckboxes label="Dietary Requirements *" note="Select all that apply" options={DIETARY}
+                selected={data.dietary_requirements} onChange={v => onChange('dietary_requirements', v)} />
+              <div>
+                <label className="label-text">Health Conditions / Allergies</label>
+                <textarea value={data.health_conditions} onChange={e => onChange('health_conditions', e.target.value)} className="input-field resize-none" rows={2} placeholder="Leave blank if none." />
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -229,9 +236,10 @@ function AdultAccordion({ index, data, onChange, expanded, onToggle, isPoC }: {
 }
 
 // ── Student accordion ─────────────────────────────────────────────────────────
-function StudentAccordion({ index, displayNumber, data, onChange, expanded, onToggle }: {
+function StudentAccordion({ index, displayNumber, data, onChange, onAccept, onUnlink, expanded, onToggle }: {
   index: number; displayNumber?: number; data: StudentData
-  onChange: (field: keyof StudentData, value: string) => void
+  onChange: (field: keyof StudentData, value: string | string[]) => void
+  onAccept: (m: MemberMatch) => void; onUnlink: () => void
   expanded: boolean; onToggle: () => void
 }) {
   const label = data.first_name && data.last_name ? `${data.first_name} ${data.last_name}` : `Student ${displayNumber ?? index + 1}`
@@ -244,65 +252,71 @@ function StudentAccordion({ index, displayNumber, data, onChange, expanded, onTo
       </button>
       {expanded && (
         <div className="p-4 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div><label className="label-text">First Name *</label><input value={data.first_name} onChange={e => onChange('first_name', e.target.value)} className="input-field" /></div>
-            <div><label className="label-text">Last Name *</label><input value={data.last_name} onChange={e => onChange('last_name', e.target.value)} className="input-field" /></div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div><label className="label-text">Email *</label><input type="email" value={data.email} onChange={e => onChange('email', e.target.value)} className="input-field" /></div>
-            <div><label className="label-text">Phone *</label><input type="tel" value={data.phone} onChange={e => onChange('phone', e.target.value)} className="input-field" /></div>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="col-span-2 sm:col-span-1"><label className="label-text">Date of Birth *</label><input type="date" value={data.date_of_birth} onChange={e => onChange('date_of_birth', e.target.value)} className="input-field" /></div>
-            <div>
-              <label className="label-text">Grade *</label>
-              <select value={data.grade} onChange={e => onChange('grade', e.target.value)} className="input-field">
-                <option value="">Select…</option>{GRADES.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label-text">Gender *</label>
-              <select value={data.gender} onChange={e => onChange('gender', e.target.value)} className="input-field">
-                <option value="">Select…</option>{GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label-text">T-Shirt *</label>
-              <select value={data.t_shirt_size} onChange={e => onChange('t_shirt_size', e.target.value)} className="input-field">
-                <option value="">Select…</option>{T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="label-text">Health Conditions / Allergies</label>
-            <textarea value={data.health_conditions} onChange={e => onChange('health_conditions', e.target.value)} className="input-field resize-none" rows={2} placeholder="Leave blank if none." />
-          </div>
-          <div className="border-t border-gray-100 pt-4 space-y-4">
-              <div>
-                <p className="font-semibold text-brand-blue-dark text-sm">Emergency Contact</p>
-                <p className="text-xs text-gray-400">Required for all student participants — acts as the guardian for their participation agreement</p>
-              </div>
+          <MemberIdLookup value={data.existing_membership_id} linked={data.linked}
+            linkedName={`${data.first_name} ${data.last_name}`.trim()}
+            onChange={v => onChange('existing_membership_id', v)} onAccept={onAccept} onUnlink={onUnlink} />
+          {!data.linked && (
+            <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div><label className="label-text">First Name *</label><input value={data.emergency_contact_first_name} onChange={e => onChange('emergency_contact_first_name', e.target.value)} className="input-field" /></div>
-                <div><label className="label-text">Last Name *</label><input value={data.emergency_contact_last_name} onChange={e => onChange('emergency_contact_last_name', e.target.value)} className="input-field" /></div>
+                <div><label className="label-text">First Name *</label><input value={data.first_name} onChange={e => onChange('first_name', e.target.value)} className="input-field" /></div>
+                <div><label className="label-text">Last Name *</label><input value={data.last_name} onChange={e => onChange('last_name', e.target.value)} className="input-field" /></div>
               </div>
+              <div><label className="label-text">Preferred Name / Nickname</label><input value={data.nickname} onChange={e => onChange('nickname', e.target.value)} className="input-field" placeholder="Optional" /></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div><label className="label-text">Email *</label><input type="email" value={data.emergency_contact_email} onChange={e => onChange('emergency_contact_email', e.target.value)} className="input-field" /></div>
-                <div><label className="label-text">Phone *</label><input type="tel" value={data.emergency_contact_phone} onChange={e => onChange('emergency_contact_phone', e.target.value)} className="input-field" /></div>
+                <div><label className="label-text">Email *</label><input type="email" value={data.email} onChange={e => onChange('email', e.target.value)} className="input-field" /></div>
+                <div><label className="label-text">Phone *</label><input type="tel" value={data.phone} onChange={e => onChange('phone', e.target.value)} className="input-field" /></div>
               </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="col-span-2 sm:col-span-1"><label className="label-text">Date of Birth *</label><input type="date" value={data.date_of_birth} onChange={e => onChange('date_of_birth', e.target.value)} className="input-field" /></div>
+                <div>
+                  <label className="label-text">Grade *</label>
+                  <select value={data.grade} onChange={e => onChange('grade', e.target.value)} className="input-field">
+                    <option value="">Select…</option>{GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label-text">Gender *</label>
+                  <select value={data.gender} onChange={e => onChange('gender', e.target.value)} className="input-field">
+                    <option value="">Select…</option>{GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label-text">T-Shirt *</label>
+                  <select value={data.t_shirt_size} onChange={e => onChange('t_shirt_size', e.target.value)} className="input-field">
+                    <option value="">Select…</option>{T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+              <MultiCheckboxes label="Ethnicity *" note="Select all that apply" options={ETHNICITIES}
+                selected={data.ethnicity} onChange={v => onChange('ethnicity', v)} />
+              <MultiCheckboxes label="Dietary Requirements *" note="Select all that apply" options={DIETARY}
+                selected={data.dietary_requirements} onChange={v => onChange('dietary_requirements', v)} />
               <div>
-                <label className="label-text">Relationship To Participant *</label>
-                <select value={data.emergency_contact_relationship} onChange={e => onChange('emergency_contact_relationship', e.target.value)} className="input-field">
-                  <option value="">Select…</option>{EMERGENCY_RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
+                <label className="label-text">Health Conditions / Allergies</label>
+                <textarea value={data.health_conditions} onChange={e => onChange('health_conditions', e.target.value)} className="input-field resize-none" rows={2} placeholder="Leave blank if none." />
               </div>
-            </div>
-          <div className="border-t border-gray-100 pt-4">
-            <label className="label-text">Existing Membership ID</label>
-            <input value={data.existing_membership_id} onChange={e => onChange('existing_membership_id', e.target.value)}
-              className="input-field font-mono" placeholder="e.g. 0000001 — leave blank if new to Stellr" />
-            <p className="text-xs text-gray-400 mt-1">If this student has previously registered with Stellr, enter their Membership ID to prevent duplicate records.</p>
-          </div>
+              <div className="border-t border-gray-100 pt-4 space-y-4">
+                <div>
+                  <p className="font-semibold text-brand-blue-dark text-sm">Emergency Contact</p>
+                  <p className="text-xs text-gray-400">Required for all student participants — acts as the guardian for their participation agreement</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div><label className="label-text">First Name *</label><input value={data.emergency_contact_first_name} onChange={e => onChange('emergency_contact_first_name', e.target.value)} className="input-field" /></div>
+                  <div><label className="label-text">Last Name *</label><input value={data.emergency_contact_last_name} onChange={e => onChange('emergency_contact_last_name', e.target.value)} className="input-field" /></div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div><label className="label-text">Email *</label><input type="email" value={data.emergency_contact_email} onChange={e => onChange('emergency_contact_email', e.target.value)} className="input-field" /></div>
+                  <div><label className="label-text">Phone *</label><input type="tel" value={data.emergency_contact_phone} onChange={e => onChange('emergency_contact_phone', e.target.value)} className="input-field" /></div>
+                </div>
+                <div>
+                  <label className="label-text">Relationship To Participant *</label>
+                  <select value={data.emergency_contact_relationship} onChange={e => onChange('emergency_contact_relationship', e.target.value)} className="input-field">
+                    <option value="">Select…</option>{EMERGENCY_RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -439,16 +453,10 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
   function getPoCAsAdult(): AdultData {
     const d = sf.getValues()
     return {
+      ...emptyAdult(),
       first_name: d.teacher_poc_first_name ?? '',
       last_name: d.teacher_poc_last_name ?? '',
       email: d.teacher_poc_email ?? '',
-      phone: '',
-      date_of_birth: '',
-      gender: '',
-      t_shirt_size: '',
-      dietary_requirements: [],
-      health_conditions: '',
-      existing_membership_id: '',
     }
   }
 
@@ -485,8 +493,24 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
     setAdditionalAdults(prev => prev.map((a, idx) => idx === i ? { ...a, [field]: value } : a))
   }
 
-  function updateStudent(i: number, field: keyof StudentData, value: string) {
+  function updateStudent(i: number, field: keyof StudentData, value: string | string[]) {
     setStudents(prev => prev.map((s, idx) => idx === i ? { ...s, [field]: value } : s))
+  }
+
+  // Member ID match accepted — link the slot and adopt the matched name so the
+  // accordion header reads correctly; the route fills the rest from the on-file
+  // record. Unlink reverts to manual entry.
+  function acceptAdult(i: number, m: MemberMatch) {
+    setAdditionalAdults(prev => prev.map((a, idx) => idx === i ? { ...a, linked: true, first_name: m.first_name, last_name: m.last_name } : a))
+  }
+  function unlinkAdult(i: number) {
+    setAdditionalAdults(prev => prev.map((a, idx) => idx === i ? { ...a, linked: false } : a))
+  }
+  function acceptStudent(i: number, m: MemberMatch) {
+    setStudents(prev => prev.map((s, idx) => idx === i ? { ...s, linked: true, first_name: m.first_name, last_name: m.last_name } : s))
+  }
+  function unlinkStudent(i: number) {
+    setStudents(prev => prev.map((s, idx) => idx === i ? { ...s, linked: false } : s))
   }
 
   // ── Step 1 → Step 2 ──────────────────────────────────────────────────────────
@@ -528,21 +552,39 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
     setStep(2)
   }
 
+  // A slot counts as "started" once it's linked to a member or has any of
+  // name/email — fully blank slots are simply deferred (provide later via the
+  // Sheet or completion link). Linked slots are built from the on-file record.
+  const adultStarted = (a: AdultData) => a.linked || !!(a.first_name || a.last_name || a.email)
+  const studentStarted = (s: StudentData) => s.linked || !!(s.first_name || s.last_name || s.email)
+
+  /** Count of slots left for later (not entered now) — drives the "remaining" hint. */
+  function deferredCount(): number {
+    if (detailsMethod !== 'add_now') return 0
+    const adults = additionalAdults.filter(a => !adultStarted(a)).length
+    const studs = students.filter(s => !studentStarted(s)).length
+    return adults + studs
+  }
+
   // ── Validate participants before submit ──────────────────────────────────────
+  // Partial entry is allowed: only *started* slots must be complete; blank slots
+  // are deferred and linked slots use the member's on-file record.
   function validateParticipants(): string | null {
     if (detailsMethod !== 'add_now') return null
     for (let i = 0; i < additionalAdults.length; i++) {
       const a = additionalAdults[i]
-      if (!a.first_name || !a.last_name || !a.email || !a.phone || !a.date_of_birth || !a.gender || !a.t_shirt_size || a.dietary_requirements.length === 0)
-        return `${i === 0 && registrantRole === 'student_manager' ? 'Teacher Point of Contact' : `Additional Adult ${i + 1}`}: please complete all required fields`
+      if (a.linked || !adultStarted(a)) continue
+      if (!a.first_name || !a.last_name || !a.email || !a.phone || !a.date_of_birth || !a.gender || !a.t_shirt_size || a.ethnicity.length === 0 || a.dietary_requirements.length === 0)
+        return `${i === 0 && registrantRole === 'student_manager' ? 'Teacher Point of Contact' : `Additional Adult ${i + 1}`}: complete all required fields, or clear it to provide their details later`
     }
     // Student Manager occupies Student 1 (read-only), so the editable students
     // shown below start at Student 2 — keep error numbering in step.
     const studentOffset = registrantRole === 'student_manager' ? 1 : 0
     for (let i = 0; i < students.length; i++) {
       const s = students[i]
-      if (!s.first_name || !s.last_name || !s.email || !s.phone || !s.date_of_birth || !s.grade || !s.gender || !s.t_shirt_size)
-        return `Student ${i + 1 + studentOffset}: please complete all required fields`
+      if (s.linked || !studentStarted(s)) continue
+      if (!s.first_name || !s.last_name || !s.email || !s.phone || !s.date_of_birth || !s.grade || !s.gender || !s.t_shirt_size || s.ethnicity.length === 0 || s.dietary_requirements.length === 0)
+        return `Student ${i + 1 + studentOffset}: complete all required fields, or clear it to provide their details later`
       // Every student signs the minor participation agreement, with their
       // emergency contact as the guardian — so it's required for all students.
       if (!s.emergency_contact_first_name || !s.emergency_contact_last_name || !s.emergency_contact_email || !s.emergency_contact_phone || !s.emergency_contact_relationship)
@@ -621,17 +663,23 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
           payment_method: paymentMethod,
           member_pays_individually: paymentMethod === 'individual',
           // For SM: all additional_adults entries are genuinely additional (PoC is adults[0])
-          // For teacher: additional_adults excludes teacher themselves
+          // For teacher: additional_adults excludes teacher themselves. Map with the
+          // ORIGINAL index (so PoC role detection holds), then drop blank/deferred
+          // slots — only started or member-linked people are submitted now.
           additional_adults: detailsMethod === 'add_now'
-            ? additionalAdults.map((a, i) => ({
-                ...a,
-                age_bracket: deriveAgeBracket(a.date_of_birth),
-                // PoC (SM adult 0) is a Teacher role; all others are Adult
-                event_role: registrantRole === 'student_manager' && i === 0 ? 'Teacher' : 'Adult',
-              }))
+            ? additionalAdults
+                .map((a, i) => ({
+                  ...a,
+                  age_bracket: deriveAgeBracket(a.date_of_birth),
+                  // PoC (SM adult 0) is a Teacher role; all others are Adult
+                  event_role: registrantRole === 'student_manager' && i === 0 ? 'Teacher' : 'Adult',
+                }))
+                .filter(a => a.linked || a.first_name || a.last_name || a.email)
             : [],
           students: detailsMethod === 'add_now'
-            ? students.map(s => ({ ...s, age_bracket: deriveAgeBracket(s.date_of_birth, s.grade), event_role: 'School Student' }))
+            ? students
+                .map(s => ({ ...s, age_bracket: deriveAgeBracket(s.date_of_birth, s.grade), event_role: 'School Student' }))
+                .filter(s => s.linked || s.first_name || s.last_name || s.email)
             : [],
           school_dpa_agreed: dpaAgreed,
         }),
@@ -642,7 +690,10 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
         throw new Error(body.error ?? 'Registration failed')
       }
 
-      const { registrationId, checkoutUrl, spreadsheetUrl, signInToken } = await res.json()
+      const { registrationId, checkoutUrl, spreadsheetUrl, joinUrl, signInToken } = await res.json()
+      // Slots the organiser chose to provide later (blank now) — drives the
+      // "complete the rest via Sheet / link" prompt on the confirmation page.
+      const remaining = deferredCount()
 
       // Silently sign the registrant in (Clerk ticket flow) so they land on the
       // confirmation step already authenticated and can open their group's sheet
@@ -663,7 +714,11 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
         window.location.href = checkoutUrl
       } else {
         const params = new URLSearchParams({ id: registrationId, type: 'group' })
-        if (spreadsheetUrl) params.set('spreadsheet', encodeURIComponent(spreadsheetUrl))
+        // Surface the Sheet for the spreadsheet/email-link flows, or whenever some
+        // participants were deferred for later completion (partial add-now).
+        if (spreadsheetUrl && (detailsMethod !== 'add_now' || remaining > 0)) params.set('spreadsheet', encodeURIComponent(spreadsheetUrl))
+        if (joinUrl && remaining > 0) params.set('join', encodeURIComponent(joinUrl))
+        if (remaining > 0) params.set('remaining', String(remaining))
         router.push(`/register/${eventSlug}/confirmation?${params.toString()}`)
       }
     } catch (e: unknown) {
@@ -932,6 +987,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
                 <AdultAccordion key={i} index={i} data={adult}
                   isPoC={registrantRole === 'student_manager' && i === 0}
                   onChange={(field, value) => updateAdult(i, field, value)}
+                  onAccept={(m) => acceptAdult(i, m)} onUnlink={() => unlinkAdult(i)}
                   expanded={expandedAdult === i} onToggle={() => setExpandedAdult(expandedAdult === i ? null : i)} />
               ))}
             </div>
@@ -947,6 +1003,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
                 displayNumber={i + 1 + (registrantRole === 'student_manager' ? 1 : 0)}
                 data={student}
                 onChange={(field, value) => updateStudent(i, field, value)}
+                onAccept={(m) => acceptStudent(i, m)} onUnlink={() => unlinkStudent(i)}
                 expanded={expandedStudent === i} onToggle={() => setExpandedStudent(expandedStudent === i ? null : i)} />
             ))}
           </div>

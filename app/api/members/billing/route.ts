@@ -1,6 +1,6 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { resolveRequestMember } from '@/lib/impersonation'
 import Stripe from 'stripe'
 
 function getStripe() {
@@ -10,19 +10,16 @@ function getStripe() {
 }
 
 // GET /api/members/billing — returns Stripe invoices + participation payment history
-export async function GET() {
-  const { userId } = await auth()
-  if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
-
+// Admins may pass ?memberId= to read another member's billing (view-as).
+export async function GET(req: Request) {
   const db = supabaseServer()
 
-  const { data: member } = await db
-    .from('members')
-    .select('id, stripe_customer_id, event_role')
-    .eq('clerk_user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle()
-
+  const { member, unauthorised } = await resolveRequestMember<{
+    id: string
+    stripe_customer_id: string | null
+    event_role: string
+  }>(req, db, 'id, stripe_customer_id, event_role')
+  if (unauthorised) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
 
   // ── Stripe invoices (only when they have a Stripe customer record) ────────────

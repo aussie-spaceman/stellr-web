@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { sendEmail, studentLeftTeamEmail } from '@/lib/email'
 import { normalizeEventRole } from '@/lib/member-enums'
+import { ownsTeam } from '@/lib/team-access'
 
 // PATCH /api/members/teams/[id]/participants/[pid]
 export async function PATCH(
@@ -17,12 +18,12 @@ export async function PATCH(
 
   const [{ data: member }, { data: registration }] = await Promise.all([
     db.from('members')
-      .select('id, event_role')
+      .select('id, email')
       .eq('clerk_user_id', userId)
       .eq('is_active', true)
       .maybeSingle(),
     db.from('registrations')
-      .select('id, teacher_member_id')
+      .select('id, teacher_member_id, teacher_email, teacher_poc_email')
       .eq('id', registrationId)
       .eq('type', 'group')
       .maybeSingle(),
@@ -31,8 +32,9 @@ export async function PATCH(
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
 
-  // Only the teacher who owns this registration can edit participants
-  if (member.event_role !== 'teacher' || registration.teacher_member_id !== member.id) {
+  // Only an owner of this registration can edit participants — the registrant
+  // (teacher or student manager) or the nominated teacher POC (see lib/team-access).
+  if (!ownsTeam(member, registration)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -92,7 +94,7 @@ export async function DELETE(
       .eq('registration_id', registrationId)
       .maybeSingle(),
     db.from('registrations')
-      .select('id, teacher_member_id, teacher_first_name, teacher_email, event_title')
+      .select('id, teacher_member_id, teacher_first_name, teacher_email, teacher_poc_email, event_title')
       .eq('id', registrationId)
       .maybeSingle(),
   ])
@@ -101,14 +103,16 @@ export async function DELETE(
   if (!participant) return NextResponse.json({ error: 'Participant not found' }, { status: 404 })
   if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
 
-  const isTeacher = member.event_role === 'teacher' && registration.teacher_member_id === member.id
+  // An owner (registrant — teacher or student manager — or teacher POC) can remove
+  // anyone; a participant can only remove themselves.
+  const isManager = ownsTeam(member, registration)
   const isSelf = participant.member_id === member.id
 
-  if (!isTeacher && !isSelf) {
+  if (!isManager && !isSelf) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // Teachers cannot delete student accounts — only remove from team
+  // Managers cannot delete student accounts — only remove from team
   // (we're removing the participant row, not the member account, so this is fine)
 
   const { error } = await db
@@ -122,8 +126,8 @@ export async function DELETE(
     return NextResponse.json({ error: 'Failed to remove participant' }, { status: 500 })
   }
 
-  // Notify teacher if a student removed themselves
-  if (isSelf && !isTeacher && registration.teacher_email && registration.teacher_first_name) {
+  // Notify the organiser if a participant removed themselves
+  if (isSelf && !isManager && registration.teacher_email && registration.teacher_first_name) {
     const tmpl = studentLeftTeamEmail({
       teacherFirstName: registration.teacher_first_name,
       studentFirstName: participant.first_name,

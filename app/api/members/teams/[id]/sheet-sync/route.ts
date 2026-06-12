@@ -30,13 +30,14 @@ export async function POST(
 
   const { data: registration } = await db
     .from('registrations')
-    .select('id, teacher_member_id, teacher_email, spreadsheet_id, event_slug, event_title, school_name, school_address_state')
+    .select('id, teacher_member_id, teacher_email, teacher_poc_email, spreadsheet_id, event_slug, event_title, school_name, school_address_state')
     .eq('id', registrationId)
     .eq('type', 'group')
     .maybeSingle()
 
   if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
-  // Ownership by member id OR registrant email (see lib/team-access).
+  // Ownership by member id OR registrant email OR nominated teacher-POC email
+  // (see lib/team-access).
   if (!ownsTeam(member, registration)) {
     console.warn('[teams/sheet-sync] Access denied', { registrationId, memberId: member.id })
     return NextResponse.json({ error: 'You do not have access to this team' }, { status: 403 })

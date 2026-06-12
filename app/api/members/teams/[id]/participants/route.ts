@@ -7,6 +7,7 @@ import { recordEventParticipationForRegistration } from '@/lib/event-participati
 import { normalizeEventRole } from '@/lib/member-enums'
 import { ownsTeam } from '@/lib/team-access'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
+import { getMemberOnFileByMembershipId } from '@/lib/member-onfile'
 
 // POST /api/members/teams/[id]/participants — group organiser adds a participant
 export async function POST(
@@ -30,14 +31,15 @@ export async function POST(
 
   const { data: registration } = await db
     .from('registrations')
-    .select('id, teacher_member_id, teacher_email, event_slug, event_title, school_name, school_address_state')
+    .select('id, teacher_member_id, teacher_email, teacher_poc_email, event_slug, event_title, school_name, school_address_state')
     .eq('id', registrationId)
     .eq('type', 'group')
     .maybeSingle()
 
   if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
-  // Ownership by member id OR registrant email (see lib/team-access). The brittle
-  // event_role === 'teacher' gate also rejected student-managers, who own teams too.
+  // Ownership by member id OR registrant email OR nominated teacher-POC email
+  // (see lib/team-access). The brittle event_role === 'teacher' gate also
+  // rejected student managers and the teacher POC, who both own the team.
   if (!ownsTeam(member, registration)) {
     console.warn('[teams/participants] Access denied', { registrationId, memberId: member.id })
     return NextResponse.json({ error: 'You do not have access to this team' }, { status: 403 })
@@ -78,10 +80,35 @@ export async function POST(
     }
   }
 
+  // Member-ID-linked: build from the existing member's on-file record, reuse
+  // their member (never overwrite), and skip the upsert below — same contract as
+  // the group registration route.
+  let linkedMemberId: string | null = null
+  if (body.linked && membershipId) {
+    const onFile = await getMemberOnFileByMembershipId(db, membershipId)
+    if (onFile) {
+      linkedMemberId = onFile.memberId
+      Object.assign(insert, {
+        first_name: onFile.first_name, last_name: onFile.last_name, nickname: onFile.nickname,
+        email: onFile.email, phone: onFile.phone, date_of_birth: onFile.date_of_birth,
+        grade: onFile.grade, gender: onFile.gender, t_shirt_size: onFile.t_shirt_size,
+        ethnicity: onFile.ethnicity, dietary_requirements: onFile.dietary_requirements,
+        health_conditions: onFile.health_conditions,
+        emergency_contact_first_name: onFile.emergency_contact_first_name,
+        emergency_contact_last_name: onFile.emergency_contact_last_name,
+        emergency_contact_email: onFile.emergency_contact_email,
+        emergency_contact_phone: onFile.emergency_contact_phone,
+        emergency_contact_relationship: onFile.emergency_contact_relationship,
+        event_role: normalizeEventRole(onFile.event_role ?? insert.event_role),
+        member_id: onFile.memberId,
+      })
+    }
+  }
+
   // Upsert a member row (non-fatal) so the person gets a member account, can be
   // linked to a school, and shows on admin member pages — parity with the
   // registration routes. The participant is saved regardless of the outcome.
-  const memberId = await upsertMember(db, {
+  const memberId = linkedMemberId ?? await upsertMember(db, {
     email: body.email,
     first_name: body.first_name,
     last_name: body.last_name,

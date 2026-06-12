@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { DEFAULT_ROLE_FOR_BRACKET } from '@/lib/membership-rules'
+import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 
 function isAdmin(sessionClaims: unknown) {
   return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
@@ -14,10 +15,11 @@ export async function POST(req: Request) {
 
   const body = await req.json()
   const {
-    first_name, last_name, email, phone,
+    first_name, last_name, nickname, email, phone,
     date_of_birth, gender,
     age_bracket, event_role,
     grade, tshirt_size,
+    ethnicity, dietary_requirements,
     school_id, new_school_name,
     new_school_address_line1, new_school_address_line2,
     new_school_city, new_school_state, new_school_postcode,
@@ -98,6 +100,7 @@ export async function POST(req: Request) {
     .insert({
       first_name: first_name.trim(),
       last_name: last_name.trim(),
+      nickname: nickname?.trim() || null,
       email: email.trim().toLowerCase(),
       phone: phone || null,
       date_of_birth: date_of_birth || null,
@@ -132,6 +135,12 @@ export async function POST(req: Request) {
       started_at: new Date().toISOString().split('T')[0],
     })
   }
+
+  // Persist ethnicity + dietary onto the canonical join tables (same as the
+  // registration routes) so the admin-entered selections show everywhere.
+  await syncMemberOptionSelections(db, [
+    { memberId: member.id, ethnicity, dietary: dietary_requirements },
+  ])
 
   // Assign membership tier
   if (tier_id) {

@@ -20,18 +20,21 @@ const GENDERS = ['Male', 'Female', 'Other']
 const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
 const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
 const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
+const ETHNICITIES = ['Pacific Islander', 'Hispanic', 'White (Caucasian)', 'Black', 'Native American', 'Asian', 'Prefer Not To Say']
 const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
 
 interface DetailsForm {
   type: 'Student' | 'Adult'
   first_name: string
   last_name: string
+  nickname: string
   email: string
   phone: string
   date_of_birth: string
   gender: string
   t_shirt_size: string
   grade: string
+  ethnicity: string[]
   dietary_requirements: string[]
   health_conditions: string
   emergency_contact_first_name: string
@@ -42,9 +45,9 @@ interface DetailsForm {
 }
 
 const EMPTY_DETAILS: DetailsForm = {
-  type: 'Student', first_name: '', last_name: '', email: '', phone: '',
+  type: 'Student', first_name: '', last_name: '', nickname: '', email: '', phone: '',
   date_of_birth: '', gender: '', t_shirt_size: '', grade: '',
-  dietary_requirements: [], health_conditions: '',
+  ethnicity: [], dietary_requirements: [], health_conditions: '',
   emergency_contact_first_name: '', emergency_contact_last_name: '',
   emergency_contact_email: '', emergency_contact_phone: '', emergency_contact_relationship: '',
 }
@@ -80,6 +83,11 @@ export default function GroupJoinClient({
   function toggleDietary(opt: string) {
     const cur = form.dietary_requirements
     set('dietary_requirements', cur.includes(opt) ? cur.filter(d => d !== opt) : [...cur, opt])
+  }
+
+  function toggleEthnicity(opt: string) {
+    const cur = form.ethnicity
+    set('ethnicity', cur.includes(opt) ? cur.filter(d => d !== opt) : [...cur, opt])
   }
 
   // Signed-in members: one-click join using their stored profile.
@@ -257,6 +265,12 @@ export default function GroupJoinClient({
           </div>
         </div>
 
+        {/* Preferred name */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Preferred name / nickname</label>
+          <input className={inputClass} value={form.nickname} onChange={e => set('nickname', e.target.value)} placeholder="Optional" />
+        </div>
+
         {/* Contact */}
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -302,6 +316,19 @@ export default function GroupJoinClient({
               </select>
             </div>
           )}
+        </div>
+
+        {/* Ethnicity */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Ethnicity</label>
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            {ETHNICITIES.map(opt => (
+              <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={form.ethnicity.includes(opt)} onChange={() => toggleEthnicity(opt)} />
+                <span className="text-sm">{opt}</span>
+              </label>
+            ))}
+          </div>
         </div>
 
         {/* Dietary */}

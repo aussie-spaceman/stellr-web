@@ -3,14 +3,17 @@ import { CheckCircle, ExternalLink } from 'lucide-react'
 
 interface PageProps {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ id?: string; type?: string; payment?: string; spreadsheet?: string }>
+  searchParams: Promise<{ id?: string; type?: string; payment?: string; spreadsheet?: string; join?: string; remaining?: string }>
 }
 
 export default async function ConfirmationPage({ params, searchParams }: PageProps) {
   const { slug } = await params
-  const { id, type, spreadsheet } = await searchParams
+  const { id, type, spreadsheet, join, remaining } = await searchParams
   const isGroup = type === 'group'
   const spreadsheetUrl = spreadsheet ? decodeURIComponent(spreadsheet) : null
+  const joinUrl = join ? decodeURIComponent(join) : null
+  // Some declared participants were left for later (partial "add them now").
+  const hasRemaining = isGroup && !!remaining
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-16">
@@ -35,8 +38,34 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
           </div>
         )}
 
-        {/* Google Sheet link — spreadsheet path */}
-        {spreadsheetUrl && (
+        {/* Partial add-now — remaining participants still need entering */}
+        {hasRemaining && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-6 text-left">
+            <p className="font-semibold text-amber-900 mb-1">Some participant details still needed</p>
+            <p className="text-sm text-amber-800 mb-3">
+              You didn&apos;t fill in every participant. Provide the remaining participant details via your Member Portal or Google Sheet — whichever is easier.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              {spreadsheetUrl && (
+                <a href={spreadsheetUrl} target="_blank" rel="noopener noreferrer" className="btn-primary inline-flex items-center justify-center gap-2 text-sm">
+                  Open Google Sheet <ExternalLink size={14} />
+                </a>
+              )}
+              {joinUrl && (
+                <a href={joinUrl} target="_blank" rel="noopener noreferrer" className="btn-outline inline-flex items-center justify-center gap-2 text-sm">
+                  Individual completion link <ExternalLink size={14} />
+                </a>
+              )}
+              <Link href="/account?tab=teams" className="btn-outline inline-flex items-center justify-center gap-2 text-sm">
+                Member Portal <ExternalLink size={14} />
+              </Link>
+            </div>
+            <p className="text-xs text-amber-700 mt-2">These links have also been emailed to you.</p>
+          </div>
+        )}
+
+        {/* Google Sheet link — spreadsheet path (whole roster provided later) */}
+        {spreadsheetUrl && !hasRemaining && (
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6 text-left">
             <p className="font-semibold text-brand-blue-dark mb-1">Your Team Member Spreadsheet</p>
             <p className="text-sm text-gray-600 mb-3">

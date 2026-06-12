@@ -89,12 +89,22 @@ function receiptAvailable(p: Participation, reg: ParticipationReg): boolean {
   return reg.status === 'confirmed'
 }
 
-export function BillingHistory() {
+// `impersonateMemberId` + `readOnly` back the admin "view as member" page: the
+// data is fetched for that member (admin-gated server-side) and the interactive
+// payment controls are suppressed.
+interface BillingHistoryProps {
+  impersonateMemberId?: string
+  readOnly?: boolean
+}
+
+export function BillingHistory({ impersonateMemberId, readOnly = false }: BillingHistoryProps = {}) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [participations, setParticipations] = useState<Participation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [payingId, setPayingId] = useState<string | null>(null)
+
+  const memberQuery = impersonateMemberId ? `?memberId=${impersonateMemberId}` : ''
 
   async function handlePay(registrationId: string) {
     setPayingId(registrationId)
@@ -118,7 +128,7 @@ export function BillingHistory() {
   }
 
   useEffect(() => {
-    fetch('/api/members/billing')
+    fetch(`/api/members/billing${memberQuery}`)
       .then(r => r.json())
       .then(data => {
         if (data.error) throw new Error(data.error)
@@ -127,7 +137,7 @@ export function BillingHistory() {
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [memberQuery])
 
   if (loading) {
     return (
@@ -193,7 +203,7 @@ export function BillingHistory() {
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${style}`}>
                           {label}
                         </span>
-                        {p.pay_kind === 'self' && (
+                        {!readOnly && p.pay_kind === 'self' && (
                           <div className="mt-1">
                             <button
                               onClick={() => handlePay(reg.id)}
@@ -219,14 +229,18 @@ export function BillingHistory() {
                       </td>
                       <td className="px-6 py-4">
                         {receiptAvailable(p, reg) ? (
-                          <a
-                            href={`/api/members/billing/receipt?participation=${p.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-brand-blue hover:text-brand-blue-dark text-xs font-medium"
-                          >
-                            Download
-                          </a>
+                          readOnly ? (
+                            <span className="text-xs text-gray-400">Available</span>
+                          ) : (
+                            <a
+                              href={`/api/members/billing/receipt?participation=${p.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-brand-blue hover:text-brand-blue-dark text-xs font-medium"
+                            >
+                              Download
+                            </a>
+                          )
                         ) : (
                           <span className="text-xs text-gray-400">—</span>
                         )}

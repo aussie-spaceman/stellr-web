@@ -74,8 +74,24 @@ interface TeamRegistration {
   member_pays_individually: boolean
   details_method: string | null
   joinUrl: string | null
+  // How the signed-in member relates to this group, for the role badge.
+  viewerRole: 'teacher' | 'student_manager' | 'teacher_poc' | null
   participants: Participant[]
   docusignEnvelopes: Record<string, DocuSignEnvelope>
+}
+
+const VIEWER_ROLE_LABEL: Record<NonNullable<TeamRegistration['viewerRole']>, string> = {
+  teacher: 'Teacher',
+  student_manager: 'Student Manager',
+  teacher_poc: 'Teacher POC',
+}
+
+function RoleBadge({ role }: { role: NonNullable<TeamRegistration['viewerRole']> }) {
+  return (
+    <span className="inline-flex text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+      {VIEWER_ROLE_LABEL[role]}
+    </span>
+  )
 }
 
 interface StudentTeam {
@@ -105,9 +121,11 @@ interface StudentTeam {
 function JoinedTeamsView({
   participations,
   onLeft,
+  readOnly = false,
 }: {
   participations: StudentTeam[]
   onLeft: (participantId: string) => void
+  readOnly?: boolean
 }) {
   const [leaving, setLeaving] = useState<string | null>(null)
   const [payingId, setPayingId] = useState<string | null>(null)
@@ -200,24 +218,26 @@ function JoinedTeamsView({
                 </div>
               </div>
             </div>
-            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-4 flex-wrap">
-              {paymentPending && (
+            {!readOnly && (
+              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-4 flex-wrap">
+                {paymentPending && (
+                  <button
+                    onClick={() => handlePay(reg.id, entry.id)}
+                    disabled={payingId === entry.id}
+                    className="text-sm font-medium text-white bg-brand-blue hover:bg-blue-800 rounded-lg px-4 py-1.5 disabled:opacity-50"
+                  >
+                    {payingId === entry.id ? 'Redirecting…' : 'Pay Now →'}
+                  </button>
+                )}
                 <button
-                  onClick={() => handlePay(reg.id, entry.id)}
-                  disabled={payingId === entry.id}
-                  className="text-sm font-medium text-white bg-brand-blue hover:bg-blue-800 rounded-lg px-4 py-1.5 disabled:opacity-50"
+                  onClick={() => handleLeave(entry.id, reg.id)}
+                  disabled={leaving === entry.id}
+                  className="text-sm text-red-500 hover:text-red-700 font-medium disabled:opacity-50 ml-auto"
                 >
-                  {payingId === entry.id ? 'Redirecting…' : 'Pay Now →'}
+                  {leaving === entry.id ? 'Leaving…' : 'Leave team'}
                 </button>
-              )}
-              <button
-                onClick={() => handleLeave(entry.id, reg.id)}
-                disabled={leaving === entry.id}
-                className="text-sm text-red-500 hover:text-red-700 font-medium disabled:opacity-50 ml-auto"
-              >
-                {leaving === entry.id ? 'Leaving…' : 'Leave team'}
-              </button>
-            </div>
+              </div>
+            )}
           </div>
         )
       })}
@@ -245,7 +265,7 @@ const CONSENT_TYPE_LABEL: Record<string, string> = {
 
 // ── Teacher view ──────────────────────────────────────────────────────────────
 
-function TeacherTeamsView() {
+function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; readOnly: boolean }) {
   const [teams, setTeams] = useState<TeamRegistration[]>([])
   const [participations, setParticipations] = useState<StudentTeam[]>([])
   const [loading, setLoading] = useState(true)
@@ -261,7 +281,7 @@ function TeacherTeamsView() {
   const [consentMsg, setConsentMsg] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/members/teams')
+    fetch(`/api/members/teams${memberQuery}`)
       .then(r => r.json())
       .then(data => {
         if (data.error) throw new Error(data.error)
@@ -270,12 +290,12 @@ function TeacherTeamsView() {
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [memberQuery])
 
   async function loadTeam(id: string) {
     if (expanded === id) { setExpanded(null); setFullTeam(null); return }
     setExpanded(id)
-    const res = await fetch(`/api/members/teams/${id}`)
+    const res = await fetch(`/api/members/teams/${id}${memberQuery}`)
     const data = await res.json()
     if (!data.error) setFullTeam(data)
   }
@@ -288,7 +308,7 @@ function TeacherTeamsView() {
     if (res.ok) {
       setSyncMsg(`Synced: ${data.updated} updated, ${data.created} added.${data.watchActive ? ' Live sync active.' : ''}`)
       // Reload full team
-      const r2 = await fetch(`/api/members/teams/${registrationId}`)
+      const r2 = await fetch(`/api/members/teams/${registrationId}${memberQuery}`)
       const d2 = await r2.json()
       if (!d2.error) setFullTeam(d2)
     } else {
@@ -302,7 +322,7 @@ function TeacherTeamsView() {
     setRemoving(pid)
     await fetch(`/api/members/teams/${registrationId}/participants/${pid}`, { method: 'DELETE' })
     // Reload
-    const r = await fetch(`/api/members/teams/${registrationId}`)
+    const r = await fetch(`/api/members/teams/${registrationId}${memberQuery}`)
     const d = await r.json()
     if (!d.error) setFullTeam(d)
     setRemoving(null)
@@ -312,7 +332,7 @@ function TeacherTeamsView() {
     setAdding(false)
     setEditing(null)
     if (expanded) {
-      fetch(`/api/members/teams/${expanded}`)
+      fetch(`/api/members/teams/${expanded}${memberQuery}`)
         .then(r => r.json())
         .then(d => { if (!d.error) setFullTeam(d) })
     }
@@ -329,7 +349,7 @@ function TeacherTeamsView() {
       const data = await res.json() as { error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Resend failed')
       setConsentMsg('Reminder sent.')
-      const r = await fetch(`/api/members/teams/${registrationId}`)
+      const r = await fetch(`/api/members/teams/${registrationId}${memberQuery}`)
       const d = await r.json()
       if (!d.error) setFullTeam(d)
     } catch (e) {
@@ -382,7 +402,10 @@ function TeacherTeamsView() {
               className="w-full p-5 text-left flex items-center justify-between"
             >
               <div>
-                <p className="font-medium text-gray-900">{team.event_title}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-medium text-gray-900">{team.event_title}</p>
+                  {team.viewerRole && <RoleBadge role={team.viewerRole} />}
+                </div>
                 <p className="text-sm text-gray-500 mt-0.5">{team.school_name ?? '—'}</p>
               </div>
               <div className="flex items-center gap-4">
@@ -445,20 +468,24 @@ function TeacherTeamsView() {
                       on-demand endpoint which generates it, persists the ID, and
                       redirects (covers older registrations created before sheets
                       were generated up front). */}
-                  <a
-                    href={
-                      fullTeam.registration.spreadsheet_id
-                        ? `https://docs.google.com/spreadsheets/d/${fullTeam.registration.spreadsheet_id}/edit`
-                        : `/api/registrations/${team.id}/spreadsheet`
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm text-brand-blue hover:text-brand-blue-dark font-medium"
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-                    Open Sheet
-                  </a>
-                  {fullTeam.registration.spreadsheet_id && (
+                  {/* On-demand sheet generation is a write — in read-only view-as
+                      only link out when a sheet already exists (direct Google link). */}
+                  {(fullTeam.registration.spreadsheet_id || !readOnly) && (
+                    <a
+                      href={
+                        fullTeam.registration.spreadsheet_id
+                          ? `https://docs.google.com/spreadsheets/d/${fullTeam.registration.spreadsheet_id}/edit`
+                          : `/api/registrations/${team.id}/spreadsheet`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-brand-blue hover:text-brand-blue-dark font-medium"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+                      Open Sheet
+                    </a>
+                  )}
+                  {!readOnly && fullTeam.registration.spreadsheet_id && (
                     <button
                       onClick={() => handleSync(team.id)}
                       disabled={syncing}
@@ -476,12 +503,14 @@ function TeacherTeamsView() {
                       Live sync active
                     </span>
                   )}
-                  <button
-                    onClick={() => setAdding(true)}
-                    className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium text-white bg-brand-blue hover:bg-blue-800 rounded-lg px-3 py-1.5"
-                  >
-                    + Add participant
-                  </button>
+                  {!readOnly && (
+                    <button
+                      onClick={() => setAdding(true)}
+                      className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium text-white bg-brand-blue hover:bg-blue-800 rounded-lg px-3 py-1.5"
+                    >
+                      + Add participant
+                    </button>
+                  )}
                 </div>
 
                 {syncMsg && (
@@ -593,7 +622,7 @@ function TeacherTeamsView() {
                                   <div className="space-y-1">
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <EnvelopeStatusBadge status={envelope.status} />
-                                      {canResend && (
+                                      {!readOnly && canResend && (
                                         <button
                                           onClick={() => handleConsentResend(team.id, p.id)}
                                           disabled={resendingConsent === p.id}
@@ -636,19 +665,23 @@ function TeacherTeamsView() {
                                 </td>
                               )}
                               <td className="py-2.5 text-right space-x-2">
-                                <button
-                                  onClick={() => setEditing(p)}
-                                  className="text-xs text-brand-blue hover:text-brand-blue-dark font-medium"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => handleRemoveParticipant(team.id, p.id)}
-                                  disabled={removing === p.id}
-                                  className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
-                                >
-                                  Remove
-                                </button>
+                                {!readOnly && (
+                                  <>
+                                    <button
+                                      onClick={() => setEditing(p)}
+                                      className="text-xs text-brand-blue hover:text-brand-blue-dark font-medium"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => handleRemoveParticipant(team.id, p.id)}
+                                      disabled={removing === p.id}
+                                      className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
+                                    >
+                                      Remove
+                                    </button>
+                                  </>
+                                )}
                               </td>
                             </tr>
                           )
@@ -689,6 +722,7 @@ function TeacherTeamsView() {
             id: editing.id,
             first_name: editing.first_name,
             last_name: editing.last_name,
+            nickname: (editing as { nickname?: string }).nickname ?? '',
             email: editing.email,
             phone: editing.phone ?? '',
             date_of_birth: editing.date_of_birth ?? '',
@@ -696,6 +730,7 @@ function TeacherTeamsView() {
             t_shirt_size: editing.t_shirt_size ?? '',
             grade: editing.grade ?? '',
             event_role: editing.event_role,
+            ethnicity: (editing as { ethnicity?: string[] }).ethnicity ?? [],
             dietary_requirements: editing.dietary_requirements ?? [],
             health_conditions: editing.health_conditions ?? '',
             emergency_contact_first_name: editing.emergency_contact_first_name ?? '',
@@ -714,13 +749,21 @@ function TeacherTeamsView() {
 
 // ── Student view ──────────────────────────────────────────────────────────────
 
-function StudentTeamsView({ memberId: _memberId }: { memberId: string }) {
+function StudentTeamsView({
+  memberId: _memberId,
+  memberQuery,
+  readOnly,
+}: {
+  memberId: string
+  memberQuery: string
+  readOnly: boolean
+}) {
   const [teams, setTeams] = useState<StudentTeam[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/members/teams')
+    fetch(`/api/members/teams${memberQuery}`)
       .then(r => r.json())
       .then(data => {
         if (data.error) throw new Error(data.error)
@@ -728,7 +771,7 @@ function StudentTeamsView({ memberId: _memberId }: { memberId: string }) {
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [memberQuery])
 
   if (loading) return <p className="text-sm text-gray-400 py-4">Loading your teams…</p>
   if (error) return <p className="text-sm text-red-600 py-4">{error}</p>
@@ -742,7 +785,7 @@ function StudentTeamsView({ memberId: _memberId }: { memberId: string }) {
     )
   }
 
-  return <JoinedTeamsView participations={teams} onLeft={(pid) => setTeams(prev => prev.filter(t => t.id !== pid))} />
+  return <JoinedTeamsView participations={teams} readOnly={readOnly} onLeft={(pid) => setTeams(prev => prev.filter(t => t.id !== pid))} />
 }
 
 // ── Exports ───────────────────────────────────────────────────────────────────
@@ -750,9 +793,39 @@ function StudentTeamsView({ memberId: _memberId }: { memberId: string }) {
 interface Props {
   role: string
   memberId: string
+  // Admin "view as member": fetch this member's teams (admin-gated server-side)
+  // and render read-only — all mutating controls are hidden.
+  impersonateMemberId?: string
+  readOnly?: boolean
 }
 
-export function TeamsTab({ role, memberId }: Props) {
-  if (role === 'teacher' || role === 'school_student_manager') return <TeacherTeamsView />
-  return <StudentTeamsView memberId={memberId} />
+export function TeamsTab({ memberId, impersonateMemberId, readOnly = false }: Props) {
+  const memberQuery = impersonateMemberId ? `?memberId=${impersonateMemberId}` : ''
+
+  // Manager vs participant view is driven by what the member actually owns, not
+  // by their members.event_role: a student manager's row is 'school_student' and
+  // a teacher POC can be any role, yet both fully manage a group. The teams API
+  // resolves ownership (registrant + nominated teacher POC) and reports which
+  // view to render via `role`.
+  const [apiRole, setApiRole] = useState<'group_manager' | 'student' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/members/teams${memberQuery}`)
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return
+        if (data.error) throw new Error(data.error)
+        setApiRole(data.role === 'group_manager' ? 'group_manager' : 'student')
+      })
+      .catch(err => { if (!cancelled) setError(err.message) })
+    return () => { cancelled = true }
+  }, [memberQuery])
+
+  if (error) return <p className="text-sm text-red-600 py-4">{error}</p>
+  if (apiRole === null) return <p className="text-sm text-gray-400 py-4">Loading your teams…</p>
+  if (apiRole === 'group_manager')
+    return <TeacherTeamsView memberQuery={memberQuery} readOnly={readOnly} />
+  return <StudentTeamsView memberId={memberId} memberQuery={memberQuery} readOnly={readOnly} />
 }

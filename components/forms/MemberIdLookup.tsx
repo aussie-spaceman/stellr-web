@@ -3,19 +3,19 @@
 import { useState } from 'react'
 
 export interface MemberMatch {
-  member_id: string
   first_name: string
   last_name: string
 }
 
 // Stellr Member ID field with a lookup. Entering an existing participant's
 // Member ID and accepting the match links this person to their on-file member
-// record (the registration route then builds the participant from that record
-// rather than re-collecting — and never overwrites the member). Decline keeps the
-// fields editable so the organiser can enter details manually.
+// record (the registration route resolves the ID server-side, builds the
+// participant from that record, and never overwrites the member). Decline keeps
+// the fields editable so the organiser can enter details manually. Only the
+// matched name is returned to the browser — never the internal member id.
 export function MemberIdLookup({
   value,
-  linkedMemberId,
+  linked,
   linkedName,
   onChange,
   onAccept,
@@ -23,14 +23,14 @@ export function MemberIdLookup({
   label = 'Stellr Member ID',
 }: {
   value: string
-  linkedMemberId: string
+  linked: boolean
   linkedName?: string
   onChange: (v: string) => void
   onAccept: (m: MemberMatch) => void
   onUnlink: () => void
   label?: string
 }) {
-  const [status, setStatus] = useState<'idle' | 'searching' | 'found' | 'notfound' | 'error'>('idle')
+  const [status, setStatus] = useState<'idle' | 'searching' | 'found' | 'notfound' | 'limited' | 'error'>('idle')
   const [match, setMatch] = useState<MemberMatch | null>(null)
 
   async function lookup() {
@@ -40,9 +40,13 @@ export function MemberIdLookup({
     setMatch(null)
     try {
       const res = await fetch(`/api/members/lookup?membership_id=${encodeURIComponent(id)}`)
+      if (res.status === 429) {
+        setStatus('limited')
+        return
+      }
       const data = await res.json()
       if (data.found) {
-        setMatch(data as MemberMatch)
+        setMatch({ first_name: data.first_name, last_name: data.last_name })
         setStatus('found')
       } else {
         setStatus('notfound')
@@ -53,7 +57,7 @@ export function MemberIdLookup({
   }
 
   // Accepted/linked — show a compact confirmation; the rest of the form collapses.
-  if (linkedMemberId) {
+  if (linked) {
     return (
       <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 flex items-center justify-between gap-3">
         <p className="text-sm text-green-900">
@@ -96,6 +100,7 @@ export function MemberIdLookup({
         </div>
       )}
       {status === 'notfound' && <p className="text-xs text-gray-500 mt-1">No member found with that ID — enter their details below.</p>}
+      {status === 'limited' && <p className="text-xs text-amber-600 mt-1">Too many lookups in a short time — wait a minute and try again, or enter their details below.</p>}
       {status === 'error' && <p className="text-xs text-red-500 mt-1">Lookup failed — enter their details below.</p>}
       <p className="text-xs text-gray-400 mt-1">Leave blank if new to Stellr, or enter a Member ID to reuse their existing record and prevent duplicates.</p>
     </div>

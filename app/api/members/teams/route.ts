@@ -1,37 +1,38 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { resolveRequestMember } from '@/lib/impersonation'
+import { teamViewerRole, type TeamViewerRegistration } from '@/lib/team-access'
 
 // GET /api/members/teams
-// Teachers: all registrations where teacher_member_id = this member
-// Students: all registrations they appear in as a participant
-export async function GET() {
-  const { userId } = await auth()
-  if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
-
+// Managers: all group registrations they own — as the registrant (teacher or
+//   student manager) OR as the nominated teacher point of contact.
+// Students: all registrations they appear in as a participant.
+// Admins may pass ?memberId= to read another member's teams (view-as).
+export async function GET(req: Request) {
   const db = supabaseServer()
 
-  const { data: member } = await db
-    .from('members')
-    .select('id, email')
-    .eq('clerk_user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle()
-
+  const { member, unauthorised } = await resolveRequestMember<{ id: string; email: string | null }>(
+    req,
+    db,
+    'id, email',
+  )
+  if (unauthorised) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
 
   // Managed teams are matched by member id OR the email the group was registered
-  // under (see lib/team-access) — not by event_role, which broke whenever the
-  // session resolved to a different/duplicate members row than the registration.
+  // under, OR the nominated teacher-POC email (see lib/team-access) — not by
+  // event_role, which broke whenever the session resolved to a different/duplicate
+  // members row than the registration, and never recognised the student manager
+  // (a school_student member) or the teacher POC at all.
   const ownerOr = member.email
-    ? `teacher_member_id.eq.${member.id},teacher_email.eq.${member.email}`
+    ? `teacher_member_id.eq.${member.id},teacher_email.eq.${member.email},teacher_poc_email.eq.${member.email}`
     : `teacher_member_id.eq.${member.id}`
 
   const { data: registrations, error } = await db
     .from('registrations')
     .select(`
       id, event_slug, event_title, school_name, status, created_at,
-      teacher_first_name, teacher_last_name, teacher_email,
+      teacher_first_name, teacher_last_name, teacher_email, teacher_member_id,
       spreadsheet_id, registrant_role,
       teacher_poc_first_name, teacher_poc_last_name, teacher_poc_email,
       member_pays_individually, details_method,
@@ -69,9 +70,12 @@ export async function GET() {
       }
     }
 
-    const teams = (registrations ?? []).map((r: { id: string }) => ({
+    const teams = (registrations ?? []).map((r) => ({
       ...r,
-      joinUrl: joinUrlMap[r.id] ?? null,
+      joinUrl: joinUrlMap[(r as { id: string }).id] ?? null,
+      // How the viewer relates to this group, so the portal can label it
+      // (Student Manager / Teacher POC / Teacher).
+      viewerRole: teamViewerRole(member, r as unknown as TeamViewerRegistration),
     }))
 
     // Also return any groups this member has joined as a participant

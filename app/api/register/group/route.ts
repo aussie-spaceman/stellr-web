@@ -15,6 +15,7 @@ import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrad
 import { linkMembersToSchoolByName } from '@/lib/school-link'
 import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
+import { getMemberOnFileByMembershipId } from '@/lib/member-onfile'
 import { getCurrentMember } from '@/lib/community'
 import type { RegistrationRow } from '@/lib/database.types'
 
@@ -39,13 +40,19 @@ function resolveRoleForAge(rawRole: unknown, ageNow: number): string {
 }
 
 interface ParticipantPayload {
-  first_name: string; last_name: string; email: string; phone: string
+  first_name: string; last_name: string; nickname?: string; email: string; phone: string
   date_of_birth: string; grade?: string; gender: string; t_shirt_size: string
   age_bracket: string; event_role: string
-  dietary_requirements?: string[]; health_conditions?: string
+  ethnicity?: string[]; dietary_requirements?: string[]; health_conditions?: string
   emergency_contact_first_name?: string; emergency_contact_last_name?: string
   emergency_contact_email?: string; emergency_contact_phone?: string
   emergency_contact_relationship?: string
+  // Member-ID linking (organiser entered an existing Stellr Member ID + Accept).
+  linked?: boolean
+  existing_membership_id?: string
+  // Set during server-side resolution — the linked member's id. When present the
+  // participant is built from the on-file record and the member is NOT overwritten.
+  _linked_member_id?: string | null
 }
 
 interface TeacherPoC {
@@ -101,6 +108,42 @@ export async function POST(req: NextRequest) {
     }
 
     const db = supabaseServer()
+
+    // Resolve any member-ID-linked participants to their on-file record. The
+    // organiser only typed a Member ID + "Accept", so the rest of the slot is
+    // blank — fill it from the member's stored profile and stamp the resolved
+    // member id so the email-keyed upsert below skips them (the member is reused,
+    // never overwritten — the real fix for the silent overwrite/duplicate bug).
+    // Falls back to manual handling if the ID no longer resolves.
+    if (details_method === 'add_now') {
+      const resolveLinked = async (people: ParticipantPayload[] | undefined) => {
+        for (const p of people ?? []) {
+          if (!p.linked || !p.existing_membership_id) continue
+          const onFile = await getMemberOnFileByMembershipId(db, p.existing_membership_id)
+          if (!onFile) { p.linked = false; continue }
+          p.first_name = onFile.first_name
+          p.last_name = onFile.last_name
+          p.nickname = onFile.nickname ?? undefined
+          p.email = onFile.email
+          p.phone = onFile.phone ?? ''
+          p.date_of_birth = onFile.date_of_birth ?? ''
+          p.grade = onFile.grade ?? undefined
+          p.gender = onFile.gender ?? ''
+          p.t_shirt_size = onFile.t_shirt_size ?? ''
+          p.ethnicity = onFile.ethnicity
+          p.dietary_requirements = onFile.dietary_requirements
+          p.health_conditions = onFile.health_conditions ?? undefined
+          p.emergency_contact_first_name = onFile.emergency_contact_first_name ?? undefined
+          p.emergency_contact_last_name = onFile.emergency_contact_last_name ?? undefined
+          p.emergency_contact_email = onFile.emergency_contact_email ?? undefined
+          p.emergency_contact_phone = onFile.emergency_contact_phone ?? undefined
+          p.emergency_contact_relationship = onFile.emergency_contact_relationship ?? undefined
+          p._linked_member_id = onFile.memberId
+        }
+      }
+      await resolveLinked(additional_adults)
+      await resolveLinked(students)
+    }
 
     // Duplicate check: registrant email
     const { data: existingRegistrant } = await db
@@ -195,7 +238,15 @@ export async function POST(req: NextRequest) {
     // updates that touch the same row twice in one statement.
     const memberUpsertByEmail = new Map<string, Record<string, unknown>>()
     const optionsByEmail = new Map<string, { ethnicity?: string[]; dietary?: string[] }>()
+    const linkedMemberIdByEmail = new Map<string, string>()
     for (const p of allPeople) {
+      // Member-ID-linked participants reuse their existing record — never re-upsert
+      // (which would overwrite their profile) or re-sync their options. Just keep
+      // their id so the participant row below links to them.
+      if (p._linked_member_id) {
+        if (p.email) linkedMemberIdByEmail.set(p.email, p._linked_member_id)
+        continue
+      }
       const dob = new Date(p.date_of_birth)
       const ageNow = new Date().getFullYear() - dob.getFullYear()
       optionsByEmail.set(p.email, {
@@ -206,6 +257,7 @@ export async function POST(req: NextRequest) {
         email: p.email,
         first_name: p.first_name,
         last_name: p.last_name,
+        nickname: p.nickname || null,
         phone: p.phone,
         date_of_birth: p.date_of_birth,
         gender: normalizeGender(p.gender),
@@ -229,10 +281,14 @@ export async function POST(req: NextRequest) {
     }
 
     const memberIdMap: Record<string, string | null> = {}
-    const { data: memberRows, error: memberUpsertError } = await db
-      .from('members')
-      .upsert([...memberUpsertByEmail.values()], { onConflict: 'email', ignoreDuplicates: false })
-      .select('id, email')
+    // Seed linked participants' member ids up front (they were skipped above).
+    for (const [email, id] of linkedMemberIdByEmail) memberIdMap[email] = id
+    const { data: memberRows, error: memberUpsertError } = memberUpsertByEmail.size > 0
+      ? await db
+          .from('members')
+          .upsert([...memberUpsertByEmail.values()], { onConflict: 'email', ignoreDuplicates: false })
+          .select('id, email')
+      : { data: [], error: null }
     if (memberUpsertError) {
       console.error('Member upsert error (non-fatal — participants still created):', memberUpsertError)
     }
@@ -326,7 +382,7 @@ export async function POST(req: NextRequest) {
       registration_id: regId,
       member_id: memberIdMap[p.email] ?? null,
       first_name: p.first_name, last_name: p.last_name,
-      nickname: null as null,
+      nickname: p.nickname || null,
       email: p.email, phone: p.phone,
       date_of_birth: p.date_of_birth,
       grade: p.grade ?? null,
@@ -353,10 +409,12 @@ export async function POST(req: NextRequest) {
       member_pays_individually && details_method === 'add_now' ? 'pending' : null
     const registrantRow = buildParticipant({
       first_name: teacher.first_name, last_name: teacher.last_name,
+      nickname: teacher.nickname,
       email: teacher.email, phone: teacher.phone,
       date_of_birth: teacher.date_of_birth, gender: teacher.gender,
       t_shirt_size: teacher.t_shirt_size, age_bracket: teacher.age_bracket,
       event_role: registrant_role === 'student_manager' ? 'school_student_manager' : 'teacher',
+      ethnicity: teacher.ethnicity,
       dietary_requirements: teacher.dietary_requirements,
       health_conditions: teacher.health_conditions,
       grade: teacher.grade ?? undefined,
@@ -441,9 +499,23 @@ export async function POST(req: NextRequest) {
       console.log('[group] Google Sheets not configured — skipping sheet creation')
     }
 
-    // ── Group join token (spreadsheet or email_link path — both get a token) ──
+    // Did the organiser leave some declared slots for later? For add_now we
+    // compare what they actually entered against the declared group size. (For
+    // the spreadsheet / email-link methods the whole roster is provided later.)
+    const expectedAdditionalAdults = registrant_role === 'student_manager'
+      ? adult_count                       // SM: all adults are "additional" (PoC + optional)
+      : Math.max(0, adult_count - 1)      // teacher: exclude themselves
+    const providedAdditionalAdults = (additional_adults ?? []).length
+    const providedStudents = (students ?? []).length
+    const incompleteAddNow = details_method === 'add_now' &&
+      (providedAdditionalAdults < expectedAdditionalAdults || providedStudents < student_count)
+
+    // ── Group join token ──────────────────────────────────────────────────────
+    // A forwardable completion link is created for the spreadsheet / email-link
+    // methods, and also for an add_now registration that was only partially filled
+    // — so the organiser (or each member) can finish the remaining people later.
     let joinUrl: string | null = null
-    if (details_method === 'spreadsheet' || details_method === 'email_link') {
+    if (details_method === 'spreadsheet' || details_method === 'email_link' || incompleteAddNow) {
       const token = randomBytes(32).toString('hex')
       const { error: tokenError } = await db.from('group_join_tokens').insert({
         token,
@@ -460,9 +532,9 @@ export async function POST(req: NextRequest) {
     }
 
     // The sheet is created for every group, but it's only an *action item* (and so
-    // surfaced as an option in the confirmation email / page) when members weren't
-    // entered up front. For add_now the sheet is just a portal record.
-    const promptSpreadsheetUrl = details_method === 'add_now' ? null : spreadsheetUrl
+    // surfaced in the confirmation email / page) when members still need entering —
+    // the spreadsheet / email-link methods, or a partially-filled add_now.
+    const promptSpreadsheetUrl = details_method !== 'add_now' || incompleteAddNow ? spreadsheetUrl : null
 
     // ── Look up Stripe Price ID ───────────────────────────────────────────────
     const event = await getEventBySlug(event_slug)
@@ -518,9 +590,14 @@ export async function POST(req: NextRequest) {
           isGroup: 'true',
           teacherName: `${teacher.first_name} ${teacher.last_name}`,
         },
-        success_url: promptSpreadsheetUrl
-          ? `${SITE_URL}/register/${event_slug}/confirmation?id=${regId}&type=group&payment=success&spreadsheet=${encodeURIComponent(promptSpreadsheetUrl)}`
-          : `${SITE_URL}/register/${event_slug}/confirmation?id=${regId}&type=group&payment=success`,
+        success_url: (() => {
+          const u = new URL(`${SITE_URL}/register/${event_slug}/confirmation`)
+          u.searchParams.set('id', regId); u.searchParams.set('type', 'group'); u.searchParams.set('payment', 'success')
+          if (promptSpreadsheetUrl) u.searchParams.set('spreadsheet', promptSpreadsheetUrl)
+          if (incompleteAddNow && joinUrl) u.searchParams.set('join', joinUrl)
+          if (incompleteAddNow) u.searchParams.set('remaining', '1')
+          return u.toString()
+        })(),
         cancel_url: `${SITE_URL}/register/${event_slug}/group?cancelled=true`,
       })
       checkoutUrl = session.url
@@ -586,7 +663,7 @@ export async function POST(req: NextRequest) {
       console.error('Confirmation email failed (non-fatal):', emailErr)
     }
 
-    return NextResponse.json({ registrationId: regId, checkoutUrl, spreadsheetUrl: promptSpreadsheetUrl, signInToken }, { status: 201 })
+    return NextResponse.json({ registrationId: regId, checkoutUrl, spreadsheetUrl: promptSpreadsheetUrl, joinUrl, signInToken }, { status: 201 })
   } catch (e) {
     console.error('Group registration error:', e)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

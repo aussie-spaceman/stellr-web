@@ -1,26 +1,23 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { ownsTeam } from '@/lib/team-access'
+import { ownsTeam, teamViewerRole, type TeamViewerRegistration } from '@/lib/team-access'
+import { resolveRequestMember } from '@/lib/impersonation'
 
 // GET /api/members/teams/[id] — full team detail with participants
+// Admins may pass ?memberId= to read another member's team detail (view-as).
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { userId } = await auth()
-  if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
-
   const { id } = await params
   const db = supabaseServer()
 
-  const { data: member } = await db
-    .from('members')
-    .select('id, email')
-    .eq('clerk_user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle()
-
+  const { member, unauthorised } = await resolveRequestMember<{ id: string; email: string | null }>(
+    req,
+    db,
+    'id, email',
+  )
+  if (unauthorised) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
 
   const { data: registration, error } = await db
@@ -43,12 +40,13 @@ export async function GET(
   }
   if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
 
-  // Access control: the group organiser owns it (matched by member id OR
-  // registrant email — see lib/team-access), otherwise the caller must be a
-  // participant in it.
+  // Access control: the group organiser owns it (the registrant — teacher or
+  // student manager — OR the nominated teacher POC, matched by member id/email;
+  // see lib/team-access), otherwise the caller must be a participant in it.
+  const owns = ownsTeam(member, registration)
   const isParticipant = (registration.participants as { member_id?: string | null }[])
     .some(p => p.member_id === member.id)
-  if (!ownsTeam(member, registration) && !isParticipant) {
+  if (!owns && !isParticipant) {
     console.warn('[teams/id] Access denied', { registrationId: id, memberId: member.id })
     return NextResponse.json({ error: 'You do not have access to this team' }, { status: 403 })
   }
@@ -101,5 +99,9 @@ export async function GET(
     }
   }
 
-  return NextResponse.json({ registration: { ...registration, joinUrl, docusignEnvelopes }, watchActive })
+  const viewerRole = owns
+    ? teamViewerRole(member, registration as unknown as TeamViewerRegistration)
+    : null
+
+  return NextResponse.json({ registration: { ...registration, joinUrl, docusignEnvelopes, viewerRole }, watchActive })
 }

@@ -28,6 +28,8 @@ const BRACKETS = ['high_school', 'college', 'adult']
 const GENDERS = ['male', 'female', 'other']
 const TSHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL_plus']
 const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
+const ETHNICITIES = ['Pacific Islander', 'Hispanic', 'White (Caucasian)', 'Black', 'Native American', 'Asian', 'Prefer Not To Say']
+const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
 
 function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -46,6 +48,7 @@ export function AdminAddMember({ tiers }: Props) {
   const [form, setForm] = useState({
     first_name: '',
     last_name: '',
+    nickname: '',
     email: '',
     phone: '',
     date_of_birth: '',
@@ -55,6 +58,8 @@ export function AdminAddMember({ tiers }: Props) {
     grade: '',
     tshirt_size: '',
     discord_handle: '',
+    ethnicity: [] as string[],
+    dietary_requirements: [] as string[],
     health_conditions: '',
     ec_first_name: '',
     ec_last_name: '',
@@ -68,6 +73,13 @@ export function AdminAddMember({ tiers }: Props) {
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }))
+  }
+
+  function toggleMulti(field: 'ethnicity' | 'dietary_requirements', opt: string) {
+    setForm((f) => {
+      const cur = f[field]
+      return { ...f, [field]: cur.includes(opt) ? cur.filter((d) => d !== opt) : [...cur, opt] }
+    })
   }
 
   function handleBracketChange(bracket: string) {
@@ -173,6 +185,15 @@ export function AdminAddMember({ tiers }: Props) {
                   type="text"
                   value={form.last_name}
                   onChange={(e) => set('last_name', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Preferred name / nickname</label>
+                <input
+                  type="text"
+                  value={form.nickname}
+                  onChange={(e) => set('nickname', e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
@@ -320,7 +341,7 @@ export function AdminAddMember({ tiers }: Props) {
                   <label className="block text-xs text-gray-500 mb-1">{lbl}</label>
                   <input
                     type="text"
-                    value={(form as Record<string, string>)[field]}
+                    value={(form as unknown as Record<string, string>)[field]}
                     onChange={(e) => set(field, e.target.value)}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
@@ -336,6 +357,33 @@ export function AdminAddMember({ tiers }: Props) {
                   <option value="">Select…</option>
                   {EMERGENCY_RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Ethnicity & dietary */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+            <h2 className="text-base font-semibold text-gray-900">Ethnicity &amp; dietary</h2>
+            <div>
+              <p className="block text-xs text-gray-500 mb-2">Ethnicity</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {ETHNICITIES.map((opt) => (
+                  <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={form.ethnicity.includes(opt)} onChange={() => toggleMulti('ethnicity', opt)} className="rounded" />
+                    <span className="text-sm">{opt}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="block text-xs text-gray-500 mb-2">Dietary requirements</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {DIETARY_OPTIONS.map((opt) => (
+                  <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={form.dietary_requirements.includes(opt)} onChange={() => toggleMulti('dietary_requirements', opt)} className="rounded" />
+                    <span className="text-sm">{opt}</span>
+                  </label>
+                ))}
               </div>
             </div>
           </div>

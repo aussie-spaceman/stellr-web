@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { resendEnvelope } from '@/lib/docusign'
+import { ownsTeam } from '@/lib/team-access'
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -19,12 +20,12 @@ export async function POST(
 
   const [{ data: member }, { data: reg }, { data: envelope }] = await Promise.all([
     db.from('members')
-      .select('id, event_role')
+      .select('id, email')
       .eq('clerk_user_id', userId)
       .eq('is_active', true)
       .maybeSingle(),
     db.from('registrations')
-      .select('teacher_member_id')
+      .select('teacher_member_id, teacher_email, teacher_poc_email')
       .eq('id', id)
       .maybeSingle(),
     db.from('docusign_envelopes')
@@ -35,12 +36,9 @@ export async function POST(
 
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
 
-  const isManager =
-    member.event_role === 'teacher' || member.event_role === 'school_student_manager'
-  if (!isManager) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-
-  // Verify teacher owns this registration
-  if (!reg || reg.teacher_member_id !== member.id) {
+  // Only an owner of this registration — the registrant (teacher or student
+  // manager) or the nominated teacher POC — can resend (see lib/team-access).
+  if (!reg || !ownsTeam(member, reg)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

@@ -8,11 +8,14 @@ interface Props {
     show_school: boolean
     show_region: boolean
   }
+  // Admin "view as member": render the member's current prefs but disable the
+  // controls so the admin can't mutate their own directory record.
+  readOnly?: boolean
 }
 
 // Opt-in controls for the member directory (FR-COM-04).
 // Rendered on the account profile page so members control their own visibility.
-export function DirectoryPrefsForm({ initial }: Props) {
+export function DirectoryPrefsForm({ initial, readOnly = false }: Props) {
   const [isVisible, setIsVisible] = useState(initial.is_visible)
   const [showSchool, setShowSchool] = useState(initial.show_school)
   const [showRegion, setShowRegion] = useState(initial.show_region)
@@ -50,6 +53,7 @@ export function DirectoryPrefsForm({ initial }: Props) {
     field: keyof typeof initial,
     value: boolean
   ) => {
+    if (readOnly) return
     setter(value)
     save({ [field]: value })
   }
@@ -65,7 +69,7 @@ export function DirectoryPrefsForm({ initial }: Props) {
           role="switch"
           aria-checked={isVisible}
           onClick={() => toggle(setIsVisible, 'is_visible', !isVisible)}
-          disabled={saving}
+          disabled={saving || readOnly}
           className={[
             'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none',
             isVisible ? 'bg-gray-900' : 'bg-gray-200',
@@ -87,7 +91,7 @@ export function DirectoryPrefsForm({ initial }: Props) {
               type="checkbox"
               checked={showSchool}
               onChange={(e) => toggle(setShowSchool, 'show_school', e.target.checked)}
-              disabled={saving}
+              disabled={saving || readOnly}
               className="rounded border-gray-300"
             />
             <span className="text-sm text-gray-700">Show my school</span>
@@ -97,7 +101,7 @@ export function DirectoryPrefsForm({ initial }: Props) {
               type="checkbox"
               checked={showRegion}
               onChange={(e) => toggle(setShowRegion, 'show_region', e.target.checked)}
-              disabled={saving}
+              disabled={saving || readOnly}
               className="rounded border-gray-300"
             />
             <span className="text-sm text-gray-700">Show my region / state</span>

@@ -1,4 +1,4 @@
--- 032: Normalise participants.event_role to the members enum values.
+-- 033: Normalise participants.event_role to the members enum values.
 --
 -- participants.event_role is plain text and historically stored the form's
 -- display strings ("School Student", "Teacher", "Adult") plus the teams

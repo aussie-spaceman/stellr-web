@@ -14,6 +14,11 @@ export interface RegistrationPrefill {
   memberId: string
   /** Authenticated session email — authoritative, rendered read-only. */
   email: string
+  /** members.age_bracket enum: 'adult' | 'high_school' | 'college'. Drives
+   *  whether the individual form shows student-only fields (grade, etc.). */
+  age_bracket?: string
+  /** members.event_role enum: 'teacher' | 'school_student' | 'mentor' | … */
+  event_role?: string
   first_name?: string
   last_name?: string
   nickname?: string
@@ -68,7 +73,7 @@ export async function getRegistrationPrefill(
       .maybeSingle(),
     db
       .from('members')
-      .select('first_name, last_name, nickname, phone, date_of_birth, grade, gender, tshirt_size')
+      .select('first_name, last_name, nickname, phone, date_of_birth, grade, gender, tshirt_size, age_bracket, event_role')
       .eq('id', m.id)
       .maybeSingle(),
   ])
@@ -81,6 +86,8 @@ export async function getRegistrationPrefill(
   return {
     memberId: m.id,
     email: m.email,
+    age_bracket: str(mr.age_bracket),
+    event_role: str(mr.event_role),
     first_name: str(p.first_name) ?? str(mr.first_name) ?? m.first_name ?? undefined,
     last_name: str(p.last_name) ?? str(mr.last_name) ?? m.last_name ?? undefined,
     nickname: str(p.nickname) ?? str(mr.nickname),

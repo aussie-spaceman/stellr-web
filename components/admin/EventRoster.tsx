@@ -176,7 +176,7 @@ export default function EventRoster({
                           <DeleteEntityButton
                             entity="participant"
                             id={p.id}
-                            name={`${p.first_name} ${p.last_name}`}
+                            name={`${p.first_name} ${p.last_name}'s registration`}
                             label="Delete"
                             softDeletable={false}
                             requireTypedConfirm={false}

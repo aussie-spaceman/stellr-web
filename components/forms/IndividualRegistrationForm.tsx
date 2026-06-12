@@ -19,7 +19,9 @@ const schema = z.object({
   email: z.string().email('Valid email required'),
   phone: z.string().min(7, 'Valid phone required'),
   date_of_birth: z.string().min(1, 'Required'),
-  grade: z.string().min(1, 'Required'),
+  // Student-only — required for students, dropped for adult members. Enforced
+  // conditionally in nextStep() rather than the static schema.
+  grade: z.string().optional(),
   gender: z.string().min(1, 'Required'),
   t_shirt_size: z.string().min(1, 'Required'),
   // Step 2 — Emergency contact + health
@@ -48,6 +50,10 @@ export default function IndividualRegistrationForm({
   // When the registrant is signed in, the email is authoritative and locked
   // (Option A) — a logged-in member can only register under their own address.
   const emailLocked = !!prefill?.email
+  // Individual registration is student-shaped by default. A signed-in adult
+  // member shouldn't be asked for student-only fields (Grade) — recognise their
+  // age_bracket and present the adult variant instead.
+  const isAdultMember = prefill?.age_bracket === 'adult'
   const [step, setStep] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -60,6 +66,7 @@ export default function IndividualRegistrationForm({
     handleSubmit,
     watch,
     setValue,
+    setError: setFieldError,
     getValues,
     trigger,
     formState: { errors },
@@ -100,9 +107,14 @@ export default function IndividualRegistrationForm({
   async function nextStep() {
     const step1Fields: (keyof FormData)[] = [
       'first_name', 'last_name', 'email', 'phone', 'date_of_birth',
-      'grade', 'gender', 't_shirt_size',
+      'gender', 't_shirt_size',
     ]
-    const valid = await trigger(step === 1 ? step1Fields : undefined)
+    let valid = await trigger(step === 1 ? step1Fields : undefined)
+    // Grade is required for students only; adult members don't see the field.
+    if (!isAdultMember && !getValues('grade')) {
+      setFieldError('grade', { type: 'manual', message: 'Required' })
+      valid = false
+    }
     if (!schoolSelection) {
       setSchoolError('Please select your school')
       return
@@ -157,6 +169,12 @@ export default function IndividualRegistrationForm({
             <p className="text-sm text-gray-600">Step 1 of 2 — Tell us about yourself</p>
           </div>
 
+          {isAdultMember && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              You&apos;re registering as an adult participant, so student-only fields (like grade) are hidden.
+            </div>
+          )}
+
           <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -206,14 +224,16 @@ export default function IndividualRegistrationForm({
                 <input {...register('date_of_birth')} type="date" className="input-field" />
                 <FieldError message={errors.date_of_birth?.message} />
               </div>
-              <div>
-                <label className="label-text">Grade / Year Level *</label>
-                <select {...register('grade')} className="input-field">
-                  <option value="">Select…</option>
-                  {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
-                </select>
-                <FieldError message={errors.grade?.message} />
-              </div>
+              {!isAdultMember && (
+                <div>
+                  <label className="label-text">Grade / Year Level *</label>
+                  <select {...register('grade')} className="input-field">
+                    <option value="">Select…</option>
+                    {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                  <FieldError message={errors.grade?.message} />
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

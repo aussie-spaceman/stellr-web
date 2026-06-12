@@ -86,7 +86,7 @@ export default async function RegisterTypePage({ params }: PageProps) {
       <div className="max-w-2xl mx-auto px-4 py-12">
         <h2 className="text-xl font-bold text-brand-blue-dark mb-2">How are you registering?</h2>
         <p className="text-gray-600 mb-6">
-          Individual students register and pay online. Teachers register a group and receive an invoice.
+          Individuals register and pay online. Teachers register a group and receive an invoice.
         </p>
 
         <div className="mb-8">
@@ -109,7 +109,7 @@ export default async function RegisterTypePage({ params }: PageProps) {
             </div>
             <h3 className="font-bold text-brand-blue-dark text-lg mb-1">Individual</h3>
             <p className="text-sm text-gray-600 mb-4">
-              I&apos;m a student registering myself. I&apos;ll pay the registration fee online.
+              I&apos;m registering myself (student or adult). I&apos;ll pay the registration fee online.
             </p>
             <span className="text-brand-blue text-sm font-medium group-hover:underline">
               Register as Individual →

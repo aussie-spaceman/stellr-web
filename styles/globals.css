@@ -1,9 +1,10 @@
+/* Google Fonts — Archivo Black (display titles) + Fredoka (subheadings) */
+/* @import must precede all other rules (Turbopack/CSS spec), so it sits above the Tailwind directives. */
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Fredoka:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Google Fonts — Archivo Black (display titles) + Fredoka (subheadings) */
-@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Fredoka:wght@400;500;600&display=swap');
 
 /* Self-hosted fonts from /public/fonts/ */
 @font-face {

@@ -92,7 +92,8 @@ Then complete the env + webhook items below.
 - [ ] Template IDs for the prod account: `DOCUSIGN_TEMPLATE_ID` (minor/guardian consent), `DOCUSIGN_ADULT_TEMPLATE_ID`, `DOCUSIGN_MENTOR_TEMPLATE_ID`.
 - [ ] Mentor counter-signer: `DOCUSIGN_STELLR_REP_NAME`, `DOCUSIGN_STELLR_REP_EMAIL`; template must define `StellrRepresentative` role at routing order 1.
 - [ ] Verify DocuSign template **tab labels** match the app's tabs (e.g. `TeacherPhone`, `MentorPhone`, the emergency-contact relationship tab from migration 014).
-- [ ] DocuSign Connect (webhook): point to `https://app.stellreducation.org/api/webhooks/docusign`; set `DOCUSIGN_CONNECT_HMAC_KEY` to match the Connect config.
+- [ ] DocuSign Connect (webhook): point to `https://app.stellreducation.org/api/webhooks/docusign`; set `DOCUSIGN_CONNECT_HMAC_KEY` to match the Connect config. **Full setup (events, HMAC, JSON format): [DOCUSIGN-CONNECT.md](./DOCUSIGN-CONNECT.md).**
+- [ ] Enable the **recipient "Signed/Completed"** trigger event in the Connect config — required for the 🟠 "partially complete" DocuSign pill (envelope-only events make it jump 🔴→🟢 and skip the partial state).
 - [ ] Test each agreement type sends and the signed-status webhook returns 200.
 
 ---

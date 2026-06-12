@@ -10,6 +10,26 @@ interface Blocker {
   adminHref?: string
 }
 
+interface RefundOption {
+  pct: number
+  cents: number
+  validityDays?: number | null
+}
+
+interface RefundPreview {
+  paid: boolean
+  paidCents: number
+  currency: string
+  daysOut: number | null
+  options: { cash?: RefundOption; credit?: RefundOption }
+  hasPaymentRef: boolean
+  alreadyRefunded: boolean
+}
+
+function money(cents: number, currency: string) {
+  return `${(cents / 100).toFixed(2)} ${currency.toUpperCase()}`
+}
+
 interface Props {
   /** Registry entity type, e.g. 'member', 'school', 'event'. */
   entity: string
@@ -27,6 +47,8 @@ interface Props {
   requireTypedConfirm?: boolean
   /** Optional custom button label (default "Delete"). */
   label?: string
+  /** Enable the refund step for paid registrations/participants. */
+  refundable?: boolean
   className?: string
 }
 
@@ -43,6 +65,7 @@ export function DeleteEntityButton({
   softDeletable = true,
   requireTypedConfirm = true,
   label,
+  refundable = false,
   className,
 }: Props) {
   const router = useRouter()
@@ -52,6 +75,8 @@ export function DeleteEntityButton({
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<'soft' | 'hard'>(softDeletable ? 'soft' : 'hard')
   const [confirmText, setConfirmText] = useState('')
+  const [refund, setRefund] = useState<RefundPreview | null>(null)
+  const [refundChoice, setRefundChoice] = useState<'cash' | 'credit' | null>(null)
 
   async function openDialog() {
     setOpen(true)
@@ -59,12 +84,35 @@ export function DeleteEntityButton({
     setBlockers(null)
     setMode(softDeletable ? 'soft' : 'hard')
     setConfirmText('')
+    setRefund(null)
+    // Group deletions refund every paid participant; default to credit (issued
+    // wherever the tier offers it). Per-participant deletions resolve below.
+    setRefundChoice(refundable && entity === 'registration' ? 'credit' : null)
     setLoading(true)
     try {
-      const res = await fetch(`/api/admin/deletion/preflight?entity=${encodeURIComponent(entity)}&id=${encodeURIComponent(id)}`)
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Preflight failed')
-      setBlockers(data.blockers as Blocker[])
+      const calls: Promise<unknown>[] = [
+        fetch(`/api/admin/deletion/preflight?entity=${encodeURIComponent(entity)}&id=${encodeURIComponent(id)}`)
+          .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+          .then((res) => {
+            if (!(res as { ok: boolean }).ok) throw new Error(((res as { d: { error?: string } }).d).error || 'Preflight failed')
+            setBlockers(((res as { d: { blockers: Blocker[] } }).d).blockers)
+          }),
+      ]
+      if (refundable && entity === 'participant') {
+        calls.push(
+          fetch(`/api/admin/refunds/preview?participant=${encodeURIComponent(id)}`)
+            .then((r) => r.json())
+            .then((preview: RefundPreview) => {
+              setRefund(preview)
+              // Pre-select the single offered option; leave null when both exist.
+              const opts = preview.options || {}
+              if (opts.cash && !opts.credit) setRefundChoice('cash')
+              else if (opts.credit && !opts.cash) setRefundChoice('credit')
+            })
+            .catch(() => setRefund(null))
+        )
+      }
+      await Promise.all(calls)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not check dependencies')
     } finally {
@@ -79,7 +127,7 @@ export function DeleteEntityButton({
       const res = await fetch('/api/admin/deletion', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entity, id, mode }),
+        body: JSON.stringify({ entity, id, mode, refundChoice: refundChoice ?? undefined }),
       })
       const data = await res.json()
       if (res.status === 409 && data.blockers) {
@@ -112,6 +160,16 @@ export function DeleteEntityButton({
   const typedOk = !requireTypedConfirm || confirmText.trim().toUpperCase() === 'DELETE'
   const hardConfirmed = mode === 'soft' || typedOk
   const showModeChoice = softDeletable && allowHardDelete
+
+  // When a participant's tier offers BOTH cash and credit, the admin must pick.
+  const needsRefundChoice =
+    refundable &&
+    entity === 'participant' &&
+    !!refund?.paid &&
+    !refund.alreadyRefunded &&
+    !!refund.options.cash &&
+    !!refund.options.credit
+  const refundReady = !needsRefundChoice || refundChoice !== null
 
   return (
     <>
@@ -186,11 +244,65 @@ export function DeleteEntityButton({
                     </div>
                   )}
 
+                  {/* Refund step */}
+                  {refundable && entity === 'registration' && (
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2 text-sm">
+                      <p className="text-gray-700">Paid participants will be refunded per the event&apos;s refund policy. Where a tier offers a choice:</p>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-1.5 text-gray-700">
+                          <input type="radio" checked={refundChoice === 'cash'} onChange={() => setRefundChoice('cash')} /> Cash
+                        </label>
+                        <label className="flex items-center gap-1.5 text-gray-700">
+                          <input type="radio" checked={refundChoice === 'credit'} onChange={() => setRefundChoice('credit')} /> Credit
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {refundable && entity === 'participant' && refund && (
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2 text-sm">
+                      {refund.alreadyRefunded ? (
+                        <p className="text-gray-600">Already refunded — no further refund will be issued.</p>
+                      ) : !refund.paid ? (
+                        <p className="text-gray-600">No payment on record — nothing to refund.</p>
+                      ) : Object.keys(refund.options).length === 0 ? (
+                        <p className="text-gray-600">No refund is due at this point ({refund.daysOut} days out).</p>
+                      ) : (
+                        <>
+                          <p className="text-gray-700">
+                            Paid {money(refund.paidCents, refund.currency)} · {refund.daysOut} days out. Refund:
+                          </p>
+                          {refund.options.cash && (
+                            <label className="flex items-center justify-between gap-2 text-gray-700">
+                              <span className="flex items-center gap-1.5">
+                                <input type="radio" checked={refundChoice === 'cash'} onChange={() => setRefundChoice('cash')} />
+                                Cash ({refund.options.cash.pct}%)
+                              </span>
+                              <span className="font-medium">{money(refund.options.cash.cents, refund.currency)}</span>
+                            </label>
+                          )}
+                          {refund.options.credit && (
+                            <label className="flex items-center justify-between gap-2 text-gray-700">
+                              <span className="flex items-center gap-1.5">
+                                <input type="radio" checked={refundChoice === 'credit'} onChange={() => setRefundChoice('credit')} />
+                                Credit ({refund.options.credit.pct}%{refund.options.credit.validityDays ? `, ${Math.round(refund.options.credit.validityDays / 365)}yr` : ''})
+                              </span>
+                              <span className="font-medium">{money(refund.options.credit.cents, refund.currency)}</span>
+                            </label>
+                          )}
+                          {refundChoice === 'cash' && !refund.hasPaymentRef && (
+                            <p className="text-amber-700 text-xs">No Stripe payment reference on file — this will be flagged for a manual refund.</p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-end gap-3 pt-1">
                     <button onClick={() => setOpen(false)} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5">Cancel</button>
                     <button
                       onClick={doDelete}
-                      disabled={loading || !hardConfirmed}
+                      disabled={loading || !hardConfirmed || !refundReady}
                       className="bg-red-600 text-white text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-red-700 disabled:opacity-50"
                     >
                       {loading ? 'Deleting…' : mode === 'hard' ? 'Permanently delete' : 'Soft-delete'}

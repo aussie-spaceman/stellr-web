@@ -112,6 +112,7 @@ export default function EventRoster({
                   id={group.registrationId}
                   name={group.type === 'group' ? `the group "${group.groupLabel}"` : 'this individual registration'}
                   label={group.type === 'group' ? 'Delete group' : 'Delete registration'}
+                  refundable
                   className="text-xs font-medium text-red-600 hover:text-red-800 normal-case"
                 />
               </div>
@@ -179,6 +180,7 @@ export default function EventRoster({
                             label="Delete"
                             softDeletable={false}
                             requireTypedConfirm={false}
+                            refundable
                             className="text-xs font-medium text-red-600 hover:text-red-800"
                           />
                         </td>

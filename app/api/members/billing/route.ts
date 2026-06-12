@@ -68,5 +68,16 @@ export async function GET() {
     .not('join_completed_at', 'is', null)
     .order('join_completed_at', { ascending: false })
 
-  return NextResponse.json({ invoices, participations: participations ?? [] })
+  // ── Account credits (issued from cancelled registrations) ────────────────────
+  const nowIso = new Date().toISOString()
+  const { data: creditRows } = await db
+    .from('account_credits')
+    .select('id, currency, amount_cents, remaining_cents, status, reason, expires_at, created_at')
+    .eq('member_id', member.id)
+    .in('status', ['available', 'partially_redeemed'])
+    .gt('remaining_cents', 0)
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+    .order('expires_at', { ascending: true, nullsFirst: false })
+
+  return NextResponse.json({ invoices, participations: participations ?? [], credits: creditRows ?? [] })
 }

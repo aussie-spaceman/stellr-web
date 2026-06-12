@@ -10,6 +10,8 @@ import EventRoster from '@/components/admin/EventRoster'
 import EventManagerAssignments from '@/components/admin/EventManagerAssignments'
 import EventCompanies, { type CompanyRow } from '@/components/admin/EventCompanies'
 import EventBadges from '@/components/admin/EventBadges'
+import { RefundPolicyEditor } from '@/components/admin/RefundPolicyEditor'
+import { DEFAULT_TIERS, type RefundTier } from '@/lib/refunds/policy'
 
 export const metadata = { title: 'Admin — Event' }
 export const dynamic = 'force-dynamic'
@@ -56,6 +58,13 @@ export default async function AdminEventDetailPage({ params }: { params: Promise
   const studentCount = roster.groups
     .flatMap((g) => g.participants)
     .filter((p) => p.event_role === 'school_student').length
+
+  // Refund policy: global default + optional per-event override.
+  const [{ data: globalPolicy }, { data: eventPolicy }] = await Promise.all([
+    db.from('refund_policies').select('tiers').eq('scope', 'global').maybeSingle(),
+    db.from('refund_policies').select('tiers').eq('scope', 'event').eq('event_slug', slug).maybeSingle(),
+  ])
+  const refundTiers = (eventPolicy?.tiers as RefundTier[]) ?? (globalPolicy?.tiers as RefundTier[]) ?? DEFAULT_TIERS
 
   // Assignment panel (admins only) — enrich Clerk ids with emails for display
   let assignments: { id: string; clerk_user_id: string; email: string | null }[] = []
@@ -175,6 +184,20 @@ export default async function AdminEventDetailPage({ params }: { params: Promise
           hasCertificateArtwork={Boolean(eventSettings?.certificate_artwork_path)}
           certificateFormat={(eventSettings?.certificate_format as 'us_letter' | 'a4') ?? 'us_letter'}
         />
+      )}
+
+      {!isCampaign && access.isAdmin && (
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Refund Policy</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              {eventPolicy ? 'This event uses a custom override.' : 'Using the global default. Save below to override for this event only.'}
+            </p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <RefundPolicyEditor scope="event" eventSlug={slug} initialTiers={refundTiers} hasOverride={Boolean(eventPolicy)} />
+          </div>
+        </section>
       )}
 
       {/* Roster */}

@@ -15,12 +15,13 @@ export async function DELETE(req: Request) {
   const entity = body?.entity as string | undefined
   const id = body?.id as string | undefined
   const mode = (body?.mode as string | undefined) === 'hard' ? 'hard' : 'soft'
+  const refundChoice = body?.refundChoice === 'cash' || body?.refundChoice === 'credit' ? body.refundChoice : undefined
   if (!entity || !id) return NextResponse.json({ error: 'entity and id are required' }, { status: 400 })
 
   const deletedBy = await memberIdForClerkUser(userId)
 
   try {
-    const result = await executeDeletion(entity, id, { mode, deletedBy })
+    const result = await executeDeletion(entity, id, { mode, deletedBy, refundChoice })
     return NextResponse.json(result)
   } catch (e) {
     if (e instanceof DeletionBlockedError) {

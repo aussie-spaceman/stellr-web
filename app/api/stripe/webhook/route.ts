@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { sendEmail, individualConfirmationEmail, groupPaymentConfirmedEmail } from '@/lib/email'
+import { finalizeRedemption } from '@/lib/refunds/redeem'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -10,6 +11,30 @@ function getStripe() {
 }
 
 // ── Event registration helpers ────────────────────────────────────────────────
+
+// Stores the Stripe payment_intent so a later deletion can issue a cash refund.
+// Per-participant payments land on the participant row; whole-group/individual
+// payments land on the registration.
+async function capturePaymentIntent(
+  session: Stripe.Checkout.Session,
+  target: { registrationId: string; participantEmail?: string }
+) {
+  const intent = typeof session.payment_intent === 'string' ? session.payment_intent : null
+  if (!intent) return
+  const db = supabaseServer()
+  if (target.participantEmail) {
+    await db
+      .from('participants')
+      .update({ stripe_payment_intent_id: intent })
+      .eq('registration_id', target.registrationId)
+      .eq('email', target.participantEmail)
+  } else {
+    await db
+      .from('registrations')
+      .update({ stripe_payment_intent_id: intent })
+      .eq('id', target.registrationId)
+  }
+}
 
 async function markIndividualPayment(registrationId: string, participantEmail: string) {
   const db = supabaseServer()
@@ -201,6 +226,7 @@ export async function POST(req: NextRequest) {
         const { registrationId, participantEmail } = session.metadata
         if (registrationId && participantEmail) {
           await markIndividualPayment(registrationId, participantEmail)
+          await capturePaymentIntent(session, { registrationId, participantEmail })
         }
       } else {
         // Event registration purchase (whole group or individual)
@@ -208,8 +234,12 @@ export async function POST(req: NextRequest) {
         const isGroup = session.metadata?.isGroup === 'true'
         if (registrationId) {
           await confirmRegistration(registrationId, isGroup)
+          await capturePaymentIntent(session, { registrationId })
         }
       }
+
+      // Settle any account-credit redemption applied to this checkout.
+      await finalizeRedemption(session)
     }
 
     // ── invoice.paid (recurring renewal) ───────────────────────────────────

@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
+import { buildCreditDiscount } from '@/lib/refunds/redeem'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -71,10 +72,23 @@ export async function POST(req: Request) {
     await db.from('members').update({ stripe_customer_id: customerId }).eq('id', member.id)
   }
 
+  // Apply any available account credit (issued from a prior refund) to the first
+  // invoice. Allocations are settled in the webhook once payment completes.
+  let discount: Awaited<ReturnType<typeof buildCreditDiscount>> = null
+  try {
+    const price = await stripe.prices.retrieve(priceId)
+    if (price.unit_amount && price.currency) {
+      discount = await buildCreditDiscount(stripe, member.id as string, price.currency, price.unit_amount)
+    }
+  } catch (e) {
+    console.error('[membership-checkout] credit application skipped:', e)
+  }
+
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
     mode: 'subscription',
     line_items: [{ price: priceId, quantity: 1 }],
+    discounts: discount ? [{ coupon: discount.couponId }] : undefined,
     success_url: `${baseUrl}/account?membership=success`,
     cancel_url: `${baseUrl}/membership`,
     metadata: {
@@ -82,6 +96,7 @@ export async function POST(req: Request) {
       memberId: member.id,
       tierId: tier.id,
       billingInterval,
+      ...(discount ? { creditMemberId: member.id as string, creditAllocations: JSON.stringify(discount.allocations) } : {}),
     },
     subscription_data: {
       metadata: {

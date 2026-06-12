@@ -3,6 +3,7 @@ import { getEntityDef } from './registry'
 import { deletionPreflight } from './preflight'
 import { runExternalCleanup } from './external'
 import { archiveEntity } from './archive'
+import { executeRefund, type RefundChoice } from '@/lib/refunds/execute'
 import type { DeleteMode, DeletionResult, EntityDef } from './types'
 
 export class DeletionBlockedError extends Error {
@@ -29,7 +30,7 @@ function resolveSoftSet(def: EntityDef): Record<string, unknown> {
 export async function executeDeletion(
   entity: string,
   id: string,
-  opts: { mode: DeleteMode; deletedBy?: string | null }
+  opts: { mode: DeleteMode; deletedBy?: string | null; refundChoice?: RefundChoice }
 ): Promise<DeletionResult> {
   const def = getEntityDef(entity)
   if (!def) throw new Error(`Unknown deletable entity type: ${entity}`)
@@ -39,9 +40,24 @@ export async function executeDeletion(
   const pre = await deletionPreflight(entity, id)
   if (!pre.canDelete) throw new DeletionBlockedError(pre.blockers)
 
-  const externalResults = await runExternalCleanup(def, id)
-
   const db = supabaseServer()
+
+  // Refund paid registrations BEFORE the row is removed (we need participant
+  // data + payment refs to still exist). Runs only when the admin supplied a
+  // choice and the entity is a participant or a registration ("delete group"
+  // refunds every paid participant).
+  if (opts.refundChoice) {
+    if (def.type === 'participant') {
+      await executeRefund(id, opts.refundChoice, opts.deletedBy ?? null)
+    } else if (def.type === 'registration') {
+      const { data: parts } = await db.from('participants').select('id').eq('registration_id', id)
+      for (const part of parts ?? []) {
+        await executeRefund((part as { id: string }).id, opts.refundChoice, opts.deletedBy ?? null)
+      }
+    }
+  }
+
+  const externalResults = await runExternalCleanup(def, id)
 
   if (mode === 'soft') {
     const { error } = await db.from(def.table).update(resolveSoftSet(def)).eq(def.pk, id)

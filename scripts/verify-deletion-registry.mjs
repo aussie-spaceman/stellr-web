@@ -34,6 +34,11 @@ const CHECKS = [
   ['session_participants', 'member_id'], ['session_participants', 'session_id'],
   ['docusign_envelopes', 'member_id'], ['docusign_envelopes', 'participant_id'],
   ['participants', 'registration_id'],
+  // refund engine (migration 027)
+  ['participants', 'stripe_payment_intent_id'], ['registrations', 'stripe_payment_intent_id'],
+  ['refund_policies', 'scope'], ['account_credits', 'member_id'],
+  ['account_credits', 'remaining_cents'], ['credit_redemptions', 'credit_id'],
+  ['event_refunds', 'participant_id'],
 ]
 
 let ok = 0, bad = 0

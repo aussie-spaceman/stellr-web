@@ -65,13 +65,20 @@ export default async function AdminEventsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Events</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          {access.isAdmin
-            ? 'All events and campaigns from the CMS'
-            : 'Events you are assigned to manage'}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Events</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {access.isAdmin
+              ? 'All events and campaigns from the CMS'
+              : 'Events you are assigned to manage'}
+          </p>
+        </div>
+        {access.isAdmin && (
+          <Link href="/admin/events/refund-policy" className="text-sm font-medium text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded-lg px-3 py-1.5 shrink-0">
+            Refund Policy
+          </Link>
+        )}
       </div>
 
       {sections.map(({ label, items, isCampaign }) => (

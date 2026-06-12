@@ -37,9 +37,11 @@ export type SchoolSelection =
 
 interface Props {
   onChange: (selection: SchoolSelection | null) => void
+  /** Seed the input with the member's existing school so they don't re-pick it. */
+  initialSchool?: { id: string; name: string } | null
 }
 
-export function SchoolSearchInput({ onChange }: Props) {
+export function SchoolSearchInput({ onChange, initialSchool }: Props) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<DbSchool[]>([])
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -54,6 +56,16 @@ export function SchoolSearchInput({ onChange }: Props) {
 
   const containerRef = useRef<HTMLDivElement>(null)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Seed the member's existing school once, on mount, into the "selected" state.
+  const seededRef = useRef(false)
+  useEffect(() => {
+    if (seededRef.current || !initialSchool?.id || !initialSchool.name) return
+    seededRef.current = true
+    setMode('selected')
+    setSelectedName(initialSchool.name)
+    onChange({ type: 'existing', id: initialSchool.id, name: initialSchool.name })
+  }, [initialSchool, onChange])
 
   // Close dropdown on outside click
   useEffect(() => {

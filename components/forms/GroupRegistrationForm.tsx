@@ -357,8 +357,11 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
   const sDietary = sf.watch('dietary_requirements') ?? []
 
   // School selection (separate state — SchoolSearchInput owns its own UI)
-  const [teacherSchool, setTeacherSchool] = useState<SchoolSelection | null>(null)
-  const [smSchool, setSmSchool] = useState<SchoolSelection | null>(null)
+  const initialSchool: SchoolSelection | null = prefill?.school
+    ? { type: 'existing', id: prefill.school.id, name: prefill.school.name }
+    : null
+  const [teacherSchool, setTeacherSchool] = useState<SchoolSelection | null>(initialSchool)
+  const [smSchool, setSmSchool] = useState<SchoolSelection | null>(initialSchool)
   const [schoolError, setSchoolError] = useState<string | null>(null)
 
   // For teacher: adultCount includes teacher themselves (min=1)
@@ -670,7 +673,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
               <h3 className="font-semibold text-brand-blue-dark">School</h3>
               <div>
                 <label className="label-text">School Name *</label>
-                <SchoolSearchInput onChange={setTeacherSchool} />
+                <SchoolSearchInput initialSchool={prefill?.school} onChange={setTeacherSchool} />
                 {schoolError && !teacherSchool && <p className="text-xs text-red-500 mt-1">{schoolError}</p>}
               </div>
             </div>
@@ -727,7 +730,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
               <h3 className="font-semibold text-brand-blue-dark">School</h3>
               <div>
                 <label className="label-text">School Name *</label>
-                <SchoolSearchInput onChange={setSmSchool} />
+                <SchoolSearchInput initialSchool={prefill?.school} onChange={setSmSchool} />
                 {schoolError && !smSchool && <p className="text-xs text-red-500 mt-1">{schoolError}</p>}
               </div>
             </div>

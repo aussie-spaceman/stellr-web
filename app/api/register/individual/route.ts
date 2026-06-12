@@ -116,6 +116,15 @@ export async function POST(req: NextRequest) {
         age_bracket: resolvedBracket,
         event_role: resolvedRole,
         is_active: true,
+        // Persist the profile so the member doesn't re-enter it next time (028).
+        ethnicity: ethnicity ?? [],
+        dietary_requirements: dietary_requirements ?? [],
+        health_conditions: health_conditions || null,
+        emergency_contact_first_name: emergency_contact_first_name || null,
+        emergency_contact_last_name: emergency_contact_last_name || null,
+        emergency_contact_email: emergency_contact_email || null,
+        emergency_contact_phone: emergency_contact_phone || null,
+        emergency_contact_relationship: emergency_contact_relationship || null,
       }, { onConflict: 'email', ignoreDuplicates: false })
       .select('id')
       .maybeSingle()

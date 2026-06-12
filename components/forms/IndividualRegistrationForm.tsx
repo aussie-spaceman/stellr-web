@@ -57,7 +57,9 @@ export default function IndividualRegistrationForm({
   const [step, setStep] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [schoolSelection, setSchoolSelection] = useState<SchoolSelection | null>(null)
+  const [schoolSelection, setSchoolSelection] = useState<SchoolSelection | null>(
+    prefill?.school ? { type: 'existing', id: prefill.school.id, name: prefill.school.name } : null
+  )
   const [schoolError, setSchoolError] = useState<string | null>(null)
   const router = useRouter()
 
@@ -258,6 +260,7 @@ export default function IndividualRegistrationForm({
             <div>
               <label className="label-text">School *</label>
               <SchoolSearchInput
+                initialSchool={prefill?.school}
                 onChange={(sel) => { setSchoolSelection(sel); setSchoolError(null) }}
               />
               {schoolError && <FieldError message={schoolError} />}

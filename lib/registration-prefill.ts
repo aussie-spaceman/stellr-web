@@ -36,6 +36,9 @@ export interface RegistrationPrefill {
   emergency_contact_phone?: string
   emergency_contact_relationship?: string
   school_name?: string
+  /** The member's current school (member_schools join), ready to seed the
+   *  SchoolSearchInput so they don't re-pick it. */
+  school?: { id: string; name: string }
 }
 
 /**
@@ -58,7 +61,7 @@ export async function getRegistrationPrefill(
   //      once they've registered for something before;
   //   2. the members row — always exists for a signed-in member; columns are
   //      enums, so denormalize them back to the form's display labels.
-  const [{ data: last }, { data: mem }] = await Promise.all([
+  const [{ data: last }, { data: mem }, { data: schoolLink }] = await Promise.all([
     db
       .from('participants')
       .select(
@@ -73,8 +76,21 @@ export async function getRegistrationPrefill(
       .maybeSingle(),
     db
       .from('members')
-      .select('first_name, last_name, nickname, phone, date_of_birth, grade, gender, tshirt_size, age_bracket, event_role')
+      .select(
+        `first_name, last_name, nickname, phone, date_of_birth, grade, gender, tshirt_size,
+         age_bracket, event_role, ethnicity, dietary_requirements, health_conditions,
+         emergency_contact_first_name, emergency_contact_last_name, emergency_contact_email,
+         emergency_contact_phone, emergency_contact_relationship`
+      )
       .eq('id', m.id)
+      .maybeSingle(),
+    // Current school via the member_schools join (school isn't a member column).
+    db
+      .from('member_schools')
+      .select('school_id, schools(name)')
+      .eq('member_id', m.id)
+      .eq('is_current', true)
+      .limit(1)
       .maybeSingle(),
   ])
 
@@ -82,6 +98,12 @@ export async function getRegistrationPrefill(
   const mr = (mem ?? {}) as Record<string, unknown>
   const str = (v: unknown) => (typeof v === 'string' && v.length > 0 ? v : undefined)
   const arr = (v: unknown) => (Array.isArray(v) && v.length > 0 ? (v as string[]) : undefined)
+
+  // Resolve the joined school name (Supabase returns the relation as object|array).
+  const sl = (schoolLink ?? null) as { school_id?: string; schools?: { name?: string } | { name?: string }[] } | null
+  const schoolRel = Array.isArray(sl?.schools) ? sl?.schools[0] : sl?.schools
+  const schoolName = str(schoolRel?.name) ?? str(p.school_name)
+  const school = sl?.school_id && schoolName ? { id: sl.school_id, name: schoolName } : undefined
 
   return {
     memberId: m.id,
@@ -96,14 +118,15 @@ export async function getRegistrationPrefill(
     grade: str(p.grade) ?? denormalizeGrade(mr.grade),
     gender: str(p.gender) ?? denormalizeGender(mr.gender),
     t_shirt_size: str(p.t_shirt_size) ?? denormalizeTshirt(mr.tshirt_size),
-    ethnicity: arr(p.ethnicity),
-    dietary_requirements: arr(p.dietary_requirements),
-    health_conditions: str(p.health_conditions),
-    emergency_contact_first_name: str(p.emergency_contact_first_name),
-    emergency_contact_last_name: str(p.emergency_contact_last_name),
-    emergency_contact_email: str(p.emergency_contact_email),
-    emergency_contact_phone: str(p.emergency_contact_phone),
-    emergency_contact_relationship: str(p.emergency_contact_relationship),
-    school_name: str(p.school_name),
+    ethnicity: arr(p.ethnicity) ?? arr(mr.ethnicity),
+    dietary_requirements: arr(p.dietary_requirements) ?? arr(mr.dietary_requirements),
+    health_conditions: str(p.health_conditions) ?? str(mr.health_conditions),
+    emergency_contact_first_name: str(p.emergency_contact_first_name) ?? str(mr.emergency_contact_first_name),
+    emergency_contact_last_name: str(p.emergency_contact_last_name) ?? str(mr.emergency_contact_last_name),
+    emergency_contact_email: str(p.emergency_contact_email) ?? str(mr.emergency_contact_email),
+    emergency_contact_phone: str(p.emergency_contact_phone) ?? str(mr.emergency_contact_phone),
+    emergency_contact_relationship: str(p.emergency_contact_relationship) ?? str(mr.emergency_contact_relationship),
+    school_name: schoolName,
+    school,
   }
 }

@@ -186,6 +186,15 @@ export async function POST(req: NextRequest) {
         age_bracket: ageNow < 18 ? 'high_school' : normalizeAgeBracket(p.age_bracket),
         event_role: normalizeEventRole(ageNow < 18 ? (p.event_role === 'school_student_manager' ? 'school_student_manager' : 'school_student') : p.event_role),
         is_active: true,
+        // Persist the profile so each member doesn't re-enter it next time (028).
+        ethnicity: (p as { ethnicity?: string[] }).ethnicity ?? [],
+        dietary_requirements: p.dietary_requirements ?? [],
+        health_conditions: p.health_conditions || null,
+        emergency_contact_first_name: p.emergency_contact_first_name || null,
+        emergency_contact_last_name: p.emergency_contact_last_name || null,
+        emergency_contact_email: p.emergency_contact_email || null,
+        emergency_contact_phone: p.emergency_contact_phone || null,
+        emergency_contact_relationship: p.emergency_contact_relationship || null,
       })
     }
 

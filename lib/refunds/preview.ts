@@ -41,8 +41,12 @@ export async function previewRefund(participantId: string): Promise<RefundPrevie
     .maybeSingle()
   const alreadyRefunded = !!prior
 
+  // Only hard payment evidence counts: a webhook-recorded per-participant
+  // payment or a stored payment_intent. registrations.status='confirmed' is NOT
+  // proof of payment (test data / manual edits can confirm without money moving),
+  // and treating it as such produced phantom refund offers.
   const paymentIntent = p.stripe_payment_intent_id ?? (reg.stripe_payment_intent_id as string | null)
-  const paid = p.individual_payment_status === 'paid' || !!paymentIntent || reg.status === 'confirmed'
+  const paid = p.individual_payment_status === 'paid' || !!paymentIntent
   if (!paid) return { ...empty, alreadyRefunded }
 
   const event = await getEventBySlug(reg.event_slug as string) as { date?: string; stripePriceId?: string } | null

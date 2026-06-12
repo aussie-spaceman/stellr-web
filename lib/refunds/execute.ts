@@ -51,9 +51,13 @@ export async function executeRefund(
   if (!reg) return { type: 'none', refundCents: 0, detail: 'Registration not found' }
 
   const eventSlug = reg.event_slug as string
+  // Only hard payment evidence counts: a webhook-recorded per-participant
+  // payment or a stored payment_intent. registrations.status='confirmed' is NOT
+  // proof of payment (test data / manual edits can confirm without money moving).
+  // Historical group payments with no stored intent fall through to "unpaid" —
+  // those are handled manually rather than risking a phantom refund.
   const paymentIntent = p.stripe_payment_intent_id ?? (reg.stripe_payment_intent_id as string | null)
-  const isPaid =
-    p.individual_payment_status === 'paid' || !!paymentIntent || reg.status === 'confirmed'
+  const isPaid = p.individual_payment_status === 'paid' || !!paymentIntent
 
   // Idempotency: never refund the same participant twice.
   const { data: prior } = await db

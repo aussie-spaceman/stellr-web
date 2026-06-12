@@ -1,13 +1,21 @@
 import { supabaseServer } from '@/lib/supabase'
 
 // Data assembly for the admin/event-manager event detail view (PRD 6.7).
-// Status pill logic (user-confirmed 10-Jun-2026):
-//   red    "Not Paid"    — payment outstanding
-//   red    "No DocuSign" — consent form outstanding for a minor
-//   green  "Checked In"  — arrived at the event (in-person or virtual confirm)
-//   orange "Registered"  — registration complete, not yet arrived
+// Per-participant pill logic (user-confirmed 11-Jun-2026, supersedes the
+// single summary pill of 10-Jun-2026):
+//   Payment  — red "Invoice Issued" / green "Invoice Paid" when the group
+//              requested an invoice; red "Pmt Link Unpaid" / green "Pmt Link
+//              Paid" for every Stripe-checkout path (individual registrations,
+//              group card payments, members paying individually).
+//   DocuSign — red "Issued", orange "Partially Complete" (some but not all
+//              signers done), green "Complete"; plus red "Not Issued" when
+//              paperwork is required but no envelope exists yet, red
+//              "Declined", and gray "Not Required".
+//   Check-in — green "Checked In" / orange "Registered" (kept alongside the
+//              two pills above so event-day arrival state stays visible).
 
-export type ParticipantPill = 'not_paid' | 'no_docusign' | 'checked_in' | 'registered'
+export type PaymentPill = 'invoice_issued' | 'invoice_paid' | 'link_unpaid' | 'link_paid'
+export type DocusignPill = 'not_required' | 'not_issued' | 'issued' | 'partial' | 'declined' | 'complete'
 
 export interface RosterParticipant {
   id: string
@@ -24,9 +32,13 @@ export interface RosterParticipant {
   health_conditions: string | null
   company_id: string | null
   checked_in_at: string | null
+  minor: boolean
+  emergency_contact_name: string | null
+  emergency_contact_email: string | null
   paid: boolean
   docusign: 'completed' | 'outstanding' | 'not_required'
-  pill: ParticipantPill
+  payment_pill: PaymentPill
+  docusign_pill: DocusignPill
 }
 
 export interface RosterGroup {
@@ -34,6 +46,7 @@ export interface RosterGroup {
   type: 'individual' | 'group'
   status: string
   groupLabel: string | null // teacher/school label for group registrations
+  teacherEmail: string | null
   participants: RosterParticipant[]
 }
 
@@ -68,28 +81,37 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
     db
       .from('registrations')
       .select(
-        `id, type, status, teacher_first_name, teacher_last_name, school_name, member_pays_individually,
+        `id, type, status, teacher_first_name, teacher_last_name, teacher_email, school_name,
+         member_pays_individually, invoice_requested,
          participants(id, first_name, last_name, email, grade, gender, date_of_birth, t_shirt_size,
            school_name, event_role, dietary_requirements, health_conditions, company_id,
-           checked_in_at, individual_payment_status)`
+           checked_in_at, individual_payment_status,
+           emergency_contact_first_name, emergency_contact_last_name, emergency_contact_email)`
       )
       .eq('event_slug', eventSlug)
       .neq('status', 'withdrawn')
       .order('created_at', { ascending: true }),
     db
       .from('docusign_envelopes')
-      .select('participant_id, status')
+      .select('participant_id, status, signers_total, signers_completed')
       .eq('event_slug', eventSlug),
   ])
   if (regError) throw new Error(`Failed to load registrations: ${regError.message}`)
   if (envError) throw new Error(`Failed to load docusign envelopes: ${envError.message}`)
 
   // Latest-wins per participant: completed beats anything else
-  const envelopeByParticipant = new Map<string, string>()
+  interface EnvelopeProgress { status: string; total: number; completed: number }
+  const envelopeByParticipant = new Map<string, EnvelopeProgress>()
   for (const env of envelopes ?? []) {
     if (!env.participant_id) continue
     const prev = envelopeByParticipant.get(env.participant_id)
-    if (prev !== 'completed') envelopeByParticipant.set(env.participant_id, env.status)
+    if (prev?.status !== 'completed') {
+      envelopeByParticipant.set(env.participant_id, {
+        status: env.status,
+        total: (env.signers_total as number | null) ?? 1,
+        completed: (env.signers_completed as number | null) ?? 0,
+      })
+    }
   }
 
   const groups: RosterGroup[] = (regs ?? []).map((reg) => {
@@ -98,20 +120,27 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
         reg.status === 'confirmed' ||
         (p.individual_payment_status as string | null) === 'paid'
 
-      const envStatus = envelopeByParticipant.get(p.id as string)
+      const payment_pill: PaymentPill = reg.invoice_requested
+        ? paid ? 'invoice_paid' : 'invoice_issued'
+        : paid ? 'link_paid' : 'link_unpaid'
+
+      const minor = isMinor(p.date_of_birth as string | null, eventDate)
+      const env = envelopeByParticipant.get(p.id as string)
       let docusign: RosterParticipant['docusign']
-      if (envStatus === 'completed') docusign = 'completed'
-      else if (envStatus) docusign = 'outstanding'
-      else if (isMinor(p.date_of_birth as string | null, eventDate)) docusign = 'outstanding'
+      if (env?.status === 'completed') docusign = 'completed'
+      else if (env) docusign = 'outstanding'
+      else if (minor) docusign = 'outstanding'
       else docusign = 'not_required'
 
-      const pill: ParticipantPill = !paid
-        ? 'not_paid'
-        : docusign === 'outstanding'
-          ? 'no_docusign'
-          : p.checked_in_at
-            ? 'checked_in'
-            : 'registered'
+      let docusign_pill: DocusignPill
+      if (!env) docusign_pill = minor ? 'not_issued' : 'not_required'
+      else if (env.status === 'completed') docusign_pill = 'complete'
+      else if (env.status === 'declined') docusign_pill = 'declined'
+      else if (env.status === 'voided') docusign_pill = 'not_issued'
+      else docusign_pill = env.completed > 0 && env.completed < env.total ? 'partial' : 'issued'
+
+      const ecName =
+        [p.emergency_contact_first_name, p.emergency_contact_last_name].filter(Boolean).join(' ') || null
 
       return {
         id: p.id as string,
@@ -128,9 +157,13 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
         health_conditions: (p.health_conditions as string | null) || null,
         company_id: p.company_id as string | null,
         checked_in_at: p.checked_in_at as string | null,
+        minor,
+        emergency_contact_name: ecName,
+        emergency_contact_email: (p.emergency_contact_email as string | null) || null,
         paid,
         docusign,
-        pill,
+        payment_pill,
+        docusign_pill,
       }
     })
 
@@ -149,6 +182,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       type: reg.type as 'individual' | 'group',
       status: reg.status,
       groupLabel,
+      teacherEmail: (reg.teacher_email as string | null) || null,
       participants,
     }
   })

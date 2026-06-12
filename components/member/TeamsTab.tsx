@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { ParticipantForm } from './ParticipantForm'
 import { EnvelopeStatusBadge } from './DocusignsSection'
+import { displayEventRole } from '@/lib/member-enums'
 import { Copy, Check } from 'lucide-react'
 
 function CopyButton({ text }: { text: string }) {
@@ -543,7 +544,7 @@ function TeacherTeamsView() {
                             <tr key={p.id} className="hover:bg-gray-50">
                               <td className="py-2.5 pr-4">{p.first_name} {p.last_name}</td>
                               <td className="py-2.5 pr-4 text-gray-500">{p.email}</td>
-                              <td className="py-2.5 pr-4 capitalize">{p.event_role}</td>
+                              <td className="py-2.5 pr-4">{displayEventRole(p.event_role) ?? p.event_role}</td>
                               <td className="py-2.5 pr-4 text-gray-500">{p.grade ?? '—'}</td>
                               <td className="py-2.5 pr-4">
                                 {p.event_companies ? (

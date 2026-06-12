@@ -2,16 +2,41 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { EventRosterData, ParticipantPill, RosterParticipant } from '@/lib/event-admin'
+import type { EventRosterData, PaymentPill, DocusignPill, RosterParticipant } from '@/lib/event-admin'
 import type { CompanyRow } from '@/components/admin/EventCompanies'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
+import { displayEventRole } from '@/lib/member-enums'
 
-const PILL_STYLES: Record<ParticipantPill, { label: string; className: string }> = {
-  not_paid: { label: 'Not Paid', className: 'bg-red-100 text-red-700' },
-  no_docusign: { label: 'No DocuSign', className: 'bg-red-100 text-red-700' },
-  checked_in: { label: 'Checked In', className: 'bg-green-100 text-green-700' },
-  registered: { label: 'Registered', className: 'bg-orange-100 text-orange-700' },
+const PAYMENT_PILLS: Record<PaymentPill, { label: string; className: string }> = {
+  invoice_issued: { label: 'Invoice Issued', className: 'bg-red-100 text-red-700' },
+  invoice_paid:   { label: 'Invoice Paid',   className: 'bg-green-100 text-green-700' },
+  link_unpaid:    { label: 'Pmt Link Unpaid', className: 'bg-red-100 text-red-700' },
+  link_paid:      { label: 'Pmt Link Paid',   className: 'bg-green-100 text-green-700' },
 }
+
+const DOCUSIGN_PILLS: Record<DocusignPill, { label: string; className: string }> = {
+  not_required: { label: 'Not Required', className: 'bg-gray-100 text-gray-500' },
+  not_issued:   { label: 'Not Issued', className: 'bg-red-100 text-red-700' },
+  issued:       { label: 'Issued', className: 'bg-red-100 text-red-700' },
+  partial:      { label: 'Partially Complete', className: 'bg-orange-100 text-orange-700' },
+  declined:     { label: 'Declined', className: 'bg-red-100 text-red-700' },
+  complete:     { label: 'Complete', className: 'bg-green-100 text-green-700' },
+}
+
+// Shared column widths so every group/individual table aligns line-to-line.
+// table-fixed + a common colgroup keeps the columns identical across sections.
+const COLUMNS = [
+  { label: 'Name', width: '18%' },
+  { label: 'Role', width: '8%' },
+  { label: 'School', width: '13%' },
+  { label: 'Grade', width: '5%' },
+  { label: 'Shirt', width: '5%' },
+  { label: 'Company', width: '10%' },
+  { label: 'Payment', width: '11%' },
+  { label: 'DocuSign', width: '12%' },
+  { label: 'Status', width: '8%' },
+  { label: 'Actions', width: '10%' },
+] as const
 
 type PaymentFilter = 'all' | 'paid' | 'unpaid'
 type DocusignFilter = 'all' | 'completed' | 'outstanding'
@@ -22,6 +47,14 @@ function matches(p: RosterParticipant, payment: PaymentFilter, docusign: Docusig
   if (docusign === 'completed' && p.docusign !== 'completed') return false
   if (docusign === 'outstanding' && p.docusign !== 'outstanding') return false
   return true
+}
+
+function Pill({ label, className }: { label: string; className: string }) {
+  return (
+    <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${className}`}>
+      {label}
+    </span>
+  )
 }
 
 export default function EventRoster({
@@ -39,6 +72,8 @@ export default function EventRoster({
   const [payment, setPayment] = useState<PaymentFilter>('all')
   const [docusign, setDocusign] = useState<DocusignFilter>('all')
   const [moving, setMoving] = useState<string | null>(null)
+  const [sending, setSending] = useState(false)
+  const [sendResult, setSendResult] = useState<string | null>(null)
 
   async function moveParticipant(participantId: string, companyId: string | null) {
     setMoving(participantId)
@@ -62,6 +97,53 @@ export default function EventRoster({
   )
   const shown = filtered.reduce((n, g) => n + g.participants.length, 0)
 
+  // One-click reminders for the currently filtered outstanding participants.
+  const remindPayment = payment === 'unpaid'
+  const remindDocusign = docusign === 'outstanding'
+  const canRemind = (remindPayment || remindDocusign) && shown > 0
+  const remindLabel =
+    remindPayment && remindDocusign
+      ? 'Email Reminders'
+      : remindPayment
+        ? 'Email Payment Reminders'
+        : 'Email DocuSign Reminders'
+
+  async function sendReminders() {
+    const what =
+      remindPayment && remindDocusign
+        ? 'payment and DocuSign reminders'
+        : remindPayment
+          ? 'payment reminders'
+          : 'DocuSign reminders'
+    const ok = confirm(
+      `Send ${what} to the ${shown} participant${shown === 1 ? '' : 's'} currently shown?\n\n` +
+        'Minors are CC’d to their emergency contact; group members are CC’d to their teacher / student manager.'
+    )
+    if (!ok) return
+
+    setSending(true)
+    setSendResult(null)
+    try {
+      const res = await fetch(`/api/admin/events/${eventSlug}/remind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment: remindPayment, docusign: remindDocusign }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setSendResult(data?.error ?? 'Failed to send reminders.')
+      } else {
+        setSendResult(
+          `Sent ${data.sent} reminder email${data.sent === 1 ? '' : 's'}` +
+            (data.failed > 0 ? ` (${data.failed} failed)` : '')
+        )
+      }
+    } catch {
+      setSendResult('Failed to send reminders.')
+    }
+    setSending(false)
+  }
+
   const select = 'border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-700'
 
   return (
@@ -80,9 +162,23 @@ export default function EventRoster({
         <span className="text-sm text-gray-500">
           {shown} of {roster.summary.totalParticipants} participants
         </span>
+        {sendResult && <span className="text-sm text-gray-600">{sendResult}</span>}
+        <button
+          type="button"
+          onClick={sendReminders}
+          disabled={!canRemind || sending}
+          title={
+            canRemind
+              ? undefined
+              : 'Filter by Payment: Outstanding or DocuSign: Outstanding to email those participants'
+          }
+          className="ml-auto text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg px-3 py-1.5"
+        >
+          {sending ? 'Sending…' : remindPayment || remindDocusign ? remindLabel : 'Email Reminders'}
+        </button>
         <a
           href={exportHref}
-          className="ml-auto text-sm font-medium text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded-lg px-3 py-1.5"
+          className="text-sm font-medium text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded-lg px-3 py-1.5"
         >
           Export CSV
         </a>
@@ -121,77 +217,91 @@ export default function EventRoster({
                   />
                 )}
               </div>
-              <table className="w-full text-sm bg-white">
+              <table className="w-full table-fixed text-sm bg-white">
+                <colgroup>
+                  {COLUMNS.map((c) => (
+                    <col key={c.label} style={{ width: c.width }} />
+                  ))}
+                </colgroup>
                 <thead>
                   <tr className="border-b border-gray-100 text-left">
-                    <th className="px-4 py-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Name</th>
-                    <th className="px-4 py-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Role</th>
-                    <th className="px-4 py-2 font-medium text-gray-500 text-xs uppercase tracking-wide">School</th>
-                    <th className="px-4 py-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Grade</th>
-                    <th className="px-4 py-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Shirt</th>
-                    <th className="px-4 py-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Company</th>
-                    <th className="px-4 py-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
-                    <th className="px-4 py-2 font-medium text-gray-500 text-xs uppercase tracking-wide text-right">Actions</th>
+                    {COLUMNS.map((c) => (
+                      <th
+                        key={c.label}
+                        className={`px-4 py-2 font-medium text-gray-500 text-xs uppercase tracking-wide ${
+                          c.label === 'Actions' ? 'text-right' : ''
+                        }`}
+                      >
+                        {c.label}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {group.participants.map((p) => {
-                    const pill = PILL_STYLES[p.pill]
-                    return (
-                      <tr key={p.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-2.5">
-                          <span className="font-medium text-gray-900">
-                            {p.first_name} {p.last_name}
-                          </span>
-                          <p className="text-xs text-gray-400">{p.email}</p>
-                        </td>
-                        <td className="px-4 py-2.5 text-gray-600">{p.event_role ?? '—'}</td>
-                        <td className="px-4 py-2.5 text-gray-600">{p.school_name ?? '—'}</td>
-                        <td className="px-4 py-2.5 text-gray-600">{p.grade ?? '—'}</td>
-                        <td className="px-4 py-2.5 text-gray-600">{p.t_shirt_size ?? '—'}</td>
-                        <td className="px-4 py-2.5">
-                          {p.event_role === 'school_student' ? (
-                            companies.length === 0 ? (
-                              <span className="text-gray-400">—</span>
-                            ) : (
-                              <select
-                                value={p.company_id ?? ''}
-                                disabled={moving === p.id}
-                                onChange={(e) => moveParticipant(p.id, e.target.value || null)}
-                                className="border border-gray-200 rounded px-2 py-1 text-xs bg-white text-gray-700 disabled:opacity-50"
-                              >
-                                <option value="">Unassigned</option>
-                                {companies.map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    {companyLabel(c)}
-                                  </option>
-                                ))}
-                              </select>
-                            )
+                  {group.participants.map((p) => (
+                    <tr key={p.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-2.5">
+                        <span className="font-medium text-gray-900">
+                          {p.first_name} {p.last_name}
+                        </span>
+                        <p className="text-xs text-gray-400 truncate" title={p.email}>
+                          {p.email}
+                        </p>
+                      </td>
+                      <td className="px-4 py-2.5 text-gray-600">{displayEventRole(p.event_role) ?? p.event_role ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-gray-600">{p.school_name ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-gray-600">{p.grade ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-gray-600">{p.t_shirt_size ?? '—'}</td>
+                      <td className="px-4 py-2.5">
+                        {p.event_role === 'school_student' ? (
+                          companies.length === 0 ? (
+                            <span className="text-gray-400">—</span>
                           ) : (
-                            <span className="text-gray-400">n/a</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${pill.className}`}>
-                            {pill.label}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5 text-right">
-                          <DeleteEntityButton
-                            entity="participant"
-                            id={p.id}
-                            name={`${p.first_name} ${p.last_name}'s registration`}
-                            label="Delete Registration"
-                            softDeletable={false}
-                            requireTypedConfirm={false}
-                            refundable
-                            className="text-xs font-medium text-red-600 hover:text-red-800"
-                          />
-                        </td>
-                      </tr>
-                    )
-                  })}
+                            <select
+                              value={p.company_id ?? ''}
+                              disabled={moving === p.id}
+                              onChange={(e) => moveParticipant(p.id, e.target.value || null)}
+                              className="border border-gray-200 rounded px-2 py-1 text-xs bg-white text-gray-700 disabled:opacity-50 max-w-full"
+                            >
+                              <option value="">Unassigned</option>
+                              {companies.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {companyLabel(c)}
+                                </option>
+                              ))}
+                            </select>
+                          )
+                        ) : (
+                          <span className="text-gray-400">n/a</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <Pill {...PAYMENT_PILLS[p.payment_pill]} />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <Pill {...DOCUSIGN_PILLS[p.docusign_pill]} />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {p.checked_in_at ? (
+                          <Pill label="Checked In" className="bg-green-100 text-green-700" />
+                        ) : (
+                          <Pill label="Registered" className="bg-orange-100 text-orange-700" />
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <DeleteEntityButton
+                          entity="participant"
+                          id={p.id}
+                          name={`${p.first_name} ${p.last_name}'s registration`}
+                          label="Delete Registration"
+                          softDeletable={false}
+                          requireTypedConfirm={false}
+                          refundable
+                          className="text-xs font-medium text-red-600 hover:text-red-800"
+                        />
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

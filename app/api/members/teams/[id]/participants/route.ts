@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { upsertMember } from '@/lib/member-sync'
 import { linkMembersToRegistrationSchool } from '@/lib/school-link'
+import { normalizeEventRole } from '@/lib/member-enums'
 
 // POST /api/members/teams/[id]/participants — teacher adds a participant
 export async function POST(
@@ -49,6 +50,8 @@ export async function POST(
   for (const key of allowed) {
     if (key in body) insert[key] = body[key]
   }
+  // Roster filters (Companies auto-assign, studentCount) match enum values.
+  if ('event_role' in insert) insert.event_role = normalizeEventRole(insert.event_role)
 
   // Upsert a member row (non-fatal) so the person gets a member account, can be
   // linked to a school, and shows on admin member pages — parity with the

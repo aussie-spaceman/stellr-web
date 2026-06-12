@@ -605,6 +605,73 @@ export function groupPaymentConfirmedEmail({
   return { subject, html, text }
 }
 
+// ── Event-manager outstanding-item reminders ──────────────────────────────────
+// One email per participant covering whatever is outstanding (payment,
+// DocuSign, or both). For minors the emergency contact is CC'd; for group
+// registrations the teacher / student manager is CC'd (handled by the caller).
+
+export function outstandingItemsReminderEmail({
+  firstName, eventTitle, payment, docusign,
+}: {
+  firstName: string
+  eventTitle: string
+  /** Set when payment is outstanding; method drives the copy. */
+  payment?: { method: 'invoice' | 'link' }
+  /** Set when DocuSign paperwork is outstanding. */
+  docusign?: { minor: boolean; guardianName?: string | null }
+}) {
+  const items: { heading: string; html: string; text: string }[] = []
+
+  if (payment) {
+    const html =
+      payment.method === 'invoice'
+        ? 'Our records show the invoice issued for your registration has not yet been paid. Registration is only confirmed once payment is received — please arrange payment of the invoice, or reply to this email if it hasn\'t arrived or you have questions.'
+        : 'Our records show your registration fee has not yet been paid. Please complete payment using the payment link previously emailed to you — or reply to this email if you need the link re-sent.'
+    items.push({ heading: 'Payment outstanding', html, text: html })
+  }
+
+  if (docusign) {
+    const html = docusign.minor
+      ? `The required participation paperwork has not yet been completed${docusign.guardianName ? ` by <strong>${docusign.guardianName}</strong>` : ''}. Your parent or guardian needs to sign the DocuSign consent form — please ask them to check their inbox (and spam folder) for an email from DocuSign.`
+      : 'Your required participation paperwork has not yet been completed. Please check your inbox (and spam folder) for an email from DocuSign and sign the agreement.'
+    items.push({ heading: 'Paperwork outstanding', html, text: html.replace(/<\/?strong>/g, '') })
+  }
+
+  const subject = `Action required — ${eventTitle}`
+  const sections = items
+    .map(
+      (i) => `
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:16px 0">
+          <p style="margin:0 0 6px;font-weight:600;color:#92400e">${i.heading}</p>
+          <p style="margin:0;font-size:14px;color:#374151">${i.html}</p>
+        </div>`
+    )
+    .join('')
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#1e3a5f;margin-top:0">Your registration needs attention</h2>
+        <p>Hi ${firstName},</p>
+        <p>Your registration for <strong>${eventTitle}</strong> is not yet complete. The following item${items.length !== 1 ? 's' : ''} need${items.length === 1 ? 's' : ''} your attention:</p>
+        ${sections}
+        <p style="color:#6b7280;font-size:14px">Your place is only confirmed once everything above is complete.</p>
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `Hi ${firstName},\n\nYour registration for ${eventTitle} is not yet complete.\n\n${items
+    .map((i) => `${i.heading.toUpperCase()}\n${i.text}`)
+    .join('\n\n')}\n\nYour place is only confirmed once everything above is complete.\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
 // ── Community notification emails (FR-COM-06) ────────────────────────────────
 
 export function communityReplyEmail({

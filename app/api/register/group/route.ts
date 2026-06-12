@@ -269,7 +269,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Build participant rows
+    // Build participant rows. event_role is normalised to the enum values the
+    // admin roster, Companies auto-assign, and check-in filter on — same
+    // under-18 override as the members upsert above.
     const buildParticipant = (p: ParticipantPayload, paymentStatus?: 'pending' | null) => ({
       registration_id: regId,
       member_id: memberIdMap[p.email] ?? null,
@@ -283,7 +285,12 @@ export async function POST(req: NextRequest) {
       t_shirt_size: p.t_shirt_size,
       school_name: teacher.school_name as string,
       age_bracket: p.age_bracket,
-      event_role: p.event_role,
+      event_role: normalizeEventRole(
+        new Date().getFullYear() - new Date(p.date_of_birth).getFullYear() < 18 &&
+        normalizeEventRole(p.event_role) !== 'school_student_manager'
+          ? 'school_student'
+          : p.event_role
+      ),
       dietary_requirements: p.dietary_requirements ?? [],
       health_conditions: p.health_conditions || null,
       emergency_contact_first_name: p.emergency_contact_first_name || null,
@@ -301,7 +308,7 @@ export async function POST(req: NextRequest) {
       email: teacher.email, phone: teacher.phone,
       date_of_birth: teacher.date_of_birth, gender: teacher.gender,
       t_shirt_size: teacher.t_shirt_size, age_bracket: teacher.age_bracket,
-      event_role: registrant_role === 'student_manager' ? 'School Student Manager' : 'Teacher',
+      event_role: registrant_role === 'student_manager' ? 'school_student_manager' : 'teacher',
       dietary_requirements: teacher.dietary_requirements,
       health_conditions: teacher.health_conditions,
       grade: teacher.grade ?? undefined,

@@ -18,7 +18,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
   const header = [
     'Registration Type', 'Group', 'First Name', 'Last Name', 'Email', 'Role', 'School', 'Grade',
     'Gender', 'Date of Birth', 'Shirt Size', 'Dietary Requirements', 'Health Conditions',
-    'Paid', 'DocuSign', 'Checked In At', 'Status',
+    'Paid', 'Payment Status', 'DocuSign', 'DocuSign Status', 'Checked In At',
   ]
   const rows = roster.groups.flatMap((g) =>
     g.participants.map((p) => [
@@ -36,9 +36,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
       p.dietary_requirements.join('; '),
       p.health_conditions ?? '',
       p.paid ? 'yes' : 'no',
+      p.payment_pill,
       p.docusign,
+      p.docusign_pill,
       p.checked_in_at ?? '',
-      p.pill,
     ])
   )
 

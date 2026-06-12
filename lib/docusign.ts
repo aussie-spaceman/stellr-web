@@ -110,8 +110,16 @@ export interface EnvelopeParams {
   schoolState?:    string
 }
 
-export async function createConsentEnvelope(p: EnvelopeParams): Promise<string> {
+// Envelope creation reports how many signers it was issued with so the
+// roster can show per-signer progress (signers_total / signers_completed).
+export interface CreatedEnvelope {
+  envelopeId: string
+  signerCount: number
+}
+
+export async function createConsentEnvelope(p: EnvelopeParams): Promise<CreatedEnvelope> {
   const minorName = `${p.minorFirstName} ${p.minorLastName}`
+  const signerCount = p.minorEmail ? 2 : 1
   let body: object
 
   if (ENV.templateId) {
@@ -192,7 +200,7 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<string> 
   const res = await dsRequest('/envelopes', { method: 'POST', body: JSON.stringify(body) })
   if (!res.ok) throw new Error(`DocuSign create envelope failed: ${await res.text()}`)
   const data = await res.json() as { envelopeId: string }
-  return data.envelopeId
+  return { envelopeId: data.envelopeId, signerCount }
 }
 
 // ── Adult & Mentor participation agreements ────────────────────────────────────
@@ -210,7 +218,7 @@ export interface AdultAgreementParams {
   schoolState?: string
 }
 
-export async function createAdultAgreementEnvelope(p: AdultAgreementParams): Promise<string> {
+export async function createAdultAgreementEnvelope(p: AdultAgreementParams): Promise<CreatedEnvelope> {
   if (!ENV.adultTemplateId) throw new Error('DOCUSIGN_ADULT_TEMPLATE_ID not configured')
   const fullName = `${p.firstName} ${p.lastName}`
 
@@ -238,7 +246,7 @@ export async function createAdultAgreementEnvelope(p: AdultAgreementParams): Pro
   const res = await dsRequest('/envelopes', { method: 'POST', body: JSON.stringify(body) })
   if (!res.ok) throw new Error(`DocuSign create adult envelope failed: ${await res.text()}`)
   const data = await res.json() as { envelopeId: string }
-  return data.envelopeId
+  return { envelopeId: data.envelopeId, signerCount: 1 }
 }
 
 export interface MentorAgreementParams {
@@ -249,9 +257,10 @@ export interface MentorAgreementParams {
   eventTitle: string
 }
 
-export async function createMentorAgreementEnvelope(p: MentorAgreementParams): Promise<string> {
+export async function createMentorAgreementEnvelope(p: MentorAgreementParams): Promise<CreatedEnvelope> {
   if (!ENV.mentorTemplateId) throw new Error('DOCUSIGN_MENTOR_TEMPLATE_ID not configured')
   const fullName = `${p.firstName} ${p.lastName}`
+  const signerCount = ENV.stellrRepEmail ? 2 : 1
 
   // Mentor + Stellr representative counter-sign concurrently (identical
   // routingOrder). The 'StellrRepresentative' role must exist on the template;
@@ -289,7 +298,23 @@ export async function createMentorAgreementEnvelope(p: MentorAgreementParams): P
   const res = await dsRequest('/envelopes', { method: 'POST', body: JSON.stringify(body) })
   if (!res.ok) throw new Error(`DocuSign create mentor envelope failed: ${await res.text()}`)
   const data = await res.json() as { envelopeId: string }
-  return data.envelopeId
+  return { envelopeId: data.envelopeId, signerCount }
+}
+
+// Per-signer progress for an in-flight envelope, used by the Connect webhook
+// to keep signers_total / signers_completed current. Carbon copies and other
+// non-signing recipients are excluded.
+export async function getEnvelopeSignerProgress(
+  envelopeId: string,
+): Promise<{ total: number; completed: number }> {
+  const res = await dsRequest(`/envelopes/${envelopeId}/recipients`)
+  if (!res.ok) throw new Error(`DocuSign recipients fetch failed: ${await res.text()}`)
+  const data = await res.json() as { signers?: { status?: string }[] }
+  const signers = data.signers ?? []
+  return {
+    total: signers.length,
+    completed: signers.filter((s) => (s.status ?? '').toLowerCase() === 'completed').length,
+  }
 }
 
 export async function resendEnvelope(envelopeId: string): Promise<void> {

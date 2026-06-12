@@ -25,7 +25,7 @@ interface ParticipantData {
 const EMPTY: ParticipantData = {
   first_name: '', last_name: '', email: '', phone: '',
   date_of_birth: '', gender: '', t_shirt_size: '', grade: '',
-  event_role: 'student', dietary_requirements: [],
+  event_role: 'school_student', dietary_requirements: [],
   health_conditions: '', emergency_contact_first_name: '',
   emergency_contact_last_name: '', emergency_contact_email: '',
   emergency_contact_phone: '', emergency_contact_relationship: '',
@@ -45,11 +45,16 @@ interface Props {
 }
 
 export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: Props) {
-  const [form, setForm] = useState<ParticipantData>(initial ?? EMPTY)
+  // Roles are the members enum values; legacy rows may still hold 'student'.
+  const [form, setForm] = useState<ParticipantData>(() =>
+    initial
+      ? { ...initial, event_role: initial.event_role === 'adult' ? 'adult' : 'school_student' }
+      : EMPTY
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const isStudent = form.event_role === 'student'
+  const isStudent = form.event_role === 'school_student'
 
   function set(field: keyof ParticipantData, value: string | string[]) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -100,7 +105,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Participant type</label>
             <div className="flex gap-4">
-              {['student', 'adult'].map(role => (
+              {([['school_student', 'Student'], ['adult', 'Adult']] as const).map(([role, label]) => (
                 <label key={role} className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
@@ -109,7 +114,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
                     checked={form.event_role === role}
                     onChange={() => set('event_role', role)}
                   />
-                  <span className="text-sm capitalize">{role}</span>
+                  <span className="text-sm">{label}</span>
                 </label>
               ))}
             </div>

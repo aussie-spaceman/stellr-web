@@ -6,6 +6,7 @@ import { getEventBySlug } from '@/lib/sanity'
 import { sendEmail, groupMemberJoinedEmail, groupMemberIndividualPaymentEmail } from '@/lib/email'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
+import { normalizeEventRole } from '@/lib/member-enums'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -89,7 +90,9 @@ export async function POST(req: NextRequest) {
     t_shirt_size: member.tshirt_size ?? '',
     school_name: (reg.school_name as string) ?? '',
     age_bracket: member.age_bracket,
-    event_role: 'School Student',
+    // The member's own enum role (admin roster + Companies auto-assign filter on
+    // 'school_student') — adults joining via the group link keep their role.
+    event_role: normalizeEventRole(member.event_role ?? 'school_student'),
     dietary_requirements: [],
     health_conditions: null,
     emergency_contact_first_name: member.ec_first_name ?? null,

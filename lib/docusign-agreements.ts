@@ -6,6 +6,7 @@ import {
   createAdultAgreementEnvelope,
   createMentorAgreementEnvelope,
   type AgreementType,
+  type CreatedEnvelope,
 } from './docusign'
 import {
   sendEmail,
@@ -83,7 +84,7 @@ export async function dispatchAgreement(
     if (type === 'minor') {
       if (!ctx.guardianEmail || !ctx.guardianFirstName) return
       const guardianName = [ctx.guardianFirstName, ctx.guardianLastName].filter(Boolean).join(' ')
-      const envelopeId = await createConsentEnvelope({
+      const envelope = await createConsentEnvelope({
         minorFirstName:   ctx.firstName,
         minorLastName:    ctx.lastName,
         minorEmail:       ctx.email,
@@ -96,7 +97,7 @@ export async function dispatchAgreement(
         schoolName:       ctx.schoolName ?? undefined,
         schoolState:      ctx.schoolState ?? undefined,
       })
-      await recordEnvelope(db, ctx, type, envelopeId, guardianName, ctx.guardianEmail)
+      await recordEnvelope(db, ctx, type, envelope, guardianName, ctx.guardianEmail)
       await safeEmail(ctx.email, docusignSentToMinorEmail({
         firstName: ctx.firstName, guardianName, guardianEmail: ctx.guardianEmail, eventTitle: ctx.eventTitle,
       }))
@@ -105,7 +106,7 @@ export async function dispatchAgreement(
 
     // Adult or mentor — self-signed, sourced from the participant's own phone column
     const signerName = `${ctx.firstName} ${ctx.lastName}`
-    const envelopeId = type === 'adult'
+    const envelope = type === 'adult'
       ? await createAdultAgreementEnvelope({
           firstName: ctx.firstName, lastName: ctx.lastName, email: ctx.email,
           phone: ctx.phone ?? undefined, eventTitle: ctx.eventTitle,
@@ -115,7 +116,7 @@ export async function dispatchAgreement(
           firstName: ctx.firstName, lastName: ctx.lastName, email: ctx.email,
           phone: ctx.phone ?? undefined, eventTitle: ctx.eventTitle,
         })
-    await recordEnvelope(db, ctx, type, envelopeId, signerName, ctx.email)
+    await recordEnvelope(db, ctx, type, envelope, signerName, ctx.email)
     await safeEmail(ctx.email, docusignSentToSignerEmail({
       firstName: ctx.firstName, eventTitle: ctx.eventTitle, agreementLabel: AGREEMENT_LABEL[type],
     }))
@@ -190,18 +191,20 @@ async function recordCoverage(
   source: ValidAgreement,
 ): Promise<void> {
   await db.from('docusign_envelopes').insert({
-    participant_id: ctx.participantId,
-    member_id:      ctx.memberId,
-    event_slug:     ctx.eventSlug,
-    event_title:    ctx.eventTitle,
-    envelope_id:    `on-file:${randomUUID()}`,
-    envelope_type:  type,
-    status:         'completed',
-    signer_name:    source.signerName,
-    signer_email:   source.signerEmail,
-    minor_name:     `${ctx.firstName} ${ctx.lastName}`,
-    completed_at:   source.completedAt,
-    reused_from:    source.id,
+    participant_id:    ctx.participantId,
+    member_id:         ctx.memberId,
+    event_slug:        ctx.eventSlug,
+    event_title:       ctx.eventTitle,
+    envelope_id:       `on-file:${randomUUID()}`,
+    envelope_type:     type,
+    status:            'completed',
+    signer_name:       source.signerName,
+    signer_email:      source.signerEmail,
+    minor_name:        `${ctx.firstName} ${ctx.lastName}`,
+    completed_at:      source.completedAt,
+    reused_from:       source.id,
+    signers_total:     1,
+    signers_completed: 1,
   })
 }
 
@@ -209,21 +212,23 @@ async function recordEnvelope(
   db: SupabaseClient,
   ctx: ParticipantContext,
   type: AgreementType,
-  envelopeId: string,
+  envelope: CreatedEnvelope,
   signerName: string,
   signerEmail: string,
 ): Promise<void> {
   await db.from('docusign_envelopes').insert({
-    participant_id: ctx.participantId,
-    member_id:      ctx.memberId,
-    event_slug:     ctx.eventSlug,
-    event_title:    ctx.eventTitle,
-    envelope_id:    envelopeId,
-    envelope_type:  type,
-    status:         'sent',
-    signer_name:    signerName,
-    signer_email:   signerEmail,
-    minor_name:     `${ctx.firstName} ${ctx.lastName}`,
+    participant_id:    ctx.participantId,
+    member_id:         ctx.memberId,
+    event_slug:        ctx.eventSlug,
+    event_title:       ctx.eventTitle,
+    envelope_id:       envelope.envelopeId,
+    envelope_type:     type,
+    status:            'sent',
+    signer_name:       signerName,
+    signer_email:      signerEmail,
+    minor_name:        `${ctx.firstName} ${ctx.lastName}`,
+    signers_total:     envelope.signerCount,
+    signers_completed: 0,
   })
 }
 

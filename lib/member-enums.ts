@@ -3,11 +3,15 @@
 // values required by the `members` table's Postgres enum columns
 // (gender_type, age_bracket_type, event_role_type).
 //
-// Participants are stored with the display strings (plain text columns), but the
-// members table is strongly typed — feeding it a display string raises
+// The members table is strongly typed — feeding it a display string raises
 // `22P02 invalid input value for enum …` and, because the upsert is batched,
 // silently drops every member in the registration. Always run member-bound
 // gender / age_bracket / event_role through these helpers first.
+//
+// participants.event_role is plain text, but readers (admin roster studentCount,
+// Companies auto-assign, check-in) match against the enum values — so participant
+// writes must go through normalizeEventRole too (migration 032 normalised
+// historical rows).
 
 export const VALID_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'] as const
 export const VALID_AGE_BRACKETS = ['adult', 'high_school', 'college'] as const
@@ -39,9 +43,11 @@ export function normalizeAgeBracket(v: unknown): string {
 }
 
 // Event role → enum. Defaults to 'subscriber' (the generic member role) when
-// unrecognised. ("School Student Manager" / "Adult" canonicalise to valid values.)
+// unrecognised. ("School Student Manager" / "Adult" canonicalise to valid values;
+// the teams portal's legacy 'student' maps to 'school_student'.)
 export function normalizeEventRole(v: unknown): string {
-  const c = canon(v)
+  let c = canon(v)
+  if (c === 'student') c = 'school_student'
   return (VALID_EVENT_ROLES as readonly string[]).includes(c) ? c : 'subscriber'
 }
 
@@ -87,4 +93,20 @@ export function denormalizeGrade(v: unknown): string | undefined {
 export function denormalizeTshirt(v: unknown): string | undefined {
   const s = (v ?? '').toString().trim()
   return s.length > 0 ? s : undefined
+}
+
+// Event role → display label for rosters/admin tables. Accepts enum values and
+// legacy display strings (canonicalised first); undefined when unrecognised.
+export function displayEventRole(v: unknown): string | undefined {
+  let c = canon(v)
+  if (c === 'student') c = 'school_student'
+  return {
+    teacher: 'Teacher',
+    school_student: 'School Student',
+    school_student_manager: 'School Student Manager',
+    mentor: 'Mentor',
+    subscriber: 'Subscriber',
+    parent: 'Parent',
+    adult: 'Adult',
+  }[c]
 }

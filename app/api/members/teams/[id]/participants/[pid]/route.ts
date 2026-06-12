@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { sendEmail, studentLeftTeamEmail } from '@/lib/email'
+import { normalizeEventRole } from '@/lib/member-enums'
 
 // PATCH /api/members/teams/[id]/participants/[pid]
 export async function PATCH(
@@ -48,6 +49,8 @@ export async function PATCH(
   for (const key of allowed) {
     if (key in body) updates[key] = body[key]
   }
+  // Roster filters (Companies auto-assign, studentCount) match enum values.
+  if ('event_role' in updates) updates.event_role = normalizeEventRole(updates.event_role)
 
   const { data: participant, error } = await db
     .from('participants')

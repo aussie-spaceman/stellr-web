@@ -100,7 +100,7 @@ export async function POST(
       emergency_contact_email: row.ec_email || null,
       emergency_contact_phone: row.ec_phone || null,
       emergency_contact_relationship: row.ec_relationship || null,
-      event_role: isAdult ? 'adult' : 'student',
+      event_role: isAdult ? 'adult' : 'school_student',
       age_bracket: isAdult ? 'adult' : 'high_school',
       school_name: registration.school_name ?? '',
       ...(memberId ? { member_id: memberId } : {}),

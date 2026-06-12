@@ -1,7 +1,7 @@
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { verifyConnectHmac, type AgreementType } from '@/lib/docusign'
+import { verifyConnectHmac, getEnvelopeSignerProgress, type AgreementType } from '@/lib/docusign'
 import { AGREEMENT_LABEL } from '@/lib/docusign-agreements'
 import { sendEmail, docusignCompletedToMinorEmail, docusignCompletedToSignerEmail } from '@/lib/email'
 
@@ -54,14 +54,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const newStatus = DS_STATUS_MAP[payload.event]
-  if (!newStatus) return NextResponse.json({ received: true, skipped: 'unhandled event' })
-
   const envelopeId = payload.data?.envelopeId
   if (!envelopeId) return NextResponse.json({ received: true, skipped: 'no envelopeId' })
 
   const db = supabaseServer()
   const now = new Date().toISOString()
+
+  // Recipient-level signing progress (roster "partially complete" pill).
+  // Recount from the recipients API rather than incrementing locally —
+  // idempotent under DocuSign Connect's at-least-once delivery.
+  if (payload.event === 'recipient-completed') {
+    try {
+      const progress = await getEnvelopeSignerProgress(envelopeId)
+      await db
+        .from('docusign_envelopes')
+        .update({ signers_total: progress.total, signers_completed: progress.completed, updated_at: now })
+        .eq('envelope_id', envelopeId)
+    } catch (err) {
+      console.error('[docusign-webhook] Failed to update signer progress:', err)
+    }
+    return NextResponse.json({ received: true })
+  }
+
+  const newStatus = DS_STATUS_MAP[payload.event]
+  if (!newStatus) return NextResponse.json({ received: true, skipped: 'unhandled event' })
 
   const update: Record<string, string | null> = { status: newStatus, updated_at: now }
   if (newStatus === 'completed') update.completed_at = payload.data.envelopeSummary?.completedDateTime ?? now
@@ -71,8 +87,16 @@ export async function POST(req: Request) {
     .from('docusign_envelopes')
     .update(update)
     .eq('envelope_id', envelopeId)
-    .select('id, member_id, envelope_type, minor_name, signer_name, event_title')
+    .select('id, member_id, envelope_type, minor_name, signer_name, event_title, signers_total')
     .maybeSingle()
+
+  // Envelope completion implies every signer finished.
+  if (envelope && newStatus === 'completed') {
+    await db
+      .from('docusign_envelopes')
+      .update({ signers_completed: envelope.signers_total ?? 1 })
+      .eq('id', envelope.id)
+  }
 
   if (!envelope) {
     console.warn('[docusign-webhook] No envelope record for', envelopeId)

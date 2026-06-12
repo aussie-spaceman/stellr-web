@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { ownsTeam } from '@/lib/team-access'
 
 // GET /api/members/teams/[id] — full team detail with participants
 export async function GET(
@@ -15,7 +16,7 @@ export async function GET(
 
   const { data: member } = await db
     .from('members')
-    .select('id, event_role')
+    .select('id, email')
     .eq('clerk_user_id', userId)
     .eq('is_active', true)
     .maybeSingle()
@@ -42,17 +43,14 @@ export async function GET(
   }
   if (!registration) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
 
-  // Access control: group manager must own it, student must be a participant
-  if (member.event_role === 'teacher' || member.event_role === 'school_student_manager') {
-    if (registration.teacher_member_id !== member.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-  } else {
-    const isParticipant = (registration.participants as { member_id?: string | null }[])
-      .some(p => p.member_id === member.id)
-    if (!isParticipant) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+  // Access control: the group organiser owns it (matched by member id OR
+  // registrant email — see lib/team-access), otherwise the caller must be a
+  // participant in it.
+  const isParticipant = (registration.participants as { member_id?: string | null }[])
+    .some(p => p.member_id === member.id)
+  if (!ownsTeam(member, registration) && !isParticipant) {
+    console.warn('[teams/id] Access denied', { registrationId: id, memberId: member.id })
+    return NextResponse.json({ error: 'You do not have access to this team' }, { status: 403 })
   }
 
   // Watch channel, join token, and DocuSign envelopes are independent — fetch in parallel

@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 interface ParticipantData {
   id?: string
+  membership_id?: string
   first_name: string
   last_name: string
   email: string
@@ -23,6 +24,7 @@ interface ParticipantData {
 }
 
 const EMPTY: ParticipantData = {
+  membership_id: '',
   first_name: '', last_name: '', email: '', phone: '',
   date_of_birth: '', gender: '', t_shirt_size: '', grade: '',
   event_role: 'school_student', dietary_requirements: [],
@@ -48,7 +50,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
   // Roles are the members enum values; legacy rows may still hold 'student'.
   const [form, setForm] = useState<ParticipantData>(() =>
     initial
-      ? { ...initial, event_role: initial.event_role === 'adult' ? 'adult' : 'school_student' }
+      ? { ...initial, membership_id: initial.membership_id ?? '', event_role: initial.event_role === 'adult' ? 'adult' : 'school_student' }
       : EMPTY
   )
   const [saving, setSaving] = useState(false)
@@ -118,6 +120,20 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
                 </label>
               ))}
             </div>
+          </div>
+
+          {/* Member ID — optional, helps avoid duplicate roster entries */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Member ID <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <input
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              value={form.membership_id}
+              onChange={(e) => set('membership_id', e.target.value)}
+              placeholder="If this person already has a Stellr Member ID"
+            />
+            <p className="text-xs text-gray-400 mt-1">Enter an existing Member ID to link this entry and prevent duplicates.</p>
           </div>
 
           {/* Name */}

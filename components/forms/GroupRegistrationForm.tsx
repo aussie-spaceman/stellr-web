@@ -10,7 +10,7 @@ import { useSignIn } from '@clerk/nextjs/legacy'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import FieldError from '@/components/forms/FieldError'
 import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
-import { T_SHIRT_SIZES, GENDERS, GRADES, HS_GRADES, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, deriveAgeBracket } from '@/lib/registration-constants'
+import { T_SHIRT_SIZES, GENDERS, GRADES, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, deriveAgeBracket } from '@/lib/registration-constants'
 import { resolveSchoolPayload } from '@/lib/school-utils'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 
@@ -223,13 +223,12 @@ function AdultAccordion({ index, data, onChange, expanded, onToggle, isPoC }: {
 }
 
 // ── Student accordion ─────────────────────────────────────────────────────────
-function StudentAccordion({ index, data, onChange, expanded, onToggle }: {
-  index: number; data: StudentData
+function StudentAccordion({ index, displayNumber, data, onChange, expanded, onToggle }: {
+  index: number; displayNumber?: number; data: StudentData
   onChange: (field: keyof StudentData, value: string) => void
   expanded: boolean; onToggle: () => void
 }) {
-  const label = data.first_name && data.last_name ? `${data.first_name} ${data.last_name}` : `Student ${index + 1}`
-  const isHS = data.grade ? HS_GRADES.includes(data.grade) : true
+  const label = data.first_name && data.last_name ? `${data.first_name} ${data.last_name}` : `Student ${displayNumber ?? index + 1}`
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
       <button type="button" onClick={onToggle}
@@ -272,11 +271,10 @@ function StudentAccordion({ index, data, onChange, expanded, onToggle }: {
             <label className="label-text">Health Conditions / Allergies</label>
             <textarea value={data.health_conditions} onChange={e => onChange('health_conditions', e.target.value)} className="input-field resize-none" rows={2} placeholder="Leave blank if none." />
           </div>
-          {isHS && (
-            <div className="border-t border-gray-100 pt-4 space-y-4">
+          <div className="border-t border-gray-100 pt-4 space-y-4">
               <div>
                 <p className="font-semibold text-brand-blue-dark text-sm">Emergency Contact</p>
-                <p className="text-xs text-gray-400">Required for High School students</p>
+                <p className="text-xs text-gray-400">Required for all student participants — acts as the guardian for their participation agreement</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div><label className="label-text">First Name *</label><input value={data.emergency_contact_first_name} onChange={e => onChange('emergency_contact_first_name', e.target.value)} className="input-field" /></div>
@@ -293,13 +291,61 @@ function StudentAccordion({ index, data, onChange, expanded, onToggle }: {
                 </select>
               </div>
             </div>
-          )}
           <div className="border-t border-gray-100 pt-4">
             <label className="label-text">Existing Membership ID</label>
             <input value={data.existing_membership_id} onChange={e => onChange('existing_membership_id', e.target.value)}
               className="input-field font-mono" placeholder="e.g. 0000001 — leave blank if new to Stellr" />
             <p className="text-xs text-gray-400 mt-1">If this student has previously registered with Stellr, enter their Membership ID to prevent duplicate records.</p>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Student Manager (self) read-only card ─────────────────────────────────────
+// The Student Manager is the group's first student. Their full student profile was
+// captured on Step 1 ("Your Details"), so here we only confirm it read-only —
+// editing happens back on Step 1. Mirrors how the Teacher PoC is surfaced as Adult
+// 1, except the SM's details are already complete, so nothing here is editable.
+function StudentManagerCard({ data, onEdit }: { data: StudentManagerFormData; onEdit: () => void }) {
+  const [expanded, setExpanded] = useState(false)
+  const name = `${data.first_name} ${data.last_name}`.trim() || 'You'
+  const ec = [data.emergency_contact_first_name, data.emergency_contact_last_name].filter(Boolean).join(' ')
+  const summary: { label: string; value: string }[] = [
+    { label: 'Email', value: data.email },
+    { label: 'Phone', value: data.phone },
+    { label: 'Date of Birth', value: data.date_of_birth },
+    { label: 'Grade', value: data.grade ? `Grade ${data.grade}` : '' },
+    { label: 'Gender', value: data.gender },
+    { label: 'T-Shirt Size', value: data.t_shirt_size },
+    { label: 'Dietary', value: (data.dietary_requirements ?? []).join(', ') },
+    { label: 'Health Conditions', value: data.health_conditions || 'None' },
+    { label: 'Emergency Contact', value: ec },
+    { label: 'Emergency Phone', value: data.emergency_contact_phone },
+    { label: 'Relationship', value: data.emergency_contact_relationship },
+  ]
+  return (
+    <div className="rounded-xl overflow-hidden border border-amber-200">
+      <button type="button" onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left bg-amber-50 hover:bg-amber-100">
+        <span className="font-medium text-sm text-amber-900">{name} — You (Student Manager)</span>
+        {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+      </button>
+      <div className="px-4 py-2 bg-amber-50/60 border-t border-amber-100 flex items-center justify-between gap-3">
+        <span className="text-xs text-amber-700">Pre-filled from <strong>Your Details</strong> — you&apos;re registered as the group&apos;s first student.</span>
+        <button type="button" onClick={onEdit} className="text-xs text-brand-blue underline whitespace-nowrap">Edit ↗</button>
+      </div>
+      {expanded && (
+        <div className="p-4">
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            {summary.filter(s => s.value).map(s => (
+              <div key={s.label} className="flex justify-between gap-3 border-b border-gray-100 pb-1">
+                <dt className="text-gray-500">{s.label}</dt>
+                <dd className="text-brand-blue-dark font-medium text-right">{s.value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       )}
     </div>
@@ -482,12 +528,17 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
       if (!a.first_name || !a.last_name || !a.email || !a.phone || !a.date_of_birth || !a.gender || !a.t_shirt_size || a.dietary_requirements.length === 0)
         return `${i === 0 && registrantRole === 'student_manager' ? 'Teacher Point of Contact' : `Additional Adult ${i + 1}`}: please complete all required fields`
     }
+    // Student Manager occupies Student 1 (read-only), so the editable students
+    // shown below start at Student 2 — keep error numbering in step.
+    const studentOffset = registrantRole === 'student_manager' ? 1 : 0
     for (let i = 0; i < students.length; i++) {
       const s = students[i]
       if (!s.first_name || !s.last_name || !s.email || !s.phone || !s.date_of_birth || !s.grade || !s.gender || !s.t_shirt_size)
-        return `Student ${i + 1}: please complete all required fields`
-      if (HS_GRADES.includes(s.grade) && (!s.emergency_contact_first_name || !s.emergency_contact_last_name || !s.emergency_contact_email || !s.emergency_contact_phone || !s.emergency_contact_relationship))
-        return `Student ${i + 1}: emergency contact is required for High School students`
+        return `Student ${i + 1 + studentOffset}: please complete all required fields`
+      // Every student signs the minor participation agreement, with their
+      // emergency contact as the guardian — so it's required for all students.
+      if (!s.emergency_contact_first_name || !s.emergency_contact_last_name || !s.emergency_contact_email || !s.emergency_contact_phone || !s.emergency_contact_relationship)
+        return `Student ${i + 1 + studentOffset}: emergency contact is required`
     }
     return null
   }
@@ -818,9 +869,15 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
               ? 'Includes your Teacher Point of Contact. Maximum 2.'
               : 'Includes yourself as teacher / coordinator. Maximum 2.'}
           />
-          <NumberStepper label="How many students will be in the group?" value={studentCount} min={2} max={20}
+          <NumberStepper
+            label={registrantRole === 'student_manager'
+              ? 'How many other students will be in the group?'
+              : 'How many students will be in the group?'}
+            value={studentCount} min={2} max={20}
             onChange={handleStudentCountChange}
-            note="Minimum 2. Maximum 20. For groups larger than 20, contact Stellr directly for custom registration." />
+            note={registrantRole === 'student_manager'
+              ? 'Besides yourself — you’re automatically included as Student 1. Minimum 2, maximum 20.'
+              : 'Minimum 2. Maximum 20. For groups larger than 20, contact Stellr directly for custom registration.'} />
         </div>
         <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark">
           Total participants: <strong>
@@ -870,8 +927,13 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
 
           <div className="space-y-3">
             <h3 className="font-semibold text-brand-blue-dark">Students</h3>
+            {registrantRole === 'student_manager' && (
+              <StudentManagerCard data={sf.getValues()} onEdit={() => setStep(1)} />
+            )}
             {students.map((student, i) => (
-              <StudentAccordion key={i} index={i} data={student}
+              <StudentAccordion key={i} index={i}
+                displayNumber={i + 1 + (registrantRole === 'student_manager' ? 1 : 0)}
+                data={student}
                 onChange={(field, value) => updateStudent(i, field, value)}
                 expanded={expandedStudent === i} onToggle={() => setExpandedStudent(expandedStudent === i ? null : i)} />
             ))}

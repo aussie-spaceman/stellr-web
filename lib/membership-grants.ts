@@ -237,7 +237,15 @@ function matchesConditions(
 ): boolean {
   const c = rule.conditions ?? {}
   if (c.age_bracket && member.age_bracket !== c.age_bracket) return false
-  if (c.event_role && member.event_role !== c.event_role) return false
+  if (c.event_role) {
+    // A Student Manager is a student who also organises the group, so any rule
+    // scoped to plain school students (e.g. attend → Pathfinder, award → Scholar)
+    // applies to them too. Teacher/mentor-scoped rules are unaffected.
+    const matches =
+      member.event_role === c.event_role ||
+      (c.event_role === 'school_student' && member.event_role === 'school_student_manager')
+    if (!matches) return false
+  }
   if (c.award_contains) {
     const award = (ctx.award ?? '').toLowerCase()
     if (!award.includes(c.award_contains.toLowerCase())) return false

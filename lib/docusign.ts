@@ -365,18 +365,23 @@ export function isMinor(dateOfBirth: string): boolean {
 
 export type AgreementType = 'minor' | 'adult' | 'mentor'
 
-// Which DocuSign agreement (if any) a participant needs, based on age and role:
-//   • under 18                         → minor parental-consent form
-//   • adult registering as a mentor    → mentor participation agreement
-//   • any other adult attendee         → adult participation agreement
-//   • adult school student (edge case) → none
+// Which DocuSign agreement (if any) a participant needs, based on role and age:
+//   • any student (incl. Student Manager) → minor "Participation Agreement"
+//     (parental consent), REGARDLESS of age — students are treated as minors
+//     for paperwork, with their emergency contact acting as the guardian signer
+//   • other under-18 participant          → minor parental-consent form
+//   • adult registering as a mentor       → mentor participation agreement
+//   • any other adult attendee            → adult participation agreement
 export function classifyAgreement(
   eventRole: string | null | undefined,
   dateOfBirth: string | null | undefined,
 ): AgreementType | null {
-  if (dateOfBirth && isMinor(dateOfBirth)) return 'minor'
   const role = (eventRole ?? '').toLowerCase().replace(/\s+/g, '_')
+  // Student participants always sign the minor agreement — role wins over age,
+  // so an 18-year-old senior or student-manager still gets parental consent.
+  if (role === 'school_student' || role === 'school_student_manager') return 'minor'
+  if (dateOfBirth && isMinor(dateOfBirth)) return 'minor'
   if (role === 'mentor') return 'mentor'
-  if (!role || role === 'school_student') return null
+  if (!role) return null
   return 'adult'
 }

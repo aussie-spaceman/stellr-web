@@ -68,6 +68,10 @@ export default function GroupJoinClient({
     const age = new Date().getFullYear() - new Date(form.date_of_birth).getFullYear()
     return Number.isFinite(age) && age < 18
   })()
+  // Every student signs the minor participation agreement (regardless of age),
+  // with their emergency contact as the guardian — so it's required for all
+  // students, plus any non-student who happens to be under 18.
+  const requiresEmergencyContact = isStudent || isMinor
 
   function set(field: keyof DetailsForm, value: string | string[]) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -101,8 +105,14 @@ export default function GroupJoinClient({
   // ticket so they land on their account without touching the sign-in widget.
   async function handleJoinNew(e: React.FormEvent) {
     e.preventDefault()
-    if (isMinor && !form.emergency_contact_first_name.trim()) {
-      setError('An emergency contact is required for participants under 18.')
+    if (requiresEmergencyContact && (
+      !form.emergency_contact_first_name.trim() ||
+      !form.emergency_contact_last_name.trim() ||
+      !form.emergency_contact_email.trim() ||
+      !form.emergency_contact_phone.trim() ||
+      !form.emergency_contact_relationship.trim()
+    )) {
+      setError('Emergency contact details are required for students (and any participant under 18).')
       return
     }
     setSubmitting(true)
@@ -316,9 +326,9 @@ export default function GroupJoinClient({
         {/* Emergency contact */}
         <div className="border-t border-gray-100 pt-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-1">
-            Emergency contact {isMinor && <span className="text-red-500">*</span>}
+            Emergency contact {requiresEmergencyContact && <span className="text-red-500">*</span>}
           </h3>
-          <p className="text-xs text-gray-400 mb-3">Required for participants under 18.</p>
+          <p className="text-xs text-gray-400 mb-3">Required for students and any participant under 18 — acts as the guardian for their participation agreement.</p>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-gray-500 mb-1">First name</label>

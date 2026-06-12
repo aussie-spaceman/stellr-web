@@ -4,6 +4,7 @@ import { requireEventAccess } from '@/lib/event-access'
 import { getEventBySlug } from '@/lib/sanity'
 import { generateCertificatesPdf, type Artwork } from '@/lib/event-pdf'
 import { RESOURCES_BUCKET } from '@/lib/community'
+import { STUDENT_ROLES } from '@/lib/membership-rules'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +33,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
 
   const students = (regs ?? [])
     .flatMap((r) => (r.participants as Record<string, unknown>[]) ?? [])
-    .filter((p) => p.event_role === 'school_student')
+    // Student Managers are students too — include them in participation certs.
+    .filter((p) => STUDENT_ROLES.includes(p.event_role as string))
     .sort((a, b) =>
       `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`)
     )

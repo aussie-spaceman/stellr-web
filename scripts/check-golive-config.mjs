@@ -1,4 +1,4 @@
-// Throwaway functional checks for the two go-live prerequisites.
+// Throwaway functional checks for the go-live prerequisites.
 // Runs the exact API calls the app makes, then cleans up. Safe to delete.
 import 'dotenv/config'
 import { google } from 'googleapis'
@@ -85,6 +85,46 @@ async function checkClerkCreateUser() {
   }
 }
 
+async function checkGooglePlaces() {
+  console.log('\n=== #3 Google Places (New): school-address autofill ===')
+  const key = process.env.GOOGLE_PLACES_API_KEY
+  if (!key) {
+    console.log('❌ GOOGLE_PLACES_API_KEY missing — school address autofill silently falls back to manual entry.')
+    console.log('   → Set it in Vercel (Prod + Preview) and .env.local; enable "Places API (New)" + billing on the GCP project.')
+    return
+  }
+  try {
+    // The exact call app/api/schools/lookup/route.ts makes (same field mask).
+    const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': key,
+        'X-Goog-FieldMask': 'places.id,places.formattedAddress,places.addressComponents',
+      },
+      body: JSON.stringify({ textQuery: 'Alta High School Sandy Utah', regionCode: 'US', maxResultCount: 1 }),
+    })
+    if (!res.ok) {
+      const body = await res.text()
+      console.log(`❌ FAIL — Places API returned ${res.status}.`)
+      console.log(`   body: ${body.slice(0, 300)}`)
+      if (res.status === 403) console.log('   → 403 = billing not enabled, "Places API (New)" not enabled, or key restriction too tight (must allow Places API New).')
+      return
+    }
+    const data = await res.json()
+    const place = data.places?.[0]
+    if (!place) { console.log('❌ FAIL — no result for the test query (unexpected).'); return }
+    const components = place.addressComponents ?? []
+    const state = components.find((c) => c.types?.includes('administrative_area_level_1'))?.longText
+    console.log(`✅ PASS — resolved "${place.formattedAddress}" (place_id ${place.id}).`)
+    console.log(`   state component = "${state}" — must be a full name (e.g. "Utah") to match the form's state <select>.`)
+  } catch (err) {
+    console.log('❌ FAIL — request to Places API failed.')
+    console.log(`   message: ${err?.message ?? String(err)}`)
+  }
+}
+
 await checkGoogleAnyoneSharing()
 await checkClerkCreateUser()
+await checkGooglePlaces()
 console.log('\nDone.')

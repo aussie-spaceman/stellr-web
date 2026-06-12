@@ -69,6 +69,20 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+
+    // Students sign the minor participation agreement, with their emergency
+    // contact as the guardian signer — so it's required for every student.
+    if (isStudent && (
+      !form.emergency_contact_first_name.trim() ||
+      !form.emergency_contact_last_name.trim() ||
+      !form.emergency_contact_email.trim() ||
+      !form.emergency_contact_phone.trim() ||
+      !form.emergency_contact_relationship.trim()
+    )) {
+      setError('Emergency contact details are required for student participants.')
+      return
+    }
+
     setSaving(true)
     setError(null)
 
@@ -259,10 +273,11 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
             />
           </div>
 
-          {/* Emergency contact — students only */}
+          {/* Emergency contact — required for students (guardian for their agreement) */}
           {isStudent && (
             <div className="border-t border-gray-100 pt-4">
-              <p className="text-sm font-medium text-gray-700 mb-3">Emergency contact</p>
+              <p className="text-sm font-medium text-gray-700 mb-1">Emergency contact <span className="text-red-500">*</span></p>
+              <p className="text-xs text-gray-400 mb-3">Acts as the guardian for the student&apos;s participation agreement.</p>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">First name</label>

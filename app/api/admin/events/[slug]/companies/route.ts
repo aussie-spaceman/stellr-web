@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
 import { assignCompanies, type AssignableStudent } from '@/lib/company-assign'
+import { STUDENT_ROLES } from '@/lib/membership-rules'
 
 // Company management for an event (admins + assigned event managers).
 //   GET  — list companies with participant counts
@@ -130,7 +131,7 @@ export async function POST(req: Request, { params }: Params) {
       for (const p of (reg.participants as Record<string, unknown>[]) ?? []) {
         // Student managers compete as students too, so they're assigned to a
         // company alongside school students.
-        if (p.event_role !== 'school_student' && p.event_role !== 'school_student_manager') continue
+        if (!STUDENT_ROLES.includes(p.event_role as string)) continue
         const dob = p.date_of_birth as string | null
         students.push({
           participantId: p.id as string,

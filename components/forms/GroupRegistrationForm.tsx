@@ -164,12 +164,48 @@ function NumberStepper({ label, value, min, max, onChange, note }: {
   )
 }
 
+// ── Per-slot completion status ────────────────────────────────────────────────
+// A slot is 'empty' (deferred — finish later via link/Sheet), 'incomplete'
+// (started but missing required fields — blocks submit), or 'complete'. The field
+// lists here MUST mirror validateParticipants() so the pill never disagrees with
+// the submit gate. Linked slots are built from the member's on-file record → always
+// complete.
+type SlotStatus = 'complete' | 'incomplete' | 'empty'
+
+function adultStatus(a: AdultData): SlotStatus {
+  if (a.linked) return 'complete'
+  if (!(a.first_name || a.last_name || a.email)) return 'empty'
+  const complete = !!(a.first_name && a.last_name && a.email && a.phone && a.date_of_birth &&
+    a.gender && a.t_shirt_size && a.ethnicity.length && a.dietary_requirements.length)
+  return complete ? 'complete' : 'incomplete'
+}
+
+function studentStatus(s: StudentData): SlotStatus {
+  if (s.linked) return 'complete'
+  if (!(s.first_name || s.last_name || s.email)) return 'empty'
+  const core = !!(s.first_name && s.last_name && s.email && s.phone && s.date_of_birth && s.grade &&
+    s.gender && s.t_shirt_size && s.ethnicity.length && s.dietary_requirements.length)
+  const ec = !!(s.emergency_contact_first_name && s.emergency_contact_last_name &&
+    s.emergency_contact_email && s.emergency_contact_phone && s.emergency_contact_relationship)
+  return core && ec ? 'complete' : 'incomplete'
+}
+
+function StatusPill({ status }: { status: SlotStatus }) {
+  const map: Record<SlotStatus, { label: string; cls: string }> = {
+    complete:   { label: 'Complete',       cls: 'bg-green-100 text-green-700' },
+    incomplete: { label: 'Incomplete',     cls: 'bg-amber-100 text-amber-700' },
+    empty:      { label: 'To finish later', cls: 'bg-gray-100 text-gray-500' },
+  }
+  const { label, cls } = map[status]
+  return <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${cls}`}>{label}</span>
+}
+
 // ── Adult accordion ───────────────────────────────────────────────────────────
-function AdultAccordion({ index, data, onChange, onAccept, onUnlink, expanded, onToggle, isPoC }: {
+function AdultAccordion({ index, data, onChange, onAccept, onUnlink, expanded, onToggle, isPoC, status }: {
   index: number; data: AdultData
   onChange: (field: keyof AdultData, value: string | string[]) => void
   onAccept: (m: MemberMatch) => void; onUnlink: () => void
-  expanded: boolean; onToggle: () => void; isPoC?: boolean
+  expanded: boolean; onToggle: () => void; isPoC?: boolean; status: SlotStatus
 }) {
   const label = data.first_name && data.last_name
     ? `${data.first_name} ${data.last_name}${isPoC ? ' (Teacher Point of Contact)' : ''}`
@@ -179,9 +215,12 @@ function AdultAccordion({ index, data, onChange, onAccept, onUnlink, expanded, o
   return (
     <div className={`rounded-xl overflow-hidden border ${isPoC ? 'border-amber-200' : 'border-gray-200'}`}>
       <button type="button" onClick={onToggle}
-        className={`w-full flex items-center justify-between px-4 py-3 text-left ${isPoC ? 'bg-amber-50 hover:bg-amber-100' : 'bg-gray-50 hover:bg-gray-100'}`}>
+        className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left ${isPoC ? 'bg-amber-50 hover:bg-amber-100' : 'bg-gray-50 hover:bg-gray-100'}`}>
         <span className={`font-medium text-sm ${isPoC ? 'text-amber-900' : 'text-brand-blue-dark'}`}>{label}</span>
-        {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+        <span className="flex items-center gap-2 flex-shrink-0">
+          <StatusPill status={status} />
+          {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+        </span>
       </button>
       {expanded && (
         <div className="p-4 space-y-4">
@@ -236,19 +275,22 @@ function AdultAccordion({ index, data, onChange, onAccept, onUnlink, expanded, o
 }
 
 // ── Student accordion ─────────────────────────────────────────────────────────
-function StudentAccordion({ index, displayNumber, data, onChange, onAccept, onUnlink, expanded, onToggle }: {
+function StudentAccordion({ index, displayNumber, data, onChange, onAccept, onUnlink, expanded, onToggle, status }: {
   index: number; displayNumber?: number; data: StudentData
   onChange: (field: keyof StudentData, value: string | string[]) => void
   onAccept: (m: MemberMatch) => void; onUnlink: () => void
-  expanded: boolean; onToggle: () => void
+  expanded: boolean; onToggle: () => void; status: SlotStatus
 }) {
   const label = data.first_name && data.last_name ? `${data.first_name} ${data.last_name}` : `Student ${displayNumber ?? index + 1}`
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
       <button type="button" onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 text-left">
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-gray-50 hover:bg-gray-100 text-left">
         <span className="font-medium text-brand-blue-dark text-sm">{label}</span>
-        {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+        <span className="flex items-center gap-2 flex-shrink-0">
+          <StatusPill status={status} />
+          {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+        </span>
       </button>
       {expanded && (
         <div className="p-4 space-y-4">
@@ -555,8 +597,8 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
   // A slot counts as "started" once it's linked to a member or has any of
   // name/email — fully blank slots are simply deferred (provide later via the
   // Sheet or completion link). Linked slots are built from the on-file record.
-  const adultStarted = (a: AdultData) => a.linked || !!(a.first_name || a.last_name || a.email)
-  const studentStarted = (s: StudentData) => s.linked || !!(s.first_name || s.last_name || s.email)
+  const adultStarted = (a: AdultData) => adultStatus(a) !== 'empty'
+  const studentStarted = (s: StudentData) => studentStatus(s) !== 'empty'
 
   /** Count of slots left for later (not entered now) — drives the "remaining" hint. */
   function deferredCount(): number {
@@ -575,7 +617,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
       const a = additionalAdults[i]
       if (a.linked || !adultStarted(a)) continue
       if (!a.first_name || !a.last_name || !a.email || !a.phone || !a.date_of_birth || !a.gender || !a.t_shirt_size || a.ethnicity.length === 0 || a.dietary_requirements.length === 0)
-        return `${i === 0 && registrantRole === 'student_manager' ? 'Teacher Point of Contact' : `Additional Adult ${i + 1}`}: complete all required fields, or clear it to provide their details later`
+        return `${i === 0 && registrantRole === 'student_manager' ? 'Teacher Point of Contact' : `Additional Adult ${i + 1}`} is partly filled — finish their required fields, or clear the entry to add them later via your link or Sheet`
     }
     // Student Manager occupies Student 1 (read-only), so the editable students
     // shown below start at Student 2 — keep error numbering in step.
@@ -584,11 +626,11 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
       const s = students[i]
       if (s.linked || !studentStarted(s)) continue
       if (!s.first_name || !s.last_name || !s.email || !s.phone || !s.date_of_birth || !s.grade || !s.gender || !s.t_shirt_size || s.ethnicity.length === 0 || s.dietary_requirements.length === 0)
-        return `Student ${i + 1 + studentOffset}: complete all required fields, or clear it to provide their details later`
+        return `Student ${i + 1 + studentOffset} is partly filled — finish their required fields, or clear the entry to add them later via your link or Sheet`
       // Every student signs the minor participation agreement, with their
       // emergency contact as the guardian — so it's required for all students.
       if (!s.emergency_contact_first_name || !s.emergency_contact_last_name || !s.emergency_contact_email || !s.emergency_contact_phone || !s.emergency_contact_relationship)
-        return `Student ${i + 1 + studentOffset}: emergency contact is required`
+        return `Student ${i + 1 + studentOffset} is partly filled — an emergency contact is required, or clear the entry to add them later`
     }
     return null
   }
@@ -978,6 +1020,14 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
 
       {detailsMethod === 'add_now' && (
         <>
+          <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark">
+            <p className="font-medium">Add details for as many participants as you have now.</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              You don&apos;t have to complete everyone — leave a card blank and you can finish the rest later
+              via your completion link or pre-filled Google Sheet. Partly-filled cards must be finished or cleared before you submit.
+            </p>
+          </div>
+
           {additionalAdults.length > 0 && (
             <div className="space-y-3">
               <h3 className="font-semibold text-brand-blue-dark">
@@ -986,6 +1036,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
               {additionalAdults.map((adult, i) => (
                 <AdultAccordion key={i} index={i} data={adult}
                   isPoC={registrantRole === 'student_manager' && i === 0}
+                  status={adultStatus(adult)}
                   onChange={(field, value) => updateAdult(i, field, value)}
                   onAccept={(m) => acceptAdult(i, m)} onUnlink={() => unlinkAdult(i)}
                   expanded={expandedAdult === i} onToggle={() => setExpandedAdult(expandedAdult === i ? null : i)} />
@@ -1002,6 +1053,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
               <StudentAccordion key={i} index={i}
                 displayNumber={i + 1 + (registrantRole === 'student_manager' ? 1 : 0)}
                 data={student}
+                status={studentStatus(student)}
                 onChange={(field, value) => updateStudent(i, field, value)}
                 onAccept={(m) => acceptStudent(i, m)} onUnlink={() => unlinkStudent(i)}
                 expanded={expandedStudent === i} onToggle={() => setExpandedStudent(expandedStudent === i ? null : i)} />
@@ -1059,6 +1111,13 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
         </label>
         {dpaError && <p className="text-xs text-red-500">You must accept the School Data Processing Agreement to submit this registration.</p>}
       </div>
+
+      {detailsMethod === 'add_now' && deferredCount() > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-600">
+          <strong className="text-brand-blue-dark">{deferredCount()}</strong> participant{deferredCount() === 1 ? '' : 's'} left blank will be completed later —
+          you&apos;ll get a completion link and a pre-filled Google Sheet for them on the next screen and by email.
+        </div>
+      )}
 
       {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">{error}</div>}
 

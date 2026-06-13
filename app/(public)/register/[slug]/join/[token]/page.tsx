@@ -20,7 +20,7 @@ export default async function GroupJoinPage({ params }: PageProps) {
   const db = supabaseServer()
   const { data: tokenRow, error } = await db
     .from('group_join_tokens')
-    .select('*, registrations(teacher_first_name, teacher_last_name, school_name, registrant_role, status, member_pays_individually)')
+    .select('*, registrations(teacher_first_name, teacher_last_name, school_name, registrant_role, status, member_pays_individually, adult_count, student_count)')
     .eq('token', token)
     .eq('event_slug', slug)
     .maybeSingle()
@@ -55,6 +55,7 @@ export default async function GroupJoinPage({ params }: PageProps) {
     teacher_first_name: string; teacher_last_name: string
     school_name: string; registrant_role: string; status: string
     member_pays_individually: boolean
+    adult_count: number | null; student_count: number | null
   }
 
   // Check if already registered
@@ -70,6 +71,18 @@ export default async function GroupJoinPage({ params }: PageProps) {
       .eq('email', memberEmail)
       .maybeSingle()
     alreadyRegistered = !!existing
+  }
+
+  // Is every declared place already filled? Mirrors the cap enforced in the
+  // group-join route so a forwarded link shows a clear "full" message rather than
+  // a form that will be rejected. Older registrations (null counts) are never full.
+  let groupFull = false
+  if (!alreadyRegistered && reg.adult_count != null && reg.student_count != null) {
+    const { count } = await db
+      .from('participants')
+      .select('*', { count: 'exact', head: true })
+      .eq('registration_id', tokenRow.registration_id)
+    groupFull = (count ?? 0) >= reg.adult_count + reg.student_count
   }
 
   const organiserName = `${reg.teacher_first_name} ${reg.teacher_last_name}`
@@ -91,6 +104,16 @@ export default async function GroupJoinPage({ params }: PageProps) {
             <h2 className="text-xl font-bold text-gray-900">You&apos;re already registered!</h2>
             <p className="text-gray-600">You&apos;ve already joined this group for <strong>{tokenRow.event_title}</strong>.</p>
             <Link href="/account" className="btn-primary inline-block mt-4">View My Account →</Link>
+          </div>
+        ) : groupFull ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center space-y-4">
+            <div className="text-4xl">🎟️</div>
+            <h2 className="text-xl font-bold text-gray-900">This group is full</h2>
+            <p className="text-gray-600">
+              Every place {organiserName} registered for <strong>{tokenRow.event_title}</strong> has been filled.
+              Please contact your group organiser if you think this is a mistake.
+            </p>
+            <Link href={`/events/${slug}`} className="btn-primary inline-block mt-4">View Event →</Link>
           </div>
         ) : (
           <GroupJoinClient

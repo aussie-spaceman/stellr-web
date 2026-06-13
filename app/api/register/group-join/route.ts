@@ -218,6 +218,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'You are already registered in this group.' }, { status: 409 })
   }
 
+  // Cap at the declared group size. Once every place the organiser nominated is
+  // filled, the link stops accepting NEW people (the dedupe above still lets an
+  // already-registered member re-open the link harmlessly). Registrations created
+  // before migration 037 have null counts → no cap, preserving old behaviour.
+  const declaredAdults = reg.adult_count as number | null
+  const declaredStudents = reg.student_count as number | null
+  if (declaredAdults != null && declaredStudents != null) {
+    const { count: currentCount } = await db
+      .from('participants')
+      .select('*', { count: 'exact', head: true })
+      .eq('registration_id', registrationId)
+    if ((currentCount ?? 0) >= declaredAdults + declaredStudents) {
+      return NextResponse.json({
+        error: 'This group is already full — every place the organiser registered has been filled. Please contact your organiser if you think this is a mistake.',
+      }, { status: 409 })
+    }
+  }
+
   const paymentStatus = memberPaysIndividually ? 'pending' : null
 
   // Insert participant row

@@ -8,7 +8,7 @@ import {
   groupConfirmationEmail,
   groupMemberIndividualPaymentEmail,
 } from '@/lib/email'
-import { createGroupRegistrationSheet, isGoogleSheetsConfigured } from '@/lib/google-sheets'
+import { createGroupRegistrationSheet, isGoogleSheetsConfigured, type SheetSeedRow } from '@/lib/google-sheets'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt, normalizeEmail } from '@/lib/member-enums'
@@ -200,11 +200,20 @@ export async function POST(req: NextRequest) {
 
     const poc = teacher_poc as TeacherPoC | null
 
+    // Declared group size, normalised to ABSOLUTE totals so adult_count +
+    // student_count == total participants regardless of role. For a teacher the
+    // form's adult_count already includes them; for a student-manager the SM is the
+    // group's first student, so add 1 to the "other students" count.
+    const declaredAdultCount = adult_count
+    const declaredStudentCount = registrant_role === 'student_manager' ? 1 + student_count : student_count
+
     // Create registration record
     const { data: registration, error: regError } = await db.from('registrations').insert({
       event_slug, event_title,
       type: 'group',
       status: 'pending',
+      adult_count: declaredAdultCount,
+      student_count: declaredStudentCount,
       teacher_first_name: teacher.first_name,
       teacher_last_name: teacher.last_name,
       teacher_email: teacher.email,
@@ -488,12 +497,42 @@ export async function POST(req: NextRequest) {
         const adultCountForSheet = registrant_role === 'student_manager'
           ? adult_count          // all adults are "additional" for SM
           : adult_count - 1      // exclude teacher from additional adult count
+
+        // Seed the sheet with anyone already entered on the web form (greyed +
+        // read-only), and leave blank rows only for the REMAINDER. The registrant
+        // is captured directly and never appears in the sheet, so the universe
+        // (and the entered subset) both exclude them. For the spreadsheet /
+        // email-link methods nothing was entered now, so this seeds nothing and
+        // the whole roster stays blank — unchanged behaviour.
+        const seedFromPayload = (p: ParticipantPayload, type: SheetSeedRow['type']): SheetSeedRow => ({
+          type,
+          first_name: p.first_name ?? '', last_name: p.last_name ?? '',
+          email: p.email ?? '', phone: p.phone ?? '',
+          date_of_birth: p.date_of_birth ?? '',
+          gender: p.gender ?? '', t_shirt_size: p.t_shirt_size ?? '', grade: p.grade ?? '',
+          dietary_requirements: p.dietary_requirements ?? [],
+          health_conditions: p.health_conditions ?? '',
+          ec_first_name: p.emergency_contact_first_name ?? '', ec_last_name: p.emergency_contact_last_name ?? '',
+          ec_email: p.emergency_contact_email ?? '', ec_phone: p.emergency_contact_phone ?? '',
+          ec_relationship: p.emergency_contact_relationship ?? '',
+        })
+        const enteredParticipants: SheetSeedRow[] = details_method === 'add_now'
+          ? [
+              ...(additional_adults ?? []).map((p: ParticipantPayload) =>
+                seedFromPayload(p, p.event_role === 'Teacher' ? 'Teacher' : 'Adult')),
+              ...(students ?? []).map((p: ParticipantPayload) => seedFromPayload(p, 'Student')),
+            ]
+          : []
+        const enteredAdults = details_method === 'add_now' ? (additional_adults ?? []).length : 0
+        const enteredStudents = details_method === 'add_now' ? (students ?? []).length : 0
+
         const sheet = await createGroupRegistrationSheet({
           eventTitle: event_title,
           schoolName: teacher.school_name,
           teacherEmail: teacher.email,
-          additionalAdultCount: adultCountForSheet,
-          studentCount: student_count,
+          additionalAdultCount: Math.max(0, adultCountForSheet - enteredAdults),
+          studentCount: Math.max(0, student_count - enteredStudents),
+          enteredParticipants,
         })
         spreadsheetUrl = sheet.url
         // Persist the sheet ID so the portal "Open Sheet" link, sheet-sync, and the
@@ -516,6 +555,12 @@ export async function POST(req: NextRequest) {
     const providedStudents = (students ?? []).length
     const incompleteAddNow = details_method === 'add_now' &&
       (providedAdditionalAdults < expectedAdditionalAdults || providedStudents < student_count)
+    // How many declared people were left for later — drives the "X still to add"
+    // messaging on the confirmation page and email. Only meaningful for a partial
+    // add_now; the spreadsheet / email-link methods provide the whole roster later.
+    const remainingCount = incompleteAddNow
+      ? Math.max(0, expectedAdditionalAdults - providedAdditionalAdults) + Math.max(0, student_count - providedStudents)
+      : 0
 
     // ── Group join token ──────────────────────────────────────────────────────
     // A forwardable completion link is created for the spreadsheet / email-link
@@ -602,7 +647,7 @@ export async function POST(req: NextRequest) {
           u.searchParams.set('id', regId); u.searchParams.set('type', 'group'); u.searchParams.set('payment', 'success')
           if (promptSpreadsheetUrl) u.searchParams.set('spreadsheet', promptSpreadsheetUrl)
           if (incompleteAddNow && joinUrl) u.searchParams.set('join', joinUrl)
-          if (incompleteAddNow) u.searchParams.set('remaining', '1')
+          if (remainingCount > 0) u.searchParams.set('remaining', String(remainingCount))
           return u.toString()
         })(),
         cancel_url: `${SITE_URL}/register/${event_slug}/group?cancelled=true`,
@@ -664,6 +709,7 @@ export async function POST(req: NextRequest) {
         detailsMethod: details_method,
         spreadsheetUrl: promptSpreadsheetUrl ?? undefined,
         joinUrl: joinUrl ?? undefined,
+        remainingCount,
       })
       await sendEmail({ to: teacher.email, cc: ccEmails, ...emailContent })
     } catch (emailErr) {

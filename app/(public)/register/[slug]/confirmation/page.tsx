@@ -13,7 +13,8 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
   const spreadsheetUrl = spreadsheet ? decodeURIComponent(spreadsheet) : null
   const joinUrl = join ? decodeURIComponent(join) : null
   // Some declared participants were left for later (partial "add them now").
-  const hasRemaining = isGroup && !!remaining
+  const remainingCount = remaining ? parseInt(remaining, 10) || 0 : 0
+  const hasRemaining = isGroup && remainingCount > 0
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-16">
@@ -41,9 +42,12 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
         {/* Partial add-now — remaining participants still need entering */}
         {hasRemaining && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-6 text-left">
-            <p className="font-semibold text-amber-900 mb-1">Some participant details still needed</p>
+            <p className="font-semibold text-amber-900 mb-1">
+              {remainingCount} more participant{remainingCount === 1 ? '' : 's'} still to add
+            </p>
             <p className="text-sm text-amber-800 mb-3">
-              You didn&apos;t fill in every participant. Provide the remaining participant details via your Member Portal or Google Sheet — whichever is easier.
+              You added everyone you had details for. Provide the remaining {remainingCount === 1 ? 'person' : `${remainingCount} people`} via your
+              completion link, pre-filled Google Sheet, or Member Portal — whichever is easier.
             </p>
             <div className="flex flex-col sm:flex-row gap-2">
               {spreadsheetUrl && (

@@ -73,6 +73,9 @@ interface TeamRegistration {
   teacher_poc_email: string | null
   member_pays_individually: boolean
   details_method: string | null
+  // Declared group size (migration 037). Null on older registrations.
+  adult_count: number | null
+  student_count: number | null
   joinUrl: string | null
   // How the signed-in member relates to this group, for the role badge.
   viewerRole: 'teacher' | 'student_manager' | 'teacher_poc' | null
@@ -374,6 +377,11 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
         // Count by actual role — the old "everyone who isn't an adult is a
         // student" bucket mislabelled a lone teacher as "1 students".
         const total = team.participants.length
+        // Declared size (migration 037) vs people actually entered → "Y remaining".
+        const declaredTotal = team.adult_count != null && team.student_count != null
+          ? team.adult_count + team.student_count
+          : null
+        const remaining = declaredTotal != null ? Math.max(0, declaredTotal - total) : 0
         const roleCounts: Record<string, number> = {}
         for (const p of team.participants) {
           const key = p.event_role === 'school_student_manager' ? 'teacher'
@@ -411,9 +419,16 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
               <div className="flex items-center gap-4">
                 <div className="text-right">
                   <p className="text-sm text-gray-700">
-                    <span className="font-medium">{total}</span> participant{total === 1 ? '' : 's'}
+                    <span className="font-medium">{total}</span>
+                    {declaredTotal != null ? <span className="text-gray-400"> of {declaredTotal}</span> : null}
+                    {' '}participant{(declaredTotal ?? total) === 1 ? '' : 's'}
                   </p>
                   {roleBreakdown && <p className="text-xs text-gray-400">{roleBreakdown}</p>}
+                  {remaining > 0 && (
+                    <p className="text-xs text-amber-600 font-medium" title="Declared group members who still need to be added via the completion link or Google Sheet.">
+                      {remaining} still to add
+                    </p>
+                  )}
                   <span
                     className={`inline-flex text-xs px-2 py-0.5 rounded-full mt-1 font-medium capitalize ${
                       team.status === 'confirmed' ? 'bg-green-100 text-green-700' :

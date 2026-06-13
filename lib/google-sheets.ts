@@ -210,9 +210,33 @@ const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Vegetar
 const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
 
 const GREY = { red: 0.84, green: 0.84, blue: 0.84 }
+const LIGHT_GREY = { red: 0.95, green: 0.95, blue: 0.95 }
 const GREY_TEXT = { red: 0.55, green: 0.55, blue: 0.55 }
 const HEADER_BG = { red: 0.118, green: 0.227, blue: 0.373 }
 const WHITE = { red: 1, green: 1, blue: 1 }
+
+// A participant already entered on the web form, seeded into the sheet as a
+// greyed, read-only row so the organiser sees the full roster in one place. They
+// are matched by email on sync (sheet-participant-sync), so re-syncing updates
+// the existing participant rather than creating a duplicate.
+export interface SheetSeedRow {
+  type: 'Student' | 'Adult' | 'Teacher' | 'Mentor'
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  date_of_birth: string          // ISO YYYY-MM-DD (or '')
+  gender: string
+  t_shirt_size: string
+  grade: string
+  dietary_requirements: string[]
+  health_conditions: string
+  ec_first_name: string
+  ec_last_name: string
+  ec_email: string
+  ec_phone: string
+  ec_relationship: string
+}
 
 export async function createGroupRegistrationSheet({
   eventTitle,
@@ -220,12 +244,18 @@ export async function createGroupRegistrationSheet({
   teacherEmail,
   additionalAdultCount,
   studentCount,
+  enteredParticipants = [],
 }: {
   eventTitle: string
   schoolName: string
   teacherEmail: string
+  // Blank rows to leave for people still to be entered (the REMAINDER, after any
+  // already added on the web form). For a non-partial registration these equal the
+  // whole roster; for a partial add_now they're the leftover slots only.
   additionalAdultCount: number
   studentCount: number
+  // Already-entered people, pre-filled + greyed at the top of the sheet.
+  enteredParticipants?: SheetSeedRow[]
 }): Promise<{ spreadsheetId: string; url: string }> {
   const auth = getAuth()
   if (!auth) throw new Error('Google service account not configured')
@@ -233,7 +263,9 @@ export async function createGroupRegistrationSheet({
   const sheets = google.sheets({ version: 'v4', auth })
   const drive = google.drive({ version: 'v3', auth })
 
-  const totalDataRows = additionalAdultCount + studentCount
+  const enteredCount = enteredParticipants.length
+  const blankDataRows = additionalAdultCount + studentCount
+  const totalDataRows = enteredCount + blankDataRows
   const totalRows = 1 + totalDataRows + 50 // header + data + buffer
 
   // ── Create spreadsheet ──────────────────────────────────────────────────────
@@ -260,8 +292,25 @@ export async function createGroupRegistrationSheet({
     requestBody: { values: [HEADERS] },
   })
 
-  // ── Write data rows (placeholder values) ───────────────────────────────────
+  // ── Write data rows ─────────────────────────────────────────────────────────
+  // Entered people (already on the web form) come first as pre-filled rows, then
+  // blank placeholder rows for the people still to be added. Membership ID (col A)
+  // is left blank on entered rows — sync matches them back by email, so they update
+  // their existing participant instead of duplicating. DOB is written as a Sheets
+  // date serial so the dd-mmm-yyyy column format applies and parseSheetDate reads
+  // it back; everything else stays text (RAW) so phone numbers keep leading zeros.
   if (totalDataRows > 0) {
+    const enteredRows = enteredParticipants.map(p => [
+      '',                                                  // Membership ID (blank — matched by email)
+      p.type,
+      p.first_name, p.last_name, p.email, p.phone,
+      p.date_of_birth ? isoToSheetSerial(p.date_of_birth) : '',
+      p.gender, p.t_shirt_size,
+      p.type === 'Student' ? p.grade : '',                 // Grade — blank/greyed for non-students
+      (p.dietary_requirements ?? []).join(', '),
+      p.health_conditions ?? '',
+      p.ec_first_name ?? '', p.ec_last_name ?? '', p.ec_email ?? '', p.ec_phone ?? '', p.ec_relationship ?? '',
+    ])
     const adultRows = Array.from({ length: additionalAdultCount }, () => [
       '<new adult registrant>', 'Adult', '', '', '', '', '', '', '', 'N/A — Adult',
       '', '', 'N/A — Adult', 'N/A — Adult', 'N/A — Adult', 'N/A — Adult', 'N/A — Adult',
@@ -274,7 +323,7 @@ export async function createGroupRegistrationSheet({
       spreadsheetId,
       range: `Participants!A2:${colLetter(HEADERS.length)}${1 + totalDataRows}`,
       valueInputOption: 'RAW',
-      requestBody: { values: [...adultRows, ...studentRows] },
+      requestBody: { values: [...enteredRows, ...adultRows, ...studentRows] },
     })
   }
 
@@ -317,6 +366,27 @@ export async function createGroupRegistrationSheet({
   })
   requests.push(greyNotStudentRule(COL_GRADE, COL_GRADE + 1))
   requests.push(greyNotStudentRule(COL_EC_START, COL_EC_END))
+
+  // ── Already-entered rows: light grey + read-only ──────────────────────────────
+  // People added on the web form are pre-filled at the top. Tint them and protect
+  // the block (warning-only, so the organiser CAN override if they must) to signal
+  // "already registered — edit on Stellr, not here". Sync still matches them by
+  // email, so even an edited row updates the existing participant, never duplicates.
+  if (enteredCount > 0) {
+    requests.push(repeatCell(sheetId, 1, 1 + enteredCount, 0, HEADERS.length, {
+      userEnteredFormat: { backgroundColor: LIGHT_GREY, textFormat: { foregroundColor: GREY_TEXT } },
+    }, 'userEnteredFormat(backgroundColor,textFormat)'))
+    requests.push({
+      addProtectedRange: {
+        protectedRange: {
+          range: { sheetId, startRowIndex: 1, endRowIndex: 1 + enteredCount },
+          description: 'Already added via the web form — these participants are registered. Edit them on Stellr, not here.',
+          warningOnly: true,
+          editors: { users: [process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!, OWNER_EMAIL] },
+        },
+      },
+    })
+  }
 
   // Buffer rows are left open (no lock) so the teacher can add more participants
   // than the initial count — every row below carries the same dropdowns, so they
@@ -407,6 +477,18 @@ export async function createGroupRegistrationSheet({
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// ISO date (YYYY-MM-DD) → Google Sheets serial (days since 1899-12-30), so a
+// pre-filled DOB renders under the dd-mmm-yyyy column format and reads back via
+// parseSheetDate's serial branch. Returns '' for an unparseable/empty date.
+function isoToSheetSerial(iso: string): number | string {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!m) return ''
+  const utc = Date.UTC(+m[1], +m[2] - 1, +m[3])
+  const epoch = Date.UTC(1899, 11, 30)
+  const serial = Math.round((utc - epoch) / 86400000)
+  return Number.isFinite(serial) ? serial : ''
+}
 
 function colLetter(n: number): string {
   // 1-indexed column number to letter (A, B, ..., Z, AA, ...)

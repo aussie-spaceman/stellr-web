@@ -27,6 +27,10 @@ export interface RegistrationRow {
   details_method: 'add_now' | 'spreadsheet' | 'email_link'
   spreadsheet_id: string | null
   school_dpa_agreed_at: string | null
+  // Declared group size (absolute, role-normalised): adult_count + student_count
+  // == total participants. NULL on registrations created before migration 037.
+  adult_count: number | null
+  student_count: number | null
 }
 
 export type RegistrationInsert = Omit<RegistrationRow, 'id' | 'created_at' | 'updated_at'>

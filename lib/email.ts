@@ -117,12 +117,16 @@ export function individualConfirmationEmail({
 export function groupConfirmationEmail({
   teacherFirstName, teacherLastName, schoolName, eventTitle,
   participantCount, registrationId, paymentMethod, detailsMethod, spreadsheetUrl, joinUrl,
+  remainingCount = 0,
 }: {
   teacherFirstName: string; teacherLastName: string; schoolName: string
   eventTitle: string; participantCount: number; registrationId: string
   paymentMethod: 'invoice' | 'card' | 'individual'
   detailsMethod: 'add_now' | 'spreadsheet' | 'email_link'
   spreadsheetUrl?: string; joinUrl?: string
+  // For a partial add_now: how many declared people were left for later. 0 means
+  // either a complete add_now (nothing left) or a spreadsheet/email-link roster.
+  remainingCount?: number
 }) {
   const subject = `Group Registration Received — ${eventTitle}`
 
@@ -134,9 +138,14 @@ export function groupConfirmationEmail({
       ? '<li style="margin-bottom:8px"><strong>Payment:</strong> Each group member will receive their own payment link by email. Each member\'s spot is confirmed once they complete their individual payment.</li>'
       : `<li style="margin-bottom:8px"><strong>Payment:</strong> An invoice for all ${participantCount} participant${participantCount !== 1 ? 's' : ''} will be emailed to you within 1–2 business days. Registration is confirmed once payment is received.</li>`
 
+  // A partial add_now (remainingCount > 0) still has people to provide later, so it
+  // gets the "finish the rest" note + the Sheet/link options, like the other methods.
+  const partialAddNow = detailsMethod === 'add_now' && remainingCount > 0
   const registrationNote =
-    detailsMethod === 'add_now'
+    detailsMethod === 'add_now' && !partialAddNow
       ? '<li style="margin-bottom:8px"><strong>Member details:</strong> All group member details have been submitted — there\'s nothing further to add.</li>'
+    : partialAddNow
+      ? `<li style="margin-bottom:8px"><strong>Member details:</strong> You added most of your group, with <strong>${remainingCount}</strong> still to provide. Finish the remaining ${remainingCount === 1 ? 'person' : 'people'} using <strong>either</strong> option above — the pre-filled Google Sheet <strong>or</strong> the registration link.</li>`
       : '<li style="margin-bottom:8px"><strong>Member details:</strong> Complete your group\'s details using <strong>either</strong> option above — the pre-populated Google Sheet <strong>or</strong> the registration link. We\'ll finalise each member\'s registration as their details come in.</li>'
 
   const sheetSection = spreadsheetUrl ? `

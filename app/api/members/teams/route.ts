@@ -35,7 +35,7 @@ export async function GET(req: Request) {
       teacher_first_name, teacher_last_name, teacher_email, teacher_member_id,
       spreadsheet_id, registrant_role,
       teacher_poc_first_name, teacher_poc_last_name, teacher_poc_email,
-      member_pays_individually, details_method,
+      member_pays_individually, details_method, adult_count, student_count,
       participants(id, event_role, first_name, last_name, email, join_completed_at, individual_payment_status, event_companies(number, name))
     `)
     .or(ownerOr)

@@ -5,6 +5,7 @@ import {
   normalizeEventRole,
   normalizeGrade,
   normalizeTshirt,
+  normalizeEmail,
 } from '@/lib/member-enums'
 
 export interface MemberUpsertInput {
@@ -30,7 +31,7 @@ export async function upsertMember(
   db: SupabaseClient,
   input: MemberUpsertInput
 ): Promise<string | null> {
-  const email = input.email?.trim()
+  const email = normalizeEmail(input.email)
   if (!email) return null
 
   const { data, error } = await db

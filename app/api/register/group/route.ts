@@ -11,7 +11,7 @@ import {
 import { createGroupRegistrationSheet, isGoogleSheetsConfigured } from '@/lib/google-sheets'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
-import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt } from '@/lib/member-enums'
+import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt, normalizeEmail } from '@/lib/member-enums'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
 import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
@@ -84,6 +84,13 @@ export async function POST(req: NextRequest) {
     if (sessionMember?.email && teacher) {
       teacher.email = sessionMember.email
     }
+
+    // Email is the member dedup key — normalise the registrant's and every
+    // participant's address up front so casing never spawns a duplicate member
+    // (and so the duplicate-check queries below compare like-for-like).
+    if (teacher?.email) teacher.email = normalizeEmail(teacher.email)
+    for (const p of (additional_adults ?? [])) if (p?.email) p.email = normalizeEmail(p.email)
+    for (const p of (students ?? [])) if (p?.email) p.email = normalizeEmail(p.email)
 
     if (!event_slug || !teacher?.email || !teacher?.first_name || !teacher?.last_name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })

@@ -36,27 +36,39 @@ export async function GET(req: Request) {
   const id = raw.padStart(7, '0')
 
   const db = supabaseServer()
+
+  // Canonical path: the per-person id now lives on members (migration 036). Try it
+  // first. The `.catch`-style error check keeps this working before the migration
+  // is applied (column missing → fall through to the participants lookup below).
+  const { data: member, error: memberErr } = await db
+    .from('members')
+    .select('first_name, last_name')
+    .eq('membership_id', id)
+    .maybeSingle()
+  if (!memberErr && member) {
+    return NextResponse.json({ found: true, first_name: member.first_name ?? '', last_name: member.last_name ?? '' })
+  }
+
+  // Fallback: a legacy participant id (an older badge/email may carry a per-event
+  // id that isn't the member's canonical one) — resolve it to the person's name.
   const { data: participant } = await db
     .from('participants')
     .select('first_name, last_name, member_id')
     .eq('membership_id', id)
     .maybeSingle()
-
   if (!participant) return NextResponse.json({ found: false })
 
-  // Prefer the canonical member record's name when the participant is linked to
-  // one; fall back to the participant row otherwise.
   let firstName = (participant.first_name as string | null) ?? ''
   let lastName = (participant.last_name as string | null) ?? ''
   if (participant.member_id) {
-    const { data: member } = await db
+    const { data: linked } = await db
       .from('members')
       .select('first_name, last_name')
       .eq('id', participant.member_id)
       .maybeSingle()
-    if (member) {
-      firstName = (member.first_name as string | null) ?? firstName
-      lastName = (member.last_name as string | null) ?? lastName
+    if (linked) {
+      firstName = (linked.first_name as string | null) ?? firstName
+      lastName = (linked.last_name as string | null) ?? lastName
     }
   }
 

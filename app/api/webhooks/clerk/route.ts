@@ -2,6 +2,7 @@ import { Webhook } from 'svix'
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { normalizeEmail } from '@/lib/member-enums'
 
 // Clerk sends user.created / user.updated / user.deleted events here.
 // This keeps the members table in sync with Clerk identity records.
@@ -59,9 +60,9 @@ export async function POST(req: Request) {
   const { type, data } = event
 
   if (type === 'user.created') {
-    const primaryEmail = data.email_addresses.find(
+    const primaryEmail = normalizeEmail(data.email_addresses.find(
       (e) => e.id === data.primary_email_address_id
-    )?.email_address
+    )?.email_address)
 
     if (!primaryEmail) {
       return NextResponse.json({ received: true, skipped: 'no primary email' })
@@ -97,9 +98,9 @@ export async function POST(req: Request) {
   }
 
   if (type === 'user.updated') {
-    const primaryEmail = data.email_addresses.find(
+    const primaryEmail = normalizeEmail(data.email_addresses.find(
       (e) => e.id === data.primary_email_address_id
-    )?.email_address
+    )?.email_address) || undefined
 
     await db
       .from('members')

@@ -38,14 +38,24 @@ export async function getMemberOnFileByMembershipId(
   const id = membershipId.trim()
   if (!id) return null
 
-  const { data: part } = await db
-    .from('participants')
-    .select('member_id, email')
+  // The id may be the member's canonical id (members.membership_id, migration 036)
+  // or a legacy per-event participant id — resolve either to the member.
+  let memberId: string | null = null
+  const { data: canonical, error: canonErr } = await db
+    .from('members')
+    .select('id')
     .eq('membership_id', id)
     .maybeSingle()
-  if (!part?.member_id) return null
-
-  const memberId = part.member_id as string
+  if (!canonErr && canonical) memberId = canonical.id as string
+  if (!memberId) {
+    const { data: part } = await db
+      .from('participants')
+      .select('member_id')
+      .eq('membership_id', id)
+      .maybeSingle()
+    memberId = (part?.member_id as string | null) ?? null
+  }
+  if (!memberId) return null
 
   const [{ data: mem }, { data: last }] = await Promise.all([
     db
@@ -90,7 +100,7 @@ export async function getMemberOnFileByMembershipId(
 
   return {
     memberId,
-    email: str(p.email) ?? str(m.email) ?? ((part.email as string | null) ?? '') ?? '',
+    email: str(p.email) ?? str(m.email) ?? '',
     first_name: str(p.first_name) ?? str(m.first_name) ?? '',
     last_name: str(p.last_name) ?? str(m.last_name) ?? '',
     nickname: str(p.nickname) ?? str(m.nickname),

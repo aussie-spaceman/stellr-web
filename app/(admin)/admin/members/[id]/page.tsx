@@ -45,16 +45,18 @@ export default async function AdminMemberPage({
 
   if (!member) notFound()
 
-  // The member's 7-digit Membership ID lives on their participant rows (assigned
-  // by sequence on first registration). Surface the earliest one — that's the ID
-  // they were given and that the confirmation email references.
-  const { data: firstParticipant } = await db
-    .from('participants')
-    .select('membership_id')
-    .or(`member_id.eq.${member.id},email.eq.${member.email}`)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
+  // Canonical Membership ID now lives on the members row (migration 036). Fall
+  // back to the member's earliest participant id if not yet backfilled.
+  const canonicalId = (member as { membership_id?: string | null }).membership_id ?? null
+  const { data: firstParticipant } = canonicalId
+    ? { data: null }
+    : await db
+        .from('participants')
+        .select('membership_id')
+        .or(`member_id.eq.${member.id},email.eq.${member.email}`)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
 
   return (
     <AdminMemberDetail
@@ -64,7 +66,7 @@ export default async function AdminMemberPage({
       ethnicityOptions={ethnicityOptions ?? []}
       allergyOptions={allergyOptions ?? []}
       registrations={registrations ?? []}
-      membershipId={(firstParticipant as { membership_id?: string } | null)?.membership_id ?? null}
+      membershipId={canonicalId ?? (firstParticipant as { membership_id?: string } | null)?.membership_id ?? null}
     />
   )
 }

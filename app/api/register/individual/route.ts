@@ -4,7 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import type { RegistrationRow, ParticipantRow } from '@/lib/database.types'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
-import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt } from '@/lib/member-enums'
+import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt, normalizeEmail } from '@/lib/member-enums'
 import { resolveAndLinkSchool } from '@/lib/school-link'
 import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     // duplicate member rows and forged-identity registrations. Falls back to the
     // submitted email when there's no resolvable session (e.g. on www).
     const sessionMember = await getCurrentMember().catch(() => null)
-    const email: string = sessionMember?.email ?? body.email
+    const email: string = normalizeEmail(sessionMember?.email ?? body.email)
 
     if (!event_slug || !email || !first_name || !last_name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })

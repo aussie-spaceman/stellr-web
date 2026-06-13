@@ -82,13 +82,15 @@ export default async function AccountPage({
     })
     .filter((r): r is NonNullable<typeof r> => r !== null)
 
-  // The member's 7-digit Membership ID lives on their participant rows; surface
-  // the lowest (their original, zero-padded so string sort == numeric order) —
-  // it's the ID they were assigned and that their confirmation email references.
-  const membershipId = (myParticipantRows ?? [])
-    .map((p) => (p as { membership_id?: string | null }).membership_id)
-    .filter((m): m is string => !!m)
-    .sort()[0] ?? null
+  // The member's canonical 7-digit Membership ID now lives on the members row
+  // (migration 036). Fall back to the lowest of their participant ids for any
+  // member not yet backfilled (zero-padded, so string sort == numeric order).
+  const membershipId =
+    (member as { membership_id?: string | null }).membership_id ??
+    ((myParticipantRows ?? [])
+      .map((p) => (p as { membership_id?: string | null }).membership_id)
+      .filter((m): m is string => !!m)
+      .sort()[0] ?? null)
 
   const activeMembership = member.member_memberships
     ?.filter((m: { renewal_status: string }) => m.renewal_status === 'active')

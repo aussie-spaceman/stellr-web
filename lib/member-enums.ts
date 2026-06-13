@@ -13,6 +13,13 @@
 // writes must go through normalizeEventRole too (migration 032 normalised
 // historical rows).
 
+// Email is the dedup key for members (one row per address, enforced by a unique
+// constraint + a lower(email) index — migration 036). Casing/whitespace must be
+// normalised on EVERY write so "Jane@x.com" and "jane@x.com" collapse to one row.
+export function normalizeEmail(email: unknown): string {
+  return typeof email === 'string' ? email.trim().toLowerCase() : ''
+}
+
 export const VALID_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'] as const
 export const VALID_AGE_BRACKETS = ['adult', 'high_school', 'college'] as const
 // 'adult' and 'school_student_manager' require migration 016 to exist in the enum.

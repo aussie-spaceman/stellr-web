@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { fireCampaignEvent } from '@/lib/email-campaigns'
 import { applyGrantTrigger } from '@/lib/membership-grants'
+import { normalizeEmail } from '@/lib/member-enums'
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
@@ -99,19 +100,32 @@ export async function POST(req: Request) {
     memberError = error
     memberId = existingMember.id
   } else {
-    // Webhook hasn't fired yet — fetch identity from Clerk and create the row now
+    // No row linked to this Clerk id yet (webhook hasn't fired). Before inserting,
+    // check whether a member already exists for this EMAIL — created by an earlier
+    // event registration — and link/update it rather than spawning a duplicate.
     const clerkUser = await currentUser()
-    const primaryEmail = clerkUser?.emailAddresses.find(
+    const primaryEmail = normalizeEmail(clerkUser?.emailAddresses.find(
       (e) => e.id === clerkUser.primaryEmailAddressId
-    )?.emailAddress ?? ''
-    const { data: inserted, error } = await db.from('members').insert({
-      ...profileUpdates,
-      first_name: clerkUser?.firstName ?? '',
-      last_name: clerkUser?.lastName ?? '',
-      email: primaryEmail,
-    }).select('id').single()
-    memberError = error
-    memberId = inserted?.id ?? null
+    )?.emailAddress)
+
+    const { data: byEmail } = primaryEmail
+      ? await db.from('members').select('id').eq('email', primaryEmail).maybeSingle()
+      : { data: null }
+
+    if (byEmail) {
+      const { error } = await db.from('members').update(profileUpdates).eq('id', byEmail.id)
+      memberError = error
+      memberId = byEmail.id
+    } else {
+      const { data: inserted, error } = await db.from('members').insert({
+        ...profileUpdates,
+        first_name: clerkUser?.firstName ?? '',
+        last_name: clerkUser?.lastName ?? '',
+        email: primaryEmail,
+      }).select('id').single()
+      memberError = error
+      memberId = inserted?.id ?? null
+    }
   }
 
   if (memberError) {

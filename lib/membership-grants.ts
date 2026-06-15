@@ -23,6 +23,10 @@ export type GrantTrigger =
   | 'subscribe_website'
   | 'graduation'
   | 'manual'
+  // Fired when a member is enrolled in a competition campaign. The caller fires
+  // it only for a Premium purchase (Baseline/Advanced grant content access only),
+  // so the seeded rule grants Pathfinder for 12 months (decision D2).
+  | 'campaign_enrollment'
 
 export type GrantSource = 'stripe' | 'rule' | 'manual' | 'system'
 

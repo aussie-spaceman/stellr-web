@@ -19,7 +19,7 @@ export default async function AdminEntitlementsPage() {
 
   const [{ data: tiers }, { data: spaces }, { data: modules }, { data: resources }, { data: ents }] =
     await Promise.all([
-      db.from('membership_tiers').select('id, name, is_free').order('sort_order'),
+      db.from('membership_tiers').select('id, name, is_free, age_bracket').order('sort_order'),
       db.from('community_spaces').select('id, name').eq('is_archived', false).order('display_order'),
       db.from('training_modules').select('id, title, material_kind').order('display_order'),
       db
@@ -28,13 +28,18 @@ export default async function AdminEntitlementsPage() {
         .is('event_ref', null) // event-attached resources are gated via the event itself
         .order('created_at', { ascending: false })
         .limit(100),
-      db.from('content_entitlements').select('id, tier_id, target_type, target_ref, access_level'),
+      db
+        .from('content_entitlements')
+        .select('id, tier_id, content_tier, target_type, target_ref, access_level'),
     ])
 
   const targets: Target[] = [
     // Category-wide grants for the upcoming Mentoring/Coaching components.
     { type: 'mentoring', ref: '*', label: 'Mentoring — access (all)', group: 'Programs' },
     { type: 'coaching', ref: '*', label: 'Coaching — access (all)', group: 'Programs' },
+    // Campaign delivery content, gated by the per-campaign content tier (drag a
+    // content-tier chip here). Scoped to each member's enrolled campaign at run time.
+    { type: 'campaign_material', ref: '*', label: 'Campaign materials — by content tier', group: 'Campaign content' },
     ...(spaces ?? []).map((s) => ({
       type: 'space' as const,
       ref: s.id,
@@ -58,7 +63,7 @@ export default async function AdminEntitlementsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Content Access</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Access map</h1>
         <p className="mt-0.5 text-sm text-gray-500">
           Drag a membership tier onto any content row to grant access. This is the entitlement
           source of truth — edit it any time as your tier model evolves.

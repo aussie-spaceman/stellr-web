@@ -28,9 +28,13 @@ export async function GET() {
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { tierId, targetType, targetRef, accessLevel } = await req.json().catch(() => ({}))
-  if (!tierId || !targetType || !targetRef) {
-    return NextResponse.json({ error: 'tierId, targetType, targetRef required' }, { status: 400 })
+  // Subject is EITHER a membership tier (tierId) OR a content tier (contentTier).
+  const { tierId, contentTier, targetType, targetRef, accessLevel } = await req.json().catch(() => ({}))
+  if (!targetType || !targetRef || Boolean(tierId) === Boolean(contentTier)) {
+    return NextResponse.json(
+      { error: 'targetType, targetRef and exactly one of tierId / contentTier required' },
+      { status: 400 }
+    )
   }
 
   const admin = await getCurrentMember()
@@ -39,13 +43,18 @@ export async function POST(req: Request) {
     .from('content_entitlements')
     .upsert(
       {
-        tier_id: tierId,
+        tier_id: tierId ?? null,
+        content_tier: contentTier ?? null,
         target_type: targetType,
         target_ref: targetRef,
         access_level: accessLevel ?? 'view',
         created_by: admin?.id ?? null,
       },
-      { onConflict: 'tier_id,target_type,target_ref,access_level' }
+      {
+        onConflict: tierId
+          ? 'tier_id,target_type,target_ref,access_level'
+          : 'content_tier,target_type,target_ref,access_level',
+      }
     )
     .select('id')
     .single()
@@ -55,6 +64,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Could not grant access' }, { status: 500 })
   }
   return NextResponse.json({ id: data.id })
+}
+
+// PATCH — change the access level of an existing entitlement row. Body: { id, accessLevel }
+// The matrix keeps one chip per (tier, target), so updating access_level can't
+// collide with the UNIQUE (tier_id, target_type, target_ref, access_level) key.
+const ACCESS_LEVELS = ['view', 'download', 'enroll', 'host'] as const
+export async function PATCH(req: Request) {
+  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const { id, accessLevel } = await req.json().catch(() => ({}))
+  if (!id || !accessLevel) return NextResponse.json({ error: 'id and accessLevel required' }, { status: 400 })
+  if (!ACCESS_LEVELS.includes(accessLevel)) {
+    return NextResponse.json({ error: 'invalid accessLevel' }, { status: 400 })
+  }
+
+  const db = supabaseServer()
+  const { error } = await db
+    .from('content_entitlements')
+    .update({ access_level: accessLevel })
+    .eq('id', id)
+  if (error) {
+    console.error('[entitlements] patch error:', error)
+    return NextResponse.json({ error: 'Could not update access level' }, { status: 500 })
+  }
+  return NextResponse.json({ ok: true })
 }
 
 // DELETE — revoke an entitlement row. Body: { id }

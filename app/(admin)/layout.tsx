@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { UserButton } from '@clerk/nextjs'
 import { hasAdminPortalAccess, isAdminClaims } from '@/lib/admin-auth'
+import { AdminNav } from '@/components/admin/AdminNav'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { userId, sessionClaims } = await auth()
@@ -25,50 +26,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               {isAdmin ? 'Admin' : 'Event Manager'}
             </span>
           </div>
-          <nav className="flex items-center gap-6 text-sm">
-            {isAdmin && (
-            <>
-            <Link href="/admin" className="text-gray-600 hover:text-gray-900">
-              Members
-            </Link>
-            <Link href="/admin/schools" className="text-gray-600 hover:text-gray-900">
-              Schools
-            </Link>
-            <Link href="/admin/membership" className="text-gray-600 hover:text-gray-900">
-              Membership
-            </Link>
-            <Link href="/admin/docusigns" className="text-gray-600 hover:text-gray-900">
-              Consent Forms
-            </Link>
-            <Link href="/admin/activity-log" className="text-gray-600 hover:text-gray-900">
-              Activity Log
-            </Link>
-            <Link href="/admin/community/resources" className="text-gray-600 hover:text-gray-900">
-              Resources
-            </Link>
-            <Link href="/admin/community/training" className="text-gray-600 hover:text-gray-900">
-              Training
-            </Link>
-            <Link href="/admin/community/entitlements" className="text-gray-600 hover:text-gray-900">
-              Access
-            </Link>
-            <Link href="/admin/community/sessions" className="text-gray-600 hover:text-gray-900">
-              Sessions
-            </Link>
-            <Link href="/admin/community/announcements" className="text-gray-600 hover:text-gray-900">
-              Announcements
-            </Link>
-            <Link href="/admin/community/moderation" className="text-gray-600 hover:text-gray-900">
-              Moderation
-            </Link>
-            <Link href="/admin/email" className="text-gray-600 hover:text-gray-900">
-              Email
-            </Link>
-            </>
+          <nav className="flex items-center gap-4 text-sm">
+            {isAdmin ? (
+              <AdminNav />
+            ) : (
+              // Event Managers only reach the Events section (middleware enforces this).
+              <Link href="/admin/events" className="text-gray-600 hover:text-gray-900">
+                Events
+              </Link>
             )}
-            <Link href="/admin/events" className="text-gray-600 hover:text-gray-900">
-              Events
-            </Link>
             <UserButton />
           </nav>
         </div>

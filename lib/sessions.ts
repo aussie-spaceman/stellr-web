@@ -1,5 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
-import { type CommunityMember } from '@/lib/community'
+import { type CommunityMember, getCurrentMember, memberCanAccess } from '@/lib/community'
 import { getVideoProvider } from '@/lib/video-provider'
 import { notifyMember, notifyMembers } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
@@ -576,16 +576,47 @@ export async function postMessage(channelId: string, authorId: string, body: str
   return !error
 }
 
-/** Whether the member may read/write a channel (cohort member, or the coaching pair). */
+/** Get-or-create the single discussion channel for a community space (Phase 4). */
+export async function getSpaceChannel(spaceId: string): Promise<string> {
+  const db = supabaseServer()
+  const { data: existing } = await db
+    .from('chat_channels')
+    .select('id')
+    .eq('kind', 'space')
+    .eq('space_id', spaceId)
+    .maybeSingle()
+  if (existing) return existing.id
+  const { data } = await db
+    .from('chat_channels')
+    .insert({ kind: 'space', space_id: spaceId })
+    .select('id')
+    .single()
+  return data!.id
+}
+
+/** Whether the member may read/write a channel (cohort member, coaching pair, or space viewer). */
 export async function canAccessChannel(channelId: string, memberId: string): Promise<boolean> {
   const db = supabaseServer()
   const { data: ch } = await db
     .from('chat_channels')
-    .select('kind, cohort_id, member_id, host_member_id')
+    .select('kind, cohort_id, member_id, host_member_id, space_id')
     .eq('id', channelId)
     .maybeSingle()
   if (!ch) return false
   if (ch.kind === 'coaching') return ch.member_id === memberId || ch.host_member_id === memberId
+  if (ch.kind === 'space') {
+    // Space chat mirrors space-view access (tier + entitlement gated). Resolved
+    // for the current member, who must be the one asking.
+    if (!ch.space_id) return false
+    const me = await getCurrentMember()
+    if (!me || me.id !== memberId) return false
+    const { data: space } = await db
+      .from('community_spaces')
+      .select('min_tier_rank')
+      .eq('id', ch.space_id)
+      .maybeSingle()
+    return memberCanAccess(me, 'space', ch.space_id, (space?.min_tier_rank as number) ?? 0, 'view')
+  }
   // cohort: member must belong to the cohort (or be its mentor)
   const { data: cm } = await db
     .from('cohort_members')

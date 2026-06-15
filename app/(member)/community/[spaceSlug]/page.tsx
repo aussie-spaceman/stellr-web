@@ -3,7 +3,9 @@ import { notFound, redirect } from 'next/navigation'
 import { MessageSquare, Pin, Megaphone } from 'lucide-react'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, getSpaceBySlug, memberMeetsTier } from '@/lib/community'
+import { getSpaceChannel } from '@/lib/sessions'
 import { NewPostForm } from '@/components/community/NewPostForm'
+import { ChatPanel } from '@/components/community/ChatPanel'
 
 interface PostListRow {
   id: string
@@ -51,6 +53,9 @@ export default async function SpaceFeedPage({
     )
   }
 
+  // Live discussion channel for this space (Phase 4 — chat on Spaces, D7).
+  const chatChannelId = await getSpaceChannel(space.id)
+
   const db = supabaseServer()
   const { data: posts } = await db
     .from('community_posts')
@@ -69,6 +74,10 @@ export default async function SpaceFeedPage({
       </div>
       <h1 className="text-2xl font-bold text-gray-900">{space.name}</h1>
       {space.description && <p className="mt-1 text-sm text-gray-500">{space.description}</p>}
+
+      <div className="mt-5">
+        <ChatPanel channelId={chatChannelId} selfMemberId={member.id} title={`${space.name} chat`} />
+      </div>
 
       <div className="mt-5">
         <NewPostForm spaceSlug={space.slug} />

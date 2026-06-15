@@ -42,7 +42,7 @@ const COURSE_TYPE_LABEL: Record<CourseType, string> = {
   scheduled: 'Scheduled',
 }
 
-const KINDS = ['general', 'event', 'campaign', 'cte'] as const
+const KINDS = ['general', 'event', 'campaign', 'cte', 'curriculum'] as const
 const CONTENT_KINDS = ['video', 'document', 'google_doc', 'link'] as const
 
 export interface AdminSection {

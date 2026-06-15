@@ -1,0 +1,128 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { X } from 'lucide-react'
+
+export interface ModuleRef {
+  id: string
+  title: string
+}
+export interface Prereq {
+  id: string
+  target_ref: string
+  requires_target_ref: string
+}
+
+// Configure the Phase 5 gates per training module: prerequisites (must complete X
+// first) and persistence (keep open vs re-gate once a container archives).
+export default function GatesManager({
+  modules,
+  prereqs,
+  persistence,
+}: {
+  modules: ModuleRef[]
+  prereqs: Prereq[]
+  persistence: Record<string, string>
+}) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const titleOf = (id: string) => modules.find((m) => m.id === id)?.title ?? id
+
+  async function addPrereq(targetRef: string, requiresRef: string) {
+    if (!requiresRef) return
+    setBusy(true)
+    await fetch('/api/admin/community/gates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'prereq', targetRef, requiresRef }),
+    })
+    setBusy(false)
+    router.refresh()
+  }
+  async function removePrereq(id: string) {
+    setBusy(true)
+    await fetch('/api/admin/community/gates', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    setBusy(false)
+    router.refresh()
+  }
+  async function setPersistence(targetRef: string, policy: string) {
+    setBusy(true)
+    await fetch('/api/admin/community/gates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'persistence', targetRef, policy }),
+    })
+    setBusy(false)
+    router.refresh()
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      {modules.length === 0 && (
+        <p className="px-4 py-6 text-center text-sm text-gray-400">No training modules yet.</p>
+      )}
+      {modules.map((m) => {
+        const mine = prereqs.filter((p) => p.target_ref === m.id)
+        return (
+          <div key={m.id} className="border-b border-gray-100 px-4 py-3 last:border-b-0">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-gray-900">{m.title}</span>
+              <label className="flex items-center gap-1.5 text-xs text-gray-500">
+                On archive:
+                <select
+                  value={persistence[m.id] ?? 're_gate'}
+                  onChange={(e) => setPersistence(m.id, e.target.value)}
+                  disabled={busy}
+                  className="rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+                >
+                  <option value="re_gate">re-gate</option>
+                  <option value="keep_open">keep open</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-gray-400">Requires:</span>
+              {mine.length === 0 && <span className="text-xs text-gray-400">—</span>}
+              {mine.map((p) => (
+                <span
+                  key={p.id}
+                  className="inline-flex items-center gap-1 rounded-full bg-amber-50 py-0.5 pl-2 pr-1 text-xs font-medium text-amber-800"
+                >
+                  {titleOf(p.requires_target_ref)}
+                  <button
+                    onClick={() => removePrereq(p.id)}
+                    disabled={busy}
+                    aria-label="Remove prerequisite"
+                    className="hover:text-amber-900 disabled:opacity-50"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              <select
+                value=""
+                onChange={(e) => addPrereq(m.id, e.target.value)}
+                disabled={busy}
+                className="rounded border border-gray-300 px-1.5 py-0.5 text-xs text-gray-600"
+              >
+                <option value="">+ add prerequisite…</option>
+                {modules
+                  .filter((o) => o.id !== m.id && !mine.some((p) => p.requires_target_ref === o.id))
+                  .map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.title}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}

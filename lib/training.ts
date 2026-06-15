@@ -9,7 +9,7 @@ import {
 // Modules contain ordered items (video/document/google_doc/link). Progress is
 // tracked per item so members see "1 of 4" and teachers/admins see completion.
 
-export type MaterialKind = 'general' | 'event' | 'campaign' | 'cte'
+export type MaterialKind = 'general' | 'event' | 'campaign' | 'cte' | 'curriculum'
 
 /** How a course's content is paced/released (Circle-style course types). */
 export type CourseType = 'self_paced' | 'structured' | 'scheduled'

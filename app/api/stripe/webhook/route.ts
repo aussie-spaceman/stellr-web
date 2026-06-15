@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { sendEmail, individualConfirmationEmail, groupPaymentConfirmedEmail } from '@/lib/email'
 import { finalizeRedemption } from '@/lib/refunds/redeem'
+import { applyCampaignContentTier } from '@/lib/event-participation-sync'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -107,6 +108,10 @@ async function confirmRegistration(registrationId: string, isGroup: boolean) {
   const db = supabaseServer()
 
   await db.from('registrations').update({ status: 'confirmed' }).eq('id', registrationId)
+
+  // Payment cleared: cascade any purchased content tier to every participant and
+  // fire the Premium → Pathfinder membership grant (decisions D2/D3). Non-fatal.
+  await applyCampaignContentTier(db, registrationId)
 
   if (isGroup) {
     const { data: reg } = await db.from('registrations')

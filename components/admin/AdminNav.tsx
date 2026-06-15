@@ -37,12 +37,14 @@ const SECTIONS: Section[] = [
     items: [
       { href: '/admin/community/training', label: 'Training' },
       { href: '/admin/community/sessions', label: 'Sessions' },
+      { href: '/admin/community/gates', label: 'Gates' },
     ],
   },
   {
     label: 'Operations',
     items: [
       { href: '/admin/delegations', label: 'Delegations' },
+      { href: '/admin/staff', label: 'Staff roles' },
       { href: '/admin/schools', label: 'Schools' },
       { href: '/admin/docusigns', label: 'Consent forms' },
       { href: '/admin/activity-log', label: 'Activity log' },

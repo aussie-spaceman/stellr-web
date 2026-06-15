@@ -144,6 +144,7 @@ export default async function TrainingPage() {
   assigned.sort((a, b) => Number(b.isMandatory) - Number(a.isMandatory))
 
   const all = await listModules(member)
+  const curriculum = all.filter((m) => m.material_kind === 'curriculum')
   const cte = all.filter((m) => m.material_kind === 'cte')
   const general = all.filter((m) => m.material_kind === 'general')
 
@@ -157,6 +158,7 @@ export default async function TrainingPage() {
       </div>
 
       <Section title="For your events" modules={assigned} />
+      <Section title="Academy curriculum" modules={curriculum} />
       <Section title="Career &amp; Technical Education (CTE)" modules={cte} />
       <Section title="Library" modules={general} />
 

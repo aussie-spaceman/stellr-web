@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus,
@@ -14,8 +14,11 @@ import {
   FileText,
   Link2,
   GraduationCap,
+  GripVertical,
+  Pencil,
   X,
 } from 'lucide-react'
+import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 
 const COURSE_TYPES = [
   {
@@ -43,7 +46,16 @@ const COURSE_TYPE_LABEL: Record<CourseType, string> = {
 }
 
 const KINDS = ['general', 'event', 'campaign', 'cte', 'curriculum'] as const
-const CONTENT_KINDS = ['video', 'document', 'google_doc', 'link'] as const
+const CONTENT_KINDS = ['video', 'document', 'google_doc', 'link', 'live'] as const
+
+// Human label for the lesson-type dropdown (raw enum values aren't all readable).
+const CONTENT_KIND_LABELS: Record<(typeof CONTENT_KINDS)[number], string> = {
+  video: 'video',
+  document: 'document',
+  google_doc: 'google doc',
+  link: 'link',
+  live: 'live video room',
+}
 
 export interface AdminSection {
   id: string
@@ -63,6 +75,14 @@ export interface AdminLesson {
   body: string | null
 }
 
+export interface AdminAssignment {
+  id: string
+  event_ref: string
+  event_role: string
+  is_mandatory: boolean
+  due_at: string | null
+}
+
 export interface AdminModule {
   id: string
   title: string
@@ -75,10 +95,11 @@ export interface AdminModule {
   is_published: boolean
   training_sections: AdminSection[]
   training_items: AdminLesson[]
+  training_assignments: AdminAssignment[]
 }
 
 const kindIcon = (k: AdminLesson['content_kind']) =>
-  k === 'video' ? Video : k === 'link' || k === 'google_doc' ? Link2 : FileText
+  k === 'video' || k === 'live' ? Video : k === 'link' || k === 'google_doc' ? Link2 : FileText
 
 export function TrainingManager({ modules }: { modules: AdminModule[] }) {
   const router = useRouter()
@@ -157,8 +178,13 @@ export function TrainingManager({ modules }: { modules: AdminModule[] }) {
 
               {isOpen && (
                 <div className="space-y-5 border-t border-gray-100 bg-gray-50/60 px-4 py-4">
+                  <CourseSettings module={m} onDone={() => router.refresh()} />
                   <Curriculum module={m} sections={sections} onDone={() => router.refresh()} />
-                  <AssignForm moduleId={m.id} onDone={() => router.refresh()} />
+                  <AssignForm
+                    moduleId={m.id}
+                    assignments={m.training_assignments ?? []}
+                    onDone={() => router.refresh()}
+                  />
                 </div>
               )}
             </div>
@@ -168,6 +194,98 @@ export function TrainingManager({ modules }: { modules: AdminModule[] }) {
           <p className="text-sm text-gray-400">No modules yet — create one above.</p>
         )}
       </div>
+    </div>
+  )
+}
+
+/* ─── Course settings (rename + delete) ──────────────────────────────────────── */
+
+function CourseSettings({ module: m, onDone }: { module: AdminModule; onDone: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(m.title)
+  const [description, setDescription] = useState(m.description ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const save = async () => {
+    if (!title.trim()) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/community/training/modules', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: m.id, title, description }),
+      })
+      if (res.ok) {
+        setEditing(false)
+        onDone()
+      } else {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error || 'Could not save changes')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const cancel = () => {
+    setEditing(false)
+    setError(null)
+    setTitle(m.title)
+    setDescription(m.description ?? '')
+  }
+
+  if (editing) {
+    return (
+      <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-3">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Course title"
+          autoFocus
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        />
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Description (optional)"
+          rows={2}
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        />
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={save}
+            disabled={busy || !title.trim()}
+            className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+          <button onClick={cancel} className="px-2 py-1.5 text-xs text-gray-500">
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2">
+      <button
+        onClick={() => setEditing(true)}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-gray-900"
+      >
+        <Pencil className="h-3.5 w-3.5" /> Rename course
+      </button>
+      <DeleteEntityButton
+        entity="training_module"
+        id={m.id}
+        name={m.title}
+        softDeletable={false}
+        label="Delete course"
+        className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-800"
+      />
     </div>
   )
 }
@@ -362,6 +480,18 @@ function Curriculum({
   const [addingSection, setAddingSection] = useState(false)
   const [sectionTitle, setSectionTitle] = useState('')
   const [busy, setBusy] = useState(false)
+  // Local section order for drag-and-drop; resynced when the server set changes.
+  const [orderIds, setOrderIds] = useState<string[]>(sections.map((s) => s.id))
+  const [dragId, setDragId] = useState<string | null>(null)
+
+  const idsKey = sections.map((s) => s.id).join(',')
+  useEffect(() => {
+    setOrderIds(sections.map((s) => s.id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsKey])
+
+  const byId = new Map(sections.map((s) => [s.id, s]))
+  const ordered = orderIds.map((id) => byId.get(id)).filter((s): s is AdminSection => !!s)
 
   const lessonsIn = (sectionId: string | null) =>
     m.training_items
@@ -392,46 +522,66 @@ function Curriculum({
     }
   }
 
-  const deleteSection = async (id: string) => {
-    setBusy(true)
+  // Reorder live as the dragged section passes over another, then persist the
+  // resulting display_order for every section that moved on drop.
+  const reorderOver = (overId: string) => {
+    if (!dragId || dragId === overId) return
+    setOrderIds((prev) => {
+      const from = prev.indexOf(dragId)
+      const to = prev.indexOf(overId)
+      if (from === -1 || to === -1) return prev
+      const next = [...prev]
+      next.splice(from, 1)
+      next.splice(to, 0, dragId)
+      return next
+    })
+  }
+
+  const persistOrder = async () => {
+    const ids = orderIds
+    setDragId(null)
+    const moved = ids.some((id, idx) => (byId.get(id)?.display_order ?? idx) !== idx)
+    if (!moved) return
     try {
-      const res = await fetch(`/api/admin/community/training/sections?id=${id}`, { method: 'DELETE' })
-      if (res.ok) onDone()
+      await Promise.all(
+        ids
+          .map((id, idx) =>
+            (byId.get(id)?.display_order ?? idx) === idx
+              ? null
+              : fetch('/api/admin/community/training/sections', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id, displayOrder: idx }),
+                })
+          )
+          .filter((p): p is Promise<Response> => p !== null)
+      )
     } finally {
-      setBusy(false)
+      onDone()
     }
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Curriculum</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Curriculum</p>
+        {ordered.length > 1 && <p className="text-[11px] text-gray-400">Drag sections to reorder</p>}
+      </div>
 
-      {sections.map((s) => (
-        <div key={s.id} className="rounded-lg border border-gray-200 bg-white">
-          <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-2">
-            <p className="truncate text-sm font-semibold text-gray-800">{s.title}</p>
-            <div className="flex shrink-0 items-center gap-3">
-              {m.course_type !== 'self_paced' && <DripControl section={s} onDone={onDone} />}
-              <button
-                onClick={() => deleteSection(s.id)}
-                disabled={busy}
-                className="text-gray-300 hover:text-red-500 disabled:opacity-50"
-                aria-label="Delete section"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-          <div className="space-y-1.5 p-3">
-            {lessonsIn(s.id).map((l) => (
-              <LessonRow key={l.id} lesson={l} onDone={onDone} />
-            ))}
-            {lessonsIn(s.id).length === 0 && (
-              <p className="px-1 py-2 text-xs text-gray-400">No lessons yet.</p>
-            )}
-            <AddLessonForm moduleId={m.id} sectionId={s.id} count={lessonsIn(s.id).length} onDone={onDone} />
-          </div>
-        </div>
+      {ordered.map((s) => (
+        <SectionCard
+          key={s.id}
+          module={m}
+          section={s}
+          lessons={lessonsIn(s.id)}
+          reorderable={ordered.length > 1}
+          dragging={dragId === s.id}
+          onDragStart={() => setDragId(s.id)}
+          onDragEnter={() => reorderOver(s.id)}
+          onDrop={persistOrder}
+          onDragEnd={() => setDragId(null)}
+          onDone={onDone}
+        />
       ))}
 
       {/* Ungrouped lessons */}
@@ -483,6 +633,148 @@ function Curriculum({
       {sections.length === 0 && (
         <AddLessonForm moduleId={m.id} sectionId={null} count={ungrouped.length} onDone={onDone} />
       )}
+    </div>
+  )
+}
+
+function SectionCard({
+  module: m,
+  section: s,
+  lessons,
+  reorderable,
+  dragging,
+  onDragStart,
+  onDragEnter,
+  onDrop,
+  onDragEnd,
+  onDone,
+}: {
+  module: AdminModule
+  section: AdminSection
+  lessons: AdminLesson[]
+  reorderable: boolean
+  dragging: boolean
+  onDragStart: () => void
+  onDragEnter: () => void
+  onDrop: () => void
+  onDragEnd: () => void
+  onDone: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(s.title)
+
+  const rename = async () => {
+    const next = title.trim()
+    if (!next || next === s.title) {
+      setEditing(false)
+      setTitle(s.title)
+      return
+    }
+    setBusy(true)
+    try {
+      const res = await fetch('/api/admin/community/training/sections', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: s.id, title: next }),
+      })
+      if (res.ok) {
+        setEditing(false)
+        onDone()
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async () => {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/admin/community/training/sections?id=${s.id}`, { method: 'DELETE' })
+      if (res.ok) onDone()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      onDragEnter={onDragEnter}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault()
+        onDrop()
+      }}
+      className={`rounded-lg border bg-white transition ${
+        dragging ? 'border-gray-400 opacity-60' : 'border-gray-200'
+      }`}
+    >
+      <div
+        draggable={reorderable && !editing}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        className="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2"
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          {reorderable && (
+            <span className="cursor-grab text-gray-300 hover:text-gray-500" title="Drag to reorder">
+              <GripVertical className="h-4 w-4" />
+            </span>
+          )}
+          {editing ? (
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={rename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') rename()
+                if (e.key === 'Escape') {
+                  setTitle(s.title)
+                  setEditing(false)
+                }
+              }}
+              disabled={busy}
+              autoFocus
+              className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm"
+            />
+          ) : (
+            <button
+              onClick={() => setEditing(true)}
+              className="min-w-0 truncate text-left text-sm font-semibold text-gray-800 hover:underline"
+              title="Rename section"
+            >
+              {s.title}
+            </button>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          {m.course_type !== 'self_paced' && <DripControl section={s} onDone={onDone} />}
+          {!editing && (
+            <button
+              onClick={() => setEditing(true)}
+              className="text-gray-300 hover:text-gray-600"
+              aria-label="Rename section"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            onClick={remove}
+            disabled={busy}
+            className="text-gray-300 hover:text-red-500 disabled:opacity-50"
+            aria-label="Delete section"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+      <div className="space-y-1.5 p-3">
+        {lessons.map((l) => (
+          <LessonRow key={l.id} lesson={l} onDone={onDone} />
+        ))}
+        {lessons.length === 0 && <p className="px-1 py-2 text-xs text-gray-400">No lessons yet.</p>}
+        <AddLessonForm moduleId={m.id} sectionId={s.id} count={lessons.length} onDone={onDone} />
+      </div>
     </div>
   )
 }
@@ -653,11 +945,24 @@ function AddLessonForm({
   const [bodyText, setBodyText] = useState('')
   const [status, setStatus] = useState<'draft' | 'published'>('published')
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const needsFile = contentKind === 'video' || contentKind === 'document'
+  const needsUrl = contentKind === 'google_doc' || contentKind === 'link'
+  // 'live' needs neither a file nor a URL — the room is created from the item id.
+  const missingMedia = needsFile ? !file : needsUrl ? !externalUrl.trim() : false
 
   const submit = async () => {
     if (!title.trim()) return
+    if (needsFile && !file) {
+      setError(`Choose a ${contentKind} file to upload, or switch the type to a link.`)
+      return
+    }
+    if (needsUrl && !externalUrl.trim()) {
+      setError('Add a URL for this lesson, or switch the type to a video/document upload.')
+      return
+    }
     setBusy(true)
+    setError(null)
     try {
       const fd = new FormData()
       fd.set('moduleId', moduleId)
@@ -669,7 +974,7 @@ function AddLessonForm({
       if (minutes) fd.set('estimatedMinutes', minutes)
       if (bodyText.trim()) fd.set('body', bodyText)
       if (needsFile && file) fd.set('file', file)
-      if (!needsFile) fd.set('externalUrl', externalUrl)
+      if (needsUrl) fd.set('externalUrl', externalUrl)
       const res = await fetch('/api/admin/community/training/items', { method: 'POST', body: fd })
       if (res.ok) {
         setTitle('')
@@ -677,9 +982,15 @@ function AddLessonForm({
         setFile(null)
         setMinutes('')
         setBodyText('')
+        setError(null)
         setOpenForm(false)
         onDone()
+      } else {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error || `Could not add lesson (${res.status})`)
       }
+    } catch {
+      setError('Network error — please try again.')
     } finally {
       setBusy(false)
     }
@@ -708,24 +1019,31 @@ function AddLessonForm({
         />
         <select
           value={contentKind}
-          onChange={(e) => setContentKind(e.target.value as (typeof CONTENT_KINDS)[number])}
+          onChange={(e) => {
+            setContentKind(e.target.value as (typeof CONTENT_KINDS)[number])
+            setError(null)
+          }}
           className="rounded-md border border-gray-300 px-3 py-2 text-sm"
         >
           {CONTENT_KINDS.map((k) => (
             <option key={k} value={k}>
-              {k.replace('_', ' ')}
+              {CONTENT_KIND_LABELS[k]}
             </option>
           ))}
         </select>
         {needsFile ? (
           <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm" />
-        ) : (
+        ) : needsUrl ? (
           <input
             value={externalUrl}
             onChange={(e) => setExternalUrl(e.target.value)}
             placeholder="https://… (Google Doc, YouTube/Vimeo embed, or link)"
             className="rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
+        ) : (
+          <p className="self-center text-xs text-gray-500">
+            A live video room opens in the lesson; the recording replaces it afterwards.
+          </p>
         )}
         <input
           value={minutes}
@@ -741,10 +1059,11 @@ function AddLessonForm({
         rows={2}
         className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
       />
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
       <div className="mt-2 flex items-center gap-2">
         <button
           onClick={submit}
-          disabled={busy || !title.trim()}
+          disabled={busy || !title.trim() || missingMedia}
           className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
         >
           {busy ? 'Saving…' : 'Add lesson'}
@@ -767,23 +1086,44 @@ function AddLessonForm({
 
 /* ─── Assign to event participants ───────────────────────────────────────────── */
 
-function AssignForm({ moduleId, onDone }: { moduleId: string; onDone: () => void }) {
+const ASSIGN_ROLE_LABEL: Record<string, string> = {
+  all: 'All roles',
+  school_student: 'School Student',
+  school_student_manager: 'School Student Manager',
+  teacher: 'Teacher',
+  mentor: 'Mentor',
+  parent: 'Parent',
+}
+
+function AssignForm({
+  moduleId,
+  assignments,
+  onDone,
+}: {
+  moduleId: string
+  assignments: AdminAssignment[]
+  onDone: () => void
+}) {
   const [eventRef, setEventRef] = useState('')
   const [eventRole, setEventRole] = useState('all')
   const [mandatory, setMandatory] = useState(false)
   const [dueAt, setDueAt] = useState('')
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
 
   const submit = async () => {
     if (!eventRef.trim()) return
     setBusy(true)
+    setError(null)
+    setSaved(false)
     try {
       const res = await fetch('/api/admin/community/training/assignments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           moduleId,
-          eventRef,
+          eventRef: eventRef.trim(),
           eventRole,
           isMandatory: mandatory,
           dueAt: dueAt || null,
@@ -793,7 +1133,33 @@ function AssignForm({ moduleId, onDone }: { moduleId: string; onDone: () => void
         setEventRef('')
         setDueAt('')
         setMandatory(false)
+        setEventRole('all')
+        setSaved(true)
         onDone()
+      } else {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error || `Could not create assignment (${res.status})`)
+      }
+    } catch {
+      setError('Network error — please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async (id: string) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/community/training/assignments', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      if (res.ok) onDone()
+      else {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error || 'Could not remove assignment')
       }
     } finally {
       setBusy(false)
@@ -805,11 +1171,48 @@ function AssignForm({ moduleId, onDone }: { moduleId: string; onDone: () => void
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
         Assign to event participants
       </p>
+
+      {assignments.length > 0 && (
+        <ul className="mb-3 space-y-1.5">
+          {assignments.map((a) => (
+            <li
+              key={a.id}
+              className="flex items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50/60 px-3 py-1.5 text-xs"
+            >
+              <span className="min-w-0 truncate text-gray-700">
+                <span className="font-mono text-gray-500">{a.event_ref}</span>
+                {' · '}
+                {ASSIGN_ROLE_LABEL[a.event_role] ?? a.event_role}
+                {a.is_mandatory && (
+                  <span className="ml-2 rounded-full bg-red-50 px-1.5 py-0.5 font-medium text-red-600">
+                    Mandatory
+                  </span>
+                )}
+                {a.due_at && (
+                  <span className="ml-2 text-gray-400">due {new Date(a.due_at).toLocaleDateString()}</span>
+                )}
+              </span>
+              <button
+                onClick={() => remove(a.id)}
+                disabled={busy}
+                className="shrink-0 text-gray-300 hover:text-red-500 disabled:opacity-50"
+                aria-label="Remove assignment"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <div className="grid gap-2 sm:grid-cols-2">
         <input
           value={eventRef}
-          onChange={(e) => setEventRef(e.target.value)}
-          placeholder="Sanity event _id"
+          onChange={(e) => {
+            setEventRef(e.target.value)
+            setSaved(false)
+          }}
+          placeholder="Sanity event _id or slug"
           className="rounded-md border border-gray-300 px-3 py-2 text-sm"
         />
         <select
@@ -817,12 +1220,11 @@ function AssignForm({ moduleId, onDone }: { moduleId: string; onDone: () => void
           onChange={(e) => setEventRole(e.target.value)}
           className="rounded-md border border-gray-300 px-3 py-2 text-sm"
         >
-          <option value="all">All roles</option>
-          <option value="school_student">School Student</option>
-          <option value="school_student_manager">School Student Manager</option>
-          <option value="teacher">Teacher</option>
-          <option value="mentor">Mentor</option>
-          <option value="parent">Parent</option>
+          {Object.entries(ASSIGN_ROLE_LABEL).map(([v, label]) => (
+            <option key={v} value={v}>
+              {label}
+            </option>
+          ))}
         </select>
         <input
           type="datetime-local"
@@ -835,9 +1237,13 @@ function AssignForm({ moduleId, onDone }: { moduleId: string; onDone: () => void
           Mandatory
         </label>
       </div>
+
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      {saved && !error && <p className="mt-2 text-xs text-green-600">Assignment saved.</p>}
+
       <button
         onClick={submit}
-        disabled={busy}
+        disabled={busy || !eventRef.trim()}
         className="mt-2 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
       >
         {busy ? 'Saving…' : 'Assign'}

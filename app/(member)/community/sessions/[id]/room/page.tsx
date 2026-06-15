@@ -3,8 +3,8 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
-import { getVideoProvider } from '@/lib/video-provider'
-import { SessionRoom } from '@/components/community/SessionRoom'
+import { getVideoProvider, getEmbedConfig } from '@/lib/video-provider'
+import { VideoRoom } from '@/components/video/VideoRoom'
 
 export const metadata = { title: 'Community · Session Room' }
 
@@ -46,14 +46,9 @@ export default async function SessionRoomPage({ params }: { params: Promise<{ id
     isHost
   )
 
-  // Resolve embed coordinates for the active provider.
-  const appId = process.env.JAAS_APP_ID
-  const jaasConfigured = session.provider === 'jaas' && !!appId
-  const domain = jaasConfigured ? '8x8.vc' : 'meet.jit.si'
-  const roomName = jaasConfigured ? `${appId}/${session.provider_room}` : session.provider_room
-  const scriptSrc = jaasConfigured
-    ? `https://8x8.vc/${appId}/external_api.js`
-    : 'https://meet.jit.si/external_api.js'
+  // Resolve embed coordinates from the shared seam (JaaS when configured, else
+  // the open meet.jit.si dev fallback).
+  const embed = getEmbedConfig(session.provider_room)
 
   return (
     <div>
@@ -65,10 +60,10 @@ export default async function SessionRoomPage({ params }: { params: Promise<{ id
         Back
       </Link>
       <h1 className="mb-3 text-xl font-bold text-gray-900">{session.title ?? 'Session'}</h1>
-      <SessionRoom
-        scriptSrc={scriptSrc}
-        domain={domain}
-        roomName={roomName}
+      <VideoRoom
+        scriptSrc={embed.scriptSrc}
+        domain={embed.domain}
+        roomName={embed.roomName}
         jwt={token}
         displayName={[member.first_name, member.last_name].filter(Boolean).join(' ') || 'Member'}
       />

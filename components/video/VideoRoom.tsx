@@ -2,10 +2,11 @@
 
 import { useEffect, useRef } from 'react'
 
-// Embeds the video call inside the portal (FR-COM-11/12) using the Jitsi/JaaS
-// external API, rather than opening a separate tab. Loads the provider script,
-// mounts the meeting in a container, and passes the JaaS JWT (moderator vs guest
-// rights are baked into the token server-side).
+// Embeds a Jitsi/JaaS call inside the portal rather than opening a separate tab.
+// Loads the provider script once, mounts the meeting in a container, and passes
+// the JaaS JWT (moderator vs guest rights are baked into the token server-side).
+// Shared by Coaching/Mentoring session rooms (FR-COM-11/12) and live training
+// lessons (FR-COM-10) — the embed coordinates come from getEmbedConfig().
 //
 // JitsiMeetExternalAPI is injected by the external script and has no types here.
 
@@ -18,18 +19,20 @@ declare global {
   }
 }
 
-export function SessionRoom({
+export function VideoRoom({
   scriptSrc,
   domain,
   roomName,
   jwt,
   displayName,
+  className = 'h-[70vh] w-full overflow-hidden rounded-lg bg-black',
 }: {
   scriptSrc: string
   domain: string
   roomName: string
   jwt: string
   displayName: string
+  className?: string
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -70,5 +73,5 @@ export function SessionRoom({
     }
   }, [scriptSrc, domain, roomName, jwt, displayName])
 
-  return <div ref={containerRef} className="h-[70vh] w-full overflow-hidden rounded-lg bg-black" />
+  return <div ref={containerRef} className={className} />
 }

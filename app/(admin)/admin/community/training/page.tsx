@@ -14,7 +14,8 @@ export default async function AdminTrainingPage() {
     .select(
       'id, title, description, material_kind, course_type, start_date, event_ref, min_tier_rank, is_published, ' +
         'training_sections(id, title, display_order, drip_days), ' +
-        'training_items(id, title, content_kind, status, section_id, display_order, estimated_minutes, body)'
+        'training_items(id, title, content_kind, status, section_id, display_order, estimated_minutes, body), ' +
+        'training_assignments(id, event_ref, event_role, is_mandatory, due_at)'
     )
     .order('display_order', { ascending: true })
 

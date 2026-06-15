@@ -122,3 +122,40 @@ const zoomProvider: VideoProvider = {
 export function getVideoProvider(): VideoProvider {
   return process.env.VIDEO_PROVIDER === 'zoom' ? zoomProvider : jaasProvider
 }
+
+// ─── Embed coordinates (shared by all call sites) ────────────────────────────
+// The single place that knows how to point the in-portal Jitsi <iframe> at the
+// right server. When JaaS is configured we embed 8x8.vc with the app-id-prefixed
+// room; otherwise we fall back to the open meet.jit.si dev rooms (no token).
+export interface VideoEmbedConfig {
+  domain: string
+  scriptSrc: string
+  /** Room name as the external API expects it (app-id-prefixed on JaaS). */
+  roomName: string
+  /** False when JaaS keys are absent and we're on the open dev fallback. */
+  configured: boolean
+}
+
+export function getEmbedConfig(room: string): VideoEmbedConfig {
+  if (JAAS_APP_ID) {
+    return {
+      domain: '8x8.vc',
+      scriptSrc: `https://8x8.vc/${JAAS_APP_ID}/external_api.js`,
+      roomName: `${JAAS_APP_ID}/${room}`,
+      configured: true,
+    }
+  }
+  return {
+    domain: 'meet.jit.si',
+    scriptSrc: 'https://meet.jit.si/external_api.js',
+    roomName: room,
+    configured: false,
+  }
+}
+
+// Deterministic room name for a live training lesson (FR-COM-10). No sessions
+// row is provisioned for these — the item id namespaces the room directly, and
+// the same name is reconstructed from the recording webhook's fqn.
+export function trainingRoomName(itemId: string): string {
+  return `stellr-train-${itemId}`
+}

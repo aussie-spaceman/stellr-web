@@ -138,9 +138,20 @@ export default async function TrainingPage() {
   if (!member) redirect('/sign-up')
 
   const events = await getMemberEvents(member)
-  const eventRefs = events.map((e) => e.eventId).filter((id): id is string => !!id)
-  // event_role isn't carried on CommunityMember; assignments also accept 'all'.
-  const assigned = await getAssignedModules(member, { eventRefs, eventRoles: [] })
+  // Assignments are keyed by the event's Sanity _id, but match by slug too so an
+  // assignment created with either identifier resolves.
+  const eventRefs = events
+    .flatMap((e) => [e.eventId, e.slug])
+    .filter((id): id is string => !!id)
+  // Resolve the member's Event Participation Role(s) so role-targeted assignments
+  // surface (assignments also accept 'all'). A Student Manager also receives any
+  // training assigned to School Students (mirrors lib/membership-grants).
+  const eventRoles: string[] = []
+  if (member.event_role) {
+    eventRoles.push(member.event_role)
+    if (member.event_role === 'school_student_manager') eventRoles.push('school_student')
+  }
+  const assigned = await getAssignedModules(member, { eventRefs, eventRoles })
   assigned.sort((a, b) => Number(b.isMandatory) - Number(a.isMandatory))
 
   const all = await listModules(member)

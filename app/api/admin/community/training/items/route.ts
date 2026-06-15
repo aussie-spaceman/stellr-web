@@ -39,11 +39,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'moduleId, title, contentKind required' }, { status: 400 })
   }
 
+  const ALLOWED_KINDS = ['video', 'document', 'google_doc', 'link', 'live']
+  if (!ALLOWED_KINDS.includes(contentKind)) {
+    return NextResponse.json({ error: 'Invalid contentKind' }, { status: 400 })
+  }
+
+  // 'live' lessons are an embedded JaaS room — no file or URL; the room name is
+  // derived from the item id at view time (see lib/video-provider trainingRoomName).
   const needsFile = contentKind === 'video' || contentKind === 'document'
+  const needsUrl = contentKind === 'google_doc' || contentKind === 'link'
   if (needsFile && !file) {
     return NextResponse.json({ error: 'file required for video/document' }, { status: 400 })
   }
-  if (!needsFile && !externalUrl) {
+  if (needsUrl && !externalUrl) {
     return NextResponse.json({ error: 'externalUrl required for google_doc/link' }, { status: 400 })
   }
 

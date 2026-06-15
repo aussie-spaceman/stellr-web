@@ -40,6 +40,12 @@ export interface CommunityMember {
   /** tier_id of every active membership — used by the entitlement engine. */
   activeTierIds: string[]
   /**
+   * The member's primary Event Participation Role (members.event_role enum, e.g.
+   * 'school_student' | 'teacher' | 'mentor' | 'parent'). Used to resolve
+   * role-targeted training assignments (FR-COM-10). Null when unset.
+   */
+  event_role: string | null
+  /**
    * The member's highest enrolled Content Tier per competition campaign,
    * keyed by event_slug (decision D8/Phase 2). Drives campaign-scoped access:
    * a content-tier entitlement only applies inside a campaign the member is
@@ -68,7 +74,7 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
   const { data: member } = await db
     .from('members')
     .select(`
-      id, first_name, last_name, email,
+      id, first_name, last_name, email, event_role,
       member_memberships(renewal_status, started_at, expires_at, tier_id, membership_tiers(name, is_free))
     `)
     .eq('clerk_user_id', userId)
@@ -124,6 +130,7 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
     first_name: member.first_name,
     last_name: member.last_name,
     email: member.email,
+    event_role: (member.event_role as string | null) ?? null,
     hasPaidTier,
     activeTierName: primaryTier?.name ?? null,
     activeTierIds,

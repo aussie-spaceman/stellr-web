@@ -230,9 +230,16 @@ export const ENTITIES: Record<string, EntityDef> = {
     pk: 'id',
     keyType: 'uuid',
     softDelete: null,
-    // items/sections/assignments cascade; enrollments record learner progress.
-    dependents: [
-      { table: 'training_enrollments', fkColumn: 'module_id', label: 'learner enrollments' },
+    // A course owns all of its content and learner state, so nothing blocks the
+    // delete. Children are snapshotted (spans) before the hard purge cascades
+    // them — lessons, sections, event assignments, and learner enrollments.
+    // (training_progress has no module_id; it cascades from training_items.)
+    dependents: [],
+    spans: [
+      { table: 'training_items', column: 'module_id' },
+      { table: 'training_sections', column: 'module_id' },
+      { table: 'training_assignments', column: 'module_id' },
+      { table: 'training_enrollments', column: 'module_id' },
     ],
   },
 

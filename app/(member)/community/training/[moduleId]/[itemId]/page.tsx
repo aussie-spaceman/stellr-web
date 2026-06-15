@@ -4,15 +4,37 @@ import { ArrowLeft, Lock, ExternalLink, FileText, Download } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
 import { getLesson } from '@/lib/training'
 import { CompleteLessonBar } from '@/components/community/CompleteLessonBar'
+import { VideoRoom } from '@/components/video/VideoRoom'
 
 export const metadata = { title: 'Community · Lesson' }
 
-function Media({ media, title }: { media: NonNullable<Awaited<ReturnType<typeof getLesson>>>['media']; title: string }) {
+function Media({
+  media,
+  title,
+  displayName,
+}: {
+  media: NonNullable<Awaited<ReturnType<typeof getLesson>>>['media']
+  title: string
+  displayName: string
+}) {
   if (!media) {
     return (
       <div className="flex aspect-video w-full items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50 text-sm text-gray-400">
         No media for this lesson.
       </div>
+    )
+  }
+
+  if (media.type === 'live') {
+    return (
+      <VideoRoom
+        scriptSrc={media.scriptSrc}
+        domain={media.domain}
+        roomName={media.roomName}
+        jwt={media.jwt}
+        displayName={displayName}
+        className="aspect-video w-full overflow-hidden rounded-xl bg-black"
+      />
     )
   }
 
@@ -120,7 +142,11 @@ export default async function LessonPage({
             </div>
           ) : (
             <>
-              <Media media={lesson.media} title={lesson.title} />
+              <Media
+                media={lesson.media}
+                title={lesson.title}
+                displayName={[member.first_name, member.last_name].filter(Boolean).join(' ') || 'Member'}
+              />
               {lesson.body && (
                 <div className="prose prose-sm mt-6 max-w-none whitespace-pre-wrap text-gray-700">
                   {lesson.body}

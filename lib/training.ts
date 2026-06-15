@@ -4,6 +4,8 @@ import {
   memberCanAccess,
   signedDownloadUrl,
 } from '@/lib/community'
+import { getVideoProvider, getEmbedConfig, trainingRoomName } from '@/lib/video-provider'
+import { currentUserHasScope } from '@/lib/admin-auth'
 
 // FR-COM-10 — Training section, gated by membership tier.
 // Modules contain ordered items (video/document/google_doc/link). Progress is
@@ -23,7 +25,7 @@ export const COURSE_TYPE_LABELS: Record<CourseType, string> = {
 export interface TrainingItem {
   id: string
   title: string
-  content_kind: 'video' | 'document' | 'google_doc' | 'link'
+  content_kind: 'video' | 'document' | 'google_doc' | 'link' | 'live'
   external_url: string | null
   estimated_minutes: number | null
   display_order: number
@@ -376,7 +378,43 @@ export type LessonMedia =
   | { type: 'document'; url: string }
   | { type: 'embed'; src: string }
   | { type: 'link'; url: string }
+  // A live video room (JaaS/Jitsi) embedded in the lesson player. Once the class
+  // ends and its recording is offloaded, the lesson serves the recording as a
+  // 'video' replay instead (see liveLessonMedia).
+  | { type: 'live'; domain: string; scriptSrc: string; roomName: string; jwt: string }
   | null
+
+function memberDisplayName(member: CommunityMember): string {
+  return [member.first_name, member.last_name].filter(Boolean).join(' ') || 'Member'
+}
+
+/**
+ * Resolve the media for a 'live' lesson. If a recording has been offloaded it is
+ * served as the replay; otherwise we mint a per-join JaaS token (staff = the
+ * moderator/recorder, everyone else a guest) and return the embed coordinates.
+ */
+async function liveLessonMedia(
+  member: CommunityMember,
+  itemId: string,
+  row: { recording_path?: string | null; recording_status?: string | null }
+): Promise<LessonMedia> {
+  if (row.recording_status === 'available' && row.recording_path) {
+    const url = await signedDownloadUrl(row.recording_path)
+    return url ? { type: 'video', url } : null
+  }
+
+  const room = trainingRoomName(itemId)
+  // Moderator/recording rights go to community staff (and platform admins, who
+  // hold every scope); members join as guests with no recording control.
+  const isHost = await currentUserHasScope('community')
+  const jwt = await getVideoProvider().getJoinToken(
+    room,
+    { id: member.id, name: memberDisplayName(member), email: member.email },
+    isHost
+  )
+  const embed = getEmbedConfig(room)
+  return { type: 'live', domain: embed.domain, scriptSrc: embed.scriptSrc, roomName: embed.roomName, jwt }
+}
 
 export interface LessonDetail {
   id: string
@@ -421,14 +459,16 @@ export async function getLesson(
   const db = supabaseServer()
   const { data: row } = await db
     .from('training_items')
-    .select('storage_path, external_url, body, content_kind')
+    .select('storage_path, external_url, body, content_kind, recording_path, recording_status')
     .eq('id', itemId)
     .maybeSingle()
 
   let media: LessonMedia = null
   if (!here.locked && row) {
     const kind = row.content_kind as TrainingItem['content_kind']
-    if ((kind === 'video' || kind === 'document') && row.storage_path) {
+    if (kind === 'live') {
+      media = await liveLessonMedia(member, itemId, row)
+    } else if ((kind === 'video' || kind === 'document') && row.storage_path) {
       const url = await signedDownloadUrl(row.storage_path as string)
       if (url) media = { type: kind, url }
     } else if (row.external_url) {

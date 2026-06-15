@@ -7,7 +7,7 @@ import { CheckCircle2, Circle, FileText, Video, Link2, Lock, ChevronRight } from
 export interface TrainingItemRowData {
   id: string
   title: string
-  content_kind: 'video' | 'document' | 'google_doc' | 'link'
+  content_kind: 'video' | 'document' | 'google_doc' | 'link' | 'live'
   external_url: string | null
   estimated_minutes: number | null
   completed: boolean
@@ -52,7 +52,7 @@ export function TrainingItemRow({
   }
 
   const Icon =
-    item.content_kind === 'video'
+    item.content_kind === 'video' || item.content_kind === 'live'
       ? Video
       : item.content_kind === 'google_doc' || item.content_kind === 'link'
         ? Link2

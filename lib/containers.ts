@@ -18,6 +18,17 @@ export async function containerIsArchived(cohortId: string): Promise<boolean> {
 }
 
 /**
+ * Whether a container's content still reaches its (former) roster members.
+ * Active → always. Archived → only if the container's persistence policy is
+ * 'keep_open' (decision D1: default re_gate, so archived content locks unless the
+ * admin chose "keep open" when archiving). Persistence is stored per container as
+ * content_persistence(target_type='container', target_ref=cohortId).
+ */
+export async function containerAccessPersists(cohortId: string): Promise<boolean> {
+  return persistenceAllows('container', cohortId, await containerIsArchived(cohortId))
+}
+
+/**
  * Persistence gate (decision D1). While a container is ACTIVE, access is always
  * allowed. Once it ARCHIVES, a target persists for past members only if its
  * content_persistence policy is 'keep_open'; otherwise it re-gates (the default)

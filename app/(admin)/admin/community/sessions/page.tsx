@@ -26,7 +26,7 @@ export default async function AdminSessionsPage() {
     db.from('session_hosts').select('member_id, can_coach, can_mentor, members(first_name, last_name)'),
     db
       .from('mentoring_cohorts')
-      .select('id, name, mentor:members!mentoring_cohorts_mentor_member_id_fkey(first_name, last_name), cohort_members(member_id)')
+      .select('id, name, lifecycle, mentor:members!mentoring_cohorts_mentor_member_id_fkey(first_name, last_name), cohort_members(member_id)')
       .eq('is_active', true),
     db
       .from('session_entitlements')
@@ -45,6 +45,7 @@ export default async function AdminSessionsPage() {
     name: c.name as string,
     mentor_name: nameOf((c as { mentor?: unknown }).mentor),
     member_count: Array.isArray(c.cohort_members) ? c.cohort_members.length : 0,
+    lifecycle: ((c as { lifecycle?: string }).lifecycle as 'active' | 'archived') ?? 'active',
   }))
 
   return (

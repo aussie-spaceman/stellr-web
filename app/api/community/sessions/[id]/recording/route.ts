@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, signedDownloadUrl } from '@/lib/community'
+import { containerAccessPersists } from '@/lib/containers'
 
 // GET /api/community/sessions/[id]/recording
 // Returns a short-lived signed URL to the offloaded recording, only for the
@@ -13,7 +14,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const db = supabaseServer()
   const { data: session } = await db
     .from('sessions')
-    .select('id, host_member_id, recording_path, recording_status')
+    .select('id, host_member_id, cohort_id, recording_path, recording_status')
     .eq('id', id)
     .maybeSingle()
   if (!session || !session.recording_path || session.recording_status !== 'available') {
@@ -32,6 +33,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     allowed = !!p
   }
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  // Persistence gate (Phase 5): once the cohort is archived, recordings re-gate
+  // unless that container was kept open. Mentoring sessions carry a cohort_id.
+  if (session.cohort_id && !(await containerAccessPersists(session.cohort_id as string))) {
+    return NextResponse.json({ error: 'This recording is no longer available' }, { status: 403 })
+  }
 
   const url = await signedDownloadUrl(session.recording_path)
   if (!url) return NextResponse.json({ error: 'Could not generate link' }, { status: 500 })

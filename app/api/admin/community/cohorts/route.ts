@@ -59,5 +59,22 @@ export async function PATCH(req: Request) {
   if (b.removeMemberId) {
     await db.from('cohort_members').delete().eq('cohort_id', b.cohortId).eq('member_id', b.removeMemberId)
   }
+  // Archive / re-activate the container (Phase 5 lifecycle). When archiving, record
+  // the persistence policy for its content: keepOpen → past members keep access;
+  // otherwise re-gate (the default). content_persistence is read by
+  // lib/containers.ts containerAccessPersists() at content-access time.
+  if ('archive' in b) {
+    const archived = !!b.archive
+    await db
+      .from('mentoring_cohorts')
+      .update({ lifecycle: archived ? 'archived' : 'active', archived_at: archived ? new Date().toISOString() : null })
+      .eq('id', b.cohortId)
+    if (archived) {
+      await db.from('content_persistence').upsert(
+        { target_type: 'container', target_ref: b.cohortId, policy: b.keepOpen ? 'keep_open' : 're_gate' },
+        { onConflict: 'target_type,target_ref' },
+      )
+    }
+  }
   return NextResponse.json({ ok: true })
 }

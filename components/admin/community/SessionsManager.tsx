@@ -18,6 +18,7 @@ export interface AdminCohort {
   name: string
   mentor_name: string | null
   member_count: number
+  lifecycle?: 'active' | 'archived'
 }
 export interface AdminEntitlement {
   tier_id: string
@@ -151,13 +152,43 @@ function CohortsSection({ cohorts, busy, post }: { cohorts: AdminCohort[]; busy:
       <ul className="space-y-2">
         {cohorts.map((c) => (
           <li key={c.id} className="rounded-lg border border-gray-200 bg-white p-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <div>
-                <p className="font-medium text-gray-900">{c.name}</p>
+                <p className="flex items-center gap-2 font-medium text-gray-900">
+                  {c.name}
+                  {c.lifecycle === 'archived' && (
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                      Archived
+                    </span>
+                  )}
+                </p>
                 <p className="text-xs text-gray-500">
                   Mentor: {c.mentor_name ?? '—'} · {c.member_count} members
                 </p>
               </div>
+              {c.lifecycle === 'archived' ? (
+                <button
+                  onClick={() => post('/api/admin/community/cohorts', { cohortId: c.id, archive: false }, 'PATCH')}
+                  disabled={busy}
+                  className="shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                >
+                  Reactivate
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (!window.confirm(`Archive "${c.name}"? Its sessions stop and members move to read-only.`)) return
+                    const keepOpen = window.confirm(
+                      'Keep its content (chat, recordings) open for past members?\n\nOK = keep open.\nCancel = re-gate (lock unless their tier allows).',
+                    )
+                    post('/api/admin/community/cohorts', { cohortId: c.id, archive: true, keepOpen }, 'PATCH')
+                  }}
+                  disabled={busy}
+                  className="shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                >
+                  Archive
+                </button>
+              )}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <input

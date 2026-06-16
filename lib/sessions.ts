@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { type CommunityMember, getCurrentMember, memberCanAccess } from '@/lib/community'
+import { containerAccessPersists } from '@/lib/containers'
 import { getVideoProvider } from '@/lib/video-provider'
 import { notifyMember, notifyMembers } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
@@ -617,18 +618,24 @@ export async function canAccessChannel(channelId: string, memberId: string): Pro
       .maybeSingle()
     return memberCanAccess(me, 'space', ch.space_id, (space?.min_tier_rank as number) ?? 0, 'view')
   }
-  // cohort: member must belong to the cohort (or be its mentor)
+  // cohort: member must belong to the cohort (or be its mentor) AND the container's
+  // content must still persist (an archived cohort re-gates unless kept open — D1).
+  if (!ch.cohort_id) return false
   const { data: cm } = await db
     .from('cohort_members')
     .select('member_id')
     .eq('cohort_id', ch.cohort_id)
     .eq('member_id', memberId)
     .maybeSingle()
-  if (cm) return true
-  const { data: cohort } = await db
-    .from('mentoring_cohorts')
-    .select('mentor_member_id')
-    .eq('id', ch.cohort_id)
-    .maybeSingle()
-  return cohort?.mentor_member_id === memberId
+  let onRoster = !!cm
+  if (!onRoster) {
+    const { data: cohort } = await db
+      .from('mentoring_cohorts')
+      .select('mentor_member_id')
+      .eq('id', ch.cohort_id)
+      .maybeSingle()
+    onRoster = cohort?.mentor_member_id === memberId
+  }
+  if (!onRoster) return false
+  return containerAccessPersists(ch.cohort_id)
 }

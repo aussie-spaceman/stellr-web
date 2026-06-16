@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Send } from 'lucide-react'
+import { useAuth } from '@clerk/nextjs'
+import { createBrowserSupabase } from '@/lib/supabase-browser'
 
 interface Message {
   id: string
@@ -41,6 +43,32 @@ export function ChatPanel({
     const t = setInterval(load, 8000)
     return () => clearInterval(t)
   }, [load])
+
+  // Realtime push: when a new message lands in this channel, fetch immediately
+  // instead of waiting for the next poll. Best-effort — if Clerk↔Supabase
+  // third-party auth isn't configured the subscription stays quiet and the 8s
+  // poll above keeps the chat current (no regression). Data still comes via the
+  // gated API; the subscription only signals "something changed".
+  const { getToken } = useAuth()
+  useEffect(() => {
+    let channel: ReturnType<ReturnType<typeof createBrowserSupabase>['channel']> | null = null
+    try {
+      const sb = createBrowserSupabase(getToken)
+      channel = sb
+        .channel(`chat:${channelId}`)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `channel_id=eq.${channelId}` },
+          () => load(),
+        )
+        .subscribe()
+    } catch {
+      /* realtime is optional; polling covers it */
+    }
+    return () => {
+      channel?.unsubscribe()
+    }
+  }, [channelId, getToken, load])
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })

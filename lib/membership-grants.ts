@@ -14,6 +14,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseServer } from '@/lib/supabase'
+import { logActivity, type Actor, type ActorType } from '@/lib/activity-log'
 
 export type GrantTrigger =
   | 'signup'
@@ -75,6 +76,18 @@ export interface GrantTierOptions {
   replacesFree?: boolean
   /** Complimentary = not a paid Stripe membership (default true for non-stripe sources). */
   complimentary?: boolean
+  /**
+   * Who is performing the grant, for the activity log. When omitted the actor
+   * type is inferred from `source` (stripe→stripe, manual→admin, rule/system→system).
+   */
+  logActor?: Actor
+}
+
+/** Default activity-log actor type when a grant doesn't specify one. */
+function actorTypeForSource(source: GrantSource): ActorType {
+  if (source === 'stripe') return 'stripe'
+  if (source === 'manual') return 'admin'
+  return 'system' // rule | system
 }
 
 export interface GrantResult {
@@ -99,16 +112,25 @@ export async function grantTier(
     source, ruleId = null,
     replacesFree = true,
     complimentary,
+    logActor,
   } = opts
 
   if (!tierId) return { granted: false, reason: 'no_tier' }
+
+  // Tier name + is_free, used for both the complimentary inference below and the
+  // activity-log summary after a successful insert.
+  const { data: tierRow } = await db
+    .from('membership_tiers')
+    .select('name, is_free')
+    .eq('id', tierId)
+    .maybeSingle()
+  const tierName = tierRow?.name ?? 'membership'
 
   // Resolve is_complimentary when the caller didn't force it: a Stripe grant is
   // never complimentary; a comped PAID tier (e.g. "1yr free Pathfinder") is; a
   // plain FREE default tier (e.g. Explorer at signup) is not.
   let isComplimentary = complimentary
   if (isComplimentary === undefined) {
-    const { data: tierRow } = await db.from('membership_tiers').select('is_free').eq('id', tierId).maybeSingle()
     isComplimentary = source !== 'stripe' && tierRow?.is_free === false
   }
 
@@ -170,6 +192,32 @@ export async function grantTier(
     console.error('[membership-grants] grantTier insert error:', error)
     return { granted: false, reason: 'no_tier' }
   }
+
+  // Audit trail — captures every grant path (manual, rule, signup, cron, Stripe).
+  const isLifetime = resolvedExpiry == null
+  await logActivity(
+    {
+      memberId,
+      category: 'membership',
+      action: 'tier_granted',
+      summary: isLifetime
+        ? `Granted ${tierName} membership (no expiry)`
+        : `Granted ${tierName} membership through ${expiresAtValue}`,
+      metadata: {
+        tierId,
+        tierName,
+        source,
+        complimentary: isComplimentary,
+        expiresAt: resolvedExpiry,
+        ruleId,
+      },
+      actorType: logActor?.actorType ?? actorTypeForSource(source),
+      actorMemberId: logActor?.actorMemberId ?? null,
+      actorLabel: logActor?.actorLabel ?? null,
+    },
+    db,
+  )
+
   return { granted: true, membershipId: inserted.id }
 }
 
@@ -267,7 +315,7 @@ export async function expireLapsedGrants(client?: SupabaseClient): Promise<numbe
 
   const { data: lapsed } = await db
     .from('member_memberships')
-    .select('id')
+    .select('id, member_id, membership_tiers(name)')
     .eq('renewal_status', 'active')
     .is('stripe_subscription_id', null)
     .lt('expires_at', today)
@@ -277,5 +325,23 @@ export async function expireLapsedGrants(client?: SupabaseClient): Promise<numbe
     .from('member_memberships')
     .update({ renewal_status: 'expired' })
     .in('id', lapsed.map((r) => r.id))
+
+  // Audit trail — one entry per member whose grant lapsed.
+  for (const row of lapsed) {
+    const tier = Array.isArray(row.membership_tiers) ? row.membership_tiers[0] : row.membership_tiers
+    const tierName = (tier as { name?: string } | null)?.name ?? 'membership'
+    await logActivity(
+      {
+        memberId: row.member_id as string,
+        category: 'membership',
+        action: 'tier_expired',
+        summary: `${tierName} membership expired`,
+        metadata: { membershipId: row.id, tierName },
+        actorType: 'system',
+      },
+      db,
+    )
+  }
+
   return lapsed.length
 }

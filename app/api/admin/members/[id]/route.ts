@@ -1,9 +1,14 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { actorFromAuth, logActivity } from '@/lib/activity-log'
 
 function isAdmin(sessionClaims: unknown) {
   return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
+}
+
+function humanizeFields(keys: string[]): string {
+  return keys.map((k) => k.replace(/^ec_/, 'emergency ').replace(/_/g, ' ')).join(', ')
 }
 
 export async function PATCH(
@@ -28,6 +33,13 @@ export async function PATCH(
   for (const key of allowed) {
     if (key in body) updates[key] = body[key]
   }
+
+  // Snapshot the editable fields before the write so we can record exactly what changed.
+  const { data: before } = await db
+    .from('members')
+    .select(allowed.join(','))
+    .eq('id', id)
+    .maybeSingle()
 
   const { data, error } = await db
     .from('members')
@@ -67,6 +79,23 @@ export async function PATCH(
   }
   await Promise.all(replacements)
 
+  // Audit trail — record which fields the admin actually changed.
+  const beforeRow = (before ?? {}) as Record<string, unknown>
+  const changed = Object.keys(updates).filter((k) => beforeRow[k] !== updates[k])
+  if ('ethnicity_ids' in body) changed.push('ethnicity')
+  if ('allergy_ids' in body) changed.push('dietary')
+  if (changed.length > 0) {
+    const actor = await actorFromAuth()
+    await logActivity({
+      memberId: id,
+      category: 'profile',
+      action: 'profile_updated',
+      summary: `Updated profile (${humanizeFields(changed)})`,
+      metadata: { fields: changed },
+      ...actor,
+    })
+  }
+
   return NextResponse.json({ member: data })
 }
 
@@ -87,5 +116,15 @@ export async function DELETE(
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: 'Delete failed' }, { status: 500 })
+
+  const actor = await actorFromAuth()
+  await logActivity({
+    memberId: id,
+    category: 'account',
+    action: 'account_deactivated',
+    summary: 'Account deactivated',
+    ...actor,
+  })
+
   return NextResponse.json({ success: true })
 }

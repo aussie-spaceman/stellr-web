@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { applyGrantTrigger } from '@/lib/membership-grants'
+import { logActivity } from '@/lib/activity-log'
 
 // Content tiers are cumulative; only ever upgrade a participation, never downgrade.
 const CONTENT_TIER_RANK: Record<string, number> = { core: 0, baseline: 1, advanced: 2, premium: 3 }
@@ -55,7 +56,18 @@ export async function recordEventParticipation(
       status: 'approved',
       content_tier: p.contentTier ?? null,
     })
-    if (error) console.error('[event-participation] insert error (non-fatal):', error)
+    if (error) {
+      console.error('[event-participation] insert error (non-fatal):', error)
+    } else {
+      await logActivity({
+        memberId: p.memberId,
+        category: 'event',
+        action: 'event_registered',
+        summary: `Registered for ${p.eventTitle || p.eventSlug}`,
+        metadata: { eventSlug: p.eventSlug, eventTitle: p.eventTitle ?? null, contentTier: p.contentTier ?? null },
+        actorType: 'system',
+      }, db)
+    }
   } catch (e) {
     console.error('[event-participation] recordEventParticipation failed (non-fatal):', e)
   }

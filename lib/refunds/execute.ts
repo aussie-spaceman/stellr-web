@@ -1,6 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import { notifyMember } from '@/lib/notify'
+import { logActivity } from '@/lib/activity-log'
 import { stripeClient } from './stripe'
 import { resolvePolicy, applicableTier, computeRefundOptions, daysOut } from './policy'
 
@@ -119,6 +120,17 @@ export async function executeRefund(
       const result: RefundResult = { type: 'cash', refundCents: option.cents, stripeRefundId: refund.id, detail: `Refunded ${(option.cents / 100).toFixed(2)} ${currency.toUpperCase()}` }
       await audit(db, p, eventSlug, result, actorMemberId, paidCents, null, d, option.pct)
       await notifyRefund(p, reg.event_title as string, result, currency)
+      if (p.member_id) {
+        await logActivity({
+          memberId: p.member_id,
+          category: 'billing',
+          action: 'refund_issued',
+          summary: `Cash refund issued — ${result.detail}`,
+          metadata: { kind: 'cash', participantId: p.id, eventSlug, refundCents: option.cents },
+          actorType: 'admin',
+          actorMemberId,
+        }, db)
+      }
       return result
     } catch (e) {
       const detail = e instanceof Error ? e.message : 'Stripe refund failed'
@@ -155,6 +167,15 @@ export async function executeRefund(
   const result: RefundResult = { type: 'credit', refundCents: option.cents, creditId: credit?.id, detail: `Issued ${(option.cents / 100).toFixed(2)} ${currency.toUpperCase()} credit` }
   await audit(db, p, eventSlug, result, actorMemberId, paidCents, option.validityDays ?? null, d, option.pct)
   await notifyRefund(p, reg.event_title as string, result, currency)
+  await logActivity({
+    memberId,
+    category: 'billing',
+    action: 'refund_issued',
+    summary: `Account credit issued — ${result.detail}`,
+    metadata: { kind: 'credit', participantId: p.id, eventSlug, refundCents: option.cents, creditId: credit?.id ?? null },
+    actorType: 'admin',
+    actorMemberId,
+  }, db)
   return result
 }
 

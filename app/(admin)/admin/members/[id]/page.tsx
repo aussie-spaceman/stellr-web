@@ -19,6 +19,7 @@ export default async function AdminMemberPage({
     { data: ethnicityOptions },
     { data: allergyOptions },
     { data: registrations },
+    { data: activity },
   ] = await Promise.all([
     db
       .from('members')
@@ -41,6 +42,12 @@ export default async function AdminMemberPage({
       .select('id, event_title, event_slug, school_name, status, created_at, registrant_role, type')
       .eq('teacher_member_id', id)
       .order('created_at', { ascending: false }),
+    db
+      .from('member_activity_log')
+      .select('id, actor_type, actor_label, category, action, summary, metadata, created_at')
+      .eq('member_id', id)
+      .order('created_at', { ascending: false })
+      .limit(30),
   ])
 
   if (!member) notFound()
@@ -67,6 +74,7 @@ export default async function AdminMemberPage({
       allergyOptions={allergyOptions ?? []}
       registrations={registrations ?? []}
       membershipId={canonicalId ?? (firstParticipant as { membership_id?: string } | null)?.membership_id ?? null}
+      activity={activity ?? []}
     />
   )
 }

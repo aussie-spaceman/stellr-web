@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { ROLES_FOR_BRACKET, DEFAULT_ROLE_FOR_BRACKET, getEligibleTierNames } from '@/lib/membership-rules'
 import { EventHistory } from '@/components/member/EventHistory'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
+import { MemberMembershipManager } from '@/components/admin/MemberMembershipManager'
+import { ActivityTimeline, type ActivityItem } from '@/components/activity/ActivityTimeline'
 
 interface Member {
   id: string
@@ -33,7 +35,7 @@ interface Member {
   ec_relationship: string | null
   member_memberships: Array<{
     id: string; renewal_status: string; started_at: string; expires_at: string | null
-    is_complimentary: boolean; membership_tiers: { name: string }
+    is_complimentary: boolean; source: string | null; membership_tiers: { name: string }
   }>
   member_schools: Array<{ is_current: boolean; school_id: string; schools: { name: string; city: string | null; state: string | null } }>
   member_ethnicities: Array<{ ethnicity_option_id: string }>
@@ -67,6 +69,8 @@ interface Props {
   registrations: Registration[]
   /** The member's 7-digit Membership ID (from participants.membership_id). */
   membershipId: string | null
+  /** First page of the member's activity log (newest first). */
+  activity: ActivityItem[]
 }
 
 const TIER_TOOLTIPS: Record<string, string> = {
@@ -98,7 +102,7 @@ function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, membershipId }: Props) {
+export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, membershipId, activity }: Props) {
   const router = useRouter()
   const [form, setForm] = useState({
     first_name: member.first_name,
@@ -477,48 +481,25 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
               </div>
             </div>
           )}
+
+          {/* Activity log — the full audit trail for this member (shared with the member) */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="text-base font-semibold text-gray-900 mb-1">Activity log</h2>
+            <p className="text-xs text-gray-400 mb-4">
+              Every change recorded against this profile. The member sees this same history in their account.
+            </p>
+            <ActivityTimeline items={activity} fetchUrl={`/api/admin/members/${member.id}/activity`} />
+          </div>
         </div>
 
         {/* Sidebar */}
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-              Membership
-            </h2>
-            <div className="flex items-center justify-between text-sm mb-3 pb-3 border-b border-gray-100">
-              <span className="text-gray-500">Member ID</span>
-              {membershipId ? (
-                <span className="font-mono font-medium text-gray-900">{membershipId}</span>
-              ) : (
-                <span className="text-gray-400">Not yet assigned</span>
-              )}
-            </div>
-            {activeMembership ? (
-              <div className="space-y-2 text-sm">
-                <div className="font-semibold text-gray-900 text-base">
-                  {activeMembership.membership_tiers.name}
-                </div>
-                <div className="text-gray-500">
-                  Since {new Date(activeMembership.started_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                </div>
-                {activeMembership.expires_at && (
-                  <div className="text-gray-500">
-                    Expires {new Date(activeMembership.expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </div>
-                )}
-                {activeMembership.is_complimentary && (
-                  <span
-                    className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full"
-                    title="This membership was provided at no charge — typically awarded for event participation or granted by an admin."
-                  >
-                    Complimentary
-                  </span>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400">No active membership.</p>
-            )}
-          </div>
+          <MemberMembershipManager
+            memberId={member.id}
+            membershipId={membershipId}
+            tiers={tiers}
+            memberships={member.member_memberships ?? []}
+          />
 
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">

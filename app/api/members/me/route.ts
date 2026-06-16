@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { logActivity } from '@/lib/activity-log'
 
 // GET /api/members/me — fetch the current member's full record
 export async function GET() {
@@ -39,15 +40,6 @@ export async function PATCH(req: Request) {
   const body = await req.json()
   const db = supabaseServer()
 
-  const { data: member } = await db
-    .from('members')
-    .select('id')
-    .eq('clerk_user_id', userId)
-    .eq('is_active', true)
-    .single()
-
-  if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-
   // Only allow safe fields to be updated by the member themselves
   const allowed = [
     'nickname', 'phone', 'discord_handle', 'gender',
@@ -55,16 +47,30 @@ export async function PATCH(req: Request) {
     'ec_first_name', 'ec_last_name', 'ec_email', 'ec_phone', 'ec_relationship',
     'health_conditions',
   ]
+
+  const { data: member } = await db
+    .from('members')
+    .select(['id', 'first_name', 'last_name', ...allowed].join(','))
+    .eq('clerk_user_id', userId)
+    .eq('is_active', true)
+    .single()
+
+  if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+  const memberRow = member as unknown as Record<string, unknown>
+  const memberId = memberRow.id as string
+
   const updates: Record<string, unknown> = {}
   for (const key of allowed) {
     if (key in body) updates[key] = body[key]
   }
 
+  const changedFields = Object.keys(updates).filter((k) => memberRow[k] !== updates[k])
+
   if (Object.keys(updates).length > 0) {
     const { error } = await db
       .from('members')
       .update(updates)
-      .eq('id', member.id)
+      .eq('id', memberId)
 
     if (error) {
       console.error('Error updating member:', error)
@@ -76,10 +82,10 @@ export async function PATCH(req: Request) {
   const replacements: Promise<void>[] = []
   if ('ethnicity_ids' in body && Array.isArray(body.ethnicity_ids)) {
     replacements.push((async () => {
-      await db.from('member_ethnicities').delete().eq('member_id', member.id)
+      await db.from('member_ethnicities').delete().eq("member_id", memberId)
       if (body.ethnicity_ids.length > 0) {
         const { error: insertError } = await db.from('member_ethnicities').insert(
-          body.ethnicity_ids.map((eid: string) => ({ member_id: member.id, ethnicity_option_id: eid }))
+          body.ethnicity_ids.map((eid: string) => ({ member_id: memberId, ethnicity_option_id: eid }))
         )
         if (insertError) console.error('Error saving ethnicity selections:', insertError)
       }
@@ -87,16 +93,34 @@ export async function PATCH(req: Request) {
   }
   if ('allergy_ids' in body && Array.isArray(body.allergy_ids)) {
     replacements.push((async () => {
-      await db.from('member_allergies').delete().eq('member_id', member.id)
+      await db.from('member_allergies').delete().eq("member_id", memberId)
       if (body.allergy_ids.length > 0) {
         const { error: insertError } = await db.from('member_allergies').insert(
-          body.allergy_ids.map((aid: string) => ({ member_id: member.id, allergy_option_id: aid }))
+          body.allergy_ids.map((aid: string) => ({ member_id: memberId, allergy_option_id: aid }))
         )
         if (insertError) console.error('Error saving allergy selections:', insertError)
       }
     })())
   }
   await Promise.all(replacements)
+
+  // Audit trail — the member edited their own profile.
+  const changed = [...changedFields]
+  if ('ethnicity_ids' in body) changed.push('ethnicity')
+  if ('allergy_ids' in body) changed.push('dietary')
+  if (changed.length > 0) {
+    const actorLabel = [memberRow.first_name, memberRow.last_name].filter(Boolean).join(' ').trim() || null
+    await logActivity({
+      memberId,
+      category: 'profile',
+      action: 'profile_updated',
+      summary: `Updated profile (${changed.map((k) => k.replace(/^ec_/, 'emergency ').replace(/_/g, ' ')).join(', ')})`,
+      metadata: { fields: changed },
+      actorType: 'member',
+      actorMemberId: memberId,
+      actorLabel,
+    })
+  }
 
   return NextResponse.json({ success: true })
 }

@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { fireCampaignEvent } from '@/lib/email-campaigns'
 import { applyGrantTrigger } from '@/lib/membership-grants'
 import { normalizeEmail } from '@/lib/member-enums'
+import { logActivity } from '@/lib/activity-log'
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
@@ -133,6 +134,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to save member' }, { status: 500 })
   }
 
+  if (memberId) {
+    await logActivity({
+      memberId,
+      category: 'account',
+      action: 'onboarding_completed',
+      summary: 'Completed account onboarding',
+      actorType: 'member',
+      actorMemberId: memberId,
+    }, db)
+  }
+
   // Link to school if provided
   if (resolvedSchoolId) {
     // Close any previous current school links
@@ -148,6 +160,17 @@ export async function POST(req: Request) {
         is_current: true,
         started_at: new Date().toISOString().split('T')[0],
       }, { onConflict: 'member_id,school_id' })
+
+      const { data: school } = await db.from('schools').select('name').eq('id', resolvedSchoolId).maybeSingle()
+      await logActivity({
+        memberId,
+        category: 'school',
+        action: 'school_linked',
+        summary: `Linked to school ${school?.name ?? ''}`.trim(),
+        metadata: { schoolId: resolvedSchoolId, schoolName: school?.name ?? null },
+        actorType: 'member',
+        actorMemberId: memberId,
+      }, db)
     }
   }
 

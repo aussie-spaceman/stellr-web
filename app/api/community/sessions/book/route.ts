@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentMember } from '@/lib/community'
 import { bookCoaching } from '@/lib/sessions'
+import { logActivity } from '@/lib/activity-log'
 
 // POST /api/community/sessions/book
 // Body: { hostId, start (ISO), durationMin?, isPaidExtra?, title? }
@@ -20,5 +21,18 @@ export async function POST(req: Request) {
     title: body.title,
   })
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 })
+
+  const m = member as { id: string; first_name?: string | null; last_name?: string | null }
+  await logActivity({
+    memberId: m.id,
+    category: 'community',
+    action: 'session_booked',
+    summary: `Booked a coaching session${body.title ? `: ${body.title}` : ''}`,
+    metadata: { sessionId: result.sessionId, hostId: body.hostId, start: body.start, isPaidExtra: !!body.isPaidExtra },
+    actorType: 'member',
+    actorMemberId: m.id,
+    actorLabel: [m.first_name, m.last_name].filter(Boolean).join(' ').trim() || null,
+  })
+
   return NextResponse.json({ id: result.sessionId })
 }

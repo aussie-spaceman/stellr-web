@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { logActivity } from '@/lib/activity-log'
 
 export interface SchoolDetails {
   /** When the registrant picked an existing school from search, its id is
@@ -105,6 +106,20 @@ export async function linkMembersToSchool(
   )
   if (upsertError) {
     console.error('[school-link] member_schools upsert error:', upsertError)
+    return
+  }
+
+  // Audit trail — one entry per newly-linked member.
+  const { data: school } = await db.from('schools').select('name').eq('id', schoolId).maybeSingle()
+  for (const member_id of toLink) {
+    await logActivity({
+      memberId: member_id,
+      category: 'school',
+      action: 'school_linked',
+      summary: `Linked to school ${school?.name ?? ''}`.trim(),
+      metadata: { schoolId, schoolName: school?.name ?? null },
+      actorType: 'system',
+    }, db)
   }
 }
 

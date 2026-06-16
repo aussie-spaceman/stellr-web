@@ -46,6 +46,18 @@ const COURSE_TYPE_LABEL: Record<CourseType, string> = {
 }
 
 const KINDS = ['general', 'event', 'campaign', 'cte', 'curriculum'] as const
+
+// Readable labels that also hint WHERE each kind surfaces on the member training
+// page (training/page.tsx): general/cte/curriculum appear in the catalogue for any
+// member; event/campaign only surface to registered participants via an assignment.
+const KIND_LABELS: Record<(typeof KINDS)[number], string> = {
+  general: 'General — Library (all members)',
+  curriculum: 'Academy curriculum (all members)',
+  cte: 'CTE (all members)',
+  event: 'Event — only via participant assignment',
+  campaign: 'Campaign — only via participant assignment',
+}
+
 const CONTENT_KINDS = ['video', 'document', 'google_doc', 'link', 'live'] as const
 
 // Human label for the lesson-type dropdown (raw enum values aren't all readable).
@@ -236,6 +248,29 @@ function CourseSettings({ module: m, onDone }: { module: AdminModule; onDone: ()
     setDescription(m.description ?? '')
   }
 
+  // Change the course's material kind in place. This controls where the course
+  // surfaces for members (see KIND_LABELS) — switching Event→General is what makes
+  // a course appear in the membership catalogue without recreating it.
+  const changeKind = async (materialKind: string) => {
+    if (materialKind === m.material_kind) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/community/training/modules', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: m.id, materialKind }),
+      })
+      if (res.ok) onDone()
+      else {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error || 'Could not change course type')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (editing) {
     return (
       <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-3">
@@ -272,12 +307,30 @@ function CourseSettings({ module: m, onDone }: { module: AdminModule; onDone: ()
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2">
-      <button
-        onClick={() => setEditing(true)}
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-gray-900"
-      >
-        <Pencil className="h-3.5 w-3.5" /> Rename course
-      </button>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <button
+          onClick={() => setEditing(true)}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-gray-900"
+        >
+          <Pencil className="h-3.5 w-3.5" /> Rename course
+        </button>
+        <label className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
+          Shows in
+          <select
+            value={m.material_kind}
+            onChange={(e) => changeKind(e.target.value)}
+            disabled={busy}
+            className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 disabled:opacity-50"
+          >
+            {KINDS.map((k) => (
+              <option key={k} value={k}>
+                {KIND_LABELS[k]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {error && <span className="text-xs text-red-600">{error}</span>}
+      </div>
       <DeleteEntityButton
         entity="training_module"
         id={m.id}

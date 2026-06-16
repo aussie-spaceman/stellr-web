@@ -9,11 +9,12 @@ import { BillingHistory } from '@/components/member/BillingHistory'
 import { DocusignsSection } from '@/components/member/DocusignsSection'
 import { MyRegistrations } from '@/components/member/MyRegistrations'
 import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
+import { ActivityTimeline } from '@/components/activity/ActivityTimeline'
 import Link from 'next/link'
 
 export const metadata = { title: 'My Account' }
 
-const TABS = ['profile', 'teams', 'billing'] as const
+const TABS = ['profile', 'teams', 'billing', 'activity'] as const
 type Tab = typeof TABS[number]
 
 export default async function AccountPage({
@@ -52,6 +53,14 @@ export default async function AccountPage({
     .select('is_visible, show_school, show_region')
     .eq('member_id', member.id)
     .maybeSingle()
+
+  // Activity log — the same history an admin sees on this member's admin page.
+  const { data: activity } = await db
+    .from('member_activity_log')
+    .select('id, actor_type, actor_label, category, action, summary, metadata, created_at')
+    .eq('member_id', member.id)
+    .order('created_at', { ascending: false })
+    .limit(30)
 
   // Current event registrations, with Company assignment when set (PRD 6.7)
   const { data: myParticipantRows } = await db
@@ -125,11 +134,13 @@ export default async function AccountPage({
   let activeTab: Tab = 'profile'
   if (rawTab === 'teams' && showTeams) activeTab = 'teams'
   else if (rawTab === 'billing' && showBilling) activeTab = 'billing'
+  else if (rawTab === 'activity') activeTab = 'activity'
 
   const tabLinks: { key: Tab; label: string }[] = [
     { key: 'profile', label: 'Profile' },
     ...(showTeams ? [{ key: 'teams' as Tab, label: 'Teams' }] : []),
     ...(showBilling ? [{ key: 'billing' as Tab, label: 'Billing' }] : []),
+    { key: 'activity', label: 'Activity' },
   ]
 
   return (
@@ -199,6 +210,17 @@ export default async function AccountPage({
       {/* Billing tab */}
       {activeTab === 'billing' && showBilling && (
         <BillingHistory />
+      )}
+
+      {/* Activity tab */}
+      {activeTab === 'activity' && (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <h2 className="mb-1 text-base font-semibold text-gray-900">Activity log</h2>
+          <p className="mb-4 text-xs text-gray-400">
+            A record of changes to your membership, profile and account.
+          </p>
+          <ActivityTimeline items={activity ?? []} fetchUrl="/api/members/me/activity" />
+        </div>
       )}
     </div>
   )

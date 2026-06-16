@@ -4,11 +4,22 @@ import { supabaseServer } from '@/lib/supabase'
 import { sendEmail, individualConfirmationEmail, groupPaymentConfirmedEmail } from '@/lib/email'
 import { finalizeRedemption } from '@/lib/refunds/redeem'
 import { applyCampaignContentTier } from '@/lib/event-participation-sync'
+import { logActivity } from '@/lib/activity-log'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
   if (!key) throw new Error('STRIPE_SECRET_KEY not set')
   return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
+}
+
+// Formats a Stripe minor-unit amount as " ($60.00)" for activity-log summaries.
+function fmtMoney(amount: number | null | undefined, currency: string | null | undefined): string {
+  if (amount == null) return ''
+  try {
+    return ` (${(amount / 100).toLocaleString('en-US', { style: 'currency', currency: (currency || 'usd').toUpperCase() })})`
+  } catch {
+    return ''
+  }
 }
 
 // ── Event registration helpers ────────────────────────────────────────────────
@@ -50,6 +61,34 @@ async function persistStripeCustomer(session: Stripe.Checkout.Session) {
     .update({ stripe_customer_id: customerId })
     .eq('email', email)
     .is('stripe_customer_id', null)
+}
+
+// Logs a billing 'payment_received' against the member behind an event-registration
+// payment. When participantEmail is given it targets that participant; otherwise it
+// uses the registration's sole linked participant (individual registrations).
+async function logEventPayment(
+  session: Stripe.Checkout.Session,
+  registrationId: string,
+  participantEmail?: string,
+) {
+  const db = supabaseServer()
+  let q = db
+    .from('participants')
+    .select('member_id')
+    .eq('registration_id', registrationId)
+    .not('member_id', 'is', null)
+  if (participantEmail) q = q.eq('email', participantEmail)
+  const { data } = await q.limit(1).maybeSingle()
+  const memberId = (data as { member_id?: string | null } | null)?.member_id
+  if (!memberId) return
+  await logActivity({
+    memberId,
+    category: 'billing',
+    action: 'payment_received',
+    summary: `Event registration payment received${fmtMoney(session.amount_total, session.currency)}`,
+    metadata: { kind: 'event', registrationId, amount: session.amount_total, currency: session.currency },
+    actorType: 'stripe',
+  }, db)
 }
 
 async function markIndividualPayment(registrationId: string, participantEmail: string) {
@@ -183,16 +222,46 @@ async function activateMembership(
     stripe_subscription_id: stripeSubscriptionId,
     billing_interval: billingInterval,
   })
+
+  // Audit trail — paid membership activated via Stripe (this path bypasses grantTier).
+  const { data: tier } = await db.from('membership_tiers').select('name').eq('id', tierId).maybeSingle()
+  await logActivity({
+    memberId,
+    category: 'membership',
+    action: 'tier_granted',
+    summary: `Activated ${tier?.name ?? 'paid'} membership (${billingInterval})`,
+    metadata: { tierId, tierName: tier?.name ?? null, source: 'stripe', stripeSubscriptionId, billingInterval, expiresAt },
+    actorType: 'stripe',
+  }, db)
 }
 
 async function expireMembership(stripeSubscriptionId: string) {
   const db = supabaseServer()
+
+  // Resolve the affected members before the update so we can log the cancellation.
+  const { data: affected } = await db
+    .from('member_memberships')
+    .select('member_id, membership_tiers(name)')
+    .eq('stripe_subscription_id', stripeSubscriptionId)
+    .eq('renewal_status', 'active')
 
   await db
     .from('member_memberships')
     .update({ renewal_status: 'expired', expires_at: new Date().toISOString().split('T')[0] })
     .eq('stripe_subscription_id', stripeSubscriptionId)
     .eq('renewal_status', 'active')
+
+  for (const row of affected ?? []) {
+    const tier = Array.isArray(row.membership_tiers) ? row.membership_tiers[0] : row.membership_tiers
+    await logActivity({
+      memberId: row.member_id as string,
+      category: 'membership',
+      action: 'membership_canceled',
+      summary: `${(tier as { name?: string } | null)?.name ?? 'Paid'} membership canceled (subscription ended)`,
+      metadata: { stripeSubscriptionId },
+      actorType: 'stripe',
+    }, db)
+  }
 }
 
 // ── Webhook handler ───────────────────────────────────────────────────────────
@@ -228,6 +297,14 @@ export async function POST(req: NextRequest) {
 
         if (memberId && tierId && subscriptionId) {
           await activateMembership(memberId, tierId, billingInterval ?? 'annual', subscriptionId)
+          await logActivity({
+            memberId,
+            category: 'billing',
+            action: 'payment_received',
+            summary: `Membership payment received${fmtMoney(session.amount_total, session.currency)}`,
+            metadata: { kind: 'membership', tierId, amount: session.amount_total, currency: session.currency },
+            actorType: 'stripe',
+          })
         }
       } else if (session.metadata?.type === 'extra_session') {
         // Purchased extra coaching/mentoring session → grant a credit (FR-COM-11/12)
@@ -248,6 +325,7 @@ export async function POST(req: NextRequest) {
           await markIndividualPayment(registrationId, participantEmail)
           await capturePaymentIntent(session, { registrationId, participantEmail })
           await persistStripeCustomer(session)
+          await logEventPayment(session, registrationId, participantEmail)
         }
       } else {
         // Event registration purchase (whole group or individual)
@@ -257,6 +335,7 @@ export async function POST(req: NextRequest) {
           await confirmRegistration(registrationId, isGroup)
           await capturePaymentIntent(session, { registrationId })
           await persistStripeCustomer(session)
+          if (!isGroup) await logEventPayment(session, registrationId)
         }
       }
 

@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { verifyConnectHmac, getEnvelopeSignerProgress, type AgreementType } from '@/lib/docusign'
 import { AGREEMENT_LABEL } from '@/lib/docusign-agreements'
 import { sendEmail, docusignCompletedToMinorEmail, docusignCompletedToSignerEmail } from '@/lib/email'
+import { logActivity } from '@/lib/activity-log'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -104,6 +105,16 @@ export async function POST(req: Request) {
   }
 
   if (newStatus === 'completed' && envelope.member_id) {
+    const dsType = (envelope.envelope_type ?? 'minor') as AgreementType
+    await logActivity({
+      memberId: envelope.member_id,
+      category: 'docusign',
+      action: 'docusign_completed',
+      summary: `${AGREEMENT_LABEL[dsType] ?? 'Consent form'} completed${envelope.event_title ? ` for ${envelope.event_title}` : ''}`,
+      metadata: { envelopeId, agreementType: dsType, eventTitle: envelope.event_title ?? null },
+      actorType: 'docusign',
+    }, db)
+
     const { data: member } = await db
       .from('members')
       .select('email, first_name')

@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   const lookup = db.from('members').select('id, event_role')
   const { data: target } = await (memberId
     ? lookup.eq('id', memberId)
-    : lookup.eq('email', email)
+    : lookup.ilike('email', String(email).trim())
   ).maybeSingle()
   if (!target) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   if (target.event_role === 'school_student') {

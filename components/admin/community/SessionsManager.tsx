@@ -71,20 +71,30 @@ export function SessionsManager({
 type Poster = (url: string, body: unknown, method?: string) => Promise<void>
 
 function HostsSection({ hosts, busy, post }: { hosts: AdminHost[]; busy: boolean; post: Poster }) {
-  const [email, setEmail] = useState('')
+  const [host, setHost] = useState<PickedMember | null>(null)
   const [canCoach, setCanCoach] = useState(true)
   const [canMentor, setCanMentor] = useState(false)
+
+  const hostName = host
+    ? [host.first_name, host.last_name].filter(Boolean).join(' ') || host.email || 'Member'
+    : ''
 
   return (
     <section>
       <h2 className="mb-3 text-lg font-semibold text-gray-900">Coaches &amp; Mentors</h2>
       <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white p-3">
-        <input
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="member email"
-          className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-        />
+        <div className="min-w-[220px] flex-1">
+          {host ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 py-1 pl-3 pr-1 text-sm font-medium text-indigo-700">
+              {hostName}
+              <button onClick={() => setHost(null)} aria-label="Clear member" className="hover:text-indigo-900">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          ) : (
+            <MemberPicker disabled={busy} placeholder="member — search by name or email…" onPick={setHost} />
+          )}
+        </div>
         <label className="flex items-center gap-1 text-sm">
           <input type="checkbox" checked={canCoach} onChange={(e) => setCanCoach(e.target.checked)} /> Coach
         </label>
@@ -92,8 +102,12 @@ function HostsSection({ hosts, busy, post }: { hosts: AdminHost[]; busy: boolean
           <input type="checkbox" checked={canMentor} onChange={(e) => setCanMentor(e.target.checked)} /> Mentor
         </label>
         <button
-          onClick={() => email && post('/api/admin/community/hosts', { email, canCoach, canMentor })}
-          disabled={busy}
+          onClick={() => {
+            if (!host) return
+            post('/api/admin/community/hosts', { memberId: host.id, canCoach, canMentor })
+            setHost(null)
+          }}
+          disabled={busy || !host}
           className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
         >
           Grant

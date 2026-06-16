@@ -3,6 +3,18 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
 
+// Treat null/undefined/'' as equivalent so an untouched empty field (the form
+// submits null DB values as '') is not flagged as a change.
+function norm(v: unknown): string {
+  return v === null || v === undefined ? '' : String(v).trim()
+}
+
+function sameSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const sa = new Set(a)
+  return b.every((x) => sa.has(x))
+}
+
 // GET /api/members/me — fetch the current member's full record
 export async function GET() {
   const { userId } = await auth()
@@ -64,7 +76,15 @@ export async function PATCH(req: Request) {
     if (key in body) updates[key] = body[key]
   }
 
-  const changedFields = Object.keys(updates).filter((k) => memberRow[k] !== updates[k])
+  const changedFields = Object.keys(updates).filter((k) => norm(memberRow[k]) !== norm(updates[k]))
+
+  // Snapshot current ethnicity/allergy selections before the replacement runs.
+  const [{ data: beforeEth }, { data: beforeAllergy }] = await Promise.all([
+    db.from('member_ethnicities').select('ethnicity_option_id').eq('member_id', memberId),
+    db.from('member_allergies').select('allergy_option_id').eq('member_id', memberId),
+  ])
+  const beforeEthIds = (beforeEth ?? []).map((r: { ethnicity_option_id: string }) => r.ethnicity_option_id)
+  const beforeAllergyIds = (beforeAllergy ?? []).map((r: { allergy_option_id: string }) => r.allergy_option_id)
 
   if (Object.keys(updates).length > 0) {
     const { error } = await db
@@ -106,8 +126,12 @@ export async function PATCH(req: Request) {
 
   // Audit trail — the member edited their own profile.
   const changed = [...changedFields]
-  if ('ethnicity_ids' in body) changed.push('ethnicity')
-  if ('allergy_ids' in body) changed.push('dietary')
+  if ('ethnicity_ids' in body && Array.isArray(body.ethnicity_ids) && !sameSet(beforeEthIds, body.ethnicity_ids)) {
+    changed.push('ethnicity')
+  }
+  if ('allergy_ids' in body && Array.isArray(body.allergy_ids) && !sameSet(beforeAllergyIds, body.allergy_ids)) {
+    changed.push('dietary')
+  }
   if (changed.length > 0) {
     const actorLabel = [memberRow.first_name, memberRow.last_name].filter(Boolean).join(' ').trim() || null
     await logActivity({

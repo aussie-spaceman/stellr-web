@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import MemberPicker from '@/components/admin/MemberPicker'
 
 export interface AdminTier {
   id: string
@@ -123,7 +124,6 @@ function HostsSection({ hosts, busy, post }: { hosts: AdminHost[]; busy: boolean
 function CohortsSection({ cohorts, busy, post }: { cohorts: AdminCohort[]; busy: boolean; post: Poster }) {
   const [name, setName] = useState('')
   const [mentorEmail, setMentorEmail] = useState('')
-  const [addEmail, setAddEmail] = useState<Record<string, string>>({})
 
   return (
     <section>
@@ -190,23 +190,14 @@ function CohortsSection({ cohorts, busy, post }: { cohorts: AdminCohort[]; busy:
                 </button>
               )}
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <input
-                value={addEmail[c.id] ?? ''}
-                onChange={(e) => setAddEmail((p) => ({ ...p, [c.id]: e.target.value }))}
-                placeholder="add member email"
-                className="rounded-md border border-gray-300 px-2 py-1 text-sm"
-              />
-              <button
-                onClick={() =>
-                  addEmail[c.id] &&
-                  post('/api/admin/community/cohorts', { cohortId: c.id, addMemberEmail: addEmail[c.id] }, 'PATCH')
-                }
+            <div className="mt-2 max-w-md">
+              <MemberPicker
                 disabled={busy}
-                className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
-              >
-                Add member
-              </button>
+                placeholder="Add member — search by name or email…"
+                onPick={(m) =>
+                  post('/api/admin/community/cohorts', { cohortId: c.id, addMemberId: m.id }, 'PATCH')
+                }
+              />
             </div>
           </li>
         ))}

@@ -11,6 +11,18 @@ function humanizeFields(keys: string[]): string {
   return keys.map((k) => k.replace(/^ec_/, 'emergency ').replace(/_/g, ' ')).join(', ')
 }
 
+// Treat null/undefined/'' as equivalent so an untouched empty field (the form
+// submits null DB values as '') is not flagged as a change.
+function norm(v: unknown): string {
+  return v === null || v === undefined ? '' : String(v).trim()
+}
+
+function sameSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const sa = new Set(a)
+  return b.every((x) => sa.has(x))
+}
+
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -34,12 +46,13 @@ export async function PATCH(
     if (key in body) updates[key] = body[key]
   }
 
-  // Snapshot the editable fields before the write so we can record exactly what changed.
-  const { data: before } = await db
-    .from('members')
-    .select(allowed.join(','))
-    .eq('id', id)
-    .maybeSingle()
+  // Snapshot the editable fields + current ethnicity/allergy selections before
+  // the write so we can record exactly what changed.
+  const [{ data: before }, { data: beforeEth }, { data: beforeAllergy }] = await Promise.all([
+    db.from('members').select(allowed.join(',')).eq('id', id).maybeSingle(),
+    db.from('member_ethnicities').select('ethnicity_option_id').eq('member_id', id),
+    db.from('member_allergies').select('allergy_option_id').eq('member_id', id),
+  ])
 
   const { data, error } = await db
     .from('members')
@@ -81,9 +94,15 @@ export async function PATCH(
 
   // Audit trail — record which fields the admin actually changed.
   const beforeRow = (before ?? {}) as Record<string, unknown>
-  const changed = Object.keys(updates).filter((k) => beforeRow[k] !== updates[k])
-  if ('ethnicity_ids' in body) changed.push('ethnicity')
-  if ('allergy_ids' in body) changed.push('dietary')
+  const changed = Object.keys(updates).filter((k) => norm(beforeRow[k]) !== norm(updates[k]))
+  const beforeEthIds = (beforeEth ?? []).map((r: { ethnicity_option_id: string }) => r.ethnicity_option_id)
+  const beforeAllergyIds = (beforeAllergy ?? []).map((r: { allergy_option_id: string }) => r.allergy_option_id)
+  if ('ethnicity_ids' in body && Array.isArray(body.ethnicity_ids) && !sameSet(beforeEthIds, body.ethnicity_ids)) {
+    changed.push('ethnicity')
+  }
+  if ('allergy_ids' in body && Array.isArray(body.allergy_ids) && !sameSet(beforeAllergyIds, body.allergy_ids)) {
+    changed.push('dietary')
+  }
   if (changed.length > 0) {
     const actor = await actorFromAuth()
     await logActivity({

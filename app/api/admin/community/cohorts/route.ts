@@ -13,7 +13,8 @@ async function requireAdmin() {
 // Resolve an email to a member id (admin convenience for assigning people).
 async function memberIdByEmail(email: string): Promise<string | null> {
   const db = supabaseServer()
-  const { data } = await db.from('members').select('id').eq('email', email).maybeSingle()
+  // Case-insensitive: emails are stored normalised, but admins may type any case.
+  const { data } = await db.from('members').select('id').ilike('email', email.trim()).maybeSingle()
   return data?.id ?? null
 }
 
@@ -49,9 +50,10 @@ export async function PATCH(req: Request) {
     if (b.mentorEmail && !mentorId) return NextResponse.json({ error: 'Mentor email not found' }, { status: 404 })
     await db.from('mentoring_cohorts').update({ mentor_member_id: mentorId }).eq('id', b.cohortId)
   }
-  if (b.addMemberEmail) {
-    const id = await memberIdByEmail(b.addMemberEmail)
-    if (!id) return NextResponse.json({ error: 'Member email not found' }, { status: 404 })
+  // Add a member by id (from the member-search picker) or by email (fallback).
+  if (b.addMemberId || b.addMemberEmail) {
+    const id = b.addMemberId ?? (await memberIdByEmail(b.addMemberEmail))
+    if (!id) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     await db
       .from('cohort_members')
       .upsert({ cohort_id: b.cohortId, member_id: id }, { onConflict: 'cohort_id,member_id' })

@@ -14,28 +14,29 @@ async function requireAdmin() {
   return (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
 }
 
-// POST — grant a member manager rights over an object, looked up by email.
+// POST — grant a member manager rights over an object. The member comes from the
+// member-search picker (memberId) or, as a fallback, by email.
 // Decision D5: the grantee must already be a member (members row); no tier needed.
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { email, objectType, objectId } = await req.json().catch(() => ({}))
-  if (!email || !objectType || !objectId) {
-    return NextResponse.json({ error: 'email, objectType and objectId required' }, { status: 400 })
+  const { memberId, email, objectType, objectId } = await req.json().catch(() => ({}))
+  if ((!memberId && !email) || !objectType || !objectId) {
+    return NextResponse.json({ error: 'objectType, objectId and a member (memberId or email) required' }, { status: 400 })
   }
   if (!OBJECT_TYPES.includes(objectType)) {
     return NextResponse.json({ error: 'invalid objectType' }, { status: 400 })
   }
 
   const db = supabaseServer()
-  const { data: member } = await db
-    .from('members')
-    .select('id, first_name, last_name, email')
-    .ilike('email', String(email).trim())
-    .maybeSingle()
+  const lookup = db.from('members').select('id, first_name, last_name, email')
+  const { data: member } = await (memberId
+    ? lookup.eq('id', memberId)
+    : lookup.ilike('email', String(email).trim())
+  ).maybeSingle()
   if (!member) {
     return NextResponse.json(
-      { error: 'No member with that email. Managers must have a member account first (D5).' },
+      { error: 'Member not found. Managers must have a member account first (D5).' },
       { status: 404 }
     )
   }

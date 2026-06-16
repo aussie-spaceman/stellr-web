@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
+import MemberPicker, { type PickedMember } from '@/components/admin/MemberPicker'
 
 export interface StaffRole {
   member_id: string
@@ -23,22 +24,26 @@ export default function StaffRolesManager({
 }) {
   const router = useRouter()
   const grantable = allScopes.filter((s) => s !== 'all')
-  const [email, setEmail] = useState('')
-  const [picked, setPicked] = useState<string[]>([])
+  const [member, setMember] = useState<PickedMember | null>(null)
+  const [scopes, setScopes] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const memberName = member
+    ? [member.first_name, member.last_name].filter(Boolean).join(' ') || member.email || 'Member'
+    : ''
+
   const toggle = (s: string) =>
-    setPicked((p) => (p.includes(s) ? p.filter((x) => x !== s) : [...p, s]))
+    setScopes((p) => (p.includes(s) ? p.filter((x) => x !== s) : [...p, s]))
 
   async function grant() {
-    if (!email.trim() || picked.length === 0) return
+    if (!member || scopes.length === 0) return
     setBusy(true)
     setError(null)
     const res = await fetch('/api/admin/staff-roles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.trim(), scopes: picked }),
+      body: JSON.stringify({ memberId: member.id, scopes }),
     })
     setBusy(false)
     if (!res.ok) {
@@ -46,8 +51,8 @@ export default function StaffRolesManager({
       setError(b?.error ?? 'Failed to save')
       return
     }
-    setEmail('')
-    setPicked([])
+    setMember(null)
+    setScopes([])
     router.refresh()
   }
 
@@ -71,20 +76,25 @@ export default function StaffRolesManager({
 
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Grant scopes</p>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="member@email.com"
-          className="mb-3 w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-        />
+        <div className="mb-3">
+          {member ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 py-1 pl-3 pr-1 text-sm font-medium text-indigo-700">
+              {memberName}
+              <button onClick={() => setMember(null)} aria-label="Clear member" className="hover:text-indigo-900">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          ) : (
+            <MemberPicker disabled={busy} onPick={setMember} />
+          )}
+        </div>
         <div className="mb-3 flex flex-wrap gap-2">
           {grantable.map((s) => (
             <button
               key={s}
               onClick={() => toggle(s)}
               className={`rounded-full border px-3 py-1 text-xs font-medium capitalize ${
-                picked.includes(s)
+                scopes.includes(s)
                   ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
                   : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
               }`}
@@ -95,7 +105,7 @@ export default function StaffRolesManager({
         </div>
         <button
           onClick={grant}
-          disabled={busy || !email.trim() || picked.length === 0}
+          disabled={busy || !member || scopes.length === 0}
           className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
         >
           Save

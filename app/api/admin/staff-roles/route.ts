@@ -11,24 +11,25 @@ async function requireAdmin() {
   return (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
 }
 
-// POST — grant/replace a member's function scopes. Body: { email, scopes: string[] }
+// POST — grant/replace a member's function scopes.
+// Body: { memberId?, email?, scopes: string[] } — member from the picker (id) or email.
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { email, scopes } = await req.json().catch(() => ({}))
-  if (!email || !Array.isArray(scopes) || scopes.length === 0) {
-    return NextResponse.json({ error: 'email and a non-empty scopes[] required' }, { status: 400 })
+  const { memberId, email, scopes } = await req.json().catch(() => ({}))
+  if ((!memberId && !email) || !Array.isArray(scopes) || scopes.length === 0) {
+    return NextResponse.json({ error: 'a member (memberId or email) and a non-empty scopes[] required' }, { status: 400 })
   }
   const clean = [...new Set(scopes)].filter((s) => (STAFF_SCOPES as readonly string[]).includes(s))
   if (clean.length === 0) return NextResponse.json({ error: 'no valid scopes' }, { status: 400 })
 
   const db = supabaseServer()
-  const { data: member } = await db
-    .from('members')
-    .select('id, first_name, last_name, email')
-    .ilike('email', String(email).trim())
-    .maybeSingle()
-  if (!member) return NextResponse.json({ error: 'No member with that email.' }, { status: 404 })
+  const lookup = db.from('members').select('id, first_name, last_name, email')
+  const { data: member } = await (memberId
+    ? lookup.eq('id', memberId)
+    : lookup.ilike('email', String(email).trim())
+  ).maybeSingle()
+  if (!member) return NextResponse.json({ error: 'Member not found.' }, { status: 404 })
 
   const admin = await getCurrentMember()
   const { error } = await db.from('staff_roles').upsert(

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
 import type { ObjectType } from '@/lib/object-roles'
+import MemberPicker, { type PickedMember } from '@/components/admin/MemberPicker'
 
 export interface Delegation {
   id: string
@@ -23,18 +24,22 @@ export default function DelegationsManager({ initial }: { initial: Delegation[] 
   const router = useRouter()
   const [objectType, setObjectType] = useState<ObjectType>('group')
   const [objectId, setObjectId] = useState('')
-  const [email, setEmail] = useState('')
+  const [picked, setPicked] = useState<PickedMember | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const pickedName = picked
+    ? [picked.first_name, picked.last_name].filter(Boolean).join(' ') || picked.email || 'Member'
+    : ''
+
   async function grant() {
-    if (!objectId.trim() || !email.trim()) return
+    if (!objectId.trim() || !picked) return
     setBusy(true)
     setError(null)
     const res = await fetch('/api/admin/object-roles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.trim(), objectType, objectId: objectId.trim() }),
+      body: JSON.stringify({ memberId: picked.id, objectType, objectId: objectId.trim() }),
     })
     setBusy(false)
     if (!res.ok) {
@@ -43,7 +48,7 @@ export default function DelegationsManager({ initial }: { initial: Delegation[] 
       return
     }
     setObjectId('')
-    setEmail('')
+    setPicked(null)
     router.refresh()
   }
 
@@ -93,16 +98,21 @@ export default function DelegationsManager({ initial }: { initial: Delegation[] 
             placeholder={objectType === 'event' ? 'event slug' : `${objectType} id`}
             className="w-48 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
           />
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="member@email.com"
-            className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-          />
+          <div className="min-w-[220px] flex-1">
+            {picked ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 py-1 pl-3 pr-1 text-sm font-medium text-indigo-700">
+                {pickedName}
+                <button onClick={() => setPicked(null)} aria-label="Clear member" className="hover:text-indigo-900">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </span>
+            ) : (
+              <MemberPicker disabled={busy} onPick={setPicked} />
+            )}
+          </div>
           <button
             onClick={grant}
-            disabled={busy || !objectId.trim() || !email.trim()}
+            disabled={busy || !objectId.trim() || !picked}
             className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
           >
             Grant

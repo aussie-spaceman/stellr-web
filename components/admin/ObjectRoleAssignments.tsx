@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
 import type { ObjectType } from '@/lib/object-roles'
+import MemberPicker, { type PickedMember } from '@/components/admin/MemberPicker'
 
 export interface ObjectRoleAssignment {
   id: string
@@ -27,18 +28,16 @@ export default function ObjectRoleAssignments({
   label?: string
 }) {
   const router = useRouter()
-  const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function add() {
-    if (!email.trim()) return
+  async function add(member: PickedMember) {
     setBusy(true)
     setError(null)
     const res = await fetch('/api/admin/object-roles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.trim(), objectType, objectId }),
+      body: JSON.stringify({ memberId: member.id, objectType, objectId }),
     })
     setBusy(false)
     if (!res.ok) {
@@ -46,7 +45,6 @@ export default function ObjectRoleAssignments({
       setError(body?.error ?? 'Failed to add manager')
       return
     }
-    setEmail('')
     router.refresh()
   }
 
@@ -85,22 +83,7 @@ export default function ObjectRoleAssignments({
           </span>
         ))}
       </div>
-      <div className="flex gap-2">
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="member@email.com"
-          className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-        />
-        <button
-          onClick={add}
-          disabled={busy || !email.trim()}
-          className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-        >
-          Add
-        </button>
-      </div>
+      <MemberPicker disabled={busy} placeholder="Add a manager — search by name or email…" onPick={add} />
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
     </div>
   )

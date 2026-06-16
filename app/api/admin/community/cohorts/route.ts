@@ -18,19 +18,23 @@ async function memberIdByEmail(email: string): Promise<string | null> {
   return data?.id ?? null
 }
 
-// POST — create a cohort. Body: { name, mentorEmail? }
+// POST — create a cohort. Body: { name, mentorId? | mentorEmail? }
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  const { name, mentorEmail } = await req.json().catch(() => ({}))
+  const { name, mentorId, mentorEmail } = await req.json().catch(() => ({}))
   if (!name?.trim()) return NextResponse.json({ error: 'name required' }, { status: 400 })
 
-  const mentorId = mentorEmail ? await memberIdByEmail(mentorEmail) : null
-  if (mentorEmail && !mentorId) return NextResponse.json({ error: 'Mentor email not found' }, { status: 404 })
+  // Mentor comes from the member-search picker (mentorId) or, as a fallback, email.
+  let resolvedMentorId: string | null = mentorId ?? null
+  if (!resolvedMentorId && mentorEmail) {
+    resolvedMentorId = await memberIdByEmail(mentorEmail)
+    if (!resolvedMentorId) return NextResponse.json({ error: 'Mentor not found' }, { status: 404 })
+  }
 
   const db = supabaseServer()
   const { data, error } = await db
     .from('mentoring_cohorts')
-    .insert({ name: name.trim(), mentor_member_id: mentorId })
+    .insert({ name: name.trim(), mentor_member_id: resolvedMentorId })
     .select('id')
     .single()
   if (error) return NextResponse.json({ error: 'Could not create cohort' }, { status: 500 })

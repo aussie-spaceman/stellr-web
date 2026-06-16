@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import MemberPicker from '@/components/admin/MemberPicker'
+import { X } from 'lucide-react'
+import MemberPicker, { type PickedMember } from '@/components/admin/MemberPicker'
 
 export interface AdminTier {
   id: string
@@ -123,7 +124,11 @@ function HostsSection({ hosts, busy, post }: { hosts: AdminHost[]; busy: boolean
 
 function CohortsSection({ cohorts, busy, post }: { cohorts: AdminCohort[]; busy: boolean; post: Poster }) {
   const [name, setName] = useState('')
-  const [mentorEmail, setMentorEmail] = useState('')
+  const [mentor, setMentor] = useState<PickedMember | null>(null)
+
+  const mentorName = mentor
+    ? [mentor.first_name, mentor.last_name].filter(Boolean).join(' ') || mentor.email || 'Member'
+    : ''
 
   return (
     <section>
@@ -135,14 +140,25 @@ function CohortsSection({ cohorts, busy, post }: { cohorts: AdminCohort[]; busy:
           placeholder="Cohort name"
           className="rounded-md border border-gray-300 px-3 py-1.5 text-sm"
         />
-        <input
-          value={mentorEmail}
-          onChange={(e) => setMentorEmail(e.target.value)}
-          placeholder="mentor email (optional)"
-          className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-        />
+        <div className="min-w-[220px] flex-1">
+          {mentor ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 py-1 pl-3 pr-1 text-sm font-medium text-indigo-700">
+              {mentorName}
+              <button onClick={() => setMentor(null)} aria-label="Clear mentor" className="hover:text-indigo-900">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          ) : (
+            <MemberPicker disabled={busy} placeholder="mentor — search by name or email (optional)" onPick={setMentor} />
+          )}
+        </div>
         <button
-          onClick={() => name && post('/api/admin/community/cohorts', { name, mentorEmail: mentorEmail || undefined })}
+          onClick={() => {
+            if (!name) return
+            post('/api/admin/community/cohorts', { name, mentorId: mentor?.id })
+            setName('')
+            setMentor(null)
+          }}
           disabled={busy}
           className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
         >

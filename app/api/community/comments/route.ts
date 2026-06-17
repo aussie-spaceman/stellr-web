@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, memberMeetsTier, tiptapToPlainText } from '@/lib/community'
 import { sendEmail, communityReplyEmail } from '@/lib/email'
+import { extractMentionIds, notifyMentions } from '@/lib/mentions'
 
 const createCommentSchema = z.object({
   postId: z.string().uuid(),
@@ -139,6 +140,30 @@ export async function POST(req: Request) {
   notifyPostAuthor({ db, postId, actorMember: member, commentId: comment.id, snippedText: plainText }).catch(
     (e) => console.error('[community] notification error:', e)
   )
+
+  // Notify any @mentioned members. Exclude the post author (they already get the
+  // 'reply' notification above) and the comment author. Best-effort.
+  const mentionIds = extractMentionIds(bodyJson)
+  if (mentionIds.length) {
+    void (async () => {
+      const { data: ctx } = await db
+        .from('community_posts')
+        .select('author_member_id, community_spaces(slug)')
+        .eq('id', postId)
+        .maybeSingle()
+      const rel = ctx?.community_spaces as { slug: string } | { slug: string }[] | null
+      const slug = Array.isArray(rel) ? rel[0]?.slug : rel?.slug
+      await notifyMentions({
+        mentionIds,
+        actorMemberId: member.id,
+        actorName: [member.first_name, member.last_name].filter(Boolean).join(' ') || 'A member',
+        context: 'comment',
+        postId,
+        spaceSlug: slug ?? 'general',
+        excludeIds: ctx?.author_member_id ? [ctx.author_member_id] : [],
+      })
+    })().catch((e: unknown) => console.error('[community] mention notify error:', e))
+  }
 
   return NextResponse.json({ id: comment.id })
 }

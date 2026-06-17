@@ -3,7 +3,7 @@ import { getEventBySlug, type StellarEvent } from '@/lib/sanity'
 import { formatDate } from '@/lib/utils'
 import CheckInForm from '@/components/forms/CheckInForm'
 
-export const metadata = { title: 'Event Check-In | Stellr Education' }
+export const metadata = { title: 'Event Check-In' }
 export const dynamic = 'force-dynamic'
 
 // Public, token-gated check-in page reached by scanning the event QR code

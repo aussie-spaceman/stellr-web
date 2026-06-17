@@ -4,7 +4,7 @@ import { CheckCircle } from 'lucide-react'
 import { MaterialTiersGrid } from '@/components/sections/MaterialTiersGrid'
 
 export const metadata: Metadata = {
-  title: 'Competitions | Stellr Education',
+  title: 'Competitions',
   description:
     'Stellr runs multiple Design Competitions across the school year for middle and high school students, based on themes like Space and Environment.',
 }

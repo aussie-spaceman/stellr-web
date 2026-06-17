@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, getSpaceBySlug, memberMeetsTier, tiptapToPlainText } from '@/lib/community'
+import { extractMentionIds, notifyMentions } from '@/lib/mentions'
 
 const createPostSchema = z.object({
   spaceSlug: z.string().min(1),
@@ -43,6 +44,19 @@ export async function POST(req: Request) {
   if (error) {
     console.error('[community] post insert error:', error)
     return NextResponse.json({ error: 'Failed to create post' }, { status: 500 })
+  }
+
+  // Notify any @mentioned members (best-effort — don't fail the request).
+  const mentionIds = extractMentionIds(bodyJson)
+  if (mentionIds.length) {
+    notifyMentions({
+      mentionIds,
+      actorMemberId: member.id,
+      actorName: [member.first_name, member.last_name].filter(Boolean).join(' ') || 'A member',
+      context: 'post',
+      postId: data.id,
+      spaceSlug,
+    }).catch((e) => console.error('[community] mention notify error:', e))
   }
 
   return NextResponse.json({ id: data.id, spaceSlug })

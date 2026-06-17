@@ -71,6 +71,19 @@ function renderNode(node: TipTapNode, key: number): React.ReactNode {
       return <br key={key} />
     case 'horizontalRule':
       return <hr key={key} />
+    case 'mention': {
+      const label =
+        typeof node.attrs?.label === 'string'
+          ? node.attrs.label
+          : typeof node.attrs?.id === 'string'
+            ? node.attrs.id
+            : 'member'
+      return (
+        <span key={key} className="rounded bg-blue-100 px-1 font-medium text-blue-700">
+          @{label}
+        </span>
+      )
+    }
     default:
       return <Fragment key={key}>{children}</Fragment>
   }

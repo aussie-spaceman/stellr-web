@@ -2,8 +2,10 @@
 
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import { useEffect } from 'react'
+import Mention from '@tiptap/extension-mention'
+import { useEffect, useMemo } from 'react'
 import type { JSONContent } from '@tiptap/react'
+import { mentionSuggestion } from './mention-suggestion'
 
 interface Props {
   /** Controlled value; the parent owns the JSON doc. */
@@ -24,8 +26,19 @@ export function RichTextEditor({
   compact = false,
   editable = true,
 }: Props) {
+  const extensions = useMemo(
+    () => [
+      StarterKit,
+      Mention.configure({
+        HTMLAttributes: { class: 'rounded bg-blue-100 px-1 font-medium text-blue-700' },
+        suggestion: mentionSuggestion(),
+      }),
+    ],
+    [],
+  )
+
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions,
     content: value ?? '',
     editable,
     immediatelyRender: false, // required for Next.js SSR

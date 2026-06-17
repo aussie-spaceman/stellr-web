@@ -3,7 +3,7 @@ import { Users, Star, Globe } from 'lucide-react'
 import { HostEventForm } from '@/components/forms/HostEventForm'
 
 export const metadata: Metadata = {
-  title: 'Host An Event | Stellr Education',
+  title: 'Host An Event',
   description:
     'Interested in running a live Stellr design competition at your facility? Learn about the benefits and submit your details.',
 }

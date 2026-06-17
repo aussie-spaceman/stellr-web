@@ -323,8 +323,9 @@ export function tiptapToPlainText(doc: unknown): string {
 
   const walk = (node: unknown) => {
     if (!node || typeof node !== 'object') return
-    const n = node as { type?: string; text?: string; content?: unknown[] }
+    const n = node as { type?: string; text?: string; content?: unknown[]; attrs?: Record<string, unknown> }
     if (typeof n.text === 'string') parts.push(n.text)
+    if (n.type === 'mention' && typeof n.attrs?.label === 'string') parts.push(`@${n.attrs.label}`)
     if (Array.isArray(n.content)) n.content.forEach(walk)
     if (n.type && blockTypes.has(n.type)) parts.push('\n')
   }

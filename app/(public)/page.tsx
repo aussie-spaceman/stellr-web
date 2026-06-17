@@ -7,7 +7,9 @@ import { TestimonialCarousel } from '@/components/sections/TestimonialCarousel'
 import { SubscribeForm } from '@/components/forms/SubscribeForm'
 
 export const metadata: Metadata = {
-  title: 'Real-World STEM Competitions | Stellr Education',
+  // Title intentionally omitted: the homepage inherits the root layout's
+  // non-templated `title.default` ("Stellr Education — Real-World STEM Competitions"),
+  // avoiding the doubled "| Stellr Education" the title template would add.
   description:
     'Stellr connects middle and high school students with industry professionals through high-tempo design competitions across the US.',
 }

@@ -6,7 +6,7 @@ import { getCampaignDates, campaignStatusFromDates, type CampaignSeason } from '
 import { MaterialTiersGrid } from '@/components/sections/MaterialTiersGrid'
 
 export const metadata: Metadata = {
-  title: 'Activities | Stellr Education',
+  title: 'Activities',
   description:
     'Download Stellr competition curriculum material and run a Design Campaign in your classroom, at your own pace.',
 }

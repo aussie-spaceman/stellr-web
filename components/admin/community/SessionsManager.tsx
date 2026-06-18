@@ -15,12 +15,24 @@ export interface AdminHost {
   can_coach: boolean
   can_mentor: boolean
 }
+export interface AdminCohortTraining {
+  module_id: string
+  title: string
+  is_mandatory: boolean
+  due_at: string | null
+}
 export interface AdminCohort {
   id: string
   name: string
   mentor_name: string | null
   member_count: number
+  invited_count?: number
   lifecycle?: 'active' | 'archived'
+  training?: AdminCohortTraining[]
+}
+export interface AdminModule {
+  id: string
+  name: string
 }
 export interface AdminEntitlement {
   tier_id: string
@@ -35,11 +47,13 @@ export function SessionsManager({
   hosts,
   cohorts,
   entitlements,
+  modules,
 }: {
   tiers: AdminTier[]
   hosts: AdminHost[]
   cohorts: AdminCohort[]
   entitlements: AdminEntitlement[]
+  modules: AdminModule[]
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -62,7 +76,7 @@ export function SessionsManager({
   return (
     <div className="space-y-10">
       <HostsSection hosts={hosts} busy={busy} post={post} />
-      <CohortsSection cohorts={cohorts} busy={busy} post={post} />
+      <CohortsSection cohorts={cohorts} modules={modules} busy={busy} post={post} />
       <EntitlementsSection tiers={tiers} entitlements={entitlements} busy={busy} post={post} />
     </div>
   )
@@ -136,7 +150,17 @@ function HostsSection({ hosts, busy, post }: { hosts: AdminHost[]; busy: boolean
   )
 }
 
-function CohortsSection({ cohorts, busy, post }: { cohorts: AdminCohort[]; busy: boolean; post: Poster }) {
+function CohortsSection({
+  cohorts,
+  modules,
+  busy,
+  post,
+}: {
+  cohorts: AdminCohort[]
+  modules: AdminModule[]
+  busy: boolean
+  post: Poster
+}) {
   const [name, setName] = useState('')
   const [mentor, setMentor] = useState<PickedMember | null>(null)
 
@@ -181,59 +205,197 @@ function CohortsSection({ cohorts, busy, post }: { cohorts: AdminCohort[]; busy:
       </div>
       <ul className="space-y-2">
         {cohorts.map((c) => (
-          <li key={c.id} className="rounded-lg border border-gray-200 bg-white p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="flex items-center gap-2 font-medium text-gray-900">
-                  {c.name}
-                  {c.lifecycle === 'archived' && (
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
-                      Archived
-                    </span>
-                  )}
-                </p>
-                <p className="text-xs text-gray-500">
-                  Mentor: {c.mentor_name ?? '—'} · {c.member_count} members
-                </p>
-              </div>
-              {c.lifecycle === 'archived' ? (
-                <button
-                  onClick={() => post('/api/admin/community/cohorts', { cohortId: c.id, archive: false }, 'PATCH')}
-                  disabled={busy}
-                  className="shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
-                >
-                  Reactivate
-                </button>
-              ) : (
-                <button
-                  onClick={() => {
-                    if (!window.confirm(`Archive "${c.name}"? Its sessions stop and members move to read-only.`)) return
-                    const keepOpen = window.confirm(
-                      'Keep its content (chat, recordings) open for past members?\n\nOK = keep open.\nCancel = re-gate (lock unless their tier allows).',
-                    )
-                    post('/api/admin/community/cohorts', { cohortId: c.id, archive: true, keepOpen }, 'PATCH')
-                  }}
-                  disabled={busy}
-                  className="shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
-                >
-                  Archive
-                </button>
-              )}
-            </div>
-            <div className="mt-2 max-w-md">
-              <MemberPicker
-                disabled={busy}
-                placeholder="Add member — search by name or email…"
-                onPick={(m) =>
-                  post('/api/admin/community/cohorts', { cohortId: c.id, addMemberId: m.id }, 'PATCH')
-                }
-              />
-            </div>
-          </li>
+          <CohortItem key={c.id} cohort={c} modules={modules} busy={busy} post={post} />
         ))}
         {cohorts.length === 0 && <li className="text-sm text-gray-400">No cohorts yet.</li>}
       </ul>
     </section>
+  )
+}
+
+function CohortItem({
+  cohort: c,
+  modules,
+  busy,
+  post,
+}: {
+  cohort: AdminCohort
+  modules: AdminModule[]
+  busy: boolean
+  post: Poster
+}) {
+  const [bulk, setBulk] = useState('')
+  const [moduleId, setModuleId] = useState('')
+  const [mandatory, setMandatory] = useState(false)
+  const [dueAt, setDueAt] = useState('')
+
+  const linkedIds = new Set((c.training ?? []).map((t) => t.module_id))
+  const available = modules.filter((m) => !linkedIds.has(m.id))
+
+  const bulkAdd = () => {
+    const emails = bulk
+      .split(/[\s,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (!emails.length) return
+    post('/api/admin/community/cohorts', { cohortId: c.id, addMemberEmails: emails }, 'PATCH')
+    setBulk('')
+  }
+
+  const attach = () => {
+    if (!moduleId) return
+    post(
+      '/api/admin/community/cohorts',
+      { cohortId: c.id, linkModuleId: moduleId, linkMandatory: mandatory, linkDueAt: dueAt || null },
+      'PATCH',
+    )
+    setModuleId('')
+    setMandatory(false)
+    setDueAt('')
+  }
+
+  return (
+    <li className="rounded-lg border border-gray-200 bg-white p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="flex items-center gap-2 font-medium text-gray-900">
+            {c.name}
+            {c.lifecycle === 'archived' && (
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                Archived
+              </span>
+            )}
+          </p>
+          <p className="text-xs text-gray-500">
+            Mentor: {c.mentor_name ?? '—'} · {c.member_count} members
+            {(c.invited_count ?? 0) > 0 && <span className="text-indigo-600"> · {c.invited_count} invited</span>}
+          </p>
+        </div>
+        {c.lifecycle === 'archived' ? (
+          <button
+            onClick={() => post('/api/admin/community/cohorts', { cohortId: c.id, archive: false }, 'PATCH')}
+            disabled={busy}
+            className="shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          >
+            Reactivate
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              if (!window.confirm(`Archive "${c.name}"? Its sessions stop and members move to read-only.`)) return
+              const keepOpen = window.confirm(
+                'Keep its content (chat, recordings) open for past members?\n\nOK = keep open.\nCancel = re-gate (lock unless their tier allows).',
+              )
+              post('/api/admin/community/cohorts', { cohortId: c.id, archive: true, keepOpen }, 'PATCH')
+            }}
+            disabled={busy}
+            className="shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          >
+            Archive
+          </button>
+        )}
+      </div>
+
+      {/* Add members — one-by-one picker + bulk paste */}
+      <div className="mt-2 max-w-md">
+        <MemberPicker
+          disabled={busy}
+          placeholder="Add member — search by name or email…"
+          onPick={(m) => post('/api/admin/community/cohorts', { cohortId: c.id, addMemberId: m.id }, 'PATCH')}
+        />
+      </div>
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        <textarea
+          value={bulk}
+          onChange={(e) => setBulk(e.target.value)}
+          placeholder="Bulk add — paste emails separated by commas, spaces, or new lines"
+          rows={2}
+          className="min-w-[260px] flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+        />
+        <button
+          onClick={bulkAdd}
+          disabled={busy || !bulk.trim()}
+          className="rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+        >
+          Add all
+        </button>
+        {(c.invited_count ?? 0) > 0 && (
+          <button
+            onClick={() => post('/api/admin/community/cohorts', { cohortId: c.id, resendInvites: true }, 'PATCH')}
+            disabled={busy}
+            className="rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+          >
+            Resend {c.invited_count} invite{c.invited_count === 1 ? '' : 's'}
+          </button>
+        )}
+      </div>
+
+      {/* Referenced training material (PRD §11) */}
+      <div className="mt-3 border-t border-gray-100 pt-3">
+        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">Training material</p>
+        {(c.training ?? []).length > 0 && (
+          <ul className="mb-2 space-y-1">
+            {(c.training ?? []).map((t) => (
+              <li key={t.module_id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="text-gray-700">
+                  {t.title}
+                  <span
+                    className={`ml-2 rounded px-1.5 py-0.5 text-[11px] ${
+                      t.is_mandatory ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'
+                    }`}
+                  >
+                    {t.is_mandatory ? 'Mandatory' : 'Optional'}
+                  </span>
+                  {t.due_at && (
+                    <span className="ml-2 text-xs text-gray-400">due {new Date(t.due_at).toLocaleDateString()}</span>
+                  )}
+                </span>
+                <button
+                  onClick={() =>
+                    post('/api/admin/community/cohorts', { cohortId: c.id, unlinkModuleId: t.module_id }, 'PATCH')
+                  }
+                  disabled={busy}
+                  className="text-xs text-gray-400 hover:text-red-600"
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={moduleId}
+            onChange={(e) => setModuleId(e.target.value)}
+            disabled={busy || available.length === 0}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            <option value="">{available.length === 0 ? 'No more modules' : 'Add training module…'}</option>
+            {available.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <label className="flex items-center gap-1 text-xs text-gray-600">
+            <input type="checkbox" checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} /> Mandatory
+          </label>
+          <input
+            type="date"
+            value={dueAt}
+            onChange={(e) => setDueAt(e.target.value)}
+            className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700"
+          />
+          <button
+            onClick={attach}
+            disabled={busy || !moduleId}
+            className="rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+          >
+            Attach
+          </button>
+        </div>
+      </div>
+    </li>
   )
 }
 

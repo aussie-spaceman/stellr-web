@@ -253,6 +253,48 @@ export const ENTITIES: Record<string, EntityDef> = {
     softDelete: { set: { is_active: false } },
     dependents: [],
   },
+
+  // ---- Web store (migration 051) -----------------------------------------
+  // A product soft-deletes to 'archived' (hidden from storefront, retained).
+  // Variants cascade on hard delete; order_items snapshot sku/name and SET NULL,
+  // so historical orders survive a product purge.
+  store_product: {
+    type: 'store_product',
+    table: 'store_products',
+    label: 'Store product',
+    pk: 'id',
+    keyType: 'uuid',
+    softDelete: { set: { status: 'archived' } },
+    dependents: [],
+    spans: [
+      { table: 'store_variants', column: 'product_id' },
+      { table: 'store_tier_discounts', column: 'product_id' },
+      { table: 'store_event_discounts', column: 'product_id' },
+    ],
+  },
+
+  // An order soft-deletes to 'cancelled'; items cascade in the DB.
+  store_order: {
+    type: 'store_order',
+    table: 'store_orders',
+    label: 'Store order',
+    pk: 'id',
+    keyType: 'uuid',
+    softDelete: { set: { status: 'cancelled' } },
+    external: ['stripe'],
+    dependents: [],
+  },
+
+  // Shipping address — PII, no soft-delete representation (hard delete only).
+  member_address: {
+    type: 'member_address',
+    table: 'member_addresses',
+    label: 'Member address',
+    pk: 'id',
+    keyType: 'uuid',
+    softDelete: null,
+    dependents: [],
+  },
 }
 
 export function getEntityDef(type: string): EntityDef | undefined {

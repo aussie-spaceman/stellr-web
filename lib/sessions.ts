@@ -5,6 +5,7 @@ import { getVideoProvider } from '@/lib/video-provider'
 import { notifyMember, notifyMembers } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
 import { buildIcsAttachment } from '@/lib/ics'
+import { listModules } from '@/lib/training'
 
 // Core logic for Coaching (1:1, FR-COM-12) and Mentoring (group, FR-COM-11).
 // Coaching: sessions.member_id is the coachee. Mentoring: sessions.cohort_id is
@@ -272,7 +273,11 @@ export async function scheduleMentoring(
 
   await provisionRoom(session.id, opts.title ?? 'Mentoring session')
 
-  const { data: cm } = await db.from('cohort_members').select('member_id').eq('cohort_id', cohortId)
+  const { data: cm } = await db
+    .from('cohort_members')
+    .select('member_id')
+    .eq('cohort_id', cohortId)
+    .eq('status', 'active')
   const memberIds = (cm ?? []).map((r) => r.member_id as string)
   if (memberIds.length > 0) {
     await db
@@ -520,6 +525,7 @@ export interface ChatMessage {
   body: string
   author_member_id: string | null
   created_at: string
+  flagged: boolean
 }
 
 export async function getCohortChannel(cohortId: string): Promise<string> {
@@ -561,11 +567,18 @@ export async function listMessages(channelId: string): Promise<ChatMessage[]> {
   const db = supabaseServer()
   const { data } = await db
     .from('chat_messages')
-    .select('id, body, author_member_id, created_at')
+    .select('id, body, author_member_id, created_at, flagged_at')
     .eq('channel_id', channelId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: true })
     .limit(500)
-  return (data ?? []) as ChatMessage[]
+  return (data ?? []).map((m) => ({
+    id: m.id as string,
+    body: m.body as string,
+    author_member_id: (m.author_member_id as string | null) ?? null,
+    created_at: m.created_at as string,
+    flagged: !!m.flagged_at,
+  }))
 }
 
 export async function postMessage(channelId: string, authorId: string, body: string): Promise<boolean> {
@@ -626,6 +639,7 @@ export async function canAccessChannel(channelId: string, memberId: string): Pro
     .select('member_id')
     .eq('cohort_id', ch.cohort_id)
     .eq('member_id', memberId)
+    .eq('status', 'active')
     .maybeSingle()
   let onRoster = !!cm
   if (!onRoster) {
@@ -638,4 +652,411 @@ export async function canAccessChannel(channelId: string, memberId: string): Pro
   }
   if (!onRoster) return false
   return containerAccessPersists(ch.cohort_id)
+}
+
+// ─── Cohort-as-Space (PRD §11) ───────────────────────────────────────────────
+// A Mentoring Cohort is a private Space: group chat + scheduled sessions (with
+// calendar links) + referenced training material, accessible to roster + mentor.
+
+export interface CohortSpace {
+  id: string
+  name: string
+  lifecycle: 'active' | 'archived'
+  isMentor: boolean
+  /** False when an archived cohort has re-gated its content for this member (D1). */
+  accessible: boolean
+}
+
+/**
+ * Resolve a cohort for a member who is on its roster or is its mentor. Returns
+ * null when the member has no relationship to the cohort (caller should 404).
+ */
+export async function getCohortSpace(memberId: string, cohortId: string): Promise<CohortSpace | null> {
+  const db = supabaseServer()
+  const { data: c } = await db
+    .from('mentoring_cohorts')
+    .select('id, name, lifecycle, mentor_member_id')
+    .eq('id', cohortId)
+    .maybeSingle()
+  if (!c) return null
+
+  const isMentor = c.mentor_member_id === memberId
+  let onRoster = isMentor
+  if (!onRoster) {
+    const { data: cm } = await db
+      .from('cohort_members')
+      .select('member_id')
+      .eq('cohort_id', cohortId)
+      .eq('member_id', memberId)
+      .eq('status', 'active')
+      .maybeSingle()
+    onRoster = !!cm
+  }
+  if (!onRoster) return null
+
+  return {
+    id: c.id as string,
+    name: c.name as string,
+    lifecycle: ((c.lifecycle as string) ?? 'active') as 'active' | 'archived',
+    isMentor,
+    accessible: await containerAccessPersists(cohortId),
+  }
+}
+
+/** All sessions belonging to a cohort (newest first), for the cohort space view. */
+export async function listCohortSessions(cohortId: string): Promise<SessionView[]> {
+  const db = supabaseServer()
+  const { data } = await db
+    .from('sessions')
+    .select(SESSION_COLS)
+    .eq('cohort_id', cohortId)
+    .order('scheduled_start', { ascending: false })
+  return (data ?? []) as SessionView[]
+}
+
+export interface CohortTraining {
+  moduleId: string
+  title: string
+  isMandatory: boolean
+  dueAt: string | null
+  itemCount: number
+  completedCount: number
+  canAccess: boolean
+  displayOrder: number
+}
+
+/**
+ * Training modules referenced by a cohort (PRD §11), resolved with the member's
+ * own completion + entitlement state so the space can show mandatory/optional,
+ * deadlines, and "x of y complete".
+ */
+export async function listCohortTraining(member: CommunityMember, cohortId: string): Promise<CohortTraining[]> {
+  const db = supabaseServer()
+  const { data: links } = await db
+    .from('cohort_training_links')
+    .select('module_id, is_mandatory, due_at, display_order')
+    .eq('cohort_id', cohortId)
+  if (!links || links.length === 0) return []
+
+  const byModule = new Map(links.map((l) => [l.module_id as string, l]))
+  const modules = await listModules(member)
+  return modules
+    .filter((m) => byModule.has(m.id))
+    .map((m) => {
+      const l = byModule.get(m.id)!
+      return {
+        moduleId: m.id,
+        title: m.title,
+        isMandatory: !!l.is_mandatory,
+        dueAt: (l.due_at as string | null) ?? null,
+        itemCount: m.itemCount,
+        completedCount: m.completedCount,
+        canAccess: m.canAccess,
+        displayOrder: (l.display_order as number) ?? 0,
+      }
+    })
+    .sort((a, b) => a.displayOrder - b.displayOrder)
+}
+
+/** Cohorts a member belongs to (as participant) or mentors, for the index list. */
+export interface CohortCard {
+  id: string
+  name: string
+  lifecycle: 'active' | 'archived'
+  isMentor: boolean
+  memberCount: number
+}
+
+export async function listMemberCohorts(memberId: string): Promise<CohortCard[]> {
+  const db = supabaseServer()
+  const [{ data: asMember }, { data: asMentor }] = await Promise.all([
+    db
+      .from('cohort_members')
+      .select('mentoring_cohorts(id, name, lifecycle, mentor_member_id, cohort_members(member_id))')
+      .eq('member_id', memberId)
+      .eq('status', 'active'),
+    db
+      .from('mentoring_cohorts')
+      .select('id, name, lifecycle, mentor_member_id, cohort_members(member_id)')
+      .eq('mentor_member_id', memberId),
+  ])
+
+  type CohortRow = {
+    id: string
+    name: string
+    lifecycle: string | null
+    mentor_member_id: string | null
+    cohort_members: { member_id: string }[] | null
+  }
+  const rows: CohortRow[] = []
+  for (const r of asMember ?? []) {
+    const c = (Array.isArray(r.mentoring_cohorts) ? r.mentoring_cohorts[0] : r.mentoring_cohorts) as CohortRow | null
+    if (c) rows.push(c)
+  }
+  for (const c of (asMentor ?? []) as unknown as CohortRow[]) rows.push(c)
+
+  const byId = new Map<string, CohortCard>()
+  for (const c of rows) {
+    if (byId.has(c.id)) continue
+    byId.set(c.id, {
+      id: c.id,
+      name: c.name,
+      lifecycle: ((c.lifecycle as string) ?? 'active') as 'active' | 'archived',
+      isMentor: c.mentor_member_id === memberId,
+      memberCount: Array.isArray(c.cohort_members) ? c.cohort_members.length : 0,
+    })
+  }
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// ─── Cohort invites (PRD §11 — "accept an invite into a Cohort") ──────────────
+
+/**
+ * Invite members to a cohort. New members are added as 'invited' (they gain
+ * access only after accepting); existing rows are left untouched so an already
+ * active member is never downgraded. Returns the number actually pending.
+ */
+export async function inviteMembersToCohort(cohortId: string, memberIds: string[]): Promise<number> {
+  const ids = [...new Set(memberIds)].filter(Boolean)
+  if (ids.length === 0) return 0
+  const db = supabaseServer()
+  const now = new Date().toISOString()
+
+  // Insert only new rows; ignoreDuplicates protects existing active members.
+  await db
+    .from('cohort_members')
+    .upsert(
+      ids.map((member_id) => ({ cohort_id: cohortId, member_id, status: 'invited', invited_at: now })),
+      { onConflict: 'cohort_id,member_id', ignoreDuplicates: true },
+    )
+
+  const { data: pending } = await db
+    .from('cohort_members')
+    .select('member_id')
+    .eq('cohort_id', cohortId)
+    .eq('status', 'invited')
+    .in('member_id', ids)
+  const pendingIds = (pending ?? []).map((r) => r.member_id as string)
+  if (pendingIds.length) {
+    const { data: cohort } = await db.from('mentoring_cohorts').select('name').eq('id', cohortId).maybeSingle()
+    const name = (cohort?.name as string) ?? 'a mentoring cohort'
+    await notifyMembers(pendingIds, {
+      type: 'announcement',
+      body: `You've been invited to the ${name} mentoring cohort. Open Mentoring to accept.`,
+      referenceType: 'cohort',
+      referenceId: cohortId,
+    })
+  }
+  return pendingIds.length
+}
+
+export interface CohortInvite {
+  cohortId: string
+  name: string
+  invitedAt: string | null
+}
+
+/** Pending cohort invites awaiting this member's response. */
+export async function listCohortInvites(memberId: string): Promise<CohortInvite[]> {
+  const db = supabaseServer()
+  const { data } = await db
+    .from('cohort_members')
+    .select('cohort_id, invited_at, mentoring_cohorts(name)')
+    .eq('member_id', memberId)
+    .eq('status', 'invited')
+  return (data ?? []).map((r) => {
+    const c = Array.isArray(r.mentoring_cohorts) ? r.mentoring_cohorts[0] : r.mentoring_cohorts
+    return {
+      cohortId: r.cohort_id as string,
+      name: ((c as { name?: string } | null)?.name) ?? 'Cohort',
+      invitedAt: (r.invited_at as string | null) ?? null,
+    }
+  })
+}
+
+/** A member accepts (→ active) or declines (→ removed) a pending invite. */
+export async function respondToInvite(cohortId: string, memberId: string, accept: boolean): Promise<boolean> {
+  const db = supabaseServer()
+  const { data: row } = await db
+    .from('cohort_members')
+    .select('status')
+    .eq('cohort_id', cohortId)
+    .eq('member_id', memberId)
+    .maybeSingle()
+  if (!row || row.status !== 'invited') return false
+
+  if (accept) {
+    const { error } = await db
+      .from('cohort_members')
+      .update({ status: 'active', accepted_at: new Date().toISOString() })
+      .eq('cohort_id', cohortId)
+      .eq('member_id', memberId)
+    return !error
+  }
+  const { error } = await db
+    .from('cohort_members')
+    .delete()
+    .eq('cohort_id', cohortId)
+    .eq('member_id', memberId)
+  return !error
+}
+
+/** Re-notify everyone with a pending invite to a cohort (admin "resend"). */
+export async function resendCohortInvites(cohortId: string): Promise<number> {
+  const db = supabaseServer()
+  const { data: pending } = await db
+    .from('cohort_members')
+    .select('member_id')
+    .eq('cohort_id', cohortId)
+    .eq('status', 'invited')
+  const ids = (pending ?? []).map((r) => r.member_id as string)
+  if (!ids.length) return 0
+  const { data: cohort } = await db.from('mentoring_cohorts').select('name').eq('id', cohortId).maybeSingle()
+  const name = (cohort?.name as string) ?? 'a mentoring cohort'
+  await notifyMembers(ids, {
+    type: 'announcement',
+    body: `Reminder: you've been invited to the ${name} mentoring cohort. Open Mentoring to accept.`,
+    referenceType: 'cohort',
+    referenceId: cohortId,
+  })
+  return ids.length
+}
+
+// ─── Mentor cohort management + chat moderation (PRD §11) ────────────────────
+
+/** True when the member is the assigned mentor of the cohort. */
+export async function isCohortMentor(cohortId: string, memberId: string): Promise<boolean> {
+  const db = supabaseServer()
+  const { data } = await db
+    .from('mentoring_cohorts')
+    .select('mentor_member_id')
+    .eq('id', cohortId)
+    .maybeSingle()
+  return data?.mentor_member_id === memberId
+}
+
+/** True when the member moderates a channel (cohort mentor, or coaching host). */
+export async function isChannelModerator(channelId: string, memberId: string): Promise<boolean> {
+  const db = supabaseServer()
+  const { data: ch } = await db
+    .from('chat_channels')
+    .select('kind, cohort_id, host_member_id')
+    .eq('id', channelId)
+    .maybeSingle()
+  if (!ch) return false
+  if (ch.kind === 'coaching') return ch.host_member_id === memberId
+  if (ch.kind === 'cohort' && ch.cohort_id) return isCohortMentor(ch.cohort_id as string, memberId)
+  return false
+}
+
+/** A member flags a message to the channel's moderator (PRD §11). */
+export async function flagMessage(messageId: string, memberId: string): Promise<boolean> {
+  const db = supabaseServer()
+  const { data: msg } = await db
+    .from('chat_messages')
+    .select('id, channel_id')
+    .eq('id', messageId)
+    .maybeSingle()
+  if (!msg) return false
+  const channelId = msg.channel_id as string
+  if (!(await canAccessChannel(channelId, memberId))) return false
+
+  const { error } = await db
+    .from('chat_messages')
+    .update({ flagged_at: new Date().toISOString(), flagged_by: memberId })
+    .eq('id', messageId)
+  if (error) return false
+
+  // Notify the channel's moderator (mentor / coach).
+  const { data: ch } = await db
+    .from('chat_channels')
+    .select('kind, cohort_id, host_member_id')
+    .eq('id', channelId)
+    .maybeSingle()
+  let moderatorId: string | null = null
+  if (ch?.kind === 'coaching') moderatorId = (ch.host_member_id as string | null) ?? null
+  else if (ch?.kind === 'cohort' && ch.cohort_id) {
+    const { data: c } = await db
+      .from('mentoring_cohorts')
+      .select('mentor_member_id')
+      .eq('id', ch.cohort_id)
+      .maybeSingle()
+    moderatorId = (c?.mentor_member_id as string | null) ?? null
+  }
+  if (moderatorId && moderatorId !== memberId) {
+    await notifyMember(moderatorId, {
+      type: 'announcement',
+      body: 'A message in your cohort chat was flagged for review.',
+      referenceType: 'chat_channel',
+      referenceId: channelId,
+      actorMemberId: memberId,
+    })
+  }
+  return true
+}
+
+/** The channel's moderator soft-deletes a message (PRD §11). */
+export async function deleteMessage(messageId: string, memberId: string): Promise<boolean> {
+  const db = supabaseServer()
+  const { data: msg } = await db
+    .from('chat_messages')
+    .select('id, channel_id')
+    .eq('id', messageId)
+    .maybeSingle()
+  if (!msg) return false
+  if (!(await isChannelModerator(msg.channel_id as string, memberId))) return false
+  const { error } = await db
+    .from('chat_messages')
+    .update({ deleted_at: new Date().toISOString(), deleted_by: memberId })
+    .eq('id', messageId)
+  return !error
+}
+
+/**
+ * Schedule a series of mentoring sessions (PRD §11 — mentor defines "number of
+ * live video sessions, duration, start date"). Spaces them `intervalDays` apart.
+ */
+export async function scheduleMentoringSeries(
+  hostId: string,
+  cohortId: string,
+  startIso: string,
+  count: number,
+  intervalDays: number,
+  durationMin: number,
+  title?: string,
+): Promise<{ ok: boolean; created: number; error?: string }> {
+  const n = Math.max(1, Math.min(Math.floor(count) || 1, 52))
+  const interval = Math.max(0, Math.floor(intervalDays) || 0)
+  const base = new Date(startIso)
+  if (Number.isNaN(base.getTime())) return { ok: false, created: 0, error: 'Invalid start date.' }
+
+  let created = 0
+  let error: string | undefined
+  for (let i = 0; i < n; i++) {
+    const start = new Date(base.getTime() + i * interval * 86_400_000)
+    const r = await scheduleMentoring(hostId, cohortId, start.toISOString(), { durationMin, title })
+    if (r.ok) created++
+    else error = r.error
+  }
+  return { ok: created > 0, created, error }
+}
+
+/** Link a training module to a cohort (mentor or admin). */
+export async function linkCohortTraining(
+  cohortId: string,
+  moduleId: string,
+  isMandatory: boolean,
+  dueAt: string | null,
+): Promise<void> {
+  const db = supabaseServer()
+  await db.from('cohort_training_links').upsert(
+    { cohort_id: cohortId, module_id: moduleId, is_mandatory: isMandatory, due_at: dueAt || null },
+    { onConflict: 'cohort_id,module_id' },
+  )
+}
+
+/** Remove a training module link from a cohort. */
+export async function unlinkCohortTraining(cohortId: string, moduleId: string): Promise<void> {
+  const db = supabaseServer()
+  await db.from('cohort_training_links').delete().eq('cohort_id', cohortId).eq('module_id', moduleId)
 }

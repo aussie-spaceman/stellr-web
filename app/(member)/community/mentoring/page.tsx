@@ -1,16 +1,10 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { Users, ChevronRight } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
-import { supabaseServer } from '@/lib/supabase'
-import {
-  getEntitlement,
-  listMemberSessions,
-  getMemberActions,
-  getCohortChannel,
-} from '@/lib/sessions'
-import { JoinButton } from '@/components/community/JoinButton'
+import { getEntitlement, getMemberActions, listMemberCohorts, listCohortInvites } from '@/lib/sessions'
 import { ActionChecklist } from '@/components/community/ActionChecklist'
-import { ChatPanel } from '@/components/community/ChatPanel'
-import { MaterialDownloadButton } from '@/components/community/MaterialDownloadButton'
+import { CohortInviteCard } from '@/components/community/CohortInviteCard'
 
 export const metadata = { title: 'Community · Mentoring' }
 
@@ -18,89 +12,82 @@ export default async function MentoringPage() {
   const member = await getCurrentMember()
   if (!member) redirect('/sign-up')
 
-  const db = supabaseServer()
-  const [ent, sessions, actions] = await Promise.all([
+  const [ent, actions, cohorts, invites] = await Promise.all([
     getEntitlement(member, 'mentoring'),
-    listMemberSessions(member.id),
     getMemberActions(member.id),
+    listMemberCohorts(member.id),
+    listCohortInvites(member.id),
   ])
-  const mentoring = sessions.filter((s) => s.session_type === 'mentoring')
-
-  // Cohorts the member belongs to → group chat each.
-  const { data: cm } = await db
-    .from('cohort_members')
-    .select('cohort_id, mentoring_cohorts(name)')
-    .eq('member_id', member.id)
-  const cohorts = (cm ?? []).map((r) => {
-    const c = Array.isArray(r.mentoring_cohorts) ? r.mentoring_cohorts[0] : r.mentoring_cohorts
-    return { id: r.cohort_id as string, name: (c as { name: string } | null)?.name ?? 'Cohort' }
-  })
-  const chats = await Promise.all(
-    cohorts.map(async (c) => ({ ...c, channelId: await getCohortChannel(c.id) }))
-  )
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Mentoring</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Small-group mentoring with a Stellr-approved mentor.
+          Small-group mentoring with a Stellr-approved mentor. Open a cohort for its sessions, chat,
+          training, and recordings.
         </p>
       </div>
 
       <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm">
         <span className="font-semibold text-gray-900">{ent.remaining}</span> of {ent.included} included
         sessions remaining
-        {ent.extraCredits > 0 && (
-          <span className="text-indigo-600"> · {ent.extraCredits} purchased</span>
-        )}
+        {ent.extraCredits > 0 && <span className="text-indigo-600"> · {ent.extraCredits} purchased</span>}
         {ent.expiresAt && (
           <span className="text-gray-500"> · expires {new Date(ent.expiresAt).toLocaleDateString()}</span>
         )}
       </div>
 
-      {cohorts.length === 0 && (
-        <p className="text-sm text-gray-400">
-          You&apos;re not in a mentoring cohort yet. An administrator will add you to one.
-        </p>
+      {invites.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Invitations</h2>
+          <ul className="space-y-2">
+            {invites.map((inv) => (
+              <li key={inv.cohortId}>
+                <CohortInviteCard cohortId={inv.cohortId} name={inv.name} />
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Sessions</h2>
-        {mentoring.length === 0 ? (
-          <p className="text-sm text-gray-400">No mentoring sessions scheduled.</p>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Your cohorts</h2>
+        {cohorts.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-200 py-10 text-center">
+            <Users className="mx-auto h-7 w-7 text-gray-300" />
+            <p className="mt-2 text-sm text-gray-500">
+              You&apos;re not in a mentoring cohort yet. An administrator will add you to one.
+            </p>
+          </div>
         ) : (
-          <ul className="space-y-3">
-            {mentoring.map((s) => {
-              const upcoming = new Date(s.scheduled_start) > new Date()
-              return (
-                <li key={s.id} className="rounded-lg border border-gray-200 bg-white p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-gray-900">{s.title ?? 'Mentoring session'}</p>
-                      <p className="text-sm text-gray-500">
-                        {new Date(s.scheduled_start).toLocaleString()} · {s.status}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {s.status === 'scheduled' && upcoming && <JoinButton sessionId={s.id} />}
-                      {s.recording_status === 'available' && (
-                        <MaterialDownloadButton
-                          endpoint={`/api/community/sessions/${s.id}/recording`}
-                          title={`${s.title ?? 'session'}-recording`}
-                          label="Recording"
-                        />
+          <ul className="space-y-2">
+            {cohorts.map((c) => (
+              <li key={c.id}>
+                <Link
+                  href={`/community/mentoring/${c.id}`}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-4 hover:border-gray-300"
+                >
+                  <div>
+                    <p className="flex items-center gap-2 font-medium text-gray-900">
+                      {c.name}
+                      {c.isMentor && (
+                        <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-medium text-purple-700">
+                          Mentor
+                        </span>
                       )}
-                    </div>
-                  </div>
-                  {s.host_notes && (
-                    <p className="mt-2 rounded bg-gray-50 px-3 py-2 text-sm text-gray-600">
-                      <span className="font-medium">Mentor notes:</span> {s.host_notes}
+                      {c.lifecycle === 'archived' && (
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                          Archived
+                        </span>
+                      )}
                     </p>
-                  )}
-                </li>
-              )
-            })}
+                    <p className="mt-0.5 text-xs text-gray-500">{c.memberCount} members</p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
+                </Link>
+              </li>
+            ))}
           </ul>
         )}
       </section>
@@ -109,20 +96,6 @@ export default async function MentoringPage() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">My actions</h2>
         <ActionChecklist actions={actions} />
       </section>
-
-      {chats.length > 0 && (
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Cohort chat</h2>
-          {chats.map((c) => (
-            <ChatPanel
-              key={c.channelId}
-              channelId={c.channelId}
-              selfMemberId={member.id}
-              title={c.name}
-            />
-          ))}
-        </section>
-      )}
     </div>
   )
 }

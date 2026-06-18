@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { inviteMembersToCohort, resendCohortInvites } from '@/lib/sessions'
 
 // Admin: mentoring cohorts (FR-COM-11) — create a cohort, assign a mentor, and
 // manage its members.
@@ -58,12 +59,45 @@ export async function PATCH(req: Request) {
   if (b.addMemberId || b.addMemberEmail) {
     const id = b.addMemberId ?? (await memberIdByEmail(b.addMemberEmail))
     if (!id) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-    await db
-      .from('cohort_members')
-      .upsert({ cohort_id: b.cohortId, member_id: id }, { onConflict: 'cohort_id,member_id' })
+    await inviteMembersToCohort(b.cohortId, [id])
   }
   if (b.removeMemberId) {
     await db.from('cohort_members').delete().eq('cohort_id', b.cohortId).eq('member_id', b.removeMemberId)
+  }
+  // Bulk add members by email (de-blocker for populating a cohort quickly).
+  if (Array.isArray(b.addMemberEmails) && b.addMemberEmails.length) {
+    const ids: string[] = []
+    for (const email of b.addMemberEmails) {
+      if (typeof email !== 'string' || !email.trim()) continue
+      const id = await memberIdByEmail(email)
+      if (id && !ids.includes(id)) ids.push(id)
+    }
+    const invited = ids.length ? await inviteMembersToCohort(b.cohortId, ids) : 0
+    return NextResponse.json({ ok: true, invited, resolved: ids.length, requested: b.addMemberEmails.length })
+  }
+  // Resend pending invites for a cohort (PRD §11 — admin "resend invites").
+  if (b.resendInvites) {
+    const resent = await resendCohortInvites(b.cohortId)
+    return NextResponse.json({ ok: true, resent })
+  }
+  // Link / unlink referenced training material for the cohort (PRD §11).
+  if (b.linkModuleId) {
+    await db.from('cohort_training_links').upsert(
+      {
+        cohort_id: b.cohortId,
+        module_id: b.linkModuleId,
+        is_mandatory: !!b.linkMandatory,
+        due_at: b.linkDueAt || null,
+      },
+      { onConflict: 'cohort_id,module_id' },
+    )
+  }
+  if (b.unlinkModuleId) {
+    await db
+      .from('cohort_training_links')
+      .delete()
+      .eq('cohort_id', b.cohortId)
+      .eq('module_id', b.unlinkModuleId)
   }
   // Archive / re-activate the container (Phase 5 lifecycle). When archiving, record
   // the persistence policy for its content: keepOpen → past members keep access;

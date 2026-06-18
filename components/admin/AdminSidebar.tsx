@@ -80,9 +80,11 @@ export function AdminSidebar({ isAdmin = true }: { isAdmin?: boolean }) {
       {/* Desktop rail */}
       <aside className="hidden lg:flex w-[228px] shrink-0 flex-col gap-0.5 bg-brand-blue-dark px-4 py-6 text-white">
         <Link href="/admin" className="mb-5 flex items-center gap-2.5 px-2">
-          <Image src="/images/logo-icon.svg" alt="Stellr" width={28} height={28} className="brightness-0 invert" />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white">
+            <Image src="/images/logo-icon.svg" alt="Stellr" width={20} height={20} />
+          </span>
           <span className="font-heading text-lg tracking-wide">STELLR</span>
-          <span className="ml-1 rounded-full bg-white/15 px-2 py-0.5 font-subheading text-[10px] font-subheading font-semibold uppercase tracking-wide">
+          <span className="ml-1 rounded-full bg-white/15 px-2 py-0.5 font-subheading text-[10px] font-semibold uppercase tracking-wide">
             {isAdmin ? 'Admin' : 'Events'}
           </span>
         </Link>

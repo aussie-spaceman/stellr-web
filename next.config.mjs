@@ -13,6 +13,13 @@ const nextConfig = {
       { protocol: 'https', hostname: 'images.unsplash.com' },
       { protocol: 'https', hostname: 'img.clerk.com' },
     ],
+    // Allow the brand SVGs in /public to be served through next/image. Without
+    // this the optimizer returns 400 "image type is not allowed" and every
+    // <Image src="*.svg"> (logo mark, wordmark) renders blank. The CSP + sandbox
+    // neutralise any script in an SVG; all our SVGs are first-party assets.
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 }
 

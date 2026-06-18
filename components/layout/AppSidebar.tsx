@@ -64,7 +64,9 @@ export function AppSidebar({ canHost = false }: { canHost?: boolean }) {
       {/* Desktop rail */}
       <aside className="hidden lg:flex w-[228px] shrink-0 flex-col gap-1 bg-brand-blue-dark px-4 py-6 text-white">
         <Link href="/home" className="mb-5 flex items-center gap-2.5 px-2">
-          <Image src="/images/logo-icon.svg" alt="Stellr" width={30} height={30} className="brightness-0 invert" />
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white">
+            <Image src="/images/logo-icon.svg" alt="Stellr" width={22} height={22} />
+          </span>
           <span className="font-heading text-xl tracking-wide">STELLR</span>
         </Link>
 

@@ -53,10 +53,12 @@ export default function IndividualRegistrationForm({
   eventSlug,
   eventTitle,
   prefill,
+  addons = [],
 }: {
   eventSlug: string
   eventTitle: string
   prefill?: RegistrationPrefill | null
+  addons?: { variantId: string; name: string; unitCents: number }[]
 }) {
   // When the registrant is signed in, the email is authoritative and locked
   // (Option A) — a logged-in member can only register under their own address.
@@ -71,6 +73,7 @@ export default function IndividualRegistrationForm({
   const [adultRegistrant, setAdultRegistrant] = useState(false)
   const isAdult = isAdultMember || adultRegistrant
   const [step, setStep] = useState(1)
+  const [merchQty, setMerchQty] = useState<Record<string, number>>({})
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [schoolSelection, setSchoolSelection] = useState<SchoolSelection | null>(
@@ -178,6 +181,10 @@ export default function IndividualRegistrationForm({
             age_bracket === 'High School' ? 'School Student'
             : age_bracket === 'College' ? 'Mentor'
             : 'Adult',
+          // Paid merch add-ons selected during registration (collected at the event).
+          merch_addons: Object.entries(merchQty)
+            .filter(([, q]) => q > 0)
+            .map(([variantId, qty]) => ({ variantId, qty })),
         }),
       })
 
@@ -457,6 +464,30 @@ export default function IndividualRegistrationForm({
               />
             </div>
           </div>
+
+          {addons.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+              <h3 className="font-semibold text-brand-blue-dark">Add Merchandise (optional)</h3>
+              <p className="text-xs text-gray-400 -mt-2">Collect these in person when you check in at the event.</p>
+              {addons.map((a) => (
+                <div key={a.variantId} className="flex items-center justify-between gap-3">
+                  <div className="text-sm">
+                    <span className="text-gray-900">{a.name}</span>
+                    <span className="text-gray-500"> — ${(a.unitCents / 100).toFixed(2)}</span>
+                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    value={merchQty[a.variantId] ?? 0}
+                    onChange={(e) =>
+                      setMerchQty((m) => ({ ...m, [a.variantId]: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))
+                    }
+                    className="input-field w-20"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">

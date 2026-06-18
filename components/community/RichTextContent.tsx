@@ -84,6 +84,13 @@ function renderNode(node: TipTapNode, key: number): React.ReactNode {
         </span>
       )
     }
+    case 'image': {
+      const src = typeof node.attrs?.src === 'string' ? node.attrs.src : null
+      if (!src) return <Fragment key={key} />
+      const alt = typeof node.attrs?.alt === 'string' ? node.attrs.alt : ''
+      // eslint-disable-next-line @next/next/no-img-element
+      return <img key={key} src={src} alt={alt} loading="lazy" className="my-2 max-h-80 rounded-lg" />
+    }
     default:
       return <Fragment key={key}>{children}</Fragment>
   }

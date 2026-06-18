@@ -138,6 +138,7 @@ export default async function CoachingPage() {
               key={c.channelId}
               channelId={c.channelId}
               selfMemberId={member.id}
+              selfName={[member.first_name, member.last_name].filter(Boolean).join(' ') || undefined}
               title={c.coachName}
             />
           ))}

@@ -6,7 +6,7 @@ import { finalizeRedemption } from '@/lib/refunds/redeem'
 import { applyCampaignContentTier } from '@/lib/event-participation-sync'
 import { logActivity } from '@/lib/activity-log'
 import { handleStoreOrderPaid } from '@/lib/store/orders'
-import { allocateIncludedShirts } from '@/lib/store/event-merch'
+import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -142,8 +142,8 @@ async function markIndividualPayment(registrationId: string, participantEmail: s
       .from('registrations')
       .update({ status: 'confirmed' })
       .eq('id', registrationId)
-    // Whole group now paid → allocate included shirts (idempotent, non-fatal).
-    await allocateIncludedShirts(db, registrationId)
+    // Whole group now paid → finalize event merch (idempotent, non-fatal).
+    await finalizeRegistrationMerch(db, registrationId)
   }
 }
 
@@ -156,9 +156,9 @@ async function confirmRegistration(registrationId: string, isGroup: boolean) {
   // fire the Premium → Pathfinder membership grant (decisions D2/D3). Non-fatal.
   await applyCampaignContentTier(db, registrationId)
 
-  // Allocate the event's included shirt to every participant (sized from their
-  // t-shirt size), as awaiting-batch line items. Idempotent + non-fatal.
-  await allocateIncludedShirts(db, registrationId)
+  // Finalize event merch: allocate the included shirt to every participant
+  // (sized from their t-shirt size) and activate any paid add-ons. Idempotent + non-fatal.
+  await finalizeRegistrationMerch(db, registrationId)
 
   if (isGroup) {
     const { data: reg } = await db.from('registrations')

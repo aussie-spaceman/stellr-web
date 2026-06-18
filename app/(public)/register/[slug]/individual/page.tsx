@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation'
 import { getEventBySlug } from '@/lib/sanity'
 import { formatDateRange } from '@/lib/utils'
 import { getRegistrationPrefill } from '@/lib/registration-prefill'
+import { supabaseServer } from '@/lib/supabase'
+import { listEventAddons } from '@/lib/store/event-merch'
 import IndividualRegistrationForm from '@/components/forms/IndividualRegistrationForm'
 
 interface PageProps {
@@ -14,6 +16,7 @@ export default async function IndividualRegistrationPage({ params }: PageProps) 
   if (!event) notFound()
 
   const prefill = await getRegistrationPrefill().catch(() => null)
+  const addons = await listEventAddons(supabaseServer(), slug).catch(() => [])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -54,6 +57,7 @@ export default async function IndividualRegistrationPage({ params }: PageProps) 
           eventSlug={slug}
           eventTitle={event.title}
           prefill={prefill}
+          addons={addons}
         />
       </div>
     </div>

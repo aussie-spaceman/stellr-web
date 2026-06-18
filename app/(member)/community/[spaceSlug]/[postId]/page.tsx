@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, getSpaceBySlug, memberMeetsTier } from '@/lib/community'
+import { markPostRead } from '@/lib/community-feed'
 import { RichTextContent } from '@/components/community/RichTextContent'
 import { ReactionBar } from '@/components/community/ReactionBar'
 import { CommentForm } from '@/components/community/CommentForm'
@@ -63,6 +64,9 @@ export default async function PostDetailPage({
     .maybeSingle()
 
   if (!post || post.status === 'deleted') notFound()
+
+  // Mark this post read for the member (clears its unread badge).
+  await markPostRead(member.id, postId)
 
   const { data: comments } = await db
     .from('community_comments')

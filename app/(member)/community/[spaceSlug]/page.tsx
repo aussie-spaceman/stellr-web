@@ -76,7 +76,12 @@ export default async function SpaceFeedPage({
       {space.description && <p className="mt-1 text-sm text-gray-500">{space.description}</p>}
 
       <div className="mt-5">
-        <ChatPanel channelId={chatChannelId} selfMemberId={member.id} title={`${space.name} chat`} />
+        <ChatPanel
+          channelId={chatChannelId}
+          selfMemberId={member.id}
+          selfName={[member.first_name, member.last_name].filter(Boolean).join(' ') || undefined}
+          title={`${space.name} chat`}
+        />
       </div>
 
       <div className="mt-5">

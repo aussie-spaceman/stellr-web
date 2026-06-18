@@ -20,18 +20,24 @@ interface Message {
 export function ChatPanel({
   channelId,
   selfMemberId,
+  selfName,
   title,
   canModerate = false,
 }: {
   channelId: string
   selfMemberId: string
+  selfName?: string
   title: string
   canModerate?: boolean
 }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
+  const [onlineCount, setOnlineCount] = useState(0)
+  const [typing, setTyping] = useState<string[]>([])
   const endRef = useRef<HTMLDivElement>(null)
+  const channelRef = useRef<ReturnType<ReturnType<typeof createBrowserSupabase>['channel']> | null>(null)
+  const lastTypingSent = useRef(0)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/community/chat?channelId=${channelId}`)
@@ -48,31 +54,61 @@ export function ChatPanel({
   }, [load])
 
   // Realtime push: fetch immediately on insert instead of waiting for the poll.
+  // The same channel carries presence (who's online) and a typing broadcast.
   // Best-effort — falls back to the 8s poll if third-party auth isn't configured.
   const { getToken } = useAuth()
   useEffect(() => {
     let channel: ReturnType<ReturnType<typeof createBrowserSupabase>['channel']> | null = null
+    const timers: Record<string, ReturnType<typeof setTimeout>> = {}
     try {
       const sb = createBrowserSupabase(getToken)
       channel = sb
-        .channel(`chat:${channelId}`)
+        .channel(`chat:${channelId}`, { config: { presence: { key: selfMemberId } } })
         .on(
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `channel_id=eq.${channelId}` },
           () => load(),
         )
-        .subscribe()
+        .on('presence', { event: 'sync' }, () => {
+          setOnlineCount(Object.keys(channel?.presenceState() ?? {}).length)
+        })
+        .on('broadcast', { event: 'typing' }, ({ payload }) => {
+          const { memberId, name } = (payload ?? {}) as { memberId?: string; name?: string }
+          if (!memberId || memberId === selfMemberId) return
+          const label = name || 'Someone'
+          setTyping((prev) => (prev.includes(label) ? prev : [...prev, label]))
+          clearTimeout(timers[memberId])
+          timers[memberId] = setTimeout(() => setTyping((prev) => prev.filter((n) => n !== label)), 3500)
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') channel?.track({ memberId: selfMemberId, name: selfName ?? 'Member' })
+        })
+      channelRef.current = channel
     } catch {
       /* realtime is optional; polling covers it */
     }
     return () => {
+      Object.values(timers).forEach(clearTimeout)
       channel?.unsubscribe()
+      channelRef.current = null
     }
-  }, [channelId, getToken, load])
+  }, [channelId, getToken, load, selfMemberId, selfName])
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
+
+  // Throttled "typing" ping as the member writes.
+  const pingTyping = () => {
+    const now = Date.now()
+    if (now - lastTypingSent.current < 1500) return
+    lastTypingSent.current = now
+    channelRef.current?.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { memberId: selfMemberId, name: selfName ?? 'Member' },
+    })
+  }
 
   const send = async () => {
     if (!draft.trim()) return
@@ -103,7 +139,15 @@ export function ChatPanel({
 
   return (
     <div className="flex h-80 flex-col rounded-lg border border-gray-200 bg-white">
-      <div className="border-b border-gray-100 px-4 py-2 text-sm font-semibold text-gray-700">{title}</div>
+      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2">
+        <span className="text-sm font-semibold text-gray-700">{title}</span>
+        {onlineCount > 0 && (
+          <span className="flex items-center gap-1 text-xs text-gray-400">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+            {onlineCount} online
+          </span>
+        )}
+      </div>
       <div className="flex-1 space-y-2 overflow-y-auto px-4 py-3">
         {messages.length === 0 && <p className="text-sm text-gray-400">No messages yet — say hello.</p>}
         {messages.map((m) => {
@@ -145,10 +189,17 @@ export function ChatPanel({
         })}
         <div ref={endRef} />
       </div>
+      <div className="h-4 px-4 text-xs italic text-gray-400">
+        {typing.length > 0 &&
+          (typing.length === 1 ? `${typing[0]} is typing…` : `${typing.slice(0, 2).join(', ')} are typing…`)}
+      </div>
       <div className="flex items-center gap-2 border-t border-gray-100 p-2">
         <input
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            setDraft(e.target.value)
+            pingTyping()
+          }}
           onKeyDown={(e) => e.key === 'Enter' && send()}
           placeholder="Message…"
           className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"

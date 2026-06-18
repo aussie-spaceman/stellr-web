@@ -10,6 +10,7 @@ import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 import { getCurrentMember } from '@/lib/community'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
+import { prepareRegistrationAddons, addRegistrationAddons } from '@/lib/store/event-merch'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
@@ -239,20 +240,36 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Look up Stripe Price ID from Sanity
+    // Look up Stripe Price ID from Sanity + price any merch add-ons selected.
     const event = await getEventBySlug(event_slug)
     const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId
     const stripe = getStripe()
 
-    if (!stripePriceId || !stripe) {
-      // No payment configured — sign in (client) and go straight to /community.
+    // Validate + persist paid add-ons (pending until payment clears; activated
+    // into the event batch on confirmation).
+    const addonLines = await prepareRegistrationAddons(db, event_slug, body.merch_addons ?? [])
+    if (addonLines.length > 0) {
+      await addRegistrationAddons(db, regId, addonLines, memberId)
+    }
+
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = []
+    if (stripePriceId) lineItems.push({ price: stripePriceId, quantity: 1 })
+    for (const l of addonLines) {
+      lineItems.push({
+        quantity: l.qty,
+        price_data: { currency: 'usd', unit_amount: l.unitCents, product_data: { name: l.name } },
+      })
+    }
+
+    if (!stripe || lineItems.length === 0) {
+      // No payment due — sign in (client) and go straight to /community.
       return NextResponse.json({ registrationId: regId, checkoutUrl: null, signInToken }, { status: 201 })
     }
 
-    // Create Stripe Checkout session
+    // Create Stripe Checkout session (event fee + any add-ons)
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      line_items: [{ price: stripePriceId, quantity: 1 }],
+      line_items: lineItems,
       client_reference_id: regId,
       customer_email: email,
       // Always mint a Customer so the receipt is retrievable in the billing tab

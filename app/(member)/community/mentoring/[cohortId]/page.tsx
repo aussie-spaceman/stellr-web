@@ -227,7 +227,13 @@ export default async function CohortSpacePage({
       {/* Group chat */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Cohort chat</h2>
-        <ChatPanel channelId={channelId} selfMemberId={member.id} title={cohort.name} canModerate={cohort.isMentor} />
+        <ChatPanel
+          channelId={channelId}
+          selfMemberId={member.id}
+          selfName={[member.first_name, member.last_name].filter(Boolean).join(' ') || undefined}
+          title={cohort.name}
+          canModerate={cohort.isMentor}
+        />
       </section>
     </div>
   )

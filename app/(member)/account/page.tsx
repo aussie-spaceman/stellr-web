@@ -10,6 +10,7 @@ import { DocusignsSection } from '@/components/member/DocusignsSection'
 import { MyRegistrations } from '@/components/member/MyRegistrations'
 import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
 import { AddressBook } from '@/components/account/AddressBook'
+import { OrdersList } from '@/components/account/OrdersList'
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline'
 import Link from 'next/link'
 
@@ -191,6 +192,9 @@ export default async function AccountPage({
             <DocusignsSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
             <div className="rounded-xl border border-gray-200 bg-white p-5">
               <AddressBook />
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-5">
+              <OrdersList />
             </div>
           </div>
           <div>

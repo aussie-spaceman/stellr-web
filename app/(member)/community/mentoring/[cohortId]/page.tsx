@@ -8,9 +8,11 @@ import {
   listCohortTraining,
   getCohortChannel,
 } from '@/lib/sessions'
+import { listModules } from '@/lib/training'
 import { googleCalendarUrl } from '@/lib/calendar'
 import { JoinButton } from '@/components/community/JoinButton'
 import { ChatPanel } from '@/components/community/ChatPanel'
+import { MentorCohortControls } from '@/components/community/MentorCohortControls'
 import { MaterialDownloadButton } from '@/components/community/MaterialDownloadButton'
 
 export const metadata = { title: 'Community · Cohort' }
@@ -55,10 +57,11 @@ export default async function CohortSpacePage({
     )
   }
 
-  const [sessions, training, channelId] = await Promise.all([
+  const [sessions, training, channelId, allModules] = await Promise.all([
     listCohortSessions(cohortId),
     listCohortTraining(member, cohortId),
     getCohortChannel(cohortId),
+    cohort.isMentor ? listModules(member) : Promise.resolve([]),
   ])
 
   const now = Date.now()
@@ -81,6 +84,21 @@ export default async function CohortSpacePage({
           )}
         </div>
       </div>
+
+      {/* Mentor controls */}
+      {cohort.isMentor && (
+        <MentorCohortControls
+          cohortId={cohortId}
+          modules={allModules.map((m) => ({ id: m.id, title: m.title }))}
+          linkedTraining={training.map((t) => ({
+            moduleId: t.moduleId,
+            title: t.title,
+            isMandatory: t.isMandatory,
+            dueAt: t.dueAt ?? null,
+          }))}
+          onUpdate={() => {}}
+        />
+      )}
 
       {/* Scheduled sessions */}
       <section>
@@ -210,7 +228,7 @@ export default async function CohortSpacePage({
       {/* Group chat */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Cohort chat</h2>
-        <ChatPanel channelId={channelId} selfMemberId={member.id} title={cohort.name} />
+        <ChatPanel channelId={channelId} selfMemberId={member.id} title={cohort.name} canModerate={cohort.isMentor} />
       </section>
     </div>
   )

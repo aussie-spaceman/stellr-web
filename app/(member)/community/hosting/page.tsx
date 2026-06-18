@@ -100,6 +100,26 @@ export default async function HostingPage() {
           </ul>
         )}
       </section>
+      {/* Coach notes board — all completed sessions with notes */}
+      {caps.canCoach && (() => {
+        const noted = sessions.filter((s) => s.status === 'completed' && s.host_notes)
+        if (noted.length === 0) return null
+        return (
+          <section>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Session notes</h2>
+            <ul className="space-y-2">
+              {noted.map((s) => (
+                <li key={s.id} className="rounded-lg border border-gray-200 bg-white p-3">
+                  <p className="text-xs text-gray-400">
+                    {new Date(s.scheduled_start).toLocaleDateString()} · {s.title ?? 'Session'}
+                  </p>
+                  <p className="mt-1 text-sm text-gray-700">{s.host_notes}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+      })()}
     </div>
   )
 }

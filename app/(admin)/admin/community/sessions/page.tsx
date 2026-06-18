@@ -7,6 +7,8 @@ import {
   type AdminEntitlement,
   type AdminModule,
 } from '@/components/admin/community/SessionsManager'
+import { SessionCalendar } from '@/components/community/SessionCalendar'
+import { AdminOversight } from '@/components/admin/community/AdminOversight'
 
 export const metadata = { title: 'Admin — Coaching & Mentoring' }
 
@@ -22,7 +24,7 @@ function nameOf(rel: unknown): string | null {
 export default async function AdminSessionsPage() {
   const db = supabaseServer()
 
-  const [{ data: tiers }, { data: hostRows }, { data: cohortRows }, { data: ents }, { data: moduleRows }] =
+  const [{ data: tiers }, { data: hostRows }, { data: cohortRows }, { data: ents }, { data: moduleRows }, { data: allSessions }] =
     await Promise.all([
       db.from('membership_tiers').select('id, name').order('sort_order'),
       db.from('session_hosts').select('member_id, can_coach, can_mentor, members(first_name, last_name)'),
@@ -36,6 +38,7 @@ export default async function AdminSessionsPage() {
         .from('session_entitlements')
         .select('tier_id, session_type, included_sessions, validity_days, extra_stripe_price_id'),
       db.from('training_modules').select('id, title').eq('is_published', true).order('title'),
+      db.from('sessions').select('id, title, scheduled_start, status').order('scheduled_start', { ascending: false }).limit(200),
     ])
 
   const hosts: AdminHost[] = (hostRows ?? []).map((h) => ({
@@ -83,6 +86,13 @@ export default async function AdminSessionsPage() {
         </p>
       </div>
 
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Session calendar</h2>
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
+          <SessionCalendar sessions={(allSessions ?? []) as { id: string; title: string | null; scheduled_start: string; status: string }[]} />
+        </div>
+      </section>
+
       <SessionsManager
         tiers={(tiers ?? []) as AdminTier[]}
         hosts={hosts}
@@ -90,6 +100,11 @@ export default async function AdminSessionsPage() {
         entitlements={(ents ?? []) as AdminEntitlement[]}
         modules={modules}
       />
+
+      <section className="mt-10">
+        <h2 className="mb-4 text-lg font-semibold text-gray-900">Oversight</h2>
+        <AdminOversight cohorts={cohorts.map((c) => ({ id: c.id, name: c.name }))} />
+      </section>
     </div>
   )
 }

@@ -414,24 +414,35 @@ export async function setHostNotes(sessionId: string, hostId: string, notes: str
 
 // ─── Actions (host sets, member checks off) ──────────────────────────────────
 
+export interface ActionInput {
+  title: string
+  dueDate?: string | null
+  trainingModuleId?: string | null
+}
+
 export async function addActions(
   sessionId: string,
   hostId: string,
   memberId: string,
-  titles: string[]
+  actions: (string | ActionInput)[]
 ): Promise<boolean> {
   const db = supabaseServer()
   const { data: s } = await db.from('sessions').select('host_member_id').eq('id', sessionId).maybeSingle()
   if (!s || s.host_member_id !== hostId) return false
-  if (titles.length === 0) return true
+  if (actions.length === 0) return true
   const { error } = await db.from('session_actions').insert(
-    titles.map((title, i) => ({
-      session_id: sessionId,
-      member_id: memberId,
-      title,
-      created_by: hostId,
-      display_order: i,
-    }))
+    actions.map((a, i) => {
+      const obj = typeof a === 'string' ? { title: a } : a
+      return {
+        session_id: sessionId,
+        member_id: memberId,
+        title: obj.title,
+        created_by: hostId,
+        display_order: i,
+        due_date: obj.dueDate ?? null,
+        training_module_id: obj.trainingModuleId ?? null,
+      }
+    })
   )
   if (!error) {
     await notifyMember(memberId, {
@@ -461,16 +472,41 @@ export interface MemberAction {
   title: string
   is_done: boolean
   session_id: string
+  due_date: string | null
+  training_module_id: string | null
+  module_title: string | null
 }
 
 export async function getMemberActions(memberId: string): Promise<MemberAction[]> {
   const db = supabaseServer()
   const { data } = await db
     .from('session_actions')
-    .select('id, title, is_done, session_id')
+    .select('id, title, is_done, session_id, due_date, training_module_id')
     .eq('member_id', memberId)
     .order('created_at', { ascending: false })
-  return (data ?? []) as MemberAction[]
+  if (!data || data.length === 0) return []
+  interface RawAction { id: string; title: string; is_done: boolean; session_id: string; due_date: string | null; training_module_id: string | null }
+  const rows = data as RawAction[]
+  const moduleIds = [...new Set(rows.map((r) => r.training_module_id).filter(Boolean))] as string[]
+  let moduleMap: Record<string, string> = {}
+  if (moduleIds.length > 0) {
+    const { data: mods } = await db.from('training_modules').select('id, title').in('id', moduleIds)
+    moduleMap = Object.fromEntries((mods ?? []).map((m) => [m.id, m.title as string]))
+  }
+  return rows.map((r) => ({
+    ...r,
+    module_title: r.training_module_id ? moduleMap[r.training_module_id] ?? null : null,
+  }))
+}
+
+export async function autoCompleteTrainingAction(memberId: string, moduleId: string): Promise<void> {
+  const db = supabaseServer()
+  await db
+    .from('session_actions')
+    .update({ is_done: true, completed_at: new Date().toISOString() })
+    .eq('member_id', memberId)
+    .eq('training_module_id', moduleId)
+    .eq('is_done', false)
 }
 
 // ─── Sessions listing ────────────────────────────────────────────────────────

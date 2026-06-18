@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, memberCanAccess } from '@/lib/community'
+import { autoCompleteTrainingAction } from '@/lib/sessions'
 
 // POST /api/community/training/progress
 // Body: { itemId: string, status: 'completed' | 'in_progress' }
@@ -37,6 +38,23 @@ export async function POST(req: Request) {
   if (error) {
     console.error('[training] progress error:', error)
     return NextResponse.json({ error: 'Could not save progress' }, { status: 500 })
+  }
+
+  if (status === 'completed') {
+    const moduleId = item.module_id as string
+    const { count } = await db
+      .from('training_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('module_id', moduleId)
+    const { count: doneCount } = await db
+      .from('training_progress')
+      .select('id', { count: 'exact', head: true })
+      .eq('member_id', member.id)
+      .eq('status', 'completed')
+      .in('item_id', (await db.from('training_items').select('id').eq('module_id', moduleId)).data?.map((r) => r.id) ?? [])
+    if (count != null && doneCount != null && doneCount >= count) {
+      await autoCompleteTrainingAction(member.id, moduleId)
+    }
   }
 
   return NextResponse.json({ ok: true })

@@ -2,9 +2,11 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Users, ChevronRight } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
-import { getEntitlement, getMemberActions, listMemberCohorts, listCohortInvites } from '@/lib/sessions'
+import { getEntitlement, getMemberActions, listMemberCohorts, listCohortInvites, listMemberSessions } from '@/lib/sessions'
+import { getUpcomingReminders } from '@/lib/reminders'
 import { ActionChecklist } from '@/components/community/ActionChecklist'
 import { CohortInviteCard } from '@/components/community/CohortInviteCard'
+import { SessionCalendar } from '@/components/community/SessionCalendar'
 
 export const metadata = { title: 'Community · Mentoring' }
 
@@ -12,11 +14,13 @@ export default async function MentoringPage() {
   const member = await getCurrentMember()
   if (!member) redirect('/sign-up')
 
-  const [ent, actions, cohorts, invites] = await Promise.all([
+  const [ent, actions, cohorts, invites, sessions, reminders] = await Promise.all([
     getEntitlement(member, 'mentoring'),
     getMemberActions(member.id),
     listMemberCohorts(member.id),
     listCohortInvites(member.id),
+    listMemberSessions(member.id),
+    getUpcomingReminders(member.id),
   ])
 
   return (
@@ -37,6 +41,30 @@ export default async function MentoringPage() {
           <span className="text-gray-500"> · expires {new Date(ent.expiresAt).toLocaleDateString()}</span>
         )}
       </div>
+
+      {reminders.length > 0 && (
+        <div className="space-y-1">
+          {reminders.filter((r) => r.bucket === '1day').length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+              <strong>Tomorrow:</strong>{' '}
+              {reminders.filter((r) => r.bucket === '1day').map((r) => r.title).join(', ')}
+            </div>
+          )}
+          {reminders.filter((r) => r.bucket === '1week').length > 0 && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
+              <strong>This week:</strong>{' '}
+              {reminders.filter((r) => r.bucket === '1week').map((r) => r.title).join(', ')}
+            </div>
+          )}
+        </div>
+      )}
+
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Calendar</h2>
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
+          <SessionCalendar sessions={sessions} />
+        </div>
+      </section>
 
       {invites.length > 0 && (
         <section>

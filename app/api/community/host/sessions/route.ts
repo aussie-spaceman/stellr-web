@@ -35,10 +35,11 @@ export async function POST(req: Request) {
         : NextResponse.json({ error: 'Not allowed' }, { status: 403 })
     }
     case 'actions': {
-      if (!b.sessionId || !b.memberId || !Array.isArray(b.titles)) {
-        return NextResponse.json({ error: 'sessionId, memberId, titles[] required' }, { status: 400 })
+      const items = Array.isArray(b.actions) ? b.actions : Array.isArray(b.titles) ? b.titles : null
+      if (!b.sessionId || !b.memberId || !items) {
+        return NextResponse.json({ error: 'sessionId, memberId, actions[]|titles[] required' }, { status: 400 })
       }
-      const ok = await addActions(b.sessionId, member.id, b.memberId, b.titles)
+      const ok = await addActions(b.sessionId, member.id, b.memberId, items)
       return ok
         ? NextResponse.json({ ok: true })
         : NextResponse.json({ error: 'Not allowed' }, { status: 403 })

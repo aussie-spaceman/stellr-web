@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { inviteMembersToCohort, resendCohortInvites } from '@/lib/sessions'
+import { inviteMembersToCohort, resendCohortInvites, scheduleMentoring } from '@/lib/sessions'
 
 // Admin: mentoring cohorts (FR-COM-11) — create a cohort, assign a mentor, and
 // manage its members.
@@ -98,6 +98,17 @@ export async function PATCH(req: Request) {
       .delete()
       .eq('cohort_id', b.cohortId)
       .eq('module_id', b.unlinkModuleId)
+  }
+  // Admin direct session create — admin picks host + cohort + time.
+  if (b.action === 'scheduleSession') {
+    if (!b.hostEmail || !b.start) {
+      return NextResponse.json({ error: 'hostEmail and start required' }, { status: 400 })
+    }
+    const hostId = await memberIdByEmail(b.hostEmail)
+    if (!hostId) return NextResponse.json({ error: 'Host not found' }, { status: 404 })
+    const r = await scheduleMentoring(hostId, b.cohortId, b.start)
+    if (!r.ok) return NextResponse.json({ error: r.error }, { status: 400 })
+    return NextResponse.json({ ok: true, sessionId: r.sessionId })
   }
   // Archive / re-activate the container (Phase 5 lifecycle). When archiving, record
   // the persistence policy for its content: keepOpen → past members keep access;

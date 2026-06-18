@@ -26,10 +26,12 @@ export default function MemberPicker({
   const [results, setResults] = useState<PickedMember[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [active, setActive] = useState(0)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   function onChange(v: string) {
     setQ(v)
+    setActive(0)
     if (timer.current) clearTimeout(timer.current)
     if (v.trim().length < 2) {
       setResults([])
@@ -42,6 +44,7 @@ export default function MemberPicker({
         const res = await fetch(`/api/admin/members/search?q=${encodeURIComponent(v.trim())}`)
         const json = res.ok ? await res.json() : { members: [] }
         setResults(json.members ?? [])
+        setActive(0)
         setOpen(true)
       } finally {
         setLoading(false)
@@ -53,7 +56,27 @@ export default function MemberPicker({
     onPick(m)
     setQ('')
     setResults([])
+    setActive(0)
     setOpen(false)
+  }
+
+  // Keyboard support: ArrowUp/Down to move, Enter to pick the highlighted match,
+  // Escape to close. Without this, hitting Enter after typing does nothing.
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open || results.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActive((i) => Math.min(i + 1, results.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActive((i) => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      const m = results[active]
+      if (m) pick(m)
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+    }
   }
 
   const name = (m: PickedMember) =>
@@ -64,6 +87,7 @@ export default function MemberPicker({
       <input
         value={q}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
         onFocus={() => results.length && setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder={placeholder}
@@ -72,13 +96,14 @@ export default function MemberPicker({
       />
       {open && (
         <ul className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
-          {results.map((m) => (
+          {results.map((m, i) => (
             <li key={m.id}>
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setActive(i)}
                 onClick={() => pick(m)}
-                className="block w-full px-3 py-1.5 text-left text-sm hover:bg-gray-50"
+                className={`block w-full px-3 py-1.5 text-left text-sm ${i === active ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
               >
                 <span className="font-medium text-gray-900">{name(m)}</span>
                 <span className="ml-2 text-xs text-gray-400">

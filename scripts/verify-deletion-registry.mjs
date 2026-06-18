@@ -39,6 +39,10 @@ const CHECKS = [
   ['refund_policies', 'scope'], ['account_credits', 'member_id'],
   ['account_credits', 'remaining_cents'], ['credit_redemptions', 'credit_id'],
   ['event_refunds', 'participant_id'],
+  // web store (migration 051)
+  ['store_products', 'status'], ['store_variants', 'product_id'],
+  ['store_tier_discounts', 'product_id'], ['store_event_discounts', 'product_id'],
+  ['store_orders', 'status'], ['member_addresses', 'id'],
 ]
 
 let ok = 0, bad = 0

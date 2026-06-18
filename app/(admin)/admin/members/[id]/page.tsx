@@ -67,7 +67,7 @@ export default async function AdminMemberPage({
                 status: summary.check.status,
                 ordered_at: summary.check.ordered_at,
                 expires_at: summary.check.expires_at,
-                certn_application_id: summary.check.certn_application_id,
+                provider_report_ref: summary.check.provider_report_ref,
               }
             : null,
         }

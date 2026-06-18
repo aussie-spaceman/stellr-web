@@ -2,24 +2,26 @@ import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
-import { certnConfigured, orderCheck, defaultRequestFlags } from '@/lib/certn'
+import { getBackgroundProvider } from '@/lib/background-provider'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { requiresBackgroundCheck } from '@/lib/compliance'
 
 // POST /api/admin/members/[id]/background-check
-// Admin orders a Certn background check for an adult member (hosted invite flow).
-// Stellr is billed per check by Certn; the member is NOT charged. "Payment occurs
-// automatically once ordered" (PRD) is satisfied by Certn's own per-check billing.
+// Admin orders a background check for an adult member via the hosted-invite flow
+// (the provider emails the candidate to complete their info + consent). Stellr is
+// billed per report; the member is NOT charged. "Payment occurs automatically
+// once ordered" (PRD) is satisfied by the provider's own per-report billing.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
   if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const db = supabaseServer()
+  const provider = getBackgroundProvider()
 
   const { data: member } = await db
     .from('members')
-    .select('id, first_name, last_name, email, event_role, date_of_birth')
+    .select('id, first_name, last_name, email, event_role, date_of_birth, member_teacher_licenses(licensing_state)')
     .eq('id', id)
     .maybeSingle()
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
@@ -40,42 +42,47 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'A background check is already in progress for this member' }, { status: 409 })
   }
 
-  if (!certnConfigured()) {
-    return NextResponse.json({ error: 'Certn is not configured (CERTN_CLIENT_ID / CERTN_CLIENT_SECRET)' }, { status: 503 })
+  if (!provider.configured()) {
+    return NextResponse.json(
+      { error: `Background-check provider (${provider.name}) is not configured` },
+      { status: 503 },
+    )
   }
 
   const actor = await actorFromAuth()
-  const flags = defaultRequestFlags()
+  const state =
+    (member.member_teacher_licenses as { licensing_state: string | null }[] | null)?.[0]?.licensing_state ?? null
 
   let ordered
   try {
-    ordered = await orderCheck({
+    ordered = await provider.order({
       email: member.email,
       firstName: member.first_name ?? '',
       lastName: member.last_name ?? '',
-      flags,
+      state,
     })
   } catch (err) {
-    console.error('[admin] certn order failed:', err)
+    console.error('[admin] background-check order failed:', err)
     // Record the failed attempt so it's visible/auditable.
     await db.from('member_background_checks').insert({
       member_id: id,
-      provider: 'certn',
-      request_flags: flags,
+      provider: provider.name,
       status: 'error',
       ordered_by: actor.actorMemberId ?? null,
       ordered_label: actor.actorLabel ?? null,
     })
-    return NextResponse.json({ error: 'Failed to order background check with Certn' }, { status: 502 })
+    return NextResponse.json({ error: `Failed to order background check with ${provider.name}` }, { status: 502 })
   }
 
   const { data: row, error } = await db
     .from('member_background_checks')
     .insert({
       member_id: id,
-      provider: 'certn',
-      certn_application_id: ordered.applicationId,
-      request_flags: ordered.flags,
+      provider: provider.name,
+      provider_candidate_ref: ordered.candidateRef,
+      provider_invitation_ref: ordered.invitationRef,
+      provider_report_ref: ordered.reportRef,
+      invitation_url: ordered.invitationUrl,
       status: 'invited',
       ordered_by: actor.actorMemberId ?? null,
       ordered_label: actor.actorLabel ?? null,
@@ -93,7 +100,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       category: 'compliance',
       action: 'background_check_ordered',
       summary: 'Background check ordered — invitation sent to the member',
-      metadata: { applicationId: ordered.applicationId },
+      metadata: { provider: provider.name, candidateRef: ordered.candidateRef, invitationRef: ordered.invitationRef },
       ...actor,
     },
     db,

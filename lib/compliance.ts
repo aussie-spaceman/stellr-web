@@ -40,7 +40,8 @@ export interface BackgroundCheck {
   id: string
   status: 'invited' | 'in_progress' | 'passed' | 'referred' | 'cancelled' | 'error'
   result: string | null
-  certn_application_id: string | null
+  /** Vendor report id (Checkr) — the handle for a "view report" link. */
+  provider_report_ref: string | null
   ordered_at: string
   completed_at: string | null
   expires_at: string | null
@@ -169,7 +170,7 @@ interface MemberComplianceRow {
 const COMPLIANCE_SELECT = `
   id, email, event_role, date_of_birth,
   member_teacher_licenses(id, license_number, licensing_state, expiry_date, verified_at, verified_label),
-  member_background_checks(id, status, result, certn_application_id, ordered_at, completed_at, expires_at, report_pdf_url)
+  member_background_checks(id, status, result, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url)
 `
 
 export interface ComplianceRecords {

@@ -18,7 +18,7 @@ export interface MemberCompliance {
   state: ComplianceState
   detail: string | null
   license: TeacherLicense | null
-  check: { status: string; ordered_at: string; expires_at: string | null; certn_application_id: string | null } | null
+  check: { status: string; ordered_at: string; expires_at: string | null; provider_report_ref: string | null } | null
 }
 
 function fmt(iso: string) {
@@ -149,7 +149,7 @@ export function MemberCompliancePanel({
               onClick={() => {
                 if (
                   confirm(
-                    'Order a background check from Certn for this member?\n\nThe member will be emailed to complete it. Stellr is billed per check.',
+                    'Order a background check for this member?\n\nThe member will be emailed to complete it. Stellr is billed per check.',
                   )
                 )
                   post(`/api/admin/members/${memberId}/background-check`)

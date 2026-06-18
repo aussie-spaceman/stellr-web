@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { CalendarRange, BookOpen, Plus, X, Loader2 } from 'lucide-react'
 
 interface LinkedTraining {
@@ -19,13 +20,13 @@ export function MentorCohortControls({
   cohortId,
   modules,
   linkedTraining,
-  onUpdate,
 }: {
   cohortId: string
   modules: AvailableModule[]
   linkedTraining: LinkedTraining[]
-  onUpdate: () => void
 }) {
+  const router = useRouter()
+  const onUpdate = () => router.refresh()
   return (
     <section className="space-y-6 rounded-lg border border-purple-100 bg-purple-50/30 p-5">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-purple-700">Mentor controls</h2>

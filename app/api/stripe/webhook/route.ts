@@ -5,6 +5,7 @@ import { sendEmail, individualConfirmationEmail, groupPaymentConfirmedEmail } fr
 import { finalizeRedemption } from '@/lib/refunds/redeem'
 import { applyCampaignContentTier } from '@/lib/event-participation-sync'
 import { logActivity } from '@/lib/activity-log'
+import { handleStoreOrderPaid } from '@/lib/store/orders'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -318,6 +319,10 @@ export async function POST(req: NextRequest) {
             stripe_session_id: session.id,
           })
         }
+      } else if (session.metadata?.type === 'store_order') {
+        // Web-store purchase (direct-to-consumer) — mark paid, place the Printful
+        // order, log to activity history, email the buyer. Idempotent.
+        await handleStoreOrderPaid(session)
       } else if (session.metadata?.isIndividualGroupPayment === 'true') {
         // Individual member payment within a group registration
         const { registrationId, participantEmail } = session.metadata

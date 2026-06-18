@@ -96,7 +96,6 @@ export default async function CohortSpacePage({
             isMandatory: t.isMandatory,
             dueAt: t.dueAt ?? null,
           }))}
-          onUpdate={() => {}}
         />
       )}
 

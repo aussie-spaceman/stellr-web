@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { EventRosterData, PaymentPill, DocusignPill, RosterParticipant } from '@/lib/event-admin'
+import type { ComplianceState } from '@/lib/compliance'
 import type { CompanyRow } from '@/components/admin/EventCompanies'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { displayEventRole } from '@/lib/member-enums'
@@ -23,29 +24,52 @@ const DOCUSIGN_PILLS: Record<DocusignPill, { label: string; className: string }>
   complete:     { label: 'Complete', className: 'bg-green-100 text-green-700' },
 }
 
+// Background-check / license pill (PRD §13). Two shades of green — emerald for a
+// passed background check, green for a verified license — plus orange in-process
+// and red "Invalid" (required but nothing valid on file, or expired).
+const COMPLIANCE_PILLS: Record<ComplianceState, { label: string; className: string }> = {
+  not_required:  { label: 'n/a',        className: 'bg-gray-100 text-gray-400' },
+  valid_bc:      { label: 'BC Passed',  className: 'bg-emerald-100 text-emerald-700' },
+  valid_license: { label: 'License',    className: 'bg-green-100 text-green-700' },
+  in_process:    { label: 'In Process', className: 'bg-orange-100 text-orange-700' },
+  invalid:       { label: 'Invalid',    className: 'bg-red-100 text-red-700' },
+}
+
 // Shared column widths so every group/individual table aligns line-to-line.
 // table-fixed + a common colgroup keeps the columns identical across sections.
 const COLUMNS = [
-  { label: 'Name', width: '18%' },
-  { label: 'Role', width: '8%' },
-  { label: 'School', width: '13%' },
+  { label: 'Name', width: '15%' },
+  { label: 'Role', width: '7%' },
+  { label: 'School', width: '11%' },
   { label: 'Grade', width: '5%' },
   { label: 'Shirt', width: '5%' },
-  { label: 'Company', width: '10%' },
-  { label: 'Payment', width: '11%' },
-  { label: 'DocuSign', width: '12%' },
+  { label: 'Company', width: '9%' },
+  { label: 'Payment', width: '10%' },
+  { label: 'DocuSign', width: '10%' },
+  { label: 'Background', width: '10%' },
   { label: 'Status', width: '8%' },
   { label: 'Actions', width: '10%' },
 ] as const
 
 type PaymentFilter = 'all' | 'paid' | 'unpaid'
 type DocusignFilter = 'all' | 'completed' | 'outstanding'
+type ComplianceFilter = 'all' | 'cleared' | 'outstanding'
 
-function matches(p: RosterParticipant, payment: PaymentFilter, docusign: DocusignFilter): boolean {
+const CLEARED_STATES: ComplianceState[] = ['valid_bc', 'valid_license']
+const OUTSTANDING_STATES: ComplianceState[] = ['invalid', 'in_process']
+
+function matches(
+  p: RosterParticipant,
+  payment: PaymentFilter,
+  docusign: DocusignFilter,
+  compliance: ComplianceFilter,
+): boolean {
   if (payment === 'paid' && !p.paid) return false
   if (payment === 'unpaid' && p.paid) return false
   if (docusign === 'completed' && p.docusign !== 'completed') return false
   if (docusign === 'outstanding' && p.docusign !== 'outstanding') return false
+  if (compliance === 'cleared' && !CLEARED_STATES.includes(p.compliance_pill)) return false
+  if (compliance === 'outstanding' && !OUTSTANDING_STATES.includes(p.compliance_pill)) return false
   return true
 }
 
@@ -71,6 +95,7 @@ export default function EventRoster({
   const router = useRouter()
   const [payment, setPayment] = useState<PaymentFilter>('all')
   const [docusign, setDocusign] = useState<DocusignFilter>('all')
+  const [compliance, setCompliance] = useState<ComplianceFilter>('all')
   const [moving, setMoving] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState<string | null>(null)
@@ -91,9 +116,9 @@ export default function EventRoster({
   const filtered = useMemo(
     () =>
       roster.groups
-        .map((g) => ({ ...g, participants: g.participants.filter((p) => matches(p, payment, docusign)) }))
+        .map((g) => ({ ...g, participants: g.participants.filter((p) => matches(p, payment, docusign, compliance)) }))
         .filter((g) => g.participants.length > 0),
-    [roster, payment, docusign]
+    [roster, payment, docusign, compliance]
   )
   const shown = filtered.reduce((n, g) => n + g.participants.length, 0)
 
@@ -158,6 +183,11 @@ export default function EventRoster({
           <option value="all">DocuSign: All</option>
           <option value="completed">DocuSign: Completed</option>
           <option value="outstanding">DocuSign: Outstanding</option>
+        </select>
+        <select value={compliance} onChange={(e) => setCompliance(e.target.value as ComplianceFilter)} className={select}>
+          <option value="all">Background: All</option>
+          <option value="cleared">Background: Cleared</option>
+          <option value="outstanding">Background: Outstanding</option>
         </select>
         <span className="text-sm text-gray-500">
           {shown} of {roster.summary.totalParticipants} participants
@@ -280,6 +310,9 @@ export default function EventRoster({
                       </td>
                       <td className="px-4 py-2.5">
                         <Pill {...DOCUSIGN_PILLS[p.docusign_pill]} />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <Pill {...COMPLIANCE_PILLS[p.compliance_pill]} />
                       </td>
                       <td className="px-4 py-2.5">
                         {p.checked_in_at ? (

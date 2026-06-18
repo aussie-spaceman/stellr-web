@@ -1,6 +1,8 @@
 import { supabaseServer } from '@/lib/supabase'
 import { notFound } from 'next/navigation'
 import { AdminMemberDetail } from '@/components/admin/AdminMemberDetail'
+import { loadComplianceForMember } from '@/lib/compliance'
+import type { MemberCompliance } from '@/components/admin/MemberCompliancePanel'
 
 export const metadata = { title: 'Admin — Member Detail' }
 
@@ -52,6 +54,25 @@ export default async function AdminMemberPage({
 
   if (!member) notFound()
 
+  // Background-check / license compliance (PRD §13) — null when not required.
+  const summary = await loadComplianceForMember(db, id)
+  const compliance: MemberCompliance | null =
+    summary && summary.state !== 'not_required'
+      ? {
+          state: summary.state,
+          detail: summary.detail,
+          license: summary.license,
+          check: summary.check
+            ? {
+                status: summary.check.status,
+                ordered_at: summary.check.ordered_at,
+                expires_at: summary.check.expires_at,
+                certn_application_id: summary.check.certn_application_id,
+              }
+            : null,
+        }
+      : null
+
   // Canonical Membership ID now lives on the members row (migration 036). Fall
   // back to the member's earliest participant id if not yet backfilled.
   const canonicalId = (member as { membership_id?: string | null }).membership_id ?? null
@@ -75,6 +96,7 @@ export default async function AdminMemberPage({
       registrations={registrations ?? []}
       membershipId={canonicalId ?? (firstParticipant as { membership_id?: string } | null)?.membership_id ?? null}
       activity={activity ?? []}
+      compliance={compliance}
     />
   )
 }

@@ -1,4 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
+import { deriveCompliance, loadComplianceRecordsByEmails, type ComplianceState } from '@/lib/compliance'
 
 // Data assembly for the admin/event-manager event detail view (PRD 6.7).
 // Per-participant pill logic (user-confirmed 11-Jun-2026, supersedes the
@@ -39,6 +40,9 @@ export interface RosterParticipant {
   docusign: 'completed' | 'outstanding' | 'not_required'
   payment_pill: PaymentPill
   docusign_pill: DocusignPill
+  // Background-check / license clearance for adult non-students (PRD §13).
+  // 'not_required' for students and minors; the roster renders it as n/a.
+  compliance_pill: ComplianceState
 }
 
 export interface RosterGroup {
@@ -114,6 +118,14 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
     }
   }
 
+  // Compliance (background-check / license) records for every participant email,
+  // in one query. Requirement is driven by the participant's role for THIS event,
+  // so we derive per-participant below rather than trusting the member row's role.
+  const allEmails = (regs ?? []).flatMap((reg) =>
+    ((reg.participants as Record<string, unknown>[]) ?? []).map((p) => (p.email as string | null) ?? ''),
+  )
+  const complianceRecords = await loadComplianceRecordsByEmails(db, allEmails)
+
   const groups: RosterGroup[] = (regs ?? []).map((reg) => {
     const participants = ((reg.participants as Record<string, unknown>[]) ?? []).map((p) => {
       const paid =
@@ -138,6 +150,18 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       else if (env.status === 'declined') docusign_pill = 'declined'
       else if (env.status === 'voided') docusign_pill = 'not_issued'
       else docusign_pill = env.completed > 0 && env.completed < env.total ? 'partial' : 'issued'
+
+      // Compliance pill: derive from the member's license/checks (by email) but
+      // using the participant's role/dob for THIS event. No member row → records
+      // are absent, so an adult non-student with nothing on file reads 'invalid'.
+      const records = complianceRecords.get(((p.email as string | null) ?? '').toLowerCase())
+      const compliance_pill = deriveCompliance(
+        records?.license ?? null,
+        records?.checks ?? [],
+        p.event_role as string | null,
+        p.date_of_birth as string | null,
+        eventDate,
+      ).state
 
       const ecName =
         [p.emergency_contact_first_name, p.emergency_contact_last_name].filter(Boolean).join(' ') || null
@@ -164,6 +188,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
         docusign,
         payment_pill,
         docusign_pill,
+        compliance_pill,
       }
     })
 

@@ -7,6 +7,7 @@ import { ROLES_FOR_BRACKET, DEFAULT_ROLE_FOR_BRACKET, getEligibleTierNames } fro
 import { EventHistory } from '@/components/member/EventHistory'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { MemberMembershipManager } from '@/components/admin/MemberMembershipManager'
+import { MemberCompliancePanel, type MemberCompliance } from '@/components/admin/MemberCompliancePanel'
 import { ActivityTimeline, type ActivityItem } from '@/components/activity/ActivityTimeline'
 
 interface Member {
@@ -71,6 +72,8 @@ interface Props {
   membershipId: string | null
   /** First page of the member's activity log (newest first). */
   activity: ActivityItem[]
+  /** Background-check / license compliance (PRD §13); null when not required. */
+  compliance: MemberCompliance | null
 }
 
 const TIER_TOOLTIPS: Record<string, string> = {
@@ -102,7 +105,7 @@ function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, membershipId, activity }: Props) {
+export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, membershipId, activity, compliance }: Props) {
   const router = useRouter()
   const [form, setForm] = useState({
     first_name: member.first_name,
@@ -500,6 +503,8 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
             tiers={tiers}
             memberships={member.member_memberships ?? []}
           />
+
+          <MemberCompliancePanel memberId={member.id} compliance={compliance} />
 
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">

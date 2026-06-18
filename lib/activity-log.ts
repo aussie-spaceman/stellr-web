@@ -22,6 +22,7 @@ export type ActivityCategory =
   | 'docusign'
   | 'community'
   | 'school'
+  | 'compliance'
 
 export type ActorType = 'admin' | 'member' | 'system' | 'stripe' | 'docusign'
 

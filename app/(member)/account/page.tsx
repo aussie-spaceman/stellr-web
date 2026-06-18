@@ -7,6 +7,7 @@ import { EventHistory } from '@/components/member/EventHistory'
 import { TeamsTab } from '@/components/member/TeamsTab'
 import { BillingHistory } from '@/components/member/BillingHistory'
 import { DocusignsSection } from '@/components/member/DocusignsSection'
+import { ComplianceSection } from '@/components/member/ComplianceSection'
 import { MyRegistrations } from '@/components/member/MyRegistrations'
 import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
 import { AddressBook } from '@/components/account/AddressBook'
@@ -190,6 +191,7 @@ export default async function AccountPage({
             <MyRegistrations registrations={myRegistrations} />
             <EventHistory participations={member.event_participations ?? []} editable />
             <DocusignsSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
+            <ComplianceSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
             <div className="rounded-xl border border-gray-200 bg-white p-5">
               <AddressBook />
             </div>

@@ -182,10 +182,10 @@ export function DeleteEntityButton({
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !loading && setOpen(false)}>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-xl max-w-md w-full p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-gray-900">Delete {name}?</h2>
+          <div className="bg-white rounded-xl border border-brand-border shadow-xl max-w-md w-full p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-brand-blue-dark">Delete {name}?</h2>
 
-            {loading && !blockers && <p className="text-sm text-gray-500">Checking dependencies…</p>}
+            {loading && !blockers && <p className="text-sm text-brand-muted-soft">Checking dependencies…</p>}
 
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
@@ -193,24 +193,24 @@ export function DeleteEntityButton({
 
             {hasBlockers ? (
               <div className="space-y-2">
-                <p className="text-sm text-gray-700">
+                <p className="text-sm text-brand-muted">
                   This can&apos;t be deleted yet. Remove the following linked items first:
                 </p>
-                <ul className="text-sm text-gray-700 space-y-1 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <ul className="text-sm text-brand-muted space-y-1 bg-amber-50 border border-amber-200 rounded-lg p-3">
                   {blockers!.map((b) => (
                     <li key={b.table} className="flex justify-between gap-3">
                       <span>{b.label}</span>
                       <span className="font-medium">
                         {b.count}
                         {b.adminHref && (
-                          <a href={b.adminHref} className="ml-2 text-indigo-600 hover:text-indigo-800">view</a>
+                          <a href={b.adminHref} className="ml-2 text-brand-blue hover:text-brand-blue">view</a>
                         )}
                       </span>
                     </li>
                   ))}
                 </ul>
                 <div className="flex justify-end pt-2">
-                  <button onClick={() => setOpen(false)} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5">Close</button>
+                  <button onClick={() => setOpen(false)} className="text-sm text-brand-muted-soft hover:text-brand-muted px-3 py-1.5">Close</button>
                 </div>
               </div>
             ) : (
@@ -218,41 +218,41 @@ export function DeleteEntityButton({
                 <div className="space-y-4">
                   {showModeChoice ? (
                     <div className="space-y-2">
-                      <label className="flex items-start gap-2 text-sm text-gray-700">
+                      <label className="flex items-start gap-2 text-sm text-brand-muted">
                         <input type="radio" checked={mode === 'soft'} onChange={() => setMode('soft')} className="mt-0.5" />
                         <span><span className="font-medium">Soft-delete</span> — hide it but keep the data (recoverable).</span>
                       </label>
-                      <label className="flex items-start gap-2 text-sm text-gray-700">
+                      <label className="flex items-start gap-2 text-sm text-brand-muted">
                         <input type="radio" checked={mode === 'hard'} onChange={() => setMode('hard')} className="mt-0.5" />
                         <span><span className="font-medium">Permanently delete</span> — purge from the database. An archive snapshot is kept for support.</span>
                       </label>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-700">
+                    <p className="text-sm text-brand-muted">
                       This permanently removes <span className="font-medium">{name}</span> from the database. An archive snapshot is kept for support.
                     </p>
                   )}
 
                   {mode === 'hard' && requireTypedConfirm && (
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Type DELETE to confirm</label>
+                      <label className="block text-xs text-brand-muted-soft mb-1">Type DELETE to confirm</label>
                       <input
                         value={confirmText}
                         onChange={(e) => setConfirmText(e.target.value)}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                     </div>
                   )}
 
                   {/* Refund step */}
                   {refundable && entity === 'registration' && (
-                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2 text-sm">
-                      <p className="text-gray-700">Paid participants will be refunded per the event&apos;s refund policy. Where a tier offers a choice:</p>
+                    <div className="rounded-lg border border-brand-border bg-brand-canvas p-3 space-y-2 text-sm">
+                      <p className="text-brand-muted">Paid participants will be refunded per the event&apos;s refund policy. Where a tier offers a choice:</p>
                       <div className="flex gap-4">
-                        <label className="flex items-center gap-1.5 text-gray-700">
+                        <label className="flex items-center gap-1.5 text-brand-muted">
                           <input type="radio" checked={refundChoice === 'cash'} onChange={() => setRefundChoice('cash')} /> Cash
                         </label>
-                        <label className="flex items-center gap-1.5 text-gray-700">
+                        <label className="flex items-center gap-1.5 text-brand-muted">
                           <input type="radio" checked={refundChoice === 'credit'} onChange={() => setRefundChoice('credit')} /> Credit
                         </label>
                       </div>
@@ -260,20 +260,20 @@ export function DeleteEntityButton({
                   )}
 
                   {refundable && entity === 'participant' && refund && (
-                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2 text-sm">
+                    <div className="rounded-lg border border-brand-border bg-brand-canvas p-3 space-y-2 text-sm">
                       {refund.alreadyRefunded ? (
-                        <p className="text-gray-600">Already refunded — no further refund will be issued.</p>
+                        <p className="text-brand-muted">Already refunded — no further refund will be issued.</p>
                       ) : !refund.paid ? (
-                        <p className="text-gray-600">No payment on record — nothing to refund.</p>
+                        <p className="text-brand-muted">No payment on record — nothing to refund.</p>
                       ) : Object.keys(refund.options).length === 0 ? (
-                        <p className="text-gray-600">No refund is due at this point ({refund.daysOut} days out).</p>
+                        <p className="text-brand-muted">No refund is due at this point ({refund.daysOut} days out).</p>
                       ) : (
                         <>
-                          <p className="text-gray-700">
+                          <p className="text-brand-muted">
                             Paid {money(refund.paidCents, refund.currency)} · {refund.daysOut} days out. Refund:
                           </p>
                           {refund.options.cash && (
-                            <label className="flex items-center justify-between gap-2 text-gray-700">
+                            <label className="flex items-center justify-between gap-2 text-brand-muted">
                               <span className="flex items-center gap-1.5">
                                 <input type="radio" checked={refundChoice === 'cash'} onChange={() => setRefundChoice('cash')} />
                                 Cash ({refund.options.cash.pct}%)
@@ -282,7 +282,7 @@ export function DeleteEntityButton({
                             </label>
                           )}
                           {refund.options.credit && (
-                            <label className="flex items-center justify-between gap-2 text-gray-700">
+                            <label className="flex items-center justify-between gap-2 text-brand-muted">
                               <span className="flex items-center gap-1.5">
                                 <input type="radio" checked={refundChoice === 'credit'} onChange={() => setRefundChoice('credit')} />
                                 Credit ({refund.options.credit.pct}%{refund.options.credit.validityDays ? `, ${Math.round(refund.options.credit.validityDays / 365)}yr` : ''})
@@ -299,7 +299,7 @@ export function DeleteEntityButton({
                   )}
 
                   <div className="flex items-center justify-end gap-3 pt-1">
-                    <button onClick={() => setOpen(false)} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5">Cancel</button>
+                    <button onClick={() => setOpen(false)} className="text-sm text-brand-muted-soft hover:text-brand-muted px-3 py-1.5">Cancel</button>
                     <button
                       onClick={doDelete}
                       disabled={loading || !hardConfirmed || !refundReady}

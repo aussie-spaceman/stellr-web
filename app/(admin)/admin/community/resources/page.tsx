@@ -28,44 +28,47 @@ export default async function AdminCommunityResourcesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Community Resources</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <p className="eyebrow flex items-center gap-2 text-brand-blue">
+          <span className="h-2 w-2 rounded-full bg-brand-blue" /> Community
+        </p>
+        <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Community Resources</h1>
+        <p className="mt-0.5 text-sm text-brand-muted-soft">
           {(resources ?? []).length} resources · Upload files for members to access
         </p>
       </div>
 
       <ResourceUploadForm spaces={spaces ?? []} />
 
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-brand-border bg-white overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50 text-left">
-              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-gray-500">Title</th>
-              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-gray-500">Space</th>
-              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-gray-500">Access</th>
-              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-gray-500">Size</th>
-              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-gray-500">Added</th>
+            <tr className="border-b border-brand-hairline bg-brand-canvas text-left">
+              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Title</th>
+              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Space</th>
+              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Access</th>
+              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Size</th>
+              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Added</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-brand-hairline">
             {(resources ?? []).map((r) => {
               const space = Array.isArray(r.community_spaces)
                 ? r.community_spaces[0]
                 : r.community_spaces
               return (
-                <tr key={r.id} className="hover:bg-gray-50">
+                <tr key={r.id} className="hover:bg-brand-canvas">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 shrink-0 text-gray-400" />
+                      <FileText className="h-4 w-4 shrink-0 text-brand-muted-soft" />
                       <div>
-                        <p className="font-medium text-gray-900">{r.title}</p>
+                        <p className="font-medium text-brand-blue-dark">{r.title}</p>
                         {r.description && (
-                          <p className="text-xs text-gray-400 line-clamp-1">{r.description}</p>
+                          <p className="text-xs text-brand-muted-soft line-clamp-1">{r.description}</p>
                         )}
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{(space as { name: string } | null)?.name ?? '—'}</td>
+                  <td className="px-4 py-3 text-brand-muted">{(space as { name: string } | null)?.name ?? '—'}</td>
                   <td className="px-4 py-3">
                     {r.min_tier_rank > 0 ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
@@ -77,8 +80,8 @@ export default async function AdminCommunityResourcesPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{formatBytes(r.file_size_bytes)}</td>
-                  <td className="px-4 py-3 text-gray-500">
+                  <td className="px-4 py-3 text-brand-muted-soft">{formatBytes(r.file_size_bytes)}</td>
+                  <td className="px-4 py-3 text-brand-muted-soft">
                     {new Date(r.created_at).toLocaleDateString()}
                   </td>
                 </tr>
@@ -86,7 +89,7 @@ export default async function AdminCommunityResourcesPage() {
             })}
             {(!resources || resources.length === 0) && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-400">
+                <td colSpan={5} className="px-4 py-6 text-center text-sm text-brand-muted-soft">
                   No resources uploaded yet.
                 </td>
               </tr>

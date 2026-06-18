@@ -24,23 +24,23 @@ export default async function AdminDocusignsPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Consent Forms</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="font-heading uppercase text-title text-brand-blue-dark">Consent Forms</h1>
+          <p className="text-sm text-brand-muted-soft mt-0.5">
             DocuSign parental consent for minor event participants.
           </p>
         </div>
         <div className="flex gap-4 text-sm text-right">
           <div>
             <p className="text-2xl font-bold text-amber-600">{pending}</p>
-            <p className="text-xs text-gray-500">Awaiting signature</p>
+            <p className="text-xs text-brand-muted-soft">Awaiting signature</p>
           </div>
           <div>
             <p className="text-2xl font-bold text-green-600">{completed}</p>
-            <p className="text-xs text-gray-500">Signed</p>
+            <p className="text-xs text-brand-muted-soft">Signed</p>
           </div>
           <div>
-            <p className="text-2xl font-bold text-gray-700">{(envelopes ?? []).length}</p>
-            <p className="text-xs text-gray-500">Total</p>
+            <p className="text-2xl font-bold text-brand-muted">{(envelopes ?? []).length}</p>
+            <p className="text-xs text-brand-muted-soft">Total</p>
           </div>
         </div>
       </div>

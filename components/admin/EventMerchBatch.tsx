@@ -8,7 +8,7 @@ interface Summary {
   batch: { id: string; status: string; pod_order_id: string | null; tracking_url: string | null; committed_at: string | null } | null
 }
 
-const inputCls = 'rounded-md border border-gray-200 px-2 py-1.5 text-sm'
+const inputCls = 'rounded-md border border-brand-border px-2 py-1.5 text-sm'
 
 // Event Manager bulk-commit: turn all awaiting event-merch items into one Printful
 // order shipped to the venue. Once committed, event merch is locked from refunds.
@@ -59,18 +59,18 @@ export function EventMerchBatch({
     load()
   }
 
-  if (!summary) return <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+  if (!summary) return <Loader2 className="h-4 w-4 animate-spin text-brand-muted-soft" />
 
   const committed = summary.batch && summary.batch.status !== 'open'
 
   if (committed) {
     const b = summary.batch!
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-5">
+      <div className="rounded-xl border border-brand-border bg-white p-5">
         <div className="flex items-center gap-2 text-sm font-medium text-green-700">
           <CheckCircle className="h-4 w-4" /> Bulk order committed
         </div>
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-brand-muted-soft">
           Status: {b.status}
           {b.pod_order_id && ` · Printful order ${b.pod_order_id}`}
           {b.committed_at && ` · ${new Date(b.committed_at).toLocaleDateString()}`}
@@ -85,11 +85,11 @@ export function EventMerchBatch({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5">
-      <p className="text-sm text-gray-700">
+    <div className="rounded-xl border border-brand-border bg-white p-5">
+      <p className="text-sm text-brand-muted">
         <span className="font-semibold">{summary.awaitingCount}</span> item{summary.awaitingCount === 1 ? '' : 's'} awaiting fulfilment.
       </p>
-      <p className="mb-3 text-xs text-gray-500">Confirm the venue ship-to address, then commit one bulk order.</p>
+      <p className="mb-3 text-xs text-brand-muted-soft">Confirm the venue ship-to address, then commit one bulk order.</p>
       <div className="grid gap-2 sm:grid-cols-2">
         <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Venue / recipient name" className={inputCls + ' sm:col-span-2'} />
         <input value={form.line1} onChange={(e) => setForm({ ...form, line1: e.target.value })} placeholder="Address line 1" className={inputCls + ' sm:col-span-2'} />
@@ -103,7 +103,7 @@ export function EventMerchBatch({
       <button
         onClick={commit}
         disabled={busy || summary.awaitingCount === 0}
-        className="mt-3 inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+        className="mt-3 inline-flex items-center gap-2 rounded-md bg-brand-blue px-4 py-2 text-sm font-semibold text-white hover:bg-brand-blue-dark disabled:opacity-50"
       >
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />} Commit bulk order
       </button>

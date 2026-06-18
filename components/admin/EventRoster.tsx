@@ -16,7 +16,7 @@ const PAYMENT_PILLS: Record<PaymentPill, { label: string; className: string }> =
 }
 
 const DOCUSIGN_PILLS: Record<DocusignPill, { label: string; className: string }> = {
-  not_required: { label: 'Not Required', className: 'bg-gray-100 text-gray-500' },
+  not_required: { label: 'Not Required', className: 'bg-brand-hairline text-brand-muted-soft' },
   not_issued:   { label: 'Not Issued', className: 'bg-red-100 text-red-700' },
   issued:       { label: 'Issued', className: 'bg-red-100 text-red-700' },
   partial:      { label: 'Partially Complete', className: 'bg-orange-100 text-orange-700' },
@@ -28,7 +28,7 @@ const DOCUSIGN_PILLS: Record<DocusignPill, { label: string; className: string }>
 // passed background check, green for a verified license — plus orange in-process
 // and red "Invalid" (required but nothing valid on file, or expired).
 const COMPLIANCE_PILLS: Record<ComplianceState, { label: string; className: string }> = {
-  not_required:  { label: 'n/a',        className: 'bg-gray-100 text-gray-400' },
+  not_required:  { label: 'n/a',        className: 'bg-brand-hairline text-brand-muted-soft' },
   valid_bc:      { label: 'BC Passed',  className: 'bg-emerald-100 text-emerald-700' },
   valid_license: { label: 'License',    className: 'bg-green-100 text-green-700' },
   in_process:    { label: 'In Process', className: 'bg-orange-100 text-orange-700' },
@@ -169,7 +169,7 @@ export default function EventRoster({
     setSending(false)
   }
 
-  const select = 'border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-700'
+  const select = 'border border-brand-border rounded-lg px-3 py-1.5 text-sm bg-white text-brand-muted'
 
   return (
     <div className="space-y-4">
@@ -189,10 +189,10 @@ export default function EventRoster({
           <option value="cleared">Background: Cleared</option>
           <option value="outstanding">Background: Outstanding</option>
         </select>
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-brand-muted-soft">
           {shown} of {roster.summary.totalParticipants} participants
         </span>
-        {sendResult && <span className="text-sm text-gray-600">{sendResult}</span>}
+        {sendResult && <span className="text-sm text-brand-muted">{sendResult}</span>}
         <button
           type="button"
           onClick={sendReminders}
@@ -202,20 +202,20 @@ export default function EventRoster({
               ? undefined
               : 'Filter by Payment: Outstanding or DocuSign: Outstanding to email those participants'
           }
-          className="ml-auto text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg px-3 py-1.5"
+          className="ml-auto text-sm font-medium text-white bg-brand-blue hover:bg-brand-blue-dark disabled:bg-brand-border disabled:cursor-not-allowed rounded-lg px-3 py-1.5"
         >
           {sending ? 'Sending…' : remindPayment || remindDocusign ? remindLabel : 'Email Reminders'}
         </button>
         <a
           href={exportHref}
-          className="text-sm font-medium text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded-lg px-3 py-1.5"
+          className="text-sm font-medium text-brand-blue hover:text-brand-blue border border-brand-blue rounded-lg px-3 py-1.5"
         >
           Export CSV
         </a>
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-sm text-gray-400 bg-white rounded-xl border border-gray-200 px-4 py-6">
+        <p className="text-sm text-brand-muted-soft bg-white rounded-xl border border-brand-border px-4 py-6">
           No participants match the current filters.
         </p>
       ) : (
@@ -224,12 +224,12 @@ export default function EventRoster({
             <div
               key={group.registrationId}
               className={`rounded-xl border overflow-hidden ${
-                group.type === 'group' ? 'border-indigo-200 bg-indigo-50/30' : 'border-gray-200 bg-white'
+                group.type === 'group' ? 'border-brand-blue bg-brand-blue/5/30' : 'border-brand-border bg-white'
               }`}
             >
               <div
-                className={`px-4 py-2 flex items-center justify-between gap-3 text-xs font-semibold uppercase tracking-wide ${
-                  group.type === 'group' ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-50 text-gray-500'
+                className={`px-4 py-2 flex items-center justify-between gap-3 text-xs font-subheading font-semibold uppercase tracking-wide ${
+                  group.type === 'group' ? 'bg-brand-blue/5 text-brand-blue' : 'bg-brand-canvas text-brand-muted-soft'
                 }`}
               >
                 <span>{group.type === 'group' ? `Group — ${group.groupLabel}` : 'Individual Registration'}</span>
@@ -254,11 +254,11 @@ export default function EventRoster({
                   ))}
                 </colgroup>
                 <thead>
-                  <tr className="border-b border-gray-100 text-left">
+                  <tr className="border-b border-brand-hairline text-left">
                     {COLUMNS.map((c) => (
                       <th
                         key={c.label}
-                        className={`px-4 py-2 font-medium text-gray-500 text-xs uppercase tracking-wide ${
+                        className={`px-4 py-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide ${
                           c.label === 'Actions' ? 'text-right' : ''
                         }`}
                       >
@@ -267,31 +267,31 @@ export default function EventRoster({
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-brand-hairline">
                   {group.participants.map((p) => (
-                    <tr key={p.id} className="hover:bg-gray-50">
+                    <tr key={p.id} className="hover:bg-brand-canvas">
                       <td className="px-4 py-2.5">
-                        <span className="font-medium text-gray-900">
+                        <span className="font-medium text-brand-blue-dark">
                           {p.first_name} {p.last_name}
                         </span>
-                        <p className="text-xs text-gray-400 truncate" title={p.email}>
+                        <p className="text-xs text-brand-muted-soft truncate" title={p.email}>
                           {p.email}
                         </p>
                       </td>
-                      <td className="px-4 py-2.5 text-gray-600">{displayEventRole(p.event_role) ?? p.event_role ?? '—'}</td>
-                      <td className="px-4 py-2.5 text-gray-600">{p.school_name ?? '—'}</td>
-                      <td className="px-4 py-2.5 text-gray-600">{p.grade ?? '—'}</td>
-                      <td className="px-4 py-2.5 text-gray-600">{p.t_shirt_size ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-brand-muted">{displayEventRole(p.event_role) ?? p.event_role ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-brand-muted">{p.school_name ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-brand-muted">{p.grade ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-brand-muted">{p.t_shirt_size ?? '—'}</td>
                       <td className="px-4 py-2.5">
                         {p.event_role === 'school_student' ? (
                           companies.length === 0 ? (
-                            <span className="text-gray-400">—</span>
+                            <span className="text-brand-muted-soft">—</span>
                           ) : (
                             <select
                               value={p.company_id ?? ''}
                               disabled={moving === p.id}
                               onChange={(e) => moveParticipant(p.id, e.target.value || null)}
-                              className="border border-gray-200 rounded px-2 py-1 text-xs bg-white text-gray-700 disabled:opacity-50 max-w-full"
+                              className="border border-brand-border rounded px-2 py-1 text-xs bg-white text-brand-muted disabled:opacity-50 max-w-full"
                             >
                               <option value="">Unassigned</option>
                               {companies.map((c) => (
@@ -302,7 +302,7 @@ export default function EventRoster({
                             </select>
                           )
                         ) : (
-                          <span className="text-gray-400">n/a</span>
+                          <span className="text-brand-muted-soft">n/a</span>
                         )}
                       </td>
                       <td className="px-4 py-2.5">

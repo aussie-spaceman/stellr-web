@@ -20,10 +20,10 @@ export interface TierRow {
 
 const BADGE: Record<string, string> = {
   green: 'bg-green-100 text-green-800',
-  blue: 'bg-blue-100 text-blue-800',
+  blue: 'bg-brand-blue/10 text-brand-blue',
   amber: 'bg-amber-100 text-amber-800',
   purple: 'bg-purple-100 text-purple-800',
-  gray: 'bg-gray-100 text-gray-700',
+  gray: 'bg-brand-hairline text-brand-muted',
 }
 const COLORS = ['green', 'blue', 'amber', 'purple', 'gray']
 
@@ -57,19 +57,19 @@ export function TiersClient({ tiers, stripeConnected }: { tiers: TierRow[]; stri
       )}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {rows.map((t) => (
-          <div key={t.id} className="bg-white border border-gray-200 rounded-xl p-4">
+          <div key={t.id} className="bg-white border border-brand-border rounded-xl p-4">
             <div className="flex items-start justify-between">
               <div>
-                <div className="font-medium text-gray-900">{t.name}</div>
-                <div className="text-xs text-gray-400 mt-0.5">{t.age_bracket ?? '—'}</div>
+                <div className="font-medium text-brand-blue-dark">{t.name}</div>
+                <div className="text-xs text-brand-muted-soft mt-0.5">{t.age_bracket ?? '—'}</div>
               </div>
               <span className={'text-[11px] px-2 py-0.5 rounded-md ' + (BADGE[t.badge_color] ?? BADGE.gray)}>
                 {t.is_free ? 'Free' : 'Paid'}
               </span>
             </div>
 
-            <div className="mt-3 text-2xl font-semibold text-gray-900">{priceLabel(t)}</div>
-            <div className="text-[11px] text-indigo-600 flex items-center gap-1 mt-0.5">
+            <div className="mt-3 text-2xl font-semibold text-brand-blue-dark">{priceLabel(t)}</div>
+            <div className="text-[11px] text-brand-blue flex items-center gap-1 mt-0.5">
               <CreditCard className="w-3 h-3" />
               {t.is_free ? 'no charge' : 'live from Stripe'}
             </div>
@@ -78,8 +78,8 @@ export function TiersClient({ tiers, stripeConnected }: { tiers: TierRow[]; stri
               <TierEditForm row={t} onCancel={() => setEditing(null)} onSave={(patch) => save(t.id, patch)} />
             ) : (
               <>
-                <p className="mt-3 text-sm text-gray-600 min-h-[2.5rem]">{t.description || <span className="text-gray-300">No description</span>}</p>
-                <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+                <p className="mt-3 text-sm text-brand-muted min-h-[2.5rem]">{t.description || <span className="text-brand-muted-soft">No description</span>}</p>
+                <div className="mt-3 flex items-center justify-between text-xs text-brand-muted-soft">
                   <span className="flex items-center gap-1">
                     <Users className="w-3.5 h-3.5" />
                     {t.member_count} active
@@ -90,7 +90,7 @@ export function TiersClient({ tiers, stripeConnected }: { tiers: TierRow[]; stri
                 </div>
                 <button
                   onClick={() => setEditing(t.id)}
-                  className="mt-3 w-full text-xs flex items-center justify-center gap-1 border border-gray-200 rounded-md py-1.5 text-gray-600 hover:bg-gray-50"
+                  className="mt-3 w-full text-xs flex items-center justify-center gap-1 border border-brand-border rounded-md py-1.5 text-brand-muted hover:bg-brand-canvas"
                 >
                   <Pencil className="w-3 h-3" /> Edit metadata
                 </button>
@@ -122,11 +122,11 @@ function TierEditForm({
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         rows={3}
-        className="w-full text-sm border border-gray-200 rounded-md px-2 py-1"
+        className="w-full text-sm border border-brand-border rounded-md px-2 py-1"
         placeholder="Description"
       />
       <div className="flex items-center gap-2">
-        <label className="text-xs text-gray-500">Badge</label>
+        <label className="text-xs text-brand-muted-soft">Badge</label>
         <div className="flex gap-1">
           {COLORS.map((c) => (
             <button
@@ -136,31 +136,31 @@ function TierEditForm({
               className={
                 'w-5 h-5 rounded-full border ' +
                 (BADGE[c] ?? BADGE.gray) +
-                (badge === c ? ' ring-2 ring-offset-1 ring-indigo-500' : '')
+                (badge === c ? ' ring-2 ring-offset-1 ring-brand-blue' : '')
               }
             />
           ))}
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <label className="text-xs text-gray-500">Default grant (months)</label>
+        <label className="text-xs text-brand-muted-soft">Default grant (months)</label>
         <input
           value={months}
           onChange={(e) => setMonths(e.target.value.replace(/[^0-9]/g, ''))}
           placeholder="blank = lifetime"
-          className="w-28 text-sm border border-gray-200 rounded-md px-2 py-1"
+          className="w-28 text-sm border border-brand-border rounded-md px-2 py-1"
         />
       </div>
       <div className="flex gap-2 pt-1">
         <button
           onClick={() => onSave({ description, badge_color: badge, default_grant_months: months === '' ? null : Number(months) })}
-          className="flex-1 text-xs flex items-center justify-center gap-1 bg-indigo-600 text-white rounded-md py-1.5 hover:bg-indigo-700"
+          className="flex-1 text-xs flex items-center justify-center gap-1 bg-brand-blue text-white rounded-md py-1.5 hover:bg-brand-blue-dark"
         >
           <Check className="w-3 h-3" /> Save
         </button>
         <button
           onClick={onCancel}
-          className="flex-1 text-xs flex items-center justify-center gap-1 border border-gray-200 rounded-md py-1.5 text-gray-600 hover:bg-gray-50"
+          className="flex-1 text-xs flex items-center justify-center gap-1 border border-brand-border rounded-md py-1.5 text-brand-muted hover:bg-brand-canvas"
         >
           <X className="w-3 h-3" /> Cancel
         </button>

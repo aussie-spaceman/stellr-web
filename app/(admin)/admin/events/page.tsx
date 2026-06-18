@@ -67,15 +67,18 @@ export default async function AdminEventsPage() {
     <div className="space-y-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Events</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <p className="eyebrow flex items-center gap-2 text-brand-orange-alt">
+            <span className="h-2 w-2 rounded-full bg-brand-orange-alt" /> Competitions
+          </p>
+          <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Events</h1>
+          <p className="text-sm text-brand-muted-soft mt-0.5">
             {access.isAdmin
               ? 'All events and campaigns from the CMS'
               : 'Events you are assigned to manage'}
           </p>
         </div>
         {access.isAdmin && (
-          <Link href="/admin/events/refund-policy" className="text-sm font-medium text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded-lg px-3 py-1.5 shrink-0">
+          <Link href="/admin/events/refund-policy" className="text-sm font-medium text-brand-blue hover:text-brand-blue border border-brand-blue rounded-lg px-3 py-1.5 shrink-0">
             Refund Policy
           </Link>
         )}
@@ -83,51 +86,51 @@ export default async function AdminEventsPage() {
 
       {sections.map(({ label, items, isCampaign }) => (
         <section key={label} className="space-y-3">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">{label}</h2>
+          <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">{label}</h2>
           {items.length === 0 ? (
-            <p className="text-sm text-gray-400 bg-white rounded-xl border border-gray-200 px-4 py-6">
+            <p className="text-sm text-brand-muted-soft bg-white rounded-xl border border-brand-border px-4 py-6">
               {access.isAdmin
                 ? `No ${label.toLowerCase()} found in the CMS.`
                 : `No assigned ${label.toLowerCase()}. Ask an administrator to assign you.`}
             </p>
           ) : (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50 text-left">
-                    <th className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Event</th>
-                    <th className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">
+                  <tr className="border-b border-brand-hairline bg-brand-canvas text-left">
+                    <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Event</th>
+                    <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">
                       {isCampaign ? 'Season' : 'Date'}
                     </th>
-                    <th className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Location</th>
-                    <th className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Registration</th>
-                    <th className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide text-right">Participants</th>
+                    <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Location</th>
+                    <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Registration</th>
+                    <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide text-right">Participants</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-brand-hairline">
                   {items.map((event) => {
                     const slug = event.slug.current
                     const campaign = event as unknown as CampaignEvent
                     return (
-                      <tr key={event._id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">
-                          <Link href={`/admin/events/${slug}`} className="text-indigo-600 hover:text-indigo-800">
+                      <tr key={event._id} className="hover:bg-brand-canvas">
+                        <td className="px-4 py-3 font-medium text-brand-blue-dark">
+                          <Link href={`/admin/events/${slug}`} className="text-brand-blue hover:text-brand-blue">
                             {event.title}
                           </Link>
                           <span
                             className={`ml-2 inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${
-                              isCampaign ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                              isCampaign ? 'bg-purple-100 text-purple-700' : 'bg-brand-blue/10 text-brand-blue'
                             }`}
                           >
                             {isCampaign ? 'Campaign' : 'Live Event'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-gray-600">
+                        <td className="px-4 py-3 text-brand-muted">
                           {isCampaign
                             ? [campaign.season, campaign.campaignYear].filter(Boolean).join(' ') || '—'
                             : formatDate(event.date)}
                         </td>
-                        <td className="px-4 py-3 text-gray-600">
+                        <td className="px-4 py-3 text-brand-muted">
                           {[event.venue, event.city, event.state].filter(Boolean).join(', ') || '—'}
                         </td>
                         <td className="px-4 py-3">
@@ -135,13 +138,13 @@ export default async function AdminEventsPage() {
                             className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${
                               event.registrationOpen
                                 ? 'bg-green-100 text-green-700'
-                                : 'bg-gray-100 text-gray-500'
+                                : 'bg-brand-hairline text-brand-muted-soft'
                             }`}
                           >
                             {event.registrationOpen ? 'Open' : 'Closed'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-right text-gray-900 font-medium tabular-nums">
+                        <td className="px-4 py-3 text-right text-brand-blue-dark font-medium tabular-nums">
                           {counts.get(slug) ?? 0}
                         </td>
                       </tr>

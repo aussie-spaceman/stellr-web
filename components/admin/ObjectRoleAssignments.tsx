@@ -60,23 +60,23 @@ export default function ObjectRoleAssignments({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+    <div className="rounded-xl border border-brand-border bg-white p-4">
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">{label}</p>
       <div className="mb-3 flex flex-wrap gap-2">
         {initialAssignments.length === 0 && (
-          <span className="text-sm text-gray-400">No managers assigned.</span>
+          <span className="text-sm text-brand-muted-soft">No managers assigned.</span>
         )}
         {initialAssignments.map((a) => (
           <span
             key={a.id}
-            className="inline-flex items-center gap-1 rounded-full bg-indigo-50 py-0.5 pl-3 pr-1 text-xs font-medium text-indigo-700"
+            className="inline-flex items-center gap-1 rounded-full bg-brand-blue/5 py-0.5 pl-3 pr-1 text-xs font-medium text-brand-blue"
           >
             {a.name?.trim() || a.email || 'Member'}
             <button
               onClick={() => remove(a.id)}
               disabled={busy}
               aria-label="Remove manager"
-              className="hover:text-indigo-900 disabled:opacity-50"
+              className="hover:text-brand-blue disabled:opacity-50"
             >
               <X className="h-3 w-3" />
             </button>

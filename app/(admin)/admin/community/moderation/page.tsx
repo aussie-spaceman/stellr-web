@@ -33,8 +33,8 @@ export default async function AdminModerationPage({
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Content Moderation</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <h1 className="font-heading uppercase text-title text-brand-blue-dark">Content Moderation</h1>
+          <p className="mt-0.5 text-sm text-brand-muted-soft">
             Review flagged posts and comments (FR-COM-07)
           </p>
         </div>
@@ -46,8 +46,8 @@ export default async function AdminModerationPage({
               className={[
                 'rounded-md px-3 py-1.5 font-medium capitalize',
                 status === s
-                  ? 'bg-gray-900 text-white'
-                  : 'border border-gray-300 text-gray-600 hover:bg-gray-50',
+                  ? 'bg-brand-blue-dark text-white'
+                  : 'border border-brand-border text-brand-muted hover:bg-brand-canvas',
               ].join(' ')}
             >
               {s}

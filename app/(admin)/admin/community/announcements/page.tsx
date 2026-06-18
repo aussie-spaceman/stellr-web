@@ -23,30 +23,30 @@ export default async function AdminAnnouncementsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Announcements</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Announcements</h1>
+        <p className="mt-0.5 text-sm text-brand-muted-soft">
           Admin-posted announcements visible to all members (FR-COM-05)
         </p>
       </div>
 
       <AnnouncementForm spaces={spaces ?? []} />
 
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-        <div className="border-b border-gray-100 bg-gray-50 px-4 py-2.5">
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Past announcements</p>
+      <div className="rounded-xl border border-brand-border bg-white overflow-hidden">
+        <div className="border-b border-brand-hairline bg-brand-canvas px-4 py-2.5">
+          <p className="text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Past announcements</p>
         </div>
-        <ul className="divide-y divide-gray-100">
+        <ul className="divide-y divide-brand-hairline">
           {(announcements ?? []).map((a) => {
             const space = Array.isArray(a.community_spaces) ? a.community_spaces[0] : a.community_spaces as { name: string; slug: string } | null
             return (
               <li key={a.id} className="flex items-center gap-3 px-4 py-3">
-                <Megaphone className="h-4 w-4 shrink-0 text-blue-400" />
+                <Megaphone className="h-4 w-4 shrink-0 text-brand-blue" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-gray-900">{a.title}</p>
-                  <p className="text-xs text-gray-400">
+                  <p className="truncate text-sm font-medium text-brand-blue-dark">{a.title}</p>
+                  <p className="text-xs text-brand-muted-soft">
                     {space?.name ?? '—'} · {new Date(a.created_at).toLocaleDateString()}
                     {a.status !== 'published' && (
-                      <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs capitalize text-gray-500">
+                      <span className="ml-2 rounded bg-brand-hairline px-1.5 py-0.5 text-xs capitalize text-brand-muted-soft">
                         {a.status}
                       </span>
                     )}
@@ -56,7 +56,7 @@ export default async function AdminAnnouncementsPage() {
             )
           })}
           {(!announcements || announcements.length === 0) && (
-            <li className="px-4 py-6 text-center text-sm text-gray-400">No announcements yet.</li>
+            <li className="px-4 py-6 text-center text-sm text-brand-muted-soft">No announcements yet.</li>
           )}
         </ul>
       </div>

@@ -16,14 +16,17 @@ export default async function StoreProductsPage() {
     <div>
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Store</h1>
-          <p className="mt-0.5 mb-4 text-sm text-gray-500">
+          <p className="eyebrow flex items-center gap-2 text-brand-blue">
+            <span className="h-2 w-2 rounded-full bg-brand-blue" /> Store
+          </p>
+          <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Store</h1>
+          <p className="mt-0.5 mb-4 text-sm text-brand-muted-soft">
             Merchandise catalog. Products sync from Printful; prices and discounts are managed here.
           </p>
         </div>
         <Link
           href="/admin/store/new"
-          className="flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-700"
+          className="flex items-center gap-1 rounded-md bg-brand-blue px-3 py-1.5 text-sm text-white hover:bg-brand-blue-dark"
         >
           <Plus className="h-4 w-4" /> New product
         </Link>

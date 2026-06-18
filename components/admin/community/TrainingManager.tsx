@@ -142,23 +142,23 @@ export function TrainingManager({ modules }: { modules: AdminModule[] }) {
           const sections = [...m.training_sections].sort((a, b) => a.display_order - b.display_order)
           const isOpen = open === m.id
           return (
-            <div key={m.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+            <div key={m.id} className="overflow-hidden rounded-xl border border-brand-border bg-white">
               <div className="flex items-center justify-between gap-3 px-4 py-3">
                 <button
                   onClick={() => setOpen(isOpen ? null : m.id)}
                   className="flex min-w-0 items-center gap-2 text-left"
                 >
                   {isOpen ? (
-                    <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
+                    <ChevronDown className="h-4 w-4 shrink-0 text-brand-muted-soft" />
                   ) : (
-                    <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
+                    <ChevronRight className="h-4 w-4 shrink-0 text-brand-muted-soft" />
                   )}
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-900 text-white">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-blue-dark text-white">
                     <GraduationCap className="h-4 w-4" />
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-gray-900">{m.title}</p>
-                    <p className="truncate text-xs text-gray-400">
+                    <p className="truncate font-medium text-brand-blue-dark">{m.title}</p>
+                    <p className="truncate text-xs text-brand-muted-soft">
                       {sections.length} {sections.length === 1 ? 'section' : 'sections'} ·{' '}
                       {m.training_items.length} {m.training_items.length === 1 ? 'lesson' : 'lessons'} ·{' '}
                       {m.material_kind.toUpperCase()}
@@ -167,12 +167,12 @@ export function TrainingManager({ modules }: { modules: AdminModule[] }) {
                   </div>
                 </button>
                 <div className="flex shrink-0 items-center gap-3">
-                  <span className="hidden rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 sm:inline">
+                  <span className="hidden rounded-full bg-brand-hairline px-2 py-0.5 text-[11px] font-medium text-brand-muted sm:inline">
                     {COURSE_TYPE_LABEL[m.course_type ?? 'self_paced']}
                   </span>
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      m.is_published ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
+                      m.is_published ? 'bg-green-50 text-green-700' : 'bg-brand-hairline text-brand-muted-soft'
                     }`}
                   >
                     {m.is_published ? 'Published' : 'Draft'}
@@ -180,7 +180,7 @@ export function TrainingManager({ modules }: { modules: AdminModule[] }) {
                   <button
                     onClick={() => togglePublish(m)}
                     disabled={busy}
-                    className="text-gray-400 hover:text-gray-700 disabled:opacity-50"
+                    className="text-brand-muted-soft hover:text-brand-muted disabled:opacity-50"
                     aria-label="Toggle publish"
                   >
                     {m.is_published ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -189,7 +189,7 @@ export function TrainingManager({ modules }: { modules: AdminModule[] }) {
               </div>
 
               {isOpen && (
-                <div className="space-y-5 border-t border-gray-100 bg-gray-50/60 px-4 py-4">
+                <div className="space-y-5 border-t border-brand-hairline bg-brand-canvas/60 px-4 py-4">
                   <CourseSettings module={m} onDone={() => router.refresh()} />
                   <Curriculum module={m} sections={sections} onDone={() => router.refresh()} />
                   <AssignForm
@@ -203,7 +203,7 @@ export function TrainingManager({ modules }: { modules: AdminModule[] }) {
           )
         })}
         {modules.length === 0 && (
-          <p className="text-sm text-gray-400">No modules yet — create one above.</p>
+          <p className="text-sm text-brand-muted-soft">No modules yet — create one above.</p>
         )}
       </div>
     </div>
@@ -273,31 +273,31 @@ function CourseSettings({ module: m, onDone }: { module: AdminModule; onDone: ()
 
   if (editing) {
     return (
-      <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-3">
+      <div className="space-y-2 rounded-lg border border-brand-border bg-white p-3">
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Course title"
           autoFocus
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
         />
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Description (optional)"
           rows={2}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
         />
         {error && <p className="text-xs text-red-600">{error}</p>}
         <div className="flex items-center gap-2">
           <button
             onClick={save}
             disabled={busy || !title.trim()}
-            className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            className="rounded-md bg-brand-blue-dark px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
           >
             {busy ? 'Saving…' : 'Save'}
           </button>
-          <button onClick={cancel} className="px-2 py-1.5 text-xs text-gray-500">
+          <button onClick={cancel} className="px-2 py-1.5 text-xs text-brand-muted-soft">
             Cancel
           </button>
         </div>
@@ -306,21 +306,21 @@ function CourseSettings({ module: m, onDone }: { module: AdminModule; onDone: ()
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-border bg-white px-3 py-2">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <button
           onClick={() => setEditing(true)}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-gray-900"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-muted hover:text-brand-blue-dark"
         >
           <Pencil className="h-3.5 w-3.5" /> Rename course
         </button>
-        <label className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
+        <label className="flex items-center gap-1.5 text-xs font-medium text-brand-muted-soft">
           Shows in
           <select
             value={m.material_kind}
             onChange={(e) => changeKind(e.target.value)}
             disabled={busy}
-            className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 disabled:opacity-50"
+            className="rounded-md border border-brand-border px-2 py-1 text-xs font-medium text-brand-muted disabled:opacity-50"
           >
             {KINDS.map((k) => (
               <option key={k} value={k}>
@@ -396,7 +396,7 @@ function CreateModule({ onDone }: { onDone: () => void }) {
     return (
       <button
         onClick={() => setStep('type')}
-        className="inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+        className="inline-flex items-center gap-1.5 rounded-full bg-brand-blue-dark px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-dark"
       >
         <Plus className="h-4 w-4" /> New course
       </button>
@@ -404,12 +404,12 @@ function CreateModule({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5">
+    <div className="rounded-xl border border-brand-border bg-white p-5">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="font-semibold text-gray-900">
+        <h3 className="font-semibold text-brand-blue-dark">
           {step === 'type' ? 'Choose course type' : 'Course details'}
         </h3>
-        <button onClick={reset} className="text-gray-400 hover:text-gray-600" aria-label="Cancel">
+        <button onClick={reset} className="text-brand-muted-soft hover:text-brand-muted" aria-label="Cancel">
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -425,17 +425,17 @@ function CreateModule({ onDone }: { onDone: () => void }) {
                   onClick={() => setCourseType(t.value)}
                   className={`flex w-full items-start justify-between gap-3 rounded-xl border p-4 text-left transition ${
                     selected
-                      ? 'border-gray-900 bg-gray-50 ring-1 ring-gray-900'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-brand-border bg-brand-canvas ring-1 ring-brand-border'
+                      : 'border-brand-border hover:border-brand-border'
                   }`}
                 >
                   <div>
-                    <p className="font-semibold text-gray-900">{t.label}</p>
-                    <p className="mt-0.5 text-sm text-gray-500">{t.blurb}</p>
+                    <p className="font-semibold text-brand-blue-dark">{t.label}</p>
+                    <p className="mt-0.5 text-sm text-brand-muted-soft">{t.blurb}</p>
                   </div>
                   <span
                     className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                      selected ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300'
+                      selected ? 'border-brand-border bg-brand-blue-dark text-white' : 'border-brand-border'
                     }`}
                   >
                     {selected && <Check className="h-3 w-3" />}
@@ -446,7 +446,7 @@ function CreateModule({ onDone }: { onDone: () => void }) {
           </div>
           <button
             onClick={() => setStep('details')}
-            className="mt-4 w-full rounded-full bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800"
+            className="mt-4 w-full rounded-full bg-brand-blue-dark px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-blue-dark"
           >
             Next
           </button>
@@ -458,20 +458,20 @@ function CreateModule({ onDone }: { onDone: () => void }) {
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Course title"
             autoFocus
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
           />
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Description (optional)"
             rows={2}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
           />
           <div className="flex flex-wrap items-center gap-3">
             <select
               value={materialKind}
               onChange={(e) => setMaterialKind(e.target.value as (typeof KINDS)[number])}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              className="rounded-md border border-brand-border px-3 py-2 text-sm"
             >
               {KINDS.map((k) => (
                 <option key={k} value={k}>
@@ -483,21 +483,21 @@ function CreateModule({ onDone }: { onDone: () => void }) {
               value={eventRef}
               onChange={(e) => setEventRef(e.target.value)}
               placeholder="Sanity event _id (optional)"
-              className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+              className="flex-1 rounded-md border border-brand-border px-3 py-2 text-sm"
             />
-            <label className="flex items-center gap-1.5 text-sm text-gray-600">
+            <label className="flex items-center gap-1.5 text-sm text-brand-muted">
               <input type="checkbox" checked={paidOnly} onChange={(e) => setPaidOnly(e.target.checked)} />
               Paid only
             </label>
           </div>
           {courseType === 'scheduled' && (
-            <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
+            <label className="flex flex-col gap-1 text-xs font-medium text-brand-muted">
               Course start date (sections drip relative to this)
               <input
                 type="datetime-local"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-fit rounded-md border border-gray-300 px-3 py-2 text-sm font-normal"
+                className="w-fit rounded-md border border-brand-border px-3 py-2 text-sm font-normal"
               />
             </label>
           )}
@@ -505,11 +505,11 @@ function CreateModule({ onDone }: { onDone: () => void }) {
             <button
               onClick={create}
               disabled={busy || !title.trim()}
-              className="rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              className="rounded-full bg-brand-blue-dark px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
             >
               {busy ? 'Creating…' : 'Create course'}
             </button>
-            <button onClick={() => setStep('type')} className="px-3 py-2 text-sm text-gray-500">
+            <button onClick={() => setStep('type')} className="px-3 py-2 text-sm text-brand-muted-soft">
               Back
             </button>
           </div>
@@ -617,8 +617,8 @@ function Curriculum({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Curriculum</p>
-        {ordered.length > 1 && <p className="text-[11px] text-gray-400">Drag sections to reorder</p>}
+        <p className="text-xs font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Curriculum</p>
+        {ordered.length > 1 && <p className="text-[11px] text-brand-muted-soft">Drag sections to reorder</p>}
       </div>
 
       {ordered.map((s) => (
@@ -639,9 +639,9 @@ function Curriculum({
 
       {/* Ungrouped lessons */}
       {ungrouped.length > 0 && (
-        <div className="rounded-lg border border-gray-200 bg-white">
-          <div className="border-b border-gray-100 px-3 py-2">
-            <p className="text-sm font-semibold text-gray-500">Ungrouped lessons</p>
+        <div className="rounded-lg border border-brand-border bg-white">
+          <div className="border-b border-brand-hairline px-3 py-2">
+            <p className="text-sm font-semibold text-brand-muted-soft">Ungrouped lessons</p>
           </div>
           <div className="space-y-1.5 p-3">
             {ungrouped.map((l) => (
@@ -660,23 +660,23 @@ function Curriculum({
             onKeyDown={(e) => e.key === 'Enter' && createSection()}
             placeholder="Section name"
             autoFocus
-            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="flex-1 rounded-md border border-brand-border px-3 py-2 text-sm"
           />
           <button
             onClick={createSection}
             disabled={busy || !sectionTitle.trim()}
-            className="rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            className="rounded-md bg-brand-blue-dark px-3 py-2 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
           >
             Add
           </button>
-          <button onClick={() => setAddingSection(false)} className="px-2 py-2 text-sm text-gray-500">
+          <button onClick={() => setAddingSection(false)} className="px-2 py-2 text-sm text-brand-muted-soft">
             Cancel
           </button>
         </div>
       ) : (
         <button
           onClick={() => setAddingSection(true)}
-          className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="inline-flex items-center gap-1.5 rounded-full border border-brand-border bg-white px-3 py-1.5 text-sm font-medium text-brand-muted hover:bg-brand-canvas"
         >
           <Plus className="h-4 w-4" /> Add section
         </button>
@@ -759,18 +759,18 @@ function SectionCard({
         onDrop()
       }}
       className={`rounded-lg border bg-white transition ${
-        dragging ? 'border-gray-400 opacity-60' : 'border-gray-200'
+        dragging ? 'border-brand-border opacity-60' : 'border-brand-border'
       }`}
     >
       <div
         draggable={reorderable && !editing}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        className="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2"
+        className="flex items-center justify-between gap-2 border-b border-brand-hairline px-3 py-2"
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {reorderable && (
-            <span className="cursor-grab text-gray-300 hover:text-gray-500" title="Drag to reorder">
+            <span className="cursor-grab text-brand-muted-soft hover:text-brand-muted-soft" title="Drag to reorder">
               <GripVertical className="h-4 w-4" />
             </span>
           )}
@@ -788,12 +788,12 @@ function SectionCard({
               }}
               disabled={busy}
               autoFocus
-              className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm"
+              className="min-w-0 flex-1 rounded-md border border-brand-border px-2 py-1 text-sm"
             />
           ) : (
             <button
               onClick={() => setEditing(true)}
-              className="min-w-0 truncate text-left text-sm font-semibold text-gray-800 hover:underline"
+              className="min-w-0 truncate text-left text-sm font-semibold text-brand-blue-dark hover:underline"
               title="Rename section"
             >
               {s.title}
@@ -805,7 +805,7 @@ function SectionCard({
           {!editing && (
             <button
               onClick={() => setEditing(true)}
-              className="text-gray-300 hover:text-gray-600"
+              className="text-brand-muted-soft hover:text-brand-muted"
               aria-label="Rename section"
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -814,7 +814,7 @@ function SectionCard({
           <button
             onClick={remove}
             disabled={busy}
-            className="text-gray-300 hover:text-red-500 disabled:opacity-50"
+            className="text-brand-muted-soft hover:text-red-500 disabled:opacity-50"
             aria-label="Delete section"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -825,7 +825,7 @@ function SectionCard({
         {lessons.map((l) => (
           <LessonRow key={l.id} lesson={l} onDone={onDone} />
         ))}
-        {lessons.length === 0 && <p className="px-1 py-2 text-xs text-gray-400">No lessons yet.</p>}
+        {lessons.length === 0 && <p className="px-1 py-2 text-xs text-brand-muted-soft">No lessons yet.</p>}
         <AddLessonForm moduleId={m.id} sectionId={s.id} count={lessons.length} onDone={onDone} />
       </div>
     </div>
@@ -853,7 +853,7 @@ function DripControl({ section, onDone }: { section: AdminSection; onDone: () =>
   }
 
   return (
-    <label className="flex items-center gap-1 text-xs text-gray-500" title="Days after enrollment / start date before this section unlocks">
+    <label className="flex items-center gap-1 text-xs text-brand-muted-soft" title="Days after enrollment / start date before this section unlocks">
       <span className="hidden sm:inline">Drip</span>
       <input
         type="number"
@@ -863,7 +863,7 @@ function DripControl({ section, onDone }: { section: AdminSection; onDone: () =>
         onChange={(e) => setDays(e.target.value)}
         onBlur={save}
         onKeyDown={(e) => e.key === 'Enter' && save()}
-        className="w-14 rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-50"
+        className="w-14 rounded-md border border-brand-border px-2 py-1 text-xs disabled:opacity-50"
       />
       <span>days</span>
     </label>
@@ -910,29 +910,29 @@ function LessonRow({ lesson, onDone }: { lesson: AdminLesson; onDone: () => void
 
   if (editing) {
     return (
-      <div className="rounded-md border border-gray-200 bg-white p-3">
+      <div className="rounded-md border border-brand-border bg-white p-3">
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Lesson title"
-          className="mb-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="mb-2 w-full rounded-md border border-brand-border px-3 py-2 text-sm"
         />
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Lesson notes (shown beneath the featured media)"
           rows={3}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
         />
         <div className="mt-2 flex items-center gap-2">
           <button
             onClick={saveEdit}
             disabled={busy || !title.trim()}
-            className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            className="rounded-md bg-brand-blue-dark px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
           >
             {busy ? 'Saving…' : 'Save'}
           </button>
-          <button onClick={() => setEditing(false)} className="px-2 py-1.5 text-xs text-gray-500">
+          <button onClick={() => setEditing(false)} className="px-2 py-1.5 text-xs text-brand-muted-soft">
             Cancel
           </button>
         </div>
@@ -941,15 +941,15 @@ function LessonRow({ lesson, onDone }: { lesson: AdminLesson; onDone: () => void
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50/60 px-3 py-2">
+    <div className="flex items-center justify-between gap-3 rounded-md border border-brand-hairline bg-brand-canvas/60 px-3 py-2">
       <button
         onClick={() => setEditing(true)}
         className="flex min-w-0 items-center gap-2.5 text-left"
         title="Edit lesson"
       >
-        <Icon className="h-4 w-4 shrink-0 text-gray-400" />
-        <span className="truncate text-sm text-gray-800 hover:underline">{lesson.title}</span>
-        {lesson.body && <span className="shrink-0 text-[10px] text-gray-400">· notes</span>}
+        <Icon className="h-4 w-4 shrink-0 text-brand-muted-soft" />
+        <span className="truncate text-sm text-brand-blue-dark hover:underline">{lesson.title}</span>
+        {lesson.body && <span className="shrink-0 text-[10px] text-brand-muted-soft">· notes</span>}
       </button>
       <div className="flex shrink-0 items-center gap-2">
         <select
@@ -959,7 +959,7 @@ function LessonRow({ lesson, onDone }: { lesson: AdminLesson; onDone: () => void
           className={`rounded-md border px-2 py-1 text-xs font-medium disabled:opacity-50 ${
             lesson.status === 'published'
               ? 'border-green-200 bg-green-50 text-green-700'
-              : 'border-gray-200 bg-white text-gray-600'
+              : 'border-brand-border bg-white text-brand-muted'
           }`}
         >
           <option value="draft">Draft</option>
@@ -968,7 +968,7 @@ function LessonRow({ lesson, onDone }: { lesson: AdminLesson; onDone: () => void
         <button
           onClick={remove}
           disabled={busy}
-          className="text-gray-300 hover:text-red-500 disabled:opacity-50"
+          className="text-brand-muted-soft hover:text-red-500 disabled:opacity-50"
           aria-label="Delete lesson"
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -1053,7 +1053,7 @@ function AddLessonForm({
     return (
       <button
         onClick={() => setOpenForm(true)}
-        className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+        className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-brand-muted-soft hover:bg-brand-hairline hover:text-brand-blue-dark"
       >
         <Plus className="h-3.5 w-3.5" /> Add lesson
       </button>
@@ -1061,14 +1061,14 @@ function AddLessonForm({
   }
 
   return (
-    <div className="rounded-md border border-gray-200 bg-white p-3">
+    <div className="rounded-md border border-brand-border bg-white p-3">
       <div className="grid gap-2 sm:grid-cols-2">
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Lesson title"
           autoFocus
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="rounded-md border border-brand-border px-3 py-2 text-sm"
         />
         <select
           value={contentKind}
@@ -1076,7 +1076,7 @@ function AddLessonForm({
             setContentKind(e.target.value as (typeof CONTENT_KINDS)[number])
             setError(null)
           }}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="rounded-md border border-brand-border px-3 py-2 text-sm"
         >
           {CONTENT_KINDS.map((k) => (
             <option key={k} value={k}>
@@ -1091,10 +1091,10 @@ function AddLessonForm({
             value={externalUrl}
             onChange={(e) => setExternalUrl(e.target.value)}
             placeholder="https://… (Google Doc, YouTube/Vimeo embed, or link)"
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="rounded-md border border-brand-border px-3 py-2 text-sm"
           />
         ) : (
-          <p className="self-center text-xs text-gray-500">
+          <p className="self-center text-xs text-brand-muted-soft">
             A live video room opens in the lesson; the recording replaces it afterwards.
           </p>
         )}
@@ -1102,7 +1102,7 @@ function AddLessonForm({
           value={minutes}
           onChange={(e) => setMinutes(e.target.value)}
           placeholder="Est. minutes (optional)"
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="rounded-md border border-brand-border px-3 py-2 text-sm"
         />
       </div>
       <textarea
@@ -1110,26 +1110,26 @@ function AddLessonForm({
         onChange={(e) => setBodyText(e.target.value)}
         placeholder="Lesson notes (optional) — shown beneath the featured media"
         rows={2}
-        className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        className="mt-2 w-full rounded-md border border-brand-border px-3 py-2 text-sm"
       />
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
       <div className="mt-2 flex items-center gap-2">
         <button
           onClick={submit}
           disabled={busy || !title.trim() || missingMedia}
-          className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded-md bg-brand-blue-dark px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
         >
           {busy ? 'Saving…' : 'Add lesson'}
         </button>
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value as 'draft' | 'published')}
-          className="rounded-md border border-gray-300 px-2 py-1.5 text-xs"
+          className="rounded-md border border-brand-border px-2 py-1.5 text-xs"
         >
           <option value="published">Published</option>
           <option value="draft">Draft</option>
         </select>
-        <button onClick={() => setOpenForm(false)} className="px-2 py-1.5 text-xs text-gray-500">
+        <button onClick={() => setOpenForm(false)} className="px-2 py-1.5 text-xs text-brand-muted-soft">
           Cancel
         </button>
       </div>
@@ -1220,8 +1220,8 @@ function AssignForm({
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+    <div className="rounded-lg border border-brand-border bg-white p-3">
+      <p className="mb-2 text-xs font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">
         Assign to event participants
       </p>
 
@@ -1230,10 +1230,10 @@ function AssignForm({
           {assignments.map((a) => (
             <li
               key={a.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50/60 px-3 py-1.5 text-xs"
+              className="flex items-center justify-between gap-3 rounded-md border border-brand-hairline bg-brand-canvas/60 px-3 py-1.5 text-xs"
             >
-              <span className="min-w-0 truncate text-gray-700">
-                <span className="font-mono text-gray-500">{a.event_ref}</span>
+              <span className="min-w-0 truncate text-brand-muted">
+                <span className="font-mono text-brand-muted-soft">{a.event_ref}</span>
                 {' · '}
                 {ASSIGN_ROLE_LABEL[a.event_role] ?? a.event_role}
                 {a.is_mandatory && (
@@ -1242,13 +1242,13 @@ function AssignForm({
                   </span>
                 )}
                 {a.due_at && (
-                  <span className="ml-2 text-gray-400">due {new Date(a.due_at).toLocaleDateString()}</span>
+                  <span className="ml-2 text-brand-muted-soft">due {new Date(a.due_at).toLocaleDateString()}</span>
                 )}
               </span>
               <button
                 onClick={() => remove(a.id)}
                 disabled={busy}
-                className="shrink-0 text-gray-300 hover:text-red-500 disabled:opacity-50"
+                className="shrink-0 text-brand-muted-soft hover:text-red-500 disabled:opacity-50"
                 aria-label="Remove assignment"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -1266,12 +1266,12 @@ function AssignForm({
             setSaved(false)
           }}
           placeholder="Sanity event _id or slug"
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="rounded-md border border-brand-border px-3 py-2 text-sm"
         />
         <select
           value={eventRole}
           onChange={(e) => setEventRole(e.target.value)}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="rounded-md border border-brand-border px-3 py-2 text-sm"
         >
           {Object.entries(ASSIGN_ROLE_LABEL).map(([v, label]) => (
             <option key={v} value={v}>
@@ -1283,9 +1283,9 @@ function AssignForm({
           type="datetime-local"
           value={dueAt}
           onChange={(e) => setDueAt(e.target.value)}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="rounded-md border border-brand-border px-3 py-2 text-sm"
         />
-        <label className="flex items-center gap-1.5 text-sm text-gray-600">
+        <label className="flex items-center gap-1.5 text-sm text-brand-muted">
           <input type="checkbox" checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} />
           Mandatory
         </label>
@@ -1297,7 +1297,7 @@ function AssignForm({
       <button
         onClick={submit}
         disabled={busy || !eventRef.trim()}
-        className="mt-2 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+        className="mt-2 rounded-md border border-brand-border px-3 py-1.5 text-xs font-medium text-brand-muted hover:bg-brand-hairline disabled:opacity-50"
       >
         {busy ? 'Saving…' : 'Assign'}
       </button>

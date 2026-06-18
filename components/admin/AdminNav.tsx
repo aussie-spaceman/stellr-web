@@ -77,21 +77,21 @@ export function AdminNav() {
           >
             <button
               className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 ${
-                sectionActive ? 'text-gray-900 font-medium' : 'text-gray-600 hover:text-gray-900'
+                sectionActive ? 'text-brand-blue-dark font-medium' : 'text-brand-muted hover:text-brand-blue-dark'
               }`}
             >
               {section.label}
               <ChevronDown className="h-3.5 w-3.5 opacity-60" />
             </button>
-            <div className="absolute left-0 top-full z-20 hidden min-w-[190px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+            <div className="absolute left-0 top-full z-20 hidden min-w-[190px] rounded-lg border border-brand-border bg-white py-1 shadow-lg">
               {section.items.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={`block px-3 py-1.5 text-sm ${
                     itemActive(item.href)
-                      ? 'text-indigo-700 font-medium bg-indigo-50/60'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      ? 'text-brand-blue font-medium bg-brand-blue/5/60'
+                      : 'text-brand-muted hover:bg-brand-canvas hover:text-brand-blue-dark'
                   }`}
                 >
                   {item.label}

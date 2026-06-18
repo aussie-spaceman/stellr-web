@@ -22,8 +22,11 @@ export default async function AdminTrainingPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Training</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <p className="eyebrow flex items-center gap-2 text-brand-gold-ink">
+          <span className="h-2 w-2 rounded-full bg-brand-orange" /> Academy
+        </p>
+        <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Training</h1>
+        <p className="mt-0.5 text-sm text-brand-muted-soft">
           Build training modules and assign them to event participants. Fine-grained tier access is
           set on the <span className="font-medium">Access</span> tab.
         </p>

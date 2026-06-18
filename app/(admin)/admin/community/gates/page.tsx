@@ -26,8 +26,8 @@ export default async function AdminGatesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Access gates</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Access gates</h1>
+        <p className="mt-0.5 text-sm text-brand-muted-soft">
           Require a member to complete one module before another, and choose what stays open after a
           container archives. These layer on top of tier/entitlement access.
         </p>

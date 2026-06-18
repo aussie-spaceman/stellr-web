@@ -43,7 +43,7 @@ export function FlagQueue({ flags }: Props) {
 
   if (flags.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-200 py-12 text-center text-sm text-gray-400">
+      <div className="rounded-xl border border-dashed border-brand-border py-12 text-center text-sm text-brand-muted-soft">
         No flags in this queue.
       </div>
     )
@@ -52,37 +52,37 @@ export function FlagQueue({ flags }: Props) {
   return (
     <div className="space-y-3">
       {flags.map((flag) => (
-        <div key={flag.id} className="rounded-xl border border-gray-200 bg-white p-4">
+        <div key={flag.id} className="rounded-xl border border-brand-border bg-white p-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium capitalize text-gray-600">
+                <span className="rounded-full bg-brand-hairline px-2 py-0.5 text-xs font-medium capitalize text-brand-muted">
                   {flag.content_type}
                 </span>
-                <span className="font-mono text-xs text-gray-400">{flag.content_id.slice(0, 8)}…</span>
+                <span className="font-mono text-xs text-brand-muted-soft">{flag.content_id.slice(0, 8)}…</span>
                 <Link
                   href={`/community/general/${flag.content_type === 'post' ? flag.content_id : ''}`}
                   target="_blank"
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-brand-muted-soft hover:text-brand-muted"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                 </Link>
               </div>
               {flag.reason && (
-                <p className="text-sm text-gray-700">
+                <p className="text-sm text-brand-muted">
                   <span className="font-medium">Reason:</span> {flag.reason}
                 </p>
               )}
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-brand-muted-soft">
                 Flagged by {memberName(flag.flagged_by_member)}
                 {flag.flagged_by_member?.email && (
-                  <span className="ml-1 text-gray-300">({flag.flagged_by_member.email})</span>
+                  <span className="ml-1 text-brand-muted-soft">({flag.flagged_by_member.email})</span>
                 )}
                 {' · '}
                 {new Date(flag.created_at).toLocaleDateString()}
               </p>
               {flag.resolved_by_member && (
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-brand-muted-soft">
                   {flag.status} by {memberName(flag.resolved_by_member)}
                 </p>
               )}
@@ -100,14 +100,14 @@ export function FlagQueue({ flags }: Props) {
                 <button
                   onClick={() => resolve(flag.id, 'resolved', false)}
                   disabled={loading === flag.id}
-                  className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="rounded-md border border-brand-border px-3 py-1.5 text-xs font-medium text-brand-muted hover:bg-brand-canvas disabled:opacity-50"
                 >
                   Resolve
                 </button>
                 <button
                   onClick={() => resolve(flag.id, 'dismissed')}
                   disabled={loading === flag.id}
-                  className="rounded-md px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                  className="rounded-md px-3 py-1.5 text-xs text-brand-muted-soft hover:text-brand-muted disabled:opacity-50"
                 >
                   Dismiss
                 </button>

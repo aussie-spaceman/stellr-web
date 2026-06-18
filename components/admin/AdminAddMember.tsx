@@ -142,18 +142,18 @@ export function AdminAddMember({ tiers }: Props) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <Link href="/admin" className="text-sm text-gray-500 hover:text-gray-700 mb-1 inline-block">
+          <Link href="/admin" className="text-sm text-brand-muted-soft hover:text-brand-muted mb-1 inline-block">
             ← All members
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">Add member</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="font-heading uppercase text-title text-brand-blue-dark">Add member</h1>
+          <p className="text-sm text-brand-muted-soft mt-0.5">
             Manually create a member record. They can log in later using the email below.
           </p>
         </div>
         <button
           onClick={handleSubmit}
           disabled={saving}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+          className="bg-brand-blue text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-50"
         >
           {saving ? 'Creating…' : 'Create member'}
         </button>
@@ -167,72 +167,72 @@ export function AdminAddMember({ tiers }: Props) {
         <div className="lg:col-span-2 space-y-6">
 
           {/* Identity */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-            <h2 className="text-base font-semibold text-gray-900">Identity</h2>
+          <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
+            <h2 className="text-base font-semibold text-brand-blue-dark">Identity</h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">First name <span className="text-red-400">*</span></label>
+                <label className="block text-xs text-brand-muted-soft mb-1">First name <span className="text-red-400">*</span></label>
                 <input
                   type="text"
                   value={form.first_name}
                   onChange={(e) => set('first_name', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Last name <span className="text-red-400">*</span></label>
+                <label className="block text-xs text-brand-muted-soft mb-1">Last name <span className="text-red-400">*</span></label>
                 <input
                   type="text"
                   value={form.last_name}
                   onChange={(e) => set('last_name', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Preferred name / nickname</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">Preferred name / nickname</label>
                 <input
                   type="text"
                   value={form.nickname}
                   onChange={(e) => set('nickname', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Email <span className="text-red-400">*</span></label>
+                <label className="block text-xs text-brand-muted-soft mb-1">Email <span className="text-red-400">*</span></label>
                 <input
                   type="email"
                   value={form.email}
                   onChange={(e) => set('email', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Phone</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">Phone</label>
                 <input
                   type="tel"
                   value={form.phone}
                   onChange={(e) => set('phone', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Date of birth</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">Date of birth</label>
                 <input
                   type="date"
                   value={form.date_of_birth}
                   onChange={(e) => handleDobChange(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
                 {isMinor && (
                   <p className="text-xs text-amber-600 mt-1">Under 18 — bracket and role auto-set to High School / School Student.</p>
                 )}
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Gender</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">Gender</label>
                 <select
                   value={form.gender}
                   onChange={(e) => set('gender', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 >
                   <option value="">Select…</option>
                   {GENDERS.map((g) => (
@@ -241,20 +241,20 @@ export function AdminAddMember({ tiers }: Props) {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Discord handle</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">Discord handle</label>
                 <input
                   type="text"
                   value={form.discord_handle}
                   onChange={(e) => set('discord_handle', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">T-shirt size</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">T-shirt size</label>
                 <select
                   value={form.tshirt_size}
                   onChange={(e) => set('tshirt_size', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 >
                   <option value="">Select…</option>
                   {TSHIRT_SIZES.map((s) => (
@@ -266,41 +266,41 @@ export function AdminAddMember({ tiers }: Props) {
           </div>
 
           {/* Classification */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-            <h2 className="text-base font-semibold text-gray-900">Classification</h2>
+          <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
+            <h2 className="text-base font-semibold text-brand-blue-dark">Classification</h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Age bracket</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">Age bracket</label>
                 <select
                   value={form.age_bracket}
                   onChange={(e) => handleBracketChange(e.target.value)}
                   disabled={isMinor}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue disabled:bg-brand-canvas disabled:text-brand-muted-soft"
                 >
                   {BRACKETS.map((b) => <option key={b} value={b}>{label(b)}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Event role</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">Event role</label>
                 <select
                   value={form.event_role}
                   onChange={(e) => set('event_role', e.target.value)}
                   disabled={eligibleRoles.length <= 1}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue disabled:bg-brand-canvas disabled:text-brand-muted-soft"
                 >
                   {eligibleRoles.map((r) => <option key={r} value={r}>{label(r)}</option>)}
                 </select>
                 {eligibleRoles.length <= 1 && (
-                  <p className="text-xs text-gray-400 mt-1">Auto-set by age bracket</p>
+                  <p className="text-xs text-brand-muted-soft mt-1">Auto-set by age bracket</p>
                 )}
               </div>
               {showGrade && (
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Grade / Year</label>
+                  <label className="block text-xs text-brand-muted-soft mb-1">Grade / Year</label>
                   <select
                     value={form.grade}
                     onChange={(e) => set('grade', e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                   >
                     <option value="">Select…</option>
                     {GRADES.filter((g) =>
@@ -318,18 +318,18 @@ export function AdminAddMember({ tiers }: Props) {
 
           {/* School */}
           {(form.age_bracket === 'high_school' || form.age_bracket === 'college') && (
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-              <h2 className="text-base font-semibold text-gray-900">School</h2>
+            <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
+              <h2 className="text-base font-semibold text-brand-blue-dark">School</h2>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">School name</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">School name</label>
                 <SchoolSearchInput onChange={setSchoolSelection} />
               </div>
             </div>
           )}
 
           {/* Emergency contact */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-            <h2 className="text-base font-semibold text-gray-900">Emergency contact</h2>
+          <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
+            <h2 className="text-base font-semibold text-brand-blue-dark">Emergency contact</h2>
             <div className="grid grid-cols-2 gap-4">
               {[
                 { label: 'First name', field: 'ec_first_name' },
@@ -338,21 +338,21 @@ export function AdminAddMember({ tiers }: Props) {
                 { label: 'Phone', field: 'ec_phone' },
               ].map(({ label: lbl, field }) => (
                 <div key={field}>
-                  <label className="block text-xs text-gray-500 mb-1">{lbl}</label>
+                  <label className="block text-xs text-brand-muted-soft mb-1">{lbl}</label>
                   <input
                     type="text"
                     value={(form as unknown as Record<string, string>)[field]}
                     onChange={(e) => set(field, e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                   />
                 </div>
               ))}
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Relationship to participant</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">Relationship to participant</label>
                 <select
                   value={form.ec_relationship}
                   onChange={(e) => set('ec_relationship', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 >
                   <option value="">Select…</option>
                   {EMERGENCY_RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
@@ -362,10 +362,10 @@ export function AdminAddMember({ tiers }: Props) {
           </div>
 
           {/* Ethnicity & dietary */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-            <h2 className="text-base font-semibold text-gray-900">Ethnicity &amp; dietary</h2>
+          <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
+            <h2 className="text-base font-semibold text-brand-blue-dark">Ethnicity &amp; dietary</h2>
             <div>
-              <p className="block text-xs text-gray-500 mb-2">Ethnicity</p>
+              <p className="block text-xs text-brand-muted-soft mb-2">Ethnicity</p>
               <div className="flex flex-wrap gap-x-4 gap-y-2">
                 {ETHNICITIES.map((opt) => (
                   <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
@@ -376,7 +376,7 @@ export function AdminAddMember({ tiers }: Props) {
               </div>
             </div>
             <div>
-              <p className="block text-xs text-gray-500 mb-2">Dietary requirements</p>
+              <p className="block text-xs text-brand-muted-soft mb-2">Dietary requirements</p>
               <div className="flex flex-wrap gap-x-4 gap-y-2">
                 {DIETARY_OPTIONS.map((opt) => (
                   <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
@@ -392,11 +392,11 @@ export function AdminAddMember({ tiers }: Props) {
 
         {/* Sidebar */}
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          <div className="bg-white rounded-xl border border-brand-border p-5">
+            <h2 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide mb-3">
               Membership tier
             </h2>
-            <p className="text-xs text-gray-400 mb-3">
+            <p className="text-xs text-brand-muted-soft mb-3">
               Assign an initial tier, or leave blank to set later.
             </p>
             {eligibleTiers.length > 0 ? (
@@ -408,9 +408,9 @@ export function AdminAddMember({ tiers }: Props) {
                     value=""
                     checked={form.tier_id === ''}
                     onChange={() => set('tier_id', '')}
-                    className="text-indigo-600"
+                    className="text-brand-blue"
                   />
-                  <span className="text-gray-500">No tier yet</span>
+                  <span className="text-brand-muted-soft">No tier yet</span>
                 </label>
                 {eligibleTiers.map((t) => (
                   <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -420,14 +420,14 @@ export function AdminAddMember({ tiers }: Props) {
                       value={t.id}
                       checked={form.tier_id === t.id}
                       onChange={() => set('tier_id', t.id)}
-                      className="text-indigo-600"
+                      className="text-brand-blue"
                     />
                     {t.name}
                   </label>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-brand-muted-soft">
                 Set a classification first to see eligible tiers.
               </p>
             )}

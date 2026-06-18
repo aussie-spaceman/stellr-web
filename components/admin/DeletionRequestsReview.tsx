@@ -74,8 +74,8 @@ export function DeletionRequestsReview({ initialRequests }: { initialRequests: D
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-xl font-bold text-gray-900">Deletion requests</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <h2 className="text-xl font-bold text-brand-blue-dark">Deletion requests</h2>
+        <p className="mt-1 text-sm text-brand-muted-soft">
           Members have asked to remove these items. Approving deletes the item; declining leaves it in place.
         </p>
       </div>
@@ -88,7 +88,7 @@ export function DeletionRequestsReview({ initialRequests }: { initialRequests: D
         const requester = getRequester(item)
         const blockers = blockersFor[item.id]
         return (
-          <div key={item.id} className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+          <div key={item.id} className="bg-white rounded-xl border border-brand-border p-5 space-y-3">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <span className="inline-block text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
@@ -96,24 +96,24 @@ export function DeletionRequestsReview({ initialRequests }: { initialRequests: D
                 </span>
                 <p className="mt-1.5 text-sm">
                   {requester ? (
-                    <Link href={`/admin/members/${item.requested_by}`} className="font-medium text-indigo-600 hover:text-indigo-800">
+                    <Link href={`/admin/members/${item.requested_by}`} className="font-medium text-brand-blue hover:text-brand-blue">
                       {requester.first_name} {requester.last_name}
                     </Link>
                   ) : (
-                    <span className="font-medium text-gray-700">Unknown member</span>
+                    <span className="font-medium text-brand-muted">Unknown member</span>
                   )}
                 </p>
-                {requester?.email && <p className="text-xs text-gray-400">{requester.email}</p>}
+                {requester?.email && <p className="text-xs text-brand-muted-soft">{requester.email}</p>}
               </div>
-              <p className="text-xs text-gray-400 shrink-0">
+              <p className="text-xs text-brand-muted-soft shrink-0">
                 {new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </p>
             </div>
 
-            {item.reason && <p className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3">{item.reason}</p>}
+            {item.reason && <p className="text-sm text-brand-muted bg-brand-canvas border border-brand-border rounded-lg p-3">{item.reason}</p>}
 
             {blockers && blockers.length > 0 && (
-              <ul className="text-sm text-gray-700 space-y-1 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <ul className="text-sm text-brand-muted space-y-1 bg-amber-50 border border-amber-200 rounded-lg p-3">
                 <li className="text-amber-800 font-medium">Delete these first:</li>
                 {blockers.map((b) => (
                   <li key={b.table} className="flex justify-between"><span>{b.label}</span><span className="font-medium">{b.count}</span></li>
@@ -121,7 +121,7 @@ export function DeletionRequestsReview({ initialRequests }: { initialRequests: D
               </ul>
             )}
 
-            <div className="flex items-center gap-3 pt-1 border-t border-gray-100">
+            <div className="flex items-center gap-3 pt-1 border-t border-brand-hairline">
               <button
                 onClick={() => review(item.id, 'approve')}
                 disabled={processing === item.id}

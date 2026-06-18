@@ -49,9 +49,9 @@ export function ComplianceAuditTable({
           { label: 'Cleared', value: counts.valid_bc + counts.valid_license, cls: 'text-emerald-700' },
           { label: 'Awaiting license review', value: reviewQueueCount, cls: 'text-amber-700' },
         ] as const).map((c) => (
-          <div key={c.label} className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+          <div key={c.label} className="rounded-xl border border-brand-border bg-white px-4 py-3">
             <p className={`text-2xl font-bold ${c.cls}`}>{c.value}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{c.label}</p>
+            <p className="text-xs text-brand-muted-soft mt-0.5">{c.label}</p>
           </div>
         ))}
       </div>
@@ -64,8 +64,8 @@ export function ComplianceAuditTable({
             onClick={() => setFilter(f.key)}
             className={`text-xs font-medium rounded-full px-3 py-1.5 border ${
               filter === f.key
-                ? 'bg-indigo-600 text-white border-indigo-600'
-                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                ? 'bg-brand-blue text-white border-brand-blue'
+                : 'bg-white text-brand-muted border-brand-border hover:bg-brand-canvas'
             }`}
           >
             {f.label}
@@ -74,14 +74,14 @@ export function ComplianceAuditTable({
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-sm text-gray-400 bg-white rounded-xl border border-gray-200 px-4 py-6">
+        <p className="text-sm text-brand-muted-soft bg-white rounded-xl border border-brand-border px-4 py-6">
           No members match this filter.
         </p>
       ) : (
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+        <div className="rounded-xl border border-brand-border bg-white overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 text-left text-xs uppercase tracking-wide text-gray-500">
+              <tr className="border-b border-brand-hairline text-left text-xs uppercase tracking-wide text-brand-muted-soft">
                 <th className="px-4 py-2.5 font-medium">Member</th>
                 <th className="px-4 py-2.5 font-medium">Role</th>
                 <th className="px-4 py-2.5 font-medium">Status</th>
@@ -89,19 +89,19 @@ export function ComplianceAuditTable({
                 <th className="px-4 py-2.5 font-medium text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-brand-hairline">
               {filtered.map((r) => {
                 const pill = COMPLIANCE_PILL[r.state]
                 const reviewable = r.license && !r.license.verified_at
                 return (
-                  <tr key={r.memberId} className="hover:bg-gray-50">
+                  <tr key={r.memberId} className="hover:bg-brand-canvas">
                     <td className="px-4 py-2.5">
-                      <Link href={`/admin/members/${r.memberId}`} className="font-medium text-indigo-600 hover:text-indigo-800">
+                      <Link href={`/admin/members/${r.memberId}`} className="font-medium text-brand-blue hover:text-brand-blue">
                         {r.name}
                       </Link>
-                      {r.email && <p className="text-xs text-gray-400 truncate">{r.email}</p>}
+                      {r.email && <p className="text-xs text-brand-muted-soft truncate">{r.email}</p>}
                     </td>
-                    <td className="px-4 py-2.5 text-gray-600">{displayEventRole(r.eventRole) ?? r.eventRole ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-brand-muted">{displayEventRole(r.eventRole) ?? r.eventRole ?? '—'}</td>
                     <td className="px-4 py-2.5">
                       <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${pill.cls}`}>{pill.label}</span>
                       {reviewable && (
@@ -110,11 +110,11 @@ export function ComplianceAuditTable({
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-gray-500 text-xs">{r.detail ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-brand-muted-soft text-xs">{r.detail ?? '—'}</td>
                     <td className="px-4 py-2.5 text-right">
                       <Link
                         href={`/admin/members/${r.memberId}`}
-                        className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                        className="text-xs font-medium text-brand-blue hover:text-brand-blue"
                       >
                         Manage →
                       </Link>

@@ -80,7 +80,7 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
     })
   }, [state, search])
 
-  if (!state) return <p className="text-sm text-gray-400">Loading…</p>
+  if (!state) return <p className="text-sm text-brand-muted-soft">Loading…</p>
 
   const arrived = state.participants.filter((p) => p.checkedInAt).length
   const total = state.participants.length
@@ -88,12 +88,12 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
   return (
     <div className="grid lg:grid-cols-3 gap-6">
       {/* QR + controls */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4 self-start">
+      <div className="bg-white rounded-xl border border-brand-border p-5 space-y-4 self-start">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Check-In</h2>
+          <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Check-In</h2>
           <span
             className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${
-              state.checkInOpen ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+              state.checkInOpen ? 'bg-green-100 text-green-700' : 'bg-brand-hairline text-brand-muted-soft'
             }`}
           >
             {state.checkInOpen ? 'Open' : 'Closed'}
@@ -103,11 +103,11 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
         {state.checkInOpen && qrDataUrl ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={qrDataUrl} alt="Event check-in QR code" className="w-full rounded-lg border border-gray-100" />
-            <p className="text-xs text-gray-400 break-all">{checkInUrl}</p>
+            <img src={qrDataUrl} alt="Event check-in QR code" className="w-full rounded-lg border border-brand-hairline" />
+            <p className="text-xs text-brand-muted-soft break-all">{checkInUrl}</p>
           </>
         ) : (
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-brand-muted-soft">
             {state.checkInOpen ? 'Generating QR code…' : 'Open check-in to generate the QR code.'}
           </p>
         )}
@@ -117,7 +117,7 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
             <button
               onClick={() => act('close')}
               disabled={busy}
-              className="text-sm font-medium border border-gray-300 rounded-lg px-3 py-1.5 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="text-sm font-medium border border-brand-border rounded-lg px-3 py-1.5 text-brand-muted hover:bg-brand-canvas disabled:opacity-50"
             >
               Close Check-In
             </button>
@@ -125,7 +125,7 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
             <button
               onClick={() => act('open')}
               disabled={busy}
-              className="text-sm font-medium bg-indigo-600 text-white rounded-lg px-3 py-1.5 disabled:opacity-50"
+              className="text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5 disabled:opacity-50"
             >
               Open Check-In
             </button>
@@ -137,55 +137,55 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
               }
             }}
             disabled={busy || !state.checkInToken}
-            className="text-sm font-medium border border-gray-300 rounded-lg px-3 py-1.5 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="text-sm font-medium border border-brand-border rounded-lg px-3 py-1.5 text-brand-muted hover:bg-brand-canvas disabled:opacity-50"
           >
             Regenerate Code
           </button>
         </div>
         {checkInUrl && (
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-brand-muted-soft">
             For virtual events, email this link to participants so they can confirm attendance.
           </p>
         )}
       </div>
 
       {/* Live arrivals list */}
-      <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 overflow-hidden self-start">
-        <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-3">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Arrivals</h2>
-          <span className="text-2xl font-bold text-gray-900 tabular-nums">
+      <div className="lg:col-span-2 bg-white rounded-xl border border-brand-border overflow-hidden self-start">
+        <div className="px-4 py-3 border-b border-brand-hairline flex flex-wrap items-center gap-3">
+          <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Arrivals</h2>
+          <span className="font-heading uppercase text-title text-brand-blue-dark tabular-nums">
             {arrived}
-            <span className="text-sm font-medium text-gray-400"> / {total}</span>
+            <span className="text-sm font-medium text-brand-muted-soft"> / {total}</span>
           </span>
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name…"
-            className="ml-auto border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-56"
+            className="ml-auto border border-brand-border rounded-lg px-3 py-1.5 text-sm w-56"
           />
         </div>
         <table className="w-full text-sm">
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-brand-hairline">
             {filtered.map((p) => (
               <tr key={p.id} className={p.checkedInAt ? 'bg-green-50/40' : ''}>
                 <td className="px-4 py-2.5">
-                  <span className="font-medium text-gray-900">
+                  <span className="font-medium text-brand-blue-dark">
                     {p.firstName} {p.lastName}
                   </span>
-                  <p className="text-xs text-gray-400 capitalize">{(p.eventRole ?? '').replace(/_/g, ' ')}</p>
+                  <p className="text-xs text-brand-muted-soft capitalize">{(p.eventRole ?? '').replace(/_/g, ' ')}</p>
                 </td>
-                <td className="px-4 py-2.5 text-gray-600">
+                <td className="px-4 py-2.5 text-brand-muted">
                   {p.company
                     ? p.company.name
                       ? `${p.company.number} — ${p.company.name}`
                       : `Company ${p.company.number}`
                     : '—'}
                 </td>
-                <td className="px-4 py-2.5 text-gray-600">
+                <td className="px-4 py-2.5 text-brand-muted">
                   {p.shirtSize ?? '—'}
                   {p.merch.length > 0 && (
-                    <div className="mt-0.5 text-xs text-gray-400">
+                    <div className="mt-0.5 text-xs text-brand-muted-soft">
                       {p.merch.map((m) => `${m.name}${m.qty > 1 ? ` ×${m.qty}` : ''}`).join(', ')}
                     </div>
                   )}
@@ -209,7 +209,7 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
                       <button
                         onClick={() => act('undo', p.id)}
                         disabled={busy}
-                        className="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50"
+                        className="text-xs text-brand-muted-soft hover:text-red-600 disabled:opacity-50"
                       >
                         Undo
                       </button>
@@ -217,7 +217,7 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
                       <button
                         onClick={() => act('manual', p.id)}
                         disabled={busy}
-                        className="text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                        className="text-xs font-medium text-brand-blue hover:text-brand-blue disabled:opacity-50"
                       >
                         Check In
                       </button>
@@ -227,7 +227,7 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
                         <button
                           onClick={() => act('merch_uncollected', p.id)}
                           disabled={busy}
-                          className="inline-flex items-center gap-0.5 text-[11px] text-green-700 hover:text-gray-500 disabled:opacity-50"
+                          className="inline-flex items-center gap-0.5 text-[11px] text-green-700 hover:text-brand-muted-soft disabled:opacity-50"
                         >
                           ✓ Merch collected
                         </button>
@@ -246,7 +246,7 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td className="px-4 py-6 text-sm text-gray-400" colSpan={5}>
+                <td className="px-4 py-6 text-sm text-brand-muted-soft" colSpan={5}>
                   No participants found.
                 </td>
               </tr>

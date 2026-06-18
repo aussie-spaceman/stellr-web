@@ -46,27 +46,44 @@ export default async function AdminMembersPage({
     .select('id, name')
     .order('sort_order')
 
+  // A6 — at-a-glance summary (cheap head counts).
+  const [{ count: totalMembers }, { count: schoolCount }, { count: activeMemberships }] = await Promise.all([
+    db.from('members').select('id', { count: 'exact', head: true }).eq('is_active', true),
+    db.from('schools').select('id', { count: 'exact', head: true }),
+    db.from('member_memberships').select('id', { count: 'exact', head: true }).eq('renewal_status', 'active'),
+  ])
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Members</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{count ?? 0} total</p>
+          <p className="eyebrow flex items-center gap-2 text-brand-blue">
+            <span className="h-2 w-2 rounded-full bg-brand-blue-bright" /> Members &amp; membership
+          </p>
+          <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Members</h1>
+          <p className="text-sm text-brand-muted-soft mt-0.5">{count ?? 0} matching</p>
         </div>
         <div className="flex gap-2">
           <a
             href="/admin/members/new"
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700"
+            className="bg-brand-blue text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-blue-dark"
           >
             + Add member
           </a>
           <a
             href="/api/admin/members/export"
-            className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+            className="bg-white border border-brand-border text-brand-muted px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-canvas"
           >
             Export CSV
           </a>
         </div>
+      </div>
+
+      {/* At-a-glance */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <StatCard label="Active members" value={totalMembers ?? 0} accent="#1d5fd6" />
+        <StatCard label="Active memberships" value={activeMemberships ?? 0} accent="#dda33b" />
+        <StatCard label="Schools" value={schoolCount ?? 0} accent="#0d439d" />
       </div>
 
       <MemberTable
@@ -77,6 +94,16 @@ export default async function AdminMembersPage({
         pageSize={pageSize}
         filters={{ q, bracket, role, tier }}
       />
+    </div>
+  )
+}
+
+function StatCard({ label, value, accent }: { label: string; value: number; accent: string }) {
+  return (
+    <div className="app-card relative overflow-hidden p-4">
+      <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
+      <p className="font-display text-display leading-none text-brand-blue-dark">{value.toLocaleString()}</p>
+      <p className="mt-1 font-subheading text-xs font-medium text-brand-muted-soft">{label}</p>
     </div>
   )
 }

@@ -35,8 +35,8 @@ export default async function AdminStaffPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Staff roles</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Staff roles</h1>
+        <p className="mt-0.5 text-sm text-brand-muted-soft">
           Grant members a scoped set of staff permissions — the seam for granular roles like a future
           Graduations coordinator.
         </p>

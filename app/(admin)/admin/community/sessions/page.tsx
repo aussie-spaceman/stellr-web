@@ -80,15 +80,15 @@ export default async function AdminSessionsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Coaching &amp; Mentoring</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Coaching &amp; Mentoring</h1>
+        <p className="mt-0.5 text-sm text-brand-muted-soft">
           Approve coaches and mentors, build cohorts, and set how many sessions each tier includes.
         </p>
       </div>
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Session calendar</h2>
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Session calendar</h2>
+        <div className="rounded-lg border border-brand-border bg-white p-4">
           <SessionCalendar sessions={(allSessions ?? []) as { id: string; title: string | null; scheduled_start: string; status: string }[]} />
         </div>
       </section>
@@ -102,7 +102,7 @@ export default async function AdminSessionsPage() {
       />
 
       <section className="mt-10">
-        <h2 className="mb-4 text-lg font-semibold text-gray-900">Oversight</h2>
+        <h2 className="mb-4 text-lg font-semibold text-brand-blue-dark">Oversight</h2>
         <AdminOversight cohorts={cohorts.map((c) => ({ id: c.id, name: c.name }))} />
       </section>
     </div>

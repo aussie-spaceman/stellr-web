@@ -39,8 +39,8 @@ export default async function AdminDelegationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Delegations</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Delegations</h1>
+        <p className="mt-0.5 text-sm text-brand-muted-soft">
           Who manages what — object-scoped manager grants over events, groups and containers.
         </p>
       </div>

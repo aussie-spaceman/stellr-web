@@ -69,48 +69,48 @@ export function EventMerchandiseEditor({ eventSlug }: { eventSlug: string }) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <p className="mb-3 text-xs text-gray-500">
+    <div className="bg-white rounded-xl border border-brand-border p-5">
+      <p className="mb-3 text-xs text-brand-muted-soft">
         Included items are given free to every participant, auto-sized from their t-shirt size at confirmation. Add-ons
         are paid extras. Items are fulfilled in one bulk order to the venue (committed by the Event Manager).
       </p>
 
       {loading ? (
-        <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+        <Loader2 className="h-4 w-4 animate-spin text-brand-muted-soft" />
       ) : (
         <div className="space-y-2">
           {offerings.map((o) => (
-            <div key={o.id} className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2 text-sm">
+            <div key={o.id} className="flex items-center justify-between rounded-lg border border-brand-hairline px-3 py-2 text-sm">
               <div>
                 <span
                   className={
                     'mr-2 rounded px-1.5 py-0.5 text-[11px] ' +
-                    (o.treatment === 'included' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800')
+                    (o.treatment === 'included' ? 'bg-amber-100 text-amber-800' : 'bg-brand-blue/10 text-brand-blue')
                   }
                 >
                   {o.treatment === 'included' ? 'Included' : 'Add-on'}
                 </span>
-                <span className="font-medium text-gray-900">{o.productName ?? 'Product'}</span>
-                {o.label && <span className="text-gray-500"> — {o.label}</span>}
-                {o.treatment === 'included' && <span className="text-gray-400"> (all sizes)</span>}
+                <span className="font-medium text-brand-blue-dark">{o.productName ?? 'Product'}</span>
+                {o.label && <span className="text-brand-muted-soft"> — {o.label}</span>}
+                {o.treatment === 'included' && <span className="text-brand-muted-soft"> (all sizes)</span>}
               </div>
-              <button onClick={() => remove(o.id)} className="text-gray-400 hover:text-red-600" aria-label="Remove">
+              <button onClick={() => remove(o.id)} className="text-brand-muted-soft hover:text-red-600" aria-label="Remove">
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
           ))}
-          {offerings.length === 0 && <p className="text-sm text-gray-400">No merchandise configured for this event.</p>}
+          {offerings.length === 0 && <p className="text-sm text-brand-muted-soft">No merchandise configured for this event.</p>}
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4">
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-brand-hairline pt-4">
         <select
           value={productId}
           onChange={(e) => {
             setProductId(e.target.value)
             setVariantId('')
           }}
-          className="rounded-md border border-gray-200 px-2 py-1 text-sm"
+          className="rounded-md border border-brand-border px-2 py-1 text-sm"
         >
           <option value="">Product…</option>
           {products.map((p) => (
@@ -121,7 +121,7 @@ export function EventMerchandiseEditor({ eventSlug }: { eventSlug: string }) {
           value={variantId}
           onChange={(e) => setVariantId(e.target.value)}
           disabled={!product}
-          className="rounded-md border border-gray-200 px-2 py-1 text-sm disabled:opacity-50"
+          className="rounded-md border border-brand-border px-2 py-1 text-sm disabled:opacity-50"
         >
           <option value="">Variant…</option>
           {variants.map((v) => (
@@ -131,7 +131,7 @@ export function EventMerchandiseEditor({ eventSlug }: { eventSlug: string }) {
         <select
           value={treatment}
           onChange={(e) => setTreatment(e.target.value as 'included' | 'addon')}
-          className="rounded-md border border-gray-200 px-2 py-1 text-sm"
+          className="rounded-md border border-brand-border px-2 py-1 text-sm"
         >
           <option value="included">Included (free)</option>
           <option value="addon">Add-on (paid)</option>
@@ -139,7 +139,7 @@ export function EventMerchandiseEditor({ eventSlug }: { eventSlug: string }) {
         <button
           onClick={add}
           disabled={busy || !variantId}
-          className="flex items-center gap-1 rounded-md bg-gray-900 px-3 py-1 text-xs text-white hover:bg-gray-700 disabled:opacity-50"
+          className="flex items-center gap-1 rounded-md bg-brand-blue-dark px-3 py-1 text-xs text-white hover:bg-brand-blue-dark disabled:opacity-50"
         >
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />} Add
         </button>

@@ -3,6 +3,7 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
+import { Avatar } from '@/components/ui/Avatar'
 
 export interface MemberRow {
   id: string
@@ -80,19 +81,19 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap gap-3">
+      <div className="bg-white rounded-xl border border-brand-border p-4 flex flex-wrap gap-3">
         <input
           type="search"
           placeholder="Search name or email…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && pushFilter({ q: search, page: 1 })}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="border border-brand-border rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-brand-blue"
         />
         <select
           value={filters.bracket}
           onChange={(e) => pushFilter({ bracket: e.target.value, page: 1 })}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
         >
           <option value="">All brackets</option>
           {BRACKETS.map((b) => <option key={b} value={b}>{label(b)}</option>)}
@@ -100,7 +101,7 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
         <select
           value={filters.role}
           onChange={(e) => pushFilter({ role: e.target.value, page: 1 })}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
         >
           <option value="">All roles</option>
           {ROLES.map((r) => <option key={r} value={r}>{label(r)}</option>)}
@@ -108,23 +109,23 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="bg-brand-canvas border-b border-brand-border">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Email</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Role</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Membership</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">School</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Joined</th>
+              <th className="text-left px-4 py-3 font-medium text-brand-muted">Name</th>
+              <th className="text-left px-4 py-3 font-medium text-brand-muted">Email</th>
+              <th className="text-left px-4 py-3 font-medium text-brand-muted">Role</th>
+              <th className="text-left px-4 py-3 font-medium text-brand-muted">Membership</th>
+              <th className="text-left px-4 py-3 font-medium text-brand-muted">School</th>
+              <th className="text-left px-4 py-3 font-medium text-brand-muted">Joined</th>
               <th />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-brand-hairline">
             {members.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-brand-muted-soft">
                   No members found.
                 </td>
               </tr>
@@ -136,29 +137,34 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
               const school = m.member_schools?.find((s) => s.is_current)?.schools?.name
 
               return (
-                <tr key={m.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">
-                    {m.first_name} {m.last_name}
-                    {m.member_code && (
-                      <span className="ml-1.5 text-xs text-gray-400">{m.member_code}</span>
-                    )}
+                <tr key={m.id} className="hover:bg-brand-canvas">
+                  <td className="px-4 py-3 font-medium text-brand-blue-dark">
+                    <span className="flex items-center gap-2.5">
+                      <Avatar id={m.id} name={`${m.first_name} ${m.last_name}`} size="sm" ring={false} />
+                      <span>
+                        {m.first_name} {m.last_name}
+                        {m.member_code && (
+                          <span className="ml-1.5 text-xs text-brand-muted-soft">{m.member_code}</span>
+                        )}
+                      </span>
+                    </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{m.email}</td>
-                  <td className="px-4 py-3 text-gray-600">{label(m.event_role)}</td>
+                  <td className="px-4 py-3 text-brand-muted">{m.email}</td>
+                  <td className="px-4 py-3 text-brand-muted">{label(m.event_role)}</td>
                   <td className="px-4 py-3">
                     {activeTier ? (
                       <span
-                        className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full"
+                        className="text-xs bg-brand-blue/5 text-brand-blue px-2 py-0.5 rounded-full"
                         title={TIER_TOOLTIPS[activeTier] ?? `Active membership tier: ${activeTier}`}
                       >
                         {activeTier}
                       </span>
                     ) : (
-                      <span className="text-xs text-gray-400">—</span>
+                      <span className="text-xs text-brand-muted-soft">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{school ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-400">
+                  <td className="px-4 py-3 text-brand-muted">{school ?? '—'}</td>
+                  <td className="px-4 py-3 text-brand-muted-soft">
                     {new Date(m.created_at).toLocaleDateString('en-US', {
                       month: 'short', day: 'numeric', year: 'numeric',
                     })}
@@ -166,7 +172,7 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
                   <td className="px-4 py-3">
                     <Link
                       href={`/admin/members/${m.id}`}
-                      className="text-indigo-600 hover:underline text-xs font-medium"
+                      className="text-brand-blue hover:underline text-xs font-medium"
                     >
                       View
                     </Link>
@@ -180,7 +186,7 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-gray-600">
+        <div className="flex items-center justify-between text-sm text-brand-muted">
           <span>
             Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
           </span>
@@ -188,14 +194,14 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
             <button
               onClick={() => pushFilter({ page: page - 1 })}
               disabled={page <= 1}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40"
+              className="px-3 py-1.5 border border-brand-border rounded-lg hover:bg-brand-canvas disabled:opacity-40"
             >
               Previous
             </button>
             <button
               onClick={() => pushFilter({ page: page + 1 })}
               disabled={page >= totalPages}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40"
+              className="px-3 py-1.5 border border-brand-border rounded-lg hover:bg-brand-canvas disabled:opacity-40"
             >
               Next
             </button>

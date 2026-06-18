@@ -60,51 +60,51 @@ export function ResourceUploadForm({ spaces }: { spaces: Space[] }) {
   }
 
   return (
-    <form onSubmit={submit} className="rounded-xl border border-gray-200 bg-white p-6 space-y-4">
-      <h2 className="text-base font-semibold text-gray-900">Upload new resource</h2>
+    <form onSubmit={submit} className="rounded-xl border border-brand-border bg-white p-6 space-y-4">
+      <h2 className="text-base font-semibold text-brand-blue-dark">Upload new resource</h2>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">File</label>
+        <label className="block text-sm font-medium text-brand-muted mb-1">File</label>
         <input
           type="file"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-gray-200"
+          className="block w-full text-sm text-brand-muted file:mr-3 file:rounded-md file:border-0 file:bg-brand-hairline file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-brand-border"
           required
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+        <label className="block text-sm font-medium text-brand-muted mb-1">Title</label>
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={200}
           required
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none"
+          className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
           placeholder="e.g. 2024 Finals Paper — Physics"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Description <span className="font-normal text-gray-400">(optional)</span>
+        <label className="block text-sm font-medium text-brand-muted mb-1">
+          Description <span className="font-normal text-brand-muted-soft">(optional)</span>
         </label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none"
+          className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
           placeholder="Brief summary visible to all members"
         />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Space</label>
+          <label className="block text-sm font-medium text-brand-muted mb-1">Space</label>
           <select
             value={spaceId}
             onChange={(e) => setSpaceId(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none"
+            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
           >
             <option value="">— All spaces —</option>
             {spaces.map((s) => (
@@ -114,11 +114,11 @@ export function ResourceUploadForm({ spaces }: { spaces: Space[] }) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Download access</label>
+          <label className="block text-sm font-medium text-brand-muted mb-1">Download access</label>
           <select
             value={minTierRank}
             onChange={(e) => setMinTierRank(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none"
+            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
           >
             <option value="0">All members (free + paid)</option>
             <option value="1">Paid members only</option>
@@ -132,7 +132,7 @@ export function ResourceUploadForm({ spaces }: { spaces: Space[] }) {
       <button
         type="submit"
         disabled={uploading}
-        className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        className="rounded-md bg-brand-blue-dark px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
       >
         {uploading ? 'Uploading…' : 'Upload resource'}
       </button>

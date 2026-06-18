@@ -52,15 +52,15 @@ export default function EventManagerAssignments({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
-      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Event Managers</h3>
+    <div className="bg-white rounded-xl border border-brand-border p-4 space-y-3">
+      <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Event Managers</h3>
       {initialAssignments.length === 0 ? (
-        <p className="text-sm text-gray-400">No event managers assigned to this event.</p>
+        <p className="text-sm text-brand-muted-soft">No event managers assigned to this event.</p>
       ) : (
         <ul className="space-y-1.5">
           {initialAssignments.map((a) => (
             <li key={a.id} className="flex items-center justify-between text-sm">
-              <span className="text-gray-700">{a.email ?? a.clerk_user_id}</span>
+              <span className="text-brand-muted">{a.email ?? a.clerk_user_id}</span>
               <button
                 onClick={() => remove(a.clerk_user_id)}
                 disabled={busy}
@@ -78,18 +78,18 @@ export default function EventManagerAssignments({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="manager@email.com"
-          className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+          className="flex-1 border border-brand-border rounded-lg px-3 py-1.5 text-sm"
         />
         <button
           onClick={add}
           disabled={busy || !email.trim()}
-          className="text-sm font-medium bg-indigo-600 text-white rounded-lg px-3 py-1.5 disabled:opacity-50"
+          className="text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5 disabled:opacity-50"
         >
           Assign
         </button>
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-brand-muted-soft">
         The user must already have an account with the Event Manager role in Clerk.
       </p>
     </div>

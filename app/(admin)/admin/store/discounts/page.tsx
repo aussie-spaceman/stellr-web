@@ -20,8 +20,8 @@ export default async function StoreDiscountsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900">Store</h1>
-      <p className="mt-0.5 mb-4 text-sm text-gray-500">Discounts applied to merchandise.</p>
+      <h1 className="font-heading uppercase text-title text-brand-blue-dark">Store</h1>
+      <p className="mt-0.5 mb-4 text-sm text-brand-muted-soft">Discounts applied to merchandise.</p>
       <StoreNav />
       <DiscountMatrix
         tier={tier}

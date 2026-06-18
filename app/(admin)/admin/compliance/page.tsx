@@ -9,8 +9,8 @@ export default async function ComplianceAuditPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Background Checks & Licenses</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Background Checks & Licenses</h1>
+        <p className="mt-1 text-sm text-brand-muted-soft">
           Every adult non-student who must be cleared to take part. Background checks are valid for 3 years;
           teacher licenses are valid until the expiry the teacher entered, once you verify them.
         </p>

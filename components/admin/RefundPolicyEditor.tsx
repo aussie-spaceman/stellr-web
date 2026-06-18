@@ -62,13 +62,13 @@ export function RefundPolicyEditor({ scope, eventSlug, initialTiers, hasOverride
     if (res.ok) window.location.reload()
   }
 
-  const input = 'w-20 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+  const input = 'w-20 border border-brand-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue'
 
   return (
     <div className="space-y-3">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
+          <tr className="text-left text-xs uppercase tracking-wide text-brand-muted-soft">
             <th className="py-2 pr-3">From (days out)</th>
             <th className="py-2 pr-3">Cash %</th>
             <th className="py-2 pr-3">Credit %</th>
@@ -78,7 +78,7 @@ export function RefundPolicyEditor({ scope, eventSlug, initialTiers, hasOverride
         </thead>
         <tbody>
           {tiers.map((t, i) => (
-            <tr key={i} className="border-t border-gray-100">
+            <tr key={i} className="border-t border-brand-hairline">
               <td className="py-2 pr-3"><input className={input} type="number" value={t.minDaysOut} onChange={(e) => update(i, 'minDaysOut', e.target.value)} /></td>
               <td className="py-2 pr-3"><input className={input} type="number" value={t.cashPct ?? ''} placeholder="—" onChange={(e) => update(i, 'cashPct', e.target.value)} /></td>
               <td className="py-2 pr-3"><input className={input} type="number" value={t.creditPct ?? ''} placeholder="—" onChange={(e) => update(i, 'creditPct', e.target.value)} /></td>
@@ -90,16 +90,16 @@ export function RefundPolicyEditor({ scope, eventSlug, initialTiers, hasOverride
       </table>
 
       <div className="flex items-center gap-3">
-        <button onClick={addRow} className="text-sm text-indigo-600 hover:text-indigo-800">+ Add tier</button>
-        <button onClick={save} disabled={saving} className="bg-indigo-600 text-white text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+        <button onClick={addRow} className="text-sm text-brand-blue hover:text-brand-blue">+ Add tier</button>
+        <button onClick={save} disabled={saving} className="bg-brand-blue text-white text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-brand-blue-dark disabled:opacity-50">
           {saving ? 'Saving…' : scope === 'event' ? 'Save override' : 'Save policy'}
         </button>
         {scope === 'event' && hasOverride && (
-          <button onClick={removeOverride} disabled={saving} className="text-sm text-gray-500 hover:text-red-600">Remove override</button>
+          <button onClick={removeOverride} disabled={saving} className="text-sm text-brand-muted-soft hover:text-red-600">Remove override</button>
         )}
-        {msg && <span className="text-sm text-gray-500">{msg}</span>}
+        {msg && <span className="text-sm text-brand-muted-soft">{msg}</span>}
       </div>
-      <p className="text-xs text-gray-400">A tier applies from its “days out” up to the next-higher tier. Leave Cash or Credit blank to not offer it; when both are set, the admin chooses at deletion.</p>
+      <p className="text-xs text-brand-muted-soft">A tier applies from its “days out” up to the next-higher tier. Leave Cash or Credit blank to not offer it; when both are set, the admin chooses at deletion.</p>
     </div>
   )
 }

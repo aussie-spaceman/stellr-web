@@ -62,23 +62,23 @@ export default function GatesManager({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+    <div className="overflow-hidden rounded-xl border border-brand-border bg-white">
       {modules.length === 0 && (
-        <p className="px-4 py-6 text-center text-sm text-gray-400">No training modules yet.</p>
+        <p className="px-4 py-6 text-center text-sm text-brand-muted-soft">No training modules yet.</p>
       )}
       {modules.map((m) => {
         const mine = prereqs.filter((p) => p.target_ref === m.id)
         return (
-          <div key={m.id} className="border-b border-gray-100 px-4 py-3 last:border-b-0">
+          <div key={m.id} className="border-b border-brand-hairline px-4 py-3 last:border-b-0">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm font-medium text-gray-900">{m.title}</span>
-              <label className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span className="text-sm font-medium text-brand-blue-dark">{m.title}</span>
+              <label className="flex items-center gap-1.5 text-xs text-brand-muted-soft">
                 On archive:
                 <select
                   value={persistence[m.id] ?? 're_gate'}
                   onChange={(e) => setPersistence(m.id, e.target.value)}
                   disabled={busy}
-                  className="rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+                  className="rounded border border-brand-border px-1.5 py-0.5 text-xs"
                 >
                   <option value="re_gate">re-gate</option>
                   <option value="keep_open">keep open</option>
@@ -86,8 +86,8 @@ export default function GatesManager({
               </label>
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-gray-400">Requires:</span>
-              {mine.length === 0 && <span className="text-xs text-gray-400">—</span>}
+              <span className="text-xs text-brand-muted-soft">Requires:</span>
+              {mine.length === 0 && <span className="text-xs text-brand-muted-soft">—</span>}
               {mine.map((p) => (
                 <span
                   key={p.id}
@@ -108,7 +108,7 @@ export default function GatesManager({
                 value=""
                 onChange={(e) => addPrereq(m.id, e.target.value)}
                 disabled={busy}
-                className="rounded border border-gray-300 px-1.5 py-0.5 text-xs text-gray-600"
+                className="rounded border border-brand-border px-1.5 py-0.5 text-xs text-brand-muted"
               >
                 <option value="">+ add prerequisite…</option>
                 {modules

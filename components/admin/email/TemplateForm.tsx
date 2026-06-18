@@ -39,43 +39,43 @@ export function TemplateForm() {
   }
 
   return (
-    <form onSubmit={submit} className="rounded-xl border border-gray-200 bg-white p-6 space-y-4">
-      <h2 className="text-base font-semibold text-gray-900">New template</h2>
+    <form onSubmit={submit} className="rounded-xl border border-brand-border bg-white p-6 space-y-4">
+      <h2 className="text-base font-semibold text-brand-blue-dark">New template</h2>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+          <label className="block text-sm font-medium text-brand-muted mb-1">Name</label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
             maxLength={200}
             placeholder="Welcome — Alumni"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none"
+            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+          <label className="block text-sm font-medium text-brand-muted mb-1">Subject</label>
           <input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             required
             maxLength={300}
             placeholder="Welcome to Alumni, {{firstName}}"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none"
+            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Body</label>
+        <label className="block text-sm font-medium text-brand-muted mb-1">Body</label>
         <RichTextEditor value={bodyJson} onChange={(doc) => setBodyJson(doc)} placeholder="Write the email…" />
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs text-gray-500 mr-1">Merge fields:</span>
+        <span className="text-xs text-brand-muted-soft mr-1">Merge fields:</span>
         {MERGE_FIELDS.map((f) => (
-          <code key={f.token} title={`e.g. ${f.example}`} className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
+          <code key={f.token} title={`e.g. ${f.example}`} className="rounded bg-brand-hairline px-1.5 py-0.5 text-xs text-brand-muted">
             {`{{${f.token}}}`}
           </code>
         ))}
@@ -87,7 +87,7 @@ export function TemplateForm() {
       <button
         type="submit"
         disabled={submitting}
-        className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        className="rounded-md bg-brand-blue-dark px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
       >
         {submitting ? 'Saving…' : 'Save template'}
       </button>

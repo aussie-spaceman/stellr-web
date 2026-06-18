@@ -53,14 +53,14 @@ export default async function AdminSchoolDetailPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/admin/schools" className="text-sm text-gray-500 hover:text-gray-700 mb-1 inline-block">
+        <Link href="/admin/schools" className="text-sm text-brand-muted-soft hover:text-brand-muted mb-1 inline-block">
           ← All schools
         </Link>
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">{school.name}</h1>
+          <h1 className="font-heading uppercase text-title text-brand-blue-dark">{school.name}</h1>
           <span
             className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-              school.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+              school.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-brand-hairline text-brand-muted-soft'
             }`}
             title={
               school.is_active !== false
@@ -72,7 +72,7 @@ export default async function AdminSchoolDetailPage({
           </span>
         </div>
         {(school.city || school.state) && (
-          <p className="text-sm text-gray-500 mt-0.5">
+          <p className="text-sm text-brand-muted-soft mt-0.5">
             {[school.address_line1, school.address_line2, school.city, school.state, school.postcode]
               .filter(Boolean)
               .join(', ')}
@@ -83,58 +83,58 @@ export default async function AdminSchoolDetailPage({
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-700">Members</h2>
-          <span className="text-xs text-gray-400">{allMembers.length} active</span>
+      <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
+        <div className="px-5 py-4 border-b border-brand-hairline flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-brand-muted">Members</h2>
+          <span className="text-xs text-brand-muted-soft">{allMembers.length} active</span>
         </div>
 
         {allMembers.length === 0 ? (
-          <div className="px-5 py-10 text-center text-sm text-gray-400">No members linked to this school.</div>
+          <div className="px-5 py-10 text-center text-sm text-brand-muted-soft">No members linked to this school.</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50 text-left">
-                <th className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Name</th>
-                <th className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Email</th>
-                <th className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Role</th>
-                <th className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Tier</th>
-                <th className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Current</th>
+              <tr className="border-b border-brand-hairline bg-brand-canvas text-left">
+                <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Name</th>
+                <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Email</th>
+                <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Role</th>
+                <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Tier</th>
+                <th className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Current</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-brand-hairline">
               {allMembers.map((m) => {
                 const memberships = m.member_memberships as Array<{ renewal_status: string; membership_tiers: { name: string } }> | null
                 const activeTier = memberships?.find((mm) => mm.renewal_status === 'active')?.membership_tiers.name
                 return (
-                  <tr key={m.id as string} className="hover:bg-gray-50">
+                  <tr key={m.id as string} className="hover:bg-brand-canvas">
                     <td className="px-4 py-3">
                       <Link
                         href={`/admin/members/${m.id}`}
-                        className="font-medium text-indigo-600 hover:text-indigo-800"
+                        className="font-medium text-brand-blue hover:text-brand-blue"
                       >
                         {m.last_name as string}, {m.first_name as string}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-gray-500">{m.email as string}</td>
-                    <td className="px-4 py-3 text-gray-600 capitalize">{label(m.event_role as string)}</td>
+                    <td className="px-4 py-3 text-brand-muted-soft">{m.email as string}</td>
+                    <td className="px-4 py-3 text-brand-muted capitalize">{label(m.event_role as string)}</td>
                     <td className="px-4 py-3">
                       {activeTier ? (
                         <span
-                          className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-medium"
+                          className="text-xs bg-brand-blue/5 text-brand-blue px-2 py-0.5 rounded-full font-medium"
                           title={TIER_TOOLTIPS[activeTier] ?? `Active membership tier: ${activeTier}`}
                         >
                           {activeTier}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400">None</span>
+                        <span className="text-xs text-brand-muted-soft">None</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       {m.is_current_school ? (
                         <span className="text-xs text-green-600 font-medium" title="This is the member's current school.">Current</span>
                       ) : (
-                        <span className="text-xs text-gray-400" title="This was a previous school for this member.">Previous</span>
+                        <span className="text-xs text-brand-muted-soft" title="This was a previous school for this member.">Previous</span>
                       )}
                     </td>
                   </tr>

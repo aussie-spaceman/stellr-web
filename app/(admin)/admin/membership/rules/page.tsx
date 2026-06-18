@@ -17,8 +17,8 @@ export default async function MembershipRulesPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900">Membership Studio</h1>
-      <p className="mt-0.5 mb-4 text-sm text-gray-500">
+      <h1 className="font-heading uppercase text-title text-brand-blue-dark">Membership Studio</h1>
+      <p className="mt-0.5 mb-4 text-sm text-brand-muted-soft">
         Rules that automatically assign or upgrade a tier when something happens.
       </p>
       <MembershipNav />

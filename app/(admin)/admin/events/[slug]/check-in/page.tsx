@@ -21,10 +21,10 @@ export default async function EventCheckInPage({ params }: { params: Promise<{ s
   return (
     <div className="space-y-6">
       <div>
-        <Link href={`/admin/events/${slug}`} className="text-sm text-indigo-600 hover:text-indigo-800">
+        <Link href={`/admin/events/${slug}`} className="text-sm text-brand-blue hover:text-brand-blue">
           ← {event.title}
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900 mt-1">Check-In — {event.title}</h1>
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark mt-1">Check-In — {event.title}</h1>
       </div>
       <CheckInLive eventSlug={slug} siteUrl={siteUrl} />
     </div>

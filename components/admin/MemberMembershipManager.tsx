@@ -28,7 +28,7 @@ const SOURCE_LABEL: Record<string, string> = {
 }
 const STATUS_CLS: Record<string, string> = {
   active: 'bg-green-100 text-green-700',
-  expired: 'bg-gray-100 text-gray-500',
+  expired: 'bg-brand-hairline text-brand-muted-soft',
   canceled: 'bg-red-100 text-red-600',
   revoked: 'bg-red-100 text-red-600',
 }
@@ -121,23 +121,23 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
   })
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
+    <div className="bg-white rounded-xl border border-brand-border p-5">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Membership</h2>
+        <h2 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide">Membership</h2>
         <button
           onClick={() => setShowAssign((s) => !s)}
-          className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800"
+          className="inline-flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-blue"
         >
           <Plus className="h-3.5 w-3.5" /> Assign tier
         </button>
       </div>
 
-      <div className="flex items-center justify-between text-sm mb-3 pb-3 border-b border-gray-100">
-        <span className="text-gray-500">Member ID</span>
+      <div className="flex items-center justify-between text-sm mb-3 pb-3 border-b border-brand-hairline">
+        <span className="text-brand-muted-soft">Member ID</span>
         {membershipId ? (
-          <span className="font-mono font-medium text-gray-900">{membershipId}</span>
+          <span className="font-mono font-medium text-brand-blue-dark">{membershipId}</span>
         ) : (
-          <span className="text-gray-400">Not yet assigned</span>
+          <span className="text-brand-muted-soft">Not yet assigned</span>
         )}
       </div>
 
@@ -145,23 +145,23 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
 
       {/* Assign form */}
       {showAssign && (
-        <div className="mb-4 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3 space-y-2.5">
+        <div className="mb-4 rounded-lg border border-brand-blue bg-brand-blue/5/40 p-3 space-y-2.5">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Tier</label>
+            <label className="block text-xs text-brand-muted-soft mb-1">Tier</label>
             <select
               value={tierId}
               onChange={(e) => setTierId(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full border border-brand-border rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue"
             >
               {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Duration</label>
+            <label className="block text-xs text-brand-muted-soft mb-1">Duration</label>
             <select
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full border border-brand-border rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue"
             >
               <option value="12">1 year</option>
               <option value="24">2 years</option>
@@ -174,26 +174,26 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
               type="date"
               value={customDate}
               onChange={(e) => setCustomDate(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full border border-brand-border rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue"
             />
           )}
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={complimentary} onChange={(e) => setComplimentary(e.target.checked)} className="rounded border-gray-300" />
+          <label className="flex items-center gap-2 text-sm text-brand-muted">
+            <input type="checkbox" checked={complimentary} onChange={(e) => setComplimentary(e.target.checked)} className="rounded border-brand-border" />
             Complimentary (no charge)
           </label>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={replacesFree} onChange={(e) => setReplacesFree(e.target.checked)} className="rounded border-gray-300" />
+          <label className="flex items-center gap-2 text-sm text-brand-muted">
+            <input type="checkbox" checked={replacesFree} onChange={(e) => setReplacesFree(e.target.checked)} className="rounded border-brand-border" />
             Replace existing free membership
           </label>
           <div className="flex gap-2 pt-1">
             <button
               onClick={handleAssign}
               disabled={busy}
-              className="flex-1 bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+              className="flex-1 bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-50"
             >
               {busy ? 'Assigning…' : 'Assign'}
             </button>
-            <button onClick={() => setShowAssign(false)} className="px-3 py-1.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100">
+            <button onClick={() => setShowAssign(false)} className="px-3 py-1.5 rounded-lg text-sm text-brand-muted hover:bg-brand-hairline">
               Cancel
             </button>
           </div>
@@ -202,37 +202,37 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
 
       {/* Memberships list */}
       {sorted.length === 0 ? (
-        <p className="text-sm text-gray-400">No memberships on record.</p>
+        <p className="text-sm text-brand-muted-soft">No memberships on record.</p>
       ) : (
         <ul className="space-y-2.5">
           {sorted.map((m) => (
-            <li key={m.id} className="rounded-lg border border-gray-100 p-3">
+            <li key={m.id} className="rounded-lg border border-brand-hairline p-3">
               {editingId === m.id ? (
                 <div className="space-y-2">
-                  <div className="font-semibold text-sm text-gray-900">{tierName(m)}</div>
+                  <div className="font-semibold text-sm text-brand-blue-dark">{tierName(m)}</div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Expiry</label>
+                    <label className="block text-xs text-brand-muted-soft mb-1">Expiry</label>
                     <input type="date" value={editExpiry} onChange={(e) => setEditExpiry(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                      className="w-full border border-brand-border rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue" />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Status</label>
+                    <label className="block text-xs text-brand-muted-soft mb-1">Status</label>
                     <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                      className="w-full border border-brand-border rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue">
                       {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
-                    <input type="checkbox" checked={editComp} onChange={(e) => setEditComp(e.target.checked)} className="rounded border-gray-300" />
+                  <label className="flex items-center gap-2 text-sm text-brand-muted">
+                    <input type="checkbox" checked={editComp} onChange={(e) => setEditComp(e.target.checked)} className="rounded border-brand-border" />
                     Complimentary
                   </label>
                   <div className="flex gap-2 pt-0.5">
                     <button onClick={() => saveEdit(m.id)} disabled={busy}
-                      className="inline-flex items-center gap-1 bg-indigo-600 text-white px-2.5 py-1 rounded-md text-xs font-medium hover:bg-indigo-700 disabled:opacity-50">
+                      className="inline-flex items-center gap-1 bg-brand-blue text-white px-2.5 py-1 rounded-md text-xs font-medium hover:bg-brand-blue-dark disabled:opacity-50">
                       <Check className="h-3.5 w-3.5" /> Save
                     </button>
                     <button onClick={() => setEditingId(null)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-gray-600 hover:bg-gray-100">
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-brand-muted hover:bg-brand-hairline">
                       <X className="h-3.5 w-3.5" /> Cancel
                     </button>
                   </div>
@@ -241,25 +241,25 @@ export function MemberMembershipManager({ memberId, membershipId, tiers, members
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm text-gray-900">{tierName(m)}</span>
-                      <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium ${STATUS_CLS[m.renewal_status] ?? 'bg-gray-100 text-gray-500'}`}>
+                      <span className="font-semibold text-sm text-brand-blue-dark">{tierName(m)}</span>
+                      <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium ${STATUS_CLS[m.renewal_status] ?? 'bg-brand-hairline text-brand-muted-soft'}`}>
                         {m.renewal_status}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-xs text-brand-muted-soft mt-0.5">
                       {fmt(m.started_at)} → {fmt(m.expires_at)}
                     </p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">
+                    <p className="text-[11px] text-brand-muted-soft mt-0.5">
                       {SOURCE_LABEL[m.source ?? ''] ?? m.source ?? '—'}
                       {m.is_complimentary ? ' · Complimentary' : ''}
                     </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => startEdit(m)} title="Edit" className="p-1 text-gray-400 hover:text-indigo-600">
+                    <button onClick={() => startEdit(m)} title="Edit" className="p-1 text-brand-muted-soft hover:text-brand-blue">
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
                     {m.renewal_status !== 'revoked' && (
-                      <button onClick={() => remove(m.id)} title="Revoke" className="p-1 text-gray-400 hover:text-red-600">
+                      <button onClick={() => remove(m.id)} title="Revoke" className="p-1 text-brand-muted-soft hover:text-red-600">
                         <X className="h-4 w-4" />
                       </button>
                     )}

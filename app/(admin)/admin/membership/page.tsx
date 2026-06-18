@@ -55,8 +55,8 @@ export default async function MembershipTiersPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900">Membership Studio</h1>
-      <p className="mt-0.5 mb-4 text-sm text-gray-500">
+      <h1 className="font-heading uppercase text-title text-brand-blue-dark">Membership Studio</h1>
+      <p className="mt-0.5 mb-4 text-sm text-brand-muted-soft">
         Tiers, grant rules, access and members — one place. Prices are read live from Stripe.
       </p>
       <MembershipNav />

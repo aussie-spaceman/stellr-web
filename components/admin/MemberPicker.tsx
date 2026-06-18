@@ -92,10 +92,10 @@ export default function MemberPicker({
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder={placeholder}
         disabled={disabled}
-        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm disabled:opacity-50"
+        className="w-full rounded-md border border-brand-border px-3 py-1.5 text-sm disabled:opacity-50"
       />
       {open && (
-        <ul className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+        <ul className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-brand-border bg-white py-1 shadow-lg">
           {results.map((m, i) => (
             <li key={m.id}>
               <button
@@ -103,10 +103,10 @@ export default function MemberPicker({
                 onMouseDown={(e) => e.preventDefault()}
                 onMouseEnter={() => setActive(i)}
                 onClick={() => pick(m)}
-                className={`block w-full px-3 py-1.5 text-left text-sm ${i === active ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
+                className={`block w-full px-3 py-1.5 text-left text-sm ${i === active ? 'bg-brand-hairline' : 'hover:bg-brand-canvas'}`}
               >
-                <span className="font-medium text-gray-900">{name(m)}</span>
-                <span className="ml-2 text-xs text-gray-400">
+                <span className="font-medium text-brand-blue-dark">{name(m)}</span>
+                <span className="ml-2 text-xs text-brand-muted-soft">
                   {m.email}
                   {m.membership_id ? ` · #${m.membership_id}` : ''}
                 </span>
@@ -114,7 +114,7 @@ export default function MemberPicker({
             </li>
           ))}
           {results.length === 0 && (
-            <li className="px-3 py-2 text-xs text-gray-400">{loading ? 'Searching…' : 'No matching members'}</li>
+            <li className="px-3 py-2 text-xs text-brand-muted-soft">{loading ? 'Searching…' : 'No matching members'}</li>
           )}
         </ul>
       )}

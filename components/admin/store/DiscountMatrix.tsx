@@ -45,11 +45,11 @@ export function DiscountMatrix({
     <div className="space-y-8">
       {/* Tier discounts */}
       <section>
-        <h2 className="mb-1 text-sm font-semibold text-gray-900">Membership-tier discounts</h2>
-        <p className="mb-3 text-xs text-gray-500">Applied automatically in the storefront for members on the tier.</p>
-        <div className="overflow-hidden rounded-xl border border-gray-200">
+        <h2 className="mb-1 text-sm font-semibold text-brand-blue-dark">Membership-tier discounts</h2>
+        <p className="mb-3 text-xs text-brand-muted-soft">Applied automatically in the storefront for members on the tier.</p>
+        <div className="overflow-hidden rounded-xl border border-brand-border">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+            <thead className="bg-brand-canvas text-left text-xs uppercase tracking-wide text-brand-muted-soft">
               <tr>
                 <th className="px-4 py-2 font-medium">Tier</th>
                 <th className="px-4 py-2 font-medium">Applies to</th>
@@ -57,16 +57,16 @@ export function DiscountMatrix({
                 <th className="px-4 py-2" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-brand-hairline">
               {tier.map((d) => (
                 <tr key={d.id}>
                   <td className="px-4 py-2">{tierName(d.tier_id)}</td>
-                  <td className="px-4 py-2 text-gray-600">
+                  <td className="px-4 py-2 text-brand-muted">
                     {d.scope === 'all' ? 'All products' : d.scope === 'product' ? productName(d.product_id) : `Category: ${d.category}`}
                   </td>
                   <td className="px-4 py-2">{d.percent_off}% off</td>
                   <td className="px-4 py-2 text-right">
-                    <button onClick={() => remove('tier', d.id)} className="text-gray-400 hover:text-red-600" aria-label="Delete">
+                    <button onClick={() => remove('tier', d.id)} className="text-brand-muted-soft hover:text-red-600" aria-label="Delete">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
@@ -74,7 +74,7 @@ export function DiscountMatrix({
               ))}
               {tier.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-3 text-gray-400">No tier discounts.</td>
+                  <td colSpan={4} className="px-4 py-3 text-brand-muted-soft">No tier discounts.</td>
                 </tr>
               )}
             </tbody>
@@ -85,13 +85,13 @@ export function DiscountMatrix({
 
       {/* Event discounts */}
       <section>
-        <h2 className="mb-1 text-sm font-semibold text-gray-900">Event merch discounts</h2>
-        <p className="mb-3 text-xs text-gray-500">
+        <h2 className="mb-1 text-sm font-semibold text-brand-blue-dark">Event merch discounts</h2>
+        <p className="mb-3 text-xs text-brand-muted-soft">
           A global default plus per-event overrides. 100% = the free included shirt.
         </p>
-        <div className="overflow-hidden rounded-xl border border-gray-200">
+        <div className="overflow-hidden rounded-xl border border-brand-border">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+            <thead className="bg-brand-canvas text-left text-xs uppercase tracking-wide text-brand-muted-soft">
               <tr>
                 <th className="px-4 py-2 font-medium">Scope</th>
                 <th className="px-4 py-2 font-medium">Applies to</th>
@@ -99,16 +99,16 @@ export function DiscountMatrix({
                 <th className="px-4 py-2" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-brand-hairline">
               {event.map((d) => (
                 <tr key={d.id}>
                   <td className="px-4 py-2">{d.scope === 'global' ? 'Global default' : `Event: ${d.event_slug}`}</td>
-                  <td className="px-4 py-2 text-gray-600">
+                  <td className="px-4 py-2 text-brand-muted">
                     {d.product_id ? productName(d.product_id) : d.category ? `Category: ${d.category}` : 'All products'}
                   </td>
                   <td className="px-4 py-2">{d.percent_off}% off</td>
                   <td className="px-4 py-2 text-right">
-                    <button onClick={() => remove('event', d.id)} className="text-gray-400 hover:text-red-600" aria-label="Delete">
+                    <button onClick={() => remove('event', d.id)} className="text-brand-muted-soft hover:text-red-600" aria-label="Delete">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
@@ -116,7 +116,7 @@ export function DiscountMatrix({
               ))}
               {event.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-3 text-gray-400">No event discounts.</td>
+                  <td colSpan={4} className="px-4 py-3 text-brand-muted-soft">No event discounts.</td>
                 </tr>
               )}
             </tbody>
@@ -128,7 +128,7 @@ export function DiscountMatrix({
   )
 }
 
-const inputCls = 'rounded-md border border-gray-200 px-2 py-1 text-sm'
+const inputCls = 'rounded-md border border-brand-border px-2 py-1 text-sm'
 
 function AddTierDiscount({
   tiers,
@@ -187,7 +187,7 @@ function AddTierDiscount({
             percent_off: Number(percent),
           })
         }
-        className="flex items-center gap-1 rounded-md bg-gray-900 px-3 py-1 text-xs text-white hover:bg-gray-700 disabled:opacity-50"
+        className="flex items-center gap-1 rounded-md bg-brand-blue-dark px-3 py-1 text-xs text-white hover:bg-brand-blue-dark disabled:opacity-50"
       >
         <Plus className="h-3 w-3" /> Add
       </button>
@@ -239,7 +239,7 @@ function AddEventDiscount({
             percent_off: Number(percent),
           })
         }
-        className="flex items-center gap-1 rounded-md bg-gray-900 px-3 py-1 text-xs text-white hover:bg-gray-700 disabled:opacity-50"
+        className="flex items-center gap-1 rounded-md bg-brand-blue-dark px-3 py-1 text-xs text-white hover:bg-brand-blue-dark disabled:opacity-50"
       >
         <Plus className="h-3 w-3" /> Add
       </button>

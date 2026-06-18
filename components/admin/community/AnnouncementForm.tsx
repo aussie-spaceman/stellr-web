@@ -48,36 +48,36 @@ export function AnnouncementForm({ spaces }: { spaces: Space[] }) {
   }
 
   return (
-    <form onSubmit={submit} className="rounded-xl border border-gray-200 bg-white p-6 space-y-4">
-      <h2 className="text-base font-semibold text-gray-900">Post new announcement</h2>
+    <form onSubmit={submit} className="rounded-xl border border-brand-border bg-white p-6 space-y-4">
+      <h2 className="text-base font-semibold text-brand-blue-dark">Post new announcement</h2>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Space</label>
+          <label className="block text-sm font-medium text-brand-muted mb-1">Space</label>
           <select
             value={spaceId}
             onChange={(e) => setSpaceId(e.target.value)}
             required
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none"
+            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
           >
             {spaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+          <label className="block text-sm font-medium text-brand-muted mb-1">Title</label>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
             maxLength={300}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none"
+            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
             placeholder="Announcement title"
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Body</label>
+        <label className="block text-sm font-medium text-brand-muted mb-1">Body</label>
         <RichTextEditor
           value={bodyJson}
           onChange={(doc) => setBodyJson(doc)}
@@ -90,10 +90,10 @@ export function AnnouncementForm({ spaces }: { spaces: Space[] }) {
           type="checkbox"
           checked={emailAll}
           onChange={(e) => setEmailAll(e.target.checked)}
-          className="rounded border-gray-300"
+          className="rounded border-brand-border"
         />
-        <span className="text-sm text-gray-700">
-          Also email all active members <span className="text-gray-400">(FR-COM-06)</span>
+        <span className="text-sm text-brand-muted">
+          Also email all active members <span className="text-brand-muted-soft">(FR-COM-06)</span>
         </span>
       </label>
 
@@ -103,7 +103,7 @@ export function AnnouncementForm({ spaces }: { spaces: Space[] }) {
       <button
         type="submit"
         disabled={submitting}
-        className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        className="rounded-md bg-brand-blue-dark px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
       >
         {submitting ? 'Posting…' : 'Post announcement'}
       </button>

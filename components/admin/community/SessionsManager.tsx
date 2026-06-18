@@ -95,13 +95,13 @@ function HostsSection({ hosts, busy, post }: { hosts: AdminHost[]; busy: boolean
 
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold text-gray-900">Coaches &amp; Mentors</h2>
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white p-3">
+      <h2 className="mb-3 text-lg font-semibold text-brand-blue-dark">Coaches &amp; Mentors</h2>
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand-border bg-white p-3">
         <div className="min-w-[220px] flex-1">
           {host ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 py-1 pl-3 pr-1 text-sm font-medium text-indigo-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-brand-blue/5 py-1 pl-3 pr-1 text-sm font-medium text-brand-blue">
               {hostName}
-              <button onClick={() => setHost(null)} aria-label="Clear member" className="hover:text-indigo-900">
+              <button onClick={() => setHost(null)} aria-label="Clear member" className="hover:text-brand-blue">
                 <X className="h-3.5 w-3.5" />
               </button>
             </span>
@@ -122,29 +122,29 @@ function HostsSection({ hosts, busy, post }: { hosts: AdminHost[]; busy: boolean
             setHost(null)
           }}
           disabled={busy || !host}
-          className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded-md bg-brand-blue-dark px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
         >
           Grant
         </button>
       </div>
-      <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white">
+      <ul className="divide-y divide-brand-hairline rounded-lg border border-brand-border bg-white">
         {hosts.map((h) => (
           <li key={h.member_id} className="flex items-center justify-between px-3 py-2 text-sm">
             <span>{h.name}</span>
             <span className="flex items-center gap-2">
-              {h.can_coach && <span className="rounded bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">Coach</span>}
+              {h.can_coach && <span className="rounded bg-brand-blue/5 px-2 py-0.5 text-xs text-brand-blue">Coach</span>}
               {h.can_mentor && <span className="rounded bg-purple-50 px-2 py-0.5 text-xs text-purple-700">Mentor</span>}
               <button
                 onClick={() => post('/api/admin/community/hosts', { memberId: h.member_id }, 'DELETE')}
                 disabled={busy}
-                className="text-xs text-gray-400 hover:text-red-600"
+                className="text-xs text-brand-muted-soft hover:text-red-600"
               >
                 Revoke
               </button>
             </span>
           </li>
         ))}
-        {hosts.length === 0 && <li className="px-3 py-3 text-sm text-gray-400">No hosts yet.</li>}
+        {hosts.length === 0 && <li className="px-3 py-3 text-sm text-brand-muted-soft">No hosts yet.</li>}
       </ul>
     </section>
   )
@@ -170,19 +170,19 @@ function CohortsSection({
 
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold text-gray-900">Mentoring Cohorts</h2>
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white p-3">
+      <h2 className="mb-3 text-lg font-semibold text-brand-blue-dark">Mentoring Cohorts</h2>
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand-border bg-white p-3">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Cohort name"
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+          className="rounded-md border border-brand-border px-3 py-1.5 text-sm"
         />
         <div className="min-w-[220px] flex-1">
           {mentor ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 py-1 pl-3 pr-1 text-sm font-medium text-indigo-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-brand-blue/5 py-1 pl-3 pr-1 text-sm font-medium text-brand-blue">
               {mentorName}
-              <button onClick={() => setMentor(null)} aria-label="Clear mentor" className="hover:text-indigo-900">
+              <button onClick={() => setMentor(null)} aria-label="Clear mentor" className="hover:text-brand-blue">
                 <X className="h-3.5 w-3.5" />
               </button>
             </span>
@@ -198,7 +198,7 @@ function CohortsSection({
             setMentor(null)
           }}
           disabled={busy}
-          className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded-md bg-brand-blue-dark px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
         >
           Create
         </button>
@@ -207,7 +207,7 @@ function CohortsSection({
         {cohorts.map((c) => (
           <CohortItem key={c.id} cohort={c} modules={modules} busy={busy} post={post} />
         ))}
-        {cohorts.length === 0 && <li className="text-sm text-gray-400">No cohorts yet.</li>}
+        {cohorts.length === 0 && <li className="text-sm text-brand-muted-soft">No cohorts yet.</li>}
       </ul>
     </section>
   )
@@ -255,27 +255,27 @@ function CohortItem({
   }
 
   return (
-    <li className="rounded-lg border border-gray-200 bg-white p-3">
+    <li className="rounded-lg border border-brand-border bg-white p-3">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <p className="flex items-center gap-2 font-medium text-gray-900">
+          <p className="flex items-center gap-2 font-medium text-brand-blue-dark">
             {c.name}
             {c.lifecycle === 'archived' && (
-              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+              <span className="rounded-full bg-brand-hairline px-2 py-0.5 text-[11px] font-medium text-brand-muted-soft">
                 Archived
               </span>
             )}
           </p>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-brand-muted-soft">
             Mentor: {c.mentor_name ?? '—'} · {c.member_count} members
-            {(c.invited_count ?? 0) > 0 && <span className="text-indigo-600"> · {c.invited_count} invited</span>}
+            {(c.invited_count ?? 0) > 0 && <span className="text-brand-blue"> · {c.invited_count} invited</span>}
           </p>
         </div>
         {c.lifecycle === 'archived' ? (
           <button
             onClick={() => post('/api/admin/community/cohorts', { cohortId: c.id, archive: false }, 'PATCH')}
             disabled={busy}
-            className="shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+            className="shrink-0 rounded-md border border-brand-border px-2.5 py-1 text-xs font-medium text-brand-muted hover:bg-brand-hairline"
           >
             Reactivate
           </button>
@@ -289,7 +289,7 @@ function CohortItem({
               post('/api/admin/community/cohorts', { cohortId: c.id, archive: true, keepOpen }, 'PATCH')
             }}
             disabled={busy}
-            className="shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+            className="shrink-0 rounded-md border border-brand-border px-2.5 py-1 text-xs font-medium text-brand-muted hover:bg-brand-hairline"
           >
             Archive
           </button>
@@ -310,12 +310,12 @@ function CohortItem({
           onChange={(e) => setBulk(e.target.value)}
           placeholder="Bulk add — paste emails separated by commas, spaces, or new lines"
           rows={2}
-          className="min-w-[260px] flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+          className="min-w-[260px] flex-1 rounded-md border border-brand-border px-3 py-1.5 text-sm"
         />
         <button
           onClick={bulkAdd}
           disabled={busy || !bulk.trim()}
-          className="rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+          className="rounded-md border border-brand-border px-2.5 py-1.5 text-xs font-medium text-brand-muted hover:bg-brand-hairline disabled:opacity-50"
         >
           Add all
         </button>
@@ -323,7 +323,7 @@ function CohortItem({
           <button
             onClick={() => post('/api/admin/community/cohorts', { cohortId: c.id, resendInvites: true }, 'PATCH')}
             disabled={busy}
-            className="rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+            className="rounded-md border border-brand-border px-2.5 py-1.5 text-xs font-medium text-brand-muted hover:bg-brand-hairline disabled:opacity-50"
           >
             Resend {c.invited_count} invite{c.invited_count === 1 ? '' : 's'}
           </button>
@@ -331,23 +331,23 @@ function CohortItem({
       </div>
 
       {/* Referenced training material (PRD §11) */}
-      <div className="mt-3 border-t border-gray-100 pt-3">
-        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">Training material</p>
+      <div className="mt-3 border-t border-brand-hairline pt-3">
+        <p className="mb-1.5 text-xs font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Training material</p>
         {(c.training ?? []).length > 0 && (
           <ul className="mb-2 space-y-1">
             {(c.training ?? []).map((t) => (
               <li key={t.module_id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="text-gray-700">
+                <span className="text-brand-muted">
                   {t.title}
                   <span
                     className={`ml-2 rounded px-1.5 py-0.5 text-[11px] ${
-                      t.is_mandatory ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'
+                      t.is_mandatory ? 'bg-amber-50 text-amber-700' : 'bg-brand-hairline text-brand-muted-soft'
                     }`}
                   >
                     {t.is_mandatory ? 'Mandatory' : 'Optional'}
                   </span>
                   {t.due_at && (
-                    <span className="ml-2 text-xs text-gray-400">due {new Date(t.due_at).toLocaleDateString()}</span>
+                    <span className="ml-2 text-xs text-brand-muted-soft">due {new Date(t.due_at).toLocaleDateString()}</span>
                   )}
                 </span>
                 <button
@@ -355,7 +355,7 @@ function CohortItem({
                     post('/api/admin/community/cohorts', { cohortId: c.id, unlinkModuleId: t.module_id }, 'PATCH')
                   }
                   disabled={busy}
-                  className="text-xs text-gray-400 hover:text-red-600"
+                  className="text-xs text-brand-muted-soft hover:text-red-600"
                 >
                   Remove
                 </button>
@@ -368,7 +368,7 @@ function CohortItem({
             value={moduleId}
             onChange={(e) => setModuleId(e.target.value)}
             disabled={busy || available.length === 0}
-            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            className="rounded-md border border-brand-border px-2 py-1.5 text-sm"
           >
             <option value="">{available.length === 0 ? 'No more modules' : 'Add training module…'}</option>
             {available.map((m) => (
@@ -377,19 +377,19 @@ function CohortItem({
               </option>
             ))}
           </select>
-          <label className="flex items-center gap-1 text-xs text-gray-600">
+          <label className="flex items-center gap-1 text-xs text-brand-muted">
             <input type="checkbox" checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} /> Mandatory
           </label>
           <input
             type="date"
             value={dueAt}
             onChange={(e) => setDueAt(e.target.value)}
-            className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700"
+            className="rounded-md border border-brand-border px-2 py-1 text-sm text-brand-muted"
           />
           <button
             onClick={attach}
             disabled={busy || !moduleId}
-            className="rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+            className="rounded-md border border-brand-border px-2.5 py-1.5 text-xs font-medium text-brand-muted hover:bg-brand-hairline disabled:opacity-50"
           >
             Attach
           </button>
@@ -443,30 +443,30 @@ function EntitlementsSection({
 
   return (
     <section>
-      <h2 className="mb-1 text-lg font-semibold text-gray-900">Sessions per tier</h2>
-      <p className="mb-3 text-sm text-gray-500">
+      <h2 className="mb-1 text-lg font-semibold text-brand-blue-dark">Sessions per tier</h2>
+      <p className="mb-3 text-sm text-brand-muted-soft">
         Included coaching / mentoring sessions per tier, and the Stripe Price ID charged for each
         additional session beyond the included allowance. Editable any time.
       </p>
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <div className="overflow-hidden rounded-lg border border-brand-border bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left">
+          <thead className="bg-brand-canvas text-left">
             <tr>
-              <th className="px-3 py-2 text-xs font-medium uppercase text-gray-500">Tier</th>
-              <th className="px-3 py-2 text-xs font-medium uppercase text-gray-500">Coaching</th>
-              <th className="px-3 py-2 text-xs font-medium uppercase text-gray-500">Mentoring</th>
+              <th className="px-3 py-2 text-xs font-medium uppercase text-brand-muted-soft">Tier</th>
+              <th className="px-3 py-2 text-xs font-medium uppercase text-brand-muted-soft">Coaching</th>
+              <th className="px-3 py-2 text-xs font-medium uppercase text-brand-muted-soft">Mentoring</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-brand-hairline">
             {tiers.map((t) => (
               <tr key={t.id}>
-                <td className="px-3 py-2 align-top font-medium text-gray-900">{t.name}</td>
+                <td className="px-3 py-2 align-top font-medium text-brand-blue-dark">{t.name}</td>
                 {(['coaching', 'mentoring'] as const).map((ty) => {
                   const c = cells[key(t.id, ty)]
                   return (
                     <td key={ty} className="px-3 py-2 align-top">
                       <div className="flex flex-col gap-1.5">
-                        <label className="flex items-center gap-2 text-xs text-gray-500">
+                        <label className="flex items-center gap-2 text-xs text-brand-muted-soft">
                           <span className="w-14">Included</span>
                           <input
                             type="number"
@@ -475,10 +475,10 @@ function EntitlementsSection({
                             onChange={(e) => update(t.id, ty, { included: Number(e.target.value) })}
                             onBlur={() => save(t.id, ty)}
                             disabled={busy}
-                            className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
+                            className="w-20 rounded-md border border-brand-border px-2 py-1 text-sm text-brand-blue-dark"
                           />
                         </label>
-                        <label className="flex items-center gap-2 text-xs text-gray-500">
+                        <label className="flex items-center gap-2 text-xs text-brand-muted-soft">
                           <span className="w-14">Extra price</span>
                           <input
                             type="text"
@@ -487,7 +487,7 @@ function EntitlementsSection({
                             onBlur={() => save(t.id, ty)}
                             placeholder="price_…"
                             disabled={busy}
-                            className="w-44 rounded-md border border-gray-300 px-2 py-1 font-mono text-xs text-gray-900"
+                            className="w-44 rounded-md border border-brand-border px-2 py-1 font-mono text-xs text-brand-blue-dark"
                           />
                         </label>
                       </div>

@@ -13,13 +13,13 @@ export default async function RefundPolicyPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <Link href="/admin/events" className="text-sm text-gray-500 hover:text-gray-700 mb-1 inline-block">← Events</Link>
-        <h1 className="text-2xl font-bold text-gray-900">Refund Policy</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <Link href="/admin/events" className="text-sm text-brand-muted-soft hover:text-brand-muted mb-1 inline-block">← Events</Link>
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Refund Policy</h1>
+        <p className="mt-1 text-sm text-brand-muted-soft">
           The global default applied when a paid registration is cancelled. Individual events can override this from the event page.
         </p>
       </div>
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="bg-white rounded-xl border border-brand-border p-5">
         <RefundPolicyEditor scope="global" initialTiers={tiers} />
       </div>
     </div>

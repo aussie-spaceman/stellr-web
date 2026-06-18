@@ -12,9 +12,9 @@ const SOURCE_LABEL: Record<string, string> = {
   system: 'System',
 }
 const SOURCE_BADGE: Record<string, string> = {
-  stripe: 'bg-blue-100 text-blue-800',
+  stripe: 'bg-brand-blue/10 text-brand-blue',
   rule: 'bg-amber-100 text-amber-800',
-  manual: 'bg-gray-100 text-gray-700',
+  manual: 'bg-brand-hairline text-brand-muted',
   system: 'bg-purple-100 text-purple-800',
 }
 
@@ -50,24 +50,24 @@ export default async function MembershipMembersPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900">Membership Studio</h1>
-      <p className="mt-0.5 mb-4 text-sm text-gray-500">Who is on which tier, and how they got there.</p>
+      <h1 className="font-heading uppercase text-title text-brand-blue-dark">Membership Studio</h1>
+      <p className="mt-0.5 mb-4 text-sm text-brand-muted-soft">Who is on which tier, and how they got there.</p>
       <MembershipNav />
 
-      <h2 className="text-sm font-medium text-gray-700 mb-2">Active members by tier</h2>
+      <h2 className="text-sm font-medium text-brand-muted mb-2">Active members by tier</h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-8">
         {(tiers ?? []).map((t) => (
-          <div key={t.id} className="bg-gray-50 rounded-md p-3">
-            <div className="text-xs text-gray-500">{t.name}</div>
-            <div className="text-xl font-semibold text-gray-900">{counts.get(t.id) ?? 0}</div>
+          <div key={t.id} className="bg-brand-canvas rounded-md p-3">
+            <div className="text-xs text-brand-muted-soft">{t.name}</div>
+            <div className="text-xl font-semibold text-brand-blue-dark">{counts.get(t.id) ?? 0}</div>
           </div>
         ))}
       </div>
 
-      <h2 className="text-sm font-medium text-gray-700 mb-2">Recent grants</h2>
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <h2 className="text-sm font-medium text-brand-muted mb-2">Recent grants</h2>
+      <div className="bg-white border border-brand-border rounded-xl overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-gray-500 text-xs">
+          <thead className="bg-brand-canvas text-brand-muted-soft text-xs">
             <tr>
               <th className="text-left font-medium px-4 py-2">Member</th>
               <th className="text-left font-medium px-4 py-2">Tier</th>
@@ -83,19 +83,19 @@ export default async function MembershipMembersPage() {
               const tier = one(r.membership_tiers)
               const src = r.source ?? 'manual'
               return (
-                <tr key={r.id} className="border-t border-gray-100">
-                  <td className="px-4 py-2 text-gray-900">{member ? `${member.first_name ?? ''} ${member.last_name ?? ''}`.trim() || '—' : '—'}</td>
-                  <td className="px-4 py-2 text-gray-700">{tier?.name ?? '—'}</td>
+                <tr key={r.id} className="border-t border-brand-hairline">
+                  <td className="px-4 py-2 text-brand-blue-dark">{member ? `${member.first_name ?? ''} ${member.last_name ?? ''}`.trim() || '—' : '—'}</td>
+                  <td className="px-4 py-2 text-brand-muted">{tier?.name ?? '—'}</td>
                   <td className="px-4 py-2">
                     <span className={'text-[11px] px-2 py-0.5 rounded-md ' + (SOURCE_BADGE[src] ?? SOURCE_BADGE.manual)}>
                       {SOURCE_LABEL[src] ?? src}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-gray-500">{r.started_at}</td>
-                  <td className="px-4 py-2 text-gray-500">{r.expires_at ?? '—'}</td>
+                  <td className="px-4 py-2 text-brand-muted-soft">{r.started_at}</td>
+                  <td className="px-4 py-2 text-brand-muted-soft">{r.expires_at ?? '—'}</td>
                   <td className="px-4 py-2 text-right">
                     {member && (
-                      <Link href={`/admin/members/${member.id}/view-as`} className="text-xs text-indigo-600 hover:underline">
+                      <Link href={`/admin/members/${member.id}/view-as`} className="text-xs text-brand-blue hover:underline">
                         View as
                       </Link>
                     )}
@@ -104,7 +104,7 @@ export default async function MembershipMembersPage() {
               )
             })}
             {(!recent || recent.length === 0) && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No active grants yet.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-brand-muted-soft">No active grants yet.</td></tr>
             )}
           </tbody>
         </table>

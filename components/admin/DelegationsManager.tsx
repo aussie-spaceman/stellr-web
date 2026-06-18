@@ -71,20 +71,20 @@ export default function DelegationsManager({ initial }: { initial: Delegation[] 
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500">
+      <div className="rounded-lg border border-brand-border bg-brand-canvas p-3 text-xs text-brand-muted-soft">
         Platform admins and Event Managers are set in Clerk (role metadata) — the platform-wide RBAC
         axis. The grants below are object-scoped: full read/write over a single event, group or
         container. A grantee must already be a member; no membership tier is required.
       </div>
 
       {/* Grant a new object role */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Grant a manager</p>
+      <div className="rounded-xl border border-brand-border bg-white p-4">
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Grant a manager</p>
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={objectType}
             onChange={(e) => setObjectType(e.target.value as ObjectType)}
-            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm capitalize"
+            className="rounded-md border border-brand-border px-2 py-1.5 text-sm capitalize"
           >
             {OBJECT_TYPES.map((t) => (
               <option key={t} value={t}>
@@ -96,13 +96,13 @@ export default function DelegationsManager({ initial }: { initial: Delegation[] 
             value={objectId}
             onChange={(e) => setObjectId(e.target.value)}
             placeholder={objectType === 'event' ? 'event slug' : `${objectType} id`}
-            className="w-48 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+            className="w-48 rounded-md border border-brand-border px-3 py-1.5 text-sm"
           />
           <div className="min-w-[220px] flex-1">
             {picked ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 py-1 pl-3 pr-1 text-sm font-medium text-indigo-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-brand-blue/5 py-1 pl-3 pr-1 text-sm font-medium text-brand-blue">
                 {pickedName}
-                <button onClick={() => setPicked(null)} aria-label="Clear member" className="hover:text-indigo-900">
+                <button onClick={() => setPicked(null)} aria-label="Clear member" className="hover:text-brand-blue">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </span>
@@ -113,7 +113,7 @@ export default function DelegationsManager({ initial }: { initial: Delegation[] 
           <button
             onClick={grant}
             disabled={busy || !objectId.trim() || !picked}
-            className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-brand-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
           >
             Grant
           </button>
@@ -122,33 +122,33 @@ export default function DelegationsManager({ initial }: { initial: Delegation[] 
       </div>
 
       {/* Existing grants grouped by object */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-brand-border bg-white">
         {Object.keys(groups).length === 0 && (
-          <p className="px-4 py-6 text-center text-sm text-gray-400">No object roles granted yet.</p>
+          <p className="px-4 py-6 text-center text-sm text-brand-muted-soft">No object roles granted yet.</p>
         )}
         {Object.entries(groups).map(([key, rows]) => {
           const [type, ...rest] = key.split(':')
           const id = rest.join(':')
           return (
-            <div key={key} className="border-b border-gray-100 px-4 py-3 last:border-b-0">
+            <div key={key} className="border-b border-brand-hairline px-4 py-3 last:border-b-0">
               <div className="mb-1.5 flex items-baseline gap-2">
-                <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium capitalize text-gray-600">
+                <span className="rounded bg-brand-hairline px-1.5 py-0.5 text-[11px] font-medium capitalize text-brand-muted">
                   {type}
                 </span>
-                <span className="text-sm font-medium text-gray-900">{id}</span>
+                <span className="text-sm font-medium text-brand-blue-dark">{id}</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {rows.map((d) => (
                   <span
                     key={d.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-indigo-50 py-0.5 pl-3 pr-1 text-xs font-medium text-indigo-700"
+                    className="inline-flex items-center gap-1 rounded-full bg-brand-blue/5 py-0.5 pl-3 pr-1 text-xs font-medium text-brand-blue"
                   >
                     {d.member_name?.trim() || d.member_email || 'Member'}
                     <button
                       onClick={() => revoke(d.id)}
                       disabled={busy}
                       aria-label="Revoke"
-                      className="hover:text-indigo-900 disabled:opacity-50"
+                      className="hover:text-brand-blue disabled:opacity-50"
                     >
                       <X className="h-3 w-3" />
                     </button>

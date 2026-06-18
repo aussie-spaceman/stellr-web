@@ -40,8 +40,8 @@ export default function EventBadges({
 
   function UploadInput({ kind, has }: { kind: 'badge' | 'certificate'; has: boolean }) {
     return (
-      <label className="text-xs text-gray-500 cursor-pointer">
-        <span className="underline hover:text-gray-700">
+      <label className="text-xs text-brand-muted-soft cursor-pointer">
+        <span className="underline hover:text-brand-muted">
           {uploading === kind ? 'Uploading…' : has ? 'Replace background artwork' : 'Upload background artwork'}
         </span>
         {has && <span className="ml-1 text-green-600">✓ set</span>}
@@ -61,41 +61,41 @@ export default function EventBadges({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
-      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Badges & Certificates</h3>
+    <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">
+      <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Badges & Certificates</h3>
       {error && <p className="text-xs text-red-600">{error}</p>}
       <div className="grid md:grid-cols-2 gap-4">
-        <div className="border border-gray-200 rounded-lg p-4 space-y-2">
-          <p className="font-medium text-gray-900 text-sm">Name Badges</p>
-          <p className="text-xs text-gray-500">
+        <div className="border border-brand-border rounded-lg p-4 space-y-2">
+          <p className="font-medium text-brand-blue-dark text-sm">Name Badges</p>
+          <p className="text-xs text-brand-muted-soft">
             3×4″ landscape, all participants, tiled six per US Letter page with cut guides.
           </p>
           <UploadInput kind="badge" has={hasBadgeArtwork} />
           <div>
             <a
               href={`/api/admin/events/${eventSlug}/badges`}
-              className="inline-block text-sm font-medium bg-indigo-600 text-white rounded-lg px-3 py-1.5 mt-1"
+              className="inline-block text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5 mt-1"
             >
               Download Badges PDF
             </a>
           </div>
         </div>
-        <div className="border border-gray-200 rounded-lg p-4 space-y-2">
-          <p className="font-medium text-gray-900 text-sm">Participation Certificates</p>
-          <p className="text-xs text-gray-500">One per student, landscape, with their full name and the event name.</p>
+        <div className="border border-brand-border rounded-lg p-4 space-y-2">
+          <p className="font-medium text-brand-blue-dark text-sm">Participation Certificates</p>
+          <p className="text-xs text-brand-muted-soft">One per student, landscape, with their full name and the event name.</p>
           <UploadInput kind="certificate" has={hasCertificateArtwork} />
           <div className="flex items-center gap-2 mt-1">
             <select
               value={format}
               onChange={(e) => setFormat(e.target.value as 'us_letter' | 'a4')}
-              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-700"
+              className="border border-brand-border rounded-lg px-2 py-1.5 text-sm bg-white text-brand-muted"
             >
               <option value="us_letter">US Letter</option>
               <option value="a4">A4</option>
             </select>
             <a
               href={`/api/admin/events/${eventSlug}/certificates?format=${format}`}
-              className="inline-block text-sm font-medium bg-indigo-600 text-white rounded-lg px-3 py-1.5"
+              className="inline-block text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5"
             >
               Download Certificates PDF
             </a>

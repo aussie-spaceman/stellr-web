@@ -19,10 +19,10 @@ export const metadata = { title: 'Admin — Event' }
 export const dynamic = 'force-dynamic'
 
 function StatCard({ label, value, accent }: { label: string; value: string | number; accent?: 'red' | 'green' }) {
-  const valueColor = accent === 'red' ? 'text-red-600' : accent === 'green' ? 'text-green-600' : 'text-gray-900'
+  const valueColor = accent === 'red' ? 'text-red-600' : accent === 'green' ? 'text-green-600' : 'text-brand-blue-dark'
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
+    <div className="bg-white rounded-xl border border-brand-border p-4">
+      <p className="text-xs font-medium text-brand-muted-soft uppercase tracking-wide">{label}</p>
       <p className={`text-2xl font-bold mt-1 ${valueColor}`}>{value}</p>
     </div>
   )
@@ -94,28 +94,28 @@ export default async function AdminEventDetailPage({ params }: { params: Promise
   return (
     <div className="space-y-8">
       <div>
-        <Link href="/admin/events" className="text-sm text-indigo-600 hover:text-indigo-800">
+        <Link href="/admin/events" className="text-sm text-brand-blue hover:text-brand-blue">
           ← All events
         </Link>
         <div className="flex items-center gap-3 mt-1">
-          <h1 className="text-2xl font-bold text-gray-900">{event.title}</h1>
+          <h1 className="font-heading uppercase text-title text-brand-blue-dark">{event.title}</h1>
           {!isCampaign && (
             <Link
               href={`/admin/events/${slug}/check-in`}
-              className="ml-auto text-sm font-medium bg-indigo-600 text-white rounded-lg px-3 py-1.5"
+              className="ml-auto text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5"
             >
               Check-In Console
             </Link>
           )}
           <span
             className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${
-              isCampaign ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+              isCampaign ? 'bg-purple-100 text-purple-700' : 'bg-brand-blue/10 text-brand-blue'
             }`}
           >
             {isCampaign ? 'Campaign' : 'Live Event'}
           </span>
         </div>
-        <p className="text-sm text-gray-500 mt-0.5">
+        <p className="text-sm text-brand-muted-soft mt-0.5">
           {[
             event.date && formatDate(event.date),
             [event.venue, event.city, event.state].filter(Boolean).join(', '),
@@ -144,31 +144,31 @@ export default async function AdminEventDetailPage({ params }: { params: Promise
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Dietary Requirements</h3>
+        <div className="bg-white rounded-xl border border-brand-border p-4">
+          <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide mb-2">Dietary Requirements</h3>
           {summary.dietary.length === 0 ? (
-            <p className="text-sm text-gray-400">None reported.</p>
+            <p className="text-sm text-brand-muted-soft">None reported.</p>
           ) : (
             <ul className="space-y-1">
               {summary.dietary.map((d) => (
                 <li key={d.name} className="flex justify-between text-sm">
-                  <span className="text-gray-700">{d.name}</span>
-                  <span className="font-medium text-gray-900 tabular-nums">{d.count}</span>
+                  <span className="text-brand-muted">{d.name}</span>
+                  <span className="font-medium text-brand-blue-dark tabular-nums">{d.count}</span>
                 </li>
               ))}
             </ul>
           )}
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Health Issues</h3>
+        <div className="bg-white rounded-xl border border-brand-border p-4">
+          <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide mb-2">Health Issues</h3>
           {summary.healthIssues.length === 0 ? (
-            <p className="text-sm text-gray-400">None reported.</p>
+            <p className="text-sm text-brand-muted-soft">None reported.</p>
           ) : (
             <ul className="space-y-1 max-h-48 overflow-y-auto">
               {summary.healthIssues.map((h, i) => (
                 <li key={i} className="text-sm">
-                  <span className="font-medium text-gray-900">{h.name}:</span>{' '}
-                  <span className="text-gray-600">{h.condition}</span>
+                  <span className="font-medium text-brand-blue-dark">{h.name}:</span>{' '}
+                  <span className="text-brand-muted">{h.condition}</span>
                 </li>
               ))}
             </ul>
@@ -192,12 +192,12 @@ export default async function AdminEventDetailPage({ params }: { params: Promise
       {!isCampaign && access.isAdmin && (
         <section className="space-y-3">
           <div>
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Refund Policy</h2>
-            <p className="text-xs text-gray-500 mt-1">
+            <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Refund Policy</h2>
+            <p className="text-xs text-brand-muted-soft mt-1">
               {eventPolicy ? 'This event uses a custom override.' : 'Using the global default. Save below to override for this event only.'}
             </p>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-xl border border-brand-border p-5">
             <RefundPolicyEditor scope="event" eventSlug={slug} initialTiers={refundTiers} hasOverride={Boolean(eventPolicy)} />
           </div>
         </section>
@@ -206,8 +206,8 @@ export default async function AdminEventDetailPage({ params }: { params: Promise
       {!isCampaign && (
         <section className="space-y-3">
           <div>
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Merchandise</h2>
-            <p className="text-xs text-gray-500 mt-1">
+            <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Merchandise</h2>
+            <p className="text-xs text-brand-muted-soft mt-1">
               Included shirt (auto-allocated by size) and paid add-ons for this event.
             </p>
           </div>
@@ -225,7 +225,7 @@ export default async function AdminEventDetailPage({ params }: { params: Promise
 
       {/* Roster */}
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Participants</h2>
+        <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Participants</h2>
         <EventRoster
           roster={roster}
           exportHref={`/api/admin/events/${slug}/export`}

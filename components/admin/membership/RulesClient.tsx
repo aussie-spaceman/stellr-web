@@ -101,7 +101,7 @@ export function RulesClient({ initialRules, tiers }: { initialRules: RuleRow[]; 
       <div className="flex justify-end mb-3">
         <button
           onClick={() => setDraft(emptyDraft(tiers[0]?.id ?? ''))}
-          className="text-sm flex items-center gap-1 bg-indigo-600 text-white rounded-md px-3 py-1.5 hover:bg-indigo-700"
+          className="text-sm flex items-center gap-1 bg-brand-blue text-white rounded-md px-3 py-1.5 hover:bg-brand-blue-dark"
         >
           <Plus className="w-4 h-4" /> Add rule
         </button>
@@ -109,32 +109,32 @@ export function RulesClient({ initialRules, tiers }: { initialRules: RuleRow[]; 
 
       <div className="space-y-2">
         {rules.length === 0 && (
-          <p className="text-sm text-gray-400 text-center py-8">No grant rules yet. Add one to automate tier assignment.</p>
+          <p className="text-sm text-brand-muted-soft text-center py-8">No grant rules yet. Add one to automate tier assignment.</p>
         )}
         {rules.map((r) => (
-          <div key={r.id} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+          <div key={r.id} className="bg-white border border-brand-border rounded-xl px-4 py-3">
             <div className="flex items-center gap-2 flex-wrap text-sm">
-              <span className="font-medium text-gray-900">{r.name || '(untitled)'}</span>
-              <span className="text-gray-300">·</span>
-              <span className="text-gray-500">When</span>
+              <span className="font-medium text-brand-blue-dark">{r.name || '(untitled)'}</span>
+              <span className="text-brand-muted-soft">·</span>
+              <span className="text-brand-muted-soft">When</span>
               <Chip color="amber">{TRIGGERS[r.trigger_type] ?? r.trigger_type}</Chip>
               {r.conditions.event_role && <Chip color="gray">role: {r.conditions.event_role}</Chip>}
               {r.conditions.age_bracket && <Chip color="gray">{r.conditions.age_bracket}</Chip>}
               {r.conditions.award_contains && <Chip color="gray">award ~ “{r.conditions.award_contains}”</Chip>}
-              <span className="text-gray-500">grant</span>
+              <span className="text-brand-muted-soft">grant</span>
               <Chip color="blue">{tierName(r.grant_tier_id)}</Chip>
-              <span className="text-gray-500">for</span>
+              <span className="text-brand-muted-soft">for</span>
               <Chip color="purple">{durationLabel(r)}</Chip>
               <span className="ml-auto flex items-center gap-3">
-                <span className="text-[11px] text-gray-400">priority {r.priority}</span>
+                <span className="text-[11px] text-brand-muted-soft">priority {r.priority}</span>
                 <button onClick={() => toggle(r)} title={r.is_active ? 'Active' : 'Paused'}>
-                  <Power className={'w-4 h-4 ' + (r.is_active ? 'text-green-600' : 'text-gray-300')} />
+                  <Power className={'w-4 h-4 ' + (r.is_active ? 'text-green-600' : 'text-brand-muted-soft')} />
                 </button>
                 <button onClick={() => setDraft(r)} title="Edit">
-                  <Pencil className="w-4 h-4 text-gray-400 hover:text-gray-700" />
+                  <Pencil className="w-4 h-4 text-brand-muted-soft hover:text-brand-muted" />
                 </button>
                 <button onClick={() => remove(r)} title="Delete">
-                  <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-600" />
+                  <Trash2 className="w-4 h-4 text-brand-muted-soft hover:text-red-600" />
                 </button>
               </span>
             </div>
@@ -158,9 +158,9 @@ export function RulesClient({ initialRules, tiers }: { initialRules: RuleRow[]; 
 function Chip({ color, children }: { color: string; children: React.ReactNode }) {
   const map: Record<string, string> = {
     amber: 'bg-amber-100 text-amber-800',
-    blue: 'bg-blue-100 text-blue-800',
+    blue: 'bg-brand-blue/10 text-brand-blue',
     purple: 'bg-purple-100 text-purple-800',
-    gray: 'bg-gray-100 text-gray-700',
+    gray: 'bg-brand-hairline text-brand-muted',
   }
   return <span className={'px-2 py-0.5 rounded-md text-xs ' + (map[color] ?? map.gray)}>{children}</span>
 }
@@ -185,19 +185,19 @@ function RuleForm({
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-xl p-5 w-full max-w-lg space-y-3 max-h-[90vh] overflow-y-auto">
-        <h2 className="font-semibold text-gray-900">{draft.id ? 'Edit rule' : 'New grant rule'}</h2>
+        <h2 className="font-semibold text-brand-blue-dark">{draft.id ? 'Edit rule' : 'New grant rule'}</h2>
 
         <Field label="Rule name">
           <input
             value={draft.name}
             onChange={(e) => set({ name: e.target.value })}
             placeholder="e.g. Award winner → Scholar (1yr)"
-            className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5"
+            className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5"
           />
         </Field>
 
         <Field label="When (trigger)">
-          <select value={draft.trigger_type} onChange={(e) => set({ trigger_type: e.target.value })} className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5">
+          <select value={draft.trigger_type} onChange={(e) => set({ trigger_type: e.target.value })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
             {Object.entries(TRIGGERS).map(([v, l]) => (
               <option key={v} value={v}>{l}</option>
             ))}
@@ -206,12 +206,12 @@ function RuleForm({
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="…and role is (optional)">
-            <select value={draft.conditions.event_role ?? ''} onChange={(e) => setCond({ event_role: e.target.value || undefined })} className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5">
+            <select value={draft.conditions.event_role ?? ''} onChange={(e) => setCond({ event_role: e.target.value || undefined })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
               {ROLES.map((r) => <option key={r} value={r}>{r || 'any role'}</option>)}
             </select>
           </Field>
           <Field label="…and bracket is (optional)">
-            <select value={draft.conditions.age_bracket ?? ''} onChange={(e) => setCond({ age_bracket: e.target.value || undefined })} className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5">
+            <select value={draft.conditions.age_bracket ?? ''} onChange={(e) => setCond({ age_bracket: e.target.value || undefined })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
               {BRACKETS.map((b) => <option key={b} value={b}>{b || 'any bracket'}</option>)}
             </select>
           </Field>
@@ -219,19 +219,19 @@ function RuleForm({
 
         {draft.trigger_type === 'event_award' && (
           <Field label="…and award text contains (optional)">
-            <input value={draft.conditions.award_contains ?? ''} onChange={(e) => setCond({ award_contains: e.target.value || undefined })} placeholder="e.g. winner" className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5" />
+            <input value={draft.conditions.award_contains ?? ''} onChange={(e) => setCond({ award_contains: e.target.value || undefined })} placeholder="e.g. winner" className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
           </Field>
         )}
 
         <Field label="Grant tier">
-          <select value={draft.grant_tier_id} onChange={(e) => set({ grant_tier_id: e.target.value })} className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5">
+          <select value={draft.grant_tier_id} onChange={(e) => set({ grant_tier_id: e.target.value })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
             {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}{t.is_free ? ' (free)' : ''}</option>)}
           </select>
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Duration">
-            <select value={draft.duration_kind} onChange={(e) => set({ duration_kind: e.target.value as RuleRow['duration_kind'] })} className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5">
+            <select value={draft.duration_kind} onChange={(e) => set({ duration_kind: e.target.value as RuleRow['duration_kind'] })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
               <option value="months">For N months</option>
               <option value="until_grad_july1">Until July 1 of grad year</option>
               <option value="lifetime">Lifetime</option>
@@ -239,26 +239,26 @@ function RuleForm({
           </Field>
           {draft.duration_kind === 'months' && (
             <Field label="Months">
-              <input value={draft.duration_months ?? ''} onChange={(e) => set({ duration_months: e.target.value ? Number(e.target.value.replace(/[^0-9]/g, '')) : null })} className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5" />
+              <input value={draft.duration_months ?? ''} onChange={(e) => set({ duration_months: e.target.value ? Number(e.target.value.replace(/[^0-9]/g, '')) : null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
             </Field>
           )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Priority (higher wins)">
-            <input value={draft.priority} onChange={(e) => set({ priority: Number(e.target.value.replace(/[^0-9]/g, '') || 0) })} className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5" />
+            <input value={draft.priority} onChange={(e) => set({ priority: Number(e.target.value.replace(/[^0-9]/g, '') || 0) })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
           </Field>
-          <label className="flex items-center gap-2 text-sm text-gray-700 mt-6">
+          <label className="flex items-center gap-2 text-sm text-brand-muted mt-6">
             <input type="checkbox" checked={draft.replaces_free} onChange={(e) => set({ replaces_free: e.target.checked })} />
             Replace active free tier
           </label>
         </div>
 
         <div className="flex gap-2 pt-2">
-          <button onClick={onSubmit} disabled={!draft.name || !draft.grant_tier_id} className="flex-1 text-sm bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 disabled:opacity-40">
+          <button onClick={onSubmit} disabled={!draft.name || !draft.grant_tier_id} className="flex-1 text-sm bg-brand-blue text-white rounded-md py-2 hover:bg-brand-blue-dark disabled:opacity-40">
             {draft.id ? 'Save changes' : 'Create rule'}
           </button>
-          <button onClick={onCancel} className="flex-1 text-sm border border-gray-200 rounded-md py-2 text-gray-600 hover:bg-gray-50">
+          <button onClick={onCancel} className="flex-1 text-sm border border-brand-border rounded-md py-2 text-brand-muted hover:bg-brand-canvas">
             Cancel
           </button>
         </div>
@@ -270,7 +270,7 @@ function RuleForm({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs text-gray-500 mb-1">{label}</label>
+      <label className="block text-xs text-brand-muted-soft mb-1">{label}</label>
       {children}
     </div>
   )

@@ -6,7 +6,7 @@ import type { StoreProductWithVariants } from '@/lib/store/types'
 
 const STATUS_BADGE: Record<string, string> = {
   active: 'bg-green-100 text-green-800',
-  draft: 'bg-gray-100 text-gray-700',
+  draft: 'bg-brand-hairline text-brand-muted',
   archived: 'bg-amber-100 text-amber-800',
 }
 
@@ -22,17 +22,17 @@ function priceRange(p: StoreProductWithVariants): string {
 export function ProductTable({ products }: { products: StoreProductWithVariants[] }) {
   if (products.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-200 p-10 text-center text-sm text-gray-500">
-        <Package className="mx-auto mb-2 h-6 w-6 text-gray-300" />
+      <div className="rounded-xl border border-dashed border-brand-border p-10 text-center text-sm text-brand-muted-soft">
+        <Package className="mx-auto mb-2 h-6 w-6 text-brand-muted-soft" />
         No products yet. Create one, then sync its variants from Printful.
       </div>
     )
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200">
+    <div className="overflow-hidden rounded-xl border border-brand-border">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+        <thead className="bg-brand-canvas text-left text-xs uppercase tracking-wide text-brand-muted-soft">
           <tr>
             <th className="px-4 py-2 font-medium">Product</th>
             <th className="px-4 py-2 font-medium">Type</th>
@@ -41,26 +41,26 @@ export function ProductTable({ products }: { products: StoreProductWithVariants[
             <th className="px-4 py-2 font-medium">Status</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-brand-hairline">
           {products.map((p) => (
-            <tr key={p.id} className="hover:bg-gray-50">
+            <tr key={p.id} className="hover:bg-brand-canvas">
               <td className="px-4 py-2.5">
-                <Link href={`/admin/store/${p.id}`} className="font-medium text-gray-900 hover:text-indigo-700">
+                <Link href={`/admin/store/${p.id}`} className="font-medium text-brand-blue-dark hover:text-brand-blue">
                   {p.name}
                 </Link>
-                <div className="flex items-center gap-2 text-xs text-gray-400">
+                <div className="flex items-center gap-2 text-xs text-brand-muted-soft">
                   {p.slug}
                   {p.pod_sync_product_id && (
-                    <span className="flex items-center gap-0.5 text-indigo-500">
+                    <span className="flex items-center gap-0.5 text-brand-blue">
                       <Link2 className="h-3 w-3" /> Printful
                     </span>
                   )}
                   {p.is_event_shirt && <span className="text-amber-600">event shirt</span>}
                 </div>
               </td>
-              <td className="px-4 py-2.5 capitalize text-gray-600">{p.product_type}</td>
-              <td className="px-4 py-2.5 text-gray-600">{p.variants?.length ?? 0}</td>
-              <td className="px-4 py-2.5 text-gray-600">{priceRange(p)}</td>
+              <td className="px-4 py-2.5 capitalize text-brand-muted">{p.product_type}</td>
+              <td className="px-4 py-2.5 text-brand-muted">{p.variants?.length ?? 0}</td>
+              <td className="px-4 py-2.5 text-brand-muted">{priceRange(p)}</td>
               <td className="px-4 py-2.5">
                 <span className={'rounded-md px-2 py-0.5 text-[11px] ' + (STATUS_BADGE[p.status] ?? STATUS_BADGE.draft)}>
                   {p.status}

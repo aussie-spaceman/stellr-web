@@ -47,29 +47,29 @@ function CohortChatViewer({ cohorts }: { cohorts: Cohort[] }) {
 
   return (
     <div>
-      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-gray-700">
+      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-brand-muted">
         <MessageSquare className="h-4 w-4" /> Cohort chats (read-only)
       </h3>
       <select
         value={selectedCohort}
         onChange={(e) => e.target.value && loadChat(e.target.value)}
-        className="mb-3 block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+        className="mb-3 block w-full rounded-md border border-brand-border px-3 py-1.5 text-sm"
       >
         <option value="">Select a cohort…</option>
         {cohorts.map((c) => (
           <option key={c.id} value={c.id}>{c.name}</option>
         ))}
       </select>
-      {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+      {loading && <Loader2 className="h-4 w-4 animate-spin text-brand-muted-soft" />}
       {!loading && selectedCohort && (
-        <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-3">
+        <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-md border border-brand-border bg-brand-canvas p-3">
           {messages.length === 0 ? (
-            <p className="text-sm text-gray-400">No messages.</p>
+            <p className="text-sm text-brand-muted-soft">No messages.</p>
           ) : (
             messages.map((m) => (
               <div key={m.id} className="text-sm">
-                <span className="text-xs text-gray-400">{new Date(m.created_at).toLocaleString()}</span>
-                <span className="ml-2 text-gray-700">{m.body}</span>
+                <span className="text-xs text-brand-muted-soft">{new Date(m.created_at).toLocaleString()}</span>
+                <span className="ml-2 text-brand-muted">{m.body}</span>
               </div>
             ))
           )}
@@ -110,39 +110,39 @@ function DirectSessionCreate() {
 
   return (
     <div>
-      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-gray-700">
+      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-brand-muted">
         <Plus className="h-4 w-4" /> Create session directly
       </h3>
-      <div className="space-y-2 rounded-md border border-gray-200 bg-white p-3">
+      <div className="space-y-2 rounded-md border border-brand-border bg-white p-3">
         <input
           type="email"
           value={hostEmail}
           onChange={(e) => setHostEmail(e.target.value)}
           placeholder="Host email"
-          className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+          className="block w-full rounded-md border border-brand-border px-3 py-1.5 text-sm"
         />
         <input
           type="text"
           value={cohortId}
           onChange={(e) => setCohortId(e.target.value)}
           placeholder="Cohort ID"
-          className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+          className="block w-full rounded-md border border-brand-border px-3 py-1.5 text-sm"
         />
         <input
           type="datetime-local"
           value={start}
           onChange={(e) => setStart(e.target.value)}
-          className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+          className="block w-full rounded-md border border-brand-border px-3 py-1.5 text-sm"
         />
         <button
           onClick={create}
           disabled={busy || !hostEmail || !start}
-          className="inline-flex items-center gap-1 rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="inline-flex items-center gap-1 rounded-md bg-brand-blue-dark px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
         >
           {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           Create
         </button>
-        {result && <p className="text-sm text-gray-600">{result}</p>}
+        {result && <p className="text-sm text-brand-muted">{result}</p>}
       </div>
     </div>
   )

@@ -166,14 +166,14 @@ export function EntitlementMatrix({ tiers, targets, initial }: Props) {
   return (
     <div className="space-y-6">
       {/* Tier palette, grouped by audience family */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-500">
+      <div className="rounded-xl border border-brand-border bg-white p-4">
+        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">
           Membership tiers — drag onto content to grant access
         </p>
         <div className="space-y-3">
           {orderedFamilies.map((family) => (
             <div key={family}>
-              <p className="mb-1.5 text-[11px] font-medium text-gray-400">{family}</p>
+              <p className="mb-1.5 text-[11px] font-medium text-brand-muted-soft">{family}</p>
               <div className="flex flex-wrap gap-2">
                 {tierFamilies[family].map((t) => (
                   <span
@@ -183,8 +183,8 @@ export function EntitlementMatrix({ tiers, targets, initial }: Props) {
                     onDragEnd={() => setDrag(null)}
                     className={`inline-flex cursor-grab items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium ${
                       t.is_free
-                        ? 'border-gray-300 bg-gray-50 text-gray-700'
-                        : 'border-indigo-200 bg-indigo-50 text-indigo-700'
+                        ? 'border-brand-border bg-brand-canvas text-brand-muted'
+                        : 'border-brand-blue bg-brand-blue/5 text-brand-blue'
                     }`}
                   >
                     <GripVertical className="h-3 w-3 opacity-50" />
@@ -221,21 +221,21 @@ export function EntitlementMatrix({ tiers, targets, initial }: Props) {
       {/* Content rows grouped by section */}
       {Object.entries(groups).map(([group, items]) => (
         <div key={group}>
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">{group}</h2>
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+          <h2 className="mb-2 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">{group}</h2>
+          <div className="overflow-hidden rounded-xl border border-brand-border bg-white">
             {items.map((target) => (
               <div
                 key={`${target.type}:${target.ref}`}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => drag && grant(target, drag)}
-                className={`flex items-center justify-between gap-4 border-b border-gray-100 px-4 py-3 last:border-b-0 ${
-                  drag ? 'hover:bg-indigo-50/50' : ''
+                className={`flex items-center justify-between gap-4 border-b border-brand-hairline px-4 py-3 last:border-b-0 ${
+                  drag ? 'hover:bg-brand-blue-dark/50' : ''
                 }`}
               >
-                <span className="text-sm font-medium text-gray-900">{target.label}</span>
+                <span className="text-sm font-medium text-brand-blue-dark">{target.label}</span>
                 <div className="flex flex-wrap items-center justify-end gap-1.5">
                   {chipsFor(target).length === 0 && (
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-brand-muted-soft">
                       Open to all members (legacy tier rule)
                     </span>
                   )}
@@ -248,7 +248,7 @@ export function EntitlementMatrix({ tiers, targets, initial }: Props) {
                       <span
                         key={r.id}
                         className={`inline-flex items-center gap-1 rounded-full py-0.5 pl-2 pr-1 text-xs font-medium ${
-                          isContent ? 'bg-amber-100 capitalize text-amber-800' : 'bg-indigo-50 text-indigo-700'
+                          isContent ? 'bg-amber-100 capitalize text-amber-800' : 'bg-brand-blue/5 text-brand-blue'
                         }`}
                       >
                         {label}
@@ -258,7 +258,7 @@ export function EntitlementMatrix({ tiers, targets, initial }: Props) {
                           disabled={busy}
                           aria-label={`Access level for ${label}`}
                           className={`rounded px-1 py-0.5 text-[11px] font-medium disabled:opacity-50 ${
-                            isContent ? 'bg-amber-200/70 text-amber-900' : 'bg-indigo-100/70 text-indigo-800'
+                            isContent ? 'bg-amber-200/70 text-amber-900' : 'bg-brand-blue/10/70 text-brand-blue'
                           }`}
                         >
                           {ACCESS_LEVELS.map((lvl) => (
@@ -271,7 +271,7 @@ export function EntitlementMatrix({ tiers, targets, initial }: Props) {
                           onClick={() => revoke(r.id)}
                           disabled={busy}
                           aria-label="Revoke"
-                          className="hover:text-indigo-900 disabled:opacity-50"
+                          className="hover:text-brand-blue disabled:opacity-50"
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -282,13 +282,13 @@ export function EntitlementMatrix({ tiers, targets, initial }: Props) {
               </div>
             ))}
             {items.length === 0 && (
-              <p className="px-4 py-6 text-center text-sm text-gray-400">Nothing to configure here yet.</p>
+              <p className="px-4 py-6 text-center text-sm text-brand-muted-soft">Nothing to configure here yet.</p>
             )}
           </div>
         </div>
       ))}
 
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-brand-muted-soft">
         Rows with no tier chips fall back to the content&apos;s built-in free/paid rule. Add a chip to
         switch that row to explicit tier-based access.
       </p>

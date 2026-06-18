@@ -7,7 +7,7 @@ import type { ComplianceState, TeacherLicense } from '@/lib/compliance'
 // State → pill. Two shades of green (BC vs license), orange in-process, red
 // invalid — shared shape with the event roster and member portal.
 export const COMPLIANCE_PILL: Record<ComplianceState, { label: string; cls: string }> = {
-  not_required:  { label: 'Not required',  cls: 'bg-gray-100 text-gray-500' },
+  not_required:  { label: 'Not required',  cls: 'bg-brand-hairline text-brand-muted-soft' },
   valid_bc:      { label: 'BC Passed',     cls: 'bg-emerald-100 text-emerald-700' },
   valid_license: { label: 'License',       cls: 'bg-green-100 text-green-700' },
   in_process:    { label: 'In Process',    cls: 'bg-orange-100 text-orange-700' },
@@ -62,32 +62,32 @@ export function MemberCompliancePanel({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
+    <div className="bg-white rounded-xl border border-brand-border p-5">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Background Check</h2>
+        <h2 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide">Background Check</h2>
         <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${pill.cls}`}>{pill.label}</span>
       </div>
 
-      {compliance.detail && <p className="text-xs text-gray-500 mb-3">{compliance.detail}.</p>}
+      {compliance.detail && <p className="text-xs text-brand-muted-soft mb-3">{compliance.detail}.</p>}
 
       {/* Teacher license review */}
       {license ? (
-        <div className="text-sm space-y-1 border-b border-gray-100 pb-3 mb-3">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">License</p>
+        <div className="text-sm space-y-1 border-b border-brand-hairline pb-3 mb-3">
+          <p className="text-xs font-medium text-brand-muted-soft uppercase tracking-wide">License</p>
           <div className="flex justify-between">
-            <span className="text-gray-500">Number</span>
-            <span className="text-gray-900 font-medium">{license.license_number}</span>
+            <span className="text-brand-muted-soft">Number</span>
+            <span className="text-brand-blue-dark font-medium">{license.license_number}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-500">State</span>
-            <span className="text-gray-900">{license.licensing_state}</span>
+            <span className="text-brand-muted-soft">State</span>
+            <span className="text-brand-blue-dark">{license.licensing_state}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-500">Expires</span>
-            <span className="text-gray-900">{fmt(license.expiry_date)}</span>
+            <span className="text-brand-muted-soft">Expires</span>
+            <span className="text-brand-blue-dark">{fmt(license.expiry_date)}</span>
           </div>
           <div className="flex justify-between items-center pt-1">
-            <span className="text-gray-500">Status</span>
+            <span className="text-brand-muted-soft">Status</span>
             {verified ? (
               <span className="text-green-600 font-medium text-xs">
                 Verified{license.verified_label ? ` · ${license.verified_label}` : ''}
@@ -101,7 +101,7 @@ export function MemberCompliancePanel({
               <button
                 onClick={() => post(`/api/admin/members/${memberId}/license`, { action: 'unverify' })}
                 disabled={busy}
-                className="text-xs font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                className="text-xs font-medium text-brand-muted-soft hover:text-brand-muted disabled:opacity-50"
               >
                 Remove verification
               </button>
@@ -117,31 +117,31 @@ export function MemberCompliancePanel({
           </div>
         </div>
       ) : (
-        <p className="text-xs text-gray-400 border-b border-gray-100 pb-3 mb-3">No teacher license on file.</p>
+        <p className="text-xs text-brand-muted-soft border-b border-brand-hairline pb-3 mb-3">No teacher license on file.</p>
       )}
 
       {/* Background check status + order */}
       <div className="text-sm space-y-1">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Check</p>
+        <p className="text-xs font-medium text-brand-muted-soft uppercase tracking-wide">Check</p>
         {check ? (
           <>
             <div className="flex justify-between">
-              <span className="text-gray-500">Status</span>
-              <span className="text-gray-900 capitalize">{check.status.replace(/_/g, ' ')}</span>
+              <span className="text-brand-muted-soft">Status</span>
+              <span className="text-brand-blue-dark capitalize">{check.status.replace(/_/g, ' ')}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Ordered</span>
-              <span className="text-gray-900">{fmt(check.ordered_at)}</span>
+              <span className="text-brand-muted-soft">Ordered</span>
+              <span className="text-brand-blue-dark">{fmt(check.ordered_at)}</span>
             </div>
             {check.expires_at && (
               <div className="flex justify-between">
-                <span className="text-gray-500">Valid until</span>
-                <span className="text-gray-900">{fmt(check.expires_at)}</span>
+                <span className="text-brand-muted-soft">Valid until</span>
+                <span className="text-brand-blue-dark">{fmt(check.expires_at)}</span>
               </div>
             )}
           </>
         ) : (
-          <p className="text-xs text-gray-400">No background check ordered.</p>
+          <p className="text-xs text-brand-muted-soft">No background check ordered.</p>
         )}
         {!checkInProgress && (
           <div className="pt-2">
@@ -155,7 +155,7 @@ export function MemberCompliancePanel({
                   post(`/api/admin/members/${memberId}/background-check`)
               }}
               disabled={busy}
-              className="text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-lg px-3 py-1.5"
+              className="text-xs font-medium text-white bg-brand-blue hover:bg-brand-blue-dark disabled:opacity-50 rounded-lg px-3 py-1.5"
             >
               {busy ? 'Ordering…' : check ? 'Re-order background check' : 'Order background check'}
             </button>

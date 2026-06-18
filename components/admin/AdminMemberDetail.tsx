@@ -189,27 +189,27 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <Link href="/admin" className="text-sm text-gray-500 hover:text-gray-700 mb-1 inline-block">
+          <Link href="/admin" className="text-sm text-brand-muted-soft hover:text-brand-muted mb-1 inline-block">
             ← All members
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="font-heading uppercase text-title text-brand-blue-dark">
             {member.first_name} {member.last_name}
           </h1>
           {member.member_code && (
-            <p className="text-sm text-gray-400 mt-0.5">{member.member_code}</p>
+            <p className="text-sm text-brand-muted-soft mt-0.5">{member.member_code}</p>
           )}
         </div>
         <div className="flex gap-3">
           <Link
             href={`/admin/members/${member.id}/view-as`}
-            className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+            className="border border-brand-border text-brand-muted px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-canvas"
           >
             View as member
           </Link>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+            className="bg-brand-blue text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-50"
           >
             {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save changes'}
           </button>
@@ -243,8 +243,8 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           {/* Identity */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-            <h2 className="text-base font-semibold text-gray-900">Identity</h2>
+          <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
+            <h2 className="text-base font-semibold text-brand-blue-dark">Identity</h2>
             <div className="grid grid-cols-2 gap-4">
               {[
                 { label: 'First name', field: 'first_name' },
@@ -255,12 +255,12 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                 { label: 'T-shirt size', field: 'tshirt_size' },
               ].map(({ label: lbl, field }) => (
                 <div key={field}>
-                  <label className="block text-xs text-gray-500 mb-1">{lbl}</label>
+                  <label className="block text-xs text-brand-muted-soft mb-1">{lbl}</label>
                   <input
                     type="text"
                     value={(form as Record<string, unknown>)[field] as string}
                     onChange={(e) => set(field, e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                   />
                 </div>
               ))}
@@ -268,40 +268,40 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           </div>
 
           {/* Classification */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-            <h2 className="text-base font-semibold text-gray-900">Classification</h2>
+          <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
+            <h2 className="text-base font-semibold text-brand-blue-dark">Classification</h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Age bracket</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">Age bracket</label>
                 <select
                   value={form.age_bracket}
                   onChange={(e) => handleBracketChange(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 >
                   {BRACKETS.map((b) => <option key={b} value={b}>{label(b)}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Event role</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">Event role</label>
                 <select
                   value={form.event_role}
                   onChange={(e) => set('event_role', e.target.value)}
                   disabled={eligibleRoles.length <= 1}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue disabled:bg-brand-canvas disabled:text-brand-muted-soft"
                 >
                   {eligibleRoles.map((r) => <option key={r} value={r}>{label(r)}</option>)}
                 </select>
                 {eligibleRoles.length <= 1 && (
-                  <p className="text-xs text-gray-400 mt-1">Auto-set by age bracket</p>
+                  <p className="text-xs text-brand-muted-soft mt-1">Auto-set by age bracket</p>
                 )}
               </div>
               {showGrade && (
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Grade / Year</label>
+                  <label className="block text-xs text-brand-muted-soft mb-1">Grade / Year</label>
                   <select
                     value={form.grade}
                     onChange={(e) => set('grade', e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                   >
                     <option value="">Select…</option>
                     {GRADES.filter((g) =>
@@ -320,9 +320,9 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                   id="auto_promote"
                   checked={form.grade_auto_promote}
                   onChange={(e) => set('grade_auto_promote', e.target.checked)}
-                  className="rounded border-gray-300"
+                  className="rounded border-brand-border"
                 />
-                <label htmlFor="auto_promote" className="text-sm text-gray-700">
+                <label htmlFor="auto_promote" className="text-sm text-brand-muted">
                   Auto-promote grade annually
                 </label>
               </div>
@@ -330,8 +330,8 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
 
             {/* Eligible membership tiers for this bracket/role */}
             {eligibleTierNames.length > 0 && (
-              <div className="pt-2 border-t border-gray-100">
-                <p className="text-xs text-gray-500 mb-1.5">Eligible membership tiers for this classification:</p>
+              <div className="pt-2 border-t border-brand-hairline">
+                <p className="text-xs text-brand-muted-soft mb-1.5">Eligible membership tiers for this classification:</p>
                 <div className="flex flex-wrap gap-1.5">
                   {eligibleTierNames.map((name) => {
                     const isActive = activeMembership?.membership_tiers.name === name
@@ -340,8 +340,8 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                         key={name}
                         className={`text-xs px-2 py-1 rounded-full font-medium ${
                           isActive
-                            ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300'
-                            : 'bg-gray-100 text-gray-600'
+                            ? 'bg-brand-blue/10 text-brand-blue ring-1 ring-brand-blue'
+                            : 'bg-brand-hairline text-brand-muted'
                         }`}
                         title={
                           isActive
@@ -359,13 +359,13 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           </div>
 
           {/* Ethnicity & Allergies */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
-            <h2 className="text-base font-semibold text-gray-900">Ethnicity & Dietary</h2>
+          <div className="bg-white rounded-xl border border-brand-border p-6 space-y-5">
+            <h2 className="text-base font-semibold text-brand-blue-dark">Ethnicity & Dietary</h2>
 
             {ethnicityOptions.length > 0 && (
               <div>
-                <label className="block text-xs text-gray-500 mb-2">
-                  Ethnicity <span className="text-gray-400">(select all that apply)</span>
+                <label className="block text-xs text-brand-muted-soft mb-2">
+                  Ethnicity <span className="text-brand-muted-soft">(select all that apply)</span>
                 </label>
                 <div className="grid grid-cols-2 gap-1.5">
                   {ethnicityOptions.map((opt) => (
@@ -374,7 +374,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                         type="checkbox"
                         checked={selectedEthnicities.includes(opt.id)}
                         onChange={() => toggleOption(selectedEthnicities, setSelectedEthnicities, opt.id)}
-                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        className="rounded border-brand-border text-brand-blue focus:ring-brand-blue"
                       />
                       {opt.name}
                     </label>
@@ -385,8 +385,8 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
 
             {allergyOptions.length > 0 && (
               <div>
-                <label className="block text-xs text-gray-500 mb-2">
-                  Dietary requirements / Allergies <span className="text-gray-400">(select all that apply)</span>
+                <label className="block text-xs text-brand-muted-soft mb-2">
+                  Dietary requirements / Allergies <span className="text-brand-muted-soft">(select all that apply)</span>
                 </label>
                 <div className="grid grid-cols-2 gap-1.5">
                   {allergyOptions.map((opt) => (
@@ -395,7 +395,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                         type="checkbox"
                         checked={selectedAllergies.includes(opt.id)}
                         onChange={() => toggleOption(selectedAllergies, setSelectedAllergies, opt.id)}
-                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        className="rounded border-brand-border text-brand-blue focus:ring-brand-blue"
                       />
                       {opt.name}
                     </label>
@@ -406,8 +406,8 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           </div>
 
           {/* Emergency contact */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-            <h2 className="text-base font-semibold text-gray-900">Emergency contact</h2>
+          <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
+            <h2 className="text-base font-semibold text-brand-blue-dark">Emergency contact</h2>
             <div className="grid grid-cols-2 gap-4">
               {[
                 { label: 'First name', field: 'ec_first_name' },
@@ -416,21 +416,21 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                 { label: 'Phone', field: 'ec_phone' },
               ].map(({ label: lbl, field }) => (
                 <div key={field}>
-                  <label className="block text-xs text-gray-500 mb-1">{lbl}</label>
+                  <label className="block text-xs text-brand-muted-soft mb-1">{lbl}</label>
                   <input
                     type="text"
                     value={(form as Record<string, unknown>)[field] as string}
                     onChange={(e) => set(field, e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                   />
                 </div>
               ))}
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Relationship to participant</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">Relationship to participant</label>
                 <select
                   value={form.ec_relationship}
                   onChange={(e) => set('ec_relationship', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 >
                   <option value="">Select…</option>
                   {['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher'].map((r) => (
@@ -450,18 +450,18 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
 
           {/* Group registrations (teacher / student manager) */}
           {registrations.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="text-base font-semibold text-gray-900 mb-4">Group Registrations (Organiser)</h2>
+            <div className="bg-white rounded-xl border border-brand-border p-6">
+              <h2 className="text-base font-semibold text-brand-blue-dark mb-4">Group Registrations (Organiser)</h2>
               <div className="space-y-3">
                 {registrations.map((reg) => (
-                  <div key={reg.id} className="flex items-start justify-between py-3 border-b border-gray-100 last:border-0">
+                  <div key={reg.id} className="flex items-start justify-between py-3 border-b border-brand-hairline last:border-0">
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{reg.event_title ?? reg.event_slug ?? '—'}</p>
+                      <p className="text-sm font-medium text-brand-blue-dark">{reg.event_title ?? reg.event_slug ?? '—'}</p>
                       {reg.school_name && (
-                        <p className="text-xs text-gray-500 mt-0.5">{reg.school_name}</p>
+                        <p className="text-xs text-brand-muted-soft mt-0.5">{reg.school_name}</p>
                       )}
                       {reg.registrant_role && (
-                        <p className="text-xs text-gray-400 mt-0.5 capitalize">{reg.registrant_role.replace(/_/g, ' ')}</p>
+                        <p className="text-xs text-brand-muted-soft mt-0.5 capitalize">{reg.registrant_role.replace(/_/g, ' ')}</p>
                       )}
                     </div>
                     <div className="text-right shrink-0">
@@ -475,7 +475,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                       >
                         {reg.status ?? 'pending'}
                       </span>
-                      <p className="text-xs text-gray-400 mt-1">
+                      <p className="text-xs text-brand-muted-soft mt-1">
                         {new Date(reg.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </p>
                     </div>
@@ -486,9 +486,9 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           )}
 
           {/* Activity log — the full audit trail for this member (shared with the member) */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-1">Activity log</h2>
-            <p className="text-xs text-gray-400 mb-4">
+          <div className="bg-white rounded-xl border border-brand-border p-6">
+            <h2 className="text-base font-semibold text-brand-blue-dark mb-1">Activity log</h2>
+            <p className="text-xs text-brand-muted-soft mb-4">
               Every change recorded against this profile. The member sees this same history in their account.
             </p>
             <ActivityTimeline items={activity} fetchUrl={`/api/admin/members/${member.id}/activity`} />
@@ -506,43 +506,43 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
 
           <MemberCompliancePanel memberId={member.id} compliance={compliance} />
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          <div className="bg-white rounded-xl border border-brand-border p-5">
+            <h2 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide mb-3">
               School
             </h2>
             {currentSchool ? (
               <div className="text-sm">
                 <Link
                   href={`/admin/schools/${currentSchool.school_id}`}
-                  className="font-medium text-indigo-600 hover:text-indigo-800"
+                  className="font-medium text-brand-blue hover:text-brand-blue"
                 >
                   {currentSchool.schools.name}
                 </Link>
                 {(currentSchool.schools.city || currentSchool.schools.state) && (
-                  <p className="text-gray-500 mt-0.5">
+                  <p className="text-brand-muted-soft mt-0.5">
                     {[currentSchool.schools.city, currentSchool.schools.state].filter(Boolean).join(', ')}
                   </p>
                 )}
               </div>
             ) : (
-              <p className="text-sm text-gray-400">No school linked.</p>
+              <p className="text-sm text-brand-muted-soft">No school linked.</p>
             )}
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          <div className="bg-white rounded-xl border border-brand-border p-5">
+            <h2 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide mb-3">
               Account
             </h2>
             <dl className="text-sm space-y-1.5">
               <div className="flex justify-between">
-                <dt className="text-gray-500">Status</dt>
+                <dt className="text-brand-muted-soft">Status</dt>
                 <dd className={member.is_active ? 'text-green-600 font-medium' : 'text-red-500'}>
                   {member.is_active ? 'Active' : 'Deactivated'}
                 </dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-gray-500">Joined</dt>
-                <dd className="text-gray-900">
+                <dt className="text-brand-muted-soft">Joined</dt>
+                <dd className="text-brand-blue-dark">
                   {new Date(member.created_at).toLocaleDateString('en-US', {
                     month: 'short', day: 'numeric', year: 'numeric',
                   })}

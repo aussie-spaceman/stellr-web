@@ -63,8 +63,8 @@ export default async function AdminEntitlementsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Access map</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Access map</h1>
+        <p className="mt-0.5 text-sm text-brand-muted-soft">
           Drag a membership tier onto any content row to grant access. This is the entitlement
           source of truth — edit it any time as your tier model evolves.
         </p>

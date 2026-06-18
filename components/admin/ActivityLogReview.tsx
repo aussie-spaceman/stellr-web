@@ -88,8 +88,8 @@ export function ActivityLogReview({ initialItems }: { initialItems: PendingItem[
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Activity Log Review</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Activity Log Review</h1>
+        <p className="mt-1 text-sm text-brand-muted-soft">
           Members submit historical event activity for admin approval before it appears on their profile.
         </p>
       </div>
@@ -99,92 +99,92 @@ export function ActivityLogReview({ initialItems }: { initialItems: PendingItem[
       )}
 
       {items.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-          <p className="text-gray-500 text-sm">No pending submissions — you&apos;re all caught up.</p>
+        <div className="bg-white rounded-xl border border-brand-border p-10 text-center">
+          <p className="text-brand-muted-soft text-sm">No pending submissions — you&apos;re all caught up.</p>
         </div>
       ) : (
         <div className="space-y-4">
-          <p className="text-sm text-gray-500">{items.length} pending submission{items.length !== 1 ? 's' : ''}</p>
+          <p className="text-sm text-brand-muted-soft">{items.length} pending submission{items.length !== 1 ? 's' : ''}</p>
           {items.map((item) => {
             const member = getMember(item)
             const isEditing = editing === item.id
             return (
-              <div key={item.id} className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+              <div key={item.id} className="bg-white rounded-xl border border-brand-border p-5 space-y-4">
                 {/* Member info */}
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     {member ? (
                       <Link
                         href={`/admin/members/${member.id}`}
-                        className="font-medium text-indigo-600 hover:text-indigo-800 text-sm"
+                        className="font-medium text-brand-blue hover:text-brand-blue text-sm"
                       >
                         {member.first_name} {member.last_name}
                       </Link>
                     ) : (
-                      <span className="font-medium text-gray-700 text-sm">Unknown member</span>
+                      <span className="font-medium text-brand-muted text-sm">Unknown member</span>
                     )}
                     {member?.email && (
-                      <p className="text-xs text-gray-400 mt-0.5">{member.email}</p>
+                      <p className="text-xs text-brand-muted-soft mt-0.5">{member.email}</p>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400 shrink-0">
+                  <p className="text-xs text-brand-muted-soft shrink-0">
                     Submitted {new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </p>
                 </div>
 
                 {/* Activity data */}
                 {isEditing ? (
-                  <div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="grid grid-cols-2 gap-3 bg-brand-canvas rounded-lg p-4 border border-brand-border">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Event Year</label>
+                      <label className="block text-xs text-brand-muted-soft mb-1">Event Year</label>
                       <input
                         type="number"
                         min={2000}
                         max={CURRENT_YEAR + 1}
                         value={editForm.event_year}
                         onChange={(e) => setEditForm((f) => ({ ...f, event_year: e.target.value }))}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Event Location</label>
+                      <label className="block text-xs text-brand-muted-soft mb-1">Event Location</label>
                       <input
                         type="text"
                         value={editForm.event_location}
                         onChange={(e) => setEditForm((f) => ({ ...f, event_location: e.target.value }))}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Team</label>
+                      <label className="block text-xs text-brand-muted-soft mb-1">Team</label>
                       <input
                         type="text"
                         value={editForm.team_name}
                         onChange={(e) => setEditForm((f) => ({ ...f, team_name: e.target.value }))}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Awards</label>
+                      <label className="block text-xs text-brand-muted-soft mb-1">Awards</label>
                       <input
                         type="text"
                         value={editForm.award}
                         onChange={(e) => setEditForm((f) => ({ ...f, award: e.target.value }))}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                       />
                     </div>
                   </div>
                 ) : (
-                  <div className="text-sm text-gray-700 space-y-1 pl-1">
-                    <p><span className="text-gray-400">Year:</span> {item.event_year ?? '—'}</p>
-                    <p><span className="text-gray-400">Location:</span> {item.event_location ?? '—'}</p>
-                    <p><span className="text-gray-400">Team:</span> {item.team_name ?? '—'}</p>
-                    <p><span className="text-gray-400">Award:</span> {item.award ?? '—'}</p>
+                  <div className="text-sm text-brand-muted space-y-1 pl-1">
+                    <p><span className="text-brand-muted-soft">Year:</span> {item.event_year ?? '—'}</p>
+                    <p><span className="text-brand-muted-soft">Location:</span> {item.event_location ?? '—'}</p>
+                    <p><span className="text-brand-muted-soft">Team:</span> {item.team_name ?? '—'}</p>
+                    <p><span className="text-brand-muted-soft">Award:</span> {item.award ?? '—'}</p>
                   </div>
                 )}
 
                 {/* Actions */}
-                <div className="flex items-center gap-3 pt-1 border-t border-gray-100">
+                <div className="flex items-center gap-3 pt-1 border-t border-brand-hairline">
                   {isEditing ? (
                     <>
                       <button
@@ -196,7 +196,7 @@ export function ActivityLogReview({ initialItems }: { initialItems: PendingItem[
                       </button>
                       <button
                         onClick={() => setEditing(null)}
-                        className="text-sm text-gray-500 hover:text-gray-700"
+                        className="text-sm text-brand-muted-soft hover:text-brand-muted"
                       >
                         Cancel
                       </button>
@@ -212,7 +212,7 @@ export function ActivityLogReview({ initialItems }: { initialItems: PendingItem[
                       </button>
                       <button
                         onClick={() => startEdit(item)}
-                        className="text-sm font-medium text-indigo-600 hover:text-indigo-800 border border-indigo-200 px-3 py-1.5 rounded-lg"
+                        className="text-sm font-medium text-brand-blue hover:text-brand-blue border border-brand-blue px-3 py-1.5 rounded-lg"
                       >
                         Edit &amp; Approve
                       </button>

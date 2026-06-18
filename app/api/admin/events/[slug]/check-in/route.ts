@@ -16,14 +16,27 @@ export async function GET(_req: Request, { params }: Params) {
   if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
 
   const db = supabaseServer()
-  const [{ data: settings }, { data: regs }] = await Promise.all([
+  const [{ data: settings }, { data: regs }, { data: merchRows }] = await Promise.all([
     db.from('event_settings').select('check_in_token, check_in_open').eq('event_slug', slug).maybeSingle(),
     db
       .from('registrations')
-      .select('id, participants(id, first_name, last_name, event_role, t_shirt_size, checked_in_at, check_in_method, event_companies(number, name))')
+      .select('id, participants(id, member_id, first_name, last_name, event_role, t_shirt_size, checked_in_at, check_in_method, merch_collected, event_companies(number, name))')
       .eq('event_slug', slug)
       .neq('status', 'withdrawn'),
+    // Event-merch line items (included + add-ons) keyed by member, to show at the desk.
+    db
+      .from('store_order_items')
+      .select('name, qty, participant_member_id, store_orders!inner(event_slug)')
+      .eq('store_orders.event_slug', slug)
+      .not('participant_member_id', 'is', null),
   ])
+
+  const merchByMember = new Map<string, { name: string; qty: number }[]>()
+  for (const m of (merchRows ?? []) as { name: string; qty: number; participant_member_id: string }[]) {
+    const list = merchByMember.get(m.participant_member_id) ?? []
+    list.push({ name: m.name, qty: m.qty })
+    merchByMember.set(m.participant_member_id, list)
+  }
 
   const participants = (regs ?? []).flatMap((r) =>
     ((r.participants as Record<string, unknown>[]) ?? []).map((p) => ({
@@ -35,6 +48,8 @@ export async function GET(_req: Request, { params }: Params) {
       checkedInAt: p.checked_in_at ?? null,
       checkInMethod: p.check_in_method ?? null,
       company: p.event_companies ?? null,
+      merch: p.member_id ? merchByMember.get(p.member_id as string) ?? [] : [],
+      merchCollected: (p.merch_collected as boolean) ?? false,
     }))
   )
 
@@ -72,6 +87,28 @@ export async function POST(req: Request, { params }: Params) {
     }
 
     const { error } = await db.from('event_settings').upsert(update, { onConflict: 'event_slug' })
+    if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    return NextResponse.json({ ok: true })
+  }
+
+  if (action === 'merch_collected' || action === 'merch_uncollected') {
+    const participantId = body?.participantId
+    if (typeof participantId !== 'string') {
+      return NextResponse.json({ error: 'participantId required' }, { status: 400 })
+    }
+    const { data: row } = await db
+      .from('participants')
+      .select('id, registrations!inner(event_slug)')
+      .eq('id', participantId)
+      .eq('registrations.event_slug', slug)
+      .maybeSingle()
+    if (!row) return NextResponse.json({ error: 'Participant not found for this event' }, { status: 404 })
+
+    const collected = action === 'merch_collected'
+    const { error } = await db
+      .from('participants')
+      .update({ merch_collected: collected, merch_collected_at: collected ? new Date().toISOString() : null })
+      .eq('id', participantId)
     if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 })
     return NextResponse.json({ ok: true })
   }

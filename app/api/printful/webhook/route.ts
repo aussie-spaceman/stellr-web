@@ -22,20 +22,36 @@ export async function POST(req: Request) {
   const podId = order.id != null ? String(order.id) : null
 
   const db = supabaseServer()
-  const { data: row } = externalId
+  const tracking = body.data?.shipment?.tracking_url ?? null
+
+  // A Printful order's external_id is either a direct store_orders.id (DTC) or a
+  // merch_batches.id (event-batched). Try the order first, then the batch.
+  const { data: orderRow } = externalId
     ? await db.from('store_orders').select('id').eq('id', externalId).maybeSingle()
     : podId
       ? await db.from('store_orders').select('id').eq('pod_order_id', podId).maybeSingle()
       : { data: null }
-  const orderId = (row as { id?: string } | null)?.id
-  if (!orderId) return NextResponse.json({ ok: true })
+  const orderId = (orderRow as { id?: string } | null)?.id
 
-  if (body.type === 'package_shipped') {
-    const tracking = body.data?.shipment?.tracking_url ?? null
-    await db.from('store_orders').update({ status: 'shipped', tracking_url: tracking }).eq('id', orderId)
-    await db.from('store_order_items').update({ fulfillment_status: 'shipped' }).eq('order_id', orderId)
-  } else if (body.type === 'order_failed' || body.type === 'order_canceled') {
-    await db.from('store_orders').update({ status: 'cancelled' }).eq('id', orderId)
+  if (orderId) {
+    if (body.type === 'package_shipped') {
+      await db.from('store_orders').update({ status: 'shipped', tracking_url: tracking }).eq('id', orderId)
+      await db.from('store_order_items').update({ fulfillment_status: 'shipped' }).eq('order_id', orderId)
+    } else if (body.type === 'order_failed' || body.type === 'order_canceled') {
+      await db.from('store_orders').update({ status: 'cancelled' }).eq('id', orderId)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  const { data: batchRow } = externalId
+    ? await db.from('merch_batches').select('id').eq('id', externalId).maybeSingle()
+    : podId
+      ? await db.from('merch_batches').select('id').eq('pod_order_id', podId).maybeSingle()
+      : { data: null }
+  const batchId = (batchRow as { id?: string } | null)?.id
+  if (batchId && body.type === 'package_shipped') {
+    await db.from('merch_batches').update({ status: 'shipped', tracking_url: tracking }).eq('id', batchId)
+    await db.from('store_order_items').update({ fulfillment_status: 'shipped' }).eq('batch_id', batchId)
   }
 
   return NextResponse.json({ ok: true })

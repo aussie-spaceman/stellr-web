@@ -11,6 +11,8 @@ import EventManagerAssignments from '@/components/admin/EventManagerAssignments'
 import EventCompanies, { type CompanyRow } from '@/components/admin/EventCompanies'
 import EventBadges from '@/components/admin/EventBadges'
 import { RefundPolicyEditor } from '@/components/admin/RefundPolicyEditor'
+import { EventMerchandiseEditor } from '@/components/admin/EventMerchandiseEditor'
+import { EventMerchBatch } from '@/components/admin/EventMerchBatch'
 import { DEFAULT_TIERS, type RefundTier } from '@/lib/refunds/policy'
 
 export const metadata = { title: 'Admin — Event' }
@@ -198,6 +200,26 @@ export default async function AdminEventDetailPage({ params }: { params: Promise
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <RefundPolicyEditor scope="event" eventSlug={slug} initialTiers={refundTiers} hasOverride={Boolean(eventPolicy)} />
           </div>
+        </section>
+      )}
+
+      {!isCampaign && (
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Merchandise</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Included shirt (auto-allocated by size) and paid add-ons for this event.
+            </p>
+          </div>
+          <EventMerchandiseEditor eventSlug={slug} />
+          <EventMerchBatch
+            eventSlug={slug}
+            defaultShipTo={{
+              name: (event as { venue?: string }).venue ?? event.title,
+              city: (event as { city?: string }).city ?? '',
+              state: (event as { state?: string }).state ?? '',
+            }}
+          />
         </section>
       )}
 

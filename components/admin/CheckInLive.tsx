@@ -12,6 +12,8 @@ interface LiveParticipant {
   checkedInAt: string | null
   checkInMethod: string | null
   company: { number: number; name: string | null } | null
+  merch: { name: string; qty: number }[]
+  merchCollected: boolean
 }
 
 interface LiveState {
@@ -180,7 +182,14 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
                       : `Company ${p.company.number}`
                     : '—'}
                 </td>
-                <td className="px-4 py-2.5 text-gray-600">{p.shirtSize ?? '—'}</td>
+                <td className="px-4 py-2.5 text-gray-600">
+                  {p.shirtSize ?? '—'}
+                  {p.merch.length > 0 && (
+                    <div className="mt-0.5 text-xs text-gray-400">
+                      {p.merch.map((m) => `${m.name}${m.qty > 1 ? ` ×${m.qty}` : ''}`).join(', ')}
+                    </div>
+                  )}
+                </td>
                 <td className="px-4 py-2.5">
                   {p.checkedInAt ? (
                     <span className="inline-flex text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700">
@@ -194,24 +203,44 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-2.5 text-right">
-                  {p.checkedInAt ? (
-                    <button
-                      onClick={() => act('undo', p.id)}
-                      disabled={busy}
-                      className="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50"
-                    >
-                      Undo
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => act('manual', p.id)}
-                      disabled={busy}
-                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
-                    >
-                      Check In
-                    </button>
-                  )}
+                <td className="px-4 py-2.5">
+                  <div className="flex flex-col items-end gap-1">
+                    {p.checkedInAt ? (
+                      <button
+                        onClick={() => act('undo', p.id)}
+                        disabled={busy}
+                        className="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50"
+                      >
+                        Undo
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => act('manual', p.id)}
+                        disabled={busy}
+                        className="text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                      >
+                        Check In
+                      </button>
+                    )}
+                    {p.merch.length > 0 &&
+                      (p.merchCollected ? (
+                        <button
+                          onClick={() => act('merch_uncollected', p.id)}
+                          disabled={busy}
+                          className="inline-flex items-center gap-0.5 text-[11px] text-green-700 hover:text-gray-500 disabled:opacity-50"
+                        >
+                          ✓ Merch collected
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => act('merch_collected', p.id)}
+                          disabled={busy}
+                          className="text-[11px] font-medium text-amber-700 hover:text-amber-900 disabled:opacity-50"
+                        >
+                          Mark merch collected
+                        </button>
+                      ))}
+                  </div>
                 </td>
               </tr>
             ))}

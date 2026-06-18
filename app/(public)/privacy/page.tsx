@@ -11,7 +11,7 @@ export default function PrivacyPage() {
       <h1 className="text-4xl font-bold text-brand-blue-dark mb-8">Privacy Policy</h1>
       <div className="prose prose-slate max-w-none space-y-6 text-brand-grey-dark">
         <p className="text-sm text-brand-grey-mid italic">
-          Effective Date: 09 June 2026 &nbsp;·&nbsp; Last Updated: 09 June 2026
+          Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 09-Jun-2026
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
           <strong>Recent update:</strong> This policy has been updated to reflect our use of

@@ -74,7 +74,11 @@ export function Footer() {
           <div className="grid grid-cols-2 lg:grid-cols-7 gap-8 lg:gap-6">
             {/* Brand column */}
             <div className="col-span-2">
-              <Logo variant="light" withTagline sizeClassName="h-44" />
+              {/* The brand mark is full-colour with a dark navy wordmark that matches the
+                  footer background, so it sits on a light panel rather than being inverted. */}
+              <div className="inline-flex bg-white rounded-xl px-6 py-5 shadow-sm">
+                <Logo sizeClassName="h-16" />
+              </div>
               <p className="mt-4 text-sm text-gray-400 max-w-xs leading-relaxed">
                 The home of STEM education for school students — providing tomorrow&apos;s
                 professionals with the skills, relationships, and career pathways they need.

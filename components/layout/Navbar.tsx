@@ -137,8 +137,8 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
       {/* ── Tier 2: Main nav ── */}
       <nav className="bg-white border-b border-gray-100 shadow-sm" aria-label="Main navigation">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-24">
-            <Logo withTagline sizeClassName="h-20" />
+          <div className="flex items-center justify-between h-20">
+            <Logo sizeClassName="h-14" />
 
             {/* Desktop nav pillars */}
             <ul className="hidden lg:flex items-center gap-1">
@@ -254,7 +254,7 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
 
       {/* ── Mobile overlay (below the main nav bar only — utility bar is hidden on mobile) ── */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 top-24 z-40 bg-white overflow-y-auto">
+        <div className="lg:hidden fixed inset-0 top-20 z-40 bg-white overflow-y-auto">
           <div className="px-4 py-4">
             {/* Nav sections as accordions */}
             {[...navLinks, { label: 'Get Involved', href: '/get-involved', dropdown: getInvolvedLinks }].map(

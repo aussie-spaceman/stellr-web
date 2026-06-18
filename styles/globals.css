@@ -85,6 +85,23 @@
 }
 
 @layer components {
+  /* Redesign surface primitives (additive — applied by the (member) refit PRs).
+     The app canvas background is set on app/(member)/layout.tsx (T2.1), not on
+     body, so the public site is unaffected. */
+  .app-card {
+    @apply rounded-card border border-brand-border bg-brand-surface shadow-card;
+  }
+  .eyebrow {
+    @apply font-subheading font-semibold uppercase tracking-[0.14em] text-xs;
+  }
+  .screen-title {
+    @apply font-heading uppercase text-title text-brand-blue-dark;
+  }
+  /* High-intent CTA (Register / Start) — orange energy variant of btn-primary. */
+  .btn-energy {
+    @apply inline-flex items-center justify-center px-5 py-3 rounded-xl bg-brand-orange-alt text-brand-white-text font-subheading font-medium text-sm transition-colors hover:bg-brand-orange-deep focus:outline-none focus:ring-2 focus:ring-brand-orange-alt focus:ring-offset-2;
+  }
+
   .btn-primary {
     @apply inline-flex items-center justify-center px-6 py-3 rounded-lg bg-brand-blue text-brand-white-text font-semibold text-sm transition-colors hover:bg-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
   }

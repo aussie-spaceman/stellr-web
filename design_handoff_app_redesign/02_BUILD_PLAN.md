@@ -91,7 +91,7 @@ First-run onboarding tour; post-event achievement moment; richer profiles/portfo
 - **Directory — none:** "No members found." + sub "Members must opt in from their account page to appear here." (keep).
 
 ## Acceptance checklist (Definition of Done, every PR)
-- [ ] `npm run build`, `npx tsc --noEmit`, `npm run lint` all clean.
+- [ ] `npm run build` and `npx tsc --noEmit` clean. (Repo has **no `lint` script** — these two are the gates; don't run `npm run lint`.)
 - [ ] No `gray-*` / `indigo-*` / `slate-*` / `amber-*` utilities in touched member files.
 - [ ] Section color identity correct (Competitions orange / Community blue / Academy gold).
 - [ ] Loading + empty + error + locked states implemented.

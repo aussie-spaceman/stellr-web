@@ -1,6 +1,6 @@
 # PROMPTS — per-PR prompts for Claude Code
 
-Paste these into Claude Code **one at a time**, in order. Each is scoped to a single reviewable PR from `02_BUILD_PLAN.md`. After each, review the diff, run `npm run build && npx tsc --noEmit && npm run lint`, eyeball against `Stellr Design Review.dc.html`, then merge before moving on.
+Paste these into Claude Code **one at a time**, in order. Each is scoped to a single reviewable PR from `02_BUILD_PLAN.md`. After each, review the diff, run `npm run build && npx tsc --noEmit` (this repo has no `lint` script), eyeball against `Stellr Design Review.dc.html`, then merge before moving on.
 
 > First message of the session (once):
 > *"Read `CLAUDE.md`, then `design_handoff_app_redesign/README.md`, `01_DESIGN_TOKENS.md`, `02_BUILD_PLAN.md`, `03_DATA_CONTRACTS.md`, and `04_AGENT_NOTES.md`. Don't write code yet — summarize the plan and the design rules back to me, and list the files you'd touch for Stage 1."*

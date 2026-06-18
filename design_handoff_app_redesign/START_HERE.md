@@ -69,7 +69,7 @@ the design rules back to me, and list the files you'd touch for Stage 1.
 ## Step 4 — Build, one PR at a time
 Open **`PROMPTS.md`** and paste the prompts **in order**, starting with **PR 1.1**. After each prompt:
 1. Review the diff.
-2. Run: `npm run build && npx tsc --noEmit && npm run lint` (the agent should do this; verify).
+2. Run: `npm run build && npx tsc --noEmit` (the agent should do this; verify). *(There is no `lint` script in this repo — build + tsc are the gates.)*
 3. For the brand sweep (PR 1.2), check the grep output it pastes shows **no** `gray-*/indigo-*/amber-*` left in member UI.
 4. Compare against the matching image in `screenshots/`.
 5. Commit/merge the PR, then move to the next prompt.

@@ -36,8 +36,8 @@ rg -n "font-display|font-heading|font-subheading" app/\(member\) components
 # 3. No client-side Supabase in components (server-only data):
 rg -n "createBrowserSupabase|supabaseServer" components   # supabaseServer must NOT appear in client components
 
-# 4. Build + types + lint:
-npm run build && npx tsc --noEmit && npm run lint
+# 4. Build + types (repo has NO `lint` script — don't run `npm run lint`; build + tsc are the gates):
+npm run build && npx tsc --noEmit
 ```
 Paste the grep output into the PR so a human can confirm without running it.
 

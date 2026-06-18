@@ -21,7 +21,7 @@ Stellr Education's web platform. A public marketing site (`www`) + an authentica
 npm run dev        # localhost:3000  (+ Sanity Studio at /studio)
 npm run build      # production build — must pass before a PR is done
 npx tsc --noEmit   # typecheck — must be clean
-npm run lint       # eslint — must be clean
+# NOTE: there is no `lint` script in package.json — build + tsc are the gates.
 ```
 Env: copy `.env.local.example` → `.env.local` (Sanity, Supabase, Clerk, Stripe keys). Supabase migrations live in `supabase/migrations/`; seed for local/staging in `design_handoff_app_redesign/seed/`.
 
@@ -37,5 +37,5 @@ Env: copy `.env.local.example` → `.env.local` (Sanity, Supabase, Clerk, Stripe
 - Make changes in small, reviewable PRs that follow `02_BUILD_PLAN.md` order (tokens → global sweep → components → Home → sidebar → per-screen).
 - Match existing file/component patterns before inventing new ones. Check neighboring files.
 - Don't introduce new dependencies without need. Don't touch the `(admin)` surface unless a task says so.
-- After each task: `tsc --noEmit`, `lint`, and a visual check against the matching screen in `Stellr Design Review.dc.html`.
+- After each task: `npm run build` + `npx tsc --noEmit` (the repo has **no `lint` script**), and a visual check against the matching screen in `Stellr Design Review.dc.html`.
 - The HTML in the handoff is a **visual reference**, not code to paste — recreate it idiomatically in Tailwind/TSX.

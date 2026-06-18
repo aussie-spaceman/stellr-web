@@ -2,30 +2,27 @@ import Link from 'next/link'
 import Image from 'next/image'
 
 interface LogoProps {
-  variant?: 'dark' | 'light'
-  /** Use the stacked logo lockup that includes the "The Engineering Education Community" tagline. */
-  withTagline?: boolean
-  /** Tailwind height class controlling the rendered logo size (e.g. "h-16"). */
+  /** Tailwind height class controlling the rendered logo size (e.g. "h-14"). */
   sizeClassName?: string
   className?: string
 }
 
-export function Logo({
-  variant = 'dark',
-  withTagline = false,
-  sizeClassName = 'h-14',
-  className = '',
-}: LogoProps) {
-  const src = withTagline ? '/images/logo-tag.svg' : '/images/logo-horiz.svg'
+/**
+ * Horizontal Stellr logo (mark + wordmark). Uses a viewBox-cropped copy of the
+ * brand SVG so the lockup fills its box predictably at any height. The brand
+ * mark is a full-colour raster, so it is always shown in colour — on dark
+ * surfaces, place it on a light container rather than inverting it.
+ */
+export function Logo({ sizeClassName = 'h-12', className = '' }: LogoProps) {
   return (
     <Link href="/" className={`inline-flex items-center ${className}`} aria-label="Stellr Education — home">
       <Image
-        src={src}
+        src="/images/logo-horiz-tight.svg"
         alt="Stellr Education"
-        width={200}
-        height={withTagline ? 200 : 56}
+        width={1483}
+        height={491}
         priority
-        className={`${sizeClassName} w-auto ${variant === 'light' ? 'brightness-0 invert' : ''}`}
+        className={`${sizeClassName} w-auto`}
       />
     </Link>
   )

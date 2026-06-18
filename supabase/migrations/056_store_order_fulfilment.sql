@@ -1,4 +1,4 @@
--- Migration 055: Printful fulfilment fields on store_orders (PRD §12, store Phase 2).
+-- Migration 056: Printful fulfilment fields on store_orders (PRD §12, store Phase 2).
 --
 -- Direct-to-consumer storefront orders place a Printful order at payment time and
 -- receive tracking via the Printful webhook. store_orders needs somewhere to hold

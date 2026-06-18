@@ -1,4 +1,4 @@
--- Migration 056: link store orders to a registration (PRD §12, store Phase 3).
+-- Migration 057: link store orders to a registration (PRD §12, store Phase 3).
 --
 -- Event-merch orders (the included shirt + registration add-ons) are created when
 -- a registration is confirmed. Tying the order to its registration gives us

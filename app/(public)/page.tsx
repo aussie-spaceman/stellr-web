@@ -1,17 +1,16 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowRight, Users, Trophy, Rocket } from 'lucide-react'
-import { getFeaturedEvents, getFeaturedTestimonials, type StellarEvent } from '@/lib/sanity'
+import { getFeaturedEvents, type StellarEvent } from '@/lib/sanity'
 import { EventCard } from '@/components/ui/EventCard'
-import { TestimonialCarousel } from '@/components/sections/TestimonialCarousel'
-import { SubscribeForm } from '@/components/forms/SubscribeForm'
+import { QuoteRotator } from '@/components/sections/QuoteRotator'
 
 export const metadata: Metadata = {
   // Title intentionally omitted: the homepage inherits the root layout's
   // non-templated `title.default` ("Stellr Education — Real-World STEM Competitions"),
   // avoiding the doubled "| Stellr Education" the title template would add.
   description:
-    'Stellr connects middle and high school students with industry professionals through high-tempo design competitions across the US.',
+    'A community bringing students and professionals together, building careers and preparing the next generation through industry simulation competitions and mentorship.',
 }
 
 // Revalidate every 60 minutes
@@ -21,24 +20,27 @@ const roleCards = [
   { label: 'Student', icon: '🎓', href: '/why-stellr#student' },
   { label: 'Teacher', icon: '📚', href: '/why-stellr#teacher' },
   { label: 'Parent', icon: '👪', href: '/why-stellr#parent' },
-  { label: 'Mentor', icon: '🔬', href: '/why-stellr#mentor' },
+  { label: 'Mentor / Volunteer', icon: '🔬', href: '/why-stellr#mentor' },
 ]
 
 const whatWeDo = [
   {
     icon: Trophy,
-    title: 'Multi-Disciplinary Challenges',
+    title: 'Multi-Disciplinary Competitions',
+    href: '/competitions',
     body: 'Real-world scenarios requiring STEM and business skills — engineering, science, communication, and strategy working together.',
   },
   {
     icon: Users,
     title: 'Mentored by Industry Experts',
+    href: '/academy',
     body: 'Students network with aerospace, engineering, and science professionals who guide them through competition challenges.',
   },
   {
     icon: Rocket,
-    title: '90%+ Go On To Study STEM',
-    body: 'An extraordinary outcome: the vast majority of Stellr participants go on to pursue STEM or medicine at college.',
+    title: 'STEM Careers',
+    href: undefined,
+    body: 'Almost 90% of Stellr alumni pursue STEM or medicine at college.',
   },
 ]
 
@@ -46,34 +48,57 @@ const membershipTiers = [
   {
     name: 'Explorer',
     price: 'Free',
-    benefits: ['Public content & competition listings', 'Basic profile', 'Community access'],
+    benefits: [
+      'STEM Power Skills training material',
+      'Access to Community Spaces',
+      'Store discount',
+    ],
   },
   {
     name: 'Pathfinder',
     price: '$60/yr',
     highlight: true,
-    benefits: ['Full community & resources', 'Competition registration', '1 year free with event participation'],
+    benefits: [
+      '1 year free membership with competition participation',
+      'Dedicated Pathfinder Community Space + additional training material',
+      'Invites to quarterly group mentoring sessions',
+    ],
   },
   {
     name: 'Scholar',
     price: '$120/yr',
-    benefits: ['Award winner tier', 'All Pathfinder benefits', 'Exclusive scholar content'],
+    benefits: [
+      '1 year free membership to competition award winners',
+      'Exclusive scholar content',
+      'Free coaching sessions',
+    ],
+  },
+]
+
+const communityQuotes = [
+  {
+    quote:
+      "I didn't know what I wanted to study when I left high-school. Now I am laser focused.",
+    author: 'Aiden, 2025 Competition Participant',
+  },
+  {
+    quote:
+      "I've never seen my daughter so engaged and excited to be learning. What an opportunity for her!",
+    author: 'Aaron, Parent of 2019 Competition Participant',
+  },
+  {
+    quote:
+      "There's no other forum available for school-aged students to learn about real-world work. These events should be mandatory for every student, globally.",
+    author: 'Senior Aerospace Executive and Competition Judge',
   },
 ]
 
 export default async function HomePage() {
   const authUrl = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
-  const [featuredEvents, testimonials] = await Promise.allSettled([
-    getFeaturedEvents(),
-    getFeaturedTestimonials(),
-  ])
+  const featuredEvents = await getFeaturedEvents().catch(() => null)
 
-  const events: StellarEvent[] = featuredEvents.status === 'fulfilled' && featuredEvents.value?.length
-    ? featuredEvents.value
-    : []
-
-  const testimonialData = testimonials.status === 'fulfilled' ? testimonials.value ?? [] : []
+  const events: StellarEvent[] = featuredEvents?.length ? featuredEvents : []
 
   return (
     <>
@@ -91,11 +116,11 @@ export default async function HomePage() {
               <span className="text-brand-blue">Real Careers Begin Here.</span>
             </h1>
             <p className="mt-6 text-lg sm:text-xl text-gray-300 max-w-2xl">
-              Stellr connects middle and high school students with industry professionals through high-tempo design competitions across the US.
+              A community bringing students and professionals together, building careers and preparing the next generation through industry simulation competitions and mentorship.
             </p>
             <div className="mt-8 flex flex-wrap gap-4">
-              <Link href="/events" className="btn-primary text-base px-8 py-4">
-                Explore Events
+              <Link href="/competitions" className="btn-primary text-base px-8 py-4">
+                Explore Competitions
               </Link>
               <a href={`${authUrl}/signup`} className="btn-outline-white text-base px-8 py-4">
                 Join Free
@@ -133,18 +158,33 @@ export default async function HomePage() {
       <section className="section-padding">
         <div className="container-max">
           <h2 className="text-3xl font-bold text-center text-brand-blue-dark mb-12">
-            Why Stellr Competitions Work
+            Why Stellr?
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {whatWeDo.map((item) => (
-              <div key={item.title} className="text-center">
-                <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-50 mb-4">
-                  <item.icon size={28} className="text-brand-blue" />
+            {whatWeDo.map((item) => {
+              const heading = (
+                <>
+                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-50 mb-4 group-hover:bg-blue-100 transition-colors">
+                    <item.icon size={28} className="text-brand-blue" />
+                  </div>
+                  <h3 className="text-xl font-bold text-brand-blue-dark mb-3 group-hover:text-brand-blue transition-colors">
+                    {item.title}
+                  </h3>
+                </>
+              )
+              return (
+                <div key={item.title} className="text-center">
+                  {item.href ? (
+                    <Link href={item.href} className="group block">
+                      {heading}
+                    </Link>
+                  ) : (
+                    heading
+                  )}
+                  <p className="text-brand-grey-dark leading-relaxed">{item.body}</p>
                 </div>
-                <h3 className="text-xl font-bold text-brand-blue-dark mb-3">{item.title}</h3>
-                <p className="text-brand-grey-dark leading-relaxed">{item.body}</p>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       </section>
@@ -153,7 +193,7 @@ export default async function HomePage() {
       <section className="bg-brand-grey-light section-padding">
         <div className="container-max">
           <div className="flex items-center justify-between mb-8">
-            <h2 className="text-3xl font-bold text-brand-blue-dark">Upcoming Events</h2>
+            <h2 className="text-3xl font-bold text-brand-blue-dark">Upcoming Competitions</h2>
             <Link href="/events" className="text-brand-blue font-semibold text-sm flex items-center gap-1 hover:underline">
               View all <ArrowRight size={14} />
             </Link>
@@ -172,16 +212,7 @@ export default async function HomePage() {
           <h2 className="text-3xl font-bold text-center text-white mb-10">
             Hear From Our Community
           </h2>
-          {testimonialData.length > 0 ? (
-            <TestimonialCarousel testimonials={testimonialData} />
-          ) : (
-            <div className="max-w-3xl mx-auto text-center">
-              <blockquote className="text-xl sm:text-2xl font-medium italic leading-relaxed text-white">
-                &ldquo;My son said it was one of the most exciting, exhilarating, challenging and memorable events in his life.&rdquo;
-              </blockquote>
-              <p className="mt-4 text-blue-300 font-semibold">— Parent, 2022</p>
-            </div>
-          )}
+          <QuoteRotator quotes={communityQuotes} />
         </div>
       </section>
 
@@ -227,20 +258,6 @@ export default async function HomePage() {
               See All Plans
             </Link>
           </div>
-        </div>
-      </section>
-
-      {/* ── Email Subscribe ───────────────────────────────────────────── */}
-      <section className="bg-brand-grey-light section-padding">
-        <div className="container-max max-w-xl mx-auto text-center">
-          <h2 className="text-2xl font-bold text-brand-blue-dark mb-2">Stay in the Loop</h2>
-          <p className="text-brand-grey-dark mb-6">
-            Get Stellr news, competition dates, and STEM resources in your inbox.
-          </p>
-          <SubscribeForm />
-          <p className="mt-3 text-xs text-brand-grey-mid">
-            By subscribing you agree to receive Stellr news and competition updates. Unsubscribe any time.
-          </p>
         </div>
       </section>
     </>

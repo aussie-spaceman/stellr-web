@@ -26,14 +26,6 @@ const footerLinks = {
     { label: 'University Partners', href: '/network#university' },
     { label: 'Corporate Partners', href: '/network#corporate' },
   ],
-  'Get Involved': [
-    { label: 'Register For An Event', href: '/events' },
-    { label: 'Download Curriculum', href: '/activities' },
-    { label: 'Join Our Community', href: '/sign-up' },
-    { label: 'Become A Sponsor', href: '/contribute#donate' },
-    { label: 'Volunteer With Us', href: '/contribute' },
-    { label: 'Partner With Us', href: '/network' },
-  ],
   About: [
     { label: 'Impact', href: '/impact' },
     { label: 'Mission', href: '/about#mission' },
@@ -51,22 +43,26 @@ const socialLinks = [
 ]
 
 export function Footer() {
+  const year = new Date().getFullYear()
+
   return (
     <footer>
       {/* ── Pre-footer: newsletter ── */}
       <div className="bg-brand-blue">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
-            <div>
+            <div className="max-w-xl">
               <p className="text-lg font-heading font-medium text-white">
-                Join the Stellr community
+                Stay In The Loop
               </p>
               <p className="text-sm text-blue-200 mt-1">
-                Future engineers start here — get updates on events, opportunities, and more.
+                The home of future STEM professionals — get updates on competitions, curriculum
+                resources, and professional opportunities, straight to your inbox.
               </p>
             </div>
             <div className="w-full sm:w-auto sm:min-w-80">
               <SubscribeForm />
+              <p className="mt-2 text-xs text-blue-200/80">Unsubscribe at any time.</p>
             </div>
           </div>
         </div>
@@ -75,10 +71,10 @@ export function Footer() {
       {/* ── Main footer ── */}
       <div className="bg-brand-blue-dark text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
-          <div className="grid grid-cols-2 lg:grid-cols-8 gap-8 lg:gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-7 gap-8 lg:gap-6">
             {/* Brand column */}
             <div className="col-span-2">
-              <Logo variant="light" />
+              <Logo variant="light" withTagline sizeClassName="h-44" />
               <p className="mt-4 text-sm text-gray-400 max-w-xs leading-relaxed">
                 The home of STEM education for school students — providing tomorrow&apos;s
                 professionals with the skills, relationships, and career pathways they need.
@@ -123,7 +119,7 @@ export function Footer() {
 
           {/* ── Bottom bar ── */}
           <div className="mt-12 pt-8 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500">
-            <p>© 2026 Stellr Education. A 501(c)(3) nonprofit organization.</p>
+            <p>{year} © Stellr Education&nbsp;&nbsp;|&nbsp;&nbsp;Registered 501(c)(3)&nbsp;&nbsp;|&nbsp;&nbsp;Built In Utah, Educating The Globe</p>
             <div className="flex items-center gap-4">
               <Link href="/privacy" className="hover:text-white transition-colors">
                 Privacy Policy

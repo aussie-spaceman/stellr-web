@@ -1,0 +1,36 @@
+{
+  "//": "Recommended Claude Code permissions for the redesign. Copy to the repo root as .claude/settings.json (or merge into your existing one). Lets the agent run build/test/grep without a prompt each time, while still asking before destructive or out-of-scope actions. Adjust to your team's comfort.",
+  "permissions": {
+    "allow": [
+      "Bash(npm run build)",
+      "Bash(npm run dev)",
+      "Bash(npm run lint)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(rg:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git add:*)",
+      "Bash(git checkout -b:*)",
+      "Read(./**)",
+      "Edit(app/**)",
+      "Edit(components/**)",
+      "Edit(lib/**)",
+      "Edit(styles/**)",
+      "Edit(tailwind.config.ts)"
+    ],
+    "ask": [
+      "Edit(supabase/**)",
+      "Edit(sanity/**)",
+      "Edit(app/(admin)/**)",
+      "Edit(components/admin/**)",
+      "Edit(.env*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(npm install:*)"
+    ],
+    "deny": [
+      "Read(.env.local)",
+      "Read(.env)"
+    ]
+  }
+}

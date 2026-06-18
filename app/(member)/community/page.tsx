@@ -3,8 +3,10 @@ import { Suspense } from 'react'
 import { Lock, MessageSquare } from 'lucide-react'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, memberMeetsTier } from '@/lib/community'
-import { getSpaceUnreadCounts, getHomeFeed } from '@/lib/community-feed'
+import { getSpaceUnreadCounts, getHomeFeed, getSpaceAuthorPreviews } from '@/lib/community-feed'
 import { RegistrationSubmittedModal } from '@/components/community/RegistrationSubmittedModal'
+import { AvatarStack } from '@/components/ui/Avatar'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 export const metadata = { title: 'Community · Spaces' }
 
@@ -33,6 +35,9 @@ export default async function CommunityHomePage() {
     getSpaceUnreadCounts(member.id),
     getHomeFeed(member),
   ])
+
+  const spaceIds = (spaces ?? []).map((s) => (s as SpaceRow).id)
+  const previews = await getSpaceAuthorPreviews(spaceIds)
 
   const totalNew = Object.values(unread).reduce((sum, n) => sum + (n || 0), 0)
 
@@ -114,6 +119,15 @@ export default async function CommunityHomePage() {
               {space.description && (
                 <p className="mt-1 text-sm text-brand-muted-soft">{space.description}</p>
               )}
+              {previews[space.id]?.people.length > 0 && (
+                <div className="mt-3">
+                  <AvatarStack
+                    people={previews[space.id].people}
+                    extra={Math.max(0, previews[space.id].total - previews[space.id].people.length)}
+                    label="members"
+                  />
+                </div>
+              )}
             </div>
           ) : (
             <div className="h-full rounded-card border border-brand-border bg-brand-canvas p-4">
@@ -146,7 +160,7 @@ export default async function CommunityHomePage() {
       </ul>
 
       {(!spaces || spaces.length === 0) && (
-        <p className="text-sm text-brand-muted-soft">No spaces yet. Check back soon.</p>
+        <EmptyState title="No spaces yet. Check back soon." />
       )}
     </div>
   )

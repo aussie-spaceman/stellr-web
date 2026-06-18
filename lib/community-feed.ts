@@ -24,12 +24,58 @@ export async function getSpaceUnreadCounts(memberId: string): Promise<Record<str
   return out
 }
 
+export interface SpacePreview {
+  people: { id: string; name: string }[]
+  total: number
+}
+
+// Recent distinct post authors per space — drives the member avatar stack on the
+// Spaces cards. `total` is the count of distinct recent authors (a lightweight
+// "members active here" signal; spaces have no membership table — access is by tier).
+export async function getSpaceAuthorPreviews(
+  spaceIds: string[],
+  perSpace = 4,
+): Promise<Record<string, SpacePreview>> {
+  if (spaceIds.length === 0) return {}
+  const db = supabaseServer()
+  const { data } = await db
+    .from('community_posts')
+    .select('space_id, author_member_id, created_at, members:author_member_id(first_name, last_name)')
+    .in('space_id', spaceIds)
+    .eq('status', 'published')
+    .order('created_at', { ascending: false })
+    .limit(400)
+
+  type Rel = { first_name: string | null; last_name: string | null }
+  type Row = { space_id: string; author_member_id: string | null; members: Rel | Rel[] | null }
+  const acc: Record<string, { people: { id: string; name: string }[]; seen: Set<string>; total: number }> = {}
+  for (const id of spaceIds) acc[id] = { people: [], seen: new Set(), total: 0 }
+
+  for (const row of (data ?? []) as Row[]) {
+    const bucket = acc[row.space_id]
+    const aid = row.author_member_id
+    if (!bucket || !aid || bucket.seen.has(aid)) continue
+    bucket.seen.add(aid)
+    bucket.total++
+    if (bucket.people.length < perSpace) {
+      const m = Array.isArray(row.members) ? row.members[0] : row.members
+      bucket.people.push({ id: aid, name: [m?.first_name, m?.last_name].filter(Boolean).join(' ') || 'Member' })
+    }
+  }
+
+  const out: Record<string, SpacePreview> = {}
+  for (const id of spaceIds) out[id] = { people: acc[id].people, total: acc[id].total }
+  return out
+}
+
 export interface FeedPost {
   id: string
   title: string
   spaceSlug: string
   spaceName: string
   authorName: string
+  authorId: string | null
+  isMentor: boolean
   createdAt: string
   commentCount: number
   unread: boolean
@@ -52,19 +98,21 @@ export async function getHomeFeed(member: CommunityMember, limit = 15): Promise<
 
   const { data: posts } = await db
     .from('community_posts')
-    .select('id, space_id, title, comment_count, created_at, members:author_member_id(first_name, last_name)')
+    .select('id, space_id, title, comment_count, created_at, author_member_id, members:author_member_id(first_name, last_name, event_role)')
     .in('space_id', accessible.map((s) => s.id))
     .eq('status', 'published')
     .order('created_at', { ascending: false })
     .limit(limit)
 
+  type AuthorRel = { first_name: string | null; last_name: string | null; event_role: string | null }
   const postRows = (posts ?? []) as {
     id: string
     space_id: string
     title: string
     comment_count: number
     created_at: string
-    members: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null
+    author_member_id: string | null
+    members: AuthorRel | AuthorRel[] | null
   }[]
   if (postRows.length === 0) return []
 
@@ -86,6 +134,8 @@ export async function getHomeFeed(member: CommunityMember, limit = 15): Promise<
       spaceSlug: space.slug,
       spaceName: space.name,
       authorName: [m?.first_name, m?.last_name].filter(Boolean).join(' ') || 'Member',
+      authorId: p.author_member_id,
+      isMentor: m?.event_role === 'mentor',
       createdAt: p.created_at,
       commentCount: p.comment_count ?? 0,
       // Unread when never read, or created after the last read.

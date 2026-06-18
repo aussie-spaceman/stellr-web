@@ -10,6 +10,7 @@ import {
 } from '@/lib/training'
 import { getMemberEvents } from '@/lib/event-portal'
 import { ProgressRing } from '@/components/ui/ProgressRing'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 export const metadata = { title: 'Community · Training' }
 
@@ -146,7 +147,10 @@ export default async function TrainingPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Training</h1>
+        <p className="eyebrow flex items-center gap-2 text-brand-gold-ink">
+          <span className="h-2 w-2 rounded-full bg-brand-orange" /> Academy
+        </p>
+        <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Training</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">
           Complete training for your events, plus ongoing courses available with your membership.
         </p>
@@ -158,10 +162,7 @@ export default async function TrainingPage() {
       <Section title="Library" modules={general} />
 
       {assigned.length === 0 && all.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-brand-border bg-white p-10 text-center">
-          <GraduationCap className="mx-auto h-8 w-8 text-brand-muted-soft" />
-          <p className="mt-2 text-sm text-brand-muted-soft">No training available yet. Check back soon.</p>
-        </div>
+        <EmptyState title="No training available yet. Check back soon." />
       )}
     </div>
   )

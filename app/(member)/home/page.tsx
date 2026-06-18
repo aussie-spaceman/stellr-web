@@ -8,6 +8,7 @@ import { listMemberSessions } from '@/lib/sessions'
 import { getHomeFeed } from '@/lib/community-feed'
 import { Avatar } from '@/components/ui/Avatar'
 import { ProgressRing } from '@/components/ui/ProgressRing'
+import { WelcomeBanner } from '@/components/community/WelcomeBanner'
 
 export const metadata = { title: 'Home' }
 
@@ -74,6 +75,8 @@ export default async function HomePage() {
 
   return (
     <div className="mx-auto max-w-4xl">
+      <WelcomeBanner firstName={firstName} />
+
       {/* Header */}
       <header className="mb-6">
         <p className="font-subheading text-[15px] font-medium text-brand-muted-soft">Welcome back,</p>
@@ -112,7 +115,7 @@ export default async function HomePage() {
                     Prep checklist · {prepDone} of {prepTotal} done
                   </p>
                   <div className="h-[7px] overflow-hidden rounded bg-white/25">
-                    <div className="h-full rounded bg-white" style={{ width: `${(prepDone / prepTotal) * 100}%` }} />
+                    <div className="bar-animate h-full rounded bg-white" style={{ width: `${(prepDone / prepTotal) * 100}%` }} />
                   </div>
                 </div>
               )}
@@ -218,10 +221,11 @@ export default async function HomePage() {
           <ul className="divide-y divide-brand-hairline">
             {feed.map((f) => (
               <li key={f.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                <Avatar id={f.authorName} name={f.authorName} size="md" />
+                <Avatar id={f.authorId || f.authorName} name={f.authorName} size="md" color={f.isMentor ? '#da6220' : undefined} />
                 <Link href={`/community/${f.spaceSlug}/${f.id}`} className="min-w-0 flex-1">
                   <span className="block text-[14.5px] text-brand-blue-dark">
-                    <strong>{f.authorName}</strong> in{' '}
+                    <strong>{f.authorName}</strong>
+                    {f.isMentor && <span className="font-semibold text-brand-orange-alt"> (Mentor)</span>} in{' '}
                     <span className="font-semibold text-brand-blue">{f.spaceName}</span>
                   </span>
                   <span className="block truncate text-[12.5px] text-brand-muted-soft">{f.title}</span>

@@ -23,21 +23,10 @@ export default async function MemberLayout({ children }: { children: React.React
   const caps = member ? await getHostCaps(member.id) : null
   const showHosting = !!caps && (caps.canCoach || caps.canMentor)
 
-  const name =
-    (member && [member.first_name, member.last_name].filter(Boolean).join(' ')) || 'Member'
-  const initials =
-    name
-      .split(/\s+/)
-      .map((p) => p[0])
-      .filter(Boolean)
-      .slice(0, 2)
-      .join('')
-      .toUpperCase() || 'M'
-
   return (
     <div className="min-h-screen bg-brand-canvas">
       <div className="flex">
-        <AppSidebar user={{ name, initials }} canHost={showHosting} />
+        <AppSidebar canHost={showHosting} />
 
         <div className="flex min-h-screen min-w-0 flex-1 flex-col">
           {/* Slim top strip: mobile logo + search / notifications / account */}

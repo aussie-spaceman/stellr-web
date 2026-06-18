@@ -19,12 +19,15 @@ export function Avatar({
   src,
   size = 'md',
   ring = true,
+  color,
 }: {
   name: string
   id: string // member id — stable colour
   src?: string | null
   size?: keyof typeof SIZES
   ring?: boolean
+  /** Override the hashed colour (e.g. orange for mentors). */
+  color?: string
 }) {
   const px = SIZES[size]
   const initials =
@@ -36,7 +39,7 @@ export function Avatar({
       .slice(0, 2)
       .join('')
       .toUpperCase() || '?'
-  const bg = PALETTE[hashIndex(id || name, PALETTE.length)]
+  const bg = color ?? PALETTE[hashIndex(id || name, PALETTE.length)]
   const fg = bg === '#dda33b' ? '#051535' : '#ffffff'
   const ringClass = ring ? 'ring-2 ring-white' : ''
 

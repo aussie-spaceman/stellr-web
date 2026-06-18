@@ -28,25 +28,35 @@ const PRIMARY: Item[] = [
 ]
 
 const COMMUNITY_SUB: Item[] = [
-  { label: 'Resources', href: '/community/resources', icon: FolderOpen, color: '#3f78d6' },
-  { label: 'Directory', href: '/community/members',   icon: Users,      color: '#aebbd6' },
+  { label: 'Spaces',    href: '/community',           icon: MessagesSquare, color: '#3f78d6' },
+  { label: 'Resources', href: '/community/resources', icon: FolderOpen,     color: '#3f78d6' },
+  { label: 'Directory', href: '/community/members',   icon: Users,          color: '#aebbd6' },
 ]
 const ACADEMY_SUB: Item[] = [
+  { label: 'Training',  href: '/community/training',  icon: GraduationCap,  color: '#dda33b' },
   { label: 'Mentoring', href: '/community/mentoring', icon: HeartHandshake, color: '#dda33b' },
   { label: 'Coaching',  href: '/community/coaching',  icon: Sparkles,       color: '#dda33b' },
 ]
 const HOSTING: Item = { label: 'Hosting', href: '/community/hosting', icon: Radio, color: '#dda33b' }
 
-export function AppSidebar({
-  user,
-  canHost = false,
-}: {
-  user: { name: string; school?: string | null; initials: string }
-  canHost?: boolean
-}) {
+export function AppSidebar({ canHost = false }: { canHost?: boolean }) {
   const pathname = usePathname() ?? ''
   const isActive = (href: string) =>
     href === '/home' ? pathname === '/home' : pathname.startsWith(href)
+
+  // Sub-routes that are NOT "Spaces" — so the Spaces item (href /community) only
+  // highlights on the spaces landing or a space-detail page, not on deeper routes.
+  const NON_SPACE = [
+    '/community/resources', '/community/members', '/community/training',
+    '/community/mentoring', '/community/coaching', '/community/hosting',
+    '/community/events', '/community/sessions', '/community/search',
+  ]
+  const subActive = (href: string) => {
+    if (href === '/community') {
+      return pathname === '/community' || (pathname.startsWith('/community/') && !NON_SPACE.some((k) => pathname.startsWith(k)))
+    }
+    return pathname.startsWith(href)
+  }
   const academySub = canHost ? [...ACADEMY_SUB, HOSTING] : ACADEMY_SUB
 
   return (
@@ -63,30 +73,20 @@ export function AppSidebar({
           <RailLink key={item.href} item={item} active={isActive(item.href)} />
         ))}
 
-        {/* Community group */}
-        <RailLink item={PRIMARY[2]} active={pathname === '/community'} />
+        {/* Community group — header + nested destinations (Spaces, Resources, Directory) */}
+        <RailHeader label="Community" icon={MessagesSquare} color="#3f78d6" />
         <div className="mb-1 ml-3 flex flex-col gap-0.5 border-l border-white/10 pl-2">
           {COMMUNITY_SUB.map((item) => (
-            <RailSubLink key={item.href} item={item} active={isActive(item.href)} />
+            <RailSubLink key={item.href} item={item} active={subActive(item.href)} />
           ))}
         </div>
 
-        {/* Academy group (Hosting appended when canHost) */}
-        <RailLink item={PRIMARY[3]} active={pathname.startsWith('/community/training')} />
+        {/* Academy group — header + nested destinations (Training, Mentoring, Coaching, Hosting) */}
+        <RailHeader label="Academy" icon={GraduationCap} color="#dda33b" />
         <div className="mb-1 ml-3 flex flex-col gap-0.5 border-l border-white/10 pl-2">
           {academySub.map((item) => (
-            <RailSubLink key={item.href} item={item} active={isActive(item.href)} />
+            <RailSubLink key={item.href} item={item} active={subActive(item.href)} />
           ))}
-        </div>
-
-        <div className="mt-auto flex items-center gap-2.5 rounded-[10px] bg-white/[0.06] px-3 py-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-orange text-[13px] font-bold text-brand-blue-dark">
-            {user.initials}
-          </span>
-          <span className="min-w-0 leading-tight">
-            <span className="block truncate text-[13.5px] font-semibold">{user.name}</span>
-            {user.school && <span className="block truncate text-[11.5px] text-[#aebbd6]">{user.school}</span>}
-          </span>
         </div>
       </aside>
 
@@ -114,6 +114,17 @@ export function AppSidebar({
         })}
       </nav>
     </>
+  )
+}
+
+// A non-clickable section label (Community / Academy). Its destinations live as
+// nested RailSubLinks beneath it.
+function RailHeader({ label, icon: Icon, color }: { label: string; icon: typeof Home; color: string }) {
+  return (
+    <div className="mt-2 flex items-center gap-3 px-3 pb-0.5 pt-1 font-subheading text-[12px] font-semibold uppercase tracking-[0.12em] text-white/45">
+      <Icon className="h-[15px] w-[15px]" style={{ color }} />
+      {label}
+    </div>
   )
 }
 

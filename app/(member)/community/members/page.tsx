@@ -2,8 +2,8 @@ import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
 import Link from 'next/link'
-import { Users } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 export const metadata = { title: 'Community · Member Directory' }
 
@@ -141,13 +141,10 @@ export default async function MemberDirectoryPage({
       </form>
 
       {rows.length === 0 && (
-        <div className="rounded-lg border border-dashed border-brand-border py-12 text-center">
-          <Users className="mx-auto h-8 w-8 text-brand-muted-soft" />
-          <p className="mt-3 text-sm text-brand-muted-soft">No members found.</p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
-            Members must opt in from their account page to appear here.
-          </p>
-        </div>
+        <EmptyState
+          title="No members found."
+          hint="Members must opt in from their account page to appear here."
+        />
       )}
 
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

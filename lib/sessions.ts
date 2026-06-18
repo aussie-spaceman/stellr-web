@@ -560,6 +560,7 @@ export interface ChatMessage {
   id: string
   body: string
   author_member_id: string | null
+  author_name: string
   created_at: string
   flagged: boolean
 }
@@ -603,18 +604,24 @@ export async function listMessages(channelId: string): Promise<ChatMessage[]> {
   const db = supabaseServer()
   const { data } = await db
     .from('chat_messages')
-    .select('id, body, author_member_id, created_at, flagged_at')
+    .select('id, body, author_member_id, created_at, flagged_at, members:author_member_id(first_name, last_name)')
     .eq('channel_id', channelId)
     .is('deleted_at', null)
     .order('created_at', { ascending: true })
     .limit(500)
-  return (data ?? []).map((m) => ({
-    id: m.id as string,
-    body: m.body as string,
-    author_member_id: (m.author_member_id as string | null) ?? null,
-    created_at: m.created_at as string,
-    flagged: !!m.flagged_at,
-  }))
+  type Rel = { first_name: string | null; last_name: string | null }
+  return (data ?? []).map((m) => {
+    const rel = (m as { members: Rel | Rel[] | null }).members
+    const author = Array.isArray(rel) ? rel[0] : rel
+    return {
+      id: m.id as string,
+      body: m.body as string,
+      author_member_id: (m.author_member_id as string | null) ?? null,
+      author_name: [author?.first_name, author?.last_name].filter(Boolean).join(' ') || 'Member',
+      created_at: m.created_at as string,
+      flagged: !!m.flagged_at,
+    }
+  })
 }
 
 export async function postMessage(channelId: string, authorId: string, body: string): Promise<boolean> {

@@ -1,5 +1,6 @@
 // Gold progress ring on a warm track (redesign). Server-safe (no hooks).
 // Used by Home (T2.2) and the Training list (T3.2).
+import type { CSSProperties } from 'react'
 import { Check } from 'lucide-react'
 
 export function ProgressRing({
@@ -13,6 +14,7 @@ export function ProgressRing({
 }) {
   const r = 16
   const c = 2 * Math.PI * r
+  const offset = c - (c * Math.min(100, Math.max(0, pct))) / 100
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg viewBox="0 0 40 40" className="-rotate-90" style={{ width: size, height: size }}>
@@ -25,8 +27,9 @@ export function ProgressRing({
           strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={c}
-          strokeDashoffset={c - (c * Math.min(100, Math.max(0, pct))) / 100}
-          className={done ? 'stroke-emerald-500' : 'stroke-brand-orange'}
+          strokeDashoffset={offset}
+          className={`ring-animate ${done ? 'stroke-emerald-500' : 'stroke-brand-orange'}`}
+          style={{ '--ring-c': `${c}`, '--ring-target': `${offset}` } as CSSProperties}
         />
       </svg>
       <span className="absolute inset-0 flex items-center justify-center font-subheading text-[11px] font-semibold text-brand-blue-dark">

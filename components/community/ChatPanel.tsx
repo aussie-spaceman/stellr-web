@@ -4,11 +4,13 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Send, Flag, Trash2 } from 'lucide-react'
 import { useAuth } from '@clerk/nextjs'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
+import { Avatar } from '@/components/ui/Avatar'
 
 interface Message {
   id: string
   body: string
   author_member_id: string | null
+  author_name: string
   created_at: string
   flagged: boolean
 }
@@ -153,7 +155,10 @@ export function ChatPanel({
         {messages.map((m) => {
           const mine = m.author_member_id === selfMemberId
           return (
-            <div key={m.id} className={`group flex items-center gap-1.5 ${mine ? 'justify-end' : 'justify-start'}`}>
+            <div key={m.id} className={`group flex items-end gap-1.5 ${mine ? 'justify-end' : 'justify-start'}`}>
+              {!mine && (
+                <Avatar id={m.author_member_id || m.author_name} name={m.author_name} size="sm" ring={false} />
+              )}
               {!mine && !m.flagged && (
                 <button
                   onClick={() => act('/api/community/chat/flag', m.id)}
@@ -164,15 +169,22 @@ export function ChatPanel({
                   <Flag className="h-3.5 w-3.5" />
                 </button>
               )}
-              <div
-                className={`max-w-[75%] rounded-lg px-3 py-1.5 text-sm ${
-                  mine ? 'bg-brand-blue text-white' : 'bg-brand-hairline text-brand-blue-dark'
-                }`}
-              >
-                {m.body}
-                {m.flagged && (
-                  <span className="ml-2 align-middle text-[10px] font-medium text-brand-gold-ink">⚑ flagged</span>
+              <div className="flex max-w-[75%] flex-col">
+                {!mine && (
+                  <span className="mb-0.5 ml-1 font-subheading text-[11px] font-medium text-brand-muted-soft">
+                    {m.author_name}
+                  </span>
                 )}
+                <div
+                  className={`rounded-lg px-3 py-1.5 text-sm ${
+                    mine ? 'bg-brand-blue text-white' : 'bg-brand-hairline text-brand-blue-dark'
+                  }`}
+                >
+                  {m.body}
+                  {m.flagged && (
+                    <span className="ml-2 align-middle text-[10px] font-medium text-brand-gold-ink">⚑ flagged</span>
+                  )}
+                </div>
               </div>
               {canModerate && (
                 <button

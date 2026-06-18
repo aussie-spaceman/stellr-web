@@ -17,7 +17,7 @@ export default async function OnboardingPage() {
     .eq('clerk_user_id', userId)
     .maybeSingle()
 
-  if (member?.date_of_birth && member?.gender) redirect('/account')
+  if (member?.date_of_birth && member?.gender) redirect('/home')
 
   const { data: tiers } = await db
     .from('membership_tiers')
@@ -27,8 +27,8 @@ export default async function OnboardingPage() {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Complete your profile</h1>
-        <p className="mt-2 text-sm text-gray-600">
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Complete your profile</h1>
+        <p className="mt-2 text-sm text-brand-muted">
           Tell us a bit about yourself to get the most out of your Stellr membership.
         </p>
       </div>

@@ -35,7 +35,7 @@ export function RichTextEditor({
     () => [
       StarterKit,
       Mention.configure({
-        HTMLAttributes: { class: 'rounded bg-blue-100 px-1 font-medium text-blue-700' },
+        HTMLAttributes: { class: 'rounded bg-brand-blue/10 px-1 font-medium text-brand-blue' },
         suggestion: mentionSuggestion(),
       }),
       Image.configure({ HTMLAttributes: { class: 'rounded-lg max-h-80' } }),
@@ -88,15 +88,15 @@ export function RichTextEditor({
   }
 
   return (
-    <div className="rounded-md border border-gray-300 bg-white focus-within:border-gray-400">
+    <div className="rounded-md border border-brand-border bg-white focus-within:border-brand-border">
       {editable && (
-        <div className="flex items-center gap-1 border-b border-gray-100 px-2 py-1">
+        <div className="flex items-center gap-1 border-b border-brand-hairline px-2 py-1">
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
             title="Add image"
-            className="flex items-center gap-1 rounded px-1.5 py-1 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+            className="flex items-center gap-1 rounded px-1.5 py-1 text-xs text-brand-muted-soft hover:bg-brand-hairline disabled:opacity-50"
           >
             {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
             Image

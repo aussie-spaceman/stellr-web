@@ -103,7 +103,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
+    <div className="bg-white rounded-xl border border-brand-border p-6">
       <div className="flex items-center gap-4 mb-6">
         {(clerkUser?.imageUrl || member.profile_photo_url) && (
           <Image
@@ -115,74 +115,74 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
           />
         )}
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-lg font-semibold text-brand-blue-dark">
             {member.first_name} {member.last_name}
             {member.nickname && (
-              <span className="ml-2 text-sm text-gray-400">"{member.nickname}"</span>
+              <span className="ml-2 text-sm text-brand-muted-soft">"{member.nickname}"</span>
             )}
           </h2>
-          <p className="text-sm text-gray-500">{member.email}</p>
+          <p className="text-sm text-brand-muted-soft">{member.email}</p>
         </div>
       </div>
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm mb-6">
         <div>
-          <dt className="text-gray-500">Role</dt>
-          <dd className="font-medium text-gray-900 capitalize">
+          <dt className="text-brand-muted-soft">Role</dt>
+          <dd className="font-medium text-brand-blue-dark capitalize">
             {member.event_role.replace('_', ' ')}
           </dd>
         </div>
         <div>
-          <dt className="text-gray-500">Age bracket</dt>
-          <dd className="font-medium text-gray-900 capitalize">
+          <dt className="text-brand-muted-soft">Age bracket</dt>
+          <dd className="font-medium text-brand-blue-dark capitalize">
             {member.age_bracket.replace('_', ' ')}
           </dd>
         </div>
         {member.grade && (
           <div>
-            <dt className="text-gray-500">Grade</dt>
-            <dd className="font-medium text-gray-900">{formatGrade(member.grade)}</dd>
+            <dt className="text-brand-muted-soft">Grade</dt>
+            <dd className="font-medium text-brand-blue-dark">{formatGrade(member.grade)}</dd>
           </div>
         )}
         {currentSchool && (
           <div>
-            <dt className="text-gray-500">School</dt>
-            <dd className="font-medium text-gray-900">{currentSchool.schools.name}</dd>
+            <dt className="text-brand-muted-soft">School</dt>
+            <dd className="font-medium text-brand-blue-dark">{currentSchool.schools.name}</dd>
           </div>
         )}
       </dl>
 
-      <div className="space-y-5 border-t border-gray-100 pt-5">
-        <h3 className="text-sm font-medium text-gray-700">Editable details</h3>
+      <div className="space-y-5 border-t border-brand-hairline pt-5">
+        <h3 className="text-sm font-medium text-brand-muted">Editable details</h3>
 
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Nickname</label>
+          <label className="block text-xs text-brand-muted-soft mb-1">Nickname</label>
           <input
             type="text"
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
             placeholder="What you'd like to be called"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+            className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
           />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Phone</label>
+            <label className="block text-xs text-brand-muted-soft mb-1">Phone</label>
             <input
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Discord handle</label>
+            <label className="block text-xs text-brand-muted-soft mb-1">Discord handle</label>
             <input
               type="text"
               value={discord}
               onChange={(e) => setDiscord(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
             />
           </div>
         </div>
@@ -190,8 +190,8 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
         {/* Ethnicity */}
         {ethnicityOptions.length > 0 && (
           <div>
-            <label className="block text-xs text-gray-500 mb-2">
-              Ethnicity <span className="text-gray-400">(select all that apply)</span>
+            <label className="block text-xs text-brand-muted-soft mb-2">
+              Ethnicity <span className="text-brand-muted-soft">(select all that apply)</span>
             </label>
             <div className="grid grid-cols-2 gap-1.5">
               {ethnicityOptions.map((opt) => (
@@ -200,7 +200,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
                     type="checkbox"
                     checked={selectedEthnicities.includes(opt.id)}
                     onChange={() => toggleOption(selectedEthnicities, setSelectedEthnicities, opt.id)}
-                    className="rounded border-gray-300 text-brand-blue focus:ring-brand-blue"
+                    className="rounded border-brand-border text-brand-blue focus:ring-brand-blue"
                   />
                   {opt.name}
                 </label>
@@ -212,8 +212,8 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
         {/* Allergies / Dietary */}
         {allergyOptions.length > 0 && (
           <div>
-            <label className="block text-xs text-gray-500 mb-2">
-              Dietary requirements / Allergies <span className="text-gray-400">(select all that apply)</span>
+            <label className="block text-xs text-brand-muted-soft mb-2">
+              Dietary requirements / Allergies <span className="text-brand-muted-soft">(select all that apply)</span>
             </label>
             <div className="grid grid-cols-2 gap-1.5">
               {allergyOptions.map((opt) => (
@@ -222,7 +222,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
                     type="checkbox"
                     checked={selectedAllergies.includes(opt.id)}
                     onChange={() => toggleOption(selectedAllergies, setSelectedAllergies, opt.id)}
-                    className="rounded border-gray-300 text-brand-blue focus:ring-brand-blue"
+                    className="rounded border-brand-border text-brand-blue focus:ring-brand-blue"
                   />
                   {opt.name}
                 </label>
@@ -232,51 +232,51 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
         )}
 
         {/* Emergency contact — captured at registration, shown/editable here */}
-        <div className="border-t border-gray-100 pt-5 space-y-4">
-          <h3 className="text-sm font-medium text-gray-700">Emergency contact</h3>
+        <div className="border-t border-brand-hairline pt-5 space-y-4">
+          <h3 className="text-sm font-medium text-brand-muted">Emergency contact</h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">First name</label>
+              <label className="block text-xs text-brand-muted-soft mb-1">First name</label>
               <input
                 type="text"
                 value={ecFirst}
                 onChange={(e) => setEcFirst(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Last name</label>
+              <label className="block text-xs text-brand-muted-soft mb-1">Last name</label>
               <input
                 type="text"
                 value={ecLast}
                 onChange={(e) => setEcLast(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Email</label>
+              <label className="block text-xs text-brand-muted-soft mb-1">Email</label>
               <input
                 type="email"
                 value={ecEmail}
                 onChange={(e) => setEcEmail(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Phone</label>
+              <label className="block text-xs text-brand-muted-soft mb-1">Phone</label>
               <input
                 type="tel"
                 value={ecPhone}
                 onChange={(e) => setEcPhone(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Relationship to you</label>
+              <label className="block text-xs text-brand-muted-soft mb-1">Relationship to you</label>
               <select
                 value={ecRelationship}
                 onChange={(e) => setEcRelationship(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue"
               >
                 <option value="">Select…</option>
                 {/* Keep a legacy/free-text value selectable even if it's not a current option */}
@@ -293,12 +293,12 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
 
         {/* Health conditions — captured at registration, shown/editable here */}
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Health conditions</label>
+          <label className="block text-xs text-brand-muted-soft mb-1">Health conditions</label>
           <textarea
             value={healthConditions}
             onChange={(e) => setHealthConditions(e.target.value)}
             rows={2}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+            className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
           />
         </div>
 
@@ -306,7 +306,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
           <button
             onClick={handleSave}
             disabled={loading}
-            className="bg-brand-blue text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-800 disabled:opacity-50"
+            className="bg-brand-blue text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-50"
           >
             {loading ? 'Saving…' : saved ? 'Saved ✓' : 'Save changes'}
           </button>

@@ -34,6 +34,8 @@ export default async function CommunityHomePage() {
     getHomeFeed(member),
   ])
 
+  const totalNew = Object.values(unread).reduce((sum, n) => sum + (n || 0), 0)
+
   const fmtAgo = (iso: string) => {
     const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
     if (mins < 1) return 'just now'
@@ -49,38 +51,42 @@ export default async function CommunityHomePage() {
         <RegistrationSubmittedModal />
       </Suspense>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Spaces</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Welcome back{member.first_name ? `, ${member.first_name}` : ''}. Jump into a
-          discussion.
+        <p className="eyebrow flex items-center gap-2 text-brand-blue">
+          <span className="h-2 w-2 rounded-full bg-brand-blue" /> Community
+        </p>
+        <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Spaces</h1>
+        <p className="mt-1 text-sm text-brand-muted-soft">
+          {totalNew > 0
+            ? `Your spaces have ${totalNew} new post${totalNew === 1 ? '' : 's'}.`
+            : `Welcome back${member.first_name ? `, ${member.first_name}` : ''}. Jump into a discussion.`}
         </p>
       </div>
 
       {feed.length > 0 && (
         <section className="mb-8">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Latest activity</h2>
-          <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white">
+          <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Latest activity</h2>
+          <ul className="divide-y divide-brand-hairline rounded-lg border border-brand-border bg-white">
             {feed.map((p) => (
               <li key={p.id}>
                 <Link
                   href={`/community/${p.spaceSlug}/${p.id}`}
-                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50"
+                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-brand-canvas"
                 >
                   {p.unread ? (
-                    <span className="h-2 w-2 shrink-0 rounded-full bg-indigo-500" aria-label="unread" />
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-brand-blue" aria-label="unread" />
                   ) : (
                     <span className="h-2 w-2 shrink-0" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className={`truncate text-sm ${p.unread ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+                    <p className={`truncate text-sm ${p.unread ? 'font-semibold text-brand-blue-dark' : 'text-brand-muted'}`}>
                       {p.title}
                     </p>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-brand-muted-soft">
                       {p.spaceName} · {p.authorName} · {fmtAgo(p.createdAt)}
                     </p>
                   </div>
                   {p.commentCount > 0 && (
-                    <span className="flex items-center gap-1 text-xs text-gray-400">
+                    <span className="flex items-center gap-1 text-xs text-brand-muted-soft">
                       <MessageSquare className="h-3.5 w-3.5" />
                       {p.commentCount}
                     </span>
@@ -95,31 +101,35 @@ export default async function CommunityHomePage() {
       <ul className="grid gap-3 sm:grid-cols-2">
         {(spaces ?? []).map((space: SpaceRow) => {
           const unlocked = memberMeetsTier(member, space.min_tier_rank)
-          const card = (
-            <div className="h-full rounded-lg border border-gray-200 bg-white p-4 transition hover:border-gray-300">
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-gray-900">{space.name}</h2>
-                {!unlocked ? (
-                  <Lock className="h-4 w-4 text-gray-400" />
-                ) : (
-                  unread[space.id] > 0 && (
-                    <span className="rounded-full bg-indigo-500 px-2 py-0.5 text-xs font-semibold text-white">
-                      {unread[space.id]} new
-                    </span>
-                  )
+          const card = unlocked ? (
+            <div className="h-full rounded-card border border-brand-border border-l-4 border-l-brand-blue bg-white p-4 shadow-card transition hover:-translate-y-0.5 hover:shadow-md">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-subheading font-semibold text-brand-blue-dark">{space.name}</h2>
+                {unread[space.id] > 0 && (
+                  <span className="shrink-0 rounded-full bg-brand-orange-alt px-2 py-0.5 text-xs font-subheading font-semibold text-white">
+                    {unread[space.id]} new
+                  </span>
                 )}
               </div>
               {space.description && (
-                <p className="mt-1 text-sm text-gray-500">{space.description}</p>
+                <p className="mt-1 text-sm text-brand-muted-soft">{space.description}</p>
               )}
-              {!unlocked && (
-                <p className="mt-3 text-xs font-medium text-amber-600">
-                  Paid membership required —{' '}
-                  <Link href="/account?tab=billing" className="underline">
-                    upgrade
-                  </Link>
-                </p>
+            </div>
+          ) : (
+            <div className="h-full rounded-card border border-brand-border bg-brand-canvas p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-subheading font-semibold text-brand-muted">{space.name}</h2>
+                <Lock className="h-4 w-4 shrink-0 text-brand-muted-soft" />
+              </div>
+              {space.description && (
+                <p className="mt-1 text-sm text-brand-muted-soft">{space.description}</p>
               )}
+              <Link
+                href="/account?tab=billing"
+                className="mt-3 inline-flex items-center gap-1 text-xs font-subheading font-semibold text-brand-gold-ink hover:underline"
+              >
+                <Lock className="h-3 w-3" /> Unlock with membership →
+              </Link>
             </div>
           )
 
@@ -136,7 +146,7 @@ export default async function CommunityHomePage() {
       </ul>
 
       {(!spaces || spaces.length === 0) && (
-        <p className="text-sm text-gray-500">No spaces yet. Check back soon.</p>
+        <p className="text-sm text-brand-muted-soft">No spaces yet. Check back soon.</p>
       )}
     </div>
   )

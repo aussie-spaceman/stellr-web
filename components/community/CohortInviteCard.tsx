@@ -24,26 +24,26 @@ export function CohortInviteCard({ cohortId, name }: { cohortId: string; name: s
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-indigo-200 bg-indigo-50/50 p-4">
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-brand-blue bg-brand-blue/5/50 p-4">
       <div className="flex items-center gap-2">
-        <Mail className="h-4 w-4 text-indigo-500" />
+        <Mail className="h-4 w-4 text-brand-blue" />
         <div>
-          <p className="font-medium text-gray-900">{name}</p>
-          <p className="text-xs text-gray-500">You&apos;ve been invited to this mentoring cohort.</p>
+          <p className="font-medium text-brand-blue-dark">{name}</p>
+          <p className="text-xs text-brand-muted-soft">You&apos;ve been invited to this mentoring cohort.</p>
         </div>
       </div>
       <div className="flex items-center gap-2">
         <button
           onClick={() => respond('accept')}
           disabled={busy}
-          className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded-md bg-brand-blue-dark px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
         >
           Accept
         </button>
         <button
           onClick={() => respond('decline')}
           disabled={busy}
-          className="rounded-md px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50"
+          className="rounded-md px-3 py-1.5 text-sm text-brand-muted-soft hover:text-brand-muted disabled:opacity-50"
         >
           Decline
         </button>

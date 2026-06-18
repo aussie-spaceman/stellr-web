@@ -27,10 +27,10 @@ interface Props {
 }
 
 const CATEGORY: Record<string, { label: string; icon: LucideIcon; cls: string }> = {
-  membership: { label: 'Membership', icon: Award, cls: 'bg-indigo-50 text-indigo-600' },
+  membership: { label: 'Membership', icon: Award, cls: 'bg-brand-blue/5 text-brand-blue' },
   profile: { label: 'Profile', icon: User, cls: 'bg-sky-50 text-sky-600' },
-  account: { label: 'Account', icon: ShieldCheck, cls: 'bg-gray-100 text-gray-600' },
-  event: { label: 'Event', icon: Calendar, cls: 'bg-amber-50 text-amber-600' },
+  account: { label: 'Account', icon: ShieldCheck, cls: 'bg-brand-hairline text-brand-muted' },
+  event: { label: 'Event', icon: Calendar, cls: 'bg-brand-orange/5 text-brand-gold-ink' },
   billing: { label: 'Billing', icon: CreditCard, cls: 'bg-emerald-50 text-emerald-600' },
   docusign: { label: 'Consent form', icon: FileText, cls: 'bg-purple-50 text-purple-600' },
   community: { label: 'Community', icon: Users, cls: 'bg-rose-50 text-rose-600' },
@@ -79,8 +79,8 @@ export function ActivityTimeline({ items: initial, fetchUrl, pageSize = 30 }: Pr
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-center">
-        <ActivityIcon className="h-6 w-6 text-gray-300" />
-        <p className="mt-2 text-sm text-gray-400">No activity recorded yet.</p>
+        <ActivityIcon className="h-6 w-6 text-brand-muted-soft" />
+        <p className="mt-2 text-sm text-brand-muted-soft">No activity recorded yet.</p>
       </div>
     )
   }
@@ -90,21 +90,21 @@ export function ActivityTimeline({ items: initial, fetchUrl, pageSize = 30 }: Pr
       <ul className="space-y-0">
         {items.map((item, i) => {
           const cat = CATEGORY[item.category] ?? {
-            label: item.category, icon: ActivityIcon, cls: 'bg-gray-100 text-gray-600',
+            label: item.category, icon: ActivityIcon, cls: 'bg-brand-hairline text-brand-muted',
           }
           const Icon = cat.icon
           const actor = item.actor_label || ACTOR_LABEL[item.actor_type] || 'System'
           const last = i === items.length - 1
           return (
             <li key={item.id} className="relative flex gap-3 pb-5">
-              {!last && <span className="absolute left-[15px] top-8 bottom-0 w-px bg-gray-200" aria-hidden />}
+              {!last && <span className="absolute left-[15px] top-8 bottom-0 w-px bg-brand-border" aria-hidden />}
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${cat.cls}`}>
                 <Icon className="h-4 w-4" />
               </span>
               <div className="min-w-0 flex-1 pt-0.5">
-                <p className="text-sm text-gray-900">{item.summary}</p>
-                <p className="mt-0.5 text-xs text-gray-400">
-                  <span className="font-medium text-gray-500">{cat.label}</span>
+                <p className="text-sm text-brand-blue-dark">{item.summary}</p>
+                <p className="mt-0.5 text-xs text-brand-muted-soft">
+                  <span className="font-medium text-brand-muted-soft">{cat.label}</span>
                   {' · '}
                   {actor}
                   {' · '}
@@ -122,7 +122,7 @@ export function ActivityTimeline({ items: initial, fetchUrl, pageSize = 30 }: Pr
         <button
           onClick={loadMore}
           disabled={loading}
-          className="mt-1 text-sm font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+          className="mt-1 text-sm font-medium text-brand-blue hover:text-brand-blue disabled:opacity-50"
         >
           {loading ? 'Loading…' : 'Load more'}
         </button>

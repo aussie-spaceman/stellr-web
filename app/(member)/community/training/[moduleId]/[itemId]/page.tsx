@@ -19,7 +19,7 @@ function Media({
 }) {
   if (!media) {
     return (
-      <div className="flex aspect-video w-full items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50 text-sm text-gray-400">
+      <div className="flex aspect-video w-full items-center justify-center rounded-xl border border-dashed border-brand-border bg-brand-canvas text-sm text-brand-muted-soft">
         No media for this lesson.
       </div>
     )
@@ -56,21 +56,21 @@ function Media({
         title={title}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
         allowFullScreen
-        className="aspect-video w-full rounded-xl border border-gray-200"
+        className="aspect-video w-full rounded-xl border border-brand-border"
       />
     )
   }
 
   if (media.type === 'document') {
     return (
-      <div className="overflow-hidden rounded-xl border border-gray-200">
+      <div className="overflow-hidden rounded-xl border border-brand-border">
         <iframe src={media.url} title={title} className="h-[70vh] w-full bg-white" />
-        <div className="flex items-center justify-end border-t border-gray-100 bg-gray-50 px-3 py-2">
+        <div className="flex items-center justify-end border-t border-brand-hairline bg-brand-canvas px-3 py-2">
           <a
             href={media.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-muted hover:text-brand-blue-dark"
           >
             <Download className="h-3.5 w-3.5" /> Download
           </a>
@@ -81,13 +81,13 @@ function Media({
 
   // External link we can't embed — offer a clean open button.
   return (
-    <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-xl border border-gray-200 bg-gray-50">
-      <FileText className="h-8 w-8 text-gray-300" />
+    <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-xl border border-brand-border bg-brand-canvas">
+      <FileText className="h-8 w-8 text-brand-muted-soft" />
       <a
         href={media.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+        className="inline-flex items-center gap-1.5 rounded-full bg-brand-blue-dark px-4 py-2 text-sm font-semibold text-white hover:bg-brand-blue-dark"
       >
         <ExternalLink className="h-4 w-4" /> Open lesson
       </a>
@@ -110,16 +110,16 @@ export default async function LessonPage({
   return (
     <div className="-mx-4 -my-8 flex min-h-screen flex-col">
       {/* Top bar */}
-      <div className="border-b border-gray-200 bg-white">
+      <div className="border-b border-brand-border bg-white">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
           <Link
             href={`/community/training/${moduleId}`}
-            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800"
+            className="inline-flex items-center gap-1 text-sm text-brand-muted-soft hover:text-brand-blue-dark"
           >
             <ArrowLeft className="h-4 w-4" />
             {lesson.moduleTitle}
           </Link>
-          <span className="ml-auto text-xs text-gray-400">
+          <span className="ml-auto text-xs text-brand-muted-soft">
             Lesson {lesson.index} of {lesson.total}
           </span>
         </div>
@@ -128,14 +128,14 @@ export default async function LessonPage({
       {/* Body */}
       <div className="flex-1 px-4 py-6">
         <div className="mx-auto max-w-3xl">
-          <h1 className="mb-4 text-2xl font-bold text-gray-900">{lesson.title}</h1>
+          <h1 className="mb-4 font-heading uppercase text-title text-brand-blue-dark">{lesson.title}</h1>
 
           {lesson.locked ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-gray-200 bg-gray-50 py-16 text-center">
-              <Lock className="h-8 w-8 text-amber-400" />
-              <p className="text-sm font-medium text-gray-700">This lesson isn’t available yet</p>
+            <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-brand-border bg-brand-canvas py-16 text-center">
+              <Lock className="h-8 w-8 text-brand-gold-ink" />
+              <p className="text-sm font-medium text-brand-muted">This lesson isn’t available yet</p>
               {lesson.availableAt && (
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-brand-muted-soft">
                   Unlocks {new Date(lesson.availableAt).toLocaleDateString()}
                 </p>
               )}
@@ -148,7 +148,7 @@ export default async function LessonPage({
                 displayName={[member.first_name, member.last_name].filter(Boolean).join(' ') || 'Member'}
               />
               {lesson.body && (
-                <div className="prose prose-sm mt-6 max-w-none whitespace-pre-wrap text-gray-700">
+                <div className="prose prose-sm mt-6 max-w-none whitespace-pre-wrap text-brand-muted">
                   {lesson.body}
                 </div>
               )}

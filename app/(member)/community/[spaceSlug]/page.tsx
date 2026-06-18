@@ -6,6 +6,7 @@ import { getCurrentMember, getSpaceBySlug, memberMeetsTier } from '@/lib/communi
 import { getSpaceChannel } from '@/lib/sessions'
 import { NewPostForm } from '@/components/community/NewPostForm'
 import { ChatPanel } from '@/components/community/ChatPanel'
+import { Avatar } from '@/components/ui/Avatar'
 
 interface PostListRow {
   id: string
@@ -38,14 +39,14 @@ export default async function SpaceFeedPage({
   // Tier gate (FR-COM-08): block the feed for members below the required tier.
   if (!memberMeetsTier(member, space.min_tier_rank)) {
     return (
-      <div className="mx-auto max-w-md rounded-lg border border-amber-200 bg-amber-50 p-6 text-center">
-        <h1 className="text-lg font-semibold text-gray-900">{space.name} is for paid members</h1>
-        <p className="mt-2 text-sm text-gray-600">
+      <div className="mx-auto max-w-md rounded-lg border border-brand-orange bg-brand-orange/5 p-6 text-center">
+        <h1 className="text-lg font-semibold text-brand-blue-dark">{space.name} is for paid members</h1>
+        <p className="mt-2 text-sm text-brand-muted">
           Upgrade your membership to join this space.
         </p>
         <Link
           href="/account?tab=billing"
-          className="mt-4 inline-block rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          className="mt-4 inline-block rounded-md bg-brand-blue-dark px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-dark"
         >
           View membership options
         </Link>
@@ -67,13 +68,13 @@ export default async function SpaceFeedPage({
 
   return (
     <div>
-      <div className="mb-2 text-sm text-gray-400">
-        <Link href="/community" className="hover:text-gray-600">Spaces</Link>
+      <div className="mb-2 text-sm text-brand-muted-soft">
+        <Link href="/community" className="hover:text-brand-muted">Spaces</Link>
         <span className="mx-1">/</span>
-        <span className="text-gray-600">{space.name}</span>
+        <span className="text-brand-muted">{space.name}</span>
       </div>
-      <h1 className="text-2xl font-bold text-gray-900">{space.name}</h1>
-      {space.description && <p className="mt-1 text-sm text-gray-500">{space.description}</p>}
+      <h1 className="font-heading uppercase text-title text-brand-blue-dark">{space.name}</h1>
+      {space.description && <p className="mt-1 text-sm text-brand-muted-soft">{space.description}</p>}
 
       <div className="mt-5">
         <ChatPanel
@@ -93,18 +94,21 @@ export default async function SpaceFeedPage({
           <li key={post.id}>
             <Link
               href={`/community/${space.slug}/${post.id}`}
-              className="block rounded-lg border border-gray-200 bg-white p-4 transition hover:border-gray-300"
+              className="block rounded-lg border border-brand-border bg-white p-4 transition hover:border-brand-border"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    {post.is_announcement && <Megaphone className="h-4 w-4 shrink-0 text-blue-500" />}
-                    {post.is_pinned && <Pin className="h-4 w-4 shrink-0 text-gray-400" />}
-                    <h2 className="truncate font-semibold text-gray-900">{post.title}</h2>
+                    {post.is_announcement && <Megaphone className="h-4 w-4 shrink-0 text-brand-blue" />}
+                    {post.is_pinned && <Pin className="h-4 w-4 shrink-0 text-brand-muted-soft" />}
+                    <h2 className="truncate font-semibold text-brand-blue-dark">{post.title}</h2>
                   </div>
-                  <p className="mt-1 text-xs text-gray-500">by {authorName(post.members)}</p>
+                  <p className="mt-1 flex items-center gap-1.5 text-xs text-brand-muted-soft">
+                    <Avatar id={authorName(post.members)} name={authorName(post.members)} size="sm" ring={false} />
+                    by {authorName(post.members)}
+                  </p>
                 </div>
-                <span className="flex shrink-0 items-center gap-1 text-xs text-gray-400">
+                <span className="flex shrink-0 items-center gap-1 text-xs text-brand-muted-soft">
                   <MessageSquare className="h-3.5 w-3.5" />
                   {post.comment_count}
                 </span>
@@ -115,7 +119,7 @@ export default async function SpaceFeedPage({
       </ul>
 
       {(!posts || posts.length === 0) && (
-        <p className="mt-6 text-center text-sm text-gray-500">
+        <p className="mt-6 text-center text-sm text-brand-muted-soft">
           No posts yet. Be the first to start a discussion.
         </p>
       )}

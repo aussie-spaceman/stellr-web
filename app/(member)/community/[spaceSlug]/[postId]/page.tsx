@@ -113,21 +113,21 @@ export default async function PostDetailPage({
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="mb-3 text-sm text-gray-400">
-        <Link href="/community" className="hover:text-gray-600">Spaces</Link>
+      <div className="mb-3 text-sm text-brand-muted-soft">
+        <Link href="/community" className="hover:text-brand-muted">Spaces</Link>
         <span className="mx-1">/</span>
-        <Link href={`/community/${space.slug}`} className="hover:text-gray-600">{space.name}</Link>
+        <Link href={`/community/${space.slug}`} className="hover:text-brand-muted">{space.name}</Link>
       </div>
 
-      <article className="rounded-lg border border-gray-200 bg-white p-5">
-        <h1 className="text-xl font-bold text-gray-900">{post.title}</h1>
-        <p className="mt-1 text-xs text-gray-500">
+      <article className="rounded-lg border border-brand-border bg-white p-5">
+        <h1 className="text-xl font-bold text-brand-blue-dark">{post.title}</h1>
+        <p className="mt-1 text-xs text-brand-muted-soft">
           by {nameOf(post.members as AuthorRel)} · {new Date(post.created_at).toLocaleDateString()}
         </p>
         <div className="mt-4">
           <RichTextContent doc={post.body_json} />
         </div>
-        <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
+        <div className="mt-4 flex items-center justify-between border-t border-brand-hairline pt-3">
           <ReactionBar
             targetType="post"
             targetId={post.id}
@@ -138,11 +138,11 @@ export default async function PostDetailPage({
       </article>
 
       <section className="mt-6">
-        <h2 className="mb-3 text-sm font-semibold text-gray-700">
+        <h2 className="mb-3 text-sm font-semibold text-brand-muted">
           {commentRows.length} {commentRows.length === 1 ? 'comment' : 'comments'}
         </h2>
 
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
+        <div className="rounded-lg border border-brand-border bg-white p-3">
           <CommentForm postId={post.id} placeholder="Join the conversation…" />
         </div>
 

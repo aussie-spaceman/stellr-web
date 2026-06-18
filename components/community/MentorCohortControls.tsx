@@ -29,7 +29,7 @@ export function MentorCohortControls({
   const onUpdate = () => router.refresh()
   return (
     <section className="space-y-6 rounded-lg border border-purple-100 bg-purple-50/30 p-5">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-purple-700">Mentor controls</h2>
+      <h2 className="text-sm font-subheading font-semibold uppercase tracking-wide text-purple-700">Mentor controls</h2>
       <SeriesScheduler cohortId={cohortId} onUpdate={onUpdate} />
       <TrainingAssigner
         cohortId={cohortId}
@@ -93,41 +93,41 @@ function SeriesScheduler({ cohortId, onUpdate }: { cohortId: string; onUpdate: (
       </button>
 
       {open && (
-        <div className="mt-3 space-y-3 rounded-md border border-gray-200 bg-white p-4">
+        <div className="mt-3 space-y-3 rounded-md border border-brand-border bg-white p-4">
           <label className="block text-sm">
-            <span className="font-medium text-gray-700">First session</span>
+            <span className="font-medium text-brand-muted">First session</span>
             <input
               type="datetime-local"
               value={startIso}
               onChange={(e) => setStartIso(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+              className="mt-1 block w-full rounded-md border border-brand-border px-3 py-1.5 text-sm"
             />
           </label>
           <div className="grid grid-cols-3 gap-3">
             <label className="block text-sm">
-              <span className="font-medium text-gray-700">Sessions</span>
+              <span className="font-medium text-brand-muted">Sessions</span>
               <input
                 type="number"
                 min={1}
                 max={52}
                 value={count}
                 onChange={(e) => setCount(Number(e.target.value))}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+                className="mt-1 block w-full rounded-md border border-brand-border px-3 py-1.5 text-sm"
               />
             </label>
             <label className="block text-sm">
-              <span className="font-medium text-gray-700">Every N days</span>
+              <span className="font-medium text-brand-muted">Every N days</span>
               <input
                 type="number"
                 min={1}
                 max={90}
                 value={intervalDays}
                 onChange={(e) => setIntervalDays(Number(e.target.value))}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+                className="mt-1 block w-full rounded-md border border-brand-border px-3 py-1.5 text-sm"
               />
             </label>
             <label className="block text-sm">
-              <span className="font-medium text-gray-700">Duration (min)</span>
+              <span className="font-medium text-brand-muted">Duration (min)</span>
               <input
                 type="number"
                 min={15}
@@ -135,18 +135,18 @@ function SeriesScheduler({ cohortId, onUpdate }: { cohortId: string; onUpdate: (
                 step={15}
                 value={durationMin}
                 onChange={(e) => setDurationMin(Number(e.target.value))}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+                className="mt-1 block w-full rounded-md border border-brand-border px-3 py-1.5 text-sm"
               />
             </label>
           </div>
           <label className="block text-sm">
-            <span className="font-medium text-gray-700">Title (optional)</span>
+            <span className="font-medium text-brand-muted">Title (optional)</span>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Mentoring session"
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+              className="mt-1 block w-full rounded-md border border-brand-border px-3 py-1.5 text-sm"
             />
           </label>
           <button
@@ -160,7 +160,7 @@ function SeriesScheduler({ cohortId, onUpdate }: { cohortId: string; onUpdate: (
         </div>
       )}
 
-      {result && <p className="mt-2 text-sm text-gray-600">{result}</p>}
+      {result && <p className="mt-2 text-sm text-brand-muted">{result}</p>}
     </div>
   )
 }
@@ -232,18 +232,18 @@ function TrainingAssigner({
             <li key={t.moduleId} className="flex items-center justify-between rounded-md bg-white px-3 py-1.5 text-sm">
               <span>
                 {t.title}
-                <span className={`ml-2 text-xs ${t.isMandatory ? 'text-amber-600' : 'text-gray-400'}`}>
+                <span className={`ml-2 text-xs ${t.isMandatory ? 'text-brand-gold-ink' : 'text-brand-muted-soft'}`}>
                   {t.isMandatory ? 'Mandatory' : 'Optional'}
                 </span>
                 {t.dueAt && (
-                  <span className="ml-2 text-xs text-gray-400">
+                  <span className="ml-2 text-xs text-brand-muted-soft">
                     due {new Date(t.dueAt).toLocaleDateString()}
                   </span>
                 )}
               </span>
               <button
                 onClick={() => unlink(t.moduleId)}
-                className="text-gray-300 hover:text-red-500"
+                className="text-brand-muted-soft hover:text-red-500"
                 title="Remove"
               >
                 <X className="h-3.5 w-3.5" />
@@ -263,11 +263,11 @@ function TrainingAssigner({
       )}
 
       {adding && (
-        <div className="mt-2 space-y-2 rounded-md border border-gray-200 bg-white p-3">
+        <div className="mt-2 space-y-2 rounded-md border border-brand-border bg-white p-3">
           <select
             value={selectedModule}
             onChange={(e) => setSelectedModule(e.target.value)}
-            className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+            className="block w-full rounded-md border border-brand-border px-3 py-1.5 text-sm"
           >
             <option value="">Select a module…</option>
             {available.map((m) => (
@@ -280,12 +280,12 @@ function TrainingAssigner({
               Mandatory
             </label>
             <label className="block text-sm">
-              <span className="text-gray-600">Due:</span>
+              <span className="text-brand-muted">Due:</span>
               <input
                 type="date"
                 value={dueAt}
                 onChange={(e) => setDueAt(e.target.value)}
-                className="ml-1 rounded-md border border-gray-300 px-2 py-1 text-sm"
+                className="ml-1 rounded-md border border-brand-border px-2 py-1 text-sm"
               />
             </label>
           </div>
@@ -297,7 +297,7 @@ function TrainingAssigner({
             >
               Add
             </button>
-            <button onClick={() => setAdding(false)} className="text-sm text-gray-500 hover:text-gray-700">
+            <button onClick={() => setAdding(false)} className="text-sm text-brand-muted-soft hover:text-brand-muted">
               Cancel
             </button>
           </div>
@@ -305,7 +305,7 @@ function TrainingAssigner({
       )}
 
       {available.length === 0 && linkedTraining.length === 0 && (
-        <p className="mt-2 text-sm text-gray-400">No training modules available to assign.</p>
+        <p className="mt-2 text-sm text-brand-muted-soft">No training modules available to assign.</p>
       )}
     </div>
   )

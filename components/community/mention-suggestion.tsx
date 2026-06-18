@@ -60,7 +60,7 @@ const MentionList = forwardRef<
   if (items.length === 0) return null
 
   return (
-    <div className="w-56 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+    <div className="w-56 overflow-hidden rounded-lg border border-brand-border bg-white py-1 shadow-lg">
       {items.map((item, i) => (
         <button
           type="button"
@@ -70,11 +70,11 @@ const MentionList = forwardRef<
             command({ id: item.id, label: item.label })
           }}
           className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm ${
-            i === index ? 'bg-gray-100' : ''
+            i === index ? 'bg-brand-hairline' : ''
           }`}
         >
-          <span className="font-medium text-gray-900">{item.label}</span>
-          {item.role && <span className="text-xs text-gray-400">{formatRole(item.role)}</span>}
+          <span className="font-medium text-brand-blue-dark">{item.label}</span>
+          {item.role && <span className="text-xs text-brand-muted-soft">{formatRole(item.role)}</span>}
         </button>
       ))}
     </div>

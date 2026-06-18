@@ -75,21 +75,21 @@ export function BookCoachingForm({ coaches, hasRemaining }: { coaches: Coach[]; 
   }
 
   if (coaches.length === 0) {
-    return <p className="text-sm text-gray-400">No coaches are available right now.</p>
+    return <p className="text-sm text-brand-muted-soft">No coaches are available right now.</p>
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
-      <h3 className="text-sm font-semibold text-gray-700">Book a coaching session</h3>
+    <div className="space-y-3 rounded-lg border border-brand-border bg-white p-4">
+      <h3 className="text-sm font-semibold text-brand-muted">Book a coaching session</h3>
       {!hasRemaining && (
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+        <p className="rounded-md bg-brand-orange/5 px-3 py-2 text-xs text-brand-gold-ink">
           You have no included sessions remaining. Booking will require purchasing an extra session.
         </p>
       )}
       <select
         value={coachId}
         onChange={(e) => setCoachId(e.target.value)}
-        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
       >
         {coaches.map((c) => (
           <option key={c.id} value={c.id}>
@@ -99,7 +99,7 @@ export function BookCoachingForm({ coaches, hasRemaining }: { coaches: Coach[]; 
       </select>
 
       {coach && (
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-brand-muted-soft">
           {coach.bio && <p className="mb-1">{coach.bio}</p>}
           {coach.availability.length > 0 ? (
             <p>
@@ -118,14 +118,14 @@ export function BookCoachingForm({ coaches, hasRemaining }: { coaches: Coach[]; 
         type="datetime-local"
         value={start}
         onChange={(e) => setStart(e.target.value)}
-        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
       />
       {error && <p className="text-xs text-red-600">{error}</p>}
       <div className="flex items-center gap-2">
         <button
           onClick={book}
           disabled={busy}
-          className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded-md bg-brand-blue-dark px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
         >
           {busy ? 'Booking…' : 'Book session'}
         </button>
@@ -133,7 +133,7 @@ export function BookCoachingForm({ coaches, hasRemaining }: { coaches: Coach[]; 
           <button
             onClick={purchase}
             disabled={busy}
-            className="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+            className="rounded-md border border-brand-blue bg-brand-blue/5 px-3 py-1.5 text-sm font-medium text-brand-blue hover:bg-brand-blue-dark disabled:opacity-50"
           >
             Purchase extra session
           </button>

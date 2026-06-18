@@ -32,18 +32,18 @@ interface Props {
 }
 
 export const ENVELOPE_STATUS_STYLES: Record<string, { label: string; cls: string }> = {
-  sent:      { label: 'Awaiting signature', cls: 'bg-amber-100 text-amber-700' },
-  delivered: { label: 'Viewed',             cls: 'bg-blue-100 text-blue-700'   },
+  sent:      { label: 'Awaiting signature', cls: 'bg-brand-orange/10 text-brand-gold-ink' },
+  delivered: { label: 'Viewed',             cls: 'bg-brand-blue/10 text-brand-blue'   },
   completed: { label: 'Signed',             cls: 'bg-green-100 text-green-700' },
   declined:  { label: 'Declined',           cls: 'bg-red-100 text-red-600'     },
-  voided:    { label: 'Voided',             cls: 'bg-gray-100 text-gray-500'   },
+  voided:    { label: 'Voided',             cls: 'bg-brand-hairline text-brand-muted-soft'   },
   // Coverage rows: the participant was covered by previously signed paperwork
   // (3-year validity) instead of receiving a new envelope.
   on_file:   { label: 'On file',            cls: 'bg-teal-100 text-teal-700'   },
 }
 
 export function EnvelopeStatusBadge({ status }: { status: string }) {
-  const { label, cls } = ENVELOPE_STATUS_STYLES[status] ?? { label: status, cls: 'bg-gray-100 text-gray-500' }
+  const { label, cls } = ENVELOPE_STATUS_STYLES[status] ?? { label: status, cls: 'bg-brand-hairline text-brand-muted-soft' }
   return <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
 }
 
@@ -65,7 +65,7 @@ function EnvelopeProgressBadge({ env }: { env: Envelope }) {
   } else if (env.status === 'declined') {
     label = 'Declined'; cls = 'bg-red-100 text-red-600'
   } else if (env.status === 'voided') {
-    label = 'Voided'; cls = 'bg-gray-100 text-gray-500'
+    label = 'Voided'; cls = 'bg-brand-hairline text-brand-muted-soft'
   } else if (completed > 0 && completed < total) {
     label = `Partially complete · ${completed} of ${total} signed`; cls = 'bg-orange-100 text-orange-700'
   } else {
@@ -109,7 +109,7 @@ function getExpiryInfo(completedAt: string): { label: string; urgency: 'ok' | 's
 
 const URGENCY_CLS: Record<string, string> = {
   ok:      'text-green-600',
-  soon:    'text-amber-600 font-medium',
+  soon:    'text-brand-gold-ink font-medium',
   expired: 'text-red-600 font-medium',
 }
 
@@ -156,18 +156,18 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
   const hasPending     = envelopes.some(e => e.status === 'sent' || e.status === 'delivered')
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <h2 className="text-base font-semibold text-gray-900 mb-1">Agreements &amp; Consent Forms</h2>
-      <p className="text-xs text-gray-500 mb-4">Your DocuSign participation agreements and parental consent forms.</p>
+    <div className="bg-white rounded-xl border border-brand-border p-6">
+      <h2 className="text-base font-semibold text-brand-blue-dark mb-1">Agreements &amp; Consent Forms</h2>
+      <p className="text-xs text-brand-muted-soft mb-4">Your DocuSign participation agreements and parental consent forms.</p>
 
       {graduated && hasMinorForms && (
-        <div className="mb-4 rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-xs text-blue-700">
+        <div className="mb-4 rounded-lg bg-brand-blue/5 border border-brand-blue/30 px-4 py-3 text-xs text-brand-blue">
           You are no longer registered as a school student. Historical consent records are kept below
           for reference. Future registrations as a mentor or adult do not require parental consent.
         </div>
       )}
 
-      <div className="divide-y divide-gray-100">
+      <div className="divide-y divide-brand-hairline">
         {envelopes.map(env => {
           const type       = env.envelope_type ?? 'minor'
           const isMinorEnv = type === 'minor'
@@ -179,15 +179,15 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
           return (
             <div key={env.id} className="flex items-start justify-between gap-4 py-3.5">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900">{env.event_title}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{TYPE_LABEL[type] ?? 'Agreement'}</p>
+                <p className="text-sm font-medium text-brand-blue-dark">{env.event_title}</p>
+                <p className="text-xs text-brand-muted-soft mt-0.5">{TYPE_LABEL[type] ?? 'Agreement'}</p>
                 {isMinorEnv && (
-                  <div className="text-xs text-gray-500 mt-0.5 space-y-0.5">
+                  <div className="text-xs text-brand-muted-soft mt-0.5 space-y-0.5">
                     <p>Parent / guardian: {env.signer_name} &middot; {env.signer_email}</p>
                     {env.minor_name && <p>Participant: {env.minor_name}</p>}
                   </div>
                 )}
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="text-xs text-brand-muted-soft mt-0.5">
                   {env.reused_from ? (
                     <>Covered by paperwork signed {env.completed_at ? fmt(env.completed_at) : '—'} &middot; no new signature was needed</>
                   ) : (
@@ -201,7 +201,7 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
                   <p className={`text-xs mt-1 ${URGENCY_CLS[expiry.urgency]}`}>{expiry.label}</p>
                 )}
                 {isMinorEnv && graduated && (
-                  <p className="text-xs text-gray-400 mt-1 italic">Historical record</p>
+                  <p className="text-xs text-brand-muted-soft mt-1 italic">Historical record</p>
                 )}
               </div>
               <div className="flex items-center gap-3 shrink-0 mt-0.5">
@@ -222,7 +222,7 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
       </div>
 
       {hasPending && (
-        <p className="text-xs text-gray-400 mt-4 pt-3 border-t border-gray-100">
+        <p className="text-xs text-brand-muted-soft mt-4 pt-3 border-t border-brand-hairline">
           A reminder will be sent automatically if the form isn&apos;t signed within 7 days.
         </p>
       )}

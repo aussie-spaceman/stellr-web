@@ -66,39 +66,39 @@ export default async function CoachingPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Coaching</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Coaching</h1>
+        <p className="mt-1 text-sm text-brand-muted-soft">
           One-on-one sessions with a Stellr coach.
         </p>
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm">
-        <span className="font-semibold text-gray-900">{ent.remaining}</span> of {ent.included} included
+      <div className="rounded-lg border border-brand-border bg-white p-4 text-sm">
+        <span className="font-semibold text-brand-blue-dark">{ent.remaining}</span> of {ent.included} included
         sessions remaining
         {ent.extraCredits > 0 && (
-          <span className="text-indigo-600"> · {ent.extraCredits} purchased</span>
+          <span className="text-brand-blue"> · {ent.extraCredits} purchased</span>
         )}
         {ent.expiresAt && (
-          <span className="text-gray-500"> · expires {new Date(ent.expiresAt).toLocaleDateString()}</span>
+          <span className="text-brand-muted-soft"> · expires {new Date(ent.expiresAt).toLocaleDateString()}</span>
         )}
       </div>
 
       <BookCoachingForm coaches={coaches} hasRemaining={ent.remaining > 0} />
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">My sessions</h2>
+        <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">My sessions</h2>
         {coaching.length === 0 ? (
-          <p className="text-sm text-gray-400">No coaching sessions yet.</p>
+          <p className="text-sm text-brand-muted-soft">No coaching sessions yet.</p>
         ) : (
           <ul className="space-y-3">
             {coaching.map((s) => {
               const upcoming = new Date(s.scheduled_start) > new Date()
               return (
-                <li key={s.id} className="rounded-lg border border-gray-200 bg-white p-4">
+                <li key={s.id} className="rounded-lg border border-brand-border bg-white p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-medium text-gray-900">{s.title ?? 'Coaching session'}</p>
-                      <p className="text-sm text-gray-500">
+                      <p className="font-medium text-brand-blue-dark">{s.title ?? 'Coaching session'}</p>
+                      <p className="text-sm text-brand-muted-soft">
                         {new Date(s.scheduled_start).toLocaleString()} · {s.status}
                       </p>
                     </div>
@@ -114,7 +114,7 @@ export default async function CoachingPage() {
                     </div>
                   </div>
                   {s.host_notes && (
-                    <p className="mt-2 rounded bg-gray-50 px-3 py-2 text-sm text-gray-600">
+                    <p className="mt-2 rounded bg-brand-canvas px-3 py-2 text-sm text-brand-muted">
                       <span className="font-medium">Coach notes:</span> {s.host_notes}
                     </p>
                   )}
@@ -126,13 +126,13 @@ export default async function CoachingPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">My actions</h2>
+        <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">My actions</h2>
         <ActionChecklist actions={actions} />
       </section>
 
       {chats.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Chat with your coach</h2>
+          <h2 className="text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Chat with your coach</h2>
           {chats.map((c) => (
             <ChatPanel
               key={c.channelId}

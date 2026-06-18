@@ -11,11 +11,11 @@ const WWW = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org
 function StatusBadge({ status }: { status: CatalogEvent['status'] }) {
   const map = {
     open: { label: 'Registration open', cls: 'bg-green-100 text-green-700' },
-    'coming-soon': { label: 'Opening soon', cls: 'bg-amber-100 text-amber-700' },
-    closed: { label: 'Registration closed', cls: 'bg-gray-100 text-gray-500' },
+    'coming-soon': { label: 'Opening soon', cls: 'bg-brand-orange/10 text-brand-gold-ink' },
+    closed: { label: 'Registration closed', cls: 'bg-brand-hairline text-brand-muted-soft' },
   }[status]
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${map.cls}`}>
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-subheading font-semibold uppercase tracking-wide ${map.cls}`}>
       {map.label}
     </span>
   )
@@ -32,22 +32,22 @@ function EventCard({ e }: { e: CatalogEvent }) {
 
   const inner = (
     <div className="flex items-start gap-3">
-      <Icon className="mt-0.5 h-5 w-5 shrink-0 text-gray-400" />
+      <Icon className="mt-0.5 h-5 w-5 shrink-0 text-brand-muted-soft" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-semibold text-gray-900">{e.title}</h3>
+          <h3 className="font-semibold text-brand-blue-dark">{e.title}</h3>
           <span
-            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-              isCampaign ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+            className={`rounded-full px-2 py-0.5 text-[10px] font-subheading font-semibold uppercase tracking-wide ${
+              isCampaign ? 'bg-purple-100 text-purple-700' : 'bg-brand-blue/10 text-brand-blue'
             }`}
           >
             {isCampaign ? 'Campaign' : 'Live Event'}
           </span>
-          {external && <ArrowUpRight className="h-3.5 w-3.5 text-gray-400" />}
+          {external && <ArrowUpRight className="h-3.5 w-3.5 text-brand-muted-soft" />}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           {e.date && (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-brand-muted-soft">
               {new Date(e.date).toLocaleDateString(undefined, {
                 year: 'numeric',
                 month: 'long',
@@ -57,7 +57,7 @@ function EventCard({ e }: { e: CatalogEvent }) {
             </p>
           )}
           {e.registered ? (
-            <span className="rounded-full bg-brand-blue/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-blue">
+            <span className="rounded-full bg-brand-blue/10 px-2 py-0.5 text-[10px] font-subheading font-semibold uppercase tracking-wide text-brand-blue">
               Registered
             </span>
           ) : (
@@ -69,7 +69,7 @@ function EventCard({ e }: { e: CatalogEvent }) {
   )
 
   const className =
-    'block rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-gray-300'
+    'block rounded-lg border border-brand-border bg-white p-4 transition-colors hover:border-brand-border'
 
   return external ? (
     <a href={href} className={className}>
@@ -97,14 +97,14 @@ export default async function EventsPortalPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Events &amp; Campaigns</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Events &amp; Campaigns</h1>
+        <p className="mt-1 text-sm text-brand-muted-soft">
           Your registrations, plus everything coming up in the next 12 months.
         </p>
       </div>
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+        <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">
           Your events &amp; campaigns
         </h2>
         {registered.length > 0 ? (
@@ -114,7 +114,7 @@ export default async function EventsPortalPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-brand-muted-soft">
             You&apos;re not registered for anything yet — browse what&apos;s coming up below.
           </p>
         )}
@@ -122,7 +122,7 @@ export default async function EventsPortalPage() {
 
       {available.length > 0 && (
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+          <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">
             Browse events &amp; campaigns
           </h2>
           <div className="grid gap-3 sm:grid-cols-2">

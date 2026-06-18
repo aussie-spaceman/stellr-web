@@ -4,7 +4,9 @@ import { NextResponse } from 'next/server'
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
 const isAdminEventsRoute = createRouteMatcher(['/admin/events(.*)'])
-const isCommunityRoute = createRouteMatcher(['/community(.*)'])
+// Member-only app surfaces that require a signed-in user (Home dashboard + the
+// community portal). Unauthenticated hits are bounced to sign-up.
+const isCommunityRoute = createRouteMatcher(['/community(.*)', '/home(.*)'])
 const isAuthRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)'])
 
 // Pages that live on www only — redirect away from app subdomain
@@ -33,7 +35,7 @@ export default clerkMiddleware(async (auth, req) => {
 
   if (isAppSubdomain) {
     if (url.pathname === '/') {
-      return NextResponse.redirect(new URL(userId ? '/community' : '/sign-in', req.url))
+      return NextResponse.redirect(new URL(userId ? '/home' : '/sign-in', req.url))
     }
     // The events *list* lives in-app on the app subdomain (the member-facing
     // event/campaign catalog). Serve the member portal page at /events without
@@ -48,7 +50,7 @@ export default clerkMiddleware(async (auth, req) => {
   }
 
   if (isAuthRoute(req) && userId) {
-    return NextResponse.redirect(new URL('/account', req.url))
+    return NextResponse.redirect(new URL('/home', req.url))
   }
 
   if (isCommunityRoute(req) && !userId) {

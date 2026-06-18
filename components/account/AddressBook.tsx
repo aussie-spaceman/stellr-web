@@ -16,7 +16,7 @@ interface Address {
 }
 
 const empty = { label: '', line1: '', line2: '', city: '', state: '', postcode: '', country: 'US', is_default: false }
-const inputCls = 'rounded-md border border-gray-200 px-2 py-1.5 text-sm'
+const inputCls = 'rounded-md border border-brand-border px-2 py-1.5 text-sm'
 
 // Member shipping address book — used by storefront checkout and reship.
 export function AddressBook() {
@@ -68,45 +68,45 @@ export function AddressBook() {
 
   return (
     <div>
-      <h2 className="mb-1 text-sm font-semibold text-gray-900">Shipping addresses</h2>
-      <p className="mb-3 text-xs text-gray-500">Used for store orders and event merch reshipped to you.</p>
+      <h2 className="mb-1 text-sm font-semibold text-brand-blue-dark">Shipping addresses</h2>
+      <p className="mb-3 text-xs text-brand-muted-soft">Used for store orders and event merch reshipped to you.</p>
 
       {loading ? (
-        <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+        <Loader2 className="h-4 w-4 animate-spin text-brand-muted-soft" />
       ) : (
         <div className="space-y-2">
           {addresses.map((a) => (
-            <div key={a.id} className="flex items-start justify-between rounded-lg border border-gray-200 p-3 text-sm">
+            <div key={a.id} className="flex items-start justify-between rounded-lg border border-brand-border p-3 text-sm">
               <div>
-                <div className="font-medium text-gray-900">
+                <div className="font-medium text-brand-blue-dark">
                   {a.label || 'Address'}
                   {a.is_default && (
-                    <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] text-indigo-700">Default</span>
+                    <span className="ml-2 rounded bg-brand-blue/5 px-1.5 py-0.5 text-[11px] text-brand-blue">Default</span>
                   )}
                 </div>
-                <div className="text-gray-600">
+                <div className="text-brand-muted">
                   {a.line1}
                   {a.line2 ? `, ${a.line2}` : ''}, {a.city}, {a.state} {a.postcode}, {a.country}
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 {!a.is_default && (
-                  <button onClick={() => makeDefault(a.id)} className="text-gray-400 hover:text-indigo-600" aria-label="Make default">
+                  <button onClick={() => makeDefault(a.id)} className="text-brand-muted-soft hover:text-brand-blue" aria-label="Make default">
                     <Star className="h-4 w-4" />
                   </button>
                 )}
-                <button onClick={() => remove(a.id)} className="text-gray-400 hover:text-red-600" aria-label="Delete address">
+                <button onClick={() => remove(a.id)} className="text-brand-muted-soft hover:text-red-600" aria-label="Delete address">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             </div>
           ))}
-          {addresses.length === 0 && <p className="text-sm text-gray-400">No saved addresses.</p>}
+          {addresses.length === 0 && <p className="text-sm text-brand-muted-soft">No saved addresses.</p>}
         </div>
       )}
 
       {adding ? (
-        <div className="mt-3 grid gap-2 rounded-lg border border-gray-200 p-3 sm:grid-cols-2">
+        <div className="mt-3 grid gap-2 rounded-lg border border-brand-border p-3 sm:grid-cols-2">
           <input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Label (Home)" className={inputCls + ' sm:col-span-2'} />
           <input value={form.line1} onChange={(e) => setForm({ ...form, line1: e.target.value })} placeholder="Address line 1" className={inputCls + ' sm:col-span-2'} />
           <input value={form.line2} onChange={(e) => setForm({ ...form, line2: e.target.value })} placeholder="Address line 2" className={inputCls + ' sm:col-span-2'} />
@@ -114,15 +114,15 @@ export function AddressBook() {
           <input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} placeholder="State" className={inputCls} />
           <input value={form.postcode} onChange={(e) => setForm({ ...form, postcode: e.target.value })} placeholder="Postcode" className={inputCls} />
           <input value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} placeholder="Country" className={inputCls} />
-          <label className="flex items-center gap-2 text-sm text-gray-700 sm:col-span-2">
+          <label className="flex items-center gap-2 text-sm text-brand-muted sm:col-span-2">
             <input type="checkbox" checked={form.is_default} onChange={(e) => setForm({ ...form, is_default: e.target.checked })} />
             Set as default
           </label>
           <div className="flex gap-2 sm:col-span-2">
-            <button onClick={add} disabled={busy} className="flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-700 disabled:opacity-50">
+            <button onClick={add} disabled={busy} className="flex items-center gap-1 rounded-md bg-brand-blue px-3 py-1.5 text-sm text-white hover:bg-brand-blue-dark disabled:opacity-50">
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Save address
             </button>
-            <button onClick={() => setAdding(false)} className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
+            <button onClick={() => setAdding(false)} className="rounded-md border border-brand-border px-3 py-1.5 text-sm text-brand-muted hover:bg-brand-canvas">
               Cancel
             </button>
           </div>
@@ -130,7 +130,7 @@ export function AddressBook() {
       ) : (
         <button
           onClick={() => setAdding(true)}
-          className="mt-3 flex items-center gap-1 rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          className="mt-3 flex items-center gap-1 rounded-md border border-brand-border px-3 py-1.5 text-sm text-brand-muted hover:bg-brand-canvas"
         >
           <Plus className="h-4 w-4" /> Add address
         </button>

@@ -35,11 +35,11 @@ export function ScheduleMentoringForm({
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-2 rounded-md bg-gray-50 p-3">
+    <div className="flex flex-wrap items-end gap-2 rounded-md bg-brand-canvas p-3">
       <select
         value={cohortId}
         onChange={(e) => setCohortId(e.target.value)}
-        className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+        className="rounded-md border border-brand-border px-2 py-1.5 text-sm"
       >
         {cohorts.map((c) => (
           <option key={c.id} value={c.id}>
@@ -51,12 +51,12 @@ export function ScheduleMentoringForm({
         type="datetime-local"
         value={start}
         onChange={(e) => setStart(e.target.value)}
-        className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+        className="rounded-md border border-brand-border px-2 py-1.5 text-sm"
       />
       <button
         onClick={schedule}
         disabled={busy}
-        className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        className="rounded-md bg-brand-blue-dark px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
       >
         {busy ? 'Scheduling…' : 'Schedule session'}
       </button>

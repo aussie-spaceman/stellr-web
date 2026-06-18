@@ -1,5 +1,6 @@
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { ArrowLeft, FileText, Lock } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
 import { memberIsParticipant, getEventMaterials } from '@/lib/event-portal'
@@ -33,44 +34,63 @@ export default async function EventPortalPage({
     <div>
       <Link
         href="/events"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-brand-muted-soft hover:text-brand-muted"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to Events
       </Link>
 
-      <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-bold text-gray-900">{event.title}</h1>
-        <span
-          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-            isCampaign ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-          }`}
-        >
-          {isCampaign ? 'Campaign' : 'Live Event'}
-        </span>
+      {/* Orange event hero — mirrors the Home next-event treatment (T3.5) */}
+      <div
+        className="relative overflow-hidden rounded-card-lg p-6 text-white"
+        style={{ background: 'linear-gradient(115deg,#da6220,#c2410c)' }}
+      >
+        <Image
+          src="/images/logo-icon.svg"
+          alt=""
+          width={180}
+          height={180}
+          className="pointer-events-none absolute -bottom-10 -right-8 opacity-[0.12] brightness-0 invert"
+        />
+        <div className="relative">
+          <span className="eyebrow rounded-full bg-white/20 px-2.5 py-1 text-[11px]">
+            {isCampaign ? 'Campaign' : 'Live Event'}
+          </span>
+          <h1 className="mt-2 font-heading text-[27px] uppercase">{event.title}</h1>
+          {event.date && (
+            <p className="mt-1 text-[13.5px] text-orange-100">
+              {new Date(event.date).toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })}
+            </p>
+          )}
+        </div>
       </div>
 
       <section className="mt-6">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+        <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">
           Materials
         </h2>
         {materials.length === 0 ? (
-          <p className="text-sm text-gray-500">No materials posted yet.</p>
+          <p className="text-sm text-brand-muted-soft">No materials posted yet.</p>
         ) : (
           <ul className="space-y-3">
             {materials.map((m) => (
               <li
                 key={m.id}
-                className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 bg-white p-4"
+                className="flex items-start justify-between gap-4 rounded-lg border border-brand-border bg-white p-4"
               >
                 <div className="flex min-w-0 items-start gap-3">
-                  <FileText className="mt-0.5 h-5 w-5 shrink-0 text-gray-400" />
+                  <FileText className="mt-0.5 h-5 w-5 shrink-0 text-brand-muted-soft" />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-gray-900">{m.title}</h3>
-                      {!m.canDownload && <Lock className="h-3.5 w-3.5 text-amber-500" />}
+                      <h3 className="font-semibold text-brand-blue-dark">{m.title}</h3>
+                      {!m.canDownload && <Lock className="h-3.5 w-3.5 text-brand-gold-ink" />}
                     </div>
-                    {m.description && <p className="mt-0.5 text-sm text-gray-500">{m.description}</p>}
+                    {m.description && <p className="mt-0.5 text-sm text-brand-muted-soft">{m.description}</p>}
                   </div>
                 </div>
                 <div className="shrink-0">
@@ -82,7 +102,7 @@ export default async function EventPortalPage({
                   ) : (
                     <a
                       href="/account?tab=billing"
-                      className="inline-block rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                      className="inline-block rounded-md border border-brand-orange bg-brand-orange/5 px-3 py-1.5 text-xs font-medium text-brand-gold-ink hover:bg-brand-orange/10"
                     >
                       Upgrade
                     </a>
@@ -96,7 +116,7 @@ export default async function EventPortalPage({
 
       {training.length > 0 && (
         <section className="mt-8">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+          <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">
             Training
           </h2>
           <ul className="space-y-3">
@@ -104,10 +124,10 @@ export default async function EventPortalPage({
               <li key={t.id}>
                 <Link
                   href={`/community/training/${t.id}`}
-                  className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-4 hover:border-gray-300"
+                  className="flex items-center justify-between rounded-lg border border-brand-border bg-white p-4 hover:border-brand-border"
                 >
-                  <span className="font-medium text-gray-900">{t.title}</span>
-                  <span className="text-xs text-gray-500">
+                  <span className="font-medium text-brand-blue-dark">{t.title}</span>
+                  <span className="text-xs text-brand-muted-soft">
                     {t.completedCount} of {t.itemCount} complete
                   </span>
                 </Link>

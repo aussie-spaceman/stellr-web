@@ -36,7 +36,7 @@ export function RegistrationSubmittedModal() {
         <button
           type="button"
           onClick={close}
-          className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"
+          className="absolute right-4 top-4 text-brand-muted-soft hover:text-brand-muted"
           aria-label="Close"
         >
           <X size={20} />
@@ -49,13 +49,13 @@ export function RegistrationSubmittedModal() {
         <h2 id="registration-submitted-title" className="text-center text-2xl font-bold text-brand-blue-dark mb-2">
           Registration Submitted!
         </h2>
-        <p className="text-center text-gray-600 mb-6">
+        <p className="text-center text-brand-muted mb-6">
           You&apos;re signed in to your Stellr portal. A confirmation email is on its way.
         </p>
 
-        <div className="rounded-xl border border-gray-200 p-5 text-left space-y-3 mb-6">
+        <div className="rounded-xl border border-brand-border p-5 text-left space-y-3 mb-6">
           <p className="font-semibold text-brand-blue-dark">What happens next?</p>
-          <ul className="space-y-2 text-sm text-gray-600">
+          <ul className="space-y-2 text-sm text-brand-muted">
             <li className="flex items-start gap-2">
               <span className="text-brand-blue mt-0.5">→</span>
               <span>

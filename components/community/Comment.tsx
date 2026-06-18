@@ -5,6 +5,7 @@ import { RichTextContent } from './RichTextContent'
 import { CommentForm } from './CommentForm'
 import { ReactionBar } from './ReactionBar'
 import { FlagButton } from './FlagButton'
+import { Avatar } from '@/components/ui/Avatar'
 
 export interface CommentNode {
   id: string
@@ -33,10 +34,11 @@ export function Comment({ node, depth = 0 }: { node: CommentNode; depth?: number
   const canNest = depth < 1 // one level of nesting
 
   return (
-    <div className={depth > 0 ? 'mt-3 border-l-2 border-gray-100 pl-4' : ''}>
+    <div className={depth > 0 ? 'mt-3 border-l-2 border-brand-hairline pl-4' : ''}>
       <div className="rounded-lg bg-white p-3">
-        <div className="mb-1 flex items-center gap-2 text-xs text-gray-500">
-          <span className="font-medium text-gray-700">{node.authorName}</span>
+        <div className="mb-1 flex items-center gap-2 text-xs text-brand-muted-soft">
+          <Avatar id={node.authorName} name={node.authorName} size="sm" ring={false} />
+          <span className="font-medium text-brand-muted">{node.authorName}</span>
           <span>·</span>
           <span>{timeAgo(node.createdAt)}</span>
         </div>
@@ -47,7 +49,7 @@ export function Comment({ node, depth = 0 }: { node: CommentNode; depth?: number
             {canNest && (
               <button
                 onClick={() => setReplying((r) => !r)}
-                className="text-xs font-medium text-gray-500 hover:text-gray-700"
+                className="text-xs font-medium text-brand-muted-soft hover:text-brand-muted"
               >
                 Reply
               </button>

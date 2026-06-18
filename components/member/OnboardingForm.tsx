@@ -107,7 +107,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
         setError(data.error ?? 'Something went wrong')
         return
       }
-      router.push('/account')
+      router.push('/home')
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {
@@ -116,20 +116,20 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-8">
+    <div className="bg-white rounded-xl border border-brand-border p-8">
       {/* Step indicator */}
       <div className="flex gap-2 mb-8">
         {[1, 2, 3].map((s) => (
           <div
             key={s}
-            className={`h-1.5 flex-1 rounded-full ${s <= step ? 'bg-brand-blue' : 'bg-gray-200'}`}
+            className={`h-1.5 flex-1 rounded-full ${s <= step ? 'bg-brand-blue' : 'bg-brand-border'}`}
           />
         ))}
       </div>
 
       {step === 1 && (
         <div className="space-y-4">
-          <h2 className="text-base font-semibold text-gray-900">What best describes you?</h2>
+          <h2 className="text-base font-semibold text-brand-blue-dark">What best describes you?</h2>
           <div className="grid grid-cols-1 gap-3">
             {ROLES.map((r) => (
               <button
@@ -137,8 +137,8 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
                 onClick={() => handleRoleSelect(r)}
                 className={`text-left px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
                   form.event_role === r.value
-                    ? 'border-brand-blue bg-blue-50 text-brand-blue'
-                    : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                    ? 'border-brand-blue bg-brand-blue/5 text-brand-blue'
+                    : 'border-brand-border hover:border-brand-border text-brand-muted'
                 }`}
               >
                 {r.label}
@@ -148,7 +148,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
           <button
             onClick={() => setStep(2)}
             disabled={!form.event_role}
-            className="w-full mt-4 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-800 disabled:opacity-40"
+            className="w-full mt-4 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-40"
           >
             Continue
           </button>
@@ -157,24 +157,24 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
 
       {step === 2 && (
         <div className="space-y-4">
-          <h2 className="text-base font-semibold text-gray-900">Personal details</h2>
+          <h2 className="text-base font-semibold text-brand-blue-dark">Personal details</h2>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Date of birth</label>
+              <label className="block text-xs text-brand-muted-soft mb-1">Date of birth</label>
               <input
                 type="date"
                 value={form.date_of_birth}
                 onChange={(e) => set('date_of_birth', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Gender</label>
+              <label className="block text-xs text-brand-muted-soft mb-1">Gender</label>
               <select
                 value={form.gender}
                 onChange={(e) => set('gender', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               >
                 <option value="">Select…</option>
                 {GENDERS.map((g) => (
@@ -187,23 +187,23 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Phone</label>
+            <label className="block text-xs text-brand-muted-soft mb-1">Phone</label>
             <input
               type="tel"
               value={form.phone}
               onChange={(e) => set('phone', e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
             />
           </div>
 
           {(form.age_bracket === 'high_school' || form.age_bracket === 'college') && (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Grade / Year</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">Grade / Year</label>
                 <select
                   value={form.grade}
                   onChange={(e) => set('grade', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 >
                   <option value="">Select…</option>
                   {GRADES.filter((g) =>
@@ -216,11 +216,11 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">T-shirt size</label>
+                <label className="block text-xs text-brand-muted-soft mb-1">T-shirt size</label>
                 <select
                   value={form.tshirt_size}
                   onChange={(e) => set('tshirt_size', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 >
                   <option value="">Select…</option>
                   {['S','M','L','XL','2XL','3XL_plus'].map((s) => (
@@ -234,19 +234,19 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
           {/* School — only shown for non-adults */}
           {form.age_bracket !== 'adult' && (
             <div>
-              <label className="block text-xs text-gray-500 mb-1">School</label>
+              <label className="block text-xs text-brand-muted-soft mb-1">School</label>
               <SchoolSearchInput onChange={setSchoolSelection} />
             </div>
           )}
 
           <div className="flex gap-3 pt-2">
-            <button onClick={() => setStep(1)} className="flex-1 border border-gray-200 rounded-lg py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <button onClick={() => setStep(1)} className="flex-1 border border-brand-border rounded-lg py-2.5 text-sm font-medium text-brand-muted hover:bg-brand-canvas">
               Back
             </button>
             <button
               onClick={() => setStep(3)}
               disabled={!form.date_of_birth || !form.gender}
-              className="flex-1 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-800 disabled:opacity-40"
+              className="flex-1 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-40"
             >
               Continue
             </button>
@@ -256,57 +256,57 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
 
       {step === 3 && (
         <div className="space-y-4">
-          <h2 className="text-base font-semibold text-gray-900">Emergency contact</h2>
-          <p className="text-xs text-gray-500">Required for event participation.</p>
+          <h2 className="text-base font-semibold text-brand-blue-dark">Emergency contact</h2>
+          <p className="text-xs text-brand-muted-soft">Required for event participation.</p>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">First name</label>
+              <label className="block text-xs text-brand-muted-soft mb-1">First name</label>
               <input
                 type="text"
                 value={form.ec_first_name}
                 onChange={(e) => set('ec_first_name', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Last name</label>
+              <label className="block text-xs text-brand-muted-soft mb-1">Last name</label>
               <input
                 type="text"
                 value={form.ec_last_name}
                 onChange={(e) => set('ec_last_name', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Email</label>
+              <label className="block text-xs text-brand-muted-soft mb-1">Email</label>
               <input
                 type="email"
                 value={form.ec_email}
                 onChange={(e) => set('ec_email', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Phone</label>
+              <label className="block text-xs text-brand-muted-soft mb-1">Phone</label>
               <input
                 type="tel"
                 value={form.ec_phone}
                 onChange={(e) => set('ec_phone', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Relationship to participant</label>
+            <label className="block text-xs text-brand-muted-soft mb-1">Relationship to participant</label>
             <select
               value={form.ec_relationship}
               onChange={(e) => set('ec_relationship', e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
             >
               <option value="">Select…</option>
               {EMERGENCY_RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
@@ -316,13 +316,13 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <div className="flex gap-3 pt-2">
-            <button onClick={() => setStep(2)} className="flex-1 border border-gray-200 rounded-lg py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <button onClick={() => setStep(2)} className="flex-1 border border-brand-border rounded-lg py-2.5 text-sm font-medium text-brand-muted hover:bg-brand-canvas">
               Back
             </button>
             <button
               onClick={handleSubmit}
               disabled={loading}
-              className="flex-1 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-800 disabled:opacity-50"
+              className="flex-1 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-50"
             >
               {loading ? 'Saving…' : 'Complete profile'}
             </button>

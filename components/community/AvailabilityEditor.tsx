@@ -70,24 +70,24 @@ export function AvailabilityEditor({ windows }: { windows: Window[] }) {
         {windows.map((w) => (
           <li
             key={w.id}
-            className="flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-sm"
+            className="flex items-center justify-between rounded-md border border-brand-border bg-white px-3 py-2 text-sm"
           >
             <span>
               {DAYS[w.weekday]} · {fmt(w.start_minute)}–{fmt(w.end_minute)}
             </span>
-            <button onClick={() => remove(w.id)} disabled={busy} className="text-gray-400 hover:text-red-600">
+            <button onClick={() => remove(w.id)} disabled={busy} className="text-brand-muted-soft hover:text-red-600">
               <Trash2 className="h-4 w-4" />
             </button>
           </li>
         ))}
-        {windows.length === 0 && <li className="text-sm text-gray-400">No availability set.</li>}
+        {windows.length === 0 && <li className="text-sm text-brand-muted-soft">No availability set.</li>}
       </ul>
 
-      <div className="flex flex-wrap items-end gap-2 rounded-md bg-gray-50 p-3">
+      <div className="flex flex-wrap items-end gap-2 rounded-md bg-brand-canvas p-3">
         <select
           value={weekday}
           onChange={(e) => setWeekday(Number(e.target.value))}
-          className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          className="rounded-md border border-brand-border px-2 py-1.5 text-sm"
         >
           {DAYS.map((d, i) => (
             <option key={d} value={i}>
@@ -99,19 +99,19 @@ export function AvailabilityEditor({ windows }: { windows: Window[] }) {
           type="time"
           value={from}
           onChange={(e) => setFrom(e.target.value)}
-          className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          className="rounded-md border border-brand-border px-2 py-1.5 text-sm"
         />
-        <span className="text-sm text-gray-400">to</span>
+        <span className="text-sm text-brand-muted-soft">to</span>
         <input
           type="time"
           value={to}
           onChange={(e) => setTo(e.target.value)}
-          className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          className="rounded-md border border-brand-border px-2 py-1.5 text-sm"
         />
         <button
           onClick={add}
           disabled={busy}
-          className="inline-flex items-center gap-1 rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="inline-flex items-center gap-1 rounded-md bg-brand-blue-dark px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
         >
           <Plus className="h-3.5 w-3.5" /> Add
         </button>

@@ -46,16 +46,16 @@ export function RequestDeletionButton({ entity, id, label, className }: Props) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className={className ?? 'text-xs text-gray-400 hover:text-red-500'}
+        className={className ?? 'text-xs text-brand-muted-soft hover:text-red-500'}
       >
         Request deletion
       </button>
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => state !== 'sending' && setOpen(false)}>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-xl max-w-md w-full p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-gray-900">Request deletion</h2>
-            <p className="text-sm text-gray-600">
+          <div className="bg-white rounded-xl border border-brand-border shadow-xl max-w-md w-full p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-brand-blue-dark">Request deletion</h2>
+            <p className="text-sm text-brand-muted">
               Ask an administrator to delete {label}. This is reviewed before anything is removed.
             </p>
             <textarea
@@ -63,15 +63,15 @@ export function RequestDeletionButton({ entity, id, label, className }: Props) {
               onChange={(e) => setReason(e.target.value)}
               placeholder="Reason (optional)"
               rows={3}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
             />
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex items-center justify-end gap-3">
-              <button onClick={() => setOpen(false)} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5">Cancel</button>
+              <button onClick={() => setOpen(false)} className="text-sm text-brand-muted-soft hover:text-brand-muted px-3 py-1.5">Cancel</button>
               <button
                 onClick={submit}
                 disabled={state === 'sending'}
-                className="bg-indigo-600 text-white text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                className="bg-brand-blue text-white text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-brand-blue-dark disabled:opacity-50"
               >
                 {state === 'sending' ? 'Sending…' : 'Send request'}
               </button>

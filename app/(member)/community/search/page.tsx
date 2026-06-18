@@ -93,37 +93,37 @@ export default async function CommunitySearchPage({
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Search</h1>
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Search</h1>
       </div>
 
       <form method="GET" className="mb-6 flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted-soft" />
           <input
             name="q"
             defaultValue={trimmedQ}
             placeholder="Search posts and resources…"
             autoFocus
-            className="w-full rounded-md border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-gray-400 focus:outline-none"
+            className="w-full rounded-md border border-brand-border py-2 pl-9 pr-3 text-sm focus:border-brand-border focus:outline-none"
           />
         </div>
         <button
           type="submit"
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          className="rounded-md bg-brand-blue-dark px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-dark"
         >
           Search
         </button>
       </form>
 
       {trimmedQ && (
-        <p className="mb-4 text-sm text-gray-500">
+        <p className="mb-4 text-sm text-brand-muted-soft">
           {total} result{total !== 1 ? 's' : ''} for <strong>"{trimmedQ}"</strong>
         </p>
       )}
 
       {posts.length > 0 && (
         <section className="mb-8">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-400">Posts</h2>
+          <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Posts</h2>
           <ul className="space-y-2">
             {posts.map((post) => {
               const space = spaceOf(post.community_spaces)
@@ -131,15 +131,15 @@ export default async function CommunitySearchPage({
                 <li key={post.id}>
                   <Link
                     href={`/community/${space?.slug ?? 'general'}/${post.id}`}
-                    className="block rounded-lg border border-gray-200 bg-white p-4 hover:border-gray-300"
+                    className="block rounded-lg border border-brand-border bg-white p-4 hover:border-brand-border"
                   >
-                    <p className="font-semibold text-gray-900">{post.title}</p>
+                    <p className="font-semibold text-brand-blue-dark">{post.title}</p>
                     {post.body_text && (
-                      <p className="mt-1 text-sm text-gray-500 line-clamp-2">
+                      <p className="mt-1 text-sm text-brand-muted-soft line-clamp-2">
                         {snippet(post.body_text, trimmedQ)}
                       </p>
                     )}
-                    <p className="mt-1 text-xs text-gray-400">
+                    <p className="mt-1 text-xs text-brand-muted-soft">
                       {space?.name ?? 'Community'} · {new Date(post.created_at).toLocaleDateString()}
                     </p>
                   </Link>
@@ -152,22 +152,22 @@ export default async function CommunitySearchPage({
 
       {resources.length > 0 && (
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-400">Resources</h2>
+          <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Resources</h2>
           <ul className="space-y-2">
             {resources.map((r) => (
               <li key={r.id}>
                 <Link
                   href="/community/resources"
-                  className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-4 hover:border-gray-300"
+                  className="flex items-start gap-3 rounded-lg border border-brand-border bg-white p-4 hover:border-brand-border"
                 >
-                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-brand-muted-soft" />
                   <div>
-                    <p className="font-semibold text-gray-900">{r.title}</p>
+                    <p className="font-semibold text-brand-blue-dark">{r.title}</p>
                     {r.description && (
-                      <p className="mt-0.5 text-sm text-gray-500 line-clamp-2">{r.description}</p>
+                      <p className="mt-0.5 text-sm text-brand-muted-soft line-clamp-2">{r.description}</p>
                     )}
                     {r.file_type && (
-                      <p className="mt-1 text-xs text-gray-400">
+                      <p className="mt-1 text-xs text-brand-muted-soft">
                         {r.file_type.split('/')[1]?.toUpperCase()}
                       </p>
                     )}
@@ -180,9 +180,9 @@ export default async function CommunitySearchPage({
       )}
 
       {trimmedQ.length >= 2 && total === 0 && (
-        <div className="rounded-lg border border-dashed border-gray-200 py-12 text-center">
-          <p className="text-sm text-gray-500">No results for "{trimmedQ}".</p>
-          <p className="mt-1 text-xs text-gray-400">Try different keywords or browse a space.</p>
+        <div className="rounded-lg border border-dashed border-brand-border py-12 text-center">
+          <p className="text-sm text-brand-muted-soft">No results for "{trimmedQ}".</p>
+          <p className="mt-1 text-xs text-brand-muted-soft">Try different keywords or browse a space.</p>
         </div>
       )}
     </div>

@@ -98,7 +98,7 @@ export function NotificationBell() {
     <div ref={ref} className="relative">
       <button
         onClick={openDropdown}
-        className="relative rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+        className="relative rounded-md p-1.5 text-brand-muted-soft hover:bg-brand-hairline hover:text-brand-muted"
         aria-label="Notifications"
       >
         <Bell className="h-5 w-5" />
@@ -110,16 +110,16 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border border-gray-200 bg-white shadow-lg">
-          <div className="border-b border-gray-100 px-4 py-2.5">
-            <p className="text-sm font-semibold text-gray-900">Notifications</p>
+        <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border border-brand-border bg-white shadow-lg">
+          <div className="border-b border-brand-hairline px-4 py-2.5">
+            <p className="text-sm font-semibold text-brand-blue-dark">Notifications</p>
           </div>
-          <ul className="max-h-80 divide-y divide-gray-50 overflow-y-auto">
+          <ul className="max-h-80 divide-y divide-brand-hairline overflow-y-auto">
             {loading && (
-              <li className="px-4 py-6 text-center text-sm text-gray-400">Loading…</li>
+              <li className="px-4 py-6 text-center text-sm text-brand-muted-soft">Loading…</li>
             )}
             {!loading && notifications.length === 0 && (
-              <li className="px-4 py-6 text-center text-sm text-gray-400">No notifications yet.</li>
+              <li className="px-4 py-6 text-center text-sm text-brand-muted-soft">No notifications yet.</li>
             )}
             {!loading && notifications.map((n) => {
               const href = n.reference_type === 'post' && n.reference_id
@@ -131,23 +131,23 @@ export function NotificationBell() {
                     href={href}
                     onClick={() => setOpen(false)}
                     className={[
-                      'block px-4 py-3 text-sm hover:bg-gray-50',
-                      n.is_read ? 'text-gray-500' : 'text-gray-900',
+                      'block px-4 py-3 text-sm hover:bg-brand-canvas',
+                      n.is_read ? 'text-brand-muted-soft' : 'text-brand-blue-dark',
                     ].join(' ')}
                   >
                     <p className={n.is_read ? '' : 'font-medium'}>{typeLabel(n)}</p>
-                    {n.body && <p className="mt-0.5 line-clamp-1 text-xs text-gray-400">{n.body}</p>}
-                    <p className="mt-0.5 text-xs text-gray-400">{timeAgo(n.created_at)}</p>
+                    {n.body && <p className="mt-0.5 line-clamp-1 text-xs text-brand-muted-soft">{n.body}</p>}
+                    <p className="mt-0.5 text-xs text-brand-muted-soft">{timeAgo(n.created_at)}</p>
                   </Link>
                 </li>
               )
             })}
           </ul>
-          <div className="border-t border-gray-100 px-4 py-2">
+          <div className="border-t border-brand-hairline px-4 py-2">
             <Link
               href="/community"
               onClick={() => setOpen(false)}
-              className="text-xs font-medium text-gray-500 hover:text-gray-700"
+              className="text-xs font-medium text-brand-muted-soft hover:text-brand-muted"
             >
               Go to community →
             </Link>

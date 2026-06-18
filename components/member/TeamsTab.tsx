@@ -91,7 +91,7 @@ const VIEWER_ROLE_LABEL: Record<NonNullable<TeamRegistration['viewerRole']>, str
 
 function RoleBadge({ role }: { role: NonNullable<TeamRegistration['viewerRole']> }) {
   return (
-    <span className="inline-flex text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+    <span className="inline-flex text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-brand-blue/5 text-brand-blue border border-brand-blue">
       {VIEWER_ROLE_LABEL[role]}
     </span>
   )
@@ -159,13 +159,13 @@ function JoinedTeamsView({
   function paymentInfo(entry: StudentTeam, reg: StudentTeam['registrations']): { label: string; style: string } {
     if (reg.member_pays_individually) {
       if (entry.individual_payment_status === 'paid') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
-      if (entry.individual_payment_status === 'pending') return { label: 'Payment Required', style: 'bg-amber-100 text-amber-700' }
+      if (entry.individual_payment_status === 'pending') return { label: 'Payment Required', style: 'bg-brand-orange/10 text-brand-gold-ink' }
     }
     if (reg.invoice_requested) {
       // A settled invoice (paid, or auto-settled for $0/free events) confirms the
       // registration — show Paid rather than the perpetual "Invoice sent" pill.
       if (reg.status === 'confirmed') return { label: 'Invoice paid', style: 'bg-green-100 text-green-700' }
-      return { label: 'Invoice sent to organiser', style: 'bg-blue-100 text-blue-700' }
+      return { label: 'Invoice sent to organiser', style: 'bg-brand-blue/10 text-brand-blue' }
     }
     return { label: 'Paid by group', style: 'bg-green-100 text-green-700' }
   }
@@ -182,13 +182,13 @@ function JoinedTeamsView({
         const paymentPending = reg.member_pays_individually && entry.individual_payment_status === 'pending'
 
         return (
-          <div key={entry.id} className="bg-white rounded-xl border border-gray-200 p-5">
+          <div key={entry.id} className="bg-white rounded-xl border border-brand-border p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="font-medium text-gray-900">{reg.event_title}</p>
-                <p className="text-sm text-gray-500 mt-0.5">{reg.school_name ?? '—'}</p>
+                <p className="font-medium text-brand-blue-dark">{reg.event_title}</p>
+                <p className="text-sm text-brand-muted-soft mt-0.5">{reg.school_name ?? '—'}</p>
                 {reg.teacher_first_name && (
-                  <p className="text-sm text-gray-500 mt-0.5">
+                  <p className="text-sm text-brand-muted-soft mt-0.5">
                     Organiser: {reg.teacher_first_name} {reg.teacher_last_name ?? ''}
                   </p>
                 )}
@@ -222,12 +222,12 @@ function JoinedTeamsView({
               </div>
             </div>
             {!readOnly && (
-              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-4 flex-wrap">
+              <div className="mt-4 pt-4 border-t border-brand-hairline flex items-center gap-4 flex-wrap">
                 {paymentPending && (
                   <button
                     onClick={() => handlePay(reg.id, entry.id)}
                     disabled={payingId === entry.id}
-                    className="text-sm font-medium text-white bg-brand-blue hover:bg-blue-800 rounded-lg px-4 py-1.5 disabled:opacity-50"
+                    className="text-sm font-medium text-white bg-brand-blue hover:bg-brand-blue-dark rounded-lg px-4 py-1.5 disabled:opacity-50"
                   >
                     {payingId === entry.id ? 'Redirecting…' : 'Pay Now →'}
                   </button>
@@ -362,14 +362,14 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
     }
   }
 
-  if (loading) return <p className="text-sm text-gray-400 py-4">Loading your teams…</p>
+  if (loading) return <p className="text-sm text-brand-muted-soft py-4">Loading your teams…</p>
   if (error) return <p className="text-sm text-red-600 py-4">{error}</p>
 
   return (
     <div className="space-y-4">
       {teams.length === 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-          <p className="text-gray-500 text-sm">You have no group registrations yet.</p>
+        <div className="bg-white rounded-xl border border-brand-border p-8 text-center">
+          <p className="text-brand-muted-soft text-sm">You have no group registrations yet.</p>
         </div>
       )}
 
@@ -404,28 +404,28 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
         const isOpen = expanded === team.id
 
         return (
-          <div key={team.id} className="bg-white rounded-xl border border-gray-200">
+          <div key={team.id} className="bg-white rounded-xl border border-brand-border">
             <button
               onClick={() => loadTeam(team.id)}
               className="w-full p-5 text-left flex items-center justify-between"
             >
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-medium text-gray-900">{team.event_title}</p>
+                  <p className="font-medium text-brand-blue-dark">{team.event_title}</p>
                   {team.viewerRole && <RoleBadge role={team.viewerRole} />}
                 </div>
-                <p className="text-sm text-gray-500 mt-0.5">{team.school_name ?? '—'}</p>
+                <p className="text-sm text-brand-muted-soft mt-0.5">{team.school_name ?? '—'}</p>
               </div>
               <div className="flex items-center gap-4">
                 <div className="text-right">
-                  <p className="text-sm text-gray-700">
+                  <p className="text-sm text-brand-muted">
                     <span className="font-medium">{total}</span>
-                    {declaredTotal != null ? <span className="text-gray-400"> of {declaredTotal}</span> : null}
+                    {declaredTotal != null ? <span className="text-brand-muted-soft"> of {declaredTotal}</span> : null}
                     {' '}participant{(declaredTotal ?? total) === 1 ? '' : 's'}
                   </p>
-                  {roleBreakdown && <p className="text-xs text-gray-400">{roleBreakdown}</p>}
+                  {roleBreakdown && <p className="text-xs text-brand-muted-soft">{roleBreakdown}</p>}
                   {remaining > 0 && (
-                    <p className="text-xs text-amber-600 font-medium" title="Declared group members who still need to be added via the completion link or Google Sheet.">
+                    <p className="text-xs text-brand-gold-ink font-medium" title="Declared group members who still need to be added via the completion link or Google Sheet.">
                       {remaining} still to add
                     </p>
                   )}
@@ -442,17 +442,17 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
                     }
                   >{team.status}</span>
                 </div>
-                <svg className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className={`w-5 h-5 text-brand-muted-soft transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
             </button>
 
             {isOpen && fullTeam && fullTeam.registration.id === team.id && (
-              <div className="border-t border-gray-100 p-5 space-y-4">
+              <div className="border-t border-brand-hairline p-5 space-y-4">
                 {/* Teacher PoC (student manager registrations) */}
                 {fullTeam.registration.registrant_role === 'student_manager' && fullTeam.registration.teacher_poc_email && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-xs text-amber-800">
+                  <div className="bg-brand-orange/5 border border-brand-orange rounded-lg px-4 py-3 text-xs text-brand-gold-ink">
                     <span className="font-medium">Teacher Point of Contact:</span>{' '}
                     {fullTeam.registration.teacher_poc_first_name} {fullTeam.registration.teacher_poc_last_name}{' '}
                     ({fullTeam.registration.teacher_poc_email}) — cc&apos;d on all correspondence
@@ -461,9 +461,9 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
 
                 {/* Join link for email_link registrations */}
                 {fullTeam.registration.details_method === 'email_link' && fullTeam.registration.joinUrl && (
-                  <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 space-y-2">
+                  <div className="bg-brand-blue/5 border border-brand-blue/30 rounded-lg px-4 py-3 space-y-2">
                     <p className="text-xs font-medium text-brand-blue-dark">Group Registration Link</p>
-                    <p className="text-xs text-gray-500 break-all">{fullTeam.registration.joinUrl}</p>
+                    <p className="text-xs text-brand-muted-soft break-all">{fullTeam.registration.joinUrl}</p>
                     <div className="flex gap-3">
                       <CopyButton text={fullTeam.registration.joinUrl} />
                       <a
@@ -504,7 +504,7 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
                     <button
                       onClick={() => handleSync(team.id)}
                       disabled={syncing}
-                      className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg px-3 py-1.5 disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 text-sm text-brand-muted hover:text-brand-blue-dark border border-brand-border rounded-lg px-3 py-1.5 disabled:opacity-50"
                     >
                       <svg className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -521,7 +521,7 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
                   {!readOnly && (
                     <button
                       onClick={() => setAdding(true)}
-                      className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium text-white bg-brand-blue hover:bg-blue-800 rounded-lg px-3 py-1.5"
+                      className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium text-white bg-brand-blue hover:bg-brand-blue-dark rounded-lg px-3 py-1.5"
                     >
                       + Add participant
                     </button>
@@ -529,10 +529,10 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
                 </div>
 
                 {syncMsg && (
-                  <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">{syncMsg}</p>
+                  <p className="text-xs text-brand-muted bg-brand-canvas border border-brand-border rounded-lg px-3 py-2">{syncMsg}</p>
                 )}
                 {consentMsg && (
-                  <p className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2">{consentMsg}</p>
+                  <p className="text-xs bg-brand-blue/5 border border-brand-blue/30 text-brand-blue rounded-lg px-3 py-2">{consentMsg}</p>
                 )}
 
                 {/* Consent summary */}
@@ -546,13 +546,13 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
                   const missing  = minors.filter(p => !envelopes[p.id]).length
                   const allDone  = signed === minors.length
                   return (
-                    <div className={`rounded-lg px-4 py-3 text-sm flex flex-wrap gap-x-4 gap-y-1 ${allDone ? 'bg-green-50 border border-green-100' : 'bg-amber-50 border border-amber-100'}`}>
-                      <span className={`font-medium ${allDone ? 'text-green-700' : 'text-amber-800'}`}>
+                    <div className={`rounded-lg px-4 py-3 text-sm flex flex-wrap gap-x-4 gap-y-1 ${allDone ? 'bg-green-50 border border-green-100' : 'bg-brand-orange/5 border border-brand-orange'}`}>
+                      <span className={`font-medium ${allDone ? 'text-green-700' : 'text-brand-gold-ink'}`}>
                         Parental consent: {signed}/{minors.length} signed
                       </span>
-                      {pending  > 0 && <span className="text-amber-700 text-xs self-center">{pending} awaiting</span>}
+                      {pending  > 0 && <span className="text-brand-gold-ink text-xs self-center">{pending} awaiting</span>}
                       {problem  > 0 && <span className="text-red-600 text-xs self-center">{problem} declined/voided</span>}
-                      {missing  > 0 && <span className="text-gray-500 text-xs self-center">{missing} not yet sent</span>}
+                      {missing  > 0 && <span className="text-brand-muted-soft text-xs self-center">{missing} not yet sent</span>}
                     </div>
                   )
                 })()}
@@ -569,11 +569,11 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
                   const problem = adults.filter(p => { const s = envelopes[p.id]?.status; return s === 'declined' || s === 'voided' }).length
                   const allDone = signed === adults.length
                   return (
-                    <div className={`rounded-lg px-4 py-3 text-sm flex flex-wrap gap-x-4 gap-y-1 ${allDone ? 'bg-green-50 border border-green-100' : 'bg-amber-50 border border-amber-100'}`}>
-                      <span className={`font-medium ${allDone ? 'text-green-700' : 'text-amber-800'}`}>
+                    <div className={`rounded-lg px-4 py-3 text-sm flex flex-wrap gap-x-4 gap-y-1 ${allDone ? 'bg-green-50 border border-green-100' : 'bg-brand-orange/5 border border-brand-orange'}`}>
+                      <span className={`font-medium ${allDone ? 'text-green-700' : 'text-brand-gold-ink'}`}>
                         Participation agreements: {signed}/{adults.length} signed
                       </span>
-                      {pending > 0 && <span className="text-amber-700 text-xs self-center">{pending} awaiting</span>}
+                      {pending > 0 && <span className="text-brand-gold-ink text-xs self-center">{pending} awaiting</span>}
                       {problem > 0 && <span className="text-red-600 text-xs self-center">{problem} declined/voided</span>}
                     </div>
                   )
@@ -581,26 +581,26 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
 
                 {/* Participants table */}
                 {fullTeam.registration.participants.length === 0 ? (
-                  <p className="text-sm text-gray-500">No participants added yet.</p>
+                  <p className="text-sm text-brand-muted-soft">No participants added yet.</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-gray-100 text-left">
-                          <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Name</th>
-                          <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Email</th>
-                          <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Type</th>
-                          <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Grade</th>
-                          <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Company</th>
-                          <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
-                          <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Consent / Agreement</th>
+                        <tr className="border-b border-brand-hairline text-left">
+                          <th className="pb-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Name</th>
+                          <th className="pb-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Email</th>
+                          <th className="pb-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Type</th>
+                          <th className="pb-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Grade</th>
+                          <th className="pb-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Company</th>
+                          <th className="pb-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Status</th>
+                          <th className="pb-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Consent / Agreement</th>
                           {fullTeam.registration.member_pays_individually && (
-                            <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Payment</th>
+                            <th className="pb-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Payment</th>
                           )}
                           <th className="pb-2"></th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-50">
+                      <tbody className="divide-y divide-brand-hairline">
                         {fullTeam.registration.participants.map(p => {
                           const envelope = fullTeam.registration.docusignEnvelopes?.[p.id]
                           const isMinor = participantIsMinor(p.date_of_birth)
@@ -610,20 +610,20 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
                             (Date.now() - new Date(envelope.sent_at).getTime()) >= SEVEN_DAYS_MS
 
                           return (
-                            <tr key={p.id} className="hover:bg-gray-50">
+                            <tr key={p.id} className="hover:bg-brand-canvas">
                               <td className="py-2.5 pr-4">{p.first_name} {p.last_name}</td>
-                              <td className="py-2.5 pr-4 text-gray-500">{p.email}</td>
+                              <td className="py-2.5 pr-4 text-brand-muted-soft">{p.email}</td>
                               <td className="py-2.5 pr-4">{displayEventRole(p.event_role) ?? p.event_role}</td>
-                              <td className="py-2.5 pr-4 text-gray-500">{p.grade ?? '—'}</td>
+                              <td className="py-2.5 pr-4 text-brand-muted-soft">{p.grade ?? '—'}</td>
                               <td className="py-2.5 pr-4">
                                 {p.event_companies ? (
-                                  <span className="inline-flex text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700">
+                                  <span className="inline-flex text-xs px-2 py-0.5 rounded-full font-medium bg-brand-blue/10 text-brand-blue">
                                     {p.event_companies.name
                                       ? `${p.event_companies.number} — ${p.event_companies.name}`
                                       : `Company ${p.event_companies.number}`}
                                   </span>
                                 ) : (
-                                  <span className="text-xs text-gray-400">—</span>
+                                  <span className="text-xs text-brand-muted-soft">—</span>
                                 )}
                               </td>
                               <td className="py-2.5 pr-4">
@@ -647,23 +647,23 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
                                         </button>
                                       )}
                                     </div>
-                                    <p className="text-xs text-gray-400 leading-tight">
+                                    <p className="text-xs text-brand-muted-soft leading-tight">
                                       {CONSENT_TYPE_LABEL[envelope.envelope_type] ?? 'Agreement'}
                                     </p>
-                                    <p className="text-xs text-gray-400 leading-tight">
+                                    <p className="text-xs text-brand-muted-soft leading-tight">
                                       {envelope.signer_name}
                                       {envelope.signer_email && <> &middot; {envelope.signer_email}</>}
                                     </p>
-                                    <p className="text-xs text-gray-400">
+                                    <p className="text-xs text-brand-muted-soft">
                                       Sent {new Date(envelope.sent_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
                                       {envelope.completed_at && <> &middot; Signed {new Date(envelope.completed_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</>}
                                       {envelope.reminder_sent_at && !envelope.completed_at && <> &middot; Reminded {new Date(envelope.reminder_sent_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</>}
                                     </p>
                                   </div>
                                 ) : isMinor ? (
-                                  <span className="text-xs text-gray-400">—</span>
+                                  <span className="text-xs text-brand-muted-soft">—</span>
                                 ) : (
-                                  <span className="text-xs text-gray-400">N/A</span>
+                                  <span className="text-xs text-brand-muted-soft">N/A</span>
                                 )}
                               </td>
                               {fullTeam.registration.member_pays_individually && (
@@ -672,7 +672,7 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
                                     className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                                       p.individual_payment_status === 'paid'
                                         ? 'bg-green-100 text-green-700'
-                                        : 'bg-amber-100 text-amber-700'
+                                        : 'bg-brand-orange/10 text-brand-gold-ink'
                                     }`}
                                   >
                                     {p.individual_payment_status === 'paid' ? 'Paid' : 'Not Yet Paid'}
@@ -714,7 +714,7 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
       {/* Teams joined as a participant */}
       {participations.length > 0 && (
         <div className="mt-8">
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Teams I&apos;ve Joined</h3>
+          <h3 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide mb-3">Teams I&apos;ve Joined</h3>
           <JoinedTeamsView
             participations={participations}
             onLeft={(pid) => setParticipations(prev => prev.filter(p => p.id !== pid))}
@@ -788,14 +788,14 @@ function StudentTeamsView({
       .finally(() => setLoading(false))
   }, [memberQuery])
 
-  if (loading) return <p className="text-sm text-gray-400 py-4">Loading your teams…</p>
+  if (loading) return <p className="text-sm text-brand-muted-soft py-4">Loading your teams…</p>
   if (error) return <p className="text-sm text-red-600 py-4">{error}</p>
 
   if (teams.length === 0) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-        <p className="text-gray-500 text-sm">You haven&apos;t been added to any teams yet.</p>
-        <p className="text-gray-400 text-xs mt-1">When a teacher registers a group event and adds you, it will appear here.</p>
+      <div className="bg-white rounded-xl border border-brand-border p-8 text-center">
+        <p className="text-brand-muted-soft text-sm">You haven&apos;t been added to any teams yet.</p>
+        <p className="text-brand-muted-soft text-xs mt-1">When a teacher registers a group event and adds you, it will appear here.</p>
       </div>
     )
   }
@@ -839,7 +839,7 @@ export function TeamsTab({ memberId, impersonateMemberId, readOnly = false }: Pr
   }, [memberQuery])
 
   if (error) return <p className="text-sm text-red-600 py-4">{error}</p>
-  if (apiRole === null) return <p className="text-sm text-gray-400 py-4">Loading your teams…</p>
+  if (apiRole === null) return <p className="text-sm text-brand-muted-soft py-4">Loading your teams…</p>
   if (apiRole === 'group_manager')
     return <TeacherTeamsView memberQuery={memberQuery} readOnly={readOnly} />
   return <StudentTeamsView memberId={memberId} memberQuery={memberQuery} readOnly={readOnly} />

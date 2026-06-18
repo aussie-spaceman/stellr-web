@@ -27,7 +27,7 @@ export function FlagButton({ contentType, contentId }: Props) {
   }
 
   if (state === 'done') {
-    return <span className="text-xs text-gray-400">Reported</span>
+    return <span className="text-xs text-brand-muted-soft">Reported</span>
   }
 
   if (state === 'open') {
@@ -39,7 +39,7 @@ export function FlagButton({ contentType, contentId }: Props) {
           placeholder="Optional: describe the issue"
           rows={2}
           maxLength={500}
-          className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-gray-400 focus:outline-none"
+          className="w-full rounded-md border border-brand-border px-2 py-1.5 text-xs focus:border-brand-border focus:outline-none"
         />
         <div className="flex items-center gap-2">
           <button
@@ -51,7 +51,7 @@ export function FlagButton({ contentType, contentId }: Props) {
           </button>
           <button
             onClick={() => setState('idle')}
-            className="text-xs text-gray-400 hover:text-gray-600"
+            className="text-xs text-brand-muted-soft hover:text-brand-muted"
           >
             Cancel
           </button>
@@ -63,7 +63,7 @@ export function FlagButton({ contentType, contentId }: Props) {
   return (
     <button
       onClick={() => setState('open')}
-      className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500"
+      className="flex items-center gap-1 text-xs text-brand-muted-soft hover:text-red-500"
       title="Report this content"
     >
       <Flag className="h-3 w-3" />

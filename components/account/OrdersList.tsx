@@ -22,13 +22,13 @@ interface Order {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  paid: 'bg-blue-100 text-blue-700',
-  fulfilling: 'bg-amber-100 text-amber-700',
+  paid: 'bg-brand-blue/10 text-brand-blue',
+  fulfilling: 'bg-brand-orange/10 text-brand-gold-ink',
   shipped: 'bg-green-100 text-green-700',
   delivered: 'bg-green-100 text-green-700',
-  refunded: 'bg-gray-100 text-gray-600',
-  cancelled: 'bg-gray-100 text-gray-500',
-  pending: 'bg-gray-100 text-gray-500',
+  refunded: 'bg-brand-hairline text-brand-muted',
+  cancelled: 'bg-brand-hairline text-brand-muted-soft',
+  pending: 'bg-brand-hairline text-brand-muted-soft',
 }
 
 export function OrdersList() {
@@ -75,13 +75,13 @@ export function OrdersList() {
 
   return (
     <div>
-      <h2 className="mb-1 text-sm font-semibold text-gray-900">Store orders</h2>
-      <p className="mb-3 text-xs text-gray-500">Merchandise purchases and event merch.</p>
+      <h2 className="mb-1 text-sm font-semibold text-brand-blue-dark">Store orders</h2>
+      <p className="mb-3 text-xs text-brand-muted-soft">Merchandise purchases and event merch.</p>
 
       {loading ? (
-        <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+        <Loader2 className="h-4 w-4 animate-spin text-brand-muted-soft" />
       ) : orders.length === 0 ? (
-        <p className="text-sm text-gray-400">No orders yet.</p>
+        <p className="text-sm text-brand-muted-soft">No orders yet.</p>
       ) : (
         <div className="space-y-3">
           {orders.map((o) => {
@@ -89,22 +89,22 @@ export function OrdersList() {
             const canReship = isEvent && !o.merchCollected && o.items.length > 0
             const canReturn = o.channel === 'storefront' && (o.status === 'shipped' || o.status === 'delivered')
             return (
-              <div key={o.id} className="rounded-lg border border-gray-200 p-3 text-sm">
+              <div key={o.id} className="rounded-lg border border-brand-border p-3 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-900">
+                  <span className="font-medium text-brand-blue-dark">
                     {isEvent ? 'Event merch' : 'Store order'} · {new Date(o.created_at).toLocaleDateString()}
                   </span>
                   <span className={'rounded px-1.5 py-0.5 text-[11px] ' + (STATUS_BADGE[o.status] ?? STATUS_BADGE.pending)}>
                     {o.status}
                   </span>
                 </div>
-                <ul className="mt-1 text-gray-600">
+                <ul className="mt-1 text-brand-muted">
                   {o.items.map((it, i) => (
                     <li key={i} className="flex items-center gap-1">
-                      <Package className="h-3 w-3 text-gray-300" />
+                      <Package className="h-3 w-3 text-brand-muted-soft" />
                       {it.name}
                       {it.qty > 1 ? ` ×${it.qty}` : ''}
-                      {it.line_source === 'event_included' && <span className="text-amber-600"> (included)</span>}
+                      {it.line_source === 'event_included' && <span className="text-brand-gold-ink"> (included)</span>}
                     </li>
                   ))}
                 </ul>
@@ -121,7 +121,7 @@ export function OrdersList() {
                       </button>
                     )}
                     {canReturn && (
-                      <button onClick={() => requestReturn(o.id)} disabled={busy === o.id} className="text-xs font-medium text-gray-500 hover:text-gray-800 disabled:opacity-50">
+                      <button onClick={() => requestReturn(o.id)} disabled={busy === o.id} className="text-xs font-medium text-brand-muted-soft hover:text-brand-blue-dark disabled:opacity-50">
                         Request return
                       </button>
                     )}

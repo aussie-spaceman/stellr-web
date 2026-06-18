@@ -45,7 +45,7 @@ export function ResourceDownloadButton({ resourceId, title }: Props) {
       <button
         onClick={download}
         disabled={loading}
-        className="inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 rounded-md bg-brand-blue-dark px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
       >
         <Download className="h-3.5 w-3.5" />
         {loading ? 'Preparing…' : 'Download'}

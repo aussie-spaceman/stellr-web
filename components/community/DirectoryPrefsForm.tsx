@@ -62,8 +62,8 @@ export function DirectoryPrefsForm({ initial, readOnly = false }: Props) {
     <div className="space-y-3">
       <label className="flex items-center justify-between gap-4 cursor-pointer">
         <div>
-          <p className="text-sm font-medium text-gray-900">Show me in the member directory</p>
-          <p className="text-xs text-gray-500">Other members can find you at /community/members</p>
+          <p className="text-sm font-medium text-brand-blue-dark">Show me in the member directory</p>
+          <p className="text-xs text-brand-muted-soft">Other members can find you at /community/members</p>
         </div>
         <button
           role="switch"
@@ -72,7 +72,7 @@ export function DirectoryPrefsForm({ initial, readOnly = false }: Props) {
           disabled={saving || readOnly}
           className={[
             'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none',
-            isVisible ? 'bg-gray-900' : 'bg-gray-200',
+            isVisible ? 'bg-brand-blue-dark' : 'bg-brand-border',
           ].join(' ')}
         >
           <span
@@ -85,16 +85,16 @@ export function DirectoryPrefsForm({ initial, readOnly = false }: Props) {
       </label>
 
       {isVisible && (
-        <div className="ml-1 space-y-2 border-l-2 border-gray-100 pl-4">
+        <div className="ml-1 space-y-2 border-l-2 border-brand-hairline pl-4">
           <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={showSchool}
               onChange={(e) => toggle(setShowSchool, 'show_school', e.target.checked)}
               disabled={saving || readOnly}
-              className="rounded border-gray-300"
+              className="rounded border-brand-border"
             />
-            <span className="text-sm text-gray-700">Show my school</span>
+            <span className="text-sm text-brand-muted">Show my school</span>
           </label>
           <label className="flex items-center gap-3 cursor-pointer">
             <input
@@ -102,9 +102,9 @@ export function DirectoryPrefsForm({ initial, readOnly = false }: Props) {
               checked={showRegion}
               onChange={(e) => toggle(setShowRegion, 'show_region', e.target.checked)}
               disabled={saving || readOnly}
-              className="rounded border-gray-300"
+              className="rounded border-brand-border"
             />
-            <span className="text-sm text-gray-700">Show my region / state</span>
+            <span className="text-sm text-brand-muted">Show my region / state</span>
           </label>
         </div>
       )}

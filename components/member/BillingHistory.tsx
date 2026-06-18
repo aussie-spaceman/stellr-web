@@ -58,26 +58,26 @@ function formatDate(ts: number | string) {
 const STATUS_STYLES: Record<string, string> = {
   paid: 'bg-green-100 text-green-700',
   open: 'bg-yellow-100 text-yellow-700',
-  void: 'bg-gray-100 text-gray-500',
+  void: 'bg-brand-hairline text-brand-muted-soft',
   uncollectible: 'bg-red-100 text-red-600',
-  draft: 'bg-gray-100 text-gray-500',
+  draft: 'bg-brand-hairline text-brand-muted-soft',
 }
 
 function paymentLabel(p: Participation, reg: ParticipationReg): { label: string; style: string } {
   if (reg.type === 'individual') {
     if (reg.status === 'confirmed') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
-    if (reg.status === 'cancelled') return { label: 'Cancelled', style: 'bg-gray-100 text-gray-500' }
-    return { label: 'Payment Pending', style: 'bg-amber-100 text-amber-700' }
+    if (reg.status === 'cancelled') return { label: 'Cancelled', style: 'bg-brand-hairline text-brand-muted-soft' }
+    return { label: 'Payment Pending', style: 'bg-brand-orange/10 text-brand-gold-ink' }
   }
   if (reg.member_pays_individually) {
     if (p.individual_payment_status === 'paid') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
-    if (p.individual_payment_status === 'pending') return { label: 'Payment Pending', style: 'bg-amber-100 text-amber-700' }
+    if (p.individual_payment_status === 'pending') return { label: 'Payment Pending', style: 'bg-brand-orange/10 text-brand-gold-ink' }
   }
   if (reg.invoice_requested) {
     // A settled invoice (paid, or auto-settled for $0/free events) confirms the
     // registration — show Paid rather than the perpetual "Invoice sent" pill.
     if (reg.status === 'confirmed') return { label: 'Invoice paid', style: 'bg-green-100 text-green-700' }
-    return { label: 'Invoice sent to organiser', style: 'bg-blue-100 text-blue-700' }
+    return { label: 'Invoice sent to organiser', style: 'bg-brand-blue/10 text-brand-blue' }
   }
   return { label: 'Paid by group', style: 'bg-green-100 text-green-700' }
 }
@@ -141,15 +141,15 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
 
   if (loading) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <p className="text-sm text-gray-400">Loading billing history…</p>
+      <div className="bg-white rounded-xl border border-brand-border p-6">
+        <p className="text-sm text-brand-muted-soft">Loading billing history…</p>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="bg-white rounded-xl border border-brand-border p-6">
         <p className="text-sm text-red-600">{error}</p>
       </div>
     )
@@ -159,42 +159,42 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
     <div className="space-y-6">
 
       {/* ── Event participation payment history ─────────────────────────── */}
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="p-6 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Event Payment History</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Payment status for all events you have participated in.</p>
+      <div className="bg-white rounded-xl border border-brand-border">
+        <div className="p-6 border-b border-brand-hairline">
+          <h2 className="text-base font-semibold text-brand-blue-dark">Event Payment History</h2>
+          <p className="text-sm text-brand-muted-soft mt-0.5">Payment status for all events you have participated in.</p>
         </div>
 
         {participations.length === 0 ? (
           <div className="p-6">
-            <p className="text-sm text-gray-500">No event participations found.</p>
+            <p className="text-sm text-brand-muted-soft">No event participations found.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 text-left">
-                  <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Date Joined</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Event</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">School</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Organiser</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Payment</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Receipt</th>
+                <tr className="border-b border-brand-hairline text-left">
+                  <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Date Joined</th>
+                  <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Event</th>
+                  <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">School</th>
+                  <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Organiser</th>
+                  <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Payment</th>
+                  <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Receipt</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-brand-hairline">
                 {participations.map(p => {
                   const reg = Array.isArray(p.registrations) ? p.registrations[0] : p.registrations
                   if (!reg) return null
                   const { label, style } = paymentLabel(p, reg)
                   return (
-                    <tr key={p.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-gray-600">
+                    <tr key={p.id} className="hover:bg-brand-canvas">
+                      <td className="px-6 py-4 text-brand-muted">
                         {formatDate(p.join_completed_at ?? reg.created_at)}
                       </td>
-                      <td className="px-6 py-4 font-medium text-gray-900">{reg.event_title}</td>
-                      <td className="px-6 py-4 text-gray-500">{reg.school_name ?? p.school_name ?? '—'}</td>
-                      <td className="px-6 py-4 text-gray-500">
+                      <td className="px-6 py-4 font-medium text-brand-blue-dark">{reg.event_title}</td>
+                      <td className="px-6 py-4 text-brand-muted-soft">{reg.school_name ?? p.school_name ?? '—'}</td>
+                      <td className="px-6 py-4 text-brand-muted-soft">
                         {reg.teacher_first_name
                           ? `${reg.teacher_first_name} ${reg.teacher_last_name ?? ''}`
                           : '—'}
@@ -217,7 +217,7 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
                         {p.pay_kind === 'organiser' && (
                           <div className="mt-1">
                             <span
-                              className="text-xs font-medium text-gray-300 cursor-not-allowed"
+                              className="text-xs font-medium text-brand-muted-soft cursor-not-allowed"
                               title={p.is_owner
                                 ? 'Settle this using the invoice below.'
                                 : 'Your group organiser will pay this.'}
@@ -230,7 +230,7 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
                       <td className="px-6 py-4">
                         {receiptAvailable(p, reg) ? (
                           readOnly ? (
-                            <span className="text-xs text-gray-400">Available</span>
+                            <span className="text-xs text-brand-muted-soft">Available</span>
                           ) : (
                             <a
                               href={`/api/members/billing/receipt?participation=${p.id}`}
@@ -242,7 +242,7 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
                             </a>
                           )
                         ) : (
-                          <span className="text-xs text-gray-400">—</span>
+                          <span className="text-xs text-brand-muted-soft">—</span>
                         )}
                       </td>
                     </tr>
@@ -256,34 +256,34 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
 
       {/* ── Stripe invoices (group managers / organisers) ───────────────── */}
       {invoices.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200">
-          <div className="p-6 border-b border-gray-100">
-            <h2 className="text-base font-semibold text-gray-900">Invoices</h2>
-            <p className="text-sm text-gray-500 mt-0.5">Invoices raised for group registrations you organised.</p>
+        <div className="bg-white rounded-xl border border-brand-border">
+          <div className="p-6 border-b border-brand-hairline">
+            <h2 className="text-base font-semibold text-brand-blue-dark">Invoices</h2>
+            <p className="text-sm text-brand-muted-soft mt-0.5">Invoices raised for group registrations you organised.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 text-left">
-                  <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Date</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Invoice #</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Description</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Amount</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide"></th>
+                <tr className="border-b border-brand-hairline text-left">
+                  <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Date</th>
+                  <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Invoice #</th>
+                  <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Description</th>
+                  <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Amount</th>
+                  <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Status</th>
+                  <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-brand-hairline">
                 {(invoices as Invoice[]).map(inv => (
-                  <tr key={inv.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-gray-600">{formatDate(inv.created)}</td>
-                    <td className="px-6 py-4 font-mono text-gray-700 text-xs">{inv.number ?? '—'}</td>
-                    <td className="px-6 py-4 text-gray-700 max-w-xs truncate">{inv.description ?? '—'}</td>
-                    <td className="px-6 py-4 text-gray-900 font-medium">
+                  <tr key={inv.id} className="hover:bg-brand-canvas">
+                    <td className="px-6 py-4 text-brand-muted">{formatDate(inv.created)}</td>
+                    <td className="px-6 py-4 font-mono text-brand-muted text-xs">{inv.number ?? '—'}</td>
+                    <td className="px-6 py-4 text-brand-muted max-w-xs truncate">{inv.description ?? '—'}</td>
+                    <td className="px-6 py-4 text-brand-blue-dark font-medium">
                       {formatAmount(inv.amount_due, inv.currency)}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_STYLES[inv.status ?? ''] ?? 'bg-gray-100 text-gray-500'}`}>
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_STYLES[inv.status ?? ''] ?? 'bg-brand-hairline text-brand-muted-soft'}`}>
                         {inv.status}
                       </span>
                     </td>

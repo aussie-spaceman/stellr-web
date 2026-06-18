@@ -35,7 +35,7 @@ export function ActionChecklist({ actions }: { actions: ActionItem[] }) {
   }
 
   if (items.length === 0) {
-    return <p className="text-sm text-gray-400">No actions assigned.</p>
+    return <p className="text-sm text-brand-muted-soft">No actions assigned.</p>
   }
 
   return (
@@ -46,18 +46,18 @@ export function ActionChecklist({ actions }: { actions: ActionItem[] }) {
             {item.is_done ? (
               <CheckCircle2 className="h-5 w-5 text-green-600" />
             ) : (
-              <Circle className="h-5 w-5 text-gray-300" />
+              <Circle className="h-5 w-5 text-brand-muted-soft" />
             )}
           </button>
-          <span className={`text-sm ${item.is_done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+          <span className={`text-sm ${item.is_done ? 'text-brand-muted-soft line-through' : 'text-brand-blue-dark'}`}>
             {item.title}
             {item.module_title && (
-              <span className="ml-1.5 text-xs text-indigo-500">📘 {item.module_title}</span>
+              <span className="ml-1.5 text-xs text-brand-blue">📘 {item.module_title}</span>
             )}
             {item.due_date && !item.is_done && (
               <span
                 className={`ml-1.5 text-xs ${
-                  new Date(item.due_date).getTime() < Date.now() ? 'text-red-500' : 'text-gray-400'
+                  new Date(item.due_date).getTime() < Date.now() ? 'text-red-500' : 'text-brand-muted-soft'
                 }`}
               >
                 due {new Date(item.due_date).toLocaleDateString()}

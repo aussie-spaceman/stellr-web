@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
 import Link from 'next/link'
 import { Users } from 'lucide-react'
+import { Avatar } from '@/components/ui/Avatar'
 
 export const metadata = { title: 'Community · Member Directory' }
 
@@ -100,10 +101,10 @@ export default async function MemberDirectoryPage({
     <div>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Member Directory</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="font-heading uppercase text-title text-brand-blue-dark">Member Directory</h1>
+          <p className="mt-1 text-sm text-brand-muted-soft">
             {rows.length} member{rows.length !== 1 ? 's' : ''} visible ·{' '}
-            <Link href="/account" className="underline hover:text-gray-700">
+            <Link href="/account" className="underline hover:text-brand-muted">
               manage your visibility
             </Link>
           </p>
@@ -116,30 +117,23 @@ export default async function MemberDirectoryPage({
           name="school"
           defaultValue={school ?? ''}
           placeholder="Filter by school…"
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-gray-400 focus:outline-none"
+          className="input-field sm:w-64"
         />
         {allStates.length > 0 && (
-          <select
-            name="state"
-            defaultValue={state ?? ''}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-gray-400 focus:outline-none"
-          >
+          <select name="state" defaultValue={state ?? ''} className="input-field sm:w-56">
             <option value="">All states / regions</option>
             {allStates.map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
         )}
-        <button
-          type="submit"
-          className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
-        >
+        <button type="submit" className="btn-primary px-4 py-2">
           Filter
         </button>
         {(school || state) && (
           <Link
             href="/community/members"
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+            className="rounded-md border border-brand-border px-3 py-1.5 text-sm text-brand-muted hover:bg-brand-canvas"
           >
             Clear
           </Link>
@@ -147,10 +141,10 @@ export default async function MemberDirectoryPage({
       </form>
 
       {rows.length === 0 && (
-        <div className="rounded-lg border border-dashed border-gray-200 py-12 text-center">
-          <Users className="mx-auto h-8 w-8 text-gray-300" />
-          <p className="mt-3 text-sm text-gray-500">No members found.</p>
-          <p className="mt-1 text-xs text-gray-400">
+        <div className="rounded-lg border border-dashed border-brand-border py-12 text-center">
+          <Users className="mx-auto h-8 w-8 text-brand-muted-soft" />
+          <p className="mt-3 text-sm text-brand-muted-soft">No members found.</p>
+          <p className="mt-1 text-xs text-brand-muted-soft">
             Members must opt in from their account page to appear here.
           </p>
         </div>
@@ -168,19 +162,27 @@ export default async function MemberDirectoryPage({
           return (
             <li
               key={entry.member_id}
-              className="rounded-lg border border-gray-200 bg-white p-4"
+              className="app-card flex gap-3 p-4 transition hover:-translate-y-0.5 hover:shadow-md"
             >
-              <p className="font-semibold text-gray-900">{name}</p>
-              {m.event_role && (
-                <p className="mt-0.5 text-xs font-medium text-gray-500">
-                  {formatRole(m.event_role)}
-                </p>
-              )}
-              {(schoolName || region) && (
-                <p className="mt-1.5 text-xs text-gray-400">
-                  {[schoolName, region].filter(Boolean).join(' · ')}
-                </p>
-              )}
+              <Avatar id={entry.member_id} name={name} size="lg" ring={false} />
+              <div className="min-w-0">
+                <p className="font-subheading font-semibold text-brand-blue-dark">{name}</p>
+                {m.event_role && (
+                  <span className="mt-1 inline-block rounded-full bg-brand-blue/10 px-2 py-0.5 text-[11px] font-subheading font-semibold text-brand-blue">
+                    {formatRole(m.event_role)}
+                  </span>
+                )}
+                {(schoolName || region) && (
+                  <p className="mt-1.5 flex flex-wrap gap-1.5 text-xs text-brand-muted-soft">
+                    {schoolName && (
+                      <span className="rounded-full bg-brand-hairline px-2 py-0.5">{schoolName}</span>
+                    )}
+                    {region && (
+                      <span className="rounded-full bg-brand-hairline px-2 py-0.5">{region}</span>
+                    )}
+                  </p>
+                )}
+              </div>
             </li>
           )
         })}

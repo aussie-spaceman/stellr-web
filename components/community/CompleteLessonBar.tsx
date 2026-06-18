@@ -45,11 +45,11 @@ export function CompleteLessonBar({
   }
 
   return (
-    <div className="sticky bottom-0 border-t border-gray-200 bg-white/95 backdrop-blur">
+    <div className="sticky bottom-0 border-t border-brand-border bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
         <a
           href={prevId ? `${base}/${prevId}` : base}
-          className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 px-3.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="inline-flex items-center gap-1.5 rounded-full border border-brand-border px-3.5 py-2 text-sm font-medium text-brand-muted hover:bg-brand-canvas"
         >
           <ArrowLeft className="h-4 w-4" />
           {prevId ? 'Previous' : 'Course'}
@@ -60,13 +60,13 @@ export function CompleteLessonBar({
             <button
               onClick={() => setStatus(false, false)}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 px-3.5 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-full border border-brand-border px-3.5 py-2 text-sm font-medium text-brand-muted hover:bg-brand-canvas disabled:opacity-50"
             >
               <RotateCcw className="h-4 w-4" /> Mark incomplete
             </button>
             <a
               href={nextId ? `${base}/${nextId}` : base}
-              className="inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+              className="inline-flex items-center gap-1.5 rounded-full bg-brand-blue-dark px-4 py-2 text-sm font-semibold text-white hover:bg-brand-blue-dark"
             >
               {nextId ? 'Next lesson' : 'Finish'}
               <ArrowRight className="h-4 w-4" />
@@ -76,7 +76,7 @@ export function CompleteLessonBar({
           <button
             onClick={() => setStatus(true, true)}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-full bg-brand-blue-dark px-5 py-2 text-sm font-semibold text-white hover:bg-brand-blue-dark disabled:opacity-60"
           >
             <Check className="h-4 w-4" />
             {busy ? 'Saving…' : 'Complete lesson'}

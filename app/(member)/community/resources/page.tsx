@@ -46,11 +46,11 @@ export default async function ResourcesPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Resources</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Resources</h1>
+        <p className="mt-1 text-sm text-brand-muted-soft">
           Documents, past competition papers, and study guides.
           {!member.hasPaidTier && (
-            <span className="ml-1 text-amber-600">
+            <span className="ml-1 text-brand-gold-ink">
               <a href="/account?tab=billing" className="underline">Upgrade</a> to unlock downloads.
             </span>
           )}
@@ -58,7 +58,7 @@ export default async function ResourcesPage() {
       </div>
 
       {(!resources || resources.length === 0) && (
-        <p className="text-sm text-gray-500">No resources yet. Check back soon.</p>
+        <p className="text-sm text-brand-muted-soft">No resources yet. Check back soon.</p>
       )}
 
       <ul className="space-y-3">
@@ -69,21 +69,21 @@ export default async function ResourcesPage() {
           return (
             <li
               key={resource.id}
-              className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 bg-white p-4"
+              className="flex items-start justify-between gap-4 rounded-lg border border-brand-border bg-white p-4"
             >
               <div className="flex min-w-0 items-start gap-3">
-                <FileText className="mt-0.5 h-5 w-5 shrink-0 text-gray-400" />
+                <FileText className="mt-0.5 h-5 w-5 shrink-0 text-brand-muted-soft" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h2 className="font-semibold text-gray-900">{resource.title}</h2>
+                    <h2 className="font-semibold text-brand-blue-dark">{resource.title}</h2>
                     {resource.min_tier_rank > 0 && (
-                      <Lock className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                      <Lock className="h-3.5 w-3.5 shrink-0 text-brand-gold-ink" />
                     )}
                   </div>
                   {resource.description && (
-                    <p className="mt-0.5 text-sm text-gray-500">{resource.description}</p>
+                    <p className="mt-0.5 text-sm text-brand-muted-soft">{resource.description}</p>
                   )}
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-brand-muted-soft">
                     {space && <span>{space}</span>}
                     {resource.file_type && <span>{resource.file_type.split('/')[1]?.toUpperCase()}</span>}
                     {resource.file_size_bytes && <span>{formatBytes(resource.file_size_bytes)}</span>}
@@ -97,7 +97,7 @@ export default async function ResourcesPage() {
                 ) : (
                   <a
                     href="/account?tab=billing"
-                    className="inline-block rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                    className="inline-block rounded-md border border-brand-orange bg-brand-orange/5 px-3 py-1.5 text-xs font-medium text-brand-gold-ink hover:bg-brand-orange/10"
                   >
                     Upgrade to download
                   </a>

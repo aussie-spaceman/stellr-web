@@ -24,13 +24,13 @@ export default async function TrainingModulePage({
   if (!mod.canAccess) {
     return (
       <div className="mx-auto max-w-2xl text-center">
-        <h1 className="text-2xl font-bold text-gray-900">{mod.title}</h1>
-        <p className="mt-2 text-sm text-gray-500">
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">{mod.title}</h1>
+        <p className="mt-2 text-sm text-brand-muted-soft">
           This training is available to a higher membership tier.
         </p>
         <a
           href="/account?tab=billing"
-          className="mt-4 inline-block rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100"
+          className="mt-4 inline-block rounded-md border border-brand-orange bg-brand-orange/5 px-4 py-2 text-sm font-medium text-brand-gold-ink hover:bg-brand-orange/10"
         >
           Upgrade to access
         </a>
@@ -47,15 +47,15 @@ export default async function TrainingModulePage({
     <div className="mx-auto max-w-3xl">
       <Link
         href="/community/training"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-brand-muted-soft hover:text-brand-muted"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to Training
       </Link>
 
       {/* Course header */}
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-        <div className="bg-gradient-to-br from-gray-900 to-gray-700 px-6 py-6 text-white">
+      <div className="overflow-hidden rounded-2xl border border-brand-border bg-white">
+        <div className="bg-gradient-to-br from-brand-blue-dark to-brand-blue px-6 py-6 text-white">
           <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-medium">
             {COURSE_TYPE_LABELS[mod.course_type]}
           </span>
@@ -77,15 +77,15 @@ export default async function TrainingModulePage({
 
         {/* Progress bar */}
         <div className="px-6 py-4">
-          <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-gray-500">
+          <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-brand-muted-soft">
             <span>
               {mod.completedCount} of {mod.itemCount} complete
             </span>
-            <span className={pct === 100 ? 'text-green-600' : 'text-gray-700'}>{pct}%</span>
+            <span className={pct === 100 ? 'text-green-600' : 'text-brand-muted'}>{pct}%</span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-brand-hairline">
             <div
-              className={`h-full rounded-full transition-all ${pct === 100 ? 'bg-green-500' : 'bg-gray-900'}`}
+              className={`h-full rounded-full transition-all ${pct === 100 ? 'bg-green-500' : 'bg-brand-blue-dark'}`}
               style={{ width: `${pct}%` }}
             />
           </div>
@@ -101,16 +101,16 @@ export default async function TrainingModulePage({
           return (
             <section key={section.id}>
               <div className="mb-2 flex items-baseline justify-between gap-3">
-                <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-gray-700">
-                  {section.locked && <Lock className="h-3.5 w-3.5 text-amber-500" />}
+                <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-brand-muted">
+                  {section.locked && <Lock className="h-3.5 w-3.5 text-brand-gold-ink" />}
                   {section.title}
                 </h2>
                 {section.locked && section.availableAt ? (
-                  <span className="text-xs font-medium text-amber-600">
+                  <span className="text-xs font-medium text-brand-gold-ink">
                     Unlocks {new Date(section.availableAt).toLocaleDateString()}
                   </span>
                 ) : (
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-brand-muted-soft">
                     {done}/{section.items.length}
                   </span>
                 )}
@@ -127,7 +127,7 @@ export default async function TrainingModulePage({
                   />
                 ))}
                 {section.items.length === 0 && (
-                  <li className="rounded-lg border border-dashed border-gray-200 p-3 text-xs text-gray-400">
+                  <li className="rounded-lg border border-dashed border-brand-border p-3 text-xs text-brand-muted-soft">
                     No lessons in this section yet.
                   </li>
                 )}
@@ -139,7 +139,7 @@ export default async function TrainingModulePage({
         {mod.ungrouped.length > 0 && (
           <section>
             {mod.sections.length > 0 && (
-              <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-700">
+              <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-brand-muted">
                 More lessons
               </h2>
             )}
@@ -157,7 +157,7 @@ export default async function TrainingModulePage({
         )}
 
         {mod.items.length === 0 && (
-          <p className="text-sm text-gray-500">No lessons in this module yet.</p>
+          <p className="text-sm text-brand-muted-soft">No lessons in this module yet.</p>
         )}
       </div>
     </div>

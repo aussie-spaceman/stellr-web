@@ -138,18 +138,18 @@ export function ChatPanel({
   }
 
   return (
-    <div className="flex h-80 flex-col rounded-lg border border-gray-200 bg-white">
-      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2">
-        <span className="text-sm font-semibold text-gray-700">{title}</span>
+    <div className="flex h-80 flex-col rounded-lg border border-brand-border bg-white">
+      <div className="flex items-center justify-between border-b border-brand-hairline px-4 py-2">
+        <span className="text-sm font-semibold text-brand-muted">{title}</span>
         {onlineCount > 0 && (
-          <span className="flex items-center gap-1 text-xs text-gray-400">
+          <span className="flex items-center gap-1 text-xs text-brand-muted-soft">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
             {onlineCount} online
           </span>
         )}
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto px-4 py-3">
-        {messages.length === 0 && <p className="text-sm text-gray-400">No messages yet — say hello.</p>}
+        {messages.length === 0 && <p className="text-sm text-brand-muted-soft">No messages yet — say hello.</p>}
         {messages.map((m) => {
           const mine = m.author_member_id === selfMemberId
           return (
@@ -159,19 +159,19 @@ export function ChatPanel({
                   onClick={() => act('/api/community/chat/flag', m.id)}
                   title="Flag for the mentor"
                   aria-label="Flag message"
-                  className="text-gray-300 opacity-0 transition hover:text-amber-600 group-hover:opacity-100"
+                  className="text-brand-muted-soft opacity-0 transition hover:text-brand-gold-ink group-hover:opacity-100"
                 >
                   <Flag className="h-3.5 w-3.5" />
                 </button>
               )}
               <div
                 className={`max-w-[75%] rounded-lg px-3 py-1.5 text-sm ${
-                  mine ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-800'
+                  mine ? 'bg-brand-blue text-white' : 'bg-brand-hairline text-brand-blue-dark'
                 }`}
               >
                 {m.body}
                 {m.flagged && (
-                  <span className="ml-2 align-middle text-[10px] font-medium text-amber-500">⚑ flagged</span>
+                  <span className="ml-2 align-middle text-[10px] font-medium text-brand-gold-ink">⚑ flagged</span>
                 )}
               </div>
               {canModerate && (
@@ -179,7 +179,7 @@ export function ChatPanel({
                   onClick={() => act('/api/community/chat/delete', m.id)}
                   title="Delete message"
                   aria-label="Delete message"
-                  className="text-gray-300 opacity-0 transition hover:text-red-600 group-hover:opacity-100"
+                  className="text-brand-muted-soft opacity-0 transition hover:text-red-600 group-hover:opacity-100"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -189,11 +189,11 @@ export function ChatPanel({
         })}
         <div ref={endRef} />
       </div>
-      <div className="h-4 px-4 text-xs italic text-gray-400">
+      <div className="h-4 px-4 text-xs italic text-brand-muted-soft">
         {typing.length > 0 &&
           (typing.length === 1 ? `${typing[0]} is typing…` : `${typing.slice(0, 2).join(', ')} are typing…`)}
       </div>
-      <div className="flex items-center gap-2 border-t border-gray-100 p-2">
+      <div className="flex items-center gap-2 border-t border-brand-hairline p-2">
         <input
           value={draft}
           onChange={(e) => {
@@ -202,12 +202,12 @@ export function ChatPanel({
           }}
           onKeyDown={(e) => e.key === 'Enter' && send()}
           placeholder="Message…"
-          className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+          className="flex-1 rounded-md border border-brand-border px-3 py-1.5 text-sm"
         />
         <button
           onClick={send}
           disabled={sending}
-          className="rounded-md bg-gray-900 p-2 text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded-md bg-brand-blue p-2 text-white hover:bg-brand-blue-dark disabled:opacity-50"
           aria-label="Send"
         >
           <Send className="h-4 w-4" />

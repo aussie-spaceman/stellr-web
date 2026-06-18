@@ -21,13 +21,13 @@ function renderMarks(text: string, marks: TipTapNode['marks'], key: number): Rea
       case 'italic':
         return <em>{acc}</em>
       case 'code':
-        return <code className="rounded bg-gray-100 px-1 py-0.5 text-sm">{acc}</code>
+        return <code className="rounded bg-brand-hairline px-1 py-0.5 text-sm">{acc}</code>
       case 'strike':
         return <s>{acc}</s>
       case 'link': {
         const href = typeof mark.attrs?.href === 'string' ? mark.attrs.href : '#'
         return (
-          <a href={href} target="_blank" rel="noopener noreferrer nofollow" className="text-blue-600 underline">
+          <a href={href} target="_blank" rel="noopener noreferrer nofollow" className="text-brand-blue underline">
             {acc}
           </a>
         )
@@ -63,7 +63,7 @@ function renderNode(node: TipTapNode, key: number): React.ReactNode {
       return <blockquote key={key}>{children}</blockquote>
     case 'codeBlock':
       return (
-        <pre key={key} className="overflow-x-auto rounded bg-gray-100 p-3 text-sm">
+        <pre key={key} className="overflow-x-auto rounded bg-brand-hairline p-3 text-sm">
           <code>{children}</code>
         </pre>
       )
@@ -79,7 +79,7 @@ function renderNode(node: TipTapNode, key: number): React.ReactNode {
             ? node.attrs.id
             : 'member'
       return (
-        <span key={key} className="rounded bg-blue-100 px-1 font-medium text-blue-700">
+        <span key={key} className="rounded bg-brand-blue/10 px-1 font-medium text-brand-blue">
           @{label}
         </span>
       )

@@ -63,14 +63,14 @@ export function CommentForm({ postId, parentCommentId = null, placeholder, compa
         <button
           onClick={submit}
           disabled={submitting || !hasText}
-          className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-40"
+          className="rounded-md bg-brand-blue-dark px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-40"
         >
           {submitting ? 'Sending…' : 'Reply'}
         </button>
         {onDone && (
           <button
             onClick={onDone}
-            className="rounded-md px-2 py-1.5 text-sm text-gray-500 hover:text-gray-700"
+            className="rounded-md px-2 py-1.5 text-sm text-brand-muted-soft hover:text-brand-muted"
           >
             Cancel
           </button>

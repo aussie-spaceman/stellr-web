@@ -54,12 +54,12 @@ export default async function SessionRoomPage({ params }: { params: Promise<{ id
     <div>
       <Link
         href="/community/coaching"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-brand-muted-soft hover:text-brand-muted"
       >
         <ArrowLeft className="h-4 w-4" />
         Back
       </Link>
-      <h1 className="mb-3 text-xl font-bold text-gray-900">{session.title ?? 'Session'}</h1>
+      <h1 className="mb-3 text-xl font-bold text-brand-blue-dark">{session.title ?? 'Session'}</h1>
       <VideoRoom
         scriptSrc={embed.scriptSrc}
         domain={embed.domain}

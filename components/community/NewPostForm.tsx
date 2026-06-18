@@ -55,7 +55,7 @@ export function NewPostForm({ spaceSlug }: { spaceSlug: string }) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="w-full rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-left text-sm text-gray-500 hover:border-gray-400 hover:text-gray-700"
+        className="w-full rounded-lg border border-dashed border-brand-border bg-white px-4 py-3 text-left text-sm text-brand-muted-soft hover:border-brand-border hover:text-brand-muted"
       >
         Start a new post…
       </button>
@@ -63,13 +63,13 @@ export function NewPostForm({ spaceSlug }: { spaceSlug: string }) {
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
+    <div className="rounded-lg border border-brand-border bg-white p-4">
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Post title"
         maxLength={300}
-        className="mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-medium focus:border-gray-400 focus:outline-none"
+        className="mb-3 w-full rounded-md border border-brand-border px-3 py-2 text-sm font-medium focus:border-brand-border focus:outline-none"
       />
       <RichTextEditor
         value={bodyJson}
@@ -84,7 +84,7 @@ export function NewPostForm({ spaceSlug }: { spaceSlug: string }) {
         <button
           onClick={submit}
           disabled={submitting}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded-md bg-brand-blue-dark px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
         >
           {submitting ? 'Posting…' : 'Post'}
         </button>
@@ -93,12 +93,12 @@ export function NewPostForm({ spaceSlug }: { spaceSlug: string }) {
             reset()
             setOpen(false)
           }}
-          className="rounded-md px-3 py-2 text-sm text-gray-500 hover:text-gray-700"
+          className="rounded-md px-3 py-2 text-sm text-brand-muted-soft hover:text-brand-muted"
         >
           Cancel
         </button>
         {bodyText.length > 0 && (
-          <span className="ml-auto text-xs text-gray-400">{bodyText.length} chars</span>
+          <span className="ml-auto text-xs text-brand-muted-soft">{bodyText.length} chars</span>
         )}
       </div>
     </div>

@@ -149,21 +149,21 @@ export default async function AccountPage({
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">My Account</h1>
-        <p className="mt-1 text-sm text-gray-500">Manage your Stellr membership and profile.</p>
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">My Account</h1>
+        <p className="mt-1 text-sm text-brand-muted-soft">Manage your Stellr membership and profile.</p>
       </div>
 
       {/* Tab bar — only shown when there are multiple tabs */}
       {tabLinks.length > 1 && (
-        <div className="flex gap-1 border-b border-gray-200">
+        <div className="flex gap-1 border-b border-brand-border">
           {tabLinks.map(({ key, label }) => (
             <Link
               key={key}
               href={key === 'profile' ? '/account' : `/account?tab=${key}`}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              className={`px-4 py-2.5 font-subheading text-sm font-medium border-b-2 transition-colors ${
                 activeTab === key
-                  ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-brand-blue text-brand-blue'
+                  : 'border-transparent text-brand-muted-soft hover:text-brand-muted hover:border-brand-border'
               }`}
             >
               {label}
@@ -182,8 +182,8 @@ export default async function AccountPage({
               ethnicityOptions={ethnicityOptions ?? []}
               allergyOptions={allergyOptions ?? []}
             />
-            <div className="rounded-xl border border-gray-200 bg-white p-5">
-              <h2 className="mb-4 text-base font-semibold text-gray-900">Community directory</h2>
+            <div className="rounded-xl border border-brand-border bg-white p-5">
+              <h2 className="mb-4 text-base font-semibold text-brand-blue-dark">Community directory</h2>
               <DirectoryPrefsForm
                 initial={directoryPrefs ?? { is_visible: false, show_school: true, show_region: true }}
               />
@@ -192,10 +192,10 @@ export default async function AccountPage({
             <EventHistory participations={member.event_participations ?? []} editable />
             <DocusignsSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
             <ComplianceSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
-            <div className="rounded-xl border border-gray-200 bg-white p-5">
+            <div className="rounded-xl border border-brand-border bg-white p-5">
               <AddressBook />
             </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-5">
+            <div className="rounded-xl border border-brand-border bg-white p-5">
               <OrdersList />
             </div>
           </div>
@@ -208,7 +208,7 @@ export default async function AccountPage({
       {/* Teams tab */}
       {activeTab === 'teams' && showTeams && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-brand-muted-soft">
             {isGroupManager
               ? 'Manage your registered teams and participant details.'
               : 'Teams you have been added to for upcoming events.'}
@@ -224,9 +224,9 @@ export default async function AccountPage({
 
       {/* Activity tab */}
       {activeTab === 'activity' && (
-        <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <h2 className="mb-1 text-base font-semibold text-gray-900">Activity log</h2>
-          <p className="mb-4 text-xs text-gray-400">
+        <div className="rounded-xl border border-brand-border bg-white p-6">
+          <h2 className="mb-1 text-base font-semibold text-brand-blue-dark">Activity log</h2>
+          <p className="mb-4 text-xs text-brand-muted-soft">
             A record of changes to your membership, profile and account.
           </p>
           <ActivityTimeline items={activity ?? []} fetchUrl="/api/members/me/activity" />

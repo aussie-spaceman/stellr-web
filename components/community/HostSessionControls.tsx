@@ -36,7 +36,7 @@ export function HostSessionControls({
   }
 
   return (
-    <div className="space-y-3 border-t border-gray-100 pt-3">
+    <div className="space-y-3 border-t border-brand-hairline pt-3">
       <div className="flex flex-wrap gap-2">
         {status !== 'completed' && (
           <button
@@ -51,7 +51,7 @@ export function HostSessionControls({
           <button
             onClick={() => call({ action: 'respond', sessionId, status: 'cancelled' })}
             disabled={busy}
-            className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+            className="rounded-md border border-brand-border px-2.5 py-1 text-xs font-medium text-brand-muted hover:bg-brand-hairline disabled:opacity-50"
           >
             Cancel
           </button>
@@ -59,17 +59,17 @@ export function HostSessionControls({
       </div>
 
       <div>
-        <label className="text-xs font-medium text-gray-500">Session notes</label>
+        <label className="text-xs font-medium text-brand-muted-soft">Session notes</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-md border border-brand-border px-3 py-2 text-sm"
         />
         <button
           onClick={() => call({ action: 'notes', sessionId, notes })}
           disabled={busy}
-          className="mt-1 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+          className="mt-1 rounded-md border border-brand-border px-2.5 py-1 text-xs font-medium text-brand-muted hover:bg-brand-hairline disabled:opacity-50"
         >
           Save notes
         </button>
@@ -77,7 +77,7 @@ export function HostSessionControls({
 
       {memberId && (
         <div>
-          <label className="text-xs font-medium text-gray-500">
+          <label className="text-xs font-medium text-brand-muted-soft">
             Set actions (one per line)
           </label>
           <textarea
@@ -85,7 +85,7 @@ export function HostSessionControls({
             onChange={(e) => setActionsText(e.target.value)}
             rows={2}
             placeholder="Watch the recording&#10;Draft your project brief"
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-md border border-brand-border px-3 py-2 text-sm"
           />
           <button
             onClick={() => {
@@ -94,7 +94,7 @@ export function HostSessionControls({
               setActionsText('')
             }}
             disabled={busy}
-            className="mt-1 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+            className="mt-1 rounded-md border border-brand-border px-2.5 py-1 text-xs font-medium text-brand-muted hover:bg-brand-hairline disabled:opacity-50"
           >
             Assign actions
           </button>

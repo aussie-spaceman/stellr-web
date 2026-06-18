@@ -67,8 +67,8 @@ export function ReactionBar({ targetType, targetId, initial }: Props) {
           className={[
             'flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition',
             r.reactedByMe
-              ? 'border-blue-300 bg-blue-50 text-blue-700'
-              : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300',
+              ? 'border-brand-blue/30 bg-brand-blue/5 text-brand-blue'
+              : 'border-brand-border bg-white text-brand-muted hover:border-brand-border',
           ].join(' ')}
         >
           <span>{r.emoji}</span>
@@ -79,18 +79,18 @@ export function ReactionBar({ targetType, targetId, initial }: Props) {
       <div className="relative">
         <button
           onClick={() => setPicking((p) => !p)}
-          className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-400 hover:border-gray-300 hover:text-gray-600"
+          className="rounded-full border border-brand-border bg-white px-2 py-0.5 text-xs text-brand-muted-soft hover:border-brand-border hover:text-brand-muted"
           aria-label="Add reaction"
         >
           + 😊
         </button>
         {picking && (
-          <div className="absolute z-10 mt-1 flex gap-1 rounded-lg border border-gray-200 bg-white p-1.5 shadow-sm">
+          <div className="absolute z-10 mt-1 flex gap-1 rounded-lg border border-brand-border bg-white p-1.5 shadow-sm">
             {EMOJI_CHOICES.map((e) => (
               <button
                 key={e}
                 onClick={() => toggle(e)}
-                className="rounded px-1 text-base hover:bg-gray-100"
+                className="rounded px-1 text-base hover:bg-brand-hairline"
               >
                 {e}
               </button>

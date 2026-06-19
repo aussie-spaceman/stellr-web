@@ -10,7 +10,7 @@ export function AppFooter() {
   return (
     <footer className="bg-brand-blue-dark text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-content-muted">
           <p>{year} © Stellr Education&nbsp;&nbsp;|&nbsp;&nbsp;Registered 501(c)(3)&nbsp;&nbsp;|&nbsp;&nbsp;Built In Utah, Educating The Globe</p>
           <div className="flex items-center gap-4">
             <Link href="/privacy" className="hover:text-white transition-colors">

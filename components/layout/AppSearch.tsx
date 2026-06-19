@@ -50,13 +50,13 @@ export function AppSearch() {
           onKeyDown={(e) => e.key === 'Escape' && collapse()}
           placeholder="Search…"
           aria-label="Search the community"
-          className="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm text-brand-grey-dark placeholder:text-gray-400 focus:border-brand-blue focus:outline-none"
+          className="w-full rounded-md border border-line px-3 py-1.5 text-sm text-brand-grey-dark placeholder:text-content-faint focus:border-brand-blue focus:outline-none"
         />
       </div>
       {open ? (
         <button
           type="submit"
-          className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+          className="rounded-md p-1.5 text-content-muted hover:bg-surface hover:text-content-body"
           aria-label="Submit search"
           // Runs before the input's blur collapses the field
           onMouseDown={(e) => e.preventDefault()}
@@ -67,7 +67,7 @@ export function AppSearch() {
         <button
           type="button"
           onClick={expand}
-          className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+          className="rounded-md p-1.5 text-content-muted hover:bg-surface hover:text-content-body"
           aria-label="Open search"
         >
           <Search className="h-5 w-5" />

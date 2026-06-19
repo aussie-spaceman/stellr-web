@@ -19,7 +19,7 @@ type Section = { label: string; href: string; color: string; icon: typeof Users;
 
 const SECTIONS: Section[] = [
   {
-    label: 'Members', href: '/admin', color: '#1d5fd6', icon: Users,
+    label: 'Members', href: '/admin', color: '#2C53C6', icon: Users,
     items: [
       { href: '/admin', label: 'Members' },
       { href: '/admin/membership', label: 'Membership' },
@@ -27,7 +27,7 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    label: 'Competitions', href: '/admin/events', color: '#da6220', icon: Trophy,
+    label: 'Competitions', href: '/admin/events', color: '#E0922F', icon: Trophy,
     items: [{ href: '/admin/events', label: 'Events' }],
   },
   {
@@ -40,7 +40,7 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    label: 'Academy', href: '/admin/community/training', color: '#dda33b', icon: GraduationCap,
+    label: 'Academy', href: '/admin/community/training', color: '#E0A23A', icon: GraduationCap,
     items: [
       { href: '/admin/community/training', label: 'Training' },
       { href: '/admin/community/sessions', label: 'Sessions' },
@@ -48,14 +48,14 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    label: 'Store', href: '/admin/store', color: '#0d439d', icon: ShoppingBag,
+    label: 'Store', href: '/admin/store', color: '#3C6DF6', icon: ShoppingBag,
     items: [
       { href: '/admin/store', label: 'Products' },
       { href: '/admin/store/discounts', label: 'Discounts' },
     ],
   },
   {
-    label: 'Operations', href: '/admin/delegations', color: '#8a8472', icon: SlidersHorizontal,
+    label: 'Operations', href: '/admin/delegations', color: '#6A708C', icon: SlidersHorizontal,
     items: [
       { href: '/admin/delegations', label: 'Delegations' },
       { href: '/admin/staff', label: 'Staff roles' },
@@ -123,10 +123,10 @@ export function AdminSidebar({ isAdmin = true }: { isAdmin?: boolean }) {
               aria-label={label}
               className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-1"
             >
-              <Icon className="h-5 w-5" style={{ color: active ? color : '#8a8472' }} />
+              <Icon className="h-5 w-5" style={{ color: active ? color : '#6A708C' }} />
               <span
                 className="font-subheading text-[10px]"
-                style={{ color: active ? '#051535' : '#8a8472', fontWeight: active ? 600 : 500 }}
+                style={{ color: active ? '#13183A' : '#6A708C', fontWeight: active ? 600 : 500 }}
               >
                 {label}
               </span>

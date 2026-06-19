@@ -65,7 +65,7 @@ function TierCard({ tier, billingInterval, isLoggedIn, signInUrl }: TierCardProp
   }
 
   return (
-    <div className={`rounded-xl border p-6 flex flex-col ${tier.highlight ? 'border-brand-blue shadow-lg ring-2 ring-brand-blue' : 'border-gray-200'}`}>
+    <div className={`rounded-xl border p-6 flex flex-col ${tier.highlight ? 'border-brand-blue shadow-lg ring-2 ring-brand-blue' : 'border-line'}`}>
       {tier.badge && (
         <span className="inline-block text-xs font-bold uppercase tracking-wider text-brand-blue mb-3">
           {tier.badge}
@@ -74,7 +74,7 @@ function TierCard({ tier, billingInterval, isLoggedIn, signInUrl }: TierCardProp
       <h3 className="text-xl font-bold text-brand-blue-dark">{tier.name}</h3>
       <p className="text-2xl font-bold text-brand-blue mt-1">{displayPrice}</p>
       {!tier.isFree && showMonthly && (
-        <p className="text-xs text-gray-400 mt-0.5">Billed ${tier.annualCost} annually</p>
+        <p className="text-xs text-content-faint mt-0.5">Billed ${tier.annualCost} annually</p>
       )}
       <p className="text-sm text-brand-grey-mid mt-1 mb-4">{tier.description}</p>
       <ul className="space-y-2 flex-1">
@@ -89,7 +89,7 @@ function TierCard({ tier, billingInterval, isLoggedIn, signInUrl }: TierCardProp
         <button
           onClick={handleCheckout}
           disabled={loading}
-          className={`mt-6 btn-primary w-full justify-center text-sm ${!tier.highlight ? 'bg-brand-blue-dark hover:bg-gray-900' : ''} disabled:opacity-60 disabled:cursor-not-allowed`}
+          className={`mt-6 btn-primary w-full justify-center text-sm ${!tier.highlight ? 'bg-brand-blue-dark hover:bg-ink' : ''} disabled:opacity-60 disabled:cursor-not-allowed`}
         >
           {loading ? 'Redirecting…' : `Get ${tier.name}`}
         </button>
@@ -127,13 +127,13 @@ export function PricingSection({
             <p className="text-brand-grey-dark">{groupDescription}</p>
           </div>
           {hasMonthlyOption && (
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 self-start sm:self-auto">
+            <div className="flex items-center gap-1 bg-surface rounded-lg p-1 self-start sm:self-auto">
               <button
                 onClick={() => setBillingInterval('annual')}
                 className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   billingInterval === 'annual'
                     ? 'bg-white text-brand-blue-dark shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
+                    : 'text-content-muted hover:text-content-body'
                 }`}
               >
                 Annual
@@ -143,7 +143,7 @@ export function PricingSection({
                 className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   billingInterval === 'monthly'
                     ? 'bg-white text-brand-blue-dark shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
+                    : 'text-content-muted hover:text-content-body'
                 }`}
               >
                 Monthly

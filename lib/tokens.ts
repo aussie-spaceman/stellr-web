@@ -3,6 +3,9 @@
 export const tokens = {
   "color": {
     "midnight": "#0E1330",
+    "midnightDeep": "#141A3D",
+    "heroLead": "#C3CBF0",
+    "heroDim": "#9FB0FF",
     "ink": "#13183A",
     "utilityNavy": "#0A1B3C",
     "surface": "#F6F7FB",

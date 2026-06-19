@@ -31,7 +31,7 @@ export function AddToCart({
   const selected = active.find((v) => v.id === variantId) ?? active[0]
 
   if (active.length === 0) {
-    return <p className="text-sm text-gray-500">Currently unavailable.</p>
+    return <p className="text-sm text-content-muted">Currently unavailable.</p>
   }
 
   const add = () => {
@@ -51,17 +51,17 @@ export function AddToCart({
 
   return (
     <div className="space-y-4">
-      <div className="text-2xl font-semibold text-gray-900">
+      <div className="text-2xl font-semibold text-ink">
         ${((selected?.market_price_cents ?? 0) / 100).toFixed(2)}
       </div>
 
       {active.length > 1 && (
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Option</label>
+          <label className="mb-1 block text-sm font-medium text-content-body">Option</label>
           <select
             value={variantId}
             onChange={(e) => setVariantId(e.target.value)}
-            className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-line px-3 py-2 text-sm"
           >
             {active.map((v) => (
               <option key={v.id} value={v.id}>
@@ -73,13 +73,13 @@ export function AddToCart({
       )}
 
       <div className="flex items-center gap-3">
-        <label className="text-sm font-medium text-gray-700">Qty</label>
+        <label className="text-sm font-medium text-content-body">Qty</label>
         <input
           type="number"
           min={1}
           value={qty}
           onChange={(e) => setQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-          className="w-20 rounded-md border border-gray-200 px-3 py-2 text-sm"
+          className="w-20 rounded-md border border-line px-3 py-2 text-sm"
         />
       </div>
 
@@ -95,7 +95,7 @@ export function AddToCart({
           View cart
         </Link>
       </div>
-      <p className="text-xs text-gray-400">Shipping calculated at checkout. Membership discounts apply automatically.</p>
+      <p className="text-xs text-content-faint">Shipping calculated at checkout. Membership discounts apply automatically.</p>
     </div>
   )
 }

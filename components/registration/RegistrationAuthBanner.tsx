@@ -39,7 +39,7 @@ export function RegistrationAuthBanner({
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+    <div className="rounded-lg border border-line bg-surface px-4 py-3 text-sm text-content-body">
       Already have a Stellr account?{' '}
       <a href={signInUrl} className="font-medium text-brand-blue hover:underline">
         Sign in to pre-fill your details

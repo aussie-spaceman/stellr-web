@@ -24,6 +24,12 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@stellr/web-ui": [
+        "./packages/web-ui/src/index.ts"
+      ],
+      "@stellr/icons": [
+        "./packages/icons/src/index.tsx"
       ]
     },
     "target": "ES2017"

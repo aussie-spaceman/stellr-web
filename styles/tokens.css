@@ -4,6 +4,9 @@
 
 :root {
   --color-midnight: #0e1330; /** Page / footer background */
+  --color-midnight-deep: #141a3d; /** Hero gradient bottom stop */
+  --color-hero-lead: #c3cbf0; /** Lead text on navy hero */
+  --color-hero-dim: #9fb0ff; /** Breadcrumb / dim accent on navy hero */
   --color-ink: #13183a; /** Headings */
   --color-utility-navy: #0a1b3c; /** Header top utility bar */
   --color-surface: #f6f7fb; /** Section / panel background */

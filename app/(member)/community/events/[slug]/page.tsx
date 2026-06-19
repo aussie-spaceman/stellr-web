@@ -43,7 +43,7 @@ export default async function EventPortalPage({
       {/* Orange event hero — mirrors the Home next-event treatment (T3.5) */}
       <div
         className="relative overflow-hidden rounded-card-lg p-6 text-white"
-        style={{ background: 'linear-gradient(115deg,#da6220,#c2410c)' }}
+        style={{ background: 'linear-gradient(115deg,#E0922F,#C2722A)' }}
       >
         <Image
           src="/images/logo-icon.svg"

@@ -2,16 +2,22 @@
   "name": "stellr-web",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev",
     "build:tokens": "node design/build-tokens.mjs",
-    "prebuild": "node design/build-tokens.mjs",
+    "lint:tokens": "node scripts/ds-lint.mjs",
+    "prebuild": "node design/build-tokens.mjs && node scripts/ds-lint.mjs",
     "build": "next build",
     "start": "next start",
     "seed": "tsx scripts/seed-events.ts",
     "backfill:members": "tsx scripts/backfill-members.ts",
     "set-admin": "tsx scripts/set-admin.ts",
-    "verify:prod": "tsx scripts/verify-prod-services.ts"
+    "verify:prod": "tsx scripts/verify-prod-services.ts",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.2",
@@ -45,6 +51,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@storybook/nextjs": "^10.4.6",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.17",
@@ -52,6 +59,7 @@
     "autoprefixer": "^10.0.1",
     "dotenv": "^16.4.0",
     "postcss": "^8",
+    "storybook": "^10.4.6",
     "style-dictionary": "^5.4.4",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.7.0",

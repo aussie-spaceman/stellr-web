@@ -81,9 +81,9 @@ export default async function AdminMembersPage({
 
       {/* At-a-glance */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatCard label="Active members" value={totalMembers ?? 0} accent="#1d5fd6" />
-        <StatCard label="Active memberships" value={activeMemberships ?? 0} accent="#dda33b" />
-        <StatCard label="Schools" value={schoolCount ?? 0} accent="#0d439d" />
+        <StatCard label="Active members" value={totalMembers ?? 0} accent="#2C53C6" />
+        <StatCard label="Active memberships" value={activeMemberships ?? 0} accent="#E0A23A" />
+        <StatCard label="Schools" value={schoolCount ?? 0} accent="#3C6DF6" />
       </div>
 
       <MemberTable

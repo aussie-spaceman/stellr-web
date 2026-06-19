@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Workspace UI packages ship TS source — let Next transpile them.
+  transpilePackages: ['@stellr/web-ui', '@stellr/icons'],
   async redirects() {
     return [
       { source: '/login', destination: '/sign-in', permanent: true },

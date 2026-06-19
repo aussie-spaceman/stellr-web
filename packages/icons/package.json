@@ -1,0 +1,15 @@
+{
+  "name": "@stellr/icons",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Stellr design-system line icon set (24px grid, currentColor).",
+  "type": "module",
+  "main": "./src/index.tsx",
+  "types": "./src/index.tsx",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  }
+}

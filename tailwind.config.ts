@@ -20,7 +20,9 @@ const config: Config = {
     extend: {
       colors: {
         /* ── New canonical semantic palette ──────────────────────────── */
-        midnight:     c.midnight,
+        midnight:     { DEFAULT: c.midnight, deep: c.midnightDeep },
+        'hero-lead':  c.heroLead,
+        'hero-dim':   c.heroDim,
         ink:          c.ink,
         'utility-navy': c.utilityNavy,
         surface:      c.surface,

@@ -21,9 +21,9 @@ type Item = { label: string; href: string; icon: typeof Home; color: string }
 
 const PRIMARY: Item[] = [
   { label: 'Home',         href: '/home',               icon: Home,           color: '#ffffff' },
-  { label: 'Competitions', href: '/events',             icon: Trophy,         color: '#da6220' },
+  { label: 'Competitions', href: '/events',             icon: Trophy,         color: '#E0922F' },
   { label: 'Community',    href: '/community',          icon: MessagesSquare, color: '#3f78d6' },
-  { label: 'Academy',      href: '/community/training', icon: GraduationCap,  color: '#dda33b' },
+  { label: 'Academy',      href: '/community/training', icon: GraduationCap,  color: '#E0A23A' },
   { label: 'Directory',    href: '/community/members',  icon: Users,          color: '#aebbd6' },
 ]
 
@@ -33,11 +33,11 @@ const COMMUNITY_SUB: Item[] = [
   { label: 'Directory', href: '/community/members',   icon: Users,          color: '#aebbd6' },
 ]
 const ACADEMY_SUB: Item[] = [
-  { label: 'Training',  href: '/community/training',  icon: GraduationCap,  color: '#dda33b' },
-  { label: 'Mentoring', href: '/community/mentoring', icon: HeartHandshake, color: '#dda33b' },
-  { label: 'Coaching',  href: '/community/coaching',  icon: Sparkles,       color: '#dda33b' },
+  { label: 'Training',  href: '/community/training',  icon: GraduationCap,  color: '#E0A23A' },
+  { label: 'Mentoring', href: '/community/mentoring', icon: HeartHandshake, color: '#E0A23A' },
+  { label: 'Coaching',  href: '/community/coaching',  icon: Sparkles,       color: '#E0A23A' },
 ]
-const HOSTING: Item = { label: 'Hosting', href: '/community/hosting', icon: Radio, color: '#dda33b' }
+const HOSTING: Item = { label: 'Hosting', href: '/community/hosting', icon: Radio, color: '#E0A23A' }
 
 export function AppSidebar({ canHost = false }: { canHost?: boolean }) {
   const pathname = usePathname() ?? ''
@@ -84,7 +84,7 @@ export function AppSidebar({ canHost = false }: { canHost?: boolean }) {
         </div>
 
         {/* Academy group — header + nested destinations (Training, Mentoring, Coaching, Hosting) */}
-        <RailHeader label="Academy" icon={GraduationCap} color="#dda33b" />
+        <RailHeader label="Academy" icon={GraduationCap} color="#E0A23A" />
         <div className="mb-1 ml-3 flex flex-col gap-0.5 border-l border-white/10 pl-2">
           {academySub.map((item) => (
             <RailSubLink key={item.href} item={item} active={subActive(item.href)} />
@@ -104,10 +104,10 @@ export function AppSidebar({ canHost = false }: { canHost?: boolean }) {
               aria-label={label}
               className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-1"
             >
-              <Icon className="h-5 w-5" style={{ color: active ? color : '#8a8472' }} />
+              <Icon className="h-5 w-5" style={{ color: active ? color : '#6A708C' }} />
               <span
                 className="font-subheading text-[10px]"
-                style={{ color: active ? '#051535' : '#8a8472', fontWeight: active ? 600 : 500 }}
+                style={{ color: active ? '#13183A' : '#6A708C', fontWeight: active ? 600 : 500 }}
               >
                 {label}
               </span>

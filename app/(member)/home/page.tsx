@@ -87,7 +87,7 @@ export default async function HomePage() {
       {nextEvt ? (
         <div
           className="relative mb-[18px] overflow-hidden rounded-card-lg p-6 text-white"
-          style={{ background: 'linear-gradient(115deg,#da6220,#c2410c)' }}
+          style={{ background: 'linear-gradient(115deg,#E0922F,#C2722A)' }}
         >
           <Image
             src="/images/logo-icon.svg"
@@ -121,7 +121,7 @@ export default async function HomePage() {
               )}
               <Link
                 href={`/community/events/${nextEvt.slug}`}
-                className="rounded-xl bg-white px-5 py-2.5 font-subheading text-sm font-semibold text-[#c2410c]"
+                className="rounded-xl bg-white px-5 py-2.5 font-subheading text-sm font-semibold text-[#C2722A]"
               >
                 View event hub →
               </Link>
@@ -221,7 +221,7 @@ export default async function HomePage() {
           <ul className="divide-y divide-brand-hairline">
             {feed.map((f) => (
               <li key={f.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                <Avatar id={f.authorId || f.authorName} name={f.authorName} size="md" color={f.isMentor ? '#da6220' : undefined} />
+                <Avatar id={f.authorId || f.authorName} name={f.authorName} size="md" color={f.isMentor ? '#E0922F' : undefined} />
                 <Link href={`/community/${f.spaceSlug}/${f.id}`} className="min-w-0 flex-1">
                   <span className="block text-[14.5px] text-brand-blue-dark">
                     <strong>{f.authorName}</strong>

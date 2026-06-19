@@ -18,9 +18,9 @@ export const metadata = { title: 'Community · Training' }
 // Section-colored cover gradients (T3.2): Curriculum = blue, CTE = orange,
 // Library/general = navy. Keyed by material_kind.
 const COVER: Record<string, { gradient: string; Icon: typeof GraduationCap }> = {
-  curriculum: { gradient: 'linear-gradient(120deg,#0d439d,#1d5fd6)', Icon: GraduationCap },
-  cte:        { gradient: 'linear-gradient(120deg,#da6220,#c2410c)', Icon: BookOpen },
-  general:    { gradient: 'linear-gradient(120deg,#051535,#0d439d)', Icon: Library },
+  curriculum: { gradient: 'linear-gradient(120deg,#3C6DF6,#2C53C6)', Icon: GraduationCap },
+  cte:        { gradient: 'linear-gradient(120deg,#E0922F,#C2722A)', Icon: BookOpen },
+  general:    { gradient: 'linear-gradient(120deg,#13183A,#3C6DF6)', Icon: Library },
 }
 
 function ModuleCard({ m }: { m: TrainingModuleSummary }) {

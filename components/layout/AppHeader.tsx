@@ -79,7 +79,7 @@ export function AppHeader({ isAdmin = false, showHosting = false }: AppHeaderPro
 
   return (
     <header className="sticky top-0 z-50">
-      <nav className="bg-white border-b border-gray-100 shadow-sm" aria-label="App navigation">
+      <nav className="bg-white border-b border-line-light shadow-sm" aria-label="App navigation">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20 gap-4">
             <Logo />
@@ -112,7 +112,7 @@ export function AppHeader({ isAdmin = false, showHosting = false }: AppHeaderPro
 
                       {openDropdown === section.label && (
                         <ul
-                          className="absolute top-full left-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50"
+                          className="absolute top-full left-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-line-light py-1 z-50"
                           onMouseEnter={() => openMenu(section.label)}
                           onMouseLeave={scheduleClose}
                         >
@@ -172,7 +172,7 @@ export function AppHeader({ isAdmin = false, showHosting = false }: AppHeaderPro
           <div className="px-4 py-4">
             {nav.map((section) =>
               section.dropdown ? (
-                <div key={section.label} className="border-b border-gray-100">
+                <div key={section.label} className="border-b border-line-light">
                   <button
                     className="w-full flex items-center justify-between px-3 py-3 text-base font-medium text-brand-blue-dark"
                     onClick={() => toggleMobileSection(section.label)}
@@ -202,7 +202,7 @@ export function AppHeader({ isAdmin = false, showHosting = false }: AppHeaderPro
                 <Link
                   key={section.label}
                   href={section.href}
-                  className="block border-b border-gray-100 px-3 py-3 text-base font-medium text-brand-blue-dark"
+                  className="block border-b border-line-light px-3 py-3 text-base font-medium text-brand-blue-dark"
                   onClick={() => setMobileOpen(false)}
                 >
                   {section.label}

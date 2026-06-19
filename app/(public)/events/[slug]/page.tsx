@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { MapPin, Calendar, Users, ExternalLink } from 'lucide-react'
+import { MapPin, Calendar, Users } from 'lucide-react'
 import { getEventBySlug, urlFor, type StellarEvent } from '@/lib/sanity'
 import { formatDateRange, formatDate, registrationStatus } from '@/lib/utils'
 import { PortableText } from 'next-sanity'
@@ -134,12 +134,6 @@ export default async function EventDetailPage({ params }: PageProps) {
               className="btn-primary text-base px-8 py-4"
             >
               Register Now
-            </a>
-            <a
-              href="#"
-              className="btn-outline-white text-base px-8 py-4 flex items-center gap-2"
-            >
-              <ExternalLink size={16} /> Download Info Pack
             </a>
           </div>
         </div>

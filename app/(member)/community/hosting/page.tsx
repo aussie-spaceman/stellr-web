@@ -87,7 +87,9 @@ export default async function HostingPage() {
                         {formatDateTime(s.scheduled_start)} · {s.status}
                       </p>
                     </div>
-                    {s.status === 'scheduled' && upcomingSession && <JoinButton sessionId={s.id} />}
+                    {s.status === 'scheduled' && upcomingSession && (
+                      <JoinButton sessionId={s.id} scheduledStart={s.scheduled_start} isHost />
+                    )}
                   </div>
                   <HostSessionControls
                     sessionId={s.id}

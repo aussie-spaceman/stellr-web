@@ -3,6 +3,9 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
 
+// Video files can be large — override the default 4 MB Next.js body limit.
+export const maxRequestBodySize = '500mb'
+
 // Admin: add a lesson item to a module (FR-COM-10).
 // Accepts multipart/form-data so admins can upload/record a video or document,
 // or link a Google Doc / external URL.

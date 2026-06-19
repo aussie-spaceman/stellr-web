@@ -12,6 +12,11 @@ export interface Coach {
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
+const DURATION_OPTIONS = [
+  { label: '30 min', value: 30 },
+  { label: '1 hr', value: 60 },
+]
+
 function fmtMinutes(m: number): string {
   const h = Math.floor(m / 60)
   const mm = (m % 60).toString().padStart(2, '0')
@@ -24,9 +29,12 @@ export function BookCoachingForm({ coaches, hasRemaining }: { coaches: Coach[]; 
   const router = useRouter()
   const [coachId, setCoachId] = useState(coaches[0]?.id ?? '')
   const [start, setStart] = useState('')
+  const [durationMin, setDurationMin] = useState(60)
   const [error, setError] = useState<string | null>(null)
   const [needsPurchase, setNeedsPurchase] = useState(false)
   const [busy, setBusy] = useState(false)
+
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
 
   const coach = coaches.find((c) => c.id === coachId)
 
@@ -42,7 +50,7 @@ export function BookCoachingForm({ coaches, hasRemaining }: { coaches: Coach[]; 
       const res = await fetch('/api/community/sessions/book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostId: coachId, start: new Date(start).toISOString() }),
+        body: JSON.stringify({ hostId: coachId, start: new Date(start).toISOString(), durationMin }),
       })
       const json = await res.json()
       if (!res.ok) {
@@ -80,7 +88,7 @@ export function BookCoachingForm({ coaches, hasRemaining }: { coaches: Coach[]; 
 
   return (
     <div className="space-y-3 rounded-lg border border-brand-border bg-white p-4">
-      <h3 className="text-sm font-semibold text-brand-muted">Book a coaching session</h3>
+      <h3 className="text-sm font-semibold text-brand-muted">Request a coaching session</h3>
       {!hasRemaining && (
         <p className="rounded-md bg-brand-orange/5 px-3 py-2 text-xs text-brand-gold-ink">
           You have no included sessions remaining. Booking will require purchasing an extra session.
@@ -114,12 +122,27 @@ export function BookCoachingForm({ coaches, hasRemaining }: { coaches: Coach[]; 
         </div>
       )}
 
-      <input
-        type="datetime-local"
-        value={start}
-        onChange={(e) => setStart(e.target.value)}
+      <div className="space-y-1">
+        <input
+          type="datetime-local"
+          step={1800}
+          value={start}
+          onChange={(e) => setStart(e.target.value)}
+          className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
+        />
+        <p className="text-[11px] text-brand-muted-soft">{tz}</p>
+      </div>
+      <select
+        value={durationMin}
+        onChange={(e) => setDurationMin(Number(e.target.value))}
         className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
-      />
+      >
+        {DURATION_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
       {error && <p className="text-xs text-red-600">{error}</p>}
       <div className="flex items-center gap-2">
         <button
@@ -127,7 +150,7 @@ export function BookCoachingForm({ coaches, hasRemaining }: { coaches: Coach[]; 
           disabled={busy}
           className="rounded-md bg-brand-blue-dark px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
         >
-          {busy ? 'Booking…' : 'Book session'}
+          {busy ? 'Requesting…' : 'Request session'}
         </button>
         {needsPurchase && (
           <button

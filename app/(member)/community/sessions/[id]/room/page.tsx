@@ -18,7 +18,7 @@ export default async function SessionRoomPage({ params }: { params: Promise<{ id
   const db = supabaseServer()
   const { data: session } = await db
     .from('sessions')
-    .select('id, title, host_member_id, provider, provider_room, status')
+    .select('id, title, host_member_id, cohort_id, provider, provider_room, status')
     .eq('id', id)
     .maybeSingle()
   if (!session || !session.provider_room) notFound()
@@ -50,10 +50,14 @@ export default async function SessionRoomPage({ params }: { params: Promise<{ id
   // the open meet.jit.si dev fallback).
   const embed = getEmbedConfig(session.provider_room)
 
+  const backHref = session.cohort_id
+    ? `/community/mentoring/${session.cohort_id}`
+    : '/community/coaching'
+
   return (
     <div>
       <Link
-        href="/community/coaching"
+        href={backHref}
         className="mb-4 inline-flex items-center gap-1 text-sm text-brand-muted-soft hover:text-brand-muted"
       >
         <ArrowLeft className="h-4 w-4" />

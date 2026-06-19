@@ -122,9 +122,12 @@ export function NotificationBell() {
               <li className="px-4 py-6 text-center text-sm text-brand-muted-soft">No notifications yet.</li>
             )}
             {!loading && notifications.map((n) => {
-              const href = n.reference_type === 'post' && n.reference_id
-                ? `/community/general/${n.reference_id}`
-                : '/community'
+              const href =
+                n.reference_type === 'post' && n.reference_id
+                  ? `/community/general/${n.reference_id}`
+                  : n.reference_type === 'cohort' && n.reference_id
+                    ? `/community/mentoring/${n.reference_id}`
+                    : '/community'
               return (
                 <li key={n.id}>
                   <Link

@@ -133,7 +133,11 @@ export default async function CohortSpacePage({
                       >
                         <CalendarPlus className="h-3.5 w-3.5" /> Add to Google Calendar
                       </a>
-                      <JoinButton sessionId={s.id} />
+                      <JoinButton
+                        sessionId={s.id}
+                        scheduledStart={s.scheduled_start}
+                        isHost={cohort.isMentor}
+                      />
                     </div>
                   </div>
                 </li>

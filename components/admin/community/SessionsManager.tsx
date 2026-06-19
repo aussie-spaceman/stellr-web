@@ -43,6 +43,8 @@ export interface AdminEntitlement {
   extra_stripe_price_id: string | null
 }
 
+type AdminTab = 'mentoring' | 'coaching'
+
 export function SessionsManager({
   tiers,
   hosts,
@@ -57,6 +59,7 @@ export function SessionsManager({
   modules: AdminModule[]
 }) {
   const router = useRouter()
+  const [tab, setTab] = useState<AdminTab>('mentoring')
   const [busy, setBusy] = useState(false)
 
   const post = async (url: string, body: unknown, method = 'POST') => {
@@ -74,21 +77,62 @@ export function SessionsManager({
     }
   }
 
+  const mentors = hosts.filter((h) => h.can_mentor)
+  const coaches = hosts.filter((h) => h.can_coach)
+
   return (
-    <div className="space-y-10">
-      <HostsSection hosts={hosts} busy={busy} post={post} />
-      <CohortsSection cohorts={cohorts} modules={modules} busy={busy} post={post} />
-      <EntitlementsSection tiers={tiers} entitlements={entitlements} busy={busy} post={post} />
+    <div className="space-y-8">
+      {/* Tab bar */}
+      <div className="flex gap-1 rounded-lg border border-brand-border bg-brand-canvas p-1 w-fit">
+        {(['mentoring', 'coaching'] as AdminTab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={[
+              'rounded-md px-4 py-1.5 text-sm font-medium capitalize transition',
+              tab === t
+                ? 'bg-white text-brand-blue-dark shadow-sm'
+                : 'text-brand-muted-soft hover:text-brand-muted',
+            ].join(' ')}
+          >
+            {t.charAt(0).toUpperCase() + t.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'mentoring' && (
+        <div className="space-y-10">
+          <HostsSection hosts={mentors} busy={busy} post={post} roleLabel="Mentor" roleKey="canMentor" />
+          <CohortsSection cohorts={cohorts} modules={modules} busy={busy} post={post} />
+          <EntitlementsSection tiers={tiers} entitlements={entitlements} sessionType="mentoring" busy={busy} post={post} />
+        </div>
+      )}
+      {tab === 'coaching' && (
+        <div className="space-y-10">
+          <HostsSection hosts={coaches} busy={busy} post={post} roleLabel="Coach" roleKey="canCoach" />
+          <EntitlementsSection tiers={tiers} entitlements={entitlements} sessionType="coaching" busy={busy} post={post} />
+        </div>
+      )}
     </div>
   )
 }
 
 type Poster = (url: string, body: unknown, method?: string) => Promise<void>
 
-function HostsSection({ hosts, busy, post }: { hosts: AdminHost[]; busy: boolean; post: Poster }) {
+function HostsSection({
+  hosts,
+  busy,
+  post,
+  roleLabel,
+  roleKey,
+}: {
+  hosts: AdminHost[]
+  busy: boolean
+  post: Poster
+  roleLabel: 'Mentor' | 'Coach'
+  roleKey: 'canMentor' | 'canCoach'
+}) {
   const [host, setHost] = useState<PickedMember | null>(null)
-  const [canCoach, setCanCoach] = useState(true)
-  const [canMentor, setCanMentor] = useState(false)
 
   const hostName = host
     ? [host.first_name, host.last_name].filter(Boolean).join(' ') || host.email || 'Member'
@@ -96,7 +140,7 @@ function HostsSection({ hosts, busy, post }: { hosts: AdminHost[]; busy: boolean
 
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold text-brand-blue-dark">Coaches &amp; Mentors</h2>
+      <h2 className="mb-3 text-lg font-semibold text-brand-blue-dark">{roleLabel}s</h2>
       <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand-border bg-white p-3">
         <div className="min-w-[220px] flex-1">
           {host ? (
@@ -110,42 +154,38 @@ function HostsSection({ hosts, busy, post }: { hosts: AdminHost[]; busy: boolean
             <MemberPicker disabled={busy} placeholder="member — search by name or email…" onPick={setHost} />
           )}
         </div>
-        <label className="flex items-center gap-1 text-sm">
-          <input type="checkbox" checked={canCoach} onChange={(e) => setCanCoach(e.target.checked)} /> Coach
-        </label>
-        <label className="flex items-center gap-1 text-sm">
-          <input type="checkbox" checked={canMentor} onChange={(e) => setCanMentor(e.target.checked)} /> Mentor
-        </label>
         <button
           onClick={() => {
             if (!host) return
-            post('/api/admin/community/hosts', { memberId: host.id, canCoach, canMentor })
+            post('/api/admin/community/hosts', {
+              memberId: host.id,
+              canCoach: roleKey === 'canCoach',
+              canMentor: roleKey === 'canMentor',
+            })
             setHost(null)
           }}
           disabled={busy || !host}
           className="rounded-md bg-brand-blue-dark px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
         >
-          Grant
+          Grant {roleLabel} access
         </button>
       </div>
       <ul className="divide-y divide-brand-hairline rounded-lg border border-brand-border bg-white">
         {hosts.map((h) => (
           <li key={h.member_id} className="flex items-center justify-between px-3 py-2 text-sm">
             <span>{h.name}</span>
-            <span className="flex items-center gap-2">
-              {h.can_coach && <span className="rounded bg-brand-blue/5 px-2 py-0.5 text-xs text-brand-blue">Coach</span>}
-              {h.can_mentor && <span className="rounded bg-purple-50 px-2 py-0.5 text-xs text-purple-700">Mentor</span>}
-              <button
-                onClick={() => post('/api/admin/community/hosts', { memberId: h.member_id }, 'DELETE')}
-                disabled={busy}
-                className="text-xs text-brand-muted-soft hover:text-red-600"
-              >
-                Revoke
-              </button>
-            </span>
+            <button
+              onClick={() => post('/api/admin/community/hosts', { memberId: h.member_id }, 'DELETE')}
+              disabled={busy}
+              className="text-xs text-brand-muted-soft hover:text-red-600"
+            >
+              Revoke
+            </button>
           </li>
         ))}
-        {hosts.length === 0 && <li className="px-3 py-3 text-sm text-brand-muted-soft">No hosts yet.</li>}
+        {hosts.length === 0 && (
+          <li className="px-3 py-3 text-sm text-brand-muted-soft">No {roleLabel.toLowerCase()}s yet.</li>
+        )}
       </ul>
     </section>
   )
@@ -188,17 +228,18 @@ function CohortsSection({
               </button>
             </span>
           ) : (
-            <MemberPicker disabled={busy} placeholder="mentor — search by name or email (optional)" onPick={setMentor} />
+            <MemberPicker disabled={busy} placeholder="mentor — required" onPick={setMentor} />
           )}
         </div>
         <button
           onClick={() => {
-            if (!name) return
-            post('/api/admin/community/cohorts', { name, mentorId: mentor?.id })
+            if (!name || !mentor) return
+            post('/api/admin/community/cohorts', { name, mentorId: mentor.id })
             setName('')
             setMentor(null)
           }}
-          disabled={busy}
+          disabled={busy || !name || !mentor}
+          title={!mentor ? 'A mentor must be selected before creating a cohort' : undefined}
           className="rounded-md bg-brand-blue-dark px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-blue-dark disabled:opacity-50"
         >
           Create
@@ -225,6 +266,7 @@ function CohortItem({
   busy: boolean
   post: Poster
 }) {
+  const router = useRouter()
   const [bulk, setBulk] = useState('')
   const [moduleId, setModuleId] = useState('')
   const [mandatory, setMandatory] = useState(false)
@@ -272,29 +314,43 @@ function CohortItem({
             {(c.invited_count ?? 0) > 0 && <span className="text-brand-blue"> · {c.invited_count} invited</span>}
           </p>
         </div>
-        {c.lifecycle === 'archived' ? (
+        <div className="flex shrink-0 items-center gap-2">
+          {c.lifecycle === 'archived' ? (
+            <button
+              onClick={() => post('/api/admin/community/cohorts', { cohortId: c.id, archive: false }, 'PATCH')}
+              disabled={busy}
+              className="rounded-md border border-brand-border px-2.5 py-1 text-xs font-medium text-brand-muted hover:bg-brand-hairline"
+            >
+              Reactivate
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                if (!window.confirm(`Archive "${c.name}"? Its sessions stop and members move to read-only.`)) return
+                const keepOpen = window.confirm(
+                  'Keep its content (chat, recordings) open for past members?\n\nOK = keep open.\nCancel = re-gate (lock unless their tier allows).',
+                )
+                post('/api/admin/community/cohorts', { cohortId: c.id, archive: true, keepOpen }, 'PATCH')
+              }}
+              disabled={busy}
+              className="rounded-md border border-brand-border px-2.5 py-1 text-xs font-medium text-brand-muted hover:bg-brand-hairline"
+            >
+              Archive
+            </button>
+          )}
           <button
-            onClick={() => post('/api/admin/community/cohorts', { cohortId: c.id, archive: false }, 'PATCH')}
-            disabled={busy}
-            className="shrink-0 rounded-md border border-brand-border px-2.5 py-1 text-xs font-medium text-brand-muted hover:bg-brand-hairline"
-          >
-            Reactivate
-          </button>
-        ) : (
-          <button
-            onClick={() => {
-              if (!window.confirm(`Archive "${c.name}"? Its sessions stop and members move to read-only.`)) return
-              const keepOpen = window.confirm(
-                'Keep its content (chat, recordings) open for past members?\n\nOK = keep open.\nCancel = re-gate (lock unless their tier allows).',
-              )
-              post('/api/admin/community/cohorts', { cohortId: c.id, archive: true, keepOpen }, 'PATCH')
+            onClick={async () => {
+              if (!window.confirm(`Permanently delete "${c.name}"? This cannot be undone.`)) return
+              const res = await fetch(`/api/admin/community/cohorts?cohortId=${c.id}`, { method: 'DELETE' })
+              if (res.ok) router.refresh()
+              else alert((await res.json()).error ?? 'Could not delete cohort')
             }}
             disabled={busy}
-            className="shrink-0 rounded-md border border-brand-border px-2.5 py-1 text-xs font-medium text-brand-muted hover:bg-brand-hairline"
+            className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:border-red-400 hover:text-red-800 disabled:opacity-50"
           >
-            Archive
+            Delete
           </button>
-        )}
+        </div>
       </div>
 
       {/* Add members — one-by-one picker + bulk paste */}
@@ -371,7 +427,13 @@ function CohortItem({
             disabled={busy || available.length === 0}
             className="rounded-md border border-brand-border px-2 py-1.5 text-sm"
           >
-            <option value="">{available.length === 0 ? 'No more modules' : 'Add training module…'}</option>
+            <option value="">
+            {modules.length === 0
+              ? 'No published modules — create one in Academy > Training'
+              : available.length === 0
+                ? 'All published modules already linked'
+                : 'Add training module…'}
+          </option>
             {available.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
@@ -403,11 +465,13 @@ function CohortItem({
 function EntitlementsSection({
   tiers,
   entitlements,
+  sessionType,
   busy,
   post,
 }: {
   tiers: AdminTier[]
   entitlements: AdminEntitlement[]
+  sessionType: 'coaching' | 'mentoring'
   busy: boolean
   post: Poster
 }) {
@@ -442,11 +506,13 @@ function EntitlementsSection({
     })
   }
 
+  const label = sessionType === 'coaching' ? 'Coaching' : 'Mentoring'
+
   return (
     <section>
-      <h2 className="mb-1 text-lg font-semibold text-brand-blue-dark">Sessions per tier</h2>
+      <h2 className="mb-1 text-lg font-semibold text-brand-blue-dark">{label} sessions per tier</h2>
       <p className="mb-3 text-sm text-brand-muted-soft">
-        Included coaching / mentoring sessions per tier, and the Stripe Price ID charged for each
+        Included {sessionType} sessions per membership tier, and the Stripe Price ID charged for each
         additional session beyond the included allowance. Editable any time.
       </p>
       <div className="overflow-hidden rounded-lg border border-brand-border bg-white">
@@ -454,49 +520,45 @@ function EntitlementsSection({
           <thead className="bg-brand-canvas text-left">
             <tr>
               <th className="px-3 py-2 text-xs font-medium uppercase text-brand-muted-soft">Tier</th>
-              <th className="px-3 py-2 text-xs font-medium uppercase text-brand-muted-soft">Coaching</th>
-              <th className="px-3 py-2 text-xs font-medium uppercase text-brand-muted-soft">Mentoring</th>
+              <th className="px-3 py-2 text-xs font-medium uppercase text-brand-muted-soft">{label}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-brand-hairline">
-            {tiers.map((t) => (
+            {tiers.map((t) => {
+              const c = cells[key(t.id, sessionType)]
+              return (
               <tr key={t.id}>
                 <td className="px-3 py-2 align-top font-medium text-brand-blue-dark">{t.name}</td>
-                {(['coaching', 'mentoring'] as const).map((ty) => {
-                  const c = cells[key(t.id, ty)]
-                  return (
-                    <td key={ty} className="px-3 py-2 align-top">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="flex items-center gap-2 text-xs text-brand-muted-soft">
-                          <span className="w-14">Included</span>
-                          <input
-                            type="number"
-                            min={0}
-                            value={c.included}
-                            onChange={(e) => update(t.id, ty, { included: Number(e.target.value) })}
-                            onBlur={() => save(t.id, ty)}
-                            disabled={busy}
-                            className="w-20 rounded-md border border-brand-border px-2 py-1 text-sm text-brand-blue-dark"
-                          />
-                        </label>
-                        <label className="flex items-center gap-2 text-xs text-brand-muted-soft">
-                          <span className="w-14">Extra price</span>
-                          <input
-                            type="text"
-                            value={c.priceId}
-                            onChange={(e) => update(t.id, ty, { priceId: e.target.value })}
-                            onBlur={() => save(t.id, ty)}
-                            placeholder="price_…"
-                            disabled={busy}
-                            className="w-44 rounded-md border border-brand-border px-2 py-1 font-mono text-xs text-brand-blue-dark"
-                          />
-                        </label>
-                      </div>
-                    </td>
-                  )
-                })}
+                <td className="px-3 py-2 align-top">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="flex items-center gap-2 text-xs text-brand-muted-soft">
+                      <span className="w-14">Included</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={c.included}
+                        onChange={(e) => update(t.id, sessionType, { included: Number(e.target.value) })}
+                        onBlur={() => save(t.id, sessionType)}
+                        disabled={busy}
+                        className="w-20 rounded-md border border-brand-border px-2 py-1 text-sm text-brand-blue-dark"
+                      />
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-brand-muted-soft">
+                      <span className="w-14">Extra price</span>
+                      <input
+                        type="text"
+                        value={c.priceId}
+                        onChange={(e) => update(t.id, sessionType, { priceId: e.target.value })}
+                        onBlur={() => save(t.id, sessionType)}
+                        placeholder="price_…"
+                        disabled={busy}
+                        className="w-44 rounded-md border border-brand-border px-2 py-1 font-mono text-xs text-brand-blue-dark"
+                      />
+                    </label>
+                  </div>
+                </td>
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
       </div>

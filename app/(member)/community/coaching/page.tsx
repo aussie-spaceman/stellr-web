@@ -104,7 +104,13 @@ export default async function CoachingPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {s.status === 'scheduled' && upcoming && <JoinButton sessionId={s.id} />}
+                      {s.status === 'scheduled' && upcoming && (
+                        <JoinButton
+                          sessionId={s.id}
+                          scheduledStart={s.scheduled_start}
+                          isHost={false}
+                        />
+                      )}
                       {s.recording_status === 'available' && (
                         <MaterialDownloadButton
                           endpoint={`/api/community/sessions/${s.id}/recording`}

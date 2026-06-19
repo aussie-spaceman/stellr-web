@@ -6,6 +6,7 @@ import { notifyMember, notifyMembers } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
 import { buildIcsAttachment } from '@/lib/ics'
 import { listModules } from '@/lib/training'
+import { logActivity } from '@/lib/activity-log'
 
 // Core logic for Coaching (1:1, FR-COM-12) and Mentoring (group, FR-COM-11).
 // Coaching: sessions.member_id is the coachee. Mentoring: sessions.cohort_id is
@@ -1026,15 +1027,30 @@ export async function flagMessage(messageId: string, memberId: string): Promise<
       .maybeSingle()
     moderatorId = (c?.mentor_member_id as string | null) ?? null
   }
+  // Notify moderator and point the notification link at the cohort page so they
+  // land in the right place (NotificationBell routes reference_type='cohort').
+  const cohortId = ch?.kind === 'cohort' ? (ch.cohort_id as string | null) : null
   if (moderatorId && moderatorId !== memberId) {
     await notifyMember(moderatorId, {
       type: 'announcement',
       body: 'A message in your cohort chat was flagged for review.',
-      referenceType: 'chat_channel',
-      referenceId: channelId,
+      referenceType: cohortId ? 'cohort' : 'chat_channel',
+      referenceId: cohortId ?? channelId,
       actorMemberId: memberId,
     })
   }
+
+  // Record the flag in the activity log so admins can see it.
+  await logActivity({
+    memberId,
+    actorType: 'member',
+    actorMemberId: memberId,
+    category: 'community',
+    action: 'chat_message_flagged',
+    summary: `Flagged a chat message for review${cohortId ? ' (cohort)' : ''}`,
+    metadata: { messageId, channelId, cohortId: cohortId ?? undefined },
+  })
+
   return true
 }
 

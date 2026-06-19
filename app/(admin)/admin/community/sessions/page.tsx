@@ -33,7 +33,7 @@ export default async function AdminSessionsPage() {
         .select(
           'id, name, lifecycle, mentor:members!mentoring_cohorts_mentor_member_id_fkey(first_name, last_name), cohort_members(member_id, status), cohort_training_links(module_id, is_mandatory, due_at, training_modules(title))',
         )
-        .eq('is_active', true),
+        .eq('lifecycle', 'active'),
       db
         .from('session_entitlements')
         .select('tier_id, session_type, included_sessions, validity_days, extra_stripe_price_id'),

@@ -19,20 +19,35 @@ async function memberIdByEmail(email: string): Promise<string | null> {
   return data?.id ?? null
 }
 
-// POST — create a cohort. Body: { name, mentorId? | mentorEmail? }
+// POST — create a cohort. Body: { name, mentorId | mentorEmail }
+// Mentor is required. Cohort names must be unique (case-insensitive).
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { name, mentorId, mentorEmail } = await req.json().catch(() => ({}))
   if (!name?.trim()) return NextResponse.json({ error: 'name required' }, { status: 400 })
 
-  // Mentor comes from the member-search picker (mentorId) or, as a fallback, email.
+  // Mentor is required — a cohort without a mentor cannot run sessions.
   let resolvedMentorId: string | null = mentorId ?? null
   if (!resolvedMentorId && mentorEmail) {
     resolvedMentorId = await memberIdByEmail(mentorEmail)
     if (!resolvedMentorId) return NextResponse.json({ error: 'Mentor not found' }, { status: 404 })
   }
+  if (!resolvedMentorId) {
+    return NextResponse.json({ error: 'A mentor must be assigned when creating a cohort' }, { status: 400 })
+  }
 
   const db = supabaseServer()
+
+  // Enforce unique cohort names (case-insensitive).
+  const { data: existing } = await db
+    .from('mentoring_cohorts')
+    .select('id')
+    .ilike('name', name.trim())
+    .maybeSingle()
+  if (existing) {
+    return NextResponse.json({ error: 'A cohort with that name already exists' }, { status: 409 })
+  }
+
   const { data, error } = await db
     .from('mentoring_cohorts')
     .insert({ name: name.trim(), mentor_member_id: resolvedMentorId })
@@ -127,5 +142,45 @@ export async function PATCH(req: Request) {
       )
     }
   }
+  return NextResponse.json({ ok: true })
+}
+
+// DELETE — permanently remove a cohort. Query: ?cohortId=
+// Blocked if the cohort has active members or pending sessions.
+export async function DELETE(req: Request) {
+  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const cohortId = new URL(req.url).searchParams.get('cohortId')
+  if (!cohortId) return NextResponse.json({ error: 'cohortId required' }, { status: 400 })
+
+  const db = supabaseServer()
+
+  // Block if active members are still enrolled.
+  const { count: memberCount } = await db
+    .from('cohort_members')
+    .select('member_id', { count: 'exact', head: true })
+    .eq('cohort_id', cohortId)
+    .eq('status', 'active')
+  if ((memberCount ?? 0) > 0) {
+    return NextResponse.json(
+      { error: `Remove all ${memberCount} active member(s) before deleting this cohort` },
+      { status: 409 },
+    )
+  }
+
+  // Block if there are upcoming sessions.
+  const { count: sessionCount } = await db
+    .from('sessions')
+    .select('id', { count: 'exact', head: true })
+    .eq('cohort_id', cohortId)
+    .eq('status', 'scheduled')
+  if ((sessionCount ?? 0) > 0) {
+    return NextResponse.json(
+      { error: `Cancel all ${sessionCount} scheduled session(s) before deleting this cohort` },
+      { status: 409 },
+    )
+  }
+
+  const { error } = await db.from('mentoring_cohorts').delete().eq('id', cohortId)
+  if (error) return NextResponse.json({ error: 'Could not delete cohort' }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

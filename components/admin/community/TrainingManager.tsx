@@ -182,7 +182,8 @@ export function TrainingManager({ modules }: { modules: AdminModule[] }) {
                     onClick={() => togglePublish(m)}
                     disabled={busy}
                     className="text-brand-muted-soft hover:text-brand-muted disabled:opacity-50"
-                    aria-label="Toggle publish"
+                    aria-label={m.is_published ? 'Unpublish course' : 'Publish course'}
+                    title={m.is_published ? 'Unpublish (hide from members)' : 'Publish (make visible to members)'}
                   >
                     {m.is_published ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -315,7 +316,10 @@ function CourseSettings({ module: m, onDone }: { module: AdminModule; onDone: ()
         >
           <Pencil className="h-3.5 w-3.5" /> Rename course
         </button>
-        <label className="flex items-center gap-1.5 text-xs font-medium text-brand-muted-soft">
+        <label
+          className="flex items-center gap-1.5 text-xs font-medium text-brand-muted-soft"
+          title="Controls where this course surfaces for members. General/Curriculum/CTE show in the training library for all members; Event/Campaign only appear via a participant assignment."
+        >
           Shows in
           <select
             value={m.material_kind}
@@ -472,21 +476,25 @@ function CreateModule({ onDone }: { onDone: () => void }) {
             <select
               value={materialKind}
               onChange={(e) => setMaterialKind(e.target.value as (typeof KINDS)[number])}
+              title="Controls where this course surfaces for members"
               className="rounded-md border border-brand-border px-3 py-2 text-sm"
             >
               {KINDS.map((k) => (
                 <option key={k} value={k}>
-                  {k.toUpperCase()}
+                  {KIND_LABELS[k]}
                 </option>
               ))}
             </select>
             <input
               value={eventRef}
               onChange={(e) => setEventRef(e.target.value)}
-              placeholder="Sanity event _id (optional)"
+              placeholder="Competition slug (optional — links course to a specific event)"
               className="flex-1 rounded-md border border-brand-border px-3 py-2 text-sm"
             />
-            <label className="flex items-center gap-1.5 text-sm text-brand-muted">
+            <label
+              className="flex items-center gap-1.5 text-sm text-brand-muted"
+              title="If checked, only members with a paid tier can access this course"
+            >
               <input type="checkbox" checked={paidOnly} onChange={(e) => setPaidOnly(e.target.checked)} />
               Paid only
             </label>
@@ -495,7 +503,7 @@ function CreateModule({ onDone }: { onDone: () => void }) {
             <label className="flex flex-col gap-1 text-xs font-medium text-brand-muted">
               Course start date (sections drip relative to this)
               <input
-                type="datetime-local"
+                type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="w-fit rounded-md border border-brand-border px-3 py-2 text-sm font-normal"
@@ -1223,7 +1231,7 @@ function AssignForm({
   return (
     <div className="rounded-lg border border-brand-border bg-white p-3">
       <p className="mb-2 text-xs font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">
-        Assign to event participants
+        Assign to competition participants
       </p>
 
       {assignments.length > 0 && (
@@ -1266,7 +1274,7 @@ function AssignForm({
             setEventRef(e.target.value)
             setSaved(false)
           }}
-          placeholder="Sanity event _id or slug"
+          placeholder="Competition slug (e.g. spring-2025)"
           className="rounded-md border border-brand-border px-3 py-2 text-sm"
         />
         <select
@@ -1280,15 +1288,25 @@ function AssignForm({
             </option>
           ))}
         </select>
-        <input
-          type="datetime-local"
-          value={dueAt}
-          onChange={(e) => setDueAt(e.target.value)}
-          className="rounded-md border border-brand-border px-3 py-2 text-sm"
-        />
-        <label className="flex items-center gap-1.5 text-sm text-brand-muted">
-          <input type="checkbox" checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} />
-          Mandatory
+        <label className="flex flex-col gap-0.5 text-xs text-brand-muted-soft">
+          Due date (optional)
+          <input
+            type="date"
+            value={dueAt}
+            onChange={(e) => setDueAt(e.target.value)}
+            className="rounded-md border border-brand-border px-3 py-2 text-sm text-brand-muted"
+          />
+        </label>
+        <label className="flex flex-col gap-0.5 text-xs text-brand-muted-soft">
+          Requirement
+          <select
+            value={mandatory ? 'mandatory' : 'optional'}
+            onChange={(e) => setMandatory(e.target.value === 'mandatory')}
+            className="rounded-md border border-brand-border px-3 py-2 text-sm text-brand-muted"
+          >
+            <option value="optional">Optional</option>
+            <option value="mandatory">Mandatory</option>
+          </select>
         </label>
       </div>
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { formatDateTime } from '@/lib/utils'
 import { supabaseServer } from '@/lib/supabase'
 import { notifyMember } from '@/lib/notify'
 
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
 
         await notifyMember(memberId, {
           type: 'session_reminder',
-          body: `Reminder: "${s.title ?? 'session'}" starts ${new Date(s.scheduled_start).toLocaleString()}.`,
+          body: `Reminder: "${s.title ?? 'session'}" starts ${formatDateTime(s.scheduled_start)}.`,
           referenceType: 'session',
           referenceId: s.id,
         })

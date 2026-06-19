@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, memberMeetsTier, signedDownloadUrl } from '@/lib/community'
+import { getCurrentMember, memberCanAccess, signedDownloadUrl } from '@/lib/community'
 
 // GET /api/community/resources/[id]/download
 // Validates the member's tier, then returns a short-lived signed URL.
@@ -23,7 +23,7 @@ export async function GET(
 
   if (!resource) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  if (!memberMeetsTier(member, resource.min_tier_rank)) {
+  if (!(await memberCanAccess(member, 'resource', resource.id, resource.min_tier_rank, 'download'))) {
     return NextResponse.json({ error: 'Upgrade required' }, { status: 403 })
   }
 

@@ -1,7 +1,8 @@
 import Link from 'next/link'
+import { formatDateShort } from '@/lib/utils'
 import { notFound, redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, getSpaceBySlug, memberMeetsTier } from '@/lib/community'
+import { getCurrentMember, getSpaceBySlug, memberCanAccessSpace } from '@/lib/community'
 import { markPostRead } from '@/lib/community-feed'
 import { RichTextContent } from '@/components/community/RichTextContent'
 import { ReactionBar } from '@/components/community/ReactionBar'
@@ -51,7 +52,7 @@ export default async function PostDetailPage({
 
   const space = await getSpaceBySlug(spaceSlug)
   if (!space) notFound()
-  if (!memberMeetsTier(member, space.min_tier_rank)) {
+  if (!(await memberCanAccessSpace(member, space))) {
     redirect(`/community/${spaceSlug}`)
   }
 
@@ -122,7 +123,7 @@ export default async function PostDetailPage({
       <article className="rounded-lg border border-brand-border bg-white p-5">
         <h1 className="text-xl font-bold text-brand-blue-dark">{post.title}</h1>
         <p className="mt-1 text-xs text-brand-muted-soft">
-          by {nameOf(post.members as AuthorRel)} · {new Date(post.created_at).toLocaleDateString()}
+          by {nameOf(post.members as AuthorRel)} · {formatDateShort(post.created_at)}
         </p>
         <div className="mt-4">
           <RichTextContent doc={post.body_json} />

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatDateTime } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { MessageSquare, Plus, Loader2 } from 'lucide-react'
 
@@ -68,7 +69,7 @@ function CohortChatViewer({ cohorts }: { cohorts: Cohort[] }) {
           ) : (
             messages.map((m) => (
               <div key={m.id} className="text-sm">
-                <span className="text-xs text-brand-muted-soft">{new Date(m.created_at).toLocaleString()}</span>
+                <span className="text-xs text-brand-muted-soft">{formatDateTime(m.created_at)}</span>
                 <span className="ml-2 text-brand-muted">{m.body}</span>
               </div>
             ))

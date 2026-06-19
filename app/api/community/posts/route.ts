@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, getSpaceBySlug, memberMeetsTier, tiptapToPlainText } from '@/lib/community'
+import { getCurrentMember, getSpaceBySlug, memberCanAccessSpace, tiptapToPlainText } from '@/lib/community'
 import { extractMentionIds, notifyMentions } from '@/lib/mentions'
 
 const createPostSchema = z.object({
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
 
   const space = await getSpaceBySlug(spaceSlug)
   if (!space) return NextResponse.json({ error: 'Space not found' }, { status: 404 })
-  if (!memberMeetsTier(member, space.min_tier_rank)) {
+  if (!(await memberCanAccessSpace(member, space))) {
     return NextResponse.json({ error: 'Upgrade required' }, { status: 403 })
   }
 

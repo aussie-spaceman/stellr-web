@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CalendarRange, BookOpen, Plus, X, Loader2 } from 'lucide-react'
+import { formatDateShort } from '@/lib/utils'
 
 interface LinkedTraining {
   moduleId: string
@@ -71,7 +72,8 @@ function SeriesScheduler({ cohortId, onUpdate }: { cohortId: string; onUpdate: (
       })
       const json = await res.json()
       if (res.ok) {
-        setResult(`${json.created ?? count} sessions scheduled.`)
+        const n = json.created ?? count
+        setResult(`${n} session${n === 1 ? '' : 's'} scheduled.`)
         setOpen(false)
         onUpdate()
       } else {
@@ -237,7 +239,7 @@ function TrainingAssigner({
                 </span>
                 {t.dueAt && (
                   <span className="ml-2 text-xs text-brand-muted-soft">
-                    due {new Date(t.dueAt).toLocaleDateString()}
+                    due {formatDateShort(t.dueAt)}
                   </span>
                 )}
               </span>

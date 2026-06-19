@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { formatDateShort } from '@/lib/utils'
 import Link from 'next/link'
 import { GraduationCap, Lock, AlertCircle, BookOpen, Layers, Library } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
@@ -63,7 +64,7 @@ function ModuleCard({ m }: { m: TrainingModuleSummary }) {
         {m.dueAt && (
           <p className="flex items-center gap-1 text-xs font-medium text-brand-gold-ink">
             <AlertCircle className="h-3.5 w-3.5" />
-            Due {new Date(m.dueAt).toLocaleDateString()}
+            Due {formatDateShort(m.dueAt)}
           </p>
         )}
 

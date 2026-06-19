@@ -1,5 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
+import { isAdminClaims } from '@/lib/admin-auth'
 
 // Private Supabase Storage bucket for community resources (FR-COM-03).
 // Create this bucket manually in the Supabase dashboard: name = community-resources, public = false.
@@ -33,6 +34,8 @@ export interface CommunityMember {
   first_name: string | null
   last_name: string | null
   email: string | null
+  /** Platform admin (Clerk role=admin). Bypasses all entitlement/tier gates. */
+  isAdmin: boolean
   /** Highest paid status across the member's active memberships. */
   hasPaidTier: boolean
   /** Display name of the active tier, if any. */
@@ -67,8 +70,9 @@ export const CONTENT_TIER_RANK: Record<string, number> = {
  * Returns null when unauthenticated, no member row exists, or the member is inactive.
  */
 export async function getCurrentMember(): Promise<CommunityMember | null> {
-  const { userId } = await auth()
+  const { userId, sessionClaims } = await auth()
   if (!userId) return null
+  const isAdmin = isAdminClaims(sessionClaims)
 
   const db = supabaseServer()
   const { data: member } = await db
@@ -130,6 +134,7 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
     first_name: member.first_name,
     last_name: member.last_name,
     email: member.email,
+    isAdmin,
     event_role: (member.event_role as string | null) ?? null,
     hasPaidTier,
     activeTierName: primaryTier?.name ?? null,
@@ -226,12 +231,26 @@ export async function memberCanAccess(
   accessLevel: AccessLevel = 'view',
   opts: EntitlementOpts = {}
 ): Promise<boolean> {
+  // Platform admins bypass every entitlement/tier/prerequisite gate.
+  if (member.isAdmin) return true
   const entitled = await memberHasEntitlement(member, targetType, targetRef, accessLevel, opts)
   const allowed = entitled !== null ? entitled : memberMeetsTier(member, minTierRank)
   if (!allowed) return false
   // Prerequisite gate (Phase 5): even when a source grants access, a target stays
   // locked until its predecessor is complete. Completion is member-level (D6).
   return prerequisitesMet(member, targetType, targetRef)
+}
+
+/**
+ * Space access convenience wrapper — entitlement-aware (Access Map) with the
+ * space's min_tier_rank as legacy fallback. Use for every space view/feed gate
+ * so the page, posts, comments and chat all agree.
+ */
+export async function memberCanAccessSpace(
+  member: CommunityMember,
+  space: { id: string; min_tier_rank: number }
+): Promise<boolean> {
+  return memberCanAccess(member, 'space', space.id, space.min_tier_rank, 'view')
 }
 
 /**

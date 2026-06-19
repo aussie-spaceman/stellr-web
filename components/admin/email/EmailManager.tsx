@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatDateShort, formatDateTime } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { Mail, FileText } from 'lucide-react'
 import { TemplateForm } from './TemplateForm'
@@ -88,9 +89,9 @@ export function EmailManager({
                     <p className="text-xs text-brand-muted-soft">
                       {c.templateName} ·{' '}
                       {c.trigger_type === 'scheduled'
-                        ? `Scheduled ${c.scheduled_at ? new Date(c.scheduled_at).toLocaleString() : '—'}`
+                        ? `Scheduled ${c.scheduled_at ? formatDateTime(c.scheduled_at) : '—'}`
                         : `Event: ${c.event_key}`}
-                      {c.sent_at && ` · sent ${new Date(c.sent_at).toLocaleDateString()}`}
+                      {c.sent_at && ` · sent ${formatDateShort(c.sent_at)}`}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2 text-xs">

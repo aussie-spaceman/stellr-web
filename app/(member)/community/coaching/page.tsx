@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { formatDateShort, formatDateTime } from '@/lib/utils'
 import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
 import {
@@ -30,7 +31,7 @@ export default async function CoachingPage() {
   // Available coaches: session_hosts(can_coach) + name + availability.
   const { data: hostRows } = await db
     .from('session_hosts')
-    .select('member_id, bio, members(first_name, last_name)')
+    .select('member_id, bio, members!session_hosts_member_id_fkey(first_name, last_name)')
     .eq('can_coach', true)
   const hostIds = (hostRows ?? []).map((h) => h.member_id as string)
   const { data: avail } = hostIds.length
@@ -79,7 +80,7 @@ export default async function CoachingPage() {
           <span className="text-brand-blue"> · {ent.extraCredits} purchased</span>
         )}
         {ent.expiresAt && (
-          <span className="text-brand-muted-soft"> · expires {new Date(ent.expiresAt).toLocaleDateString()}</span>
+          <span className="text-brand-muted-soft"> · expires {formatDateShort(ent.expiresAt)}</span>
         )}
       </div>
 
@@ -99,7 +100,7 @@ export default async function CoachingPage() {
                     <div>
                       <p className="font-medium text-brand-blue-dark">{s.title ?? 'Coaching session'}</p>
                       <p className="text-sm text-brand-muted-soft">
-                        {new Date(s.scheduled_start).toLocaleString()} · {s.status}
+                        {formatDateTime(s.scheduled_start)} · {s.status}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">

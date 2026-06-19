@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
 import MemberPicker, { type PickedMember } from '@/components/admin/MemberPicker'
@@ -347,7 +348,7 @@ function CohortItem({
                     {t.is_mandatory ? 'Mandatory' : 'Optional'}
                   </span>
                   {t.due_at && (
-                    <span className="ml-2 text-xs text-brand-muted-soft">due {new Date(t.due_at).toLocaleDateString()}</span>
+                    <span className="ml-2 text-xs text-brand-muted-soft">due {formatDateShort(t.due_at)}</span>
                   )}
                 </span>
                 <button

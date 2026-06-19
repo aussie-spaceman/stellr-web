@@ -1,4 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
+import { formatDateShort } from '@/lib/utils'
 import { ResourceUploadForm } from '@/components/admin/community/ResourceUploadForm'
 import { FileText, Lock } from 'lucide-react'
 
@@ -82,7 +83,7 @@ export default async function AdminCommunityResourcesPage() {
                   </td>
                   <td className="px-4 py-3 text-brand-muted-soft">{formatBytes(r.file_size_bytes)}</td>
                   <td className="px-4 py-3 text-brand-muted-soft">
-                    {new Date(r.created_at).toLocaleDateString()}
+                    {formatDateShort(r.created_at)}
                   </td>
                 </tr>
               )

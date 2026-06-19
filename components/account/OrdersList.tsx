@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 import { Loader2, Truck, Package } from 'lucide-react'
 
 interface OrderItem {
@@ -92,7 +93,7 @@ export function OrdersList() {
               <div key={o.id} className="rounded-lg border border-brand-border p-3 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-brand-blue-dark">
-                    {isEvent ? 'Event merch' : 'Store order'} · {new Date(o.created_at).toLocaleDateString()}
+                    {isEvent ? 'Event merch' : 'Store order'} · {formatDateShort(o.created_at)}
                   </span>
                   <span className={'rounded px-1.5 py-0.5 text-[11px] ' + (STATUS_BADGE[o.status] ?? STATUS_BADGE.pending)}>
                     {o.status}

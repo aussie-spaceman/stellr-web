@@ -1,5 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
-import { memberMeetsTier, type CommunityMember } from '@/lib/community'
+import { memberCanAccessSpace, type CommunityMember } from '@/lib/community'
 
 // Mark a post read for a member (idempotent upsert). Called when the post detail
 // page renders. Bumps read_at so re-reading after new activity clears unread.
@@ -90,9 +90,17 @@ export async function getHomeFeed(member: CommunityMember, limit = 15): Promise<
     .select('id, slug, name, min_tier_rank')
     .eq('is_archived', false)
 
-  const accessible = (spaces ?? []).filter((s) =>
-    memberMeetsTier(member, (s as { min_tier_rank: number }).min_tier_rank),
-  ) as { id: string; slug: string; name: string }[]
+  const accessChecks = await Promise.all(
+    (spaces ?? []).map(async (s) => ({
+      space: s as { id: string; slug: string; name: string; min_tier_rank: number },
+      ok: await memberCanAccessSpace(member, s as { id: string; min_tier_rank: number }),
+    })),
+  )
+  const accessible = accessChecks.filter((c) => c.ok).map((c) => c.space) as {
+    id: string
+    slug: string
+    name: string
+  }[]
   if (accessible.length === 0) return []
   const spaceById = new Map(accessible.map((s) => [s.id, s]))
 

@@ -1,4 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
+import { formatDateShort } from '@/lib/utils'
 import { AnnouncementForm } from '@/components/admin/community/AnnouncementForm'
 import { Megaphone } from 'lucide-react'
 
@@ -44,7 +45,7 @@ export default async function AdminAnnouncementsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-brand-blue-dark">{a.title}</p>
                   <p className="text-xs text-brand-muted-soft">
-                    {space?.name ?? '—'} · {new Date(a.created_at).toLocaleDateString()}
+                    {space?.name ?? '—'} · {formatDateShort(a.created_at)}
                     {a.status !== 'published' && (
                       <span className="ml-2 rounded bg-brand-hairline px-1.5 py-0.5 text-xs capitalize text-brand-muted-soft">
                         {a.status}

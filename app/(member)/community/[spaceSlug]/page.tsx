@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { MessageSquare, Pin, Megaphone } from 'lucide-react'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, getSpaceBySlug, memberMeetsTier } from '@/lib/community'
+import { getCurrentMember, getSpaceBySlug, memberCanAccessSpace } from '@/lib/community'
 import { getSpaceChannel } from '@/lib/sessions'
 import { NewPostForm } from '@/components/community/NewPostForm'
 import { ChatPanel } from '@/components/community/ChatPanel'
@@ -36,8 +36,9 @@ export default async function SpaceFeedPage({
   const space = await getSpaceBySlug(spaceSlug)
   if (!space) notFound()
 
-  // Tier gate (FR-COM-08): block the feed for members below the required tier.
-  if (!memberMeetsTier(member, space.min_tier_rank)) {
+  // Access gate (FR-COM-08): block the feed unless the Access Map / tier grants
+  // this member access to the space.
+  if (!(await memberCanAccessSpace(member, space))) {
     return (
       <div className="mx-auto max-w-md rounded-lg border border-brand-orange bg-brand-orange/5 p-6 text-center">
         <h1 className="text-lg font-semibold text-brand-blue-dark">{space.name} is for paid members</h1>

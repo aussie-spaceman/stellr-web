@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 import { Loader2, Truck, CheckCircle } from 'lucide-react'
 
 interface Summary {
@@ -73,7 +74,7 @@ export function EventMerchBatch({
         <p className="mt-1 text-xs text-brand-muted-soft">
           Status: {b.status}
           {b.pod_order_id && ` · Printful order ${b.pod_order_id}`}
-          {b.committed_at && ` · ${new Date(b.committed_at).toLocaleDateString()}`}
+          {b.committed_at && ` · ${formatDateShort(b.committed_at)}`}
         </p>
         {b.tracking_url && (
           <a href={b.tracking_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-sm text-brand-blue hover:underline">

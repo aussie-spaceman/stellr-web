@@ -3,6 +3,35 @@ export function formatDate(dateStr: string): string {
   return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 
+// Fixed app timezone + locale so a date/time renders identically on the server
+// and on the client. Bare `.toLocaleDateString()`/`.toLocaleString()` inherit the
+// runtime's locale and timezone, which differ between the SSR host (UTC) and the
+// browser — causing React #418 hydration errors and inconsistent day/format.
+// Change this single constant if the organisation operates in another timezone.
+export const APP_TIME_ZONE = 'Australia/Sydney'
+
+/** Day-month-year for a timestamp/ISO string, e.g. "20 Jun 2026". */
+export function formatDateShort(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: APP_TIME_ZONE,
+  })
+}
+
+/** Date + time for a timestamp/ISO string, e.g. "20 Jun 2026, 10:00 am". */
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: APP_TIME_ZONE,
+  })
+}
+
 export function formatDateRange(start: string, end?: string): string {
   if (!end || start === end) return formatDate(start)
   const s = new Date(start + 'T00:00:00')

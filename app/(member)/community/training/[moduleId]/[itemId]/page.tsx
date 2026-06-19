@@ -1,4 +1,5 @@
 import { redirect, notFound } from 'next/navigation'
+import { formatDateShort } from '@/lib/utils'
 import Link from 'next/link'
 import { ArrowLeft, Lock, ExternalLink, FileText, Download } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
@@ -136,7 +137,7 @@ export default async function LessonPage({
               <p className="text-sm font-medium text-brand-muted">This lesson isn’t available yet</p>
               {lesson.availableAt && (
                 <p className="text-sm text-brand-muted-soft">
-                  Unlocks {new Date(lesson.availableAt).toLocaleDateString()}
+                  Unlocks {formatDateShort(lesson.availableAt)}
                 </p>
               )}
             </div>

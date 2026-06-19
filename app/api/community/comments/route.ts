@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, memberMeetsTier, tiptapToPlainText } from '@/lib/community'
+import { getCurrentMember, memberCanAccess, tiptapToPlainText } from '@/lib/community'
 import { sendEmail, communityReplyEmail } from '@/lib/email'
 import { extractMentionIds, notifyMentions } from '@/lib/mentions'
 
@@ -89,7 +89,7 @@ export async function POST(req: Request) {
   // Confirm the post exists and the member can access its space (tier gate).
   const { data: post } = await db
     .from('community_posts')
-    .select('id, status, community_spaces(min_tier_rank)')
+    .select('id, status, space_id, community_spaces(min_tier_rank)')
     .eq('id', postId)
     .maybeSingle()
 
@@ -98,7 +98,7 @@ export async function POST(req: Request) {
   }
   const spaceRel = post.community_spaces as { min_tier_rank: number } | { min_tier_rank: number }[] | null
   const minTierRank = Array.isArray(spaceRel) ? spaceRel[0]?.min_tier_rank ?? 0 : spaceRel?.min_tier_rank ?? 0
-  if (!memberMeetsTier(member, minTierRank)) {
+  if (!(await memberCanAccess(member, 'space', post.space_id as string, minTierRank, 'view'))) {
     return NextResponse.json({ error: 'Upgrade required' }, { status: 403 })
   }
 

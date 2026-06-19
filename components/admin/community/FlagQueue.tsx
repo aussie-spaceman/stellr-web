@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ExternalLink } from 'lucide-react'
@@ -79,7 +80,7 @@ export function FlagQueue({ flags }: Props) {
                   <span className="ml-1 text-brand-muted-soft">({flag.flagged_by_member.email})</span>
                 )}
                 {' · '}
-                {new Date(flag.created_at).toLocaleDateString()}
+                {formatDateShort(flag.created_at)}
               </p>
               {flag.resolved_by_member && (
                 <p className="text-xs text-brand-muted-soft">

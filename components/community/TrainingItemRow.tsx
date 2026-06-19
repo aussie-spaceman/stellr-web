@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 import Link from 'next/link'
 import { CheckCircle2, Circle, FileText, Video, Link2, Lock, ChevronRight } from 'lucide-react'
 
@@ -79,7 +80,7 @@ export function TrainingItemRow({
               {item.title}
             </h3>
             <p className="mt-0.5 text-xs text-brand-muted-soft">
-              {availableAt ? `Unlocks ${new Date(availableAt).toLocaleDateString()}` : 'Locked'}
+              {availableAt ? `Unlocks ${formatDateShort(availableAt)}` : 'Locked'}
             </p>
           </div>
         </div>

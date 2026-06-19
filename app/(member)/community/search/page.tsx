@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { formatDateShort } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 import { Search, FileText } from 'lucide-react'
 import { supabaseServer } from '@/lib/supabase'
@@ -140,7 +141,7 @@ export default async function CommunitySearchPage({
                       </p>
                     )}
                     <p className="mt-1 text-xs text-brand-muted-soft">
-                      {space?.name ?? 'Community'} · {new Date(post.created_at).toLocaleDateString()}
+                      {space?.name ?? 'Community'} · {formatDateShort(post.created_at)}
                     </p>
                   </Link>
                 </li>

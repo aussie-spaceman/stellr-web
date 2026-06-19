@@ -1,4 +1,5 @@
 import { redirect, notFound } from 'next/navigation'
+import { formatDateShort } from '@/lib/utils'
 import Link from 'next/link'
 import { ArrowLeft, BookOpen, Layers, Lock } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
@@ -107,7 +108,7 @@ export default async function TrainingModulePage({
                 </h2>
                 {section.locked && section.availableAt ? (
                   <span className="text-xs font-medium text-brand-gold-ink">
-                    Unlocks {new Date(section.availableAt).toLocaleDateString()}
+                    Unlocks {formatDateShort(section.availableAt)}
                   </span>
                 ) : (
                   <span className="text-xs text-brand-muted-soft">

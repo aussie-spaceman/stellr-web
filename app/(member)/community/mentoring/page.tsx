@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { formatDateShort } from '@/lib/utils'
 import Link from 'next/link'
 import { Users, ChevronRight } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
@@ -38,7 +39,7 @@ export default async function MentoringPage() {
         sessions remaining
         {ent.extraCredits > 0 && <span className="text-brand-blue"> · {ent.extraCredits} purchased</span>}
         {ent.expiresAt && (
-          <span className="text-brand-muted-soft"> · expires {new Date(ent.expiresAt).toLocaleDateString()}</span>
+          <span className="text-brand-muted-soft"> · expires {formatDateShort(ent.expiresAt)}</span>
         )}
       </div>
 

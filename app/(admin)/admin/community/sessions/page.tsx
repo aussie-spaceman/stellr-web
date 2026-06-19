@@ -27,7 +27,7 @@ export default async function AdminSessionsPage() {
   const [{ data: tiers }, { data: hostRows }, { data: cohortRows }, { data: ents }, { data: moduleRows }, { data: allSessions }] =
     await Promise.all([
       db.from('membership_tiers').select('id, name').order('sort_order'),
-      db.from('session_hosts').select('member_id, can_coach, can_mentor, members(first_name, last_name)'),
+      db.from('session_hosts').select('member_id, can_coach, can_mentor, members!session_hosts_member_id_fkey(first_name, last_name)'),
       db
         .from('mentoring_cohorts')
         .select(

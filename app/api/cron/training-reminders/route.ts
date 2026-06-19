@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { formatDateShort } from '@/lib/utils'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventsByIds } from '@/lib/sanity'
 import { notifyMember } from '@/lib/notify'
@@ -92,8 +93,8 @@ export async function GET(req: NextRequest) {
         await sendEmail({
           to: teacherEmail,
           subject: 'Mandatory training overdue for a group member',
-          html: `<p>Hi ${(reg as { teacher_first_name?: string }).teacher_first_name ?? 'there'},</p><p><strong>${p.first_name} ${p.last_name}</strong> has not completed mandatory training that was due ${new Date(a.due_at as string).toLocaleDateString()}.</p>`,
-          text: `${p.first_name} ${p.last_name} has not completed mandatory training due ${new Date(a.due_at as string).toLocaleDateString()}.`,
+          html: `<p>Hi ${(reg as { teacher_first_name?: string }).teacher_first_name ?? 'there'},</p><p><strong>${p.first_name} ${p.last_name}</strong> has not completed mandatory training that was due ${formatDateShort(a.due_at as string)}.</p>`,
+          text: `${p.first_name} ${p.last_name} has not completed mandatory training due ${formatDateShort(a.due_at as string)}.`,
         })
         escalated++
       } else {
@@ -103,7 +104,7 @@ export async function GET(req: NextRequest) {
         if (error) continue
         await notifyMember(memberId, {
           type: 'session_reminder',
-          body: `Training due ${new Date(a.due_at as string).toLocaleDateString()} — you still have lessons to complete.`,
+          body: `Training due ${formatDateShort(a.due_at as string)} — you still have lessons to complete.`,
           referenceType: 'training_module',
           referenceId: a.module_id as string,
         })

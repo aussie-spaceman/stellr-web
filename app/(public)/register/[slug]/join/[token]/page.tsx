@@ -1,4 +1,5 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
+import { formatDateShort } from '@/lib/utils'
 import Link from 'next/link'
 import { supabaseServer } from '@/lib/supabase'
 import GroupJoinClient from './GroupJoinClient'
@@ -44,7 +45,7 @@ export default async function GroupJoinPage({ params }: PageProps) {
         <div className="max-w-md text-center">
           <div className="text-5xl mb-4">⏰</div>
           <h1 className="text-xl font-bold text-gray-900 mb-2">Link Expired</h1>
-          <p className="text-gray-600 mb-6">This registration link expired on {new Date(tokenRow.expires_at).toLocaleDateString()}. Please contact your group organiser for a new link.</p>
+          <p className="text-gray-600 mb-6">This registration link expired on {formatDateShort(tokenRow.expires_at)}. Please contact your group organiser for a new link.</p>
           <Link href="/events" className="btn-primary">Browse Events</Link>
         </div>
       </div>

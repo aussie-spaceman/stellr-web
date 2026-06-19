@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatDateTime } from '@/lib/utils'
 import {
   Award, User, ShieldCheck, Calendar, CreditCard,
   FileText, Users, GraduationCap, Activity as ActivityIcon,
@@ -108,7 +109,7 @@ export function ActivityTimeline({ items: initial, fetchUrl, pageSize = 30 }: Pr
                   {' · '}
                   {actor}
                   {' · '}
-                  <time dateTime={item.created_at} title={new Date(item.created_at).toLocaleString()}>
+                  <time dateTime={item.created_at} title={formatDateTime(item.created_at)}>
                     {relativeTime(item.created_at)}
                   </time>
                 </p>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 import { CheckCircle2, Circle } from 'lucide-react'
 
 export interface ActionItem {
@@ -60,7 +61,7 @@ export function ActionChecklist({ actions }: { actions: ActionItem[] }) {
                   new Date(item.due_date).getTime() < Date.now() ? 'text-red-500' : 'text-brand-muted-soft'
                 }`}
               >
-                due {new Date(item.due_date).toLocaleDateString()}
+                due {formatDateShort(item.due_date)}
               </span>
             )}
           </span>

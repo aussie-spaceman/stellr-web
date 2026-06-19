@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { formatDateShort, formatDateTime } from '@/lib/utils'
 import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
 import { getHostCaps, getAvailability, listHostSessions } from '@/lib/sessions'
@@ -83,7 +84,7 @@ export default async function HostingPage() {
                         <span className="text-xs font-normal text-brand-muted-soft">({s.session_type})</span>
                       </p>
                       <p className="text-sm text-brand-muted-soft">
-                        {new Date(s.scheduled_start).toLocaleString()} · {s.status}
+                        {formatDateTime(s.scheduled_start)} · {s.status}
                       </p>
                     </div>
                     {s.status === 'scheduled' && upcomingSession && <JoinButton sessionId={s.id} />}
@@ -111,7 +112,7 @@ export default async function HostingPage() {
               {noted.map((s) => (
                 <li key={s.id} className="rounded-lg border border-brand-border bg-white p-3">
                   <p className="text-xs text-brand-muted-soft">
-                    {new Date(s.scheduled_start).toLocaleDateString()} · {s.title ?? 'Session'}
+                    {formatDateShort(s.scheduled_start)} · {s.title ?? 'Session'}
                   </p>
                   <p className="mt-1 text-sm text-brand-muted">{s.host_notes}</p>
                 </li>

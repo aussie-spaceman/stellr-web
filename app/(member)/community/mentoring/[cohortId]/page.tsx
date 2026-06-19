@@ -1,4 +1,5 @@
 import { redirect, notFound } from 'next/navigation'
+import { formatDateShort, formatDateTime } from '@/lib/utils'
 import Link from 'next/link'
 import { ArrowLeft, CalendarPlus, Lock, Video } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
@@ -121,7 +122,7 @@ export default async function CohortSpacePage({
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-medium text-brand-blue-dark">{s.title ?? 'Mentoring session'}</p>
-                      <p className="text-sm text-brand-muted-soft">{start.toLocaleString()}</p>
+                      <p className="text-sm text-brand-muted-soft">{formatDateTime(s.scheduled_start)}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <a
@@ -169,7 +170,7 @@ export default async function CohortSpacePage({
                       {t.completedCount} of {t.itemCount} complete
                       {t.dueAt && (
                         <span className={overdue ? 'text-red-600' : 'text-brand-muted-soft'}>
-                          {' '}· due {new Date(t.dueAt).toLocaleDateString()}
+                          {' '}· due {formatDateShort(t.dueAt)}
                           {overdue ? ' (overdue)' : ''}
                         </span>
                       )}
@@ -210,7 +211,7 @@ export default async function CohortSpacePage({
                   <Video className="h-4 w-4 text-brand-muted-soft" />
                   <div>
                     <p className="text-sm font-medium text-brand-blue-dark">{s.title ?? 'Mentoring session'}</p>
-                    <p className="text-xs text-brand-muted-soft">{new Date(s.scheduled_start).toLocaleDateString()}</p>
+                    <p className="text-xs text-brand-muted-soft">{formatDateShort(s.scheduled_start)}</p>
                   </div>
                 </div>
                 <MaterialDownloadButton

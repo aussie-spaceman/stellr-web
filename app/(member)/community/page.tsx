@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import { Lock, MessageSquare } from 'lucide-react'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, memberMeetsTier } from '@/lib/community'
+import { getCurrentMember, memberCanAccessSpace } from '@/lib/community'
 import { getSpaceUnreadCounts, getHomeFeed, getSpaceAuthorPreviews } from '@/lib/community-feed'
 import { RegistrationSubmittedModal } from '@/components/community/RegistrationSubmittedModal'
 import { AvatarStack } from '@/components/ui/Avatar'
@@ -38,6 +38,14 @@ export default async function CommunityHomePage() {
 
   const spaceIds = (spaces ?? []).map((s) => (s as SpaceRow).id)
   const previews = await getSpaceAuthorPreviews(spaceIds)
+
+  // Access-Map-aware unlock state, resolved once so the cards match the feed gate.
+  const accessibleSpaceIds = new Set<string>()
+  await Promise.all(
+    (spaces ?? []).map(async (s) => {
+      if (await memberCanAccessSpace(member, s as SpaceRow)) accessibleSpaceIds.add((s as SpaceRow).id)
+    }),
+  )
 
   const totalNew = Object.values(unread).reduce((sum, n) => sum + (n || 0), 0)
 
@@ -105,7 +113,7 @@ export default async function CommunityHomePage() {
 
       <ul className="grid gap-3 sm:grid-cols-2">
         {(spaces ?? []).map((space: SpaceRow) => {
-          const unlocked = memberMeetsTier(member, space.min_tier_rank)
+          const unlocked = accessibleSpaceIds.has(space.id)
           const card = unlocked ? (
             <div className="h-full rounded-card border border-brand-border border-l-4 border-l-brand-blue bg-white p-4 shadow-card transition hover:-translate-y-0.5 hover:shadow-md">
               <div className="flex items-center justify-between gap-2">

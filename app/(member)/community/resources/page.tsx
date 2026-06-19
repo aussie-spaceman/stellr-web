@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { FileText, Lock } from 'lucide-react'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, memberMeetsTier } from '@/lib/community'
+import { getCurrentMember, memberCanAccess } from '@/lib/community'
 import { ResourceDownloadButton } from '@/components/community/ResourceDownloadButton'
 
 export const metadata = { title: 'Community · Resources' }
@@ -43,6 +43,15 @@ export default async function ResourcesPage() {
     .select('id, title, description, file_type, file_size_bytes, min_tier_rank, created_at, community_spaces(name)')
     .order('created_at', { ascending: false })
 
+  // Access-Map-aware download eligibility, resolved once for the render loop.
+  const downloadableIds = new Set<string>()
+  await Promise.all(
+    (resources ?? []).map(async (r) => {
+      if (await memberCanAccess(member, 'resource', (r as ResourceRow).id, (r as ResourceRow).min_tier_rank, 'download'))
+        downloadableIds.add((r as ResourceRow).id)
+    }),
+  )
+
   return (
     <div>
       <div className="mb-6">
@@ -63,7 +72,7 @@ export default async function ResourcesPage() {
 
       <ul className="space-y-3">
         {(resources ?? []).map((resource: ResourceRow) => {
-          const canDownload = memberMeetsTier(member, resource.min_tier_rank)
+          const canDownload = downloadableIds.has(resource.id)
           const space = spaceName(resource.community_spaces)
 
           return (

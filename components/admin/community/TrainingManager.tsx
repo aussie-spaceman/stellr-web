@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import {
   Plus,
@@ -1242,7 +1243,7 @@ function AssignForm({
                   </span>
                 )}
                 {a.due_at && (
-                  <span className="ml-2 text-brand-muted-soft">due {new Date(a.due_at).toLocaleDateString()}</span>
+                  <span className="ml-2 text-brand-muted-soft">due {formatDateShort(a.due_at)}</span>
                 )}
               </span>
               <button

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { ComplianceState, TeacherLicense } from '@/lib/compliance'
+import { formatDateShort } from '@/lib/utils'
 
 interface ComplianceData {
   required: boolean
@@ -19,9 +20,7 @@ const STATE_PILL: Record<ComplianceState, { label: string; cls: string }> = {
   invalid:       { label: 'Invalid',       cls: 'bg-red-100 text-red-700' },
 }
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
-}
+const fmt = formatDateShort
 
 export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: string | null; eventRole?: string | null }) {
   const [data, setData] = useState<ComplianceData | null>(null)

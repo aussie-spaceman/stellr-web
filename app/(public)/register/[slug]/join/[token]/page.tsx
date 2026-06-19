@@ -28,11 +28,11 @@ export default async function GroupJoinPage({ params }: PageProps) {
 
   if (error || !tokenRow) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-surface flex items-center justify-center px-4">
         <div className="max-w-md text-center">
           <div className="text-5xl mb-4">🔗</div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Invalid Link</h1>
-          <p className="text-gray-600 mb-6">This registration link is not valid. Please check with your group organiser.</p>
+          <h1 className="text-xl font-bold text-ink mb-2">Invalid Link</h1>
+          <p className="text-content-body mb-6">This registration link is not valid. Please check with your group organiser.</p>
           <Link href="/events" className="btn-primary">Browse Events</Link>
         </div>
       </div>
@@ -41,11 +41,11 @@ export default async function GroupJoinPage({ params }: PageProps) {
 
   if (new Date(tokenRow.expires_at) < new Date()) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-surface flex items-center justify-center px-4">
         <div className="max-w-md text-center">
           <div className="text-5xl mb-4">⏰</div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Link Expired</h1>
-          <p className="text-gray-600 mb-6">This registration link expired on {formatDateShort(tokenRow.expires_at)}. Please contact your group organiser for a new link.</p>
+          <h1 className="text-xl font-bold text-ink mb-2">Link Expired</h1>
+          <p className="text-content-body mb-6">This registration link expired on {formatDateShort(tokenRow.expires_at)}. Please contact your group organiser for a new link.</p>
           <Link href="/events" className="btn-primary">Browse Events</Link>
         </div>
       </div>
@@ -90,7 +90,7 @@ export default async function GroupJoinPage({ params }: PageProps) {
   const organiserRole = reg.registrant_role === 'student_manager' ? 'Student Manager' : 'Teacher'
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface">
       <div className="bg-brand-blue-dark text-white py-10 px-4">
         <div className="max-w-2xl mx-auto">
           <h1 className="text-2xl sm:text-3xl font-bold mb-2">{tokenRow.event_title}</h1>
@@ -100,17 +100,17 @@ export default async function GroupJoinPage({ params }: PageProps) {
 
       <div className="max-w-2xl mx-auto px-4 py-10">
         {alreadyRegistered ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center space-y-4">
+          <div className="bg-white rounded-xl border border-line p-8 text-center space-y-4">
             <div className="text-4xl">✅</div>
-            <h2 className="text-xl font-bold text-gray-900">You&apos;re already registered!</h2>
-            <p className="text-gray-600">You&apos;ve already joined this group for <strong>{tokenRow.event_title}</strong>.</p>
+            <h2 className="text-xl font-bold text-ink">You&apos;re already registered!</h2>
+            <p className="text-content-body">You&apos;ve already joined this group for <strong>{tokenRow.event_title}</strong>.</p>
             <Link href="/account" className="btn-primary inline-block mt-4">View My Account →</Link>
           </div>
         ) : groupFull ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center space-y-4">
+          <div className="bg-white rounded-xl border border-line p-8 text-center space-y-4">
             <div className="text-4xl">🎟️</div>
-            <h2 className="text-xl font-bold text-gray-900">This group is full</h2>
-            <p className="text-gray-600">
+            <h2 className="text-xl font-bold text-ink">This group is full</h2>
+            <p className="text-content-body">
               Every place {organiserName} registered for <strong>{tokenRow.event_title}</strong> has been filled.
               Please contact your group organiser if you think this is a mistake.
             </p>

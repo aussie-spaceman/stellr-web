@@ -35,7 +35,7 @@ function schoolSelectionToFields(selection: SchoolSelection): { companySchool: s
 
 const inputClass = (error: boolean) =>
   `w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue ${
-    error ? 'border-red-400' : 'border-gray-200'
+    error ? 'border-red-400' : 'border-line'
   }`
 
 export function HostEventForm() {
@@ -85,7 +85,7 @@ export function HostEventForm() {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
       {/* Personal */}
       <fieldset className="space-y-4">
-        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-gray-100 w-full">
+        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-line-light w-full">
           Personal Details
         </legend>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -152,7 +152,7 @@ export function HostEventForm() {
 
       {/* Facility */}
       <fieldset className="space-y-4">
-        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-gray-100 w-full">
+        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-line-light w-full">
           Facility Details
         </legend>
         <div>
@@ -179,7 +179,7 @@ export function HostEventForm() {
 
       {/* Event Specifics */}
       <fieldset className="space-y-4">
-        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-gray-100 w-full">
+        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-line-light w-full">
           Event Specifics
         </legend>
         <div>
@@ -212,7 +212,7 @@ export function HostEventForm() {
 
       {/* Financial */}
       <fieldset className="space-y-4">
-        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-gray-100 w-full">
+        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-line-light w-full">
           Financial
         </legend>
         <div>
@@ -223,7 +223,7 @@ export function HostEventForm() {
             id="funding"
             rows={3}
             {...register('funding')}
-            className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none"
+            className="w-full px-4 py-3 rounded-lg border border-line text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none"
             placeholder="e.g. School district budget, grant funding, corporate sponsor, none"
           />
         </div>
@@ -235,7 +235,7 @@ export function HostEventForm() {
             id="facilityOverheads"
             rows={3}
             {...register('facilityOverheads')}
-            className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none"
+            className="w-full px-4 py-3 rounded-lg border border-line text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none"
             placeholder="e.g. Room hire fees, catering minimums, AV equipment rental"
           />
         </div>
@@ -247,7 +247,7 @@ export function HostEventForm() {
           <input
             type="checkbox"
             {...register('consent')}
-            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-blue"
+            className="mt-0.5 h-4 w-4 rounded border-line text-brand-blue"
           />
           <span className="text-sm text-brand-grey-dark">
             I agree to Stellr Education contacting me in relation to this enquiry. View our{' '}

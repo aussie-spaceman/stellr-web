@@ -7,24 +7,27 @@ export function formatDate(dateStr: string): string {
 // and on the client. Bare `.toLocaleDateString()`/`.toLocaleString()` inherit the
 // runtime's locale and timezone, which differ between the SSR host (UTC) and the
 // browser — causing React #418 hydration errors and inconsistent day/format.
-// Change this single constant if the organisation operates in another timezone.
-export const APP_TIME_ZONE = 'Australia/Sydney'
+// Stellr is a US (Utah) organisation, so dates render in US format + Mountain
+// Time. Change this single constant if the organisation operates in another
+// timezone.
+export const APP_TIME_ZONE = 'America/Denver'
+export const APP_LOCALE = 'en-US'
 
-/** Day-month-year for a timestamp/ISO string, e.g. "20 Jun 2026". */
-export function formatDateShort(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-AU', {
-    day: 'numeric',
+/** Month-day-year for a timestamp/ISO string, e.g. "Jun 20, 2026". */
+export function formatDateShort(iso: string | number | Date): string {
+  return new Date(iso).toLocaleDateString(APP_LOCALE, {
     month: 'short',
+    day: 'numeric',
     year: 'numeric',
     timeZone: APP_TIME_ZONE,
   })
 }
 
-/** Date + time for a timestamp/ISO string, e.g. "20 Jun 2026, 10:00 am". */
-export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('en-AU', {
-    day: 'numeric',
+/** Date + time for a timestamp/ISO string, e.g. "Jun 20, 2026, 10:00 AM". */
+export function formatDateTime(iso: string | number | Date): string {
+  return new Date(iso).toLocaleString(APP_LOCALE, {
     month: 'short',
+    day: 'numeric',
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',

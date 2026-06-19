@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { formatDateTime } from '@/lib/utils'
+import { formatDateShort, formatDateTime } from '@/lib/utils'
 import {
   Award, User, ShieldCheck, Calendar, CreditCard,
   FileText, Users, GraduationCap, Activity as ActivityIcon,
@@ -56,7 +56,7 @@ function relativeTime(iso: string): string {
   if (hrs < 24) return `${hrs}h ago`
   const days = Math.round(hrs / 24)
   if (days < 7) return `${days}d ago`
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return formatDateShort(iso)
 }
 
 export function ActivityTimeline({ items: initial, fetchUrl, pageSize = 30 }: Props) {

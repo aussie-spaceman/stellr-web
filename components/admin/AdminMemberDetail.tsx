@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ROLES_FOR_BRACKET, DEFAULT_ROLE_FOR_BRACKET, getEligibleTierNames } from '@/lib/membership-rules'
@@ -476,7 +477,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                         {reg.status ?? 'pending'}
                       </span>
                       <p className="text-xs text-brand-muted-soft mt-1">
-                        {new Date(reg.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {formatDateShort(reg.created_at)}
                       </p>
                     </div>
                   </div>
@@ -543,9 +544,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
               <div className="flex justify-between">
                 <dt className="text-brand-muted-soft">Joined</dt>
                 <dd className="text-brand-blue-dark">
-                  {new Date(member.created_at).toLocaleDateString('en-US', {
-                    month: 'short', day: 'numeric', year: 'numeric',
-                  })}
+                  {formatDateShort(member.created_at)}
                 </dd>
               </div>
             </dl>

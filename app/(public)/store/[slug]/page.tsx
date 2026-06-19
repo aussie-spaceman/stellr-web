@@ -48,7 +48,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           </div>
 
           <div>
-            <span className="mb-2 inline-block rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold capitalize text-gray-600">
+            <span className="mb-2 inline-block rounded-full bg-surface px-2 py-1 text-xs font-semibold capitalize text-content-body">
               {product.product_type}
             </span>
             <h1 className="mb-3 text-3xl font-bold text-brand-blue-dark">{product.name}</h1>

@@ -48,18 +48,18 @@ export default function CheckInForm({ slug, token, isVirtual }: { slug: string; 
           <p className="text-sm font-medium text-green-700 uppercase tracking-wide">
             {result.alreadyCheckedIn ? 'Already checked in' : isVirtual ? 'Attendance confirmed' : 'Checked in'}
           </p>
-          <h1 className="text-4xl font-extrabold text-gray-900 mt-2">
+          <h1 className="text-4xl font-extrabold text-ink mt-2">
             {result.firstName} {result.lastName}
           </h1>
           {result.company && <p className="text-lg font-semibold text-indigo-600 mt-2">{result.company}</p>}
         </div>
         {!isVirtual && result.shirtSize && (
-          <div className="inline-block bg-gray-900 text-white rounded-2xl px-10 py-6">
-            <p className="text-xs uppercase tracking-wide text-gray-400">Shirt Size</p>
+          <div className="inline-block bg-ink text-white rounded-2xl px-10 py-6">
+            <p className="text-xs uppercase tracking-wide text-content-faint">Shirt Size</p>
             <p className="text-5xl font-extrabold mt-1">{result.shirtSize}</p>
           </div>
         )}
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-content-muted">
           {isVirtual ? 'You can close this page.' : 'Show this screen to the registration desk.'}
         </p>
       </div>
@@ -68,7 +68,7 @@ export default function CheckInForm({ slug, token, isVirtual }: { slug: string; 
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <label className="block text-sm font-medium text-gray-700">
+      <label className="block text-sm font-medium text-content-body">
         Email address you registered with
         <input
           type="email"
@@ -76,7 +76,7 @@ export default function CheckInForm({ slug, token, isVirtual }: { slug: string; 
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@email.com"
-          className="mt-1.5 w-full border border-gray-300 rounded-xl px-4 py-3 text-base"
+          className="mt-1.5 w-full border border-line rounded-xl px-4 py-3 text-base"
           autoComplete="email"
         />
       </label>

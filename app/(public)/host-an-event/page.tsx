@@ -39,7 +39,7 @@ export default function HostAnEventPage() {
             Educate → Host An Event
           </p>
           <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">Host An Event</h1>
-          <p className="text-lg text-gray-300 max-w-2xl leading-relaxed">
+          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
             Interested in running a live Stellr design competition at your facility? We partner with
             schools, universities, and companies to bring in-person STEM challenges to communities
             across the US and beyond.
@@ -103,7 +103,7 @@ export default function HostAnEventPage() {
               </div>
               <div className="bg-brand-blue-dark text-white rounded-xl p-6 space-y-2">
                 <h3 className="font-bold">Questions?</h3>
-                <p className="text-sm text-gray-300">
+                <p className="text-sm text-content-faint">
                   If you&rsquo;d prefer to talk before submitting, reach out directly at{' '}
                   <a
                     href="mailto:hello@stellreducation.org"

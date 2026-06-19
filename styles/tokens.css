@@ -1,0 +1,61 @@
+/**
+ * Do not edit directly, this file was auto-generated.
+ */
+
+:root {
+  --color-midnight: #0e1330; /** Page / footer background */
+  --color-ink: #13183a; /** Headings */
+  --color-utility-navy: #0a1b3c; /** Header top utility bar */
+  --color-surface: #f6f7fb; /** Section / panel background */
+  --color-white: #ffffff;
+  --color-primary: #3c6df6; /** Primary action / CTA */
+  --color-primary-deep: #2c53c6; /** Hover / gradient end */
+  --color-donate-gold: #e0a23a; /** Donate button */
+  --color-star-gold: #ffc24b; /** Highlight / milestone */
+  --color-space-violet: #7c5cfc; /** Theme: Space */
+  --color-enviro-green: #1fa97a; /** Theme: Environmental */
+  --color-pathway-amber: #e0922f; /** Pathway: Campaign */
+  --color-avatar-teal: #16b6c4; /** Account avatar */
+  --color-text-primary: #2a2f45;
+  --color-text-body: #454b68;
+  --color-text-secondary: #5a6178;
+  --color-text-muted: #6a708c;
+  --color-text-faint: #8a90ad;
+  --color-border: #e4e7f2; /** Card / divider border */
+  --color-border-light: #eceef6;
+  --color-danger: #b0554d; /** Avoid / negative copy */
+  --theme-tint-space-bg: #f6f2ff;
+  --theme-tint-space-chip: #ede6ff;
+  --theme-tint-space-text: #3b2b86;
+  --theme-tint-enviro-bg: #edfaf4;
+  --theme-tint-enviro-chip: #dcf3ea;
+  --theme-tint-enviro-text: #0f6a4c;
+  --theme-tint-primary-soft-bg: #eaf0fe;
+  --theme-tint-amber-soft-bg: #fbefdd;
+  --font-display: Space Grotesk; /** Headings & display, weights 500–700 */
+  --font-body: Hanken Grotesk; /** Body & UI, weights 400–700 */
+  --font-competition-display: Norwester; /** Competition-materials headings (print/slides) */
+  --font-competition-body: Aileron; /** Competition-materials body (print/slides) */
+  --font-size-h1: 56px;
+  --font-size-h2: 32px;
+  --font-size-h3: 18px;
+  --font-size-eyebrow: 13px; /** Uppercase, letter-spacing .13em */
+  --font-size-lead: 18px;
+  --font-size-body: 15px;
+  --font-size-meta: 13px;
+  --letter-spacing-display: -0.025em;
+  --letter-spacing-heading: -0.02em;
+  --letter-spacing-eyebrow: 0.13em;
+  --radius-control: 8px;
+  --radius-card: 14px;
+  --radius-panel: 18px;
+  --radius-cta: 22px;
+  --radius-pill: 999px;
+  --space-section: 64px; /** Vertical rhythm between blocks (64–72) */
+  --space-gutter: 32px; /** Horizontal page padding */
+  --space-content-max: 1080px; /** Content column max width */
+  --space-chrome-max: 1240px; /** Header/footer max width */
+  --shadow-card-lift: 0 18px 40px -30px rgba(20,26,61,0.4);
+  --shadow-featured: 0 18px 40px -28px rgba(60,109,246,0.6);
+  --shadow-panel: 0 18px 50px -40px rgba(20,26,61,0.4);
+}

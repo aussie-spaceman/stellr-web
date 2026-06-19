@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 import Link from 'next/link'
 import type { ComplianceState } from '@/lib/compliance'
 import type { ComplianceAuditRow } from '@/lib/compliance-admin'
@@ -19,7 +20,7 @@ const FILTERS: { key: Filter; label: string }[] = [
 ]
 
 function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+  return formatDateShort(iso)
 }
 
 export function ComplianceAuditTable({

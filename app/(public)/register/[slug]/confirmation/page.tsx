@@ -17,7 +17,7 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
   const hasRemaining = isGroup && remainingCount > 0
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-16">
+    <div className="min-h-screen bg-surface flex items-center justify-center px-4 py-16">
       <div className="max-w-lg w-full text-center">
         <div className="flex justify-center mb-6">
           <CheckCircle size={64} className="text-green-500" />
@@ -27,14 +27,14 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
           {isGroup ? 'Group Registration Submitted!' : 'Registration Submitted!'}
         </h1>
 
-        <p className="text-gray-600 mb-6">
+        <p className="text-content-body mb-6">
           {isGroup
             ? 'Thank you for registering your group. A confirmation email has been sent to you.'
             : 'Thank you for registering. A confirmation email will be sent once your payment is processed.'}
         </p>
 
         {id && (
-          <div className="bg-gray-100 rounded-lg px-4 py-3 mb-6 text-sm text-gray-600">
+          <div className="bg-surface rounded-lg px-4 py-3 mb-6 text-sm text-content-body">
             Reference ID: <span className="font-mono font-medium">{id}</span>
           </div>
         )}
@@ -72,7 +72,7 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
         {spreadsheetUrl && !hasRemaining && (
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6 text-left">
             <p className="font-semibold text-brand-blue-dark mb-1">Your Team Member Spreadsheet</p>
-            <p className="text-sm text-gray-600 mb-3">
+            <p className="text-sm text-content-body mb-3">
               A pre-formatted Google Sheet has been shared with your email. Fill in your team member details and return it to Stellr when complete.
             </p>
             <a
@@ -84,14 +84,14 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
               Open Google Sheet
               <ExternalLink size={14} />
             </a>
-            <p className="text-xs text-gray-400 mt-2">A link to this sheet has also been sent to your email.</p>
+            <p className="text-xs text-content-faint mt-2">A link to this sheet has also been sent to your email.</p>
           </div>
         )}
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6 text-left space-y-3 mb-8">
+        <div className="bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8">
           <p className="font-semibold text-brand-blue-dark">What happens next?</p>
           {isGroup ? (
-            <ul className="space-y-2 text-sm text-gray-600">
+            <ul className="space-y-2 text-sm text-content-body">
               <li className="flex items-start gap-2">
                 <span className="text-green-500 mt-0.5">✓</span>
                 Confirmation email sent to the teacher / coordinator
@@ -117,7 +117,7 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
               </li>
             </ul>
           ) : (
-            <ul className="space-y-2 text-sm text-gray-600">
+            <ul className="space-y-2 text-sm text-content-body">
               <li className="flex items-start gap-2">
                 <span className="text-green-500 mt-0.5">✓</span>
                 Payment processed
@@ -154,7 +154,7 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
               <ExternalLink size={16} />
               Manage Your Team →
             </Link>
-            <p className="text-xs text-gray-400 mt-2">Open your team in the member portal to add participants, sync your Google Sheet, and track paperwork — all participant details stay private to you.</p>
+            <p className="text-xs text-content-faint mt-2">Open your team in the member portal to add participants, sync your Google Sheet, and track paperwork — all participant details stay private to you.</p>
           </div>
         )}
 

@@ -102,7 +102,7 @@ export default async function EventDetailPage({ params }: PageProps) {
               </span>
             )}
             {event.type && (
-              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-white/10 text-gray-300">
+              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-white/10 text-content-faint">
                 {event.type}
               </span>
             )}
@@ -207,7 +207,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                 <h2 className="text-2xl font-bold text-brand-blue-dark mb-4">Frequently Asked Questions</h2>
                 <div className="space-y-3">
                   {PLACEHOLDER_FAQS.map((faq) => (
-                    <details key={faq.q} className="group border border-gray-200 rounded-lg">
+                    <details key={faq.q} className="group border border-line rounded-lg">
                       <summary className="flex items-center justify-between p-4 cursor-pointer font-medium text-brand-blue-dark list-none">
                         {faq.q}
                         <span className="ml-4 shrink-0 text-brand-grey-mid group-open:rotate-180 transition-transform">▾</span>
@@ -293,7 +293,7 @@ export default async function EventDetailPage({ params }: PageProps) {
               {/* Side CTA */}
               <div className="bg-brand-blue-dark text-white rounded-xl p-6 text-center">
                 <p className="font-bold text-lg mb-2">Ready to compete?</p>
-                <p className="text-sm text-gray-300 mb-4">
+                <p className="text-sm text-content-faint mb-4">
                   {status === 'open'
                     ? 'Registration is open. Secure your spot now.'
                     : status === 'coming-soon'
@@ -308,7 +308,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                     {status === 'open' ? 'Register Now' : 'Get Notified'}
                   </a>
                 )}
-                <Link href="/events" className="block mt-3 text-xs text-gray-400 hover:text-white transition-colors">
+                <Link href="/events" className="block mt-3 text-xs text-content-faint hover:text-white transition-colors">
                   ← Back to all events
                 </Link>
               </div>

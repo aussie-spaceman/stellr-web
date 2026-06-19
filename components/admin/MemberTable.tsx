@@ -4,6 +4,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { Avatar } from '@/components/ui/Avatar'
+import { formatDateShort } from '@/lib/utils'
 
 export interface MemberRow {
   id: string
@@ -165,9 +166,7 @@ export function MemberTable({ members, tiers, total, page, pageSize, filters }: 
                   </td>
                   <td className="px-4 py-3 text-brand-muted">{school ?? '—'}</td>
                   <td className="px-4 py-3 text-brand-muted-soft">
-                    {new Date(m.created_at).toLocaleDateString('en-US', {
-                      month: 'short', day: 'numeric', year: 'numeric',
-                    })}
+                    {formatDateShort(m.created_at)}
                   </td>
                   <td className="px-4 py-3">
                     <Link

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import type { ComplianceState, TeacherLicense } from '@/lib/compliance'
 
@@ -22,7 +23,7 @@ export interface MemberCompliance {
 }
 
 function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+  return formatDateShort(iso)
 }
 
 export function MemberCompliancePanel({

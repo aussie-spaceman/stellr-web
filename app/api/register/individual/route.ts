@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
+import { registrationStatus } from '@/lib/utils'
 import type { RegistrationRow, ParticipantRow } from '@/lib/database.types'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt, normalizeEmail } from '@/lib/member-enums'
@@ -48,6 +49,20 @@ export async function POST(req: NextRequest) {
 
     if (!event_slug || !email || !first_name || !last_name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    // Registration window gate — reject before creating any records / sending
+    // DocuSign if the event's registration isn't currently open (FR-EVT).
+    const eventForGate = await getEventBySlug(event_slug).catch(() => null)
+    if (eventForGate) {
+      const regStatus = registrationStatus(
+        eventForGate.registrationOpen ?? false,
+        eventForGate.registrationOpenDate,
+        eventForGate.registrationCloseDate,
+      )
+      if (regStatus !== 'open') {
+        return NextResponse.json({ error: 'Registration is not open for this event.' }, { status: 403 })
+      }
     }
 
     // School is mandatory — accept either an existing school id or a non-empty

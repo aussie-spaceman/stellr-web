@@ -48,7 +48,7 @@ export function TestimonialCarousel({ testimonials }: { testimonials: Testimonia
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
               activeRole === role
                 ? 'bg-brand-blue text-white'
-                : 'bg-white/10 text-gray-300 hover:bg-white/20'
+                : 'bg-white/10 text-content-faint hover:bg-white/20'
             }`}
           >
             {role}
@@ -91,7 +91,7 @@ export function TestimonialCarousel({ testimonials }: { testimonials: Testimonia
               &ldquo;{current.quote}&rdquo;
             </blockquote>
             <p className="font-semibold text-blue-300">{current.author}</p>
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-content-faint">
               {current.role}{current.event ? ` · ${current.event}` : ''}
             </p>
           </div>
@@ -101,15 +101,15 @@ export function TestimonialCarousel({ testimonials }: { testimonials: Testimonia
             <div className="flex items-center justify-center gap-4 mt-6">
               <button
                 onClick={prev}
-                className="p-2 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                className="p-2 rounded-full text-content-faint hover:text-white hover:bg-white/10 transition-colors"
                 aria-label="Previous testimonial"
               >
                 <ChevronLeft size={20} />
               </button>
-              <span className="text-sm text-gray-400">{index + 1} / {filtered.length}</span>
+              <span className="text-sm text-content-faint">{index + 1} / {filtered.length}</span>
               <button
                 onClick={next}
-                className="p-2 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                className="p-2 rounded-full text-content-faint hover:text-white hover:bg-white/10 transition-colors"
                 aria-label="Next testimonial"
               >
                 <ChevronRight size={20} />
@@ -118,7 +118,7 @@ export function TestimonialCarousel({ testimonials }: { testimonials: Testimonia
           )}
         </div>
       ) : (
-        <p className="text-center text-gray-400 italic">No testimonials for this role yet.</p>
+        <p className="text-center text-content-faint italic">No testimonials for this role yet.</p>
       )}
     </div>
   )

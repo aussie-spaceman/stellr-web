@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { Plus, Pencil, X, Check } from 'lucide-react'
 
@@ -35,7 +36,7 @@ const STATUS_CLS: Record<string, string> = {
 const STATUSES = ['active', 'expired', 'canceled', 'revoked']
 
 function fmt(d: string | null): string {
-  return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
+  return d ? formatDateShort(d) : '—'
 }
 function tierName(m: Membership): string {
   return m.membership_tiers?.name ?? 'Membership'

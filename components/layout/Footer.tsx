@@ -79,7 +79,7 @@ export function Footer() {
               <div className="inline-flex bg-white rounded-xl px-6 py-5 shadow-sm">
                 <Logo sizeClassName="h-16" />
               </div>
-              <p className="mt-4 text-sm text-gray-400 max-w-xs leading-relaxed">
+              <p className="mt-4 text-sm text-content-faint max-w-xs leading-relaxed">
                 The home of STEM education for school students — providing tomorrow&apos;s
                 professionals with the skills, relationships, and career pathways they need.
               </p>
@@ -91,7 +91,7 @@ export function Footer() {
                     aria-label={label}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-gray-500 hover:text-white transition-colors"
+                    className="text-content-muted hover:text-white transition-colors"
                   >
                     <Icon size={18} />
                   </a>
@@ -110,7 +110,7 @@ export function Footer() {
                     <li key={link.href + link.label}>
                       <Link
                         href={link.href}
-                        className="text-sm text-gray-400 hover:text-white transition-colors"
+                        className="text-sm text-content-faint hover:text-white transition-colors"
                       >
                         {link.label}
                       </Link>
@@ -122,7 +122,7 @@ export function Footer() {
           </div>
 
           {/* ── Bottom bar ── */}
-          <div className="mt-12 pt-8 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500">
+          <div className="mt-12 pt-8 border-t border-ink flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-content-muted">
             <p>{year} © Stellr Education&nbsp;&nbsp;|&nbsp;&nbsp;Registered 501(c)(3)&nbsp;&nbsp;|&nbsp;&nbsp;Built In Utah, Educating The Globe</p>
             <div className="flex items-center gap-4">
               <Link href="/privacy" className="hover:text-white transition-colors">

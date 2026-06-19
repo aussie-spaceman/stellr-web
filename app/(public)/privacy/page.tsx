@@ -201,11 +201,11 @@ export default function PrivacyPage() {
         <h2 className="text-xl font-bold text-brand-blue-dark">5. How We Use Your Information</h2>
         <p>We use collected information for the following purposes:</p>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse border border-gray-200">
+          <table className="w-full text-sm border-collapse border border-line">
             <thead>
-              <tr className="bg-gray-50">
-                <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Purpose</th>
-                <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Data Used</th>
+              <tr className="bg-surface">
+                <th className="border border-line px-4 py-2 text-left font-semibold">Purpose</th>
+                <th className="border border-line px-4 py-2 text-left font-semibold">Data Used</th>
               </tr>
             </thead>
             <tbody>
@@ -222,9 +222,9 @@ export default function PrivacyPage() {
                 ['Complying with legal obligations', 'All categories as required'],
                 ['Responding to enquiries and support requests', 'Contact information'],
               ].map(([purpose, data]) => (
-                <tr key={purpose} className="even:bg-gray-50">
-                  <td className="border border-gray-200 px-4 py-2">{purpose}</td>
-                  <td className="border border-gray-200 px-4 py-2">{data}</td>
+                <tr key={purpose} className="even:bg-surface">
+                  <td className="border border-line px-4 py-2">{purpose}</td>
+                  <td className="border border-line px-4 py-2">{data}</td>
                 </tr>
               ))}
             </tbody>
@@ -253,12 +253,12 @@ export default function PrivacyPage() {
         <h3 className="text-lg font-semibold text-brand-blue-dark">7.1 Service Providers</h3>
         <p>We engage trusted third-party vendors to assist in delivering our Services. Our current subprocessors include:</p>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse border border-gray-200">
+          <table className="w-full text-sm border-collapse border border-line">
             <thead>
-              <tr className="bg-gray-50">
-                <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Provider</th>
-                <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Purpose</th>
-                <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Data Shared</th>
+              <tr className="bg-surface">
+                <th className="border border-line px-4 py-2 text-left font-semibold">Provider</th>
+                <th className="border border-line px-4 py-2 text-left font-semibold">Purpose</th>
+                <th className="border border-line px-4 py-2 text-left font-semibold">Data Shared</th>
               </tr>
             </thead>
             <tbody>
@@ -271,10 +271,10 @@ export default function PrivacyPage() {
                 ['Vercel', 'Website hosting and delivery', 'Usage/technical data'],
                 ['Sanity', 'Content management', 'No personal data'],
               ].map(([provider, purpose, data]) => (
-                <tr key={provider} className="even:bg-gray-50">
-                  <td className="border border-gray-200 px-4 py-2 font-medium">{provider}</td>
-                  <td className="border border-gray-200 px-4 py-2">{purpose}</td>
-                  <td className="border border-gray-200 px-4 py-2 text-xs text-brand-grey-mid">{data}</td>
+                <tr key={provider} className="even:bg-surface">
+                  <td className="border border-line px-4 py-2 font-medium">{provider}</td>
+                  <td className="border border-line px-4 py-2">{purpose}</td>
+                  <td className="border border-line px-4 py-2 text-xs text-brand-grey-mid">{data}</td>
                 </tr>
               ))}
             </tbody>
@@ -383,11 +383,11 @@ export default function PrivacyPage() {
         <h2 className="text-xl font-bold text-brand-blue-dark">10. Data Retention</h2>
         <p>We retain personal information only as long as necessary:</p>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse border border-gray-200">
+          <table className="w-full text-sm border-collapse border border-line">
             <thead>
-              <tr className="bg-gray-50">
-                <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Data Type</th>
-                <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Retention Period</th>
+              <tr className="bg-surface">
+                <th className="border border-line px-4 py-2 text-left font-semibold">Data Type</th>
+                <th className="border border-line px-4 py-2 text-left font-semibold">Retention Period</th>
               </tr>
             </thead>
             <tbody>
@@ -400,9 +400,9 @@ export default function PrivacyPage() {
                 ['Photos and videos', 'Until you request removal, or indefinitely'],
                 ['Technical/usage logs', 'Generally 12 months, with minor exceptions on a platform-specific basis'],
               ].map(([type, period]) => (
-                <tr key={type} className="even:bg-gray-50">
-                  <td className="border border-gray-200 px-4 py-2">{type}</td>
-                  <td className="border border-gray-200 px-4 py-2">{period}</td>
+                <tr key={type} className="even:bg-surface">
+                  <td className="border border-line px-4 py-2">{type}</td>
+                  <td className="border border-line px-4 py-2">{period}</td>
                 </tr>
               ))}
             </tbody>

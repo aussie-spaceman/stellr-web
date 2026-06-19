@@ -3,7 +3,8 @@
 // Members currently have no photo column, so `src` is normally omitted and
 // initials render — the colour is a stable hash of the member id.
 
-const PALETTE = ['#0d439d', '#da6220', '#dda33b', '#1d5fd6', '#051535']
+// Design System V2 palette — stable hashed avatar colours from the token set.
+const PALETTE = ['#3C6DF6', '#7C5CFC', '#1FA97A', '#16B6C4', '#E0922F']
 
 function hashIndex(seed: string, mod: number) {
   let h = 0
@@ -40,7 +41,7 @@ export function Avatar({
       .join('')
       .toUpperCase() || '?'
   const bg = color ?? PALETTE[hashIndex(id || name, PALETTE.length)]
-  const fg = bg === '#dda33b' ? '#051535' : '#ffffff'
+  const fg = bg === '#E0922F' ? '#13183A' : '#ffffff'
   const ringClass = ring ? 'ring-2 ring-white' : ''
 
   if (src) {

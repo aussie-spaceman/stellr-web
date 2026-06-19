@@ -45,7 +45,7 @@ export function EventsFilterBar() {
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors border ${
               type === opt.value
                 ? 'bg-brand-blue text-white border-brand-blue'
-                : 'bg-white text-brand-grey-dark border-gray-200 hover:border-brand-blue hover:text-brand-blue'
+                : 'bg-white text-brand-grey-dark border-line hover:border-brand-blue hover:text-brand-blue'
             }`}
           >
             {opt.label}
@@ -53,7 +53,7 @@ export function EventsFilterBar() {
         ))}
       </div>
 
-      <div className="h-6 w-px bg-gray-200 hidden sm:block" />
+      <div className="h-6 w-px bg-line-light hidden sm:block" />
 
       {/* Grade filter */}
       <div className="flex flex-wrap gap-2">
@@ -64,7 +64,7 @@ export function EventsFilterBar() {
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors border ${
               grade === opt.value
                 ? 'bg-brand-blue-dark text-white border-brand-blue-dark'
-                : 'bg-white text-brand-grey-dark border-gray-200 hover:border-brand-blue-dark hover:text-brand-blue-dark'
+                : 'bg-white text-brand-grey-dark border-line hover:border-brand-blue-dark hover:text-brand-blue-dark'
             }`}
           >
             {opt.label}

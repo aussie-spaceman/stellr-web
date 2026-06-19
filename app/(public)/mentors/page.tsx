@@ -67,7 +67,7 @@ export default function MentorsPage() {
           <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">
             Share what you know. Shape what&rsquo;s next.
           </h1>
-          <p className="text-lg text-gray-300 max-w-2xl leading-relaxed">
+          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
             Our volunteers and mentors are STEM professionals who give their time to impart lessons
             and share their unique perspectives. Whatever stage of your career you&rsquo;re at,
             there&rsquo;s a way for you to contribute.
@@ -149,7 +149,7 @@ export default function MentorsPage() {
       <section className="section-padding bg-brand-blue-dark text-white text-center">
         <div className="container-max max-w-2xl">
           <h2 className="text-3xl font-bold mb-4">Ready to make an impact?</h2>
-          <p className="text-gray-300 leading-relaxed mb-8">
+          <p className="text-content-faint leading-relaxed mb-8">
             Join free, tell us about your experience, and we&rsquo;ll help you find the right way to
             contribute.
           </p>

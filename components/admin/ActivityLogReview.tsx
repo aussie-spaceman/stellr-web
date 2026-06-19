@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 import Link from 'next/link'
 
 interface Member {
@@ -128,7 +129,7 @@ export function ActivityLogReview({ initialItems }: { initialItems: PendingItem[
                     )}
                   </div>
                   <p className="text-xs text-brand-muted-soft shrink-0">
-                    Submitted {new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    Submitted {formatDateShort(item.created_at)}
                   </p>
                 </div>
 

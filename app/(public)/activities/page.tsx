@@ -66,7 +66,7 @@ export default async function ActivitiesPage() {
           <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">
             Curriculum Activities
           </h1>
-          <p className="text-lg text-gray-300 max-w-2xl leading-relaxed">
+          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
             All material Stellr produces for its live competitions is available for educators to
             access and use asynchronously — in your classroom, on your schedule.
           </p>
@@ -149,7 +149,7 @@ export default async function ActivitiesPage() {
                 return (
                   <div
                     key={c._id}
-                    className="border border-gray-200 rounded-xl p-6 flex items-start justify-between gap-4"
+                    className="border border-line rounded-xl p-6 flex items-start justify-between gap-4"
                   >
                     <div>
                       <h3 className="font-bold text-brand-blue-dark mb-1">{c.title}</h3>
@@ -163,7 +163,7 @@ export default async function ActivitiesPage() {
                           ? 'bg-green-100 text-green-800'
                           : status === 'Closed'
                           ? 'bg-red-100 text-red-700'
-                          : 'bg-gray-100 text-gray-600'
+                          : 'bg-surface text-content-body'
                       }`}
                     >
                       {status}
@@ -199,7 +199,7 @@ export default async function ActivitiesPage() {
       <section className="section-padding bg-brand-blue-dark text-white">
         <div className="container-max text-center">
           <h2 className="text-3xl font-bold mb-4">Ready to bring this to your classroom?</h2>
-          <p className="text-gray-300 max-w-xl mx-auto mb-8">
+          <p className="text-content-faint max-w-xl mx-auto mb-8">
             Create a free account to access Baseline content and register your class in an active
             Campaign.
           </p>

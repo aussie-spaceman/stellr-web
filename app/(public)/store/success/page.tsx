@@ -18,7 +18,7 @@ export default function StoreSuccessPage() {
           <Link href="/store" className="rounded-md bg-brand-blue px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-blue-dark">
             Continue shopping
           </Link>
-          <Link href="/account?tab=activity" className="rounded-md border border-gray-200 px-5 py-2.5 text-sm font-semibold text-brand-blue hover:bg-gray-50">
+          <Link href="/account?tab=activity" className="rounded-md border border-line px-5 py-2.5 text-sm font-semibold text-brand-blue hover:bg-surface">
             View order history
           </Link>
         </div>

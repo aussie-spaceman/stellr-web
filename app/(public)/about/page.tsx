@@ -107,7 +107,7 @@ export default function AboutPage() {
       {/* ── In-page anchor nav ────────────────────────────────────────── */}
       <nav
         aria-label="About sections"
-        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-gray-100"
+        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-line-light"
       >
         <div className="container-max flex gap-2 sm:gap-6 px-4 sm:px-6 lg:px-8 overflow-x-auto">
           {[
@@ -187,7 +187,7 @@ export default function AboutPage() {
               Our Vision
             </p>
             <h2 className="text-2xl sm:text-3xl font-bold mb-6">The Engineering Education Network</h2>
-            <ul className="space-y-3 text-gray-200 leading-relaxed">
+            <ul className="space-y-3 text-content-faint leading-relaxed">
               {[
                 'Develop careers through industry simulation competitions and events.',
                 'Provide future leaders the skills and tools they’ll need to solve tomorrow’s problems.',
@@ -208,7 +208,7 @@ export default function AboutPage() {
           <h2 className="text-3xl font-bold text-brand-blue-dark mb-8">Our Values</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {values.map((v) => (
-              <div key={v.title} className="border border-gray-200 rounded-xl p-6">
+              <div key={v.title} className="border border-line rounded-xl p-6">
                 <h3 className="font-bold text-brand-blue-dark mb-2">{v.title}</h3>
                 <p className="text-sm text-brand-grey-dark leading-relaxed">{v.description}</p>
               </div>

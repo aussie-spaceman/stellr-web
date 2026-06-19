@@ -25,7 +25,7 @@ export default async function StorePage() {
         <p className="mt-1 mb-8 text-brand-grey-dark">Official Stellr merchandise. Members get tier discounts at checkout.</p>
 
         {products.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-gray-200 p-12 text-center text-gray-500">
+          <div className="rounded-xl border border-dashed border-line p-12 text-center text-content-muted">
             No products available yet — check back soon.
           </div>
         ) : (

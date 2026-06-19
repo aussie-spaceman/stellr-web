@@ -260,16 +260,16 @@ function daysUntil(iso: string) {
   return Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000))
 }
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Denver' })
 }
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Denver' })
 }
 function dayNum(iso: string) {
-  return new Date(iso).getDate()
+  return Number(new Date(iso).toLocaleDateString('en-US', { day: 'numeric', timeZone: 'America/Denver' }))
 }
 function monShort(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', timeZone: 'America/Denver' }).toUpperCase()
 }
 function timeAgo(iso: string): string {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)

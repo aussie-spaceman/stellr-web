@@ -12,6 +12,7 @@
 // roles are excluded regardless of age.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { formatDateShort } from '@/lib/utils'
 
 // Student roles never require a background check (even at 18+). Everyone else
 // (teacher / mentor / adult / parent / subscriber) does once they are 18.
@@ -84,7 +85,7 @@ function licenseExpired(l: TeacherLicense, ref: Date): boolean {
 }
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+  return formatDateShort(iso)
 }
 
 /**

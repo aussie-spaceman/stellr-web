@@ -10,7 +10,7 @@ interface EventCardProps {
 
 const statusConfig = {
   open: { label: 'Registration Open', className: 'bg-green-100 text-green-700' },
-  'coming-soon': { label: 'Coming Soon', className: 'bg-gray-100 text-gray-600' },
+  'coming-soon': { label: 'Coming Soon', className: 'bg-surface text-content-body' },
   closed: { label: 'Registration Closed', className: 'bg-red-100 text-red-700' },
 }
 
@@ -23,7 +23,7 @@ export function EventCard({ event }: EventCardProps) {
   const { label, className } = statusConfig[status]
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
+    <div className="bg-white rounded-xl shadow-sm border border-line-light overflow-hidden hover:shadow-md transition-shadow flex flex-col">
       {/* Image */}
       <div className="relative h-44 bg-gradient-to-br from-brand-blue-dark to-blue-900 flex items-center justify-center">
         {event.image ? (
@@ -47,7 +47,7 @@ export function EventCard({ event }: EventCardProps) {
             </span>
           )}
           {event.type && (
-            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-surface text-content-body">
               {event.type}
             </span>
           )}

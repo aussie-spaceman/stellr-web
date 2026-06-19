@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 
 interface Invoice {
   id: string
@@ -50,9 +51,9 @@ function formatAmount(amount: number, currency: string) {
   }).format(amount / 100)
 }
 
+// Stripe invoice timestamps are unix seconds; participation dates are ISO strings.
 function formatDate(ts: number | string) {
-  const d = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts)
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+  return formatDateShort(typeof ts === 'number' ? ts * 1000 : ts)
 }
 
 const STATUS_STYLES: Record<string, string> = {

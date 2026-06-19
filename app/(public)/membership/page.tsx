@@ -124,7 +124,7 @@ export default async function MembershipPage() {
       <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-4xl sm:text-5xl font-bold mb-4">Find Your Place in the Stellr Community</h1>
-          <p className="text-lg text-gray-300 max-w-xl">
+          <p className="text-lg text-content-faint max-w-xl">
             Whether you&apos;re competing, teaching, mentoring, or supporting — there&apos;s a tier for you.
           </p>
         </div>
@@ -164,7 +164,7 @@ export default async function MembershipPage() {
           <h2 className="text-2xl font-bold text-brand-blue-dark mb-8">Frequently Asked Questions</h2>
           <div className="space-y-3">
             {faqs.map((faq) => (
-              <details key={faq.q} className="group bg-white border border-gray-200 rounded-lg">
+              <details key={faq.q} className="group bg-white border border-line rounded-lg">
                 <summary className="flex items-center justify-between p-5 cursor-pointer font-medium text-brand-blue-dark list-none">
                   {faq.q}
                   <span className="ml-4 shrink-0 text-brand-grey-mid group-open:rotate-180 transition-transform">▾</span>

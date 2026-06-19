@@ -59,17 +59,17 @@ export default async function NewsArticlePage({ params }: PageProps) {
           </Link>
           <div className="flex flex-wrap items-center gap-3 mb-4">
             {post.category && (
-              <span className={`text-xs font-semibold px-3 py-1 rounded-full ${categoryColors[post.category] ?? 'bg-white/10 text-gray-200'}`}>
+              <span className={`text-xs font-semibold px-3 py-1 rounded-full ${categoryColors[post.category] ?? 'bg-white/10 text-content-faint'}`}>
                 {post.category}
               </span>
             )}
             {post.publishedAt && (
-              <span className="text-sm text-gray-400">{formatDate(post.publishedAt)}</span>
+              <span className="text-sm text-content-faint">{formatDate(post.publishedAt)}</span>
             )}
           </div>
           <h1 className="text-3xl sm:text-4xl font-bold leading-tight">{post.title}</h1>
           {post.excerpt && (
-            <p className="mt-4 text-lg text-gray-300">{post.excerpt}</p>
+            <p className="mt-4 text-lg text-content-faint">{post.excerpt}</p>
           )}
         </div>
       </section>
@@ -94,7 +94,7 @@ export default async function NewsArticlePage({ params }: PageProps) {
             <h2 className="text-2xl font-bold text-brand-blue-dark mb-8">Related Articles</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {related.map((rel: { _id: string; title: string; slug: { current: string }; publishedAt?: string; category?: string; excerpt?: string; coverImage?: { asset: { _ref: string } } }) => (
-                <article key={rel._id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                <article key={rel._id} className="bg-white rounded-xl border border-line-light shadow-sm overflow-hidden">
                   <div className="relative h-40 bg-gradient-to-br from-brand-blue-dark to-blue-900">
                     {rel.coverImage && (
                       <Image

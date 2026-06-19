@@ -1,101 +1,109 @@
 'use client'
-// Persistent, colour-coded member nav (T2.1). Desktop ≥lg: fixed 228px navy
-// rail with grouped sections + user chip footer. Mobile <lg: fixed bottom tab
-// bar (5 primary tabs). Replaces the AppHeader hover-dropdown nav on (member)
-// routes; search / notifications / Clerk button live in the shell top strip.
-//
-// Covers ALL live destinations the old dropdowns reached: Spaces, Resources,
-// Directory (Community) and Training, Mentoring, Coaching, and conditional
-// Hosting (Academy). Hosting is gated via the `canHost` prop (server-computed,
-// same logic as AppHeader's showHosting).
 
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  Home, Trophy, MessagesSquare, GraduationCap, Users,
-  FolderOpen, HeartHandshake, Sparkles, Radio,
+  Home, Trophy, MessageSquare, FolderOpen, Users,
+  GraduationCap, Heart, Star, Radio,
 } from 'lucide-react'
 
-type Item = { label: string; href: string; icon: typeof Home; color: string }
+type NavItem = { label: string; href: string; icon: typeof Home }
 
-const PRIMARY: Item[] = [
-  { label: 'Home',         href: '/home',               icon: Home,           color: '#ffffff' },
-  { label: 'Competitions', href: '/events',             icon: Trophy,         color: '#E0922F' },
-  { label: 'Community',    href: '/community',          icon: MessagesSquare, color: '#3f78d6' },
-  { label: 'Academy',      href: '/community/training', icon: GraduationCap,  color: '#E0A23A' },
-  { label: 'Directory',    href: '/community/members',  icon: Users,          color: '#aebbd6' },
+const TOP_ITEMS: NavItem[] = [
+  { label: 'Home',         href: '/home',               icon: Home    },
+  { label: 'Competitions', href: '/events',             icon: Trophy  },
 ]
 
-const COMMUNITY_SUB: Item[] = [
-  { label: 'Spaces',    href: '/community',           icon: MessagesSquare, color: '#3f78d6' },
-  { label: 'Resources', href: '/community/resources', icon: FolderOpen,     color: '#3f78d6' },
-  { label: 'Directory', href: '/community/members',   icon: Users,          color: '#aebbd6' },
+const COMMUNITY_ITEMS: NavItem[] = [
+  { label: 'Spaces',    href: '/community',           icon: MessageSquare },
+  { label: 'Resources', href: '/community/resources', icon: FolderOpen    },
+  { label: 'Directory', href: '/community/members',   icon: Users         },
 ]
-const ACADEMY_SUB: Item[] = [
-  { label: 'Training',  href: '/community/training',  icon: GraduationCap,  color: '#E0A23A' },
-  { label: 'Mentoring', href: '/community/mentoring', icon: HeartHandshake, color: '#E0A23A' },
-  { label: 'Coaching',  href: '/community/coaching',  icon: Sparkles,       color: '#E0A23A' },
+
+const ACADEMY_ITEMS: NavItem[] = [
+  { label: 'Training',  href: '/community/training',  icon: GraduationCap },
+  { label: 'Mentoring', href: '/community/mentoring', icon: Heart         },
+  { label: 'Coaching',  href: '/community/coaching',  icon: Star          },
+  { label: 'Hosting',   href: '/community/hosting',   icon: Radio         },
 ]
-const HOSTING: Item = { label: 'Hosting', href: '/community/hosting', icon: Radio, color: '#E0A23A' }
+
+const MOBILE_PRIMARY: NavItem[] = [
+  { label: 'Home',         href: '/home',               icon: Home          },
+  { label: 'Competitions', href: '/events',             icon: Trophy        },
+  { label: 'Community',    href: '/community',          icon: MessageSquare },
+  { label: 'Academy',      href: '/community/training', icon: GraduationCap },
+  { label: 'Directory',    href: '/community/members',  icon: Users         },
+]
+
+const NON_SPACE_PREFIXES = [
+  '/community/resources', '/community/members', '/community/training',
+  '/community/mentoring', '/community/coaching', '/community/hosting',
+  '/community/events', '/community/sessions', '/community/search',
+]
 
 export function AppSidebar({ canHost = false }: { canHost?: boolean }) {
   const pathname = usePathname() ?? ''
+
   const isActive = (href: string) =>
     href === '/home' ? pathname === '/home' : pathname.startsWith(href)
 
-  // Sub-routes that are NOT "Spaces" — so the Spaces item (href /community) only
-  // highlights on the spaces landing or a space-detail page, not on deeper routes.
-  const NON_SPACE = [
-    '/community/resources', '/community/members', '/community/training',
-    '/community/mentoring', '/community/coaching', '/community/hosting',
-    '/community/events', '/community/sessions', '/community/search',
-  ]
-  const subActive = (href: string) => {
+  const spaceActive = (href: string) => {
     if (href === '/community') {
-      return pathname === '/community' || (pathname.startsWith('/community/') && !NON_SPACE.some((k) => pathname.startsWith(k)))
+      return (
+        pathname === '/community' ||
+        (pathname.startsWith('/community/') && !NON_SPACE_PREFIXES.some((k) => pathname.startsWith(k)))
+      )
     }
     return pathname.startsWith(href)
   }
-  const academySub = canHost ? [...ACADEMY_SUB, HOSTING] : ACADEMY_SUB
+
+  const academyItems = canHost ? ACADEMY_ITEMS : ACADEMY_ITEMS.filter((i) => i.href !== '/community/hosting')
 
   return (
     <>
-      {/* Desktop rail */}
-      <aside className="hidden lg:flex w-[228px] shrink-0 flex-col gap-1 bg-brand-blue-dark px-4 py-6 text-white">
-        <Link href="/home" className="mb-5 flex items-center gap-2.5 px-2">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white">
-            <Image src="/images/logo-icon.svg" alt="Stellr" width={22} height={22} />
-          </span>
-          <span className="font-heading text-xl tracking-wide">STELLR</span>
+      {/* ── Desktop sidebar rail ── */}
+      <aside
+        className="hidden lg:flex w-[210px] shrink-0 flex-col bg-midnight min-h-screen font-sans"
+        style={{ flexShrink: 0 }}
+      >
+        {/* Logo */}
+        <Link href="/home" className="block p-[20px_16px_16px]">
+          <div className="inline-block bg-white rounded-[10px] px-3 py-2">
+            <Image
+              src="/images/logo-horiz-tight.svg"
+              alt="Stellr"
+              width={100}
+              height={33}
+              className="h-7 w-auto block"
+            />
+          </div>
         </Link>
 
-        {/* Home + Competitions (top-level) */}
-        {PRIMARY.slice(0, 2).map((item) => (
-          <RailLink key={item.href} item={item} active={isActive(item.href)} />
-        ))}
-
-        {/* Community group — header + nested destinations (Spaces, Resources, Directory) */}
-        <RailHeader label="Community" icon={MessagesSquare} color="#3f78d6" />
-        <div className="mb-1 ml-3 flex flex-col gap-0.5 border-l border-white/10 pl-2">
-          {COMMUNITY_SUB.map((item) => (
-            <RailSubLink key={item.href} item={item} active={subActive(item.href)} />
+        {/* Nav */}
+        <nav className="flex-1 px-[10px] py-[8px] flex flex-col gap-0.5">
+          {/* Top-level items */}
+          {TOP_ITEMS.map((item) => (
+            <SidebarLink key={item.href} item={item} active={isActive(item.href)} />
           ))}
-        </div>
 
-        {/* Academy group — header + nested destinations (Training, Mentoring, Coaching, Hosting) */}
-        <RailHeader label="Academy" icon={GraduationCap} color="#E0A23A" />
-        <div className="mb-1 ml-3 flex flex-col gap-0.5 border-l border-white/10 pl-2">
-          {academySub.map((item) => (
-            <RailSubLink key={item.href} item={item} active={subActive(item.href)} />
+          {/* Community section */}
+          <SectionHeading label="Community" />
+          {COMMUNITY_ITEMS.map((item) => (
+            <SidebarLink key={item.href} item={item} active={spaceActive(item.href)} />
           ))}
-        </div>
+
+          {/* Academy section */}
+          <SectionHeading label="Academy" />
+          {academyItems.map((item) => (
+            <SidebarLink key={item.href} item={item} active={isActive(item.href)} />
+          ))}
+        </nav>
       </aside>
 
-      {/* Mobile bottom tab bar — 5 primary tabs; secondary destinations reached
-          from each section's landing page. */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-brand-border bg-white px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 lg:hidden">
-        {PRIMARY.map(({ label, href, icon: Icon, color }) => {
+      {/* ── Mobile bottom tab bar ── */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-line bg-white px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 lg:hidden">
+        {MOBILE_PRIMARY.map(({ label, href, icon: Icon }) => {
           const active = isActive(href)
           return (
             <Link
@@ -104,9 +112,12 @@ export function AppSidebar({ canHost = false }: { canHost?: boolean }) {
               aria-label={label}
               className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-1"
             >
-              <Icon className="h-5 w-5" style={{ color: active ? color : '#6A708C' }} />
+              <Icon
+                className="h-5 w-5"
+                style={{ color: active ? '#3C6DF6' : '#6A708C' }}
+              />
               <span
-                className="font-subheading text-[10px]"
+                className="text-[10px] font-sans"
                 style={{ color: active ? '#13183A' : '#6A708C', fontWeight: active ? 600 : 500 }}
               >
                 {label}
@@ -119,42 +130,32 @@ export function AppSidebar({ canHost = false }: { canHost?: boolean }) {
   )
 }
 
-// A non-clickable section label (Community / Academy). Its destinations live as
-// nested RailSubLinks beneath it.
-function RailHeader({ label, icon: Icon, color }: { label: string; icon: typeof Home; color: string }) {
+function SectionHeading({ label }: { label: string }) {
   return (
-    <div className="mt-2 flex items-center gap-3 px-3 pb-0.5 pt-1 font-subheading text-[12px] font-semibold uppercase tracking-[0.12em] text-white/45">
-      <Icon className="h-[15px] w-[15px]" style={{ color }} />
+    <div
+      className="font-display font-bold uppercase tracking-[0.08em] text-[#4A567A]"
+      style={{ fontSize: 10.5, padding: '14px 8px 4px' }}
+    >
       {label}
     </div>
   )
 }
 
-function RailLink({ item, active }: { item: Item; active: boolean }) {
-  const { label, href, icon: Icon, color } = item
+function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
+  const { label, href, icon: Icon } = item
   return (
     <Link
       href={href}
-      className={`flex items-center gap-3 rounded-[10px] px-3 py-2.5 font-subheading text-[15px] font-medium transition-colors ${
-        active ? 'bg-white/10 text-white' : 'text-[#aebbd6] hover:bg-white/5 hover:text-white'
+      className={`flex items-center gap-2.5 rounded-[8px] px-[10px] py-[9px] text-[14px] leading-none transition-colors ${
+        active
+          ? 'bg-white/10 text-white font-semibold'
+          : 'text-[#8B98C8] font-normal hover:bg-white/[0.06] hover:text-[#C3CBF0]'
       }`}
     >
-      <Icon className="h-[18px] w-[18px]" style={{ color }} />
-      {label}
-    </Link>
-  )
-}
-
-function RailSubLink({ item, active }: { item: Item; active: boolean }) {
-  const { label, href, icon: Icon, color } = item
-  return (
-    <Link
-      href={href}
-      className={`flex items-center gap-2.5 rounded-[8px] px-3 py-2 font-subheading text-[13.5px] transition-colors ${
-        active ? 'bg-white/10 text-white' : 'text-[#aebbd6] hover:bg-white/5 hover:text-white'
-      }`}
-    >
-      <Icon className="h-4 w-4" style={{ color }} />
+      <Icon
+        className="h-[18px] w-[18px] shrink-0"
+        style={{ color: active ? '#ffffff' : '#6C77A6' }}
+      />
       {label}
     </Link>
   )

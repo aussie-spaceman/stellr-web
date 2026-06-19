@@ -10,10 +10,7 @@ import { NavUserButton } from './NavUserButton'
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
 type NavbarProps = {
-  /** Whether a Clerk session is present. Resolved server-side and passed in so the
-   *  signed-in/signed-out state is correct on first paint (no flash of "Log In"). */
   isSignedIn?: boolean
-  /** Whether the signed-in user has the admin role (adds Admin panel to the user menu). */
   isAdmin?: boolean
 }
 
@@ -84,13 +81,11 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pathname = usePathname()
 
-  /** Open a dropdown and cancel any pending close timer. */
   const openMenu = (label: string) => {
     if (closeTimer.current) clearTimeout(closeTimer.current)
     setOpenDropdown(label)
   }
 
-  /** Schedule closing — cancelled if cursor enters the trigger or dropdown within 150 ms. */
   const scheduleClose = () => {
     closeTimer.current = setTimeout(() => setOpenDropdown(null), 150)
   }
@@ -98,129 +93,89 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
   const toggleMobileSection = (label: string) =>
     setMobileExpanded((prev) => (prev === label ? null : label))
 
+  const isActive = (href: string) => !!pathname?.startsWith(href)
+
   return (
     <header className="sticky top-0 z-50">
-      {/* ── Tier 1: Utility bar ── */}
-      <div className="bg-brand-blue-dark">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="hidden lg:flex items-center justify-end h-9 text-xs gap-5">
-            {isSignedIn ? (
-              <>
-                <a
-                  href={`${AUTH_URL}/community`}
-                  className="text-content-faint hover:text-white transition-colors"
-                >
-                  My Stellr
-                </a>
-                <NavUserButton isAdmin={isAdmin} />
-              </>
-            ) : (
-              <>
-                <a
-                  href={`${AUTH_URL}/sign-in`}
-                  className="text-content-faint hover:text-white transition-colors"
-                >
-                  Log In
-                </a>
-                <a
-                  href={`${AUTH_URL}/sign-up`}
-                  className="text-brand-orange font-medium hover:text-amber-300 transition-colors"
-                >
-                  Join Free →
-                </a>
-              </>
-            )}
-          </div>
+
+      {/* ── Utility bar ── */}
+      <div className="bg-midnight">
+        <div className="mx-auto max-w-chrome px-8 py-2 flex items-center justify-end gap-3">
+          {isSignedIn ? (
+            <>
+              <a
+                href={`${AUTH_URL}/community`}
+                className="text-hero-lead text-[13px] hover:text-white transition-colors"
+              >
+                My Stellr
+              </a>
+              <NavUserButton isAdmin={isAdmin} />
+            </>
+          ) : (
+            <>
+              <a
+                href={`${AUTH_URL}/sign-in`}
+                className="text-hero-lead text-[13px] hover:text-white transition-colors"
+              >
+                Log In
+              </a>
+              <a
+                href={`${AUTH_URL}/sign-up`}
+                className="text-primary text-[13px] font-medium hover:text-primary-deep transition-colors"
+              >
+                Join Free →
+              </a>
+            </>
+          )}
         </div>
       </div>
 
-      {/* ── Tier 2: Main nav ── */}
-      <nav className="bg-white border-b border-line-light shadow-sm" aria-label="Main navigation">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
-            <Logo sizeClassName="h-14" />
+      {/* ── Main nav (white) ── */}
+      <nav
+        className="bg-white border-b border-line"
+        style={{ boxShadow: '0 1px 4px rgba(14,19,48,.06)' }}
+        aria-label="Main navigation"
+      >
+        <div className="mx-auto max-w-chrome px-8 flex items-center h-[68px] gap-2">
 
-            {/* Desktop nav pillars */}
-            <ul className="hidden lg:flex items-center gap-1">
-              {navLinks.map((link) => (
-                <li key={link.href} className="relative">
-                  {/* Trigger wrapper */}
-                  <div
-                    onMouseEnter={() => openMenu(link.label)}
-                    onMouseLeave={scheduleClose}
-                  >
-                    <button
-                      className={`flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                        pathname?.startsWith(link.href)
-                          ? 'text-brand-blue'
-                          : 'text-brand-grey-dark hover:text-brand-blue-dark'
-                      }`}
-                      aria-expanded={openDropdown === link.label}
-                    >
-                      {link.label}
-                      <ChevronDown
-                        size={14}
-                        className={`transition-transform ${openDropdown === link.label ? 'rotate-180' : ''}`}
-                      />
-                    </button>
-                  </div>
+          {/* Logo */}
+          <Logo sizeClassName="h-[38px]" className="mr-6 flex-none" />
 
-                  {/* Dropdown — shares the same open/close handlers so cursor can move freely */}
-                  {openDropdown === link.label && link.dropdown && (
-                    <ul
-                      className="absolute top-full left-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-line-light py-1 z-50"
-                      onMouseEnter={() => openMenu(link.label)}
-                      onMouseLeave={scheduleClose}
-                    >
-                      {link.dropdown.map((item) => (
-                        <li key={item.href}>
-                          <Link
-                            href={item.href}
-                            className="block px-4 py-2 text-sm text-brand-grey-dark hover:bg-brand-grey-light hover:text-brand-blue-dark transition-colors"
-                          >
-                            {item.label}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              ))}
-            </ul>
-
-            {/* Desktop CTAs */}
-            <div className="hidden lg:flex items-center gap-3">
-              {/* Get Involved dropdown */}
-              <div className="relative">
-                {/* Trigger wrapper */}
+          {/* Desktop nav pillars */}
+          <ul className="hidden lg:flex items-center gap-1">
+            {navLinks.map((link) => (
+              <li key={link.href} className="relative">
                 <div
-                  onMouseEnter={() => openMenu('get-involved')}
+                  onMouseEnter={() => openMenu(link.label)}
                   onMouseLeave={scheduleClose}
                 >
                   <button
-                    className="flex items-center gap-1 px-4 py-2 text-sm font-medium border border-brand-blue text-brand-blue rounded-md hover:bg-blue-50 transition-colors"
-                    aria-expanded={openDropdown === 'get-involved'}
+                    className={`flex items-center gap-1 px-3 py-1.5 text-[15px] rounded-md transition-colors hover:bg-[#F0F3FF] ${
+                      isActive(link.href)
+                        ? 'text-midnight font-semibold'
+                        : 'text-content font-normal'
+                    }`}
+                    aria-expanded={openDropdown === link.label}
                   >
-                    Get Involved
+                    {link.label}
                     <ChevronDown
-                      size={14}
-                      className={`transition-transform ${openDropdown === 'get-involved' ? 'rotate-180' : ''}`}
+                      size={12}
+                      className={`opacity-60 transition-transform ${openDropdown === link.label ? 'rotate-180' : ''}`}
                     />
                   </button>
                 </div>
 
-                {/* Dropdown */}
-                {openDropdown === 'get-involved' && (
+                {openDropdown === link.label && link.dropdown && (
                   <ul
-                    className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-line-light py-1 z-50"
-                    onMouseEnter={() => openMenu('get-involved')}
+                    className="absolute top-full left-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-line py-1 z-50"
+                    onMouseEnter={() => openMenu(link.label)}
                     onMouseLeave={scheduleClose}
                   >
-                    {getInvolvedLinks.map((item) => (
+                    {link.dropdown.map((item) => (
                       <li key={item.href}>
                         <Link
                           href={item.href}
-                          className="block px-4 py-2 text-sm text-brand-grey-dark hover:bg-brand-grey-light hover:text-brand-blue-dark transition-colors"
+                          className="block px-4 py-2 text-sm text-content hover:bg-surface hover:text-midnight transition-colors"
                         >
                           {item.label}
                         </Link>
@@ -228,40 +183,83 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
                     ))}
                   </ul>
                 )}
+              </li>
+            ))}
+          </ul>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Desktop CTAs */}
+          <div className="hidden lg:flex items-center gap-2.5">
+            {/* Get Involved */}
+            <div className="relative">
+              <div
+                onMouseEnter={() => openMenu('get-involved')}
+                onMouseLeave={scheduleClose}
+              >
+                <button
+                  className="flex items-center gap-1.5 border-[1.5px] border-primary text-primary rounded-[8px] px-4 py-[9px] text-[14.5px] font-medium hover:bg-primary-soft transition-colors"
+                  aria-expanded={openDropdown === 'get-involved'}
+                >
+                  Get Involved
+                  <ChevronDown
+                    size={12}
+                    className={`transition-transform ${openDropdown === 'get-involved' ? 'rotate-180' : ''}`}
+                  />
+                </button>
               </div>
 
-              {/* Donate */}
-              <Link
-                href="/donate"
-                className="px-4 py-2 text-sm font-heading font-medium bg-brand-orange text-white rounded-md hover:bg-amber-500 transition-colors"
-              >
-                Donate
-              </Link>
+              {openDropdown === 'get-involved' && (
+                <ul
+                  className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-line py-1 z-50"
+                  onMouseEnter={() => openMenu('get-involved')}
+                  onMouseLeave={scheduleClose}
+                >
+                  {getInvolvedLinks.map((item) => (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        className="block px-4 py-2 text-sm text-content hover:bg-surface hover:text-midnight transition-colors"
+                      >
+                        {item.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
-            {/* Mobile hamburger */}
-            <button
-              className="lg:hidden p-2 rounded-md text-brand-grey-dark hover:text-brand-blue-dark"
-              onClick={() => setMobileOpen(!mobileOpen)}
-              aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
-              aria-expanded={mobileOpen}
+            {/* Donate */}
+            <Link
+              href="/donate"
+              className="px-[22px] py-[9px] text-[14.5px] font-semibold font-sans bg-donate-gold text-white rounded-[8px] hover:bg-[#C9892C] transition-colors whitespace-nowrap"
             >
-              {mobileOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
+              Donate
+            </Link>
           </div>
+
+          {/* Mobile hamburger */}
+          <button
+            className="lg:hidden p-2 rounded-md text-content hover:text-midnight"
+            onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileOpen}
+          >
+            {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
         </div>
       </nav>
 
-      {/* ── Mobile overlay (below the main nav bar only — utility bar is hidden on mobile) ── */}
+      {/* ── Mobile overlay ── */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 top-20 z-40 bg-white overflow-y-auto">
+        <div className="lg:hidden fixed inset-0 top-[105px] z-40 bg-white overflow-y-auto">
           <div className="px-4 py-4">
-            {/* Nav sections as accordions */}
             {[...navLinks, { label: 'Get Involved', href: '/get-involved', dropdown: getInvolvedLinks }].map(
               (link) => (
-                <div key={link.label} className="border-b border-line-light">
+                <div key={link.label} className="border-b border-line">
                   <button
-                    className="w-full flex items-center justify-between px-3 py-3 text-base font-medium text-brand-blue-dark"
+                    className="w-full flex items-center justify-between px-3 py-3 text-base font-medium text-midnight"
                     onClick={() => toggleMobileSection(link.label)}
                   >
                     {link.label}
@@ -276,7 +274,7 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
                         <Link
                           key={item.href}
                           href={item.href}
-                          className="block px-3 py-2 text-sm text-brand-grey-dark hover:text-brand-blue-dark"
+                          className="block px-3 py-2 text-sm text-content hover:text-midnight"
                           onClick={() => setMobileOpen(false)}
                         >
                           {item.label}
@@ -288,11 +286,10 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
               )
             )}
 
-            {/* Auth + Donate CTAs */}
             <div className="pt-6 flex flex-col gap-3">
               <Link
                 href="/donate"
-                className="block w-full text-center px-4 py-3 bg-brand-orange text-white font-heading font-medium rounded-md hover:bg-amber-500 transition-colors"
+                className="block w-full text-center px-4 py-3 bg-donate-gold text-white font-semibold font-sans rounded-[8px] hover:bg-[#C9892C] transition-colors"
                 onClick={() => setMobileOpen(false)}
               >
                 Donate
@@ -300,7 +297,7 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
               {isSignedIn ? (
                 <a
                   href={`${AUTH_URL}/community`}
-                  className="block w-full text-center px-4 py-3 bg-brand-blue text-white font-medium rounded-md hover:bg-blue-800 transition-colors"
+                  className="block w-full text-center px-4 py-3 bg-primary text-white font-medium rounded-md hover:bg-primary-deep transition-colors"
                   onClick={() => setMobileOpen(false)}
                 >
                   My Stellr
@@ -309,14 +306,14 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
                 <>
                   <a
                     href={`${AUTH_URL}/sign-up`}
-                    className="block w-full text-center px-4 py-3 bg-brand-blue text-white font-medium rounded-md hover:bg-blue-800 transition-colors"
+                    className="block w-full text-center px-4 py-3 bg-primary text-white font-medium rounded-md hover:bg-primary-deep transition-colors"
                     onClick={() => setMobileOpen(false)}
                   >
                     Join Free
                   </a>
                   <a
                     href={`${AUTH_URL}/sign-in`}
-                    className="block w-full text-center px-4 py-3 border border-brand-blue text-brand-blue font-medium rounded-md hover:bg-blue-50 transition-colors"
+                    className="block w-full text-center px-4 py-3 border border-primary text-primary font-medium rounded-md hover:bg-primary-soft transition-colors"
                     onClick={() => setMobileOpen(false)}
                   >
                     Log In

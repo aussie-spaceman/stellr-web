@@ -1,12 +1,12 @@
 import { SiteHeader } from '@/components/layout/SiteHeader'
-import { Footer } from '@/components/layout/Footer'
+import { SiteFooter } from '@/components/layout/SiteFooter'
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <SiteHeader />
       <main>{children}</main>
-      <Footer />
+      <SiteFooter variant="full" />
     </>
   )
 }

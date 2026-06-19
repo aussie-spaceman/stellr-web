@@ -99,17 +99,17 @@ function StepBar({ step }: { step: 1 | 2 }) {
     { n: 4, label: 'Confirmation', done: false, current: false },
   ]
   return (
-    <div className="bg-white border-b border-gray-200 -mx-4 px-4 py-4 mb-6 sm:-mx-0">
+    <div className="bg-white border-b border-line -mx-4 px-4 py-4 mb-6 sm:-mx-0">
       <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm flex-wrap">
         {steps.map((s, i) => (
           <div key={s.n} className="flex items-center gap-1 sm:gap-2">
-            {i > 0 && <span className="text-gray-300">›</span>}
+            {i > 0 && <span className="text-content-faint">›</span>}
             <span className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-              s.done ? 'bg-green-500 text-white' : s.current ? 'bg-brand-blue text-white' : 'bg-gray-200 text-gray-400'
+              s.done ? 'bg-green-500 text-white' : s.current ? 'bg-brand-blue text-white' : 'bg-line-light text-content-faint'
             }`}>
               {s.done ? '✓' : s.n}
             </span>
-            <span className={s.current ? 'font-medium text-brand-blue-dark' : 'text-gray-400'}>{s.label}</span>
+            <span className={s.current ? 'font-medium text-brand-blue-dark' : 'text-content-faint'}>{s.label}</span>
           </div>
         ))}
       </div>
@@ -125,13 +125,13 @@ function MultiCheckboxes({ label, note, options, selected, onChange, error }: {
   return (
     <div>
       <p className="font-semibold text-brand-blue-dark mb-1">{label}</p>
-      {note && <p className="text-xs text-gray-400 mb-2">{note}</p>}
+      {note && <p className="text-xs text-content-faint mb-2">{note}</p>}
       <div className="grid grid-cols-2 gap-2">
         {options.map(opt => (
           <label key={opt} className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="checkbox" checked={selected.includes(opt)}
               onChange={() => onChange(selected.includes(opt) ? selected.filter(v => v !== opt) : [...selected, opt])}
-              className="rounded border-gray-300 text-brand-blue" />
+              className="rounded border-line text-brand-blue" />
             {opt}
           </label>
         ))}
@@ -150,16 +150,16 @@ function NumberStepper({ label, value, min, max, onChange, note }: {
       <label className="label-text">{label}</label>
       <div className="flex items-center gap-3 mt-1">
         <button type="button" onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min}
-          className="w-9 h-9 rounded-full border border-gray-300 flex items-center justify-center text-lg font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-40">
+          className="w-9 h-9 rounded-full border border-line flex items-center justify-center text-lg font-medium text-content-body hover:bg-surface disabled:opacity-40">
           −
         </button>
         <span className="w-10 text-center font-semibold text-brand-blue-dark text-lg">{value}</span>
         <button type="button" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}
-          className="w-9 h-9 rounded-full border border-gray-300 flex items-center justify-center text-lg font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-40">
+          className="w-9 h-9 rounded-full border border-line flex items-center justify-center text-lg font-medium text-content-body hover:bg-surface disabled:opacity-40">
           +
         </button>
       </div>
-      {note && <p className="text-xs text-gray-400 mt-1">{note}</p>}
+      {note && <p className="text-xs text-content-faint mt-1">{note}</p>}
     </div>
   )
 }
@@ -194,7 +194,7 @@ function StatusPill({ status }: { status: SlotStatus }) {
   const map: Record<SlotStatus, { label: string; cls: string }> = {
     complete:   { label: 'Complete',       cls: 'bg-green-100 text-green-700' },
     incomplete: { label: 'Incomplete',     cls: 'bg-amber-100 text-amber-700' },
-    empty:      { label: 'To finish later', cls: 'bg-gray-100 text-gray-500' },
+    empty:      { label: 'To finish later', cls: 'bg-surface text-content-muted' },
   }
   const { label, cls } = map[status]
   return <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${cls}`}>{label}</span>
@@ -213,13 +213,13 @@ function AdultAccordion({ index, data, onChange, onAccept, onUnlink, expanded, o
       ? 'Teacher Point of Contact (Adult 1)'
       : `Additional Adult ${index + 1}`
   return (
-    <div className={`rounded-xl overflow-hidden border ${isPoC ? 'border-amber-200' : 'border-gray-200'}`}>
+    <div className={`rounded-xl overflow-hidden border ${isPoC ? 'border-amber-200' : 'border-line'}`}>
       <button type="button" onClick={onToggle}
-        className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left ${isPoC ? 'bg-amber-50 hover:bg-amber-100' : 'bg-gray-50 hover:bg-gray-100'}`}>
+        className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left ${isPoC ? 'bg-amber-50 hover:bg-amber-100' : 'bg-surface hover:bg-surface'}`}>
         <span className={`font-medium text-sm ${isPoC ? 'text-amber-900' : 'text-brand-blue-dark'}`}>{label}</span>
         <span className="flex items-center gap-2 flex-shrink-0">
           <StatusPill status={status} />
-          {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+          {expanded ? <ChevronUp size={16} className="text-content-faint" /> : <ChevronDown size={16} className="text-content-faint" />}
         </span>
       </button>
       {expanded && (
@@ -283,13 +283,13 @@ function StudentAccordion({ index, displayNumber, data, onChange, onAccept, onUn
 }) {
   const label = data.first_name && data.last_name ? `${data.first_name} ${data.last_name}` : `Student ${displayNumber ?? index + 1}`
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
+    <div className="border border-line rounded-xl overflow-hidden">
       <button type="button" onClick={onToggle}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-gray-50 hover:bg-gray-100 text-left">
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-surface hover:bg-surface text-left">
         <span className="font-medium text-brand-blue-dark text-sm">{label}</span>
         <span className="flex items-center gap-2 flex-shrink-0">
           <StatusPill status={status} />
-          {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+          {expanded ? <ChevronUp size={16} className="text-content-faint" /> : <ChevronDown size={16} className="text-content-faint" />}
         </span>
       </button>
       {expanded && (
@@ -337,10 +337,10 @@ function StudentAccordion({ index, displayNumber, data, onChange, onAccept, onUn
                 <label className="label-text">Health Conditions / Allergies</label>
                 <textarea value={data.health_conditions} onChange={e => onChange('health_conditions', e.target.value)} className="input-field resize-none" rows={2} placeholder="Leave blank if none." />
               </div>
-              <div className="border-t border-gray-100 pt-4 space-y-4">
+              <div className="border-t border-line-light pt-4 space-y-4">
                 <div>
                   <p className="font-semibold text-brand-blue-dark text-sm">Emergency Contact</p>
-                  <p className="text-xs text-gray-400">Required for all student participants — acts as the guardian for their participation agreement</p>
+                  <p className="text-xs text-content-faint">Required for all student participants — acts as the guardian for their participation agreement</p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div><label className="label-text">First Name *</label><input value={data.emergency_contact_first_name} onChange={e => onChange('emergency_contact_first_name', e.target.value)} className="input-field" /></div>
@@ -393,7 +393,7 @@ function StudentManagerCard({ data, onEdit }: { data: StudentManagerFormData; on
       <button type="button" onClick={() => setExpanded(e => !e)}
         className="w-full flex items-center justify-between px-4 py-3 text-left bg-amber-50 hover:bg-amber-100">
         <span className="font-medium text-sm text-amber-900">{name} — You (Student Manager)</span>
-        {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+        {expanded ? <ChevronUp size={16} className="text-content-faint" /> : <ChevronDown size={16} className="text-content-faint" />}
       </button>
       <div className="px-4 py-2 bg-amber-50/60 border-t border-amber-100 flex items-center justify-between gap-3">
         <span className="text-xs text-amber-700">Pre-filled from <strong>Your Details</strong> — you&apos;re registered as the group&apos;s first student.</span>
@@ -403,8 +403,8 @@ function StudentManagerCard({ data, onEdit }: { data: StudentManagerFormData; on
         <div className="p-4">
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
             {summary.filter(s => s.value).map(s => (
-              <div key={s.label} className="flex justify-between gap-3 border-b border-gray-100 pb-1">
-                <dt className="text-gray-500">{s.label}</dt>
+              <div key={s.label} className="flex justify-between gap-3 border-b border-line-light pb-1">
+                <dt className="text-content-muted">{s.label}</dt>
                 <dd className="text-brand-blue-dark font-medium text-right">{s.value}</dd>
               </div>
             ))}
@@ -780,22 +780,22 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         <StepBar step={1} />
         <div>
           <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Your Details</h2>
-          <p className="text-sm text-gray-600">Step 2 of 4 — Your information as the group organiser</p>
+          <p className="text-sm text-content-body">Step 2 of 4 — Your information as the group organiser</p>
         </div>
 
         {/* Role selector */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <div className="bg-white rounded-xl border border-line p-6 space-y-4">
           <h3 className="font-semibold text-brand-blue-dark">I am registering as a…</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button type="button" onClick={() => setRegistrantRole('teacher')}
-              className={`text-left px-4 py-3 rounded-lg border-2 text-sm transition-colors ${registrantRole === 'teacher' ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-gray-200 hover:border-gray-300 text-gray-700'}`}>
+              className={`text-left px-4 py-3 rounded-lg border-2 text-sm transition-colors ${registrantRole === 'teacher' ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-line hover:border-line text-content-body'}`}>
               <span className="font-semibold block mb-0.5">Teacher / Coordinator</span>
-              <span className="text-xs text-gray-500">I am an adult educator bringing students to this event</span>
+              <span className="text-xs text-content-muted">I am an adult educator bringing students to this event</span>
             </button>
             <button type="button" onClick={() => setRegistrantRole('student_manager')}
-              className={`text-left px-4 py-3 rounded-lg border-2 text-sm transition-colors ${registrantRole === 'student_manager' ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-gray-200 hover:border-gray-300 text-gray-700'}`}>
+              className={`text-left px-4 py-3 rounded-lg border-2 text-sm transition-colors ${registrantRole === 'student_manager' ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-line hover:border-line text-content-body'}`}>
               <span className="font-semibold block mb-0.5">Student Manager</span>
-              <span className="text-xs text-gray-500">I am a high school student organising a group for this event</span>
+              <span className="text-xs text-content-muted">I am a high school student organising a group for this event</span>
             </button>
           </div>
         </div>
@@ -803,7 +803,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         {registrantRole === 'teacher' ? (
           <>
             {/* Teacher personal info */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+            <div className="bg-white rounded-xl border border-line p-6 space-y-5">
               <h3 className="font-semibold text-brand-blue-dark">Personal Information</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div><label className="label-text">First Name *</label><input {...tf.register('first_name')} className="input-field" /><FieldError message={tf.formState.errors.first_name?.message} /></div>
@@ -811,7 +811,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
               </div>
               <div><label className="label-text">Preferred Name / Nickname</label><input {...tf.register('nickname')} className="input-field" placeholder="Optional" /></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div><label className="label-text">Email Address *</label><input {...tf.register('email')} type="email" className="input-field" readOnly={emailLocked} aria-readonly={emailLocked} />{emailLocked ? <p className="mt-1 text-xs text-gray-400">Linked to your Stellr account.</p> : <FieldError message={tf.formState.errors.email?.message} />}</div>
+                <div><label className="label-text">Email Address *</label><input {...tf.register('email')} type="email" className="input-field" readOnly={emailLocked} aria-readonly={emailLocked} />{emailLocked ? <p className="mt-1 text-xs text-content-faint">Linked to your Stellr account.</p> : <FieldError message={tf.formState.errors.email?.message} />}</div>
                 <div><label className="label-text">Phone Number *</label><input {...tf.register('phone')} type="tel" className="input-field" /><FieldError message={tf.formState.errors.phone?.message} /></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -830,7 +830,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
             </div>
 
             {/* Teacher school — SchoolSearchInput */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+            <div className="bg-white rounded-xl border border-line p-6 space-y-4">
               <h3 className="font-semibold text-brand-blue-dark">School</h3>
               <div>
                 <label className="label-text">School Name *</label>
@@ -840,7 +840,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
             </div>
 
             {/* Teacher additional info */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+            <div className="bg-white rounded-xl border border-line p-6 space-y-5">
               <MultiCheckboxes label="Ethnicity *" note="Select all that apply" options={ETHNICITIES} selected={tEthnicity}
                 onChange={v => tf.setValue('ethnicity', v, { shouldValidate: true })} error={tf.formState.errors.ethnicity?.message} />
               <MultiCheckboxes label="Dietary Requirements *" note="Select all that apply" options={DIETARY} selected={tDietary}
@@ -854,7 +854,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         ) : (
           <>
             {/* SM personal info */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+            <div className="bg-white rounded-xl border border-line p-6 space-y-5">
               <h3 className="font-semibold text-brand-blue-dark">Personal Information</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div><label className="label-text">First Name *</label><input {...sf.register('first_name')} className="input-field" /><FieldError message={sf.formState.errors.first_name?.message} /></div>
@@ -862,7 +862,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
               </div>
               <div><label className="label-text">Preferred Name / Nickname</label><input {...sf.register('nickname')} className="input-field" placeholder="Optional" /></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div><label className="label-text">Email Address *</label><input {...sf.register('email')} type="email" className="input-field" readOnly={emailLocked} aria-readonly={emailLocked} />{emailLocked ? <p className="mt-1 text-xs text-gray-400">Linked to your Stellr account.</p> : <FieldError message={sf.formState.errors.email?.message} />}</div>
+                <div><label className="label-text">Email Address *</label><input {...sf.register('email')} type="email" className="input-field" readOnly={emailLocked} aria-readonly={emailLocked} />{emailLocked ? <p className="mt-1 text-xs text-content-faint">Linked to your Stellr account.</p> : <FieldError message={sf.formState.errors.email?.message} />}</div>
                 <div><label className="label-text">Phone Number *</label><input {...sf.register('phone')} type="tel" className="input-field" /><FieldError message={sf.formState.errors.phone?.message} /></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
@@ -888,7 +888,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
             </div>
 
             {/* SM school — SchoolSearchInput */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+            <div className="bg-white rounded-xl border border-line p-6 space-y-4">
               <h3 className="font-semibold text-brand-blue-dark">School</h3>
               <div>
                 <label className="label-text">School Name *</label>
@@ -898,7 +898,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
             </div>
 
             {/* SM additional info */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+            <div className="bg-white rounded-xl border border-line p-6 space-y-5">
               <MultiCheckboxes label="Ethnicity *" note="Select all that apply" options={ETHNICITIES} selected={sEthnicity}
                 onChange={v => sf.setValue('ethnicity', v, { shouldValidate: true })} error={sf.formState.errors.ethnicity?.message} />
               <MultiCheckboxes label="Dietary Requirements *" note="Select all that apply" options={DIETARY} selected={sDietary}
@@ -910,10 +910,10 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
             </div>
 
             {/* SM emergency contact */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+            <div className="bg-white rounded-xl border border-line p-6 space-y-5">
               <div>
                 <h3 className="font-semibold text-brand-blue-dark">Emergency Contact</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Required for High School student participants</p>
+                <p className="text-xs text-content-faint mt-0.5">Required for High School student participants</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div><label className="label-text">First Name *</label><input {...sf.register('emergency_contact_first_name')} className="input-field" /><FieldError message={sf.formState.errors.emergency_contact_first_name?.message} /></div>
@@ -964,10 +964,10 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
       <StepBar step={2} />
       <div>
         <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Group Details</h2>
-        <p className="text-sm text-gray-600">Step 3 of 4 — Group size, member details, and payment</p>
+        <p className="text-sm text-content-body">Step 3 of 4 — Group size, member details, and payment</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+      <div className="bg-white rounded-xl border border-line p-6 space-y-6">
         <h3 className="font-semibold text-brand-blue-dark">Group Size</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
           <NumberStepper
@@ -998,11 +998,11 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
               ? 1 + adultCount + studentCount
               : adultCount + studentCount}
           </strong>
-          {registrantRole === 'student_manager' && <span className="ml-1 text-xs text-gray-500">(including yourself as Student Manager)</span>}
+          {registrantRole === 'student_manager' && <span className="ml-1 text-xs text-content-muted">(including yourself as Student Manager)</span>}
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <div className="bg-white rounded-xl border border-line p-6 space-y-4">
         <h3 className="font-semibold text-brand-blue-dark">How do you want to provide team member details?</h3>
         <select value={detailsMethod} onChange={e => setDetailsMethod(e.target.value as DetailsMethod)} className="input-field">
           <option value="add_now">Add them now via this screen</option>
@@ -1017,7 +1017,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         {detailsMethod === 'email_link' && (
           <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark space-y-1">
             <p className="font-medium">You&apos;ll receive both a forwardable registration link <strong>and</strong> a pre-populated spreadsheet via email.</p>
-            <p className="text-gray-500 text-xs">Each member who uses the link will sign in or create a free Stellr account and confirm their participation. You&apos;ll be notified as each member completes their registration.</p>
+            <p className="text-content-muted text-xs">Each member who uses the link will sign in or create a free Stellr account and confirm their participation. You&apos;ll be notified as each member completes their registration.</p>
           </div>
         )}
       </div>
@@ -1026,7 +1026,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         <>
           <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark">
             <p className="font-medium">Add details for as many participants as you have now.</p>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-content-muted mt-0.5">
               You don&apos;t have to complete everyone — leave a card blank and you can finish the rest later
               via your completion link or pre-filled Google Sheet. Partly-filled cards must be finished or cleared before you submit.
             </p>
@@ -1067,9 +1067,9 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
       )}
 
       {contentTierOfferings.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+        <div className="bg-white rounded-xl border border-line p-6 space-y-3">
           <h3 className="font-semibold text-brand-blue-dark">Content tier</h3>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-content-muted">
             Choose the competition content package for your group. Core material is always included.
           </p>
           <div className="space-y-2">
@@ -1077,7 +1077,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
               <label
                 key={o.tier}
                 className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-4 py-2.5 ${
-                  contentTier === o.tier ? 'border-brand-blue-dark bg-blue-50' : 'border-gray-200'
+                  contentTier === o.tier ? 'border-brand-blue-dark bg-blue-50' : 'border-line'
                 }`}
               >
                 <span className="flex items-center gap-2">
@@ -1087,9 +1087,9 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
                     checked={contentTier === o.tier}
                     onChange={() => setContentTier(o.tier)}
                   />
-                  <span className="font-medium capitalize text-gray-900">{o.tier}</span>
+                  <span className="font-medium capitalize text-ink">{o.tier}</span>
                 </span>
-                <span className="text-sm font-medium text-gray-600">
+                <span className="text-sm font-medium text-content-body">
                   {o.priceUsd ? `$${o.priceUsd}` : 'Free'}
                 </span>
               </label>
@@ -1098,16 +1098,16 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <div className="bg-white rounded-xl border border-line p-6 space-y-4">
         <h3 className="font-semibold text-brand-blue-dark">How will the group pay?</h3>
         <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)} className="input-field">
           <option value="invoice">Have an invoice emailed to you</option>
           <option value="card">Pay now via credit card</option>
           <option value="individual">Group members will pay individually</option>
         </select>
-        {paymentMethod === 'invoice' && <p className="text-sm text-gray-500">An invoice will be emailed to you within 1–2 business days. Registration is confirmed upon payment.</p>}
+        {paymentMethod === 'invoice' && <p className="text-sm text-content-muted">An invoice will be emailed to you within 1–2 business days. Registration is confirmed upon payment.</p>}
         {paymentMethod === 'card' && (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-content-muted">
             You&apos;ll be redirected to a secure Stripe checkout page to pay for all{' '}
             {registrantRole === 'student_manager' ? 1 + adultCount + studentCount : adultCount + studentCount} participants.
           </p>
@@ -1115,15 +1115,15 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         {paymentMethod === 'individual' && (
           <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark space-y-1">
             <p className="font-medium">Each group member will receive an individual payment link via email.</p>
-            <p className="text-gray-500 text-xs">Payment links are sent once each member is confirmed in the system — either now (if adding details today) or when they complete their self-registration.</p>
+            <p className="text-content-muted text-xs">Payment links are sent once each member is confirmed in the system — either now (if adding details today) or when they complete their self-registration.</p>
           </div>
         )}
       </div>
 
       {/* FERPA School Data Processing Agreement */}
-      <div className={`bg-white rounded-xl border p-6 space-y-3 ${dpaError ? 'border-red-300' : 'border-gray-200'}`}>
+      <div className={`bg-white rounded-xl border p-6 space-y-3 ${dpaError ? 'border-red-300' : 'border-line'}`}>
         <h3 className="font-semibold text-brand-blue-dark">School Data Processing Agreement</h3>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-content-body">
           By registering a group of students, your school is sharing education records (including student names,
           dates of birth, grades, and school details) with Stellr Education. Under FERPA, this requires your
           school to act as a &ldquo;school official&rdquo; and agree to Stellr&apos;s data processing terms.
@@ -1133,9 +1133,9 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
             type="checkbox"
             checked={dpaAgreed}
             onChange={e => { setDpaAgreed(e.target.checked); if (e.target.checked) setDpaError(false) }}
-            className="mt-0.5 rounded border-gray-300 text-brand-blue flex-shrink-0"
+            className="mt-0.5 rounded border-line text-brand-blue flex-shrink-0"
           />
-          <span className="text-sm text-gray-700">
+          <span className="text-sm text-content-body">
             I confirm that I am authorised to share student data on behalf of my school, and I agree to
             Stellr Education&apos;s{' '}
             <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-brand-blue underline">
@@ -1149,7 +1149,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
       </div>
 
       {detailsMethod === 'add_now' && deferredCount() > 0 && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-600">
+        <div className="bg-surface border border-line rounded-lg px-4 py-3 text-sm text-content-body">
           <strong className="text-brand-blue-dark">{deferredCount()}</strong> participant{deferredCount() === 1 ? '' : 's'} left blank will be completed later —
           you&apos;ll get a completion link and a pre-filled Google Sheet for them on the next screen and by email.
         </div>
@@ -1165,7 +1165,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         </button>
       </div>
 
-      <p className="text-xs text-gray-400 text-center">By submitting you confirm all details are accurate.</p>
+      <p className="text-xs text-content-faint text-center">By submitting you confirm all details are accurate.</p>
     </div>
   )
 }

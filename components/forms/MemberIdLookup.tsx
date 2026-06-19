@@ -95,14 +95,14 @@ export function MemberIdLookup({
           <span className="text-sm text-amber-900">Matched: <strong>{match.first_name} {match.last_name}</strong></span>
           <div className="flex gap-2">
             <button type="button" onClick={() => onAccept(match)} className="text-xs font-medium text-white bg-brand-blue rounded px-3 py-1">Accept</button>
-            <button type="button" onClick={() => { setStatus('idle'); setMatch(null) }} className="text-xs text-gray-600 underline">Decline</button>
+            <button type="button" onClick={() => { setStatus('idle'); setMatch(null) }} className="text-xs text-content-body underline">Decline</button>
           </div>
         </div>
       )}
-      {status === 'notfound' && <p className="text-xs text-gray-500 mt-1">No member found with that ID — enter their details below.</p>}
+      {status === 'notfound' && <p className="text-xs text-content-muted mt-1">No member found with that ID — enter their details below.</p>}
       {status === 'limited' && <p className="text-xs text-amber-600 mt-1">Too many lookups in a short time — wait a minute and try again, or enter their details below.</p>}
       {status === 'error' && <p className="text-xs text-red-500 mt-1">Lookup failed — enter their details below.</p>}
-      <p className="text-xs text-gray-400 mt-1">Leave blank if new to Stellr, or enter a Member ID to reuse their existing record and prevent duplicates.</p>
+      <p className="text-xs text-content-faint mt-1">Leave blank if new to Stellr, or enter a Member ID to reuse their existing record and prevent duplicates.</p>
     </div>
   )
 }

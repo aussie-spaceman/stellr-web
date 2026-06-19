@@ -130,7 +130,7 @@ export default function NetworkPage() {
           <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">
             The largest STEM community of practice, globally
           </h1>
-          <p className="text-lg text-gray-300 max-w-2xl leading-relaxed">
+          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
             The Stellr Network is a premier community — representing the best of STEM education and
             service providers. Our strength lies in the breadth and variety of our network. Join us
             today and start helping move the STEM flywheel.
@@ -146,7 +146,7 @@ export default function NetworkPage() {
       {/* ── In-page anchor nav ────────────────────────────────────────── */}
       <nav
         aria-label="Network sections"
-        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-gray-100"
+        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-line-light"
       >
         <div className="container-max flex gap-2 sm:gap-6 px-4 sm:px-6 lg:px-8 overflow-x-auto">
           {partnerTypes.map((p) => (
@@ -277,7 +277,7 @@ export default function NetworkPage() {
             {['Partner 1', 'Partner 2', 'Partner 3', 'Partner 4', 'Partner 5'].map((p) => (
               <div
                 key={p}
-                className="w-32 h-12 bg-brand-grey-light border border-dashed border-gray-300 rounded flex items-center justify-center text-xs text-brand-grey"
+                className="w-32 h-12 bg-brand-grey-light border border-dashed border-line rounded flex items-center justify-center text-xs text-brand-grey"
               >
                 {p}
               </div>

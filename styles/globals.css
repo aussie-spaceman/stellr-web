@@ -1,12 +1,15 @@
-/* Google Fonts — Archivo Black (display titles) + Fredoka (subheadings) */
+/* Design System V2 fonts — Space Grotesk (display/headings) + Hanken Grotesk (body/UI). */
 /* @import must precede all other rules (Turbopack/CSS spec), so it sits above the Tailwind directives. */
-@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Fredoka:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
+/* Generated design tokens (design/tokens.json → styles/tokens.css via `npm run build:tokens`). */
+@import './tokens.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Self-hosted fonts from /public/fonts/ */
+/* Self-hosted fonts from /public/fonts/ — retained for COMPETITION print/slide
+   materials only (font-competition / font-competition-body). Not the site UI. */
 @font-face {
   font-family: 'Norwester';
   src: url('/fonts/norwester.otf') format('opentype');
@@ -55,32 +58,31 @@
   font-display: swap;
 }
 
+/* Legacy CSS custom properties — repointed onto the V2 token vars (defined in
+   tokens.css) so any direct var(--color-*) usages adopt the new brand. */
 :root {
-  /* Primary */
-  --color-blue:         #0d439d;
-  --color-blue-dark:    #051535;
-  /* Accent */
-  --color-orange:       #dda33b;
-  --color-orange-alt:   #da6220;
-  /* Neutral */
-  --color-white:        #fefefe;  /* backgrounds only */
-  --color-white-text:   #ffffff;  /* pure white for text/icons */
-  --color-grey:         #969696;
+  --color-blue:       var(--color-primary);
+  --color-blue-dark:  var(--color-ink);
+  --color-orange:     var(--color-donate-gold);
+  --color-orange-alt: var(--color-pathway-amber);
+  --color-white:      var(--color-surface); /* backgrounds */
+  --color-white-text: #ffffff;              /* pure white for text/icons */
+  --color-grey:       var(--color-text-faint);
 }
 
 @layer base {
   html {
-    font-family: 'Aileron', system-ui, sans-serif;
+    font-family: 'Hanken Grotesk', system-ui, sans-serif;
     scroll-behavior: smooth;
   }
 
   body {
-    @apply bg-brand-white text-brand-blue-dark;
+    @apply bg-surface text-ink;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Norwester', system-ui, sans-serif;
-    @apply leading-tight;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    @apply leading-tight tracking-heading;
   }
 }
 

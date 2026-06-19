@@ -16,7 +16,7 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
   const prefill = await getRegistrationPrefill().catch(() => null)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface">
       <div className="bg-brand-blue-dark text-white py-10 px-4">
         <div className="max-w-3xl mx-auto">
           <p className="text-blue-300 text-sm mb-4">← Group Registration</p>

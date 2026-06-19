@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 
 interface Envelope {
   id: string
@@ -74,9 +75,7 @@ function EnvelopeProgressBadge({ env }: { env: Envelope }) {
   return <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
 }
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
-}
+const fmt = formatDateShort
 
 function isStillMinor(dob: string | null | undefined): boolean {
   if (!dob) return false

@@ -30,7 +30,7 @@ type FormData = z.infer<typeof schema>
 
 const inputClass = (error: boolean) =>
   `w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue ${
-    error ? 'border-red-400' : 'border-gray-200'
+    error ? 'border-red-400' : 'border-line'
   }`
 
 export function JoinNetworkForm() {
@@ -72,7 +72,7 @@ export function JoinNetworkForm() {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
       {/* Personal */}
       <fieldset className="space-y-4">
-        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-gray-100 w-full">
+        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-line-light w-full">
           Your Details
         </legend>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -139,7 +139,7 @@ export function JoinNetworkForm() {
 
       {/* Business */}
       <fieldset className="space-y-4">
-        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-gray-100 w-full">
+        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-line-light w-full">
           Business Details
         </legend>
         <div>
@@ -186,7 +186,7 @@ export function JoinNetworkForm() {
 
       {/* Why Stellr */}
       <fieldset className="space-y-4">
-        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-gray-100 w-full">
+        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-line-light w-full">
           Why Stellr?
         </legend>
         <div>
@@ -218,7 +218,7 @@ export function JoinNetworkForm() {
           <input
             type="checkbox"
             {...register('consent')}
-            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-blue"
+            className="mt-0.5 h-4 w-4 rounded border-line text-brand-blue"
           />
           <span className="text-sm text-brand-grey-dark">
             I agree to Stellr Education contacting me in relation to this enquiry. View our{' '}

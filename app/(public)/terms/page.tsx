@@ -47,7 +47,7 @@ export default function TermsPage() {
         </div>
 
         {/* Contents */}
-        <nav aria-label="Table of contents" className="bg-gray-50 border border-gray-200 rounded-lg px-5 py-4 not-prose">
+        <nav aria-label="Table of contents" className="bg-surface border border-line rounded-lg px-5 py-4 not-prose">
           <h2 className="text-sm font-bold uppercase tracking-wide text-brand-grey-mid mb-2">
             Contents
           </h2>
@@ -323,11 +323,11 @@ export default function TermsPage() {
         </h2>
         <p>The following applies unless a specific competition, event, or membership states otherwise:</p>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse border border-gray-200">
+          <table className="w-full text-sm border-collapse border border-line">
             <thead>
-              <tr className="bg-gray-50">
-                <th className="border border-gray-200 px-4 py-2 text-left font-semibold">What you paid for</th>
-                <th className="border border-gray-200 px-4 py-2 text-left font-semibold">Our policy</th>
+              <tr className="bg-surface">
+                <th className="border border-line px-4 py-2 text-left font-semibold">What you paid for</th>
+                <th className="border border-line px-4 py-2 text-left font-semibold">Our policy</th>
               </tr>
             </thead>
             <tbody>
@@ -338,9 +338,9 @@ export default function TermsPage() {
                 ['If Stellr cancels a competition', 'We will offer either a full credit toward a future competition, or as much of a partial refund as we can.'],
                 ['Donations', 'Donations are non-refundable, except at our discretion or where required by law. See Section 15.'],
               ].map(([item, policy]) => (
-                <tr key={item} className="even:bg-gray-50">
-                  <td className="border border-gray-200 px-4 py-2 align-top">{item}</td>
-                  <td className="border border-gray-200 px-4 py-2 align-top">{policy}</td>
+                <tr key={item} className="even:bg-surface">
+                  <td className="border border-line px-4 py-2 align-top">{item}</td>
+                  <td className="border border-line px-4 py-2 align-top">{policy}</td>
                 </tr>
               ))}
             </tbody>

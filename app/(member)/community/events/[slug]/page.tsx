@@ -59,7 +59,7 @@ export default async function EventPortalPage({
           <h1 className="mt-2 font-heading text-[27px] uppercase">{event.title}</h1>
           {event.date && (
             <p className="mt-1 text-[13.5px] text-orange-100">
-              {new Date(event.date).toLocaleDateString('en-US', {
+              {new Date(event.date + 'T00:00:00').toLocaleDateString('en-US', {
                 weekday: 'short',
                 month: 'short',
                 day: 'numeric',

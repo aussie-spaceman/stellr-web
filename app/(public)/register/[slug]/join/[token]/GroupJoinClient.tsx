@@ -52,7 +52,7 @@ const EMPTY_DETAILS: DetailsForm = {
   emergency_contact_email: '', emergency_contact_phone: '', emergency_contact_relationship: '',
 }
 
-const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue'
+const inputClass = 'w-full border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue'
 
 export default function GroupJoinClient({
   token, eventTitle, eventSlug, organiserName, organiserRole, schoolName, memberPaysIndividually, isAuthenticated,
@@ -153,10 +153,10 @@ export default function GroupJoinClient({
 
   if (done) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-8 text-center space-y-4">
+      <div className="bg-white rounded-xl border border-line p-8 text-center space-y-4">
         <div className="text-5xl">🎉</div>
         <h2 className="text-2xl font-bold text-brand-blue-dark">You&apos;re in!</h2>
-        <p className="text-gray-600">
+        <p className="text-content-body">
           You&apos;ve been registered for <strong>{eventTitle}</strong> as part of {organiserName}&apos;s group from {schoolName}.
         </p>
         {memberPaysIndividually && (
@@ -177,29 +177,29 @@ export default function GroupJoinClient({
   if (isAuthenticated) {
     return (
       <div className="space-y-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-8 space-y-6">
+        <div className="bg-white rounded-xl border border-line p-8 space-y-6">
           <div>
             <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Join this group</h2>
-            <p className="text-sm text-gray-500">Review the details below and confirm your participation</p>
+            <p className="text-sm text-content-muted">Review the details below and confirm your participation</p>
           </div>
 
           <table className="w-full text-sm border-collapse">
             <tbody>
-              <tr className="border-b border-gray-100">
-                <td className="py-3 pr-4 font-medium text-gray-500 w-1/3">Event</td>
-                <td className="py-3 font-medium text-gray-900">{eventTitle}</td>
+              <tr className="border-b border-line-light">
+                <td className="py-3 pr-4 font-medium text-content-muted w-1/3">Event</td>
+                <td className="py-3 font-medium text-ink">{eventTitle}</td>
               </tr>
-              <tr className="border-b border-gray-100">
-                <td className="py-3 pr-4 font-medium text-gray-500">School</td>
-                <td className="py-3 text-gray-900">{schoolName}</td>
+              <tr className="border-b border-line-light">
+                <td className="py-3 pr-4 font-medium text-content-muted">School</td>
+                <td className="py-3 text-ink">{schoolName}</td>
               </tr>
-              <tr className="border-b border-gray-100">
-                <td className="py-3 pr-4 font-medium text-gray-500">Organised by</td>
-                <td className="py-3 text-gray-900">{organiserName} <span className="text-xs text-gray-400">({organiserRole})</span></td>
+              <tr className="border-b border-line-light">
+                <td className="py-3 pr-4 font-medium text-content-muted">Organised by</td>
+                <td className="py-3 text-ink">{organiserName} <span className="text-xs text-content-faint">({organiserRole})</span></td>
               </tr>
               <tr>
-                <td className="py-3 pr-4 font-medium text-gray-500">Payment</td>
-                <td className="py-3 text-gray-900">
+                <td className="py-3 pr-4 font-medium text-content-muted">Payment</td>
+                <td className="py-3 text-ink">
                   {memberPaysIndividually
                     ? 'You will pay individually — a payment link will be emailed to you'
                     : 'Group payment — handled by your organiser'}
@@ -231,10 +231,10 @@ export default function GroupJoinClient({
   // ── New participant: collect details, provision + auto-login on submit ─────
   return (
     <form onSubmit={handleJoinNew} className="space-y-6">
-      <div className="bg-white rounded-xl border border-gray-200 p-8 space-y-6">
+      <div className="bg-white rounded-xl border border-line p-8 space-y-6">
         <div>
           <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Join {organiserName}&apos;s group</h2>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-content-muted">
             Registering for <strong>{eventTitle}</strong> · {schoolName}. Enter your details below — we&apos;ll create your
             Stellr account and sign you in automatically.
           </p>
@@ -242,7 +242,7 @@ export default function GroupJoinClient({
 
         {/* Type */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">I am joining as a</label>
+          <label className="block text-sm font-medium text-content-body mb-1">I am joining as a</label>
           <div className="flex flex-wrap gap-4">
             {(['Student', 'Adult'] as const).map(t => (
               <label key={t} className="flex items-center gap-2 cursor-pointer">
@@ -256,29 +256,29 @@ export default function GroupJoinClient({
         {/* Name */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">First name <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-content-body mb-1">First name <span className="text-red-500">*</span></label>
             <input required className={inputClass} value={form.first_name} onChange={e => set('first_name', e.target.value)} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Last name <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-content-body mb-1">Last name <span className="text-red-500">*</span></label>
             <input required className={inputClass} value={form.last_name} onChange={e => set('last_name', e.target.value)} />
           </div>
         </div>
 
         {/* Preferred name */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Preferred name / nickname</label>
+          <label className="block text-sm font-medium text-content-body mb-1">Preferred name / nickname</label>
           <input className={inputClass} value={form.nickname} onChange={e => set('nickname', e.target.value)} placeholder="Optional" />
         </div>
 
         {/* Contact */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-content-body mb-1">Email <span className="text-red-500">*</span></label>
             <input required type="email" className={inputClass} value={form.email} onChange={e => set('email', e.target.value)} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+            <label className="block text-sm font-medium text-content-body mb-1">Phone</label>
             <input type="tel" className={inputClass} value={form.phone} onChange={e => set('phone', e.target.value)} />
           </div>
         </div>
@@ -286,11 +286,11 @@ export default function GroupJoinClient({
         {/* DOB / Gender */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date of birth <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-content-body mb-1">Date of birth <span className="text-red-500">*</span></label>
             <input required type="date" className={inputClass} value={form.date_of_birth} onChange={e => set('date_of_birth', e.target.value)} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+            <label className="block text-sm font-medium text-content-body mb-1">Gender</label>
             <select className={inputClass} value={form.gender} onChange={e => set('gender', e.target.value)}>
               <option value="">Select…</option>
               {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
@@ -301,7 +301,7 @@ export default function GroupJoinClient({
         {/* T-shirt / Grade */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">T-shirt size</label>
+            <label className="block text-sm font-medium text-content-body mb-1">T-shirt size</label>
             <select className={inputClass} value={form.t_shirt_size} onChange={e => set('t_shirt_size', e.target.value)}>
               <option value="">Select…</option>
               {T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -309,7 +309,7 @@ export default function GroupJoinClient({
           </div>
           {isStudent && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
+              <label className="block text-sm font-medium text-content-body mb-1">Grade</label>
               <select className={inputClass} value={form.grade} onChange={e => set('grade', e.target.value)}>
                 <option value="">Select…</option>
                 {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
@@ -320,7 +320,7 @@ export default function GroupJoinClient({
 
         {/* Ethnicity */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Ethnicity</label>
+          <label className="block text-sm font-medium text-content-body mb-2">Ethnicity</label>
           <div className="flex flex-wrap gap-x-4 gap-y-2">
             {ETHNICITIES.map(opt => (
               <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
@@ -333,7 +333,7 @@ export default function GroupJoinClient({
 
         {/* Dietary */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Dietary requirements</label>
+          <label className="block text-sm font-medium text-content-body mb-2">Dietary requirements</label>
           <div className="flex flex-wrap gap-x-4 gap-y-2">
             {DIETARY_OPTIONS.map(opt => (
               <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
@@ -346,35 +346,35 @@ export default function GroupJoinClient({
 
         {/* Health */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Health conditions / allergies</label>
+          <label className="block text-sm font-medium text-content-body mb-1">Health conditions / allergies</label>
           <textarea className={inputClass} rows={2} value={form.health_conditions} onChange={e => set('health_conditions', e.target.value)} />
         </div>
 
         {/* Emergency contact */}
-        <div className="border-t border-gray-100 pt-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-1">
+        <div className="border-t border-line-light pt-5">
+          <h3 className="text-sm font-semibold text-content-body mb-1">
             Emergency contact {requiresEmergencyContact && <span className="text-red-500">*</span>}
           </h3>
-          <p className="text-xs text-gray-400 mb-3">Required for students and any participant under 18 — acts as the guardian for their participation agreement.</p>
+          <p className="text-xs text-content-faint mb-3">Required for students and any participant under 18 — acts as the guardian for their participation agreement.</p>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">First name</label>
+              <label className="block text-xs text-content-muted mb-1">First name</label>
               <input className={inputClass} value={form.emergency_contact_first_name} onChange={e => set('emergency_contact_first_name', e.target.value)} />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Last name</label>
+              <label className="block text-xs text-content-muted mb-1">Last name</label>
               <input className={inputClass} value={form.emergency_contact_last_name} onChange={e => set('emergency_contact_last_name', e.target.value)} />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Email</label>
+              <label className="block text-xs text-content-muted mb-1">Email</label>
               <input type="email" className={inputClass} value={form.emergency_contact_email} onChange={e => set('emergency_contact_email', e.target.value)} />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Phone</label>
+              <label className="block text-xs text-content-muted mb-1">Phone</label>
               <input type="tel" className={inputClass} value={form.emergency_contact_phone} onChange={e => set('emergency_contact_phone', e.target.value)} />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Relationship</label>
+              <label className="block text-xs text-content-muted mb-1">Relationship</label>
               <select className={inputClass} value={form.emergency_contact_relationship} onChange={e => set('emergency_contact_relationship', e.target.value)}>
                 <option value="">Select…</option>
                 {EMERGENCY_RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}

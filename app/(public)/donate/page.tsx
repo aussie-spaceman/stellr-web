@@ -52,7 +52,7 @@ export default async function DonatePage() {
           <h1 className="text-4xl sm:text-5xl font-bold mb-6">
             Support the next generation of STEM leaders.
           </h1>
-          <p className="text-lg text-gray-300 mb-8 max-w-2xl">
+          <p className="text-lg text-content-faint mb-8 max-w-2xl">
             Stellr events are made possible by the generous support of donors and sponsors. Your contribution funds scholarships, resources, and access for students who would otherwise miss out.
           </p>
           {DONATION_URL ? (
@@ -66,10 +66,10 @@ export default async function DonatePage() {
             </a>
           ) : (
             <div className="inline-flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <span className="inline-block px-8 py-4 rounded-lg bg-white/10 text-gray-300 text-base font-semibold cursor-not-allowed">
+              <span className="inline-block px-8 py-4 rounded-lg bg-white/10 text-content-faint text-base font-semibold cursor-not-allowed">
                 Donation Portal Coming Soon
               </span>
-              <span className="text-sm text-gray-400">
+              <span className="text-sm text-content-faint">
                 In the meantime, <a href="/contact?type=sponsorship" className="text-blue-300 hover:text-white underline">contact us</a> to discuss giving.
               </span>
             </div>
@@ -120,7 +120,7 @@ export default async function DonatePage() {
             <h2 className="text-2xl font-bold text-brand-blue-dark mb-8 text-center">From Our Donors</h2>
             <div className="space-y-6">
               {donorTestimonials.map((t) => (
-                <blockquote key={t._id} className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
+                <blockquote key={t._id} className="bg-white rounded-xl p-6 border border-line-light shadow-sm">
                   <p className="text-brand-grey-dark italic">&ldquo;{t.quote}&rdquo;</p>
                   <footer className="mt-3 text-sm font-semibold text-brand-blue-dark">
                     — {t.author}{t.event ? `, ${t.event}` : ''}
@@ -135,7 +135,7 @@ export default async function DonatePage() {
       {/* ── Tax receipt note ─────────────────────────────────────────── */}
       <section className="section-padding">
         <div className="container-max max-w-2xl mx-auto text-center">
-          <p className="text-brand-grey-dark text-sm bg-brand-grey-light rounded-xl p-4 border border-gray-200">
+          <p className="text-brand-grey-dark text-sm bg-brand-grey-light rounded-xl p-4 border border-line">
             <strong>Tax receipts:</strong> Donors receive an email receipt for tax purposes following their contribution.
             For questions about donation processing, contact{' '}
             <a href="mailto:hello@stellreducation.org" className="text-brand-blue hover:underline">

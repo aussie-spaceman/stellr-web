@@ -50,7 +50,7 @@ export default function ImpactPage() {
             About → Impact
           </p>
           <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">The impact we have</h1>
-          <p className="text-lg text-gray-300 max-w-2xl leading-relaxed">
+          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
             After people ask <em>why</em> we do what we do, they usually ask what impact we have.
             Here&rsquo;s how we change student career trajectories — and where we stand on the
             technology reshaping their future.
@@ -61,7 +61,7 @@ export default function ImpactPage() {
       {/* ── In-page anchor nav ────────────────────────────────────────── */}
       <nav
         aria-label="Impact sections"
-        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-gray-100"
+        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-line-light"
       >
         <div className="container-max flex gap-2 sm:gap-6 px-4 sm:px-6 lg:px-8 overflow-x-auto">
           {sections.map((s) => (
@@ -173,7 +173,7 @@ export default function ImpactPage() {
       <section className="section-padding bg-brand-blue-dark text-white text-center">
         <div className="container-max max-w-2xl">
           <h2 className="text-3xl font-bold mb-4">Learn more about why we do this</h2>
-          <p className="text-gray-300 leading-relaxed mb-8">
+          <p className="text-content-faint leading-relaxed mb-8">
             Read our mission, meet the team, or get in touch to find out how Stellr can make an impact
             in your community.
           </p>

@@ -235,7 +235,7 @@ export default function IndividualRegistrationForm({
         <div className="space-y-6">
           <div>
             <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Personal Details</h2>
-            <p className="text-sm text-gray-600">Step 1 of 2 — Tell us about yourself</p>
+            <p className="text-sm text-content-body">Step 1 of 2 — Tell us about yourself</p>
           </div>
 
           {isAdultMember && (
@@ -244,7 +244,7 @@ export default function IndividualRegistrationForm({
             </div>
           )}
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+          <div className="bg-white rounded-xl border border-line p-6 space-y-5">
             {!isAdultMember && (
               <div>
                 <label className="label-text">I am registering as *</label>
@@ -255,7 +255,7 @@ export default function IndividualRegistrationForm({
                       name="registrant_type"
                       checked={!adultRegistrant}
                       onChange={() => setAdultRegistrant(false)}
-                      className="border-gray-300 text-brand-blue"
+                      className="border-line text-brand-blue"
                     />
                     Student
                   </label>
@@ -269,7 +269,7 @@ export default function IndividualRegistrationForm({
                         setValue('grade', '')
                         clearErrors('grade')
                       }}
-                      className="border-gray-300 text-brand-blue"
+                      className="border-line text-brand-blue"
                     />
                     Adult (not a student)
                   </label>
@@ -307,7 +307,7 @@ export default function IndividualRegistrationForm({
                   aria-readonly={emailLocked}
                 />
                 {emailLocked ? (
-                  <p className="mt-1 text-xs text-gray-400">Linked to your Stellr account.</p>
+                  <p className="mt-1 text-xs text-content-faint">Linked to your Stellr account.</p>
                 ) : (
                   <FieldError message={errors.email?.message} />
                 )}
@@ -377,10 +377,10 @@ export default function IndividualRegistrationForm({
         <div className="space-y-6">
           <div>
             <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Emergency Contact & Health</h2>
-            <p className="text-sm text-gray-600">Step 2 of 2 — Required for all participants</p>
+            <p className="text-sm text-content-body">Step 2 of 2 — Required for all participants</p>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+          <div className="bg-white rounded-xl border border-line p-6 space-y-5">
             <h3 className="font-semibold text-brand-blue-dark">Emergency Contact</h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -419,9 +419,9 @@ export default function IndividualRegistrationForm({
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+          <div className="bg-white rounded-xl border border-line p-6 space-y-5">
             <h3 className="font-semibold text-brand-blue-dark">Ethnicity *</h3>
-            <p className="text-xs text-gray-400 -mt-3">Select all that apply</p>
+            <p className="text-xs text-content-faint -mt-3">Select all that apply</p>
             <div className="grid grid-cols-2 gap-2">
               {ETHNICITIES.map((e) => (
                 <label key={e} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -429,7 +429,7 @@ export default function IndividualRegistrationForm({
                     type="checkbox"
                     checked={ethnicity.includes(e)}
                     onChange={() => toggleMulti('ethnicity', e)}
-                    className="rounded border-gray-300 text-brand-blue"
+                    className="rounded border-line text-brand-blue"
                   />
                   {e}
                 </label>
@@ -438,7 +438,7 @@ export default function IndividualRegistrationForm({
             <FieldError message={errors.ethnicity?.message} />
 
             <h3 className="font-semibold text-brand-blue-dark pt-2">Dietary Requirements *</h3>
-            <p className="text-xs text-gray-400 -mt-3">Select all that apply</p>
+            <p className="text-xs text-content-faint -mt-3">Select all that apply</p>
             <div className="grid grid-cols-2 gap-2">
               {DIETARY.map((d) => (
                 <label key={d} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -446,7 +446,7 @@ export default function IndividualRegistrationForm({
                     type="checkbox"
                     checked={dietary.includes(d)}
                     onChange={() => toggleMulti('dietary_requirements', d)}
-                    className="rounded border-gray-300 text-brand-blue"
+                    className="rounded border-line text-brand-blue"
                   />
                   {d}
                 </label>
@@ -466,14 +466,14 @@ export default function IndividualRegistrationForm({
           </div>
 
           {addons.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+            <div className="bg-white rounded-xl border border-line p-6 space-y-4">
               <h3 className="font-semibold text-brand-blue-dark">Add Merchandise (optional)</h3>
-              <p className="text-xs text-gray-400 -mt-2">Collect these in person when you check in at the event.</p>
+              <p className="text-xs text-content-faint -mt-2">Collect these in person when you check in at the event.</p>
               {addons.map((a) => (
                 <div key={a.variantId} className="flex items-center justify-between gap-3">
                   <div className="text-sm">
-                    <span className="text-gray-900">{a.name}</span>
-                    <span className="text-gray-500"> — ${(a.unitCents / 100).toFixed(2)}</span>
+                    <span className="text-ink">{a.name}</span>
+                    <span className="text-content-muted"> — ${(a.unitCents / 100).toFixed(2)}</span>
                   </div>
                   <input
                     type="number"
@@ -512,7 +512,7 @@ export default function IndividualRegistrationForm({
             </button>
           </div>
 
-          <p className="text-xs text-gray-400 text-center">
+          <p className="text-xs text-content-faint text-center">
             By submitting you confirm all details are accurate. A confirmation email will be sent to you.
           </p>
         </div>

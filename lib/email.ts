@@ -561,7 +561,7 @@ export function docusignOnFileEmail({
   signedOn: string; expiresOn: string
 }) {
   const fmt = (iso: string) =>
-    new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })
+    new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/Denver' })
   const subject = `No action needed — ${agreementLabel} already on record`
   const html = `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto">

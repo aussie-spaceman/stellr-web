@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { ParticipantForm } from './ParticipantForm'
 import { EnvelopeStatusBadge } from './DocusignsSection'
 import { displayEventRole } from '@/lib/member-enums'
+import { formatDateShort } from '@/lib/utils'
 import { Copy, Check } from 'lucide-react'
 
 function CopyButton({ text }: { text: string }) {
@@ -655,9 +656,9 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
                                       {envelope.signer_email && <> &middot; {envelope.signer_email}</>}
                                     </p>
                                     <p className="text-xs text-brand-muted-soft">
-                                      Sent {new Date(envelope.sent_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                      {envelope.completed_at && <> &middot; Signed {new Date(envelope.completed_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</>}
-                                      {envelope.reminder_sent_at && !envelope.completed_at && <> &middot; Reminded {new Date(envelope.reminder_sent_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</>}
+                                      Sent {formatDateShort(envelope.sent_at)}
+                                      {envelope.completed_at && <> &middot; Signed {formatDateShort(envelope.completed_at)}</>}
+                                      {envelope.reminder_sent_at && !envelope.completed_at && <> &middot; Reminded {formatDateShort(envelope.reminder_sent_at)}</>}
                                     </p>
                                   </div>
                                 ) : isMinor ? (

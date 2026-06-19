@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { formatDateShort } from '@/lib/utils'
 
 interface Tier {
   name: string
@@ -39,11 +40,7 @@ function MemberIdRow({ membershipId }: { membershipId?: string | null }) {
   )
 }
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  })
-}
+const formatDate = formatDateShort
 
 export function MembershipCard({ membership, member, membershipId }: Props) {
   if (!membership) {

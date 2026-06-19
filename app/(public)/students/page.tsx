@@ -94,7 +94,7 @@ export default function StudentsPage() {
           <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">
             Students are the core of our Community
           </h1>
-          <p className="text-lg text-gray-300 max-w-2xl leading-relaxed">
+          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
             You&rsquo;re the focus of the majority of our activities. Whether you&rsquo;re in high
             school or college, Stellr is where you start building the career — and the network —
             you&rsquo;ll carry for life.
@@ -113,7 +113,7 @@ export default function StudentsPage() {
       {/* ── In-page anchor nav ────────────────────────────────────────── */}
       <nav
         aria-label="Student sections"
-        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-gray-100"
+        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-line-light"
       >
         <div className="container-max flex gap-2 sm:gap-6 px-4 sm:px-6 lg:px-8 overflow-x-auto">
           {sections.map((s) => (
@@ -167,7 +167,7 @@ export default function StudentsPage() {
               {hsDownPayment.map((point) => (
                 <li key={point} className="flex gap-3">
                   <Trophy size={18} className="text-brand-orange shrink-0 mt-0.5" />
-                  <span className="text-sm text-gray-200 leading-relaxed">{point}</span>
+                  <span className="text-sm text-content-faint leading-relaxed">{point}</span>
                 </li>
               ))}
             </ul>
@@ -278,7 +278,7 @@ export default function StudentsPage() {
               {parentReasons.map((r) => {
                 const Icon = r.icon
                 return (
-                  <div key={r.title} className="bg-white rounded-xl p-6 flex gap-4 shadow-sm border border-gray-100">
+                  <div key={r.title} className="bg-white rounded-xl p-6 flex gap-4 shadow-sm border border-line-light">
                     <div className="w-11 h-11 rounded-lg bg-brand-blue/10 flex items-center justify-center shrink-0">
                       <Icon size={22} className="text-brand-blue" />
                     </div>
@@ -300,7 +300,7 @@ export default function StudentsPage() {
       <section className="section-padding bg-brand-blue-dark text-white text-center">
         <div className="container-max max-w-2xl">
           <h2 className="text-3xl font-bold mb-4">Your career starts now</h2>
-          <p className="text-gray-300 leading-relaxed mb-8">
+          <p className="text-content-faint leading-relaxed mb-8">
             Join free, find a competition, and start building the STEM Skills that set you apart.
           </p>
           <div className="flex flex-wrap justify-center gap-3">

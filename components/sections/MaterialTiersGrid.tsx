@@ -12,7 +12,7 @@ export function MaterialTiersGrid({ tinted = false }: Props) {
       {MATERIAL_TIERS.map((tier) => (
         <div
           key={tier.tier}
-          className={`border rounded-xl p-6 flex flex-col gap-4 ${tinted ? tier.cardClass : 'border-gray-200'}`}
+          className={`border rounded-xl p-6 flex flex-col gap-4 ${tinted ? tier.cardClass : 'border-line'}`}
         >
           <div>
             <span

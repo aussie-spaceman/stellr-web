@@ -32,14 +32,14 @@ export default async function EventsPage({ searchParams }: PageProps) {
       <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-4xl sm:text-5xl font-bold">Upcoming Events</h1>
-          <p className="mt-3 text-lg text-gray-300 max-w-xl">
+          <p className="mt-3 text-lg text-content-faint max-w-xl">
             Design challenges across the US for middle and high school students.
           </p>
         </div>
       </section>
 
       {/* Filter bar */}
-      <section className="bg-brand-grey-light border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4">
+      <section className="bg-brand-grey-light border-b border-line px-4 sm:px-6 lg:px-8 py-4">
         <div className="max-w-7xl mx-auto">
           <Suspense fallback={null}>
             <EventsFilterBar />

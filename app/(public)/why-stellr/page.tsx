@@ -59,7 +59,7 @@ export default async function WhyStellarPage() {
       <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-4xl sm:text-5xl font-bold mb-4">Why Stellr?</h1>
-          <p className="text-lg text-gray-300 mb-8 max-w-xl">
+          <p className="text-lg text-content-faint mb-8 max-w-xl">
             Find out what Stellr means for you.
           </p>
           <div className="flex flex-wrap gap-3">
@@ -112,7 +112,7 @@ export default async function WhyStellarPage() {
         </div>
       </section>
 
-      <div className="border-t border-gray-100" />
+      <div className="border-t border-line-light" />
 
       {/* ── For Teachers ─────────────────────────────────────────────── */}
       <section id="teacher" className="section-padding bg-brand-grey-light scroll-mt-20">
@@ -150,7 +150,7 @@ export default async function WhyStellarPage() {
         </div>
       </section>
 
-      <div className="border-t border-gray-100" />
+      <div className="border-t border-line-light" />
 
       {/* ── For Parents ──────────────────────────────────────────────── */}
       <section id="parent" className="section-padding scroll-mt-20">
@@ -189,7 +189,7 @@ export default async function WhyStellarPage() {
         </div>
       </section>
 
-      <div className="border-t border-gray-100" />
+      <div className="border-t border-line-light" />
 
       {/* ── For Mentors ──────────────────────────────────────────────── */}
       <section id="mentor" className="section-padding bg-brand-grey-light scroll-mt-20">
@@ -206,7 +206,7 @@ export default async function WhyStellarPage() {
               You don&apos;t just judge — you&apos;re in the room with students as they work, answering questions, challenging assumptions, and sharing the kind of practical knowledge that doesn&apos;t make it into textbooks.
             </p>
           </div>
-          <div className="mt-6 p-5 bg-white rounded-xl border border-gray-200">
+          <div className="mt-6 p-5 bg-white rounded-xl border border-line">
             <p className="font-bold text-brand-blue-dark mb-1">Alumni upgrade</p>
             <p className="text-sm text-brand-grey-dark">
               Former student participants automatically receive Alumni membership upon graduating — staying connected to the Stellr community as they enter industry.
@@ -221,7 +221,7 @@ export default async function WhyStellarPage() {
         </div>
       </section>
 
-      <div className="border-t border-gray-100" />
+      <div className="border-t border-line-light" />
 
       {/* ── For Donors ───────────────────────────────────────────────── */}
       <section id="donor" className="section-padding scroll-mt-20">

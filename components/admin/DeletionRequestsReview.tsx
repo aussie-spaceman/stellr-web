@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 import Link from 'next/link'
 
 interface Requester {
@@ -106,7 +107,7 @@ export function DeletionRequestsReview({ initialRequests }: { initialRequests: D
                 {requester?.email && <p className="text-xs text-brand-muted-soft">{requester.email}</p>}
               </div>
               <p className="text-xs text-brand-muted-soft shrink-0">
-                {new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                {formatDateShort(item.created_at)}
               </p>
             </div>
 

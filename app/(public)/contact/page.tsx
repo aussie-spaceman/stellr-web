@@ -25,7 +25,7 @@ export default async function ContactPage({ searchParams }: PageProps) {
       <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-4xl sm:text-5xl font-bold mb-3">Get in Touch</h1>
-          <p className="text-lg text-gray-300 max-w-xl">
+          <p className="text-lg text-content-faint max-w-xl">
             Questions about events, sponsorship, mentoring, or anything else — we&apos;d love to hear from you.
           </p>
         </div>
@@ -70,10 +70,10 @@ export default async function ContactPage({ searchParams }: PageProps) {
 
               <div className="bg-brand-blue-dark text-white rounded-xl p-6 space-y-3">
                 <h2 className="font-bold text-lg">Response time</h2>
-                <p className="text-sm text-gray-300">
+                <p className="text-sm text-content-faint">
                   We aim to respond to all enquiries within 2 business days.
                 </p>
-                <p className="text-sm text-gray-300">
+                <p className="text-sm text-content-faint">
                   For urgent event-related questions, include your event name in the subject.
                 </p>
               </div>

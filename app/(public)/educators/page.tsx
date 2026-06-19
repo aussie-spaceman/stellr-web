@@ -61,7 +61,7 @@ export default function EducatorsPage() {
           <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">
             Bring real-world STEM to your students
           </h1>
-          <p className="text-lg text-gray-300 max-w-2xl leading-relaxed">
+          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
             Educators are at the heart of how Stellr reaches students. We give you the curriculum,
             the training, and the support to deliver industry-grade STEM experiences — without
             adding to your workload.
@@ -80,7 +80,7 @@ export default function EducatorsPage() {
       {/* ── In-page anchor nav ────────────────────────────────────────── */}
       <nav
         aria-label="Educator sections"
-        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-gray-100"
+        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-line-light"
       >
         <div className="container-max flex gap-2 sm:gap-6 px-4 sm:px-6 lg:px-8 overflow-x-auto">
           {sections.map((s) => (
@@ -154,7 +154,7 @@ export default function EducatorsPage() {
               We&rsquo;re finalizing a stipend program to recognize and reward the educators who give
               their time to run Stellr competitions and campaigns. Details are coming soon.
             </p>
-            <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-brand-grey-dark border border-gray-200">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-brand-grey-dark border border-line">
               <ClipboardCheck size={16} className="text-brand-blue" /> Program details coming soon
             </div>
             <p className="mt-6 text-sm text-brand-grey-dark">
@@ -227,7 +227,7 @@ export default function EducatorsPage() {
       <section className="section-padding bg-brand-blue-dark text-white text-center">
         <div className="container-max max-w-2xl">
           <h2 className="text-3xl font-bold mb-4">Ready to bring Stellr to your students?</h2>
-          <p className="text-gray-300 leading-relaxed mb-8">
+          <p className="text-content-faint leading-relaxed mb-8">
             Register as an Educator to unlock Baseline curriculum, or talk to our team about a
             school-wide partnership.
           </p>

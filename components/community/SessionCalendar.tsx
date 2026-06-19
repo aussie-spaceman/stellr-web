@@ -35,7 +35,7 @@ export function SessionCalendar({ sessions }: { sessions: CalendarSession[] }) {
   const cells: (number | null)[] = Array.from({ length: startDay }, () => null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(d)
 
-  const monthLabel = viewDate.toLocaleString('en-AU', { month: 'long', year: 'numeric' })
+  const monthLabel = viewDate.toLocaleString('en-US', { month: 'long', year: 'numeric' })
   const todayDate = today.getDate()
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month
 

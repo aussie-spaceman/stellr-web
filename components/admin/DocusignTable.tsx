@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatDateShort } from '@/lib/utils'
 
 export interface EnvelopeRow {
   id: string
@@ -39,7 +40,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function fmt(iso: string | null) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+  return formatDateShort(iso)
 }
 
 const FILTER_OPTIONS = ['all', 'sent', 'delivered', 'completed', 'declined', 'voided'] as const
@@ -54,7 +55,7 @@ function fmtExpiry(completedAt: string): { label: string; cls: string } {
   const rem    = months % 12
   const label  = years > 0 ? (rem > 0 ? `${years}yr ${rem}mo` : `${years}yr`) : `${months}mo`
   const cls    = months < 6 ? 'text-amber-600 font-medium' : 'text-brand-muted-soft'
-  return { label: `${label} (${expires.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })})`, cls }
+  return { label: `${label} (${formatDateShort(expires)})`, cls }
 }
 
 export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {

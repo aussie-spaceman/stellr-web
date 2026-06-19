@@ -19,7 +19,7 @@ export default async function IndividualRegistrationPage({ params }: PageProps) 
   const addons = await listEventAddons(supabaseServer(), slug).catch(() => [])
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface">
       {/* Header */}
       <div className="bg-brand-blue-dark text-white py-10 px-4">
         <div className="max-w-2xl mx-auto">
@@ -37,17 +37,17 @@ export default async function IndividualRegistrationPage({ params }: PageProps) 
       </div>
 
       {/* Step indicator */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-white border-b border-line">
         <div className="max-w-2xl mx-auto px-4 py-4">
           <div className="flex items-center gap-2 text-sm">
             <span className="w-6 h-6 rounded-full bg-green-500 text-white flex items-center justify-center text-xs">✓</span>
-            <span className="text-gray-400">Registration Type</span>
-            <span className="text-gray-300 mx-2">›</span>
+            <span className="text-content-faint">Registration Type</span>
+            <span className="text-content-faint mx-2">›</span>
             <span className="w-6 h-6 rounded-full bg-brand-blue text-white flex items-center justify-center text-xs font-bold">2</span>
             <span className="font-medium text-brand-blue-dark">Your Details</span>
-            <span className="text-gray-300 mx-2">›</span>
-            <span className="w-6 h-6 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center text-xs font-bold">3</span>
-            <span className="text-gray-400">Confirmation</span>
+            <span className="text-content-faint mx-2">›</span>
+            <span className="w-6 h-6 rounded-full bg-line-light text-content-faint flex items-center justify-center text-xs font-bold">3</span>
+            <span className="text-content-faint">Confirmation</span>
           </div>
         </div>
       </div>

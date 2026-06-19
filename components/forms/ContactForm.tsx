@@ -7,7 +7,7 @@ import { z } from 'zod'
 import FieldError from '@/components/forms/FieldError'
 
 const inputClass = (hasError: boolean) =>
-  `w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue ${hasError ? 'border-red-400' : 'border-gray-200'}`
+  `w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue ${hasError ? 'border-red-400' : 'border-line'}`
 
 const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -141,7 +141,7 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
           <input
             type="checkbox"
             {...register('consent')}
-            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-blue"
+            className="mt-0.5 h-4 w-4 rounded border-line text-brand-blue"
           />
           <span className="text-sm text-brand-grey-dark">
             I agree to Stellr Education contacting me in relation to my enquiry. View our{' '}

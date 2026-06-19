@@ -115,7 +115,7 @@ export default async function HomePage() {
               Real-World STEM Competitions.{' '}
               <span className="text-brand-blue">Real Careers Begin Here.</span>
             </h1>
-            <p className="mt-6 text-lg sm:text-xl text-gray-300 max-w-2xl">
+            <p className="mt-6 text-lg sm:text-xl text-content-faint max-w-2xl">
               A community bringing students and professionals together, building careers and preparing the next generation through industry simulation competitions and mentorship.
             </p>
             <div className="mt-8 flex flex-wrap gap-4">
@@ -141,7 +141,7 @@ export default async function HomePage() {
               <Link
                 key={card.label}
                 href={card.href}
-                className="flex flex-col items-center gap-3 p-6 bg-white rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all border border-gray-100"
+                className="flex flex-col items-center gap-3 p-6 bg-white rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all border border-line-light"
               >
                 <span className="text-3xl">{card.icon}</span>
                 <span className="font-semibold text-brand-blue-dark">{card.label}</span>
@@ -232,7 +232,7 @@ export default async function HomePage() {
                 className={`rounded-xl border p-6 ${
                   tier.highlight
                     ? 'border-brand-blue shadow-lg ring-2 ring-brand-blue'
-                    : 'border-gray-200'
+                    : 'border-line'
                 }`}
               >
                 {tier.highlight && (

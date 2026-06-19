@@ -108,7 +108,7 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
               <>
                 <a
                   href={`${AUTH_URL}/community`}
-                  className="text-gray-300 hover:text-white transition-colors"
+                  className="text-content-faint hover:text-white transition-colors"
                 >
                   My Stellr
                 </a>
@@ -118,7 +118,7 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
               <>
                 <a
                   href={`${AUTH_URL}/sign-in`}
-                  className="text-gray-400 hover:text-white transition-colors"
+                  className="text-content-faint hover:text-white transition-colors"
                 >
                   Log In
                 </a>
@@ -135,7 +135,7 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
       </div>
 
       {/* ── Tier 2: Main nav ── */}
-      <nav className="bg-white border-b border-gray-100 shadow-sm" aria-label="Main navigation">
+      <nav className="bg-white border-b border-line-light shadow-sm" aria-label="Main navigation">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
             <Logo sizeClassName="h-14" />
@@ -168,7 +168,7 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
                   {/* Dropdown — shares the same open/close handlers so cursor can move freely */}
                   {openDropdown === link.label && link.dropdown && (
                     <ul
-                      className="absolute top-full left-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50"
+                      className="absolute top-full left-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-line-light py-1 z-50"
                       onMouseEnter={() => openMenu(link.label)}
                       onMouseLeave={scheduleClose}
                     >
@@ -212,7 +212,7 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
                 {/* Dropdown */}
                 {openDropdown === 'get-involved' && (
                   <ul
-                    className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50"
+                    className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-line-light py-1 z-50"
                     onMouseEnter={() => openMenu('get-involved')}
                     onMouseLeave={scheduleClose}
                   >
@@ -259,7 +259,7 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
             {/* Nav sections as accordions */}
             {[...navLinks, { label: 'Get Involved', href: '/get-involved', dropdown: getInvolvedLinks }].map(
               (link) => (
-                <div key={link.label} className="border-b border-gray-100">
+                <div key={link.label} className="border-b border-line-light">
                   <button
                     className="w-full flex items-center justify-between px-3 py-3 text-base font-medium text-brand-blue-dark"
                     onClick={() => toggleMobileSection(link.label)}

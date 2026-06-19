@@ -135,7 +135,7 @@ export default function AcademyPage() {
           <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">
             The central reference point for every member to upskill
           </h1>
-          <p className="text-lg text-gray-300 max-w-2xl leading-relaxed">
+          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
             The Stellr Academy delivers the critical STEM Skills that tomorrow&rsquo;s professionals
             need to succeed. We offer as much of it as we can, for free — sign up and start learning
             today.
@@ -154,7 +154,7 @@ export default function AcademyPage() {
       {/* ── In-page anchor nav ────────────────────────────────────────── */}
       <nav
         aria-label="Academy sections"
-        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-gray-100"
+        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-line-light"
       >
         <div className="container-max flex gap-2 sm:gap-6 px-4 sm:px-6 lg:px-8 overflow-x-auto">
           {pillars.map((p) => (
@@ -272,7 +272,7 @@ export default function AcademyPage() {
           </div>
 
           {/* Desktop: table */}
-          <div className="hidden md:block overflow-hidden rounded-xl border border-gray-200">
+          <div className="hidden md:block overflow-hidden rounded-xl border border-line">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-brand-blue-dark text-white">
@@ -298,9 +298,9 @@ export default function AcademyPage() {
           {/* Mobile: stacked cards */}
           <div className="md:hidden space-y-4">
             {memberMatrix.map((row) => (
-              <div key={row.type} className="rounded-xl border border-gray-200 overflow-hidden">
+              <div key={row.type} className="rounded-xl border border-line overflow-hidden">
                 <p className="bg-brand-blue-dark text-white font-bold p-4">{row.type}</p>
-                <dl className="divide-y divide-gray-100 text-sm">
+                <dl className="divide-y divide-line-light text-sm">
                   {(['Training', 'Mentoring', 'Coaching'] as const).map((col) => (
                     <div key={col} className="p-4">
                       <dt className="font-semibold text-brand-blue mb-1">{col}</dt>
@@ -338,7 +338,7 @@ export default function AcademyPage() {
                 find supporting documentation to deliver classroom instruction as part of our
                 Campaigns — plus CTE material available for you.
               </p>
-              <div className="flex items-start gap-3 bg-white rounded-lg p-4 border border-gray-100">
+              <div className="flex items-start gap-3 bg-white rounded-lg p-4 border border-line-light">
                 <ShieldCheck size={20} className="text-brand-blue shrink-0 mt-0.5" />
                 <p className="text-sm text-brand-grey-dark leading-relaxed">
                   We take cybersecurity seriously. All material, student details, and access
@@ -374,7 +374,7 @@ export default function AcademyPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
             {/* Graphic placeholder */}
             <div className="order-2 lg:order-1">
-              <div className="aspect-[4/3] rounded-2xl bg-brand-grey-light border border-dashed border-gray-300 flex flex-col items-center justify-center text-center p-8">
+              <div className="aspect-[4/3] rounded-2xl bg-brand-grey-light border border-dashed border-line flex flex-col items-center justify-center text-center p-8">
                 <Users size={40} className="text-brand-grey mb-3" />
                 <p className="text-sm text-brand-grey font-medium">
                   Image placeholder — mentoring cohort session
@@ -447,7 +447,7 @@ export default function AcademyPage() {
                 community in dedicated one-on-one sessions. It&rsquo;s a unique opportunity to receive
                 specific, tailored feedback on your career trajectory.
               </p>
-              <div className="flex items-start gap-3 bg-white rounded-lg p-4 border border-gray-100">
+              <div className="flex items-start gap-3 bg-white rounded-lg p-4 border border-line-light">
                 <InfinityIcon size={20} className="text-brand-blue shrink-0 mt-0.5" />
                 <p className="text-sm text-brand-grey-dark leading-relaxed">
                   All coaching material is maintained indefinitely against your Stellr member profile
@@ -481,7 +481,7 @@ export default function AcademyPage() {
       <section className="section-padding bg-brand-blue-dark text-white text-center">
         <div className="container-max max-w-2xl">
           <h2 className="text-3xl font-bold mb-4">Start learning today</h2>
-          <p className="text-gray-300 leading-relaxed mb-8">
+          <p className="text-content-faint leading-relaxed mb-8">
             Sign up for free to unlock the Academy and begin building the STEM Skills that set you
             apart.
           </p>

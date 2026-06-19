@@ -11,6 +11,8 @@ import type {
   StoreVariant,
 } from './types'
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export function slugify(input: string): string {
   return input
     .toLowerCase()
@@ -31,6 +33,9 @@ export async function listProducts(): Promise<StoreProductWithVariants[]> {
 }
 
 export async function getProduct(id: string): Promise<StoreProductWithVariants | null> {
+  // A non-UUID id (e.g. a stray path segment) can never match — treat as not
+  // found rather than letting Postgres throw "invalid input syntax for uuid".
+  if (!UUID_RE.test(id)) return null
   const db = supabaseServer()
   const { data, error } = await db
     .from('store_products')

@@ -1,270 +1,381 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
-import { ArrowRight, CheckCircle } from 'lucide-react'
-import { getTestimonialsByRole } from '@/lib/sanity'
+import { ArrowRight, Check } from 'lucide-react'
+import { Launch, Certificate, Team, Award, Global } from '@stellr/icons'
+import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 
 export const metadata: Metadata = {
   title: 'Why Stellr?',
-  description: 'Find out what Stellr means for you — students, teachers, parents, mentors, and donors.',
+  description:
+    'Stellr connects high school, college and professional life into a single community. Here is what that means for students, teachers, parents, mentors and donors.',
 }
-
-export const revalidate = 3600
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
+const WWW = 'https://www.stellreducation.org'
 
-const roles = [
-  { label: 'Student', anchor: 'student' },
-  { label: 'Teacher', anchor: 'teacher' },
-  { label: 'Parent', anchor: 'parent' },
-  { label: 'Mentor', anchor: 'mentor' },
-  { label: 'Donor', anchor: 'donor' },
+const jumpLinks = [
+  { label: 'Students', href: '#students' },
+  { label: 'Teachers', href: '#teachers' },
+  { label: 'Parents', href: '#parents' },
+  { label: 'Mentors', href: '#mentors' },
+  { label: 'Donors', href: '#donors' },
 ]
 
-interface Testimonial {
-  _id: string
-  quote: string
-  author: string
-  role: string
-  event?: string
-}
-
-function TestimonialBlock({ testimonials }: { testimonials: Testimonial[] }) {
-  if (!testimonials.length) return null
+/* ── Section header (accent tile + eyebrow) ───────────────────────────── */
+function SectionHead({
+  Icon,
+  tileBg,
+  eyebrowColor,
+  eyebrow,
+}: {
+  Icon: React.ComponentType<{ size?: number }>
+  tileBg: string
+  eyebrowColor: string
+  eyebrow: string
+}) {
   return (
-    <div className="mt-8 space-y-4">
-      {testimonials.slice(0, 2).map((t) => (
-        <blockquote key={t._id} className="border-l-4 border-brand-blue pl-5 italic text-brand-grey-dark">
-          <p>&ldquo;{t.quote}&rdquo;</p>
-          <footer className="mt-2 text-sm font-semibold text-brand-blue-dark not-italic">
-            — {t.author}{t.event ? `, ${t.event}` : ''}
-          </footer>
-        </blockquote>
-      ))}
+    <div className="flex items-center gap-3.5">
+      <span className={`w-11 h-11 rounded-xl flex items-center justify-center text-white ${tileBg}`}>
+        <Icon size={24} />
+      </span>
+      <Eyebrow className={eyebrowColor}>{eyebrow}</Eyebrow>
     </div>
   )
 }
 
-export default async function WhyStellarPage() {
-  const [students, teachers, parents, mentors, donors] = await Promise.all([
-    getTestimonialsByRole('Student').catch(() => []),
-    getTestimonialsByRole('Teacher').catch(() => []),
-    getTestimonialsByRole('Parent').catch(() => []),
-    getTestimonialsByRole('Mentor').catch(() => []),
-    getTestimonialsByRole('Donor').catch(() => []),
-  ])
-
+export default function WhyStellrPage() {
   return (
     <>
-      {/* ── Page Header ──────────────────────────────────────────────── */}
-      <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-4xl sm:text-5xl font-bold mb-4">Why Stellr?</h1>
-          <p className="text-lg text-content-faint mb-8 max-w-xl">
-            Find out what Stellr means for you.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            {roles.map((r) => (
-              <a
-                key={r.anchor}
-                href={`#${r.anchor}`}
-                className="px-4 py-2 rounded-full bg-white/10 text-white text-sm font-medium hover:bg-brand-blue transition-colors"
-              >
-                {r.label}
-              </a>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── For Students ─────────────────────────────────────────────── */}
-      <section id="student" className="section-padding scroll-mt-20">
-        <div className="container-max max-w-4xl">
-          <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">For Students</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-brand-blue-dark mb-6">
-            Learn what it&apos;s really like to work in industry — before you get there.
-          </h2>
-          <div className="space-y-4 text-brand-grey-dark">
-            <p className="text-lg">
-              You&apos;ll collaborate with, and compete against, some of the sharpest students in the country — mentored by industry professionals. Learn in one event what many adults take a decade to master.
-            </p>
-            <p>
-              Stellr competitions are built around real-world industry scenarios across aerospace, engineering, environmental science, and business. You won&apos;t just apply what you&apos;ve studied — you&apos;ll work across disciplines under pressure, the way professionals do every day.
-            </p>
-          </div>
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-6">
-            {[
-              { stat: '90%+', label: 'go on to study STEM at college' },
-              { stat: 'US-wide', label: 'competitions across multiple states' },
-              { stat: 'Real', label: 'industry mentors at every event' },
-            ].map((item) => (
-              <div key={item.stat} className="text-center p-6 bg-brand-grey-light rounded-xl">
-                <p className="text-3xl font-bold text-brand-blue">{item.stat}</p>
-                <p className="mt-1 text-sm text-brand-grey-dark">{item.label}</p>
-              </div>
-            ))}
-          </div>
-          <TestimonialBlock testimonials={(students ?? []) as Testimonial[]} />
-          <div className="mt-8">
-            <a href={`${AUTH_URL}/signup`} className="btn-primary inline-flex items-center gap-2">
-              Create Free Account <ArrowRight size={16} />
+      {/* ── Hero ──────────────────────────────────────────────────────── */}
+      <Hero
+        breadcrumb="About → Why Stellr"
+        title="Why Stellr?"
+        lead="Stellr connects high school, college and professional life into a single community — so the path into a STEM career stops being a mystery. Here is what that means for you."
+      >
+        <div className="flex flex-wrap gap-3 mt-8">
+          {jumpLinks.map((j) => (
+            <a
+              key={j.href}
+              href={j.href}
+              className="text-[14.5px] font-medium text-[#DDE3FB] bg-white/5 border border-white/15 px-[18px] py-[9px] rounded-full hover:bg-white/10 transition-colors"
+            >
+              {j.label}
             </a>
-          </div>
+          ))}
         </div>
-      </section>
+      </Hero>
 
-      <div className="border-t border-line-light" />
-
-      {/* ── For Teachers ─────────────────────────────────────────────── */}
-      <section id="teacher" className="section-padding bg-brand-grey-light scroll-mt-20">
-        <div className="container-max max-w-4xl">
-          <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">For Teachers</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-brand-blue-dark mb-6">
-            One of the only multi-disciplinary STEM competitions available to your students.
-          </h2>
-          <p className="text-lg text-brand-grey-dark mb-8">
-            Unlike curriculum-specific activities, Stellr events require students to deploy skills across disciplines — engineering, science, business, communication — to solve real-world problems.
-          </p>
-          <ul className="space-y-3">
-            {[
-              'Complex, open-ended challenges suited to students of all ability levels',
-              'Industry simulation context that brings classroom learning to life',
-              'Competitive environment that teaches large-group communication and leadership',
-              'CPD opportunity — attend as an educator and observe professional mentoring in action',
-            ].map((benefit) => (
-              <li key={benefit} className="flex items-start gap-3">
-                <CheckCircle size={20} className="text-brand-blue mt-0.5 shrink-0" />
-                <span className="text-brand-grey-dark">{benefit}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-8 p-6 bg-brand-blue-dark text-white rounded-xl">
-            <p className="text-2xl font-bold">90%</p>
-            <p className="text-blue-200 mt-1">of Stellr participants pursue STEM or medicine at college — a measurable outcome you can point to.</p>
-          </div>
-          <TestimonialBlock testimonials={(teachers ?? []) as Testimonial[]} />
-          <div className="mt-8">
-            <Link href="/events" className="btn-primary inline-flex items-center gap-2">
-              Register Your Students <ArrowRight size={16} />
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <div className="border-t border-line-light" />
-
-      {/* ── For Parents ──────────────────────────────────────────────── */}
-      <section id="parent" className="section-padding scroll-mt-20">
-        <div className="container-max max-w-4xl">
-          <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">For Parents</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-brand-blue-dark mb-6">
-            Give your child an experience they&apos;ll talk about for years.
-          </h2>
-          <p className="text-lg text-brand-grey-dark mb-8">
-            Stellr events are safe, structured, and professionally run — giving your child the chance to test themselves in a real-world environment alongside their peers.
-          </p>
-          <div className="p-6 bg-blue-50 rounded-xl border-l-4 border-brand-blue">
-            <blockquote className="text-lg italic text-brand-grey-dark">
-              &ldquo;My son said it was one of the most exciting, exhilarating, challenging and memorable events in his life.&rdquo;
-            </blockquote>
-            <p className="mt-2 text-sm font-semibold text-brand-blue-dark">— Parent, 2022</p>
-          </div>
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { title: 'Safe & structured', body: 'Professionally organised events with full supervision throughout.' },
-              { title: 'Peer networking', body: 'Your child competes alongside motivated students from across the country.' },
-              { title: 'Mentored environment', body: 'Industry professionals guide teams — not just judges, but active mentors.' },
-            ].map((item) => (
-              <div key={item.title} className="p-5 bg-brand-grey-light rounded-xl">
-                <p className="font-bold text-brand-blue-dark mb-1">{item.title}</p>
-                <p className="text-sm text-brand-grey-dark">{item.body}</p>
-              </div>
-            ))}
-          </div>
-          <TestimonialBlock testimonials={(parents ?? []) as Testimonial[]} />
-          <div className="mt-8">
-            <Link href="/events" className="btn-primary inline-flex items-center gap-2">
-              Find an Event Near You <ArrowRight size={16} />
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <div className="border-t border-line-light" />
-
-      {/* ── For Mentors ──────────────────────────────────────────────── */}
-      <section id="mentor" className="section-padding bg-brand-grey-light scroll-mt-20">
-        <div className="container-max max-w-4xl">
-          <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">For Mentors</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-brand-blue-dark mb-6">
-            Give back. Grow your network. Stay connected to the next generation.
-          </h2>
-          <div className="space-y-4 text-brand-grey-dark">
-            <p className="text-lg">
-              As a Stellr Alumni or industry professional, you&apos;ll mentor student teams, share your experience, and help shape the engineers and scientists of tomorrow.
-            </p>
-            <p>
-              You don&apos;t just judge — you&apos;re in the room with students as they work, answering questions, challenging assumptions, and sharing the kind of practical knowledge that doesn&apos;t make it into textbooks.
-            </p>
-          </div>
-          <div className="mt-6 p-5 bg-white rounded-xl border border-line">
-            <p className="font-bold text-brand-blue-dark mb-1">Alumni upgrade</p>
-            <p className="text-sm text-brand-grey-dark">
-              Former student participants automatically receive Alumni membership upon graduating — staying connected to the Stellr community as they enter industry.
-            </p>
-          </div>
-          <TestimonialBlock testimonials={(mentors ?? []) as Testimonial[]} />
-          <div className="mt-8">
-            <Link href="/contact?type=mentor" className="btn-primary inline-flex items-center gap-2">
-              Volunteer as a Mentor <ArrowRight size={16} />
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <div className="border-t border-line-light" />
-
-      {/* ── For Donors ───────────────────────────────────────────────── */}
-      <section id="donor" className="section-padding scroll-mt-20">
-        <div className="container-max max-w-4xl">
-          <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">For Donors &amp; Sponsors</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-brand-blue-dark mb-6">
-            Invest in the next generation of STEM leaders.
-          </h2>
-          <div className="space-y-4 text-brand-grey-dark">
-            <p className="text-lg">
-              Stellr events are made possible by the generous support of donors and sponsors. Your contribution funds scholarships, resources, and access for students who would otherwise miss out.
-            </p>
-            <p>
-              With 90%+ of participants going on to STEM careers, every dollar you invest has a direct and measurable impact on the next generation of engineers, scientists, and innovators.
-            </p>
-          </div>
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {[
-              { title: 'Event sponsorship', body: 'Associate your brand with high-achieving STEM students and industry professionals.' },
-              { title: 'Scholarship funding', body: 'Ensure talented students can participate regardless of financial circumstances.' },
-              { title: 'Resource grants', body: 'Fund the materials and technology that make challenges possible.' },
-              { title: 'Legacy giving', body: 'Make a lasting contribution to STEM education in the US.' },
-            ].map((item) => (
-              <div key={item.title} className="p-5 bg-brand-grey-light rounded-xl">
-                <p className="font-bold text-brand-blue-dark mb-1">{item.title}</p>
-                <p className="text-sm text-brand-grey-dark">{item.body}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-8 p-6 bg-brand-grey-light rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="flex-1">
-              <p className="font-bold text-brand-blue-dark">Download Sponsor Prospectus</p>
-              <p className="text-sm text-brand-grey-dark mt-1">Full sponsorship packages, reach statistics, and impact data.</p>
+      {/* ── Students ──────────────────────────────────────────────────── */}
+      <section id="students" className="section-padding bg-white scroll-mt-28">
+        <div className="container-max grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-14 items-start">
+          <div>
+            <SectionHead Icon={Launch} tileBg="bg-primary" eyebrowColor="text-primary" eyebrow="Students" />
+            <h2 className="text-3xl font-bold text-ink mt-5 leading-tight">
+              The best of high-school STEM — and a head start on what comes next.
+            </h2>
+            <div className="mt-5 space-y-4 text-base text-content-body leading-relaxed">
+              <p>
+                Stellr brings the most ambitious high-school STEM students together for cross-disciplinary
+                challenges judged the way real projects are judged — by working professionals, in the room
+                with your team.
+              </p>
+              <p>
+                Take part once and you are part of the community for good: alumni membership keeps you
+                connected through college and into industry, with the mentors, events and opportunities that
+                turn an interest in STEM into a career.
+              </p>
             </div>
-            <Link href="/contact?type=sponsorship" className="btn-primary shrink-0">
-              Request Prospectus
-            </Link>
+            <div className="flex flex-wrap gap-3 mt-7">
+              <Button href={`${AUTH_URL}/sign-up`} variant="primary">
+                Create your free account
+              </Button>
+              <Button href={`${WWW}/students`} variant="secondary">
+                For students
+              </Button>
+            </div>
           </div>
-          <TestimonialBlock testimonials={(donors ?? []) as Testimonial[]} />
-          <div className="mt-8">
-            <Link href="/donate" className="btn-primary inline-flex items-center gap-2">
-              Make a Donation <ArrowRight size={16} />
-            </Link>
+
+          {/* Stat cards */}
+          <div className="flex flex-col gap-4">
+            {[
+              {
+                stat: 'Top 1%',
+                statClass: 'text-primary',
+                body: 'of high-school STEM achievers are part of the Stellr community.',
+              },
+              {
+                stat: 'Cross-disciplinary',
+                statClass: 'text-ink',
+                body: 'Engineering, science, business and communication — in one challenge.',
+              },
+              {
+                stat: 'Real mentors',
+                statClass: 'text-ink',
+                body: 'Industry professionals in the room with your team at every event.',
+              },
+            ].map((c) => (
+              <div
+                key={c.stat}
+                className="bg-white border border-line rounded-ds-card px-6 py-[22px] shadow-card-lift"
+              >
+                <p className={`text-2xl font-bold ${c.statClass}`}>{c.stat}</p>
+                <p className="mt-1.5 text-[15px] text-content-secondary leading-relaxed">{c.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Teachers ──────────────────────────────────────────────────── */}
+      <section id="teachers" className="section-padding bg-surface border-t border-line-light scroll-mt-28">
+        <div className="container-max grid grid-cols-1 lg:grid-cols-[0.95fr_1.05fr] gap-14 items-start">
+          <div>
+            <SectionHead
+              Icon={Certificate}
+              tileBg="bg-enviro-green"
+              eyebrowColor="text-enviro-green-text"
+              eyebrow="Teachers"
+            />
+            <h2 className="text-3xl font-bold text-ink mt-5 leading-tight">
+              Bring real-world STEM into your classroom — with support at every step.
+            </h2>
+            <p className="mt-5 text-base text-content-body leading-relaxed">
+              Stellr gives you open-ended, industry-grade challenges your students can take on at any ability
+              level, plus the lessons, mentoring and CPD to deliver them with confidence.
+            </p>
+
+            {/* AI callout */}
+            <div className="mt-6 bg-space-violet-bg border-l-[3px] border-space-violet rounded-r-xl px-6 py-5">
+              <p className="text-[15px] text-content-body leading-relaxed">
+                <span className="font-semibold text-ink">A note on AI.</span> We give educators the tools,
+                lessons and support to use AI themselves — and to safely encourage their students to do so.
+              </p>
+              <a
+                href={`${WWW}/impact`}
+                className="inline-flex items-center gap-1 mt-2.5 text-sm font-semibold text-space-violet-text"
+              >
+                Read our approach <ArrowRight size={14} />
+              </a>
+            </div>
+
+            <div className="flex flex-wrap gap-3 mt-7">
+              <Button href={`${WWW}/events`} variant="primary">
+                Register your students
+              </Button>
+              <Button href={`${WWW}/educators`} variant="secondary">
+                For educators &amp; schools
+              </Button>
+            </div>
+          </div>
+
+          {/* Checklist card */}
+          <div className="bg-white border border-line rounded-ds-card p-1.5 shadow-card-lift">
+            {[
+              'Complex, open-ended challenges suited to students of every ability level.',
+              'An industry-simulation context that brings classroom learning to life.',
+              'A competitive setting that builds large-group communication and leadership.',
+              'CPD for you — attend as an educator and observe professional mentoring in action.',
+            ].map((item, i, arr) => (
+              <div
+                key={item}
+                className={`flex gap-3.5 px-6 py-5 ${i < arr.length - 1 ? 'border-b border-line-light' : ''}`}
+              >
+                <span className="shrink-0 w-6 h-6 rounded-full bg-enviro-green-bg flex items-center justify-center mt-0.5">
+                  <Check size={14} strokeWidth={2.6} className="text-enviro-green" />
+                </span>
+                <p className="text-[15px] text-content-body leading-relaxed">{item}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Parents ───────────────────────────────────────────────────── */}
+      <section id="parents" className="section-padding bg-white scroll-mt-28">
+        <div className="container-max">
+          <div className="max-w-[680px]">
+            <SectionHead
+              Icon={Team}
+              tileBg="bg-space-violet"
+              eyebrowColor="text-space-violet-text"
+              eyebrow="Parents"
+            />
+            <h2 className="text-3xl font-bold text-ink mt-5 leading-tight">
+              A safe, structured place for your child to do their most exciting work.
+            </h2>
+            <p className="mt-5 text-base text-content-body leading-relaxed">
+              Stellr events are mentored, supervised and built around teamwork — a setting where students
+              stretch themselves, meet like-minded peers from across the country, and discover what a STEM
+              career can really look like.
+            </p>
+
+            {/* Testimonial */}
+            <blockquote className="mt-7 bg-space-violet-bg border-l-[3px] border-space-violet rounded-r-xl px-7 py-6">
+              <p className="font-display text-xl font-medium text-ink leading-snug">
+                &ldquo;My son said it was one of the most exciting, exhilarating, challenging and memorable
+                events in his life.&rdquo;
+              </p>
+              <footer className="mt-3 text-[13.5px] text-[#6B6790]">— Parent, 2022</footer>
+            </blockquote>
+          </div>
+
+          {/* Feature cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8 max-w-[680px]">
+            {[
+              {
+                title: 'Safe & structured',
+                body: 'Supervised, mentored events with clear safeguarding and a supportive team setting.',
+              },
+              {
+                title: 'Peer networking',
+                body: 'Your child meets ambitious, like-minded students from across the country.',
+              },
+              {
+                title: 'Mentored environment',
+                body: 'Industry professionals guide each team, modelling how real STEM work gets done.',
+              },
+            ].map((c) => (
+              <div key={c.title} className="bg-white border border-line rounded-ds-card p-5">
+                <h3 className="font-display text-[17px] font-bold text-ink">{c.title}</h3>
+                <p className="mt-2 text-[14.5px] text-content-secondary leading-relaxed">{c.body}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-7">
+            <Button href={`${WWW}/events`} variant="primary">
+              Find an event near you
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Mentors ───────────────────────────────────────────────────── */}
+      <section id="mentors" className="section-padding bg-surface border-t border-line-light scroll-mt-28">
+        <div className="container-max grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-14 items-center">
+          <div>
+            <SectionHead
+              Icon={Award}
+              tileBg="bg-avatar-teal"
+              eyebrowColor="text-[#0E8A95]"
+              eyebrow="Mentors"
+            />
+            <h2 className="text-3xl font-bold text-ink mt-5 leading-tight">
+              Spend a day with the next generation of STEM talent.
+            </h2>
+            <p className="mt-5 text-base text-content-body leading-relaxed">
+              As a Stellr mentor you sit alongside student teams as they tackle real challenges — sharing how
+              the profession actually works, and helping shape the engineers, scientists and leaders who
+              follow you.
+            </p>
+            <div className="flex flex-wrap gap-3 mt-7">
+              <Button href={`${WWW}/contact?type=mentor`} variant="primary">
+                Volunteer as a mentor
+              </Button>
+              <Button href={`${WWW}/mentors`} variant="secondary">
+                For volunteers &amp; mentors
+              </Button>
+            </div>
+          </div>
+
+          {/* Dark callout card */}
+          <div className="relative overflow-hidden bg-midnight rounded-panel p-[30px] text-white">
+            <p className="text-[11px] font-display font-bold uppercase tracking-[0.13em] text-[#5BD6E2]">
+              Alumni upgrade
+            </p>
+            <h3 className="font-display text-[21px] font-bold mt-2 leading-tight">
+              From student to mentor, automatically.
+            </h3>
+            <p className="mt-3 text-[15px] text-hero-lead leading-relaxed">
+              Former student participants receive Alumni membership on graduating — staying connected to the
+              Stellr community as they enter industry, and stepping back in to mentor the teams that follow
+              them.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Donors ────────────────────────────────────────────────────── */}
+      <section id="donors" className="section-padding bg-white scroll-mt-28">
+        <div className="container-max">
+          <div className="max-w-[680px]">
+            <SectionHead
+              Icon={Global}
+              tileBg="bg-donate-gold"
+              eyebrowColor="text-[#B5791E]"
+              eyebrow="Donors"
+            />
+            <h2 className="text-3xl font-bold text-ink mt-5 leading-tight">
+              Fund the access that makes talent, not circumstance, the deciding factor.
+            </h2>
+            <p className="mt-5 text-base text-content-body leading-relaxed">
+              Stellr is a registered 501(c)(3). Donations and sponsorships fund the scholarships, resources
+              and access that let talented students take part regardless of circumstance — as we work to
+              positively impact 100,000 students over the next decade.
+            </p>
+          </div>
+
+          {/* Gold cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
+            {[
+              {
+                title: 'Event sponsorship',
+                body: 'Associate your brand with high-achieving STEM students and industry professionals.',
+              },
+              {
+                title: 'Scholarship funding',
+                body: 'Ensure talented students can participate regardless of financial circumstances.',
+              },
+              {
+                title: 'Resource grants',
+                body: 'Fund the materials and technology that make our challenges possible.',
+              },
+              {
+                title: 'Legacy giving',
+                body: 'Make a lasting contribution to STEM education across the US and beyond.',
+              },
+            ].map((c) => (
+              <div
+                key={c.title}
+                className="bg-[#FBF4E7] border border-[#F0E3C4] rounded-ds-card p-[22px]"
+              >
+                <h3 className="font-display text-base font-bold text-ink">{c.title}</h3>
+                <p className="mt-2 text-sm text-[#6A5A38] leading-relaxed">{c.body}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 mt-8">
+            <Button href={`${WWW}/contact?type=sponsorship`} variant="primary">
+              Request prospectus
+            </Button>
+            <a
+              href={`${WWW}/donate`}
+              className="inline-flex items-center justify-center gap-2 rounded-control px-6 py-3 font-subheading font-semibold text-sm text-white bg-donate-gold hover:bg-[#C9892C] transition-colors"
+            >
+              Make a donation
+            </a>
+            <p className="text-[13.5px] text-content-faint">
+              Full packages, reach statistics and impact data included.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Closing CTA ───────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden bg-midnight text-white text-center py-20 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(120%_140%_at_15%_-20%,#28306B_0%,#141A3D_50%,#0E1330_100%)]">
+        <div className="container-max max-w-xl">
+          <h2 className="text-3xl font-bold leading-tight">Find your place at Stellr.</h2>
+          <p className="mt-4 text-[17px] text-hero-lead leading-relaxed">
+            Wherever you start — student, educator, parent, mentor or supporter — there is a way to be part
+            of the community.
+          </p>
+          <div className="flex flex-wrap justify-center gap-3 mt-8">
+            <Button href={`${AUTH_URL}/sign-up`} variant="primary">
+              Join free
+            </Button>
+            <Button href={`${WWW}/membership`} variant="outlineWhite">
+              Explore membership
+            </Button>
           </div>
         </div>
       </section>

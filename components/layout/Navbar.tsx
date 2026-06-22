@@ -22,6 +22,7 @@ const navLinks = [
       { label: 'Competitions', href: '/competitions' },
       { label: 'Activities', href: '/activities' },
       { label: 'Events', href: '/events' },
+      { label: 'Scholarships', href: '/scholarship' },
       { label: 'Host An Event', href: '/host-an-event' },
     ],
   },
@@ -57,6 +58,7 @@ const navLinks = [
     label: 'About',
     href: '/about',
     dropdown: [
+      { label: 'Why Stellr', href: '/why-stellr' },
       { label: 'Impact', href: '/impact' },
       { label: 'Mission', href: '/about#mission' },
       { label: 'Our Team', href: '/about#team' },

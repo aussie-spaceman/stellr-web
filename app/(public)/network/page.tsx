@@ -1,319 +1,322 @@
 import type { Metadata } from 'next'
-import {
-  Factory,
-  GraduationCap,
-  Building2,
-  Megaphone,
-  Lightbulb,
-  TrendingUp,
-  School,
-  Handshake,
-  Users,
-  Globe,
-  ArrowRight,
-} from 'lucide-react'
+import Link from 'next/link'
+import { ArrowRight, Check } from 'lucide-react'
+import { Event, Certificate, Team } from '@stellr/icons'
+import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 import { JoinNetworkForm } from '@/components/forms/JoinNetworkForm'
 
 export const metadata: Metadata = {
   title: 'Network',
   description:
-    'The Stellr Network is the largest STEM community of practice globally — connecting industry, universities, and corporate partners. Join us and help move the STEM flywheel.',
+    'The Stellr Network is the providers, universities, and employers who make premier STEM education happen — and who grow alongside it. Join industry, university, and corporate partners.',
 }
 
-/* ── Anchor sections — Industry / University / Corporate ────────────── */
-const partnerTypes = [
+/* ── Three ways to partner — pathway cards ─────────────────────────── */
+const pathways = [
   {
     id: 'industry',
-    icon: Factory,
-    label: 'Industry Partners',
+    Icon: Event,
+    tileBg: 'bg-pathway-amber-bg',
+    iconColor: 'text-pathway-amber',
+    accentText: 'text-brand-gold-ink',
+    hoverBorder: 'hover:border-pathway-amber',
+    eyebrow: 'Industry Partners',
+    name: 'STEM Education Providers',
+    description: 'You run events, build curriculum, or train educators — pre-K through college.',
+  },
+  {
+    id: 'university',
+    Icon: Certificate,
+    tileBg: 'bg-enviro-green-bg',
+    iconColor: 'text-enviro-green',
+    accentText: 'text-enviro-green-text',
+    hoverBorder: 'hover:border-enviro-green',
+    eyebrow: 'University Partners',
+    name: 'Colleges & universities',
+    description:
+      'You want to reach STEM-minded high school students and get them achieving at your institution.',
+  },
+  {
+    id: 'corporate',
+    Icon: Team,
+    tileBg: 'bg-space-violet-bg',
+    iconColor: 'text-space-violet',
+    accentText: 'text-space-violet-text',
+    hoverBorder: 'hover:border-space-violet',
+    eyebrow: 'Corporate Partners',
+    name: 'Employers & professional bodies',
+    description:
+      'You need STEM talent, and likely want to give back — regardless of whether you are a solo consultancy or a multinational.',
+  },
+]
+
+/* ── Detail sections — Industry / University / Corporate ────────────── */
+type Detail = {
+  id: string
+  tinted: boolean
+  eyebrow: string
+  eyebrowColor: string
+  checkColor: string
+  headline: string
+  who: React.ReactNode[]
+  whyLabel: string
+  benefits: { title: string; description: string }[]
+}
+
+const details: Detail[] = [
+  {
+    id: 'industry',
+    tinted: true,
+    eyebrow: 'Industry Partners',
+    eyebrowColor: 'text-brand-gold-ink',
+    checkColor: 'text-pathway-amber',
     headline: 'For STEM education & service providers',
     who: [
-      'If you’re doing amazing things with STEM education, we want to hear from you.',
-      'You could be running events, offering curriculum packages, or training educators — at any level, pre-K through college.',
-      'You can be a for-profit, a B-Corp, or a non-profit, based anywhere on the planet (just be aware we operate in English).',
-      'We have some requirements — to protect our students and stay aligned with our vision and mission — but they’re minimal.',
+      "If you're doing great things with STEM education, we want to hear from you — whether you run events, sell curriculum packages, or train educators, at any level from pre-K to college.",
+      'For-profit, B-Corp, or non-profit; based anywhere on the planet (note we operate in English). We ask for a few things to keep students safe and stay true to our mission — but our bar is set to inclusive.',
     ],
+    whyLabel: 'Why join',
     benefits: [
       {
-        icon: Globe,
-        title: 'A Truly Global Network',
+        title: 'A truly global audience',
         description:
-          'Increase the opportunities for students joining your events to be part of a global network — they get more value, which adds value to your offering.',
+          'Students at your events automatically join a worldwide community, so your programs are now even more valuable.',
       },
       {
-        icon: Megaphone,
-        title: 'A Larger Voice',
+        title: 'Be recognized as a premier STEM provider',
         description:
-          'We make a concerted effort to promote all our partners on all our platforms. There’s strength in numbers.',
+          'Membership signals quality to the families and educators who choose you, and we promote every partner across all our channels.',
       },
       {
-        icon: Lightbulb,
-        title: 'Idea Cross-Pollination',
+        title: 'Ideas worth sharing',
         description:
-          'Share ideas in a safe, collaborative environment. Imagine what you could learn from your peers by interacting with them regularly.',
+          'Swap what works with peers who do what you do, in a safe, collaborative space purpose-built for it.',
       },
     ],
   },
   {
     id: 'university',
-    icon: GraduationCap,
-    label: 'University Partners',
+    tinted: false,
+    eyebrow: 'University Partners',
+    eyebrowColor: 'text-enviro-green-text',
+    checkColor: 'text-enviro-green',
     headline: 'For colleges & universities',
     who: [
-      'We’ve partnered with universities and colleges across the globe to further our cradle-to-grave STEM community of practice.',
-      'College is a key component of our members’ career trajectory, and we want to provide as much visibility over options at this stage as possible.',
-      'Stellr has always focused on regional and rural areas — what we colloquially call “STEM underserved communities.” If you operate in a regional area (land-grant colleges in the USA are a great example), please reach out!',
+      'College is a pivotal step in a student’s career. We partner with universities and colleges worldwide so our members can see their options clearly — and choose the right next move. We can help you grow your high school recruitment pipeline, showcase your engineering programs, and connect future students with your existing engineering students.',
+      <>
+        If you are in a regional or rural area — what we colloquially refer to as{' '}
+        <em>&lsquo;STEM-underserved communities&rsquo;</em> — we want to hear from you.
+      </>,
     ],
+    whyLabel: 'Why partner',
     benefits: [
       {
-        icon: School,
-        title: 'Reach Local High Schoolers',
+        title: 'Reach local high-schoolers',
         description:
-          'Highlight your STEM capabilities to the local high school community and the students considering their next step.',
+          "Show nearby students what you offer, right as they're weighing up their next step.",
       },
       {
-        icon: Users,
-        title: 'Grow Future Mentors',
+        title: 'Grow future mentors',
         description:
-          'Offer Stellr upskill material to your students — they join as mentors and develop future-ready skills.',
+          'Offer Stellr training to your existing students — they join as mentors and build future-ready skills.',
       },
       {
-        icon: Handshake,
-        title: 'Strengthen Regional Ties',
-        description:
-          'Build better relationships with professionals and private organizations across your region.',
+        title: 'Stronger regional ties',
+        description: 'Build lasting links with employers and organizations across your region.',
       },
     ],
   },
   {
     id: 'corporate',
-    icon: Building2,
-    label: 'Corporate Partners',
-    headline: 'For professional organizations',
+    tinted: true,
+    eyebrow: 'Corporate Partners',
+    eyebrowColor: 'text-space-violet-text',
+    checkColor: 'text-space-violet',
+    headline: 'For professional organisations',
     who: [
-      'As a cradle-to-grave STEM community of practice, the Stellr Network relies on professional members to keep shaping the career trajectories of our members.',
-      'We work with organizations of all shapes and sizes — from independent contractors to multinational corporations.',
-      'In an ever-changing professional environment, we recognize that better collaboration across our entire ecosystem produces better outcomes — for our members and our partners.',
+      'Stellr exists to promote STEM careers, and get future STEM professionals career ready. Our Professional members are critical to supporting our student members. We work with organizations of every size, from independent contractors to multinationals.',
+      'In a fast-changing professional world, better collaboration across the whole ecosystem produces better outcomes — for our members and for you.',
     ],
+    whyLabel: 'Why partner',
     benefits: [
       {
-        icon: TrendingUp,
-        title: 'Recruit From the Top',
+        title: 'Recruit early',
         description:
-          'Many corporate partners recruit directly from the Stellr membership. Your next intern, grad, or CEO is waiting.',
+          'Many partners identify future talent straight from the Stellr Community. Your next intern, graduate, or future engineering lead is waiting.',
       },
       {
-        icon: Handshake,
-        title: 'Relationships at Every Level',
-        description:
-          'Build connections across high schools, colleges, industry partners, and other professional organizations.',
+        title: 'Connect at every level',
+        description: 'Build relationships across high schools, colleges, providers, and fellow employers.',
       },
       {
-        icon: Megaphone,
-        title: 'Flexible Sponsorship',
-        description:
-          'A number of in-kind and paid sponsorship opportunities are available — start with what works for you.',
+        title: 'Sponsor your way',
+        description: 'In-kind and paid options that start wherever makes sense for you.',
       },
     ],
   },
+]
+
+const partnerLogos = ['South Dakota State University', 'UNLV', "Janet's Planet"]
+
+const joinBullets = [
+  'Expect a more formal review — built to protect students and ensure mission alignment.',
+  'Open to for-profits, B-Corps, and non-profits, anywhere in the world.',
+  "Promotion across every Stellr platform once you're aboard.",
 ]
 
 export default function NetworkPage() {
   return (
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <p className="text-brand-orange font-semibold uppercase tracking-widest text-sm mb-4">
-            Network
-          </p>
-          <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">
-            The largest STEM community of practice, globally
-          </h1>
-          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
-            The Stellr Network is a premier community — representing the best of STEM education and
-            service providers. Our strength lies in the breadth and variety of our network. Join us
-            today and start helping move the STEM flywheel.
-          </p>
-          <div className="mt-8">
-            <a href="#join" className="btn-primary bg-brand-orange hover:bg-amber-500">
-              Join The Network
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* ── In-page anchor nav ────────────────────────────────────────── */}
-      <nav
-        aria-label="Network sections"
-        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-line-light"
+      <Hero
+        breadcrumb="The Stellr Network"
+        title="Great STEM education takes more than a classroom."
+        lead="Stellr gives high-school and college students premier events, hands-on mentoring, and real career pathways. The Network is the providers, universities, and employers who make that happen — and who grow alongside it."
       >
-        <div className="container-max flex gap-2 sm:gap-6 px-4 sm:px-6 lg:px-8 overflow-x-auto">
-          {partnerTypes.map((p) => (
-            <a
-              key={p.id}
-              href={`#${p.id}`}
-              className="whitespace-nowrap py-4 text-sm font-semibold text-brand-grey-dark hover:text-brand-blue transition-colors"
-            >
-              {p.label}
-            </a>
-          ))}
-          <a
-            href="#join"
-            className="whitespace-nowrap py-4 text-sm font-semibold text-brand-blue hover:text-brand-blue-dark transition-colors"
-          >
-            Join
-          </a>
+        <div className="flex flex-wrap gap-3.5 mt-8">
+          <Button href="#join" variant="primary">
+            Join the Network
+          </Button>
+          <Button href="#three" variant="outlineWhite">
+            See how partnering works <ArrowRight size={16} />
+          </Button>
         </div>
-      </nav>
+        <div className="flex flex-wrap gap-x-7 gap-y-2.5 mt-11 text-sm text-hero-lead/80">
+          {['Education Service Providers', 'Universities & Colleges', 'Employers & Professional Bodies'].map(
+            (chip) => (
+              <span key={chip} className="inline-flex items-center gap-1.5">
+                <span className="text-star-gold">✦</span> {chip}
+              </span>
+            ),
+          )}
+        </div>
+      </Hero>
 
-      {/* ── Intro: three partner types ────────────────────────────────── */}
-      <section className="section-padding bg-white">
+      {/* ── Three ways to partner ─────────────────────────────────────── */}
+      <section id="three" className="section-padding bg-white scroll-mt-24">
         <div className="container-max">
-          <div className="text-center max-w-2xl mx-auto mb-12">
-            <h2 className="text-3xl font-bold text-brand-blue-dark mb-4">
-              One network, three ways to belong
+          <div className="max-w-2xl">
+            <Eyebrow>Better together</Eyebrow>
+            <h2 className="text-3xl font-bold text-ink mt-3 leading-tight">
+              One network, three ways to partner
             </h2>
-            <p className="text-brand-grey-dark leading-relaxed">
-              Wherever you sit in the STEM ecosystem, there&rsquo;s a place for you in the Stellr
-              Network.
+            <p className="text-lg text-content-secondary mt-4 leading-relaxed">
+              Wherever you sit in the STEM world — running programs, teaching, or hiring — there&rsquo;s a
+              clear reason for you to join our Network.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {partnerTypes.map((p) => {
-              const Icon = p.icon
-              return (
-                <a
-                  key={p.id}
-                  href={`#${p.id}`}
-                  className="bg-brand-grey-light rounded-xl p-8 flex flex-col gap-4 hover:shadow-md transition-shadow group"
-                >
-                  <div className="w-12 h-12 rounded-lg bg-brand-blue/10 flex items-center justify-center">
-                    <Icon size={24} className="text-brand-blue" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-brand-blue-dark group-hover:text-brand-blue transition-colors">
-                      {p.label}
-                    </h3>
-                    <p className="text-sm text-brand-grey-dark mt-2 leading-relaxed">{p.headline}</p>
-                  </div>
-                  <span className="text-brand-blue text-sm font-semibold flex items-center gap-1 mt-auto">
-                    Learn more <ArrowRight size={14} />
-                  </span>
-                </a>
-              )
-            })}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
+            {pathways.map(({ id, Icon, tileBg, iconColor, accentText, hoverBorder, eyebrow, name, description }) => (
+              <a
+                key={id}
+                href={`#${id}`}
+                className={`group flex flex-col gap-3.5 bg-white border border-line rounded-ds-card p-7 shadow-card-lift transition-all hover:-translate-y-0.5 ${hoverBorder}`}
+              >
+                <span className={`w-12 h-12 rounded-xl flex items-center justify-center ${tileBg} ${iconColor}`}>
+                  <Icon size={24} />
+                </span>
+                <p className={`text-xs font-subheading font-semibold uppercase tracking-[0.1em] ${accentText}`}>
+                  {eyebrow}
+                </p>
+                <h3 className="text-lg font-bold text-ink">{name}</h3>
+                <p className="text-sm text-content-secondary leading-relaxed">{description}</p>
+                <span className="mt-auto inline-flex items-center gap-1 text-sm font-semibold text-primary">
+                  Learn more <ArrowRight size={14} />
+                </span>
+              </a>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ── Partner-type detail sections ──────────────────────────────── */}
-      {partnerTypes.map((p, idx) => {
-        const Icon = p.icon
-        const tinted = idx % 2 === 1
-        return (
-          <section
-            key={p.id}
-            id={p.id}
-            className={`section-padding scroll-mt-36 ${tinted ? 'bg-brand-grey-light' : 'bg-white'}`}
-          >
-            <div className="container-max">
-              {/* Who */}
-              <div className="max-w-3xl">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-11 h-11 rounded-lg bg-brand-blue/10 flex items-center justify-center">
-                    <Icon size={22} className="text-brand-blue" />
-                  </div>
-                  <p className="text-sm font-bold uppercase tracking-widest text-brand-blue">
-                    {p.label}
-                  </p>
-                </div>
-                <h2 className="text-3xl font-bold text-brand-blue-dark mb-6">{p.headline}</h2>
-                <div className="space-y-4 text-brand-grey-dark leading-relaxed">
-                  {p.who.map((para, i) => (
-                    <p key={i}>{para}</p>
-                  ))}
-                </div>
-              </div>
-
-              {/* Benefits */}
-              <div className="mt-10">
-                <p className="text-sm font-bold uppercase tracking-wide text-brand-orange-alt mb-4">
-                  Why join
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {p.benefits.map((b) => {
-                    const BIcon = b.icon
-                    return (
-                      <div
-                        key={b.title}
-                        className={`rounded-xl p-6 shadow-sm ${tinted ? 'bg-white' : 'bg-brand-grey-light'}`}
-                      >
-                        <div className="w-11 h-11 rounded-lg bg-brand-blue/10 flex items-center justify-center mb-4">
-                          <BIcon size={22} className="text-brand-blue" />
-                        </div>
-                        <h3 className="font-bold text-brand-blue-dark mb-2">{b.title}</h3>
-                        <p className="text-sm text-brand-grey-dark leading-relaxed">
-                          {b.description}
-                        </p>
-                      </div>
-                    )
-                  })}
-                </div>
+      {/* ── Detail sections ───────────────────────────────────────────── */}
+      {details.map((d) => (
+        <section
+          key={d.id}
+          id={d.id}
+          className={`section-padding scroll-mt-24 ${d.tinted ? 'bg-surface border-t border-line-light' : 'bg-white'}`}
+        >
+          <div className="container-max grid grid-cols-1 lg:grid-cols-2 gap-14 items-start">
+            {/* Left — who it's for */}
+            <div>
+              <Eyebrow className={d.eyebrowColor}>{d.eyebrow}</Eyebrow>
+              <h2 className="text-3xl font-bold text-ink mt-3 leading-tight">{d.headline}</h2>
+              <div className="mt-5 space-y-4 text-base text-content-body leading-relaxed">
+                {d.who.map((para, i) => (
+                  <p key={i}>{para}</p>
+                ))}
               </div>
             </div>
-          </section>
-        )
-      })}
 
-      {/* ── Partner logos placeholder ─────────────────────────────────── */}
-      <section className="section-padding bg-white">
-        <div className="container-max text-center">
-          <p className="text-sm font-bold uppercase tracking-widest text-brand-grey mb-8">
-            Some of the organizations in our network
-          </p>
-          <div className="flex flex-wrap justify-center items-center gap-10 opacity-60">
-            {/* Placeholder logos — replace with real partner logos */}
-            {['Partner 1', 'Partner 2', 'Partner 3', 'Partner 4', 'Partner 5'].map((p) => (
+            {/* Right — why join */}
+            <div>
+              <p className="text-xs font-subheading font-semibold uppercase tracking-[0.12em] text-content-faint">
+                {d.whyLabel}
+              </p>
+              <div className="mt-1">
+                {d.benefits.map((b) => (
+                  <div key={b.title} className="flex gap-3.5 border-t border-line py-5">
+                    <Check size={20} strokeWidth={2.2} className={`shrink-0 mt-0.5 ${d.checkColor}`} />
+                    <div>
+                      <p className="font-subheading font-semibold text-ink text-[17px]">{b.title}</p>
+                      <p className="text-content-secondary mt-1 leading-relaxed">{b.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      ))}
+
+      {/* ── Partner logo wall ─────────────────────────────────────────── */}
+      <section className="section-padding bg-white border-t border-line-light">
+        <div className="container-max max-w-4xl text-center">
+          <Eyebrow>In good company</Eyebrow>
+          <h2 className="text-2xl font-bold text-ink mt-3">Some of the organisations in our network</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-[18px] mt-9">
+            {partnerLogos.map((name) => (
               <div
-                key={p}
-                className="w-32 h-12 bg-brand-grey-light border border-dashed border-line rounded flex items-center justify-center text-xs text-brand-grey"
+                key={name}
+                className="h-24 rounded-xl border border-line bg-surface flex items-center justify-center px-4 text-center font-subheading font-semibold text-[15px] text-content-body"
               >
-                {p}
+                {name}
               </div>
             ))}
           </div>
-          <p className="mt-6 text-sm text-brand-grey italic">Partner logos to be added.</p>
+          <p className="mt-6 text-[13.5px] text-content-faint">
+            Partner logo artwork to be added — names shown as placeholders.
+          </p>
         </div>
       </section>
 
-      {/* ── #join — Join The Stellr Network form ──────────────────────── */}
-      <section id="join" className="section-padding bg-brand-grey-light scroll-mt-36">
-        <div className="container-max grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
-          <div className="lg:sticky lg:top-36">
-            <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">
-              Get Involved
+      {/* ── Join form ─────────────────────────────────────────────────── */}
+      <section
+        id="join"
+        className="relative overflow-hidden bg-midnight text-white py-20 px-4 sm:px-6 lg:px-8 scroll-mt-24 bg-[radial-gradient(120%_130%_at_15%_0%,#1B2550_0%,#0E1330_55%,#09102C_100%)]"
+      >
+        <div className="container-max grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-14 items-start">
+          {/* Left — pitch */}
+          <div>
+            <Eyebrow className="text-hero-dim">Get involved</Eyebrow>
+            <h2 className="text-3xl font-bold mt-3 leading-tight">Join the Stellr Network</h2>
+            <p className="text-hero-lead mt-4 leading-relaxed">
+              Tell us a little about you and your organization. We&rsquo;ll review your details and get in
+              touch to find the right way for you to join.
             </p>
-            <h2 className="text-3xl font-bold text-brand-blue-dark mb-4">Join The Stellr Network</h2>
-            <p className="text-brand-grey-dark leading-relaxed mb-6">
-              Tell us a little about yourself and your organization. We&rsquo;ll review your details
-              and get in touch to find the right way for you to join our global STEM community of
-              practice.
-            </p>
-            <ul className="space-y-3 text-sm text-brand-grey-dark">
-              {[
-                'Minimal requirements — built to protect students and align on mission',
-                'Open to for-profits, B-Corps, and non-profits, anywhere in the world',
-                'Promotion across all Stellr platforms once you’re aboard',
-              ].map((point) => (
-                <li key={point} className="flex gap-3">
-                  <Handshake size={18} className="text-brand-blue shrink-0 mt-0.5" />
+            <ul className="mt-7 space-y-4">
+              {joinBullets.map((point) => (
+                <li key={point} className="flex gap-3 text-[15px] text-hero-lead">
+                  <Check size={18} strokeWidth={2.4} className="shrink-0 mt-0.5 text-[#5CE0B0]" />
                   <span className="leading-relaxed">{point}</span>
                 </li>
               ))}
             </ul>
           </div>
-          <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-sm">
+
+          {/* Right — form card */}
+          <div className="bg-white rounded-panel p-6 sm:p-8 shadow-float">
             <JoinNetworkForm />
           </div>
         </div>

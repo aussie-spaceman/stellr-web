@@ -6,10 +6,10 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import FieldError from '@/components/forms/FieldError'
 
-const REASONS = [
-  'Network — looking to work with (other!) amazing people',
-  'Adding Value — to my students and/or activities',
-  'Just Want To Learn More',
+const PARTNER_TYPES = [
+  'Fellow Education Provider [Industry]',
+  'Interested College [University]',
+  'Want To Support [Corporate]',
 ] as const
 
 const schema = z.object({
@@ -20,7 +20,7 @@ const schema = z.object({
   companyName: z.string().min(1, 'Company name is required'),
   address: z.string().optional(),
   whatYouDo: z.string().min(1, 'Please tell us a little about what you do'),
-  reason: z.enum(REASONS, { errorMap: () => ({ message: 'Please choose an option' }) }),
+  reason: z.enum(PARTNER_TYPES, { errorMap: () => ({ message: 'Please choose an option' }) }),
   consent: z.literal(true, {
     errorMap: () => ({ message: 'You must agree to be contacted' }),
   }),
@@ -29,9 +29,13 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 const inputClass = (error: boolean) =>
-  `w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue ${
+  `w-full px-4 py-3 rounded-control border text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary ${
     error ? 'border-red-400' : 'border-line'
   }`
+
+const legendClass =
+  'text-xs font-subheading font-semibold text-content-body uppercase tracking-[0.12em] pb-2 border-b border-line-light w-full'
+const labelClass = 'block text-[13px] font-semibold text-content-body mb-1'
 
 export function JoinNetworkForm() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -72,12 +76,10 @@ export function JoinNetworkForm() {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
       {/* Personal */}
       <fieldset className="space-y-4">
-        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-line-light w-full">
-          Your Details
-        </legend>
+        <legend className={legendClass}>Your Details</legend>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="firstName" className="block text-sm font-medium text-brand-blue-dark mb-1">
+            <label htmlFor="firstName" className={labelClass}>
               First Name <span className="text-red-500">*</span>
             </label>
             <input
@@ -91,7 +93,7 @@ export function JoinNetworkForm() {
             <FieldError message={errors.firstName?.message} />
           </div>
           <div>
-            <label htmlFor="lastName" className="block text-sm font-medium text-brand-blue-dark mb-1">
+            <label htmlFor="lastName" className={labelClass}>
               Last Name <span className="text-red-500">*</span>
             </label>
             <input
@@ -107,7 +109,7 @@ export function JoinNetworkForm() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-brand-blue-dark mb-1">
+            <label htmlFor="email" className={labelClass}>
               Email <span className="text-red-500">*</span>
             </label>
             <input
@@ -121,7 +123,7 @@ export function JoinNetworkForm() {
             <FieldError message={errors.email?.message} />
           </div>
           <div>
-            <label htmlFor="phone" className="block text-sm font-medium text-brand-blue-dark mb-1">
+            <label htmlFor="phone" className={labelClass}>
               Phone Number <span className="text-red-500">*</span>
             </label>
             <input
@@ -139,78 +141,73 @@ export function JoinNetworkForm() {
 
       {/* Business */}
       <fieldset className="space-y-4">
-        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-line-light w-full">
-          Business Details
-        </legend>
-        <div>
-          <label htmlFor="companyName" className="block text-sm font-medium text-brand-blue-dark mb-1">
-            Company Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="companyName"
-            type="text"
-            autoComplete="organization"
-            {...register('companyName')}
-            className={inputClass(!!errors.companyName)}
-            placeholder="Acme STEM Labs"
-          />
-          <FieldError message={errors.companyName?.message} />
-        </div>
-        <div>
-          <label htmlFor="address" className="block text-sm font-medium text-brand-blue-dark mb-1">
-            Address
-          </label>
-          <input
-            id="address"
-            type="text"
-            autoComplete="street-address"
-            {...register('address')}
-            className={inputClass(!!errors.address)}
-            placeholder="City, State, Country"
-          />
-        </div>
-        <div>
-          <label htmlFor="whatYouDo" className="block text-sm font-medium text-brand-blue-dark mb-1">
-            What do you do? <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            id="whatYouDo"
-            rows={4}
-            {...register('whatYouDo')}
-            className={`${inputClass(!!errors.whatYouDo)} resize-none`}
-            placeholder="Tell us about your organization, the STEM work you do, and who you serve."
-          />
-          <FieldError message={errors.whatYouDo?.message} />
+        <legend className={legendClass}>Business Details</legend>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="companyName" className={labelClass}>
+              Company Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="companyName"
+              type="text"
+              autoComplete="organization"
+              {...register('companyName')}
+              className={inputClass(!!errors.companyName)}
+              placeholder="Acme STEM Labs"
+            />
+            <FieldError message={errors.companyName?.message} />
+          </div>
+          <div>
+            <label htmlFor="address" className={labelClass}>
+              Address
+            </label>
+            <input
+              id="address"
+              type="text"
+              autoComplete="street-address"
+              {...register('address')}
+              className={inputClass(!!errors.address)}
+              placeholder="City, State, Country"
+            />
+          </div>
         </div>
       </fieldset>
 
-      {/* Why Stellr */}
-      <fieldset className="space-y-4">
-        <legend className="text-sm font-semibold text-brand-blue-dark uppercase tracking-wide pb-2 border-b border-line-light w-full">
-          Why Stellr?
-        </legend>
-        <div>
-          <label htmlFor="reason" className="block text-sm font-medium text-brand-blue-dark mb-1">
-            What brings you to the network? <span className="text-red-500">*</span>
-          </label>
-          <select
-            id="reason"
-            defaultValue=""
-            {...register('reason')}
-            className={`${inputClass(!!errors.reason)} bg-white`}
-          >
-            <option value="" disabled>
-              Select an option…
+      <div>
+        <label htmlFor="whatYouDo" className={labelClass}>
+          What do you do? <span className="text-red-500">*</span>
+        </label>
+        <input
+          id="whatYouDo"
+          type="text"
+          {...register('whatYouDo')}
+          className={inputClass(!!errors.whatYouDo)}
+          placeholder="A sentence is plenty"
+        />
+        <FieldError message={errors.whatYouDo?.message} />
+      </div>
+
+      <div>
+        <label htmlFor="reason" className={labelClass}>
+          What kind of partner are you? <span className="text-red-500">*</span>
+        </label>
+        <select
+          id="reason"
+          defaultValue=""
+          {...register('reason')}
+          className={`${inputClass(!!errors.reason)} bg-white`}
+        >
+          <option value="" disabled>
+            Select an option…
+          </option>
+          {PARTNER_TYPES.map((r) => (
+            <option key={r} value={r}>
+              {r}
             </option>
-            {REASONS.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-          <FieldError message={errors.reason?.message} />
-        </div>
-      </fieldset>
+          ))}
+        </select>
+        <FieldError message={errors.reason?.message} />
+      </div>
 
       {/* Consent */}
       <div>
@@ -218,11 +215,11 @@ export function JoinNetworkForm() {
           <input
             type="checkbox"
             {...register('consent')}
-            className="mt-0.5 h-4 w-4 rounded border-line text-brand-blue"
+            className="mt-0.5 h-4 w-4 rounded border-line text-primary"
           />
-          <span className="text-sm text-brand-grey-dark">
-            I agree to Stellr Education contacting me in relation to this enquiry. View our{' '}
-            <a href="/privacy" className="text-brand-blue hover:underline">
+          <span className="text-[13.5px] text-content-secondary leading-relaxed">
+            I agree to Stellr Education contacting me about this enquiry, as described in our{' '}
+            <a href="/privacy" className="font-semibold text-primary underline">
               Privacy Policy
             </a>
             .

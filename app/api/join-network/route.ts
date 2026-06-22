@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       ['Company', companyName],
       ['Address', address || '—'],
       ['What they do', whatYouDo],
-      ['Why Stellr?', reason],
+      ['Partner type', reason],
     ]
     const htmlRows = rows
       .map(([label, value]) => `<tr><td style="padding:8px;font-weight:bold;background:#f3f4f6">${label}</td><td style="padding:8px">${value}</td></tr>`)
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       'New Join The Stellr Network submission', '',
       `Name: ${name}`, `Email: ${email}`, `Phone: ${phone}`,
       `Company: ${companyName}`, `Address: ${address || '—'}`,
-      `What they do: ${whatYouDo}`, `Why Stellr?: ${reason}`,
+      `What they do: ${whatYouDo}`, `Partner type: ${reason}`,
     ].join('\n')
 
     await sendEmail({ to: CONTACT_EMAIL, replyTo: email, subject, html, text })

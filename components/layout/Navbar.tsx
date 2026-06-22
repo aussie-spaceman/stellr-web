@@ -69,8 +69,8 @@ const getInvolvedLinks = [
   { label: 'Register For An Event', href: '/events' },
   { label: 'Download Curriculum Material', href: '/activities' },
   { label: 'Join Our Community', href: '/sign-up' },
-  { label: 'Become A Sponsor', href: '/contribute#donate' },
-  { label: 'Volunteer With Us', href: '/contribute' },
+  { label: 'Become A Sponsor', href: 'https://www.stellreducation.org/network#corporate' },
+  { label: 'Volunteer With Us', href: 'https://www.stellreducation.org/mentors' },
   { label: 'Partner With Us', href: '/network' },
 ]
 

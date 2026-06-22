@@ -1,6 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { grantTier, type GrantTierOptions } from '@/lib/membership-grants'
+import { grantTier, fireTierPurchased, type GrantTierOptions } from '@/lib/membership-grants'
 import { actorFromAuth } from '@/lib/activity-log'
 
 // POST /api/admin/members/[id]/memberships — admin assigns a tier to a member.
@@ -59,5 +59,7 @@ export async function POST(
   if (!result.granted) {
     return NextResponse.json({ error: 'Could not assign tier.' }, { status: 400 })
   }
+  // Fan-out grant rules (e.g. educator tier → registered students get Pathfinder).
+  await fireTierPurchased(memberId, tierId)
   return NextResponse.json(result)
 }

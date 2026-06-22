@@ -48,21 +48,6 @@ export interface CommunityMember {
    * role-targeted training assignments (FR-COM-10). Null when unset.
    */
   event_role: string | null
-  /**
-   * The member's highest enrolled Content Tier per competition campaign,
-   * keyed by event_slug (decision D8/Phase 2). Drives campaign-scoped access:
-   * a content-tier entitlement only applies inside a campaign the member is
-   * enrolled in, at or above the required tier.
-   */
-  campaignTiers: Record<string, string>
-}
-
-// Content tiers are ordinal and cumulative: premium ⊇ advanced ⊇ baseline ⊇ core.
-export const CONTENT_TIER_RANK: Record<string, number> = {
-  core: 0,
-  baseline: 1,
-  advanced: 2,
-  premium: 3,
 }
 
 /**
@@ -113,22 +98,6 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
     .map((m) => m.tier_id)
     .filter((id): id is string => !!id)
 
-  // Campaign content-tier enrollments, keyed by event_slug → highest tier held.
-  const { data: parts } = await db
-    .from('event_participations')
-    .select('event_slug, content_tier')
-    .eq('member_id', member.id)
-    .not('content_tier', 'is', null)
-    .not('event_slug', 'is', null)
-
-  const campaignTiers: Record<string, string> = {}
-  for (const p of (parts ?? []) as { event_slug: string; content_tier: string }[]) {
-    const current = campaignTiers[p.event_slug]
-    if (!current || CONTENT_TIER_RANK[p.content_tier] > CONTENT_TIER_RANK[current]) {
-      campaignTiers[p.event_slug] = p.content_tier
-    }
-  }
-
   return {
     id: member.id,
     first_name: member.first_name,
@@ -139,7 +108,6 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
     hasPaidTier,
     activeTierName: primaryTier?.name ?? null,
     activeTierIds,
-    campaignTiers,
   } satisfies CommunityMember
 }
 
@@ -172,29 +140,17 @@ export type AccessLevel = 'view' | 'download' | 'enroll' | 'host'
  *   - null  → NO entitlement rows configured for this target; caller should fall
  *             back to legacy min_tier_rank gating (memberMeetsTier)
  */
-export interface EntitlementOpts {
-  /**
-   * Campaign scope (event_slug) for content-tier entitlements. A content-tier
-   * row only grants access inside a campaign the member is enrolled in. For
-   * `campaign_material` targets the slug is the target_ref itself; for other
-   * targets surfaced inside a campaign (a resource, a training module), the
-   * campaign-aware caller passes it explicitly.
-   */
-  campaignSlug?: string
-}
-
 export async function memberHasEntitlement(
   member: CommunityMember,
   targetType: EntitlementTargetType,
   targetRef: string,
-  accessLevel: AccessLevel = 'view',
-  opts: EntitlementOpts = {}
+  accessLevel: AccessLevel = 'view'
 ): Promise<boolean | null> {
   const db = supabaseServer()
   // Match the specific target OR a category-wide ('*') grant.
   const { data: rows } = await db
     .from('content_entitlements')
-    .select('tier_id, content_tier, access_level, target_ref')
+    .select('tier_id, access_level, target_ref')
     .eq('target_type', targetType)
     .in('target_ref', [targetRef, '*'])
 
@@ -205,17 +161,9 @@ export async function memberHasEntitlement(
   const needed = rank[accessLevel]
   const tierSet = new Set(member.activeTierIds)
 
-  // Content-tier subject: resolve the member's tier within this campaign scope.
-  const campaignSlug =
-    opts.campaignSlug ?? (targetType === 'campaign_material' ? targetRef : undefined)
-  const myTier = campaignSlug ? member.campaignTiers[campaignSlug] : undefined
-  const myContentRank = myTier != null ? CONTENT_TIER_RANK[myTier] : -1
-
   return rows.some((r) => {
     if (rank[r.access_level as AccessLevel] < needed) return false
-    if (r.tier_id) return tierSet.has(r.tier_id) // membership-tier row
-    if (r.content_tier) return myContentRank >= CONTENT_TIER_RANK[r.content_tier] // content-tier row
-    return false
+    return r.tier_id ? tierSet.has(r.tier_id) : false // membership-tier row
   })
 }
 
@@ -228,12 +176,11 @@ export async function memberCanAccess(
   targetType: EntitlementTargetType,
   targetRef: string,
   minTierRank: number,
-  accessLevel: AccessLevel = 'view',
-  opts: EntitlementOpts = {}
+  accessLevel: AccessLevel = 'view'
 ): Promise<boolean> {
   // Platform admins bypass every entitlement/tier/prerequisite gate.
   if (member.isAdmin) return true
-  const entitled = await memberHasEntitlement(member, targetType, targetRef, accessLevel, opts)
+  const entitled = await memberHasEntitlement(member, targetType, targetRef, accessLevel)
   const allowed = entitled !== null ? entitled : memberMeetsTier(member, minTierRank)
   if (!allowed) return false
   // Prerequisite gate (Phase 5): even when a source grants access, a target stays

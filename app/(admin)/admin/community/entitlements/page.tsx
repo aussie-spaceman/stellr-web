@@ -30,16 +30,13 @@ export default async function AdminEntitlementsPage() {
         .limit(100),
       db
         .from('content_entitlements')
-        .select('id, tier_id, content_tier, target_type, target_ref, access_level'),
+        .select('id, tier_id, target_type, target_ref, access_level'),
     ])
 
   const targets: Target[] = [
     // Category-wide grants for the upcoming Mentoring/Coaching components.
     { type: 'mentoring', ref: '*', label: 'Mentoring — access (all)', group: 'Programs' },
     { type: 'coaching', ref: '*', label: 'Coaching — access (all)', group: 'Programs' },
-    // Campaign delivery content, gated by the per-campaign content tier (drag a
-    // content-tier chip here). Scoped to each member's enrolled campaign at run time.
-    { type: 'campaign_material', ref: '*', label: 'Campaign materials — by content tier', group: 'Campaign content' },
     ...(spaces ?? []).map((s) => ({
       type: 'space' as const,
       ref: s.id,

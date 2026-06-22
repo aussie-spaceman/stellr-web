@@ -24,12 +24,22 @@ export type GrantTrigger =
   | 'subscribe_website'
   | 'graduation'
   | 'manual'
-  // Fired when a member is enrolled in a competition campaign. The caller fires
-  // it only for a Premium purchase (Baseline/Advanced grant content access only),
-  // so the seeded rule grants Pathfinder for 12 months (decision D2).
+  // Fired for every member registered into a competition (event or campaign), at
+  // registration time. The seeded rule grants school students Pathfinder for 12mo.
+  | 'competition_registration'
+  // Fired when a member acquires a membership tier (Stripe purchase or admin
+  // assignment), carrying the acquired tier in ctx.sourceTierId. Powers the
+  // "educator buys Innovator/Trailblazer → their registered students get
+  // Pathfinder" fan-out rule (grant_target='registered_students').
+  | 'tier_purchased'
+  // Dormant: legacy content-tier enrollment trigger (content tiers retired). Kept
+  // so existing rows validate; no caller fires it.
   | 'campaign_enrollment'
 
 export type GrantSource = 'stripe' | 'rule' | 'manual' | 'system'
+
+/** Who receives a rule's grant: the triggering member, or the students they registered. */
+export type GrantTarget = 'self' | 'registered_students'
 
 export interface GrantRule {
   id: string
@@ -39,10 +49,13 @@ export interface GrantRule {
     age_bracket?: string
     event_role?: string
     award_contains?: string
+    /** tier_purchased only: the acquired tier must be one of these for the rule to fire. */
+    source_tier_ids?: string[]
   }
   grant_tier_id: string
-  duration_kind: 'months' | 'until_grad_july1' | 'lifetime'
+  duration_kind: 'months' | 'until_grad_july1' | 'lifetime' | 'match_source'
   duration_months: number | null
+  grant_target: GrantTarget
   replaces_free: boolean
   priority: number
   is_active: boolean
@@ -226,19 +239,22 @@ export interface TriggerContext {
   award?: string | null
   /** Overrides member.graduation_year for the 'graduation' trigger. */
   graduationYear?: number | null
+  /** tier_purchased only: the tier the member just acquired (rule match + match_source expiry). */
+  sourceTierId?: string | null
 }
 
 /**
  * Evaluate the active tier_grant_rules for `trigger` against `memberId` and grant
- * the single highest-priority matching tier. Returns the grant result plus the
- * rule that fired (if any). Safe to call from request handlers and crons.
+ * the single highest-priority matching tier. The grant lands on the triggering
+ * member ('self') or fans out to the students that member registered
+ * ('registered_students'). Returns the grant result plus the rule that fired.
  */
 export async function applyGrantTrigger(
   memberId: string,
   trigger: GrantTrigger,
   ctx: TriggerContext = {},
   client?: SupabaseClient,
-): Promise<{ rule: GrantRule | null } & GrantResult> {
+): Promise<{ rule: GrantRule | null; grantedCount?: number } & GrantResult> {
   const db = client ?? supabaseServer()
 
   const [{ data: member }, { data: rules }] = await Promise.all([
@@ -255,7 +271,7 @@ export async function applyGrantTrigger(
   const rule = (rules as GrantRule[]).find((r) => matchesConditions(r, member, ctx)) ?? null
   if (!rule) return { rule: null, granted: false, reason: 'no_tier' }
 
-  // Resolve duration.
+  // Resolve duration → months | expiresAt.
   let months: number | null | undefined
   let expiresAt: string | null | undefined
   if (rule.duration_kind === 'until_grad_july1') {
@@ -263,8 +279,27 @@ export async function applyGrantTrigger(
     expiresAt = gradYear ? julyFirst(gradYear) : null
   } else if (rule.duration_kind === 'lifetime') {
     months = null
+  } else if (rule.duration_kind === 'match_source') {
+    // Expire with the triggering membership (students' Pathfinder lapses when the
+    // educator's Innovator/Trailblazer does). Fall back to 12mo if not resolvable.
+    expiresAt = await sourceMembershipExpiry(db, memberId, ctx.sourceTierId ?? null)
+    if (expiresAt === undefined) months = rule.duration_months ?? 12
   } else {
     months = rule.duration_months
+  }
+
+  // Fan-out: grant to the students this (educator) member registered.
+  if (rule.grant_target === 'registered_students') {
+    const studentIds = await registeredStudentIds(db, memberId)
+    let grantedCount = 0
+    for (const sid of studentIds) {
+      const r = await grantTier(
+        { memberId: sid, tierId: rule.grant_tier_id, months, expiresAt, source: 'rule', ruleId: rule.id, replacesFree: rule.replaces_free },
+        db,
+      )
+      if (r.granted) grantedCount++
+    }
+    return { rule, granted: grantedCount > 0, grantedCount }
   }
 
   const result = await grantTier(
@@ -280,6 +315,71 @@ export async function applyGrantTrigger(
     db,
   )
   return { rule, ...result }
+}
+
+/** YYYY-MM-DD expiry of the member's active membership on `tierId`, or undefined if none. */
+async function sourceMembershipExpiry(
+  db: SupabaseClient,
+  memberId: string,
+  tierId: string | null,
+): Promise<string | undefined> {
+  if (!tierId) return undefined
+  const { data } = await db
+    .from('member_memberships')
+    .select('expires_at')
+    .eq('member_id', memberId)
+    .eq('tier_id', tierId)
+    .eq('renewal_status', 'active')
+    .order('expires_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return (data?.expires_at as string | null) ?? undefined
+}
+
+/**
+ * The distinct student member ids an educator registered: participants of the
+ * group registrations they own (registrations.teacher_member_id), filtered to
+ * student roles so an adult co-registrant never receives a student grant.
+ */
+async function registeredStudentIds(db: SupabaseClient, educatorMemberId: string): Promise<string[]> {
+  const { data: regs } = await db
+    .from('registrations')
+    .select('id')
+    .eq('teacher_member_id', educatorMemberId)
+  const regIds = (regs ?? []).map((r) => r.id as string)
+  if (regIds.length === 0) return []
+
+  const { data: parts } = await db
+    .from('participants')
+    .select('member_id, members(event_role)')
+    .in('registration_id', regIds)
+    .not('member_id', 'is', null)
+
+  const STUDENT_ROLES = new Set(['school_student', 'school_student_manager'])
+  const ids = new Set<string>()
+  for (const p of parts ?? []) {
+    const m = Array.isArray(p.members) ? p.members[0] : p.members
+    const role = (m as { event_role?: string } | null)?.event_role
+    if (p.member_id && role && STUDENT_ROLES.has(role)) ids.add(p.member_id as string)
+  }
+  return [...ids]
+}
+
+/**
+ * Fire the tier_purchased trigger for a member who just acquired `tierId` (Stripe
+ * activation or admin assignment). Non-fatal: tier acquisition must never fail
+ * because a downstream fan-out grant errored.
+ */
+export async function fireTierPurchased(
+  memberId: string,
+  tierId: string,
+  client?: SupabaseClient,
+): Promise<void> {
+  try {
+    await applyGrantTrigger(memberId, 'tier_purchased', { sourceTierId: tierId }, client)
+  } catch (e) {
+    console.error('[membership-grants] fireTierPurchased failed (non-fatal):', e)
+  }
 }
 
 function matchesConditions(
@@ -301,6 +401,10 @@ function matchesConditions(
   if (c.award_contains) {
     const award = (ctx.award ?? '').toLowerCase()
     if (!award.includes(c.award_contains.toLowerCase())) return false
+  }
+  // tier_purchased: the acquired tier must be in the rule's source list (if set).
+  if (c.source_tier_ids && c.source_tier_ids.length) {
+    if (!ctx.sourceTierId || !c.source_tier_ids.includes(ctx.sourceTierId)) return false
   }
   return true
 }

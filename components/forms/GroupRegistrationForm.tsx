@@ -416,14 +416,11 @@ function StudentManagerCard({ data, onEdit }: { data: StudentManagerFormData; on
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, contentTierOfferings = [] }: { eventSlug: string; eventTitle: string; prefill?: RegistrationPrefill | null; contentTierOfferings?: { tier: string; priceUsd?: number }[] }) {
+export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }: { eventSlug: string; eventTitle: string; prefill?: RegistrationPrefill | null }) {
   const router = useRouter()
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn()
   const { isSignedIn } = useAuth()
   const [step, setStep] = useState<1 | 2>(1)
-  // Competition content tier the buyer selects for the whole group (decision D3).
-  // Only campaigns with offerings show the picker; defaults to the first offered.
-  const [contentTier, setContentTier] = useState<string | null>(contentTierOfferings[0]?.tier ?? null)
   const [registrantRole, setRegistrantRole] = useState<RegistrantRole>('teacher')
 
   // When the registrant is signed in, their email is authoritative and locked
@@ -695,7 +692,6 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
           event_slug: eventSlug,
           event_title: eventTitle,
           registrant_role: registrantRole,
-          content_tier: contentTier,
           teacher: registrantPayload,
           teacher_poc: smData ? {
             first_name: smData.teacher_poc_first_name,
@@ -1064,38 +1060,6 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
             ))}
           </div>
         </>
-      )}
-
-      {contentTierOfferings.length > 0 && (
-        <div className="bg-white rounded-xl border border-line p-6 space-y-3">
-          <h3 className="font-semibold text-brand-blue-dark">Content tier</h3>
-          <p className="text-sm text-content-muted">
-            Choose the competition content package for your group. Core material is always included.
-          </p>
-          <div className="space-y-2">
-            {contentTierOfferings.map((o) => (
-              <label
-                key={o.tier}
-                className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-4 py-2.5 ${
-                  contentTier === o.tier ? 'border-brand-blue-dark bg-blue-50' : 'border-line'
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="content_tier"
-                    checked={contentTier === o.tier}
-                    onChange={() => setContentTier(o.tier)}
-                  />
-                  <span className="font-medium capitalize text-ink">{o.tier}</span>
-                </span>
-                <span className="text-sm font-medium text-content-body">
-                  {o.priceUsd ? `$${o.priceUsd}` : 'Free'}
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
       )}
 
       <div className="bg-white rounded-xl border border-line p-6 space-y-4">

@@ -37,7 +37,6 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
           eventSlug={slug}
           eventTitle={event.title}
           prefill={prefill}
-          contentTierOfferings={event.contentTierOfferings ?? []}
         />
       </div>
     </div>

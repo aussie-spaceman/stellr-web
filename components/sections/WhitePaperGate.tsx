@@ -25,6 +25,8 @@ export function WhitePaperGate() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(false)
 
   const valid = name.trim().length > 0 && /\S+@\S+\.\S+/.test(email)
   const greeting = name.trim().split(/\s+/)[0] || 'there'
@@ -32,12 +34,28 @@ export function WhitePaperGate() {
   function close() {
     setOpen(false)
     setSubmitted(false)
+    setError(false)
+    setLoading(false)
   }
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!valid) return
-    setSubmitted(true)
+    if (!valid || loading) return
+    setLoading(true)
+    setError(false)
+    try {
+      const res = await fetch('/api/white-paper', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), email: email.trim() }),
+      })
+      if (!res.ok) throw new Error('Request failed')
+      setSubmitted(true)
+    } catch {
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -119,13 +137,22 @@ export function WhitePaperGate() {
 
                   <button
                     type="submit"
-                    disabled={!valid}
+                    disabled={!valid || loading}
                     className={`w-full inline-flex items-center justify-center rounded-[9px] px-6 py-3.5 font-display text-[15px] font-semibold text-white transition-colors ${
-                      valid ? 'bg-primary hover:bg-primary-deep' : 'bg-[#A9BEF5] cursor-not-allowed'
+                      valid && !loading ? 'bg-primary hover:bg-primary-deep' : 'bg-[#A9BEF5] cursor-not-allowed'
                     }`}
                   >
-                    Email me the white paper ↓
+                    {loading ? 'Sending…' : 'Email me the white paper ↓'}
                   </button>
+                  {error && (
+                    <p className="text-center text-[13px] text-[#9A4A41]">
+                      Something went wrong sending it. Please try again, or{' '}
+                      <a href={PDF_URL} download className="font-semibold underline">
+                        download it directly
+                      </a>
+                      .
+                    </p>
+                  )}
                   <p className="text-center text-[12.5px] text-content-faint">
                     We respect your inbox. No spam — just the paper and the occasional update.
                   </p>

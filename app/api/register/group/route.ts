@@ -75,13 +75,7 @@ export async function POST(req: NextRequest) {
       additional_adults,
       students,
       school_dpa_agreed,
-      content_tier,
     } = body
-
-    // Validate the optional competition content tier (decision D3 — bought once
-    // per group). Unknown values are ignored rather than failing the registration.
-    const purchasedContentTier: string | null =
-      ['baseline', 'advanced', 'premium'].includes(content_tier) ? content_tier : null
 
     // Option A — when the registrant (teacher / student-manager) is signed in,
     // their session email is authoritative. This keeps the registrant bound to
@@ -233,7 +227,6 @@ export async function POST(req: NextRequest) {
       event_slug, event_title,
       type: 'group',
       status: 'pending',
-      content_tier: purchasedContentTier,
       adult_count: declaredAdultCount,
       student_count: declaredStudentCount,
       teacher_first_name: teacher.first_name,
@@ -368,16 +361,12 @@ export async function POST(req: NextRequest) {
     // Record the event in each member's Event Activity (event_participations),
     // so the group registration surfaces on their member/portal pages — not
     // just on the event roster. Non-fatal, idempotent per (member, event).
-    // Free Baseline unlocks content access immediately; paid Advanced/Premium
-    // are applied on payment confirmation (Stripe webhook → applyCampaignContentTier).
-    const creationContentTier = purchasedContentTier === 'baseline' ? 'baseline' : null
     await Promise.all(
       Object.values(memberIdMap).map((memberId) =>
         recordEventParticipation(db, {
           memberId,
           eventSlug: event_slug,
           eventTitle: event_title,
-          contentTier: creationContentTier,
         })
       )
     )
@@ -720,59 +709,6 @@ export async function POST(req: NextRequest) {
           console.error(`Individual payment session error for ${p.email} (non-fatal):`, indErr)
         }
       }))
-    }
-
-    // ── Content-tier checkout ─────────────────────────────────────────────────
-    // Campaigns are free to join, so a paid Advanced/Premium content tier is
-    // charged on its own (no event-fee checkout to piggyback on). On payment the
-    // Stripe webhook confirms the registration → applyCampaignContentTier cascades
-    // the tier to participants and fires the Premium → Pathfinder grant.
-    if (!checkoutUrl && (purchasedContentTier === 'advanced' || purchasedContentTier === 'premium') && stripe) {
-      const offerings =
-        (event as { contentTierOfferings?: { tier: string; priceUsd?: number }[] } | null)
-          ?.contentTierOfferings ?? []
-      const cents = Math.round(
-        (offerings.find((o) => o.tier === purchasedContentTier)?.priceUsd ?? 0) * 100,
-      )
-      if (cents > 0) {
-        try {
-          const session = await stripe.checkout.sessions.create({
-            mode: 'payment',
-            line_items: [
-              {
-                price_data: {
-                  currency: 'usd',
-                  unit_amount: cents,
-                  product_data: { name: `${event_title} — ${purchasedContentTier} content tier` },
-                },
-                quantity: 1,
-              },
-            ],
-            client_reference_id: regId,
-            customer_email: teacher.email,
-            customer_creation: 'always',
-            metadata: {
-              registrationId: regId,
-              eventSlug: event_slug,
-              isGroup: 'true',
-              contentTier: purchasedContentTier,
-            },
-            success_url: (() => {
-              const u = new URL(`${SITE_URL}/register/${event_slug}/confirmation`)
-              u.searchParams.set('id', regId)
-              u.searchParams.set('type', 'group')
-              u.searchParams.set('payment', 'success')
-              if (promptSpreadsheetUrl) u.searchParams.set('spreadsheet', promptSpreadsheetUrl)
-              if (incompleteAddNow && joinUrl) u.searchParams.set('join', joinUrl)
-              return u.toString()
-            })(),
-            cancel_url: `${SITE_URL}/register/${event_slug}/group?cancelled=true`,
-          })
-          checkoutUrl = session.url
-        } catch (ctErr) {
-          console.error('Content-tier checkout error (non-fatal):', ctErr)
-        }
-      }
     }
 
     // ── CC list for confirmation emails ───────────────────────────────────────

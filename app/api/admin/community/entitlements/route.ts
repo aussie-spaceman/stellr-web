@@ -28,11 +28,11 @@ export async function GET() {
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  // Subject is EITHER a membership tier (tierId) OR a content tier (contentTier).
-  const { tierId, contentTier, targetType, targetRef, accessLevel } = await req.json().catch(() => ({}))
-  if (!targetType || !targetRef || Boolean(tierId) === Boolean(contentTier)) {
+  // Subject is a membership tier (content tiers retired — D-G).
+  const { tierId, targetType, targetRef, accessLevel } = await req.json().catch(() => ({}))
+  if (!targetType || !targetRef || !tierId) {
     return NextResponse.json(
-      { error: 'targetType, targetRef and exactly one of tierId / contentTier required' },
+      { error: 'tierId, targetType and targetRef required' },
       { status: 400 }
     )
   }
@@ -43,18 +43,13 @@ export async function POST(req: Request) {
     .from('content_entitlements')
     .upsert(
       {
-        tier_id: tierId ?? null,
-        content_tier: contentTier ?? null,
+        tier_id: tierId,
         target_type: targetType,
         target_ref: targetRef,
         access_level: accessLevel ?? 'view',
         created_by: admin?.id ?? null,
       },
-      {
-        onConflict: tierId
-          ? 'tier_id,target_type,target_ref,access_level'
-          : 'content_tier,target_type,target_ref,access_level',
-      }
+      { onConflict: 'tier_id,target_type,target_ref,access_level' }
     )
     .select('id')
     .single()

@@ -7,10 +7,11 @@ export interface RuleRow {
   id: string
   name: string
   trigger_type: string
-  conditions: { age_bracket?: string; event_role?: string; award_contains?: string }
+  conditions: { age_bracket?: string; event_role?: string; award_contains?: string; source_tier_ids?: string[] }
   grant_tier_id: string
-  duration_kind: 'months' | 'until_grad_july1' | 'lifetime'
+  duration_kind: 'months' | 'until_grad_july1' | 'lifetime' | 'match_source'
   duration_months: number | null
+  grant_target: 'self' | 'registered_students'
   replaces_free: boolean
   priority: number
   is_active: boolean
@@ -30,6 +31,8 @@ const TRIGGERS: Record<string, string> = {
   subscribe_website: 'subscribes on the website',
   graduation: 'graduates high school',
   manual: 'is granted manually',
+  competition_registration: 'registers for a competition',
+  tier_purchased: 'buys / is granted a tier',
 }
 
 const ROLES = ['', 'school_student', 'school_student_manager', 'teacher', 'mentor', 'parent', 'adult']
@@ -38,6 +41,7 @@ const BRACKETS = ['', 'high_school', 'college', 'adult']
 function durationLabel(r: RuleRow): string {
   if (r.duration_kind === 'until_grad_july1') return 'until July 1 of grad year'
   if (r.duration_kind === 'lifetime') return 'lifetime'
+  if (r.duration_kind === 'match_source') return 'matching the triggering membership'
   return r.duration_months ? `${r.duration_months} months` : 'until removed'
 }
 
@@ -49,6 +53,7 @@ const emptyDraft = (tierId: string): RuleRow => ({
   grant_tier_id: tierId,
   duration_kind: 'months',
   duration_months: 12,
+  grant_target: 'self',
   replaces_free: true,
   priority: 10,
   is_active: true,
@@ -118,11 +123,15 @@ export function RulesClient({ initialRules, tiers }: { initialRules: RuleRow[]; 
               <span className="text-brand-muted-soft">·</span>
               <span className="text-brand-muted-soft">When</span>
               <Chip color="amber">{TRIGGERS[r.trigger_type] ?? r.trigger_type}</Chip>
+              {r.conditions.source_tier_ids?.length ? (
+                <Chip color="gray">tier: {r.conditions.source_tier_ids.map(tierName).join(', ')}</Chip>
+              ) : null}
               {r.conditions.event_role && <Chip color="gray">role: {r.conditions.event_role}</Chip>}
               {r.conditions.age_bracket && <Chip color="gray">{r.conditions.age_bracket}</Chip>}
               {r.conditions.award_contains && <Chip color="gray">award ~ “{r.conditions.award_contains}”</Chip>}
               <span className="text-brand-muted-soft">grant</span>
               <Chip color="blue">{tierName(r.grant_tier_id)}</Chip>
+              {r.grant_target === 'registered_students' && <Chip color="gray">to registered students</Chip>}
               <span className="text-brand-muted-soft">for</span>
               <Chip color="purple">{durationLabel(r)}</Chip>
               <span className="ml-auto flex items-center gap-3">
@@ -204,6 +213,27 @@ function RuleForm({
           </select>
         </Field>
 
+        {draft.trigger_type === 'tier_purchased' && (
+          <Field label="…and the tier they got is one of (leave empty = any paid tier)">
+            <div className="flex flex-wrap gap-1.5">
+              {tiers.filter((t) => !t.is_free).map((t) => {
+                const sel = draft.conditions.source_tier_ids ?? []
+                const on = sel.includes(t.id)
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setCond({ source_tier_ids: on ? sel.filter((x) => x !== t.id) : [...sel, t.id] })}
+                    className={'px-2 py-1 rounded-md text-xs border ' + (on ? 'bg-brand-blue text-white border-brand-blue' : 'border-brand-border text-brand-muted')}
+                  >
+                    {t.name}
+                  </button>
+                )
+              })}
+            </div>
+          </Field>
+        )}
+
         <div className="grid grid-cols-2 gap-3">
           <Field label="…and role is (optional)">
             <select value={draft.conditions.event_role ?? ''} onChange={(e) => setCond({ event_role: e.target.value || undefined })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
@@ -229,12 +259,20 @@ function RuleForm({
           </select>
         </Field>
 
+        <Field label="Grant to">
+          <select value={draft.grant_target} onChange={(e) => set({ grant_target: e.target.value as RuleRow['grant_target'] })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
+            <option value="self">The member who triggered it</option>
+            <option value="registered_students">The students they registered (their cohort)</option>
+          </select>
+        </Field>
+
         <div className="grid grid-cols-2 gap-3">
           <Field label="Duration">
             <select value={draft.duration_kind} onChange={(e) => set({ duration_kind: e.target.value as RuleRow['duration_kind'] })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
               <option value="months">For N months</option>
               <option value="until_grad_july1">Until July 1 of grad year</option>
               <option value="lifetime">Lifetime</option>
+              <option value="match_source">Match the triggering membership</option>
             </select>
           </Field>
           {draft.duration_kind === 'months' && (

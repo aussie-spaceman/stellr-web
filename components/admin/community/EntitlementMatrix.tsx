@@ -14,7 +14,7 @@ export interface Tier {
 export const ACCESS_LEVELS = ['view', 'download', 'enroll', 'host'] as const
 export type AccessLevel = (typeof ACCESS_LEVELS)[number]
 
-// Group tiers into audience families for the palette so 15 tiers stay scannable.
+// Group tiers into audience families for the palette so the tiers stay scannable.
 // Derived from membership_tiers.age_bracket; tiers without one fall into "Public".
 const FAMILY_ORDER = ['Public & general', 'Students', 'College & mentors', 'Educators & adults']
 function familyOf(tier: Tier): string {
@@ -47,19 +47,10 @@ export interface Target {
 export interface Entitlement {
   id: string
   tier_id: string | null
-  content_tier: string | null
   target_type: string
   target_ref: string
   access_level: string
 }
-
-// The competition content tiers, ordered low→high. A content-tier row grants the
-// target to anyone enrolled in a campaign at that tier or above (see lib/community.ts).
-export const CONTENT_TIERS = ['core', 'baseline', 'advanced', 'premium'] as const
-export type ContentTier = (typeof CONTENT_TIERS)[number]
-
-// What's being dragged onto a content row — a membership tier or a content tier.
-type DragSubject = { kind: 'tier'; id: string } | { kind: 'content'; tier: ContentTier }
 
 interface Props {
   tiers: Tier[]
@@ -67,23 +58,20 @@ interface Props {
   initial: Entitlement[]
 }
 
-// Drag a tier chip onto a content row to grant access; click the × on an assigned
-// chip to revoke. Uses native HTML5 drag-and-drop — no extra dependency. Writes
-// go through /api/admin/community/entitlements; the gating logic everywhere else
-// reads the same table (content_entitlements).
+// Drag a membership-tier chip onto a content row to grant access; click the × on
+// an assigned chip to revoke. Uses native HTML5 drag-and-drop — no extra
+// dependency. Writes go through /api/admin/community/entitlements; the gating
+// logic everywhere else reads the same table (content_entitlements).
 export function EntitlementMatrix({ tiers, targets, initial }: Props) {
   const [rows, setRows] = useState<Entitlement[]>(initial)
-  const [drag, setDrag] = useState<DragSubject | null>(null)
+  const [drag, setDrag] = useState<string | null>(null) // tier_id being dragged
   const [busy, setBusy] = useState(false)
   const tierById = new Map(tiers.map((t) => [t.id, t]))
 
-  const grant = async (target: Target, subject: DragSubject) => {
-    // Skip if this subject already has a chip (any access level) on this target.
+  const grant = async (target: Target, tierId: string) => {
+    // Skip if this tier already has a chip (any access level) on this target.
     const dup = rows.some(
-      (r) =>
-        r.target_type === target.type &&
-        r.target_ref === target.ref &&
-        (subject.kind === 'tier' ? r.tier_id === subject.id : r.content_tier === subject.tier)
+      (r) => r.target_type === target.type && r.target_ref === target.ref && r.tier_id === tierId,
     )
     if (dup) return
     setBusy(true)
@@ -92,7 +80,7 @@ export function EntitlementMatrix({ tiers, targets, initial }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...(subject.kind === 'tier' ? { tierId: subject.id } : { contentTier: subject.tier }),
+          tierId,
           targetType: target.type,
           targetRef: target.ref,
           accessLevel: 'view',
@@ -104,8 +92,7 @@ export function EntitlementMatrix({ tiers, targets, initial }: Props) {
           ...prev,
           {
             id: json.id,
-            tier_id: subject.kind === 'tier' ? subject.id : null,
-            content_tier: subject.kind === 'content' ? subject.tier : null,
+            tier_id: tierId,
             target_type: target.type,
             target_ref: target.ref,
             access_level: 'view',
@@ -179,7 +166,7 @@ export function EntitlementMatrix({ tiers, targets, initial }: Props) {
                   <span
                     key={t.id}
                     draggable
-                    onDragStart={() => setDrag({ kind: 'tier', id: t.id })}
+                    onDragStart={() => setDrag(t.id)}
                     onDragEnd={() => setDrag(null)}
                     className={`inline-flex cursor-grab items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium ${
                       t.is_free
@@ -193,27 +180,6 @@ export function EntitlementMatrix({ tiers, targets, initial }: Props) {
                 ))}
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Content-tier palette — per-campaign subjects (cumulative low→high) */}
-      <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4">
-        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-amber-700">
-          Content tiers — drag onto campaign content to grant by purchased tier
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {CONTENT_TIERS.map((ct) => (
-            <span
-              key={ct}
-              draggable
-              onDragStart={() => setDrag({ kind: 'content', tier: ct })}
-              onDragEnd={() => setDrag(null)}
-              className="inline-flex cursor-grab items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-xs font-medium capitalize text-amber-800"
-            >
-              <GripVertical className="h-3 w-3 opacity-50" />
-              {ct}
-            </span>
           ))}
         </div>
       </div>
@@ -240,16 +206,11 @@ export function EntitlementMatrix({ tiers, targets, initial }: Props) {
                     </span>
                   )}
                   {chipsFor(target).map((r) => {
-                    const isContent = !!r.content_tier
-                    const label = isContent
-                      ? (r.content_tier as string)
-                      : (tierById.get(r.tier_id ?? '')?.name ?? 'Tier')
+                    const label = tierById.get(r.tier_id ?? '')?.name ?? 'Tier'
                     return (
                       <span
                         key={r.id}
-                        className={`inline-flex items-center gap-1 rounded-full py-0.5 pl-2 pr-1 text-xs font-medium ${
-                          isContent ? 'bg-amber-100 capitalize text-amber-800' : 'bg-brand-blue/5 text-brand-blue'
-                        }`}
+                        className="inline-flex items-center gap-1 rounded-full bg-brand-blue/5 py-0.5 pl-2 pr-1 text-xs font-medium text-brand-blue"
                       >
                         {label}
                         <select
@@ -257,9 +218,7 @@ export function EntitlementMatrix({ tiers, targets, initial }: Props) {
                           onChange={(e) => changeLevel(r.id, e.target.value as AccessLevel)}
                           disabled={busy}
                           aria-label={`Access level for ${label}`}
-                          className={`rounded px-1 py-0.5 text-[11px] font-medium disabled:opacity-50 ${
-                            isContent ? 'bg-amber-200/70 text-amber-900' : 'bg-brand-blue/10/70 text-brand-blue'
-                          }`}
+                          className="rounded bg-brand-blue/10/70 px-1 py-0.5 text-[11px] font-medium text-brand-blue disabled:opacity-50"
                         >
                           {ACCESS_LEVELS.map((lvl) => (
                             <option key={lvl} value={lvl}>

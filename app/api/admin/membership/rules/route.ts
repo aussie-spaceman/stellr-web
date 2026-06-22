@@ -12,8 +12,9 @@ function isAdmin(sessionClaims: unknown) {
   return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
 }
 
-const TRIGGERS = ['signup', 'event_attendance', 'event_award', 'mentor_at_event', 'subscribe_website', 'graduation', 'manual']
-const DURATIONS = ['months', 'until_grad_july1', 'lifetime']
+const TRIGGERS = ['signup', 'event_attendance', 'event_award', 'mentor_at_event', 'subscribe_website', 'graduation', 'manual', 'competition_registration', 'tier_purchased']
+const DURATIONS = ['months', 'until_grad_july1', 'lifetime', 'match_source']
+const GRANT_TARGETS = ['self', 'registered_students']
 
 export async function GET() {
   const { sessionClaims } = await auth()
@@ -40,6 +41,9 @@ export async function POST(req: Request) {
   if (b.duration_kind && !DURATIONS.includes(b.duration_kind)) {
     return NextResponse.json({ error: 'invalid duration_kind' }, { status: 400 })
   }
+  if (b.grant_target && !GRANT_TARGETS.includes(b.grant_target)) {
+    return NextResponse.json({ error: 'invalid grant_target' }, { status: 400 })
+  }
 
   const admin = await getCurrentMember()
   const db = supabaseServer()
@@ -52,6 +56,7 @@ export async function POST(req: Request) {
       grant_tier_id: b.grant_tier_id,
       duration_kind: b.duration_kind ?? 'months',
       duration_months: b.duration_months ?? null,
+      grant_target: b.grant_target ?? 'self',
       replaces_free: b.replaces_free ?? true,
       priority: b.priority ?? 0,
       is_active: b.is_active ?? true,
@@ -75,11 +80,14 @@ export async function PATCH(req: Request) {
   if (!b.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
-  for (const k of ['name', 'trigger_type', 'conditions', 'grant_tier_id', 'duration_kind', 'duration_months', 'replaces_free', 'priority', 'is_active']) {
+  for (const k of ['name', 'trigger_type', 'conditions', 'grant_tier_id', 'duration_kind', 'duration_months', 'grant_target', 'replaces_free', 'priority', 'is_active']) {
     if (b[k] !== undefined) patch[k] = b[k]
   }
   if (patch.trigger_type && !TRIGGERS.includes(patch.trigger_type as string)) {
     return NextResponse.json({ error: 'invalid trigger_type' }, { status: 400 })
+  }
+  if (patch.grant_target && !GRANT_TARGETS.includes(patch.grant_target as string)) {
+    return NextResponse.json({ error: 'invalid grant_target' }, { status: 400 })
   }
 
   const db = supabaseServer()

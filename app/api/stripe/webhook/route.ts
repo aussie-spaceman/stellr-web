@@ -3,10 +3,10 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { sendEmail, individualConfirmationEmail, groupPaymentConfirmedEmail } from '@/lib/email'
 import { finalizeRedemption } from '@/lib/refunds/redeem'
-import { applyCampaignContentTier } from '@/lib/event-participation-sync'
 import { logActivity } from '@/lib/activity-log'
 import { handleStoreOrderPaid } from '@/lib/store/orders'
 import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
+import { fireTierPurchased } from '@/lib/membership-grants'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -152,10 +152,6 @@ async function confirmRegistration(registrationId: string, isGroup: boolean) {
 
   await db.from('registrations').update({ status: 'confirmed' }).eq('id', registrationId)
 
-  // Payment cleared: cascade any purchased content tier to every participant and
-  // fire the Premium → Pathfinder membership grant (decisions D2/D3). Non-fatal.
-  await applyCampaignContentTier(db, registrationId)
-
   // Finalize event merch: allocate the included shirt to every participant
   // (sized from their t-shirt size) and activate any paid add-ons. Idempotent + non-fatal.
   await finalizeRegistrationMerch(db, registrationId)
@@ -241,6 +237,10 @@ async function activateMembership(
     metadata: { tierId, tierName: tier?.name ?? null, source: 'stripe', stripeSubscriptionId, billingInterval, expiresAt },
     actorType: 'stripe',
   }, db)
+
+  // Fan-out grant rules keyed off acquiring a tier — e.g. an educator buying
+  // Innovator/Trailblazer upgrades the students they registered to Pathfinder.
+  await fireTierPurchased(memberId, tierId, db)
 }
 
 async function expireMembership(stripeSubscriptionId: string) {

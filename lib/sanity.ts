@@ -98,8 +98,7 @@ export async function getEventBySlug(slug: string) {
       _id, title, slug, type, gradeLevel, date, endDate, activityType, setting, term,
       venue, city, state, tagline, description, image,
       registrationOpen, registrationOpenDate, registrationCloseDate,
-      capacity, eligibility, stripePriceId,
-      contentTierOfferings[]{ tier, priceUsd }
+      capacity, eligibility, stripePriceId
     }`,
     { slug }
   )

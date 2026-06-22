@@ -82,43 +82,6 @@ export const event = {
         }),
     },
 
-    // ── Campaign-only: Content tier offerings (decision D8) ───────────────────
-    // Which competition content tiers this campaign sells, and the price of each.
-    // Core material is always included; Baseline is free (registration required).
-    // What each tier *unlocks* is configured in Admin → Access map
-    // (content_entitlements, content-tier subject) — not here.
-    {
-      name: 'contentTierOfferings',
-      title: 'Content tier offerings',
-      type: 'array',
-      description:
-        'The content tiers educators / Student Managers can buy for this campaign. ' +
-        'Core is always included; Baseline is free (registration required); set a price for Advanced / Premium.',
-      hidden: ({ document }: { document?: Record<string, unknown> }) =>
-        document?.activityType !== 'campaign',
-      of: [
-        {
-          type: 'object',
-          fields: [
-            {
-              name: 'tier',
-              title: 'Tier',
-              type: 'string',
-              options: {
-                list: [
-                  { title: 'Baseline (free, register)', value: 'baseline' },
-                  { title: 'Advanced', value: 'advanced' },
-                  { title: 'Premium', value: 'premium' },
-                ],
-                layout: 'radio',
-              },
-            },
-            { name: 'priceUsd', title: 'Price (USD)', type: 'number' },
-          ],
-          preview: { select: { title: 'tier', subtitle: 'priceUsd' } },
-        },
-      ],
-    },
     {
       name: 'campaignYear',
       title: 'Campaign Year',

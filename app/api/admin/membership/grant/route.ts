@@ -1,6 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { grantTier } from '@/lib/membership-grants'
+import { grantTier, fireTierPurchased } from '@/lib/membership-grants'
 
 // POST /api/admin/membership/grant — admin manually places a member on a tier.
 // Body: { memberId, tierId, months? (null = lifetime), replacesFree? }
@@ -26,6 +26,9 @@ export async function POST(req: Request) {
     source: 'manual',
     replacesFree: replacesFree ?? true,
   })
+
+  // Fan-out grant rules (e.g. educator tier → registered students get Pathfinder).
+  await fireTierPurchased(memberId, tierId)
 
   return NextResponse.json(result)
 }

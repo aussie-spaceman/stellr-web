@@ -225,7 +225,20 @@ Original P0 plan (for reference):
     and `cohort_training_links` into `container_contents`. Idempotent.
 - Output: containers + rosters + contents exist alongside legacy tables. Nothing reads them yet.
 
-### P1 — Unify resolution (read from roster + contents)
+### P1 — Unify resolution (read from roster) ✅ DONE 2026-06-22 (code-only, build-clean, data-verified)
+`lib/event-portal.ts` `getMemberEvents` now resolves competition participation from the roster
+(`cohort_members` → `mentoring_cohorts` where `container_type='event_participation'`,
+`campaign_ref`=event_slug) instead of `participants`→`registrations`. `memberIsParticipant` /
+catalog / materials are unchanged (they flow through `getMemberEvents`). New write path: a new
+`lib/container-sync.ts` `ensureRosterMembership(db, registrationId, memberId)` (runtime mirror of
+migration 062) is wired into `recordEventParticipation` (optional `registrationId`), so every
+registration path (group / individual / group-join / teams / sheet) creates the event + group
+containers and a roster row going forward — new registrants appear immediately. `tsc` + build
+clean. VERIFIED read-only against prod: roster member→event set == legacy participants set
+EXACTLY (15==15, 0 missing, 0 spurious) → zero access drift. `event_participations` still written
+(powers the Activity list); legacy `participants`/`event_participations` retained until P4 cleanup.
+
+Original P1 plan (for reference):
 - `lib/event-portal.ts` `getMemberEvents` / `memberIsParticipant`: roster lookup (mirror
   `lib/sessions.ts` `getCohortSpace`) instead of the `participants` table. (Phase CT already
   removed `campaignTiers`, so competition content access is now membership tier + participant.)
@@ -234,7 +247,30 @@ Original P0 plan (for reference):
 - Content reads (resources, training, recordings) resolve via `container_contents` so the
   member loads them in-context (doc: "don't redirect back to /resources").
 
-### P2 — `accessUnlocked()` in report-only mode
+### P2 — `accessUnlocked()` in report-only mode ✅ DONE 2026-06-22 (code-clean; report-only wired)
+New `lib/access-gates.ts`: `eventAccessGates(member, eventSlug)` combines **payment + DocuSign**
+(prerequisites excluded per D-F), aggregated to the member from the same signals as the
+`getEventRoster` pills (payment = any participation confirmed/individually-paid; DocuSign = none
+outstanding, minor-with-no-envelope counts outstanding). `reportEventAccessGates` logs (category
+`event`, action `access_gate_would_block`) who WOULD be blocked but never denies; wired into the
+competition portal page `app/(member)/community/events/[slug]/page.tsx` after the participant
+check. `tsc` + build clean.
+**FINDING (read-only prod preview, 15 member→event pairs): only 2 would be unlocked, 11 would be
+blocked (7 payment, 8 DocuSign).** Two caveats before P4: (a) the data is test-heavy; (b) the
+PAYMENT GATE OVER-COUNTS — after Phase CT campaigns are free-to-join, so a free registration sits
+at status='pending' with nothing owed, which the gate currently reads as "unpaid → blocked" (a
+false block). The payment gate must distinguish "owes money & unpaid" from "free, nothing owed"
+BEFORE P4 — a product/data decision (what counts as payment-due) flagged to the user.
+
+**P2 PAYMENT-GATE FIX (DONE 2026-06-22, decision: explicit amount-due).** Migration `063`
+adds `registrations.amount_due_cents`; the group + individual registration routes populate it
+from the event's Stripe price × seats (0 when the event has no `stripePriceId` → free,
+incl. all campaigns post-Phase-CT). `eventAccessGates` now passes payment when nothing is owed
+(amount_due 0/null) OR it's paid. Legacy rows = NULL = treated as free (no false block; mostly
+test data). `tsc` + build clean. Projection on current prod: would-be-blocked drops from 11 → 8,
+and the remaining 8 are genuine DocuSign-outstanding (not payment). APPLY migration 063.
+
+Original P2 plan (for reference):
 - New `lib/access-gates.ts`: `accessUnlocked(member, container) → { payment, docusign,
   unlocked, profile }` (prerequisites omitted per D-F). Extract per-participant aggregation
   from `lib/event-admin.ts` `getEventRoster` (lines ~81-164).

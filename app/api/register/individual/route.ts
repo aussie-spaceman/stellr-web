@@ -97,6 +97,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Amount owed: the per-seat event fee (one seat), or 0 when the event has no
+    // Stripe price (free event). Drives the payment access gate.
+    let amountDueCents = 0
+    const feePriceId = (eventForGate as { stripePriceId?: string } | null)?.stripePriceId
+    const feeStripe = getStripe()
+    if (feePriceId && feeStripe) {
+      try {
+        const pr = await feeStripe.prices.retrieve(feePriceId)
+        amountDueCents = pr.unit_amount ?? 0
+      } catch (e) {
+        console.error('[register/individual] price lookup failed (amount_due defaults 0):', e)
+      }
+    }
+
     // Create registration record
     const { data: registration, error: regError } = await db
       .from('registrations')
@@ -105,6 +119,7 @@ export async function POST(req: NextRequest) {
         event_title,
         type: 'individual',
         status: 'pending',
+        amount_due_cents: amountDueCents,
         invoice_requested: false,
         teacher_first_name: null,
         teacher_last_name: null,
@@ -211,7 +226,7 @@ export async function POST(req: NextRequest) {
 
     // Record this registration in event_participations so it appears in the
     // "Event Activity" lists on the member portal and admin member page.
-    await recordEventParticipation(db, { memberId, eventSlug: event_slug, eventTitle: event_title })
+    await recordEventParticipation(db, { memberId, eventSlug: event_slug, eventTitle: event_title, registrationId: regId })
 
     // Trigger the appropriate DocuSign agreement (minor consent, or self-signed
     // adult/mentor participation agreement) for this participant.

@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { ArrowLeft, FileText, Lock } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
 import { memberIsParticipant, getEventMaterials } from '@/lib/event-portal'
+import { reportEventAccessGates } from '@/lib/access-gates'
 import { listModules } from '@/lib/training'
 import { MaterialDownloadButton } from '@/components/community/MaterialDownloadButton'
 
@@ -22,6 +23,11 @@ export default async function EventPortalPage({
   const { slug } = await params
   const event = await memberIsParticipant(member, slug)
   if (!event) notFound() // not a participant → no access
+
+  // P2 (report-only): record whether payment / DocuSign WOULD block this member.
+  // Access is NOT gated on it yet — this surfaces who'd be locked out before the
+  // P4 enforcement flip. Non-fatal.
+  await reportEventAccessGates(member, slug)
 
   const materials = await getEventMaterials(member, event)
   const training = event.eventId

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { logActivity } from '@/lib/activity-log'
 import { applyGrantTrigger } from '@/lib/membership-grants'
+import { ensureRosterMembership } from '@/lib/container-sync'
 
 // Records a member's event registration into event_participations so the event
 // surfaces in the "Event Activity" lists on the member portal, the admin member
@@ -21,10 +22,18 @@ export async function recordEventParticipation(
     eventSlug: string | null | undefined
     eventTitle?: string | null
     eventYear?: number | null
+    /** When given, also sync the competition container roster (P1). */
+    registrationId?: string | null
   },
 ): Promise<void> {
   if (!p.memberId || !p.eventSlug) return
   try {
+    // Keep the competition container roster in sync — the member event portal
+    // resolves access through it. Independent of the event_participations row.
+    if (p.registrationId) {
+      await ensureRosterMembership(db, p.registrationId, p.memberId)
+    }
+
     const { data: existing } = await db
       .from('event_participations')
       .select('id')
@@ -86,6 +95,7 @@ export async function recordEventParticipationForRegistration(
           memberId,
           eventSlug: reg.event_slug as string,
           eventTitle: reg.event_title as string | null,
+          registrationId,
         }),
       ),
     )

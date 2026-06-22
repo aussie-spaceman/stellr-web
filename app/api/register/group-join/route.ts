@@ -282,7 +282,7 @@ export async function POST(req: NextRequest) {
   })
 
   // Record the event in the joining member's Event Activity (event_participations).
-  await recordEventParticipation(db, { memberId, eventSlug, eventTitle })
+  await recordEventParticipation(db, { memberId, eventSlug, eventTitle, registrationId })
 
   // Trigger the appropriate DocuSign agreement (minor consent, or self-signed
   // adult/mentor participation agreement) based on the participant's age and role.

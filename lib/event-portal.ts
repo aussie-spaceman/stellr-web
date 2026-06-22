@@ -9,8 +9,9 @@ import {
 
 // FR-COM-13 — Event & Campaign portal.
 // Lets a member access materials for the events/campaigns they're registered for.
-// Registration lives in the `participants` + `registrations` tables; the activity
-// type (live event vs campaign) and the Sanity _id come from the CMS.
+// Participation resolves through the competition container roster (cohort_members
+// on event_participation containers, migration 062 / P1); the activity type (live
+// event vs campaign) and the Sanity _id come from the CMS.
 
 export interface PortalEvent {
   /** Sanity event _id — the target_ref for entitlements/materials. May be null
@@ -30,19 +31,31 @@ export interface PortalEvent {
 export async function getMemberEvents(member: CommunityMember): Promise<PortalEvent[]> {
   const db = supabaseServer()
 
-  const { data: participations } = await db
-    .from('participants')
-    .select('registrations(event_slug, event_title)')
+  // The competitions the member is on the roster for: active cohort_members rows on
+  // event_participation containers (migration 062). campaign_ref is the event_slug.
+  const { data: rosters } = await db
+    .from('cohort_members')
+    .select('mentoring_cohorts!inner(campaign_ref, name, container_type)')
     .eq('member_id', member.id)
+    .eq('status', 'active')
 
-  type Row = { registrations: { event_slug: string; event_title: string } | { event_slug: string; event_title: string }[] | null }
-  const regs = ((participations ?? []) as unknown as Row[])
-    .map((p) => (Array.isArray(p.registrations) ? p.registrations[0] : p.registrations))
-    .filter((r): r is { event_slug: string; event_title: string } => !!r?.event_slug)
+  type Row = {
+    mentoring_cohorts:
+      | { campaign_ref: string | null; name: string; container_type: string }
+      | { campaign_ref: string | null; name: string; container_type: string }[]
+      | null
+  }
+  const conts = ((rosters ?? []) as unknown as Row[])
+    .map((r) => (Array.isArray(r.mentoring_cohorts) ? r.mentoring_cohorts[0] : r.mentoring_cohorts))
+    .filter(
+      (c): c is { campaign_ref: string; name: string; container_type: string } =>
+        !!c && c.container_type === 'event_participation' && !!c.campaign_ref,
+    )
 
-  // De-dupe by slug, keeping the first title we see.
+  // De-dupe by slug; keep the first container name (minus any " — group" suffix)
+  // as a title fallback for when Sanity can't resolve the event.
   const bySlug = new Map<string, string>()
-  for (const r of regs) if (!bySlug.has(r.event_slug)) bySlug.set(r.event_slug, r.event_title)
+  for (const c of conts) if (!bySlug.has(c.campaign_ref)) bySlug.set(c.campaign_ref, c.name.split(' — ')[0])
 
   const slugs = [...bySlug.keys()]
   if (slugs.length === 0) return []

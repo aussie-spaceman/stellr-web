@@ -222,11 +222,26 @@ export async function POST(req: NextRequest) {
     const declaredAdultCount = adult_count
     const declaredStudentCount = registrant_role === 'student_manager' ? 1 + student_count : student_count
 
+    // Amount owed for this registration: per-seat event fee × seats, or 0 when the
+    // event has no Stripe price (campaigns / free events). Drives the payment gate.
+    let amountDueCents = 0
+    const feePriceId = (eventForGate as { stripePriceId?: string } | null)?.stripePriceId
+    const feeStripe = getStripe()
+    if (feePriceId && feeStripe) {
+      try {
+        const pr = await feeStripe.prices.retrieve(feePriceId)
+        amountDueCents = (pr.unit_amount ?? 0) * (total_participants ?? 0)
+      } catch (e) {
+        console.error('[register/group] price lookup failed (amount_due defaults 0):', e)
+      }
+    }
+
     // Create registration record
     const { data: registration, error: regError } = await db.from('registrations').insert({
       event_slug, event_title,
       type: 'group',
       status: 'pending',
+      amount_due_cents: amountDueCents,
       adult_count: declaredAdultCount,
       student_count: declaredStudentCount,
       teacher_first_name: teacher.first_name,
@@ -367,6 +382,7 @@ export async function POST(req: NextRequest) {
           memberId,
           eventSlug: event_slug,
           eventTitle: event_title,
+          registrationId: regId,
         })
       )
     )

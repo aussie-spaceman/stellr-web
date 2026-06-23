@@ -16,21 +16,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const body = await req.json() as { tierId: string; billingInterval: 'monthly' | 'annual' }
-  const { tierId, billingInterval } = body
+  const body = await req.json() as { tierId?: string; tierName?: string; billingInterval: 'monthly' | 'annual' }
+  const { tierId, tierName, billingInterval } = body
 
-  if (!tierId || !billingInterval) {
-    return NextResponse.json({ error: 'Missing tierId or billingInterval' }, { status: 400 })
+  if ((!tierId && !tierName) || !billingInterval) {
+    return NextResponse.json({ error: 'Missing tierId/tierName or billingInterval' }, { status: 400 })
   }
 
   const db = supabaseServer()
 
-  // Get the tier and its price IDs
-  const { data: tier } = await db
-    .from('membership_tiers')
-    .select('id, name, stripe_price_id, stripe_price_id_monthly, is_free')
-    .eq('id', tierId)
-    .single()
+  // Get the tier and its price IDs — look up by id or by name
+  const tierBase = db.from('membership_tiers').select('id, name, stripe_price_id, stripe_price_id_monthly, is_free')
+  const { data: tier } = tierId
+    ? await tierBase.eq('id', tierId).single()
+    : await tierBase.eq('name', tierName!).single()
 
   if (!tier || tier.is_free) {
     return NextResponse.json({ error: 'Invalid tier' }, { status: 400 })

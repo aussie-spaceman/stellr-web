@@ -39,6 +39,7 @@ export async function POST(req: Request) {
       description: body.description?.trim() || null,
       material_kind: body.materialKind ?? 'general',
       course_type: body.courseType ?? 'self_paced',
+      theme: body.theme ?? null,
       start_date: body.startDate || null,
       event_ref: body.eventRef || null,
       min_tier_rank: Number.isFinite(body.minTierRank) ? body.minTierRank : 0,
@@ -69,9 +70,25 @@ export async function PATCH(req: Request) {
   if (typeof body.description === 'string') patch.description = body.description.trim() || null
   if (typeof body.materialKind === 'string') patch.material_kind = body.materialKind
   if (typeof body.courseType === 'string') patch.course_type = body.courseType
+  if ('theme' in body) patch.theme = body.theme || null
   if ('startDate' in body) patch.start_date = body.startDate || null
   if (typeof body.minTierRank === 'number') patch.min_tier_rank = body.minTierRank
   if ('eventRef' in body) patch.event_ref = body.eventRef || null
+  if ('certTemplatePath' in body) patch.cert_template_path = body.certTemplatePath || null
+  // Per-course reminder & escalation settings (Reminders & escalation tab).
+  const reminderCols: Record<string, string> = {
+    remindInapp: 'remind_inapp',
+    remindEmail: 'remind_email',
+    remindSms: 'remind_sms',
+    remind2wk: 'remind_2wk',
+    remind1wk: 'remind_1wk',
+    remind2d: 'remind_2d',
+    remind1d: 'remind_1d',
+    escalateSupervisor: 'escalate_supervisor',
+  }
+  for (const [field, col] of Object.entries(reminderCols)) {
+    if (typeof body[field] === 'boolean') patch[col] = body[field]
+  }
 
   const db = supabaseServer()
   const { error } = await db.from('training_modules').update(patch).eq('id', id)

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, memberCanAccess } from '@/lib/community'
 import { autoCompleteTrainingAction } from '@/lib/sessions'
+import { ensureCertificate } from '@/lib/training-portal'
 
 // POST /api/community/training/progress
 // Body: { itemId: string, status: 'completed' | 'in_progress' }
@@ -55,6 +56,8 @@ export async function POST(req: Request) {
     if (count != null && doneCount != null && doneCount >= count) {
       await autoCompleteTrainingAction(member.id, moduleId)
     }
+    // Auto-issue a completion certificate once every published lesson is done.
+    await ensureCertificate(member.id, moduleId)
   }
 
   return NextResponse.json({ ok: true })

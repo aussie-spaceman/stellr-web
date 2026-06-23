@@ -26,6 +26,26 @@ export async function GET(req: NextRequest) {
     .not('due_at', 'is', null)
   if (!assignments?.length) return NextResponse.json({ reminded: 0, escalated: 0 })
 
+  // Per-course reminder & escalation settings (Reminders & escalation tab). The
+  // schedule toggles gate which buckets fire; channels gate whether to remind at
+  // all; escalate_supervisor gates teacher/SM escalation.
+  const moduleIds = [...new Set(assignments.map((a) => a.module_id as string))]
+  const { data: settingsRows } = await db
+    .from('training_modules')
+    .select('id, remind_inapp, remind_email, remind_sms, remind_2wk, remind_1wk, remind_2d, remind_1d, escalate_supervisor')
+    .in('id', moduleIds)
+  type Settings = {
+    remind_inapp: boolean; remind_email: boolean; remind_sms: boolean
+    remind_2wk: boolean; remind_1wk: boolean; remind_2d: boolean; remind_1d: boolean
+    escalate_supervisor: boolean
+  }
+  const settingsById = new Map<string, Settings>((settingsRows ?? []).map((s) => [s.id as string, s as unknown as Settings]))
+  const DEFAULTS: Settings = {
+    remind_inapp: true, remind_email: true, remind_sms: false,
+    remind_2wk: false, remind_1wk: true, remind_2d: false, remind_1d: true,
+    escalate_supervisor: true,
+  }
+
   // Resolve event _ids → registration slugs (assignments key off Sanity _id).
   const eventRefs = [...new Set(assignments.map((a) => a.event_ref as string))]
   const events = await getEventsByIds(eventRefs)
@@ -39,12 +59,22 @@ export async function GET(req: NextRequest) {
     const slug = slugByRef.get(a.event_ref as string)
     if (!slug) continue
 
-    // Bucket selection.
-    let bucket: '7d' | '1d' | 'overdue' | null = null
+    const s = settingsById.get(a.module_id as string) ?? DEFAULTS
+
+    // Bucket selection — gated by the course's enabled schedule toggles. The
+    // sent_reminders unique key (kind, ref_id, member_id, bucket) prevents dupes.
+    let bucket: '2wk' | '1wk' | '2d' | '1d' | 'overdue' | null = null
     if (due < now) bucket = 'overdue'
-    else if (due <= now + DAY) bucket = '1d'
-    else if (due <= now + 7 * DAY) bucket = '7d'
+    else if (s.remind_1d && due <= now + DAY) bucket = '1d'
+    else if (s.remind_2d && due <= now + 2 * DAY) bucket = '2d'
+    else if (s.remind_1wk && due <= now + 7 * DAY) bucket = '1wk'
+    else if (s.remind_2wk && due <= now + 14 * DAY) bucket = '2wk'
     if (!bucket) continue
+
+    // A reminder needs at least one delivery channel enabled; escalation is gated
+    // separately by escalate_supervisor.
+    const anyChannel = s.remind_inapp || s.remind_email || s.remind_sms
+    if (bucket !== 'overdue' && !anyChannel) continue
 
     // Module item ids (to measure completion).
     const { data: items } = await db.from('training_items').select('id').eq('module_id', a.module_id)
@@ -81,8 +111,9 @@ export async function GET(req: NextRequest) {
       if ((count ?? 0) >= itemIds.length) continue // already done
 
       if (bucket === 'overdue') {
-        // Escalate mandatory overdue training to the teacher / Student Manager.
-        if (!a.is_mandatory) continue
+        // Escalate mandatory overdue training to the teacher / Student Manager,
+        // unless the course has escalation switched off.
+        if (!a.is_mandatory || !s.escalate_supervisor) continue
         const reg = regById.get(p.registration_id)
         const teacherEmail = (reg as { teacher_email?: string } | undefined)?.teacher_email
         if (!teacherEmail) continue

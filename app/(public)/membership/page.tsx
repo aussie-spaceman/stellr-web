@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Award, Certificate, Event, Team } from '@stellr/icons'
 import { MembershipCompareTable } from '@/components/membership/MembershipCompareTable'
 import { MembershipFaq } from '@/components/membership/MembershipFaq'
+import { TierCheckoutButton } from '@/components/membership/TierCheckoutButton'
 
 export const metadata: Metadata = {
   title: 'Membership',
@@ -447,7 +448,10 @@ export default function MembershipPage() {
                 <FeatureRow>CPD credits &amp; hours</FeatureRow>
                 <FeatureRow>Student awards included</FeatureRow>
               </div>
-              <BtnSoft href="/contact">Get Trailblazer</BtnSoft>
+              <TierCheckoutButton
+                tierName="Trailblazer"
+                className="inline-flex items-center justify-center w-full px-5 py-[10px] text-sm bg-primary text-white font-display font-bold rounded-control hover:bg-primary-deep transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              />
             </div>
 
           </div>

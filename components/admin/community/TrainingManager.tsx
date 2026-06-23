@@ -20,6 +20,9 @@ import {
   X,
 } from 'lucide-react'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
+import { ObjectAssignments, type AdminAssignment, type AdminTier } from '@/components/admin/training/ObjectAssignments'
+import type { TrainableObject } from '@/lib/training-admin'
+import { deriveType, THEME_META, TYPE_META, type CourseTheme } from '@/lib/training'
 
 const COURSE_TYPES = [
   {
@@ -94,18 +97,29 @@ export interface AdminModule {
   description: string | null
   material_kind: (typeof KINDS)[number]
   course_type: CourseType
+  theme: CourseTheme | null
+  cert_template_path: string | null
   start_date: string | null
   event_ref: string | null
   min_tier_rank: number
   is_published: boolean
   training_sections: AdminSection[]
   training_items: AdminLesson[]
+  course_object_assignments: AdminAssignment[]
 }
 
 const kindIcon = (k: AdminLesson['content_kind']) =>
   k === 'video' || k === 'live' ? Video : k === 'link' || k === 'google_doc' ? Link2 : FileText
 
-export function TrainingManager({ modules }: { modules: AdminModule[] }) {
+export function TrainingManager({
+  modules,
+  objects = [],
+  tiers = [],
+}: {
+  modules: AdminModule[]
+  objects?: TrainableObject[]
+  tiers?: AdminTier[]
+}) {
   const router = useRouter()
   const [open, setOpen] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -184,6 +198,12 @@ export function TrainingManager({ modules }: { modules: AdminModule[] }) {
               {isOpen && (
                 <div className="space-y-5 border-t border-brand-hairline bg-brand-canvas/60 px-4 py-4">
                   <CourseSettings module={m} onDone={() => router.refresh()} />
+                  <ObjectAssignments
+                    moduleId={m.id}
+                    assignments={m.course_object_assignments ?? []}
+                    objects={objects}
+                    tiers={tiers}
+                  />
                   <Curriculum module={m} sections={sections} onDone={() => router.refresh()} />
                 </div>
               )}
@@ -259,6 +279,25 @@ function CourseSettings({ module: m, onDone }: { module: AdminModule; onDone: ()
     }
   }
 
+  // Theme drives the accent colour across member screens + certificates.
+  const changeTheme = async (theme: string) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/community/training/modules', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: m.id, theme: theme || null }),
+      })
+      if (res.ok) onDone()
+      else setError('Could not change theme')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const typeMeta = TYPE_META[deriveType(m.material_kind)]
+
   if (editing) {
     return (
       <div className="space-y-2 rounded-lg border border-brand-border bg-white p-3">
@@ -320,6 +359,28 @@ function CourseSettings({ module: m, onDone }: { module: AdminModule; onDone: ()
             ))}
           </select>
         </label>
+        <label className="flex items-center gap-1.5 text-xs font-medium text-brand-muted-soft" title="Accent theme shown on member course rows, cards and certificates.">
+          Theme
+          <select
+            value={m.theme ?? ''}
+            onChange={(e) => changeTheme(e.target.value)}
+            disabled={busy}
+            className="rounded-md border border-brand-border px-2 py-1 text-xs font-medium text-brand-muted disabled:opacity-50"
+          >
+            <option value="">None</option>
+            {(['space', 'environmental', 'campaign'] as CourseTheme[]).map((t) => (
+              <option key={t} value={t}>{THEME_META[t].label}</option>
+            ))}
+          </select>
+        </label>
+        <span
+          className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+          style={{ background: typeMeta.tint, color: typeMeta.ink }}
+          title="Type is derived from the course kind"
+        >
+          {typeMeta.label}
+        </span>
+        <CertTemplateControl module={m} onDone={onDone} />
         {error && <span className="text-xs text-red-600">{error}</span>}
       </div>
       <DeleteEntityButton
@@ -331,6 +392,61 @@ function CourseSettings({ module: m, onDone }: { module: AdminModule; onDone: ()
         className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-800"
       />
     </div>
+  )
+}
+
+/* ─── Certificate template (optional uploaded PDF) ──────────────────────────── */
+
+function CertTemplateControl({ module: m, onDone }: { module: AdminModule; onDone: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const has = !!m.cert_template_path
+
+  const upload = async (file: File) => {
+    setBusy(true)
+    try {
+      const fd = new FormData()
+      fd.set('moduleId', m.id)
+      fd.set('file', file)
+      const res = await fetch('/api/admin/community/training/cert-template', { method: 'POST', body: fd })
+      if (res.ok) onDone()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const clear = async () => {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/admin/community/training/cert-template?moduleId=${m.id}`, { method: 'DELETE' })
+      if (res.ok) onDone()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <span className="flex items-center gap-1.5 text-xs font-medium text-brand-muted-soft" title="Optional PDF template for this course's completion certificate. If unset, a default Stellr certificate is generated.">
+      Certificate
+      {has ? (
+        <>
+          <span className="rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700">Template set</span>
+          <button onClick={clear} disabled={busy} className="text-brand-muted-soft hover:text-red-500 disabled:opacity-50">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </>
+      ) : (
+        <label className="cursor-pointer rounded-md border border-brand-border px-2 py-1 text-[11px] font-medium text-brand-muted hover:bg-brand-canvas">
+          {busy ? 'Uploading…' : 'Upload PDF'}
+          <input
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            disabled={busy}
+            onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
+          />
+        </label>
+      )}
+    </span>
   )
 }
 

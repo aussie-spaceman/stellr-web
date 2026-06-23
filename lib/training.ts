@@ -22,6 +22,51 @@ export const COURSE_TYPE_LABELS: Record<CourseType, string> = {
   scheduled: 'Scheduled',
 }
 
+/**
+ * Visual/content theme of a course (Training Scope domain model). Distinct from
+ * material_kind (which controls WHERE a course surfaces): theme drives the accent
+ * colour shown on course rows, cards, certificates, and event-readiness tiles.
+ */
+export type CourseTheme = 'space' | 'environmental' | 'campaign'
+
+export const THEME_META: Record<CourseTheme, { label: string; color: string; tint: string; ink: string }> = {
+  space:         { label: 'Space',         color: '#7C5CFC', tint: '#F1ECFF', ink: '#5B3FD6' },
+  environmental: { label: 'Environmental', color: '#1FA97A', tint: '#E7F7F1', ink: '#158463' },
+  campaign:      { label: 'Campaign',      color: '#E0922F', tint: '#FBEFDD', ink: '#C2722A' },
+}
+
+/** Neutral fallback accent for courses with no theme set yet. */
+export const NO_THEME_ACCENT = { label: '', color: '#3C6DF6', tint: '#EAF0FE', ink: '#2C53C6' }
+
+export function themeAccent(theme: CourseTheme | null | undefined) {
+  return theme ? THEME_META[theme] : NO_THEME_ACCENT
+}
+
+/**
+ * The course "Type" shown on cards/headers is DERIVED, not stored: Event &
+ * Campaign vs CTE · Career Technical. Curriculum is treated as CTE-flavoured
+ * (ongoing, tier-dependent); general/library courses are their own neutral kind.
+ */
+export type TrainingType = 'event_campaign' | 'cte' | 'general'
+
+export const TYPE_META: Record<TrainingType, { label: string; short: string; color: string; tint: string; ink: string }> = {
+  event_campaign: { label: 'Event & Campaign', short: 'Event', color: '#3C6DF6', tint: '#EAF0FE', ink: '#2C53C6' },
+  cte:            { label: 'CTE · Career Technical', short: 'CTE', color: '#16B6C4', tint: '#E2F6F8', ink: '#0E8C97' },
+  general:        { label: 'Library', short: 'Library', color: '#5A6178', tint: '#F0F2F8', ink: '#5A6178' },
+}
+
+/** Derive the displayed Type from a course's material_kind. */
+export function deriveType(kind: MaterialKind): TrainingType {
+  if (kind === 'event' || kind === 'campaign') return 'event_campaign'
+  if (kind === 'cte' || kind === 'curriculum') return 'cte'
+  return 'general'
+}
+
+/** Issuer name shown on certificates, derived from the course kind. */
+export function courseIssuer(kind: MaterialKind): string {
+  return kind === 'cte' || kind === 'curriculum' ? 'Stellr Academy' : 'Stellr Education'
+}
+
 export interface TrainingItem {
   id: string
   title: string
@@ -50,7 +95,10 @@ export interface TrainingModuleSummary {
   description: string | null
   material_kind: MaterialKind
   course_type: CourseType
+  theme: CourseTheme | null
   event_ref: string | null
+  /** Legacy tier gate (0 = any authenticated member; >0 = needs a paid tier). */
+  minTierRank: number
   sectionCount: number
   itemCount: number
   completedCount: number
@@ -86,7 +134,7 @@ export async function listModules(
   let q = db
     .from('training_modules')
     .select(
-      'id, title, description, material_kind, course_type, event_ref, min_tier_rank, training_items(id, status, section_id)'
+      'id, title, description, material_kind, course_type, theme, event_ref, min_tier_rank, training_items(id, status, section_id)'
     )
     .eq('is_published', true)
     .order('display_order', { ascending: true })
@@ -103,6 +151,7 @@ export async function listModules(
     description: string | null
     material_kind: MaterialKind
     course_type: CourseType
+    theme: CourseTheme | null
     event_ref: string | null
     min_tier_rank: number
     training_items: { id: string; status: string; section_id: string | null }[]
@@ -134,7 +183,9 @@ export async function listModules(
       description: m.description,
       material_kind: m.material_kind,
       course_type: m.course_type ?? 'self_paced',
+      theme: m.theme ?? null,
       event_ref: m.event_ref,
+      minTierRank: m.min_tier_rank ?? 0,
       sectionCount,
       itemCount: itemIds.length,
       completedCount: itemIds.filter((id) => completed.has(id)).length,
@@ -204,7 +255,7 @@ export async function getModule(
   const { data: m } = await db
     .from('training_modules')
     .select(
-      'id, title, description, material_kind, course_type, start_date, event_ref, min_tier_rank, is_published'
+      'id, title, description, material_kind, course_type, theme, start_date, event_ref, min_tier_rank, is_published'
     )
     .eq('id', moduleId)
     .maybeSingle()
@@ -279,7 +330,9 @@ export async function getModule(
     description: m.description,
     material_kind: m.material_kind as MaterialKind,
     course_type: courseType,
+    theme: (m.theme as CourseTheme | null) ?? null,
     event_ref: m.event_ref,
+    minTierRank: (m.min_tier_rank as number | null) ?? 0,
     sectionCount: sectionRows.length,
     itemCount: itemRows.length,
     completedCount: itemRows.filter((i) => completed.has(i.id)).length,

@@ -277,7 +277,46 @@ Original P2 plan (for reference):
 - Wire into member portal, chat (`canAccessChannel`), materials in **report-only**: log what
   *would* block via `logActivity`, do not deny yet.
 
-### P3 — Per-object admin pages + nav restructure
+### P3 — Per-object admin pages + nav restructure ⏳ PARTIAL 2026-06-22 (core direct-grant DONE; restructure remains)
+DONE — the core missing capability (the original pain "give this person access to a competition"):
+`/api/admin/events/[slug]/roster` (GET/POST/DELETE, `requireEventAccess`-gated) adds/removes a
+member on the event-level container roster (the portal resolves through it, so access is
+immediate); `components/admin/events/EventAccessGrant.tsx` (reuses `MemberPicker`) mounted on the
+admin event detail page. `ensureEventContainer` exported from `lib/container-sync.ts`. tsc+build clean.
+DONE (2026-06-22, batch 4) — dedicated Spaces admin + nav restructure:
+- **`/admin/community/spaces`**: new page + `SpacesManager` + `/api/admin/community/spaces`
+  (GET/POST/PATCH) — create / edit / archive community Spaces, set who can see each (min_tier_rank).
+- **Nav moves** (`AdminNav`): Spaces added to Community; Moderation moved Community→Operations;
+  Schools moved Operations→"Members & membership". tsc+build clean (new routes registered).
+Still remaining: per-object tabbed pages (Roster·Contents·Announcements·Moderation·Calendar);
+announcements→into objects; training page "Shows In" + "Assign to competition participants"
+removal; entitlements dropdown copy; store-discounts Sanity dropdown.
+
+DONE (2026-06-22, batch 3) — COACHING CONVERGENCE + a critical leak fix:
+- **Container-type leak fix (important):** P0's `event_participation` containers were leaking into
+  the mentoring UI because the mentoring queries had no `container_type` filter — **14 members**
+  would have seen competitions as "cohorts." Scoped `listMemberCohorts`, `getCohortSpace`, the
+  admin sessions-page cohort query, the hosting page, and the cohort name-check to
+  `container_type='mentoring'`.
+- **Coaching as containers:** migration `064` backfills a coaching container (container_type
+  'coaching', mentor=coach, coachee on roster) per existing coaching session pair (no-op now — 0
+  coaching sessions in prod). `lib/container-sync.ts` `ensureCoachingContainer` is called from
+  `bookCoaching` and by a new admin direct-grant `/api/admin/coaching` (GET/POST) +
+  `components/admin/community/CoachingGrant.tsx` mounted on the admin sessions page (POST also
+  provisions the pair's chat → immediate access). Coaching now appears in the member access panel.
+  tsc+build clean. APPLY migration 064 (harmless no-op on current data).
+
+DONE (2026-06-22, batch 2): the unified **"all access in one place" panel** —
+`lib/member-access.ts` `getMemberAccessSummary` + `/api/admin/members/[id]/access` (GET) +
+`components/admin/MemberAccessPanel.tsx` (read-only: competitions / mentoring / coaching rosters)
+mounted in `AdminMemberDetail` sidebar. tsc+build clean.
+NOT YET DONE (follow-on slice):
+per-object tabbed admin pages (Roster·Contents·Announcements·Moderation·Calendar); dedicated
+`/admin/community/spaces`; direct-grant for coaching (needs coaching-as-container first); moving announcements→object / moderation→
+operations / schools→under members; training page "Shows In" + "Assign to competition participants"
+removal; entitlements dropdown copy; store-discounts Sanity dropdown; AdminNav restructure.
+
+Original P3 plan (for reference):
 - Generic **object admin page** pattern with tabs: **Roster · Contents · Announcements ·
   Moderation · Calendar/Deadlines**. Extract `ContainerRoster.tsx` from `SessionsManager.tsx`.
 - **Direct admin grant** for competitions & coaching (the two missing add-paths) via the roster
@@ -289,7 +328,15 @@ Original P2 plan (for reference):
   the entitlements dropdown + program rows; store-discounts event-slug dropdown from Sanity.
 - Update `components/admin/AdminNav.tsx` to the new section layout.
 
-### P4 — Flip enforcement (D-D)
+### P4 — Flip enforcement (D-D) ✅ DONE 2026-06-22 (built behind a flag, default OFF)
+`accessGatesEnforced()` reads env `ACCESS_GATES_ENFORCE` (default 'false' = report-only). The
+competition portal page always reports (P2) and, when the flag is 'true' AND gates aren't met,
+renders a friendly locked screen naming what's missing (payment / DocuSign) instead of the
+materials. Default OFF so deploying never locks anyone out; flip to 'true' per environment once
+rosters reflect real paid/signed members (today's test data would deny 8/15 on genuine DocuSign).
+tsc+build clean.
+
+Original P4 plan (for reference):
 - Once P2 report-only is quiet, turn `accessUnlocked()` from report-only to enforcing in
   portal/chat/materials, behind a single feature flag (toggle per environment).
 

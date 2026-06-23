@@ -34,9 +34,10 @@ export default async function AdminEntitlementsPage() {
     ])
 
   const targets: Target[] = [
-    // Category-wide grants for the upcoming Mentoring/Coaching components.
-    { type: 'mentoring', ref: '*', label: 'Mentoring — access (all)', group: 'Programs' },
-    { type: 'coaching', ref: '*', label: 'Coaching — access (all)', group: 'Programs' },
+    // Programs: a tier dropped here grants that tier access to ALL mentoring
+    // cohorts / coaching workshops (a blanket "this tier includes mentoring").
+    { type: 'mentoring', ref: '*', label: 'All mentoring cohorts', group: 'Programs (whole-category access)' },
+    { type: 'coaching', ref: '*', label: 'All coaching workshops', group: 'Programs (whole-category access)' },
     ...(spaces ?? []).map((s) => ({
       type: 'space' as const,
       ref: s.id,
@@ -64,6 +65,11 @@ export default async function AdminEntitlementsPage() {
         <p className="mt-0.5 text-sm text-brand-muted-soft">
           Drag a membership tier onto any content row to grant access. This is the entitlement
           source of truth — edit it any time as your tier model evolves.
+        </p>
+        <p className="mt-2 text-xs text-brand-muted-soft">
+          Each chip has an access level, lowest to highest: <b>View</b> (open / read it) ·{' '}
+          <b>Download</b> (save the file) · <b>Enrol</b> (join a course or program) ·{' '}
+          <b>Host</b> (run / manage it). A higher level includes the ones below it.
         </p>
       </div>
 

@@ -8,6 +8,7 @@ import { requireEventAccess } from '@/lib/event-access'
 import { getEventRoster } from '@/lib/event-admin'
 import EventRoster from '@/components/admin/EventRoster'
 import EventManagerAssignments from '@/components/admin/EventManagerAssignments'
+import { EventAccessGrant } from '@/components/admin/events/EventAccessGrant'
 import EventCompanies, { type CompanyRow } from '@/components/admin/EventCompanies'
 import EventBadges from '@/components/admin/EventBadges'
 import { RefundPolicyEditor } from '@/components/admin/RefundPolicyEditor'
@@ -177,6 +178,10 @@ export default async function AdminEventDetailPage({ params }: { params: Promise
       </div>
 
       {access.isAdmin && <EventManagerAssignments eventSlug={slug} initialAssignments={assignments} />}
+
+      <div className="mt-6">
+        <EventAccessGrant slug={slug} />
+      </div>
 
       {!isCampaign && <EventCompanies eventSlug={slug} companies={companies} studentCount={studentCount} />}
 

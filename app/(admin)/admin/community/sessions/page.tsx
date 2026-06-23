@@ -9,6 +9,7 @@ import {
 } from '@/components/admin/community/SessionsManager'
 import { SessionCalendar } from '@/components/community/SessionCalendar'
 import { AdminOversight } from '@/components/admin/community/AdminOversight'
+import { CoachingGrant } from '@/components/admin/community/CoachingGrant'
 
 export const metadata = { title: 'Admin — Coaching & Mentoring' }
 
@@ -33,6 +34,7 @@ export default async function AdminSessionsPage() {
         .select(
           'id, name, lifecycle, mentor:members!mentoring_cohorts_mentor_member_id_fkey(first_name, last_name), cohort_members(member_id, status), cohort_training_links(module_id, is_mandatory, due_at, training_modules(title))',
         )
+        .eq('container_type', 'mentoring')
         .eq('lifecycle', 'active'),
       db
         .from('session_entitlements')
@@ -100,6 +102,10 @@ export default async function AdminSessionsPage() {
         entitlements={(ents ?? []) as AdminEntitlement[]}
         modules={modules}
       />
+
+      <section className="mt-10">
+        <CoachingGrant />
+      </section>
 
       <section className="mt-10">
         <h2 className="mb-4 text-lg font-semibold text-brand-blue-dark">Oversight</h2>

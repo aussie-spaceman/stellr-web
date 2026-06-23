@@ -4,7 +4,7 @@ import Image from 'next/image'
 import { ArrowLeft, FileText, Lock } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
 import { memberIsParticipant, getEventMaterials } from '@/lib/event-portal'
-import { reportEventAccessGates } from '@/lib/access-gates'
+import { reportEventAccessGates, accessGatesEnforced } from '@/lib/access-gates'
 import { listModules } from '@/lib/training'
 import { MaterialDownloadButton } from '@/components/community/MaterialDownloadButton'
 
@@ -24,17 +24,43 @@ export default async function EventPortalPage({
   const event = await memberIsParticipant(member, slug)
   if (!event) notFound() // not a participant → no access
 
-  // P2 (report-only): record whether payment / DocuSign WOULD block this member.
-  // Access is NOT gated on it yet — this surfaces who'd be locked out before the
-  // P4 enforcement flip. Non-fatal.
-  await reportEventAccessGates(member, slug)
+  // Access gates: always report (P2); deny only when enforcement is on (P4 flag).
+  const gates = await reportEventAccessGates(member, slug)
+  const isCampaign = event.activityType === 'campaign'
+
+  if (accessGatesEnforced() && !gates.unlocked) {
+    const missing = [
+      !gates.payment && 'complete payment',
+      !gates.docusign && 'sign the required agreement(s)',
+    ].filter(Boolean) as string[]
+    return (
+      <div>
+        <Link
+          href="/events"
+          className="mb-4 inline-flex items-center gap-1 text-sm text-brand-muted-soft hover:text-brand-muted"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Events
+        </Link>
+        <div className="rounded-card-lg border border-brand-border bg-white p-8 text-center">
+          <Lock className="mx-auto h-8 w-8 text-brand-gold-ink" />
+          <h1 className="mt-3 font-heading text-[22px] uppercase text-brand-blue-dark">{event.title}</h1>
+          <p className="mx-auto mt-2 max-w-md text-sm text-brand-muted">
+            Your spot is reserved, but access to this {isCampaign ? 'campaign' : 'event'} unlocks once you{' '}
+            {missing.join(' and ')}.
+          </p>
+          <p className="mt-4 text-xs text-brand-muted-soft">
+            Already done this? It can take a few minutes to update — or contact us if it persists.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   const materials = await getEventMaterials(member, event)
   const training = event.eventId
     ? await listModules(member, { eventRef: event.eventId })
     : []
-
-  const isCampaign = event.activityType === 'campaign'
 
   return (
     <div>

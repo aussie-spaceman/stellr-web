@@ -35,7 +35,7 @@ export default async function HostingPage() {
   ])
 
   const { data: cohortRows } = caps.canMentor
-    ? await db.from('mentoring_cohorts').select('id, name').eq('mentor_member_id', member.id).eq('is_active', true)
+    ? await db.from('mentoring_cohorts').select('id, name').eq('mentor_member_id', member.id).eq('is_active', true).eq('container_type', 'mentoring')
     : { data: [] as { id: string; name: string }[] }
 
   const completed = sessions.filter((s) => s.status === 'completed').length

@@ -7,16 +7,23 @@ import type { EventDiscount, TierDiscount } from '@/lib/store/types'
 
 type Lookup = { id: string; name: string }
 
+export interface EventOption {
+  slug: string
+  title: string
+}
+
 export function DiscountMatrix({
   tier,
   event,
   tiers,
   products,
+  events,
 }: {
   tier: TierDiscount[]
   event: EventDiscount[]
   tiers: Lookup[]
   products: Lookup[]
+  events: EventOption[]
 }) {
   const router = useRouter()
   const tierName = (id: string) => tiers.find((t) => t.id === id)?.name ?? id
@@ -122,7 +129,7 @@ export function DiscountMatrix({
             </tbody>
           </table>
         </div>
-        <AddEventDiscount products={products} onSave={save} />
+        <AddEventDiscount products={products} events={events} onSave={save} />
       </section>
     </div>
   )
@@ -197,9 +204,11 @@ function AddTierDiscount({
 
 function AddEventDiscount({
   products,
+  events,
   onSave,
 }: {
   products: Lookup[]
+  events: EventOption[]
   onSave: (body: Record<string, unknown>) => void
 }) {
   const [scope, setScope] = useState<'global' | 'event'>('global')
@@ -214,7 +223,12 @@ function AddEventDiscount({
         <option value="event">Specific event</option>
       </select>
       {scope === 'event' && (
-        <input value={eventSlug} onChange={(e) => setEventSlug(e.target.value)} placeholder="event-slug" className={inputCls} />
+        <select value={eventSlug} onChange={(e) => setEventSlug(e.target.value)} className={inputCls}>
+          <option value="">Choose an event…</option>
+          {events.map((ev) => (
+            <option key={ev.slug} value={ev.slug}>{ev.title}</option>
+          ))}
+        </select>
       )}
       <select value={productId} onChange={(e) => setProductId(e.target.value)} className={inputCls}>
         <option value="">All products</option>

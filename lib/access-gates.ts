@@ -20,6 +20,15 @@ export interface EventGateResult {
   unlocked: boolean
 }
 
+/**
+ * Whether access gates actually DENY (P4) or only report (P2). Off by default so
+ * deploying the enforcement code never locks anyone out; flip ACCESS_GATES_ENFORCE
+ * to 'true' once rosters reflect real paid/signed members. Report-only either way.
+ */
+export function accessGatesEnforced(): boolean {
+  return process.env.ACCESS_GATES_ENFORCE === 'true'
+}
+
 function isMinor(dob: string | null): boolean {
   if (!dob) return false
   const age = (Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000)

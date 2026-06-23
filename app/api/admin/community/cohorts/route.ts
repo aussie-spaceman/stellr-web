@@ -43,6 +43,7 @@ export async function POST(req: Request) {
     .from('mentoring_cohorts')
     .select('id')
     .ilike('name', name.trim())
+    .eq('container_type', 'mentoring')
     .maybeSingle()
   if (existing) {
     return NextResponse.json({ error: 'A cohort with that name already exists' }, { status: 409 })

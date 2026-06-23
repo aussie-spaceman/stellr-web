@@ -9,6 +9,7 @@ import { EventHistory } from '@/components/member/EventHistory'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { MemberMembershipManager } from '@/components/admin/MemberMembershipManager'
 import { MemberCompliancePanel, type MemberCompliance } from '@/components/admin/MemberCompliancePanel'
+import { MemberAccessPanel } from '@/components/admin/MemberAccessPanel'
 import { ActivityTimeline, type ActivityItem } from '@/components/activity/ActivityTimeline'
 
 interface Member {
@@ -506,6 +507,10 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           />
 
           <MemberCompliancePanel memberId={member.id} compliance={compliance} />
+
+          <div className="bg-white rounded-xl border border-brand-border p-5">
+            <MemberAccessPanel memberId={member.id} />
+          </div>
 
           <div className="bg-white rounded-xl border border-brand-border p-5">
             <h2 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide mb-3">

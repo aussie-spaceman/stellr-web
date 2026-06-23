@@ -1,6 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { listEventDiscounts, listTierDiscounts } from '@/lib/store/discounts'
-import { DiscountMatrix } from '@/components/admin/store/DiscountMatrix'
+import { getAllEvents, getAllCampaigns } from '@/lib/sanity'
+import { DiscountMatrix, type EventOption } from '@/components/admin/store/DiscountMatrix'
 import { StoreNav } from '../StoreNav'
 
 export const metadata = { title: 'Admin — Store discounts' }
@@ -11,12 +12,19 @@ export const dynamic = 'force-dynamic'
 // override — mirrors the refund-policy model). 100% = the free included shirt.
 export default async function StoreDiscountsPage() {
   const db = supabaseServer()
-  const [tier, event, tiersRes, productsRes] = await Promise.all([
+  const [tier, event, tiersRes, productsRes, allEvents, allCampaigns] = await Promise.all([
     listTierDiscounts(),
     listEventDiscounts(),
     db.from('membership_tiers').select('id, name').order('sort_order'),
     db.from('store_products').select('id, name').neq('status', 'archived').order('name'),
+    getAllEvents().catch(() => null),
+    getAllCampaigns().catch(() => null),
   ])
+
+  type EventDoc = { slug?: { current?: string }; title?: string }
+  const events: EventOption[] = [...((allEvents ?? []) as EventDoc[]), ...((allCampaigns ?? []) as EventDoc[])]
+    .map((e) => ({ slug: e.slug?.current ?? '', title: e.title || e.slug?.current || '' }))
+    .filter((e) => e.slug)
 
   return (
     <div>
@@ -28,6 +36,7 @@ export default async function StoreDiscountsPage() {
         event={event}
         tiers={(tiersRes.data ?? []) as { id: string; name: string }[]}
         products={(productsRes.data ?? []) as { id: string; name: string }[]}
+        events={events}
       />
     </div>
   )

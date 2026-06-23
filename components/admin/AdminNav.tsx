@@ -17,6 +17,7 @@ const SECTIONS: Section[] = [
       { href: '/admin', label: 'Members' },
       { href: '/admin/membership', label: 'Membership' },
       { href: '/admin/community/entitlements', label: 'Access map' },
+      { href: '/admin/schools', label: 'Schools' },
     ],
   },
   {
@@ -26,9 +27,9 @@ const SECTIONS: Section[] = [
   {
     label: 'Community',
     items: [
+      { href: '/admin/community/spaces', label: 'Spaces' },
       { href: '/admin/community/resources', label: 'Resources' },
       { href: '/admin/community/announcements', label: 'Announcements' },
-      { href: '/admin/community/moderation', label: 'Moderation' },
       { href: '/admin/email', label: 'Email' },
     ],
   },
@@ -52,7 +53,7 @@ const SECTIONS: Section[] = [
     items: [
       { href: '/admin/delegations', label: 'Delegations' },
       { href: '/admin/staff', label: 'Staff roles' },
-      { href: '/admin/schools', label: 'Schools' },
+      { href: '/admin/community/moderation', label: 'Moderation' },
       { href: '/admin/docusigns', label: 'Consent forms' },
       { href: '/admin/compliance', label: 'Background checks' },
       { href: '/admin/activity-log', label: 'Activity log' },

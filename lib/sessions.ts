@@ -1,6 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { type CommunityMember, getCurrentMember, memberCanAccess } from '@/lib/community'
 import { containerAccessPersists } from '@/lib/containers'
+import { ensureCoachingContainer } from '@/lib/container-sync'
 import { getVideoProvider } from '@/lib/video-provider'
 import { notifyMember, notifyMembers } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
@@ -204,6 +205,11 @@ export async function bookCoaching(
     console.error('[sessions] book coaching error:', error)
     return { ok: false, error: 'Could not book session.' }
   }
+
+  // Converge onto the container model: ensure a coaching workshop container +
+  // roster for this coachee/coach pair so it surfaces in the member access panel
+  // and admin tooling. Non-fatal; the live access path is unchanged.
+  await ensureCoachingContainer(db, member.id, hostId)
 
   // Claim a paid credit atomically when not covered by the included allowance.
   if (usePaidExtra) {
@@ -721,6 +727,7 @@ export async function getCohortSpace(memberId: string, cohortId: string): Promis
     .from('mentoring_cohorts')
     .select('id, name, lifecycle, mentor_member_id')
     .eq('id', cohortId)
+    .eq('container_type', 'mentoring')
     .maybeSingle()
   if (!c) return null
 
@@ -816,13 +823,15 @@ export async function listMemberCohorts(memberId: string): Promise<CohortCard[]>
   const [{ data: asMember }, { data: asMentor }] = await Promise.all([
     db
       .from('cohort_members')
-      .select('mentoring_cohorts(id, name, lifecycle, mentor_member_id, cohort_members(member_id))')
+      .select('mentoring_cohorts!inner(id, name, lifecycle, mentor_member_id, container_type, cohort_members(member_id))')
       .eq('member_id', memberId)
-      .eq('status', 'active'),
+      .eq('status', 'active')
+      .eq('mentoring_cohorts.container_type', 'mentoring'),
     db
       .from('mentoring_cohorts')
       .select('id, name, lifecycle, mentor_member_id, cohort_members(member_id)')
-      .eq('mentor_member_id', memberId),
+      .eq('mentor_member_id', memberId)
+      .eq('container_type', 'mentoring'),
   ])
 
   type CohortRow = {

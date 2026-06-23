@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { auth } from '@clerk/nextjs/server'
 import { getCurrentMember } from '@/lib/community'
+import { Toaster } from '@/components/ui/Toast'
 
 export const metadata = { title: 'Community' }
 
@@ -21,5 +22,10 @@ export default async function CommunityLayout({
   const member = await getCurrentMember()
   if (!member) redirect('/account/onboarding')
 
-  return <>{children}</>
+  return (
+    <>
+      {children}
+      <Toaster />
+    </>
+  )
 }

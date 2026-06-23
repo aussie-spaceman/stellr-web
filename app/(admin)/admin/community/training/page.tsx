@@ -6,7 +6,8 @@ import { AdminTrainingTabs, type AdminTab } from '@/components/admin/training/Ad
 import { OverviewTab } from '@/components/admin/training/OverviewTab'
 import { EventTrackingTab } from '@/components/admin/training/EventTrackingTab'
 import { RemindersTab, type ReminderCourse } from '@/components/admin/training/RemindersTab'
-import { TrainingManager, type AdminModule } from '@/components/admin/community/TrainingManager'
+import { CourseBuilder } from '@/components/admin/training/CourseBuilder'
+import type { AdminModule } from '@/components/admin/community/TrainingManager'
 import type { AdminTier } from '@/components/admin/training/ObjectAssignments'
 
 export const metadata = { title: 'Admin — Training' }
@@ -18,7 +19,7 @@ const TITLES: Record<AdminTab, string> = {
   reminders: 'Reminders & escalation',
 }
 
-async function builderContent() {
+async function builderContent(initialCourseId?: string) {
   const db = supabaseServer()
   const [{ data: modules }, { data: tierRows }, objects] = await Promise.all([
     db
@@ -34,10 +35,11 @@ async function builderContent() {
     listTrainableObjects('all'),
   ])
   return (
-    <TrainingManager
-      modules={(modules ?? []) as unknown as AdminModule[]}
+    <CourseBuilder
+      courses={(modules ?? []) as unknown as AdminModule[]}
       objects={objects}
       tiers={(tierRows ?? []) as AdminTier[]}
+      initialCourseId={initialCourseId}
     />
   )
 }
@@ -70,7 +72,7 @@ async function reminderCourses(): Promise<ReminderCourse[]> {
 export default async function AdminTrainingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; obj?: string; filter?: string }>
+  searchParams: Promise<{ tab?: string; obj?: string; filter?: string; course?: string }>
 }) {
   const sp = await searchParams
   const tab = (['overview', 'builder', 'tracking', 'reminders'].includes(sp.tab ?? '')
@@ -79,7 +81,7 @@ export default async function AdminTrainingPage({
 
   let content: React.ReactNode = null
   if (tab === 'overview') content = <OverviewTab data={await getAdminOverview()} />
-  else if (tab === 'builder') content = await builderContent()
+  else if (tab === 'builder') content = await builderContent(sp.course)
   else if (tab === 'tracking')
     content = (
       <EventTrackingTab

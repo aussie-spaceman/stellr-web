@@ -4,12 +4,13 @@ import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
 
 const flagSchema = z.object({
-  contentType: z.enum(['post', 'comment']),
+  contentType: z.enum(['post', 'comment', 'resource']),
   contentId: z.string().uuid(),
-  reason: z.string().trim().max(500).optional(),
+  reason: z.string().trim().max(700).optional(),
 })
 
-// POST /api/community/flag — member flags a post or comment for admin review (FR-COM-07).
+// POST /api/community/flag — member or teacher flags a post, comment, or resource
+// for admin review (FR-COM-07). Reports land in the space's Moderation queue.
 export async function POST(req: Request) {
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })

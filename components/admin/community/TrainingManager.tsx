@@ -88,14 +88,6 @@ export interface AdminLesson {
   body: string | null
 }
 
-export interface AdminAssignment {
-  id: string
-  event_ref: string
-  event_role: string
-  is_mandatory: boolean
-  due_at: string | null
-}
-
 export interface AdminModule {
   id: string
   title: string
@@ -108,7 +100,6 @@ export interface AdminModule {
   is_published: boolean
   training_sections: AdminSection[]
   training_items: AdminLesson[]
-  training_assignments: AdminAssignment[]
 }
 
 const kindIcon = (k: AdminLesson['content_kind']) =>
@@ -194,11 +185,6 @@ export function TrainingManager({ modules }: { modules: AdminModule[] }) {
                 <div className="space-y-5 border-t border-brand-hairline bg-brand-canvas/60 px-4 py-4">
                   <CourseSettings module={m} onDone={() => router.refresh()} />
                   <Curriculum module={m} sections={sections} onDone={() => router.refresh()} />
-                  <AssignForm
-                    moduleId={m.id}
-                    assignments={m.training_assignments ?? []}
-                    onDone={() => router.refresh()}
-                  />
                 </div>
               )}
             </div>
@@ -1146,180 +1132,7 @@ function AddLessonForm({
   )
 }
 
-/* ─── Assign to event participants ───────────────────────────────────────────── */
+/* ─── (AssignForm removed — course-to-competition assignment moved to the     ── */
+/* ─── event's Training tab: /admin/events/[slug]?tab=training                ── */
+/* ─── Existing training_assignments rows remain and still surface to members. ── */
 
-const ASSIGN_ROLE_LABEL: Record<string, string> = {
-  all: 'All roles',
-  school_student: 'School Student',
-  school_student_manager: 'School Student Manager',
-  teacher: 'Teacher',
-  mentor: 'Mentor',
-  parent: 'Parent',
-}
-
-function AssignForm({
-  moduleId,
-  assignments,
-  onDone,
-}: {
-  moduleId: string
-  assignments: AdminAssignment[]
-  onDone: () => void
-}) {
-  const [eventRef, setEventRef] = useState('')
-  const [eventRole, setEventRole] = useState('all')
-  const [mandatory, setMandatory] = useState(false)
-  const [dueAt, setDueAt] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
-
-  const submit = async () => {
-    if (!eventRef.trim()) return
-    setBusy(true)
-    setError(null)
-    setSaved(false)
-    try {
-      const res = await fetch('/api/admin/community/training/assignments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          moduleId,
-          eventRef: eventRef.trim(),
-          eventRole,
-          isMandatory: mandatory,
-          dueAt: dueAt || null,
-        }),
-      })
-      if (res.ok) {
-        setEventRef('')
-        setDueAt('')
-        setMandatory(false)
-        setEventRole('all')
-        setSaved(true)
-        onDone()
-      } else {
-        const d = await res.json().catch(() => ({}))
-        setError(d.error || `Could not create assignment (${res.status})`)
-      }
-    } catch {
-      setError('Network error — please try again.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const remove = async (id: string) => {
-    setBusy(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/admin/community/training/assignments', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      })
-      if (res.ok) onDone()
-      else {
-        const d = await res.json().catch(() => ({}))
-        setError(d.error || 'Could not remove assignment')
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="rounded-lg border border-brand-border bg-white p-3">
-      <p className="mb-2 text-xs font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">
-        Assign to competition participants
-      </p>
-
-      {assignments.length > 0 && (
-        <ul className="mb-3 space-y-1.5">
-          {assignments.map((a) => (
-            <li
-              key={a.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-brand-hairline bg-brand-canvas/60 px-3 py-1.5 text-xs"
-            >
-              <span className="min-w-0 truncate text-brand-muted">
-                <span className="font-mono text-brand-muted-soft">{a.event_ref}</span>
-                {' · '}
-                {ASSIGN_ROLE_LABEL[a.event_role] ?? a.event_role}
-                {a.is_mandatory && (
-                  <span className="ml-2 rounded-full bg-red-50 px-1.5 py-0.5 font-medium text-red-600">
-                    Mandatory
-                  </span>
-                )}
-                {a.due_at && (
-                  <span className="ml-2 text-brand-muted-soft">due {formatDateShort(a.due_at)}</span>
-                )}
-              </span>
-              <button
-                onClick={() => remove(a.id)}
-                disabled={busy}
-                className="shrink-0 text-brand-muted-soft hover:text-red-500 disabled:opacity-50"
-                aria-label="Remove assignment"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="grid gap-2 sm:grid-cols-2">
-        <input
-          value={eventRef}
-          onChange={(e) => {
-            setEventRef(e.target.value)
-            setSaved(false)
-          }}
-          placeholder="Competition slug (e.g. spring-2025)"
-          className="rounded-md border border-brand-border px-3 py-2 text-sm"
-        />
-        <select
-          value={eventRole}
-          onChange={(e) => setEventRole(e.target.value)}
-          className="rounded-md border border-brand-border px-3 py-2 text-sm"
-        >
-          {Object.entries(ASSIGN_ROLE_LABEL).map(([v, label]) => (
-            <option key={v} value={v}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <label className="flex flex-col gap-0.5 text-xs text-brand-muted-soft">
-          Due date (optional)
-          <input
-            type="date"
-            value={dueAt}
-            onChange={(e) => setDueAt(e.target.value)}
-            className="rounded-md border border-brand-border px-3 py-2 text-sm text-brand-muted"
-          />
-        </label>
-        <label className="flex flex-col gap-0.5 text-xs text-brand-muted-soft">
-          Requirement
-          <select
-            value={mandatory ? 'mandatory' : 'optional'}
-            onChange={(e) => setMandatory(e.target.value === 'mandatory')}
-            className="rounded-md border border-brand-border px-3 py-2 text-sm text-brand-muted"
-          >
-            <option value="optional">Optional</option>
-            <option value="mandatory">Mandatory</option>
-          </select>
-        </label>
-      </div>
-
-      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
-      {saved && !error && <p className="mt-2 text-xs text-green-600">Assignment saved.</p>}
-
-      <button
-        onClick={submit}
-        disabled={busy || !eventRef.trim()}
-        className="mt-2 rounded-md border border-brand-border px-3 py-1.5 text-xs font-medium text-brand-muted hover:bg-brand-hairline disabled:opacity-50"
-      >
-        {busy ? 'Saving…' : 'Assign'}
-      </button>
-    </div>
-  )
-}

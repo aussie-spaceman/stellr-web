@@ -11,9 +11,15 @@ interface Space {
   slug: string
 }
 
-export function AnnouncementForm({ spaces }: { spaces: Space[] }) {
+export function AnnouncementForm({
+  spaces,
+  lockedSpaceId,
+}: {
+  spaces: Space[]
+  lockedSpaceId?: string
+}) {
   const router = useRouter()
-  const [spaceId, setSpaceId] = useState(spaces[0]?.id ?? '')
+  const [spaceId, setSpaceId] = useState(lockedSpaceId ?? spaces[0]?.id ?? '')
   const [title, setTitle] = useState('')
   const [bodyJson, setBodyJson] = useState<JSONContent | null>(null)
   const [emailAll, setEmailAll] = useState(false)
@@ -52,17 +58,19 @@ export function AnnouncementForm({ spaces }: { spaces: Space[] }) {
       <h2 className="text-base font-semibold text-brand-blue-dark">Post new announcement</h2>
 
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-brand-muted mb-1">Space</label>
-          <select
-            value={spaceId}
-            onChange={(e) => setSpaceId(e.target.value)}
-            required
-            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
-          >
-            {spaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </div>
+        {!lockedSpaceId && (
+          <div>
+            <label className="block text-sm font-medium text-brand-muted mb-1">Space</label>
+            <select
+              value={spaceId}
+              onChange={(e) => setSpaceId(e.target.value)}
+              required
+              className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
+            >
+              {spaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium text-brand-muted mb-1">Title</label>
           <input

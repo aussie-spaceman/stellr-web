@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Pencil, Archive, ArchiveRestore } from 'lucide-react'
+import Link from 'next/link'
+import { Plus, Pencil, Archive, ArchiveRestore, Settings2 } from 'lucide-react'
 
 export interface SpaceRow {
   id: string
@@ -99,6 +100,13 @@ export function SpacesManager({ initial }: { initial: SpaceRow[] }) {
             <button onClick={() => toggleArchive(s)} title={s.is_archived ? 'Restore' : 'Archive'} className="text-brand-muted-soft hover:text-brand-blue-dark">
               {s.is_archived ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
             </button>
+            <Link
+              href={`/admin/community/spaces/${s.id}`}
+              title="Manage (announcements)"
+              className="text-brand-muted-soft hover:text-brand-blue-dark"
+            >
+              <Settings2 className="h-4 w-4" />
+            </Link>
           </div>
         ))}
       </div>

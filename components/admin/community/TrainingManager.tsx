@@ -22,7 +22,7 @@ import {
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { ObjectAssignments, type AdminAssignment, type AdminTier } from '@/components/admin/training/ObjectAssignments'
 import type { TrainableObject } from '@/lib/training-admin'
-import { deriveType, THEME_META, TYPE_META, type CourseTheme } from '@/lib/training'
+import { deriveType, THEME_META, TYPE_META, type CourseTheme } from '@/lib/training-display'
 
 const COURSE_TYPES = [
   {

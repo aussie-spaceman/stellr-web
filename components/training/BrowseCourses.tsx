@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Search, GraduationCap } from 'lucide-react'
-import { themeAccent, deriveType, type TrainingModuleSummary } from '@/lib/training'
+import { themeAccent, deriveType, type TrainingModuleSummary } from '@/lib/training-display'
 import { ThemePill, AccessPill, type AccessState } from './Pills'
 
 // Browse courses catalogue — search + Event/Campaign vs CTE segmented control.

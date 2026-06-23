@@ -1,4 +1,4 @@
-import { themeAccent, type CourseTheme } from '@/lib/training'
+import { themeAccent, type CourseTheme } from '@/lib/training-display'
 
 // Small presentational pills shared across the Training portal. Theme accents are
 // dynamic hex (from THEME_META), so those use inline styles; everything else uses

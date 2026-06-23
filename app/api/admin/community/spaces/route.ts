@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { ensureSpaceContainer } from '@/lib/container-sync'
 
 // Admin CRUD for community Spaces (convergence P3 — Spaces are first-class
 // objects). The dedicated /admin/community/spaces list. Access tiers are still
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
     const dup = error.code === '23505'
     return NextResponse.json({ error: dup ? 'A space with that slug already exists' : 'Could not create space' }, { status: dup ? 409 : 500 })
   }
+  await ensureSpaceContainer(db, slug, b.name.trim())
   return NextResponse.json({ id: data.id })
 }
 

@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
+import { ensureTrainingContainer } from '@/lib/container-sync'
 
 // Admin: create / list / update training modules (FR-COM-10).
 
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
     console.error('[training] module create error:', error)
     return NextResponse.json({ error: 'Could not create module' }, { status: 500 })
   }
+  await ensureTrainingContainer(db, data.id, title)
   return NextResponse.json({ id: data.id })
 }
 

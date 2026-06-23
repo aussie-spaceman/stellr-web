@@ -127,6 +127,50 @@ export async function ensureCoachingContainer(
   }
 }
 
+/** Get-or-create the container for a community Space (campaign_ref = slug). */
+export async function ensureSpaceContainer(
+  db: SupabaseClient,
+  spaceSlug: string,
+  spaceName: string,
+): Promise<string | null> {
+  const find = () =>
+    db.from('mentoring_cohorts').select('id').eq('container_type', 'space').eq('campaign_ref', spaceSlug).maybeSingle()
+  const { data: existing } = await find()
+  if (existing) return existing.id as string
+  const { data: created, error } = await db
+    .from('mentoring_cohorts')
+    .insert({ name: spaceName, container_type: 'space', campaign_ref: spaceSlug, lifecycle: 'active' })
+    .select('id')
+    .maybeSingle()
+  if (error) {
+    const { data: again } = await find()
+    return (again?.id as string) ?? null
+  }
+  return (created?.id as string) ?? null
+}
+
+/** Get-or-create the container for a training module (campaign_ref = module uuid as text). */
+export async function ensureTrainingContainer(
+  db: SupabaseClient,
+  moduleId: string,
+  moduleTitle: string,
+): Promise<string | null> {
+  const find = () =>
+    db.from('mentoring_cohorts').select('id').eq('container_type', 'training').eq('campaign_ref', moduleId).maybeSingle()
+  const { data: existing } = await find()
+  if (existing) return existing.id as string
+  const { data: created, error } = await db
+    .from('mentoring_cohorts')
+    .insert({ name: moduleTitle, container_type: 'training', campaign_ref: moduleId, lifecycle: 'active' })
+    .select('id')
+    .maybeSingle()
+  if (error) {
+    const { data: again } = await find()
+    return (again?.id as string) ?? null
+  }
+  return (created?.id as string) ?? null
+}
+
 /**
  * Ensure `memberId` is on the roster of the group sub-container for
  * `registrationId`, creating the event + group containers on demand.

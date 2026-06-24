@@ -17,7 +17,7 @@ export interface AdminSpaceConfig {
   }
   channels: { id: string; slug: string; name: string }[]
   assignedTierIds: string[]
-  members: { memberId: string; name: string; tierName: string | null; role: SpaceRole; status: 'invited' | 'active' }[]
+  members: { memberId: string; name: string; tierName: string | null; role: SpaceRole; status: 'invited' | 'active'; muted: boolean }[]
   resources: { id: string; title: string; fileType: string | null; fromChat: boolean; createdAt: string }[]
   assignedTraining: { moduleId: string; title: string; mandatory: boolean }[]
   trainingCatalogue: { id: string; title: string }[]
@@ -61,14 +61,14 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
   ] = await Promise.all([
     db.from('community_channels').select('id, slug, name, display_order').eq('space_id', spaceId).eq('is_archived', false).order('display_order'),
     db.from('community_space_tiers').select('tier_id').eq('space_id', spaceId),
-    db.from('community_space_members').select('member_id, role, status, members:member_id(first_name, last_name)').eq('space_id', spaceId),
+    db.from('community_space_members').select('member_id, role, status, muted, members:member_id(first_name, last_name)').eq('space_id', spaceId),
     db.from('community_resources').select('id, title, file_type, from_chat, created_at').eq('space_id', spaceId).order('created_at', { ascending: false }),
     db.from('community_space_training').select('training_module_id, is_mandatory, display_order, training_modules(title)').eq('space_id', spaceId).order('display_order'),
     db.from('training_modules').select('id, title').eq('is_published', true).order('display_order'),
     db.from('community_announcements').select('id, title, body, created_at').eq('space_id', spaceId).order('created_at', { ascending: false }),
   ])
 
-  type MRow = { member_id: string; role: SpaceRole; status: 'invited' | 'active'; members: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null }
+  type MRow = { member_id: string; role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null; members: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null }
   const mrows = (memberRows ?? []) as unknown as MRow[]
   const tierNames = await getActiveTierNames(mrows.map((m) => m.member_id))
   const members = mrows.map((m) => ({
@@ -77,6 +77,7 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
     tierName: tierNames.get(m.member_id) ?? null,
     role: m.role,
     status: m.status,
+    muted: !!m.muted,
   }))
 
   return {

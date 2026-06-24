@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, memberCanAccess, tiptapToPlainText } from '@/lib/community'
+import { isMemberMutedInSpace } from '@/lib/spaces'
 import { sendEmail, communityReplyEmail } from '@/lib/email'
 import { extractMentionIds, notifyMentions } from '@/lib/mentions'
 
@@ -100,6 +101,9 @@ export async function POST(req: Request) {
   const minTierRank = Array.isArray(spaceRel) ? spaceRel[0]?.min_tier_rank ?? 0 : spaceRel?.min_tier_rank ?? 0
   if (!(await memberCanAccess(member, 'space', post.space_id as string, minTierRank, 'view'))) {
     return NextResponse.json({ error: 'Upgrade required' }, { status: 403 })
+  }
+  if (post.space_id && (await isMemberMutedInSpace(post.space_id as string, member.id))) {
+    return NextResponse.json({ error: 'You have been muted in this space' }, { status: 403 })
   }
 
   const { data: comment, error } = await db

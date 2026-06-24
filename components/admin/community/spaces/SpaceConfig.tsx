@@ -468,6 +468,7 @@ function MembersTab({
             {m.tierName && <TierPill name={m.tierName} />}
             {m.role !== 'member' && <RolePill role={m.role} />}
             {m.status === 'invited' && <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-[10px] uppercase text-brand-muted-soft">invited</span>}
+            {m.muted && <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] uppercase text-red-600">muted</span>}
             <button onClick={() => setManaging(m)} className="text-xs text-brand-blue hover:underline">Manage</button>
           </div>
         ))}
@@ -508,6 +509,17 @@ function ManageMemberModal({ member, onClose, act }: { member: AdminSpaceConfig[
       </>}
     >
       <RoleSegmented role={role} setRole={setRole} />
+      <div className="mt-4 flex items-center justify-between rounded-lg border border-brand-border px-3 py-2.5">
+        <div>
+          <p className="text-sm font-subheading font-semibold text-brand-blue-dark">Posting</p>
+          <p className="text-xs text-brand-muted-soft">{member.muted ? 'Muted — can read but not post.' : 'Can post in this space.'}</p>
+        </div>
+        {member.muted ? (
+          <button onClick={async () => { if (await act({ action: 'unmute-member', memberId: member.memberId }, 'Member unmuted')) onClose() }} className="rounded-lg border border-brand-border px-3 py-1.5 text-xs font-subheading font-semibold text-brand-muted hover:bg-brand-canvas">Unmute</button>
+        ) : (
+          <button onClick={async () => { if (await act({ action: 'mute-member', memberId: member.memberId }, 'Member muted')) onClose() }} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-subheading font-semibold text-red-600 hover:bg-red-50">Mute</button>
+        )}
+      </div>
     </Modal>
   )
 }

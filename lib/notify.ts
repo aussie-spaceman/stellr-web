@@ -17,6 +17,7 @@ export type NotifyType =
   | 'session_reminder'
   | 'recording'
   | 'action'
+  | 'invite'
 
 export interface NotifyInput {
   type: NotifyType

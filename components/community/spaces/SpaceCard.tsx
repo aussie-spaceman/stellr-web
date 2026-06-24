@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Lock } from 'lucide-react'
 import { AccessBadge, SpaceIcon } from './badges'
+import { JoinSpaceButton } from './JoinSpaceButton'
 import { describeAssignedTiers } from '@/lib/tiers'
 import type { SpaceSummary } from '@/lib/spaces'
 
@@ -8,6 +9,8 @@ interface Props {
   space: SpaceSummary
   /** Restricted = visible but the member's tier can't join (greyed, no CTA). */
   restricted?: boolean
+  /** Joinable = an open space the member hasn't joined yet (shows a Join CTA). */
+  joinable?: boolean
   /** Unread post count, when known. */
   unread?: number
   /** id → tier name, for the "Requires …" footer on restricted cards. */
@@ -15,8 +18,9 @@ interface Props {
 }
 
 // A single space card on the directory (screen 01). Open/accessible cards link
-// into the space; restricted cards are dimmed and route to the locked screen.
-export function SpaceCard({ space, restricted = false, unread = 0, tierNames = {} }: Props) {
+// into the space; restricted cards are dimmed and route to the locked screen;
+// open-but-unjoined (Discover) cards also surface a Join CTA.
+export function SpaceCard({ space, restricted = false, joinable = false, unread = 0, tierNames = {} }: Props) {
   const body = (
     <div
       className="flex h-full flex-col rounded-[16px] border border-brand-border bg-white p-[18px] shadow-card transition"
@@ -45,14 +49,33 @@ export function SpaceCard({ space, restricted = false, unread = 0, tierNames = {
             {space.channelCount} {space.channelCount === 1 ? 'channel' : 'channels'}
           </span>
         )}
-        {!restricted && unread > 0 && (
-          <span className="rounded-full bg-brand-blue px-2 py-0.5 text-[11px] font-subheading font-semibold text-white">
-            {unread} new
-          </span>
-        )}
+        <div className="relative z-10 flex items-center gap-2">
+          {!restricted && unread > 0 && (
+            <span className="rounded-full bg-brand-blue px-2 py-0.5 text-[11px] font-subheading font-semibold text-white">
+              {unread} new
+            </span>
+          )}
+          {joinable && <JoinSpaceButton spaceSlug={space.slug} />}
+        </div>
       </div>
     </div>
   )
+
+  // Joinable (open, unjoined) cards use a stretched-link overlay so the whole
+  // card navigates into the space while the Join button stays independently
+  // clickable above it (a <button> nested inside <a> would be invalid).
+  if (joinable) {
+    return (
+      <div className="relative transition hover:-translate-y-0.5">
+        <Link
+          href={`/community/${space.slug}`}
+          aria-label={space.name}
+          className="absolute inset-0 z-0 rounded-[16px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
+        />
+        {body}
+      </div>
+    )
+  }
 
   // Both accessible and restricted cards are links — restricted routes to the
   // locked screen (which explains the tier requirement), per the handoff.

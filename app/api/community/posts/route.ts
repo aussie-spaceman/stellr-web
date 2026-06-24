@@ -68,7 +68,10 @@ export async function POST(req: Request) {
     if (!space || !space.access.canAccess) {
       return NextResponse.json({ error: 'No access to this space' }, { status: 403 })
     }
-    if (!canPostInSpace(member, space.postingPolicy, space.myRole)) {
+    if (space.myMuted) {
+      return NextResponse.json({ error: 'You have been muted in this space' }, { status: 403 })
+    }
+    if (!canPostInSpace(member, space.postingPolicy, space.myRole, space.myMuted)) {
       return NextResponse.json({ error: 'Posting is limited to moderators' }, { status: 403 })
     }
     const channel = space.channels.find((c) => c.slug === channelSlug)

@@ -23,6 +23,8 @@ export type SpaceTheme = 'space' | 'enviro' | 'campaign' | 'college'
 export interface SpaceMembership {
   role: SpaceRole
   status: 'invited' | 'active'
+  /** Muted by a moderator — may read but not post in this space. */
+  muted: boolean
 }
 
 export interface SpaceSummary {
@@ -125,7 +127,7 @@ export async function getSpacesDirectory(member: CommunityMember): Promise<Space
       db.from('community_space_tiers').select('space_id, tier_id'),
       db
         .from('community_space_members')
-        .select('space_id, role, status')
+        .select('space_id, role, status, muted')
         .eq('member_id', member.id),
       db.from('community_channels').select('space_id').eq('is_archived', false),
     ])
@@ -140,8 +142,8 @@ export async function getSpacesDirectory(member: CommunityMember): Promise<Space
   const channelCounts = countBy(channels ?? [], 'space_id')
   const memberCounts = countBy(activeRows ?? [], 'space_id')
   const myRoster = new Map<string, SpaceMembership>()
-  for (const r of (roster ?? []) as { space_id: string; role: SpaceRole; status: 'invited' | 'active' }[]) {
-    myRoster.set(r.space_id, { role: r.role, status: r.status })
+  for (const r of (roster ?? []) as { space_id: string; role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null }[]) {
+    myRoster.set(r.space_id, { role: r.role, status: r.status, muted: !!r.muted })
   }
 
   const yourSpaces: SpaceSummary[] = []
@@ -230,6 +232,8 @@ export interface SpaceChannel {
 export interface SpaceDetail extends SpaceSummary {
   access: SpaceAccess
   myRole: SpaceRole | null
+  /** Whether this member is muted in the space (read-only, cannot post). */
+  myMuted: boolean
   channels: SpaceChannel[]
   postingPolicy: 'all' | 'moderators'
   allowMemberUploads: boolean
@@ -257,7 +261,7 @@ export async function getSpaceForMember(
       db.from('community_space_tiers').select('tier_id').eq('space_id', s.id),
       db
         .from('community_space_members')
-        .select('role, status')
+        .select('role, status, muted')
         .eq('space_id', s.id)
         .eq('member_id', member.id)
         .maybeSingle(),
@@ -271,7 +275,10 @@ export async function getSpaceForMember(
     ])
 
   const assignedTierIds = (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
-  const membership = (mine as SpaceMembership | null) ?? null
+  const mineRow = mine as { role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null } | null
+  const membership: SpaceMembership | null = mineRow
+    ? { role: mineRow.role, status: mineRow.status, muted: !!mineRow.muted }
+    : null
   const access = resolveSpaceAccess(member, s, assignedTierIds, membership)
 
   // Secret + inaccessible → behave as not found so the URL leaks nothing.
@@ -289,21 +296,74 @@ export async function getSpaceForMember(
     channelCount: (channels ?? []).length,
     access,
     myRole: membership?.status === 'active' ? membership.role : null,
+    myMuted: membership?.muted ?? false,
     channels: (channels ?? []) as SpaceChannel[],
     postingPolicy: ((s as { posting_policy?: 'all' | 'moderators' }).posting_policy ?? 'all'),
     allowMemberUploads: ((s as { allow_member_uploads?: boolean }).allow_member_uploads ?? true),
   }
 }
 
-/** Whether a member may post in a space, given its posting policy + their role. */
+/**
+ * Whether a member may post in a space, given its posting policy + their role.
+ * A muted member can never post (platform admins are exempt — they moderate).
+ */
 export function canPostInSpace(
   member: CommunityMember,
   postingPolicy: 'all' | 'moderators',
-  myRole: SpaceRole | null
+  myRole: SpaceRole | null,
+  muted = false
 ): boolean {
   if (member.isAdmin) return true
+  if (muted) return false
   if (postingPolicy === 'all') return true
   return myRole === 'admin' || myRole === 'mentor'
+}
+
+/**
+ * Resolve a member's access to a space by id (no slug needed). Used to gate
+ * space-scoped resources against the Open/Private/Secret model rather than the
+ * legacy min_tier_rank. Returns null when the space doesn't exist.
+ */
+export async function getSpaceAccessById(
+  member: CommunityMember,
+  spaceId: string
+): Promise<SpaceAccess | null> {
+  const db = supabaseServer()
+  const { data: s } = await db
+    .from('community_spaces')
+    .select('id, access_type, is_archived')
+    .eq('id', spaceId)
+    .maybeSingle()
+  if (!s || (s as { is_archived: boolean }).is_archived) return null
+
+  const [{ data: tierRows }, { data: mine }] = await Promise.all([
+    db.from('community_space_tiers').select('tier_id').eq('space_id', spaceId),
+    db
+      .from('community_space_members')
+      .select('role, status, muted')
+      .eq('space_id', spaceId)
+      .eq('member_id', member.id)
+      .maybeSingle(),
+  ])
+
+  const assignedTierIds = (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
+  const mineRow = mine as { role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null } | null
+  const membership: SpaceMembership | null = mineRow
+    ? { role: mineRow.role, status: mineRow.status, muted: !!mineRow.muted }
+    : null
+  return resolveSpaceAccess(member, s as { access_type: SpaceAccessType }, assignedTierIds, membership)
+}
+
+/** Whether a member is muted in a given space (for the comment write path). */
+export async function isMemberMutedInSpace(spaceId: string, memberId: string): Promise<boolean> {
+  const db = supabaseServer()
+  const { data } = await db
+    .from('community_space_members')
+    .select('muted')
+    .eq('space_id', spaceId)
+    .eq('member_id', memberId)
+    .maybeSingle()
+  return !!(data as { muted: boolean } | null)?.muted
 }
 
 /**

@@ -70,7 +70,7 @@ export default async function CommunityHomePage() {
       </div>
 
       <Section title="Your spaces" hint="Spaces you can access" spaces={yourSpaces} unread={unread} />
-      <Section title="Discover" hint="Open to the whole community" spaces={discover} unread={unread} />
+      <Section title="Discover" hint="Open to the whole community" spaces={discover} unread={unread} joinable />
       <Section
         title="Restricted"
         hint="Visible, but your tier can't join yet"
@@ -92,6 +92,7 @@ function Section({
   spaces,
   unread = {},
   restricted = false,
+  joinable = false,
   tierNames,
 }: {
   title: string
@@ -99,6 +100,7 @@ function Section({
   spaces: SpaceSummary[]
   unread?: Record<string, number>
   restricted?: boolean
+  joinable?: boolean
   tierNames?: Record<string, string>
 }) {
   if (spaces.length === 0) return null
@@ -116,6 +118,7 @@ function Section({
             <SpaceCard
               space={s}
               restricted={restricted}
+              joinable={joinable}
               unread={unread[s.id] ?? 0}
               tierNames={tierNames}
             />

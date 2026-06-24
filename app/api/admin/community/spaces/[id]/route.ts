@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { notifyMember } from '@/lib/notify'
 
 // Per-space admin config actions (Spaces design, screens 11–17 + modals 19/21/22).
 // One JSON action router keeps the (many) small mutations in one place. Resource
@@ -100,6 +101,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         { onConflict: 'space_id,member_id' }
       )
       if (error) return NextResponse.json({ error: 'Could not invite member' }, { status: 500 })
+
+      // Notify the invitee (in-app + email, respecting their prefs). Best-effort —
+      // the invite row is already written, so a notification failure must not 500.
+      void (async () => {
+        const { data: space } = await db
+          .from('community_spaces')
+          .select('name, slug')
+          .eq('id', spaceId)
+          .maybeSingle()
+        const sp = space as { name: string; slug: string } | null
+        if (!sp) return
+        const url = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.stellreducation.org'}/community`
+        await notifyMember(memberId!, {
+          type: 'invite',
+          body: `You've been invited to join ${sp.name}.`,
+          referenceType: 'space',
+          referenceId: spaceId,
+          actorMemberId: adminMemberId ?? undefined,
+          email: {
+            subject: `You're invited to ${sp.name}`,
+            html: `<p>You've been invited to join the <strong>${sp.name}</strong> space on Stellr.</p>
+<p><a href="${url}">Open your Spaces directory</a> to accept the invitation.</p>`,
+            text: `You've been invited to join ${sp.name} on Stellr. Open your Spaces directory to accept: ${url}`,
+          },
+        })
+      })().catch((e) => console.error('[spaces] invite notify error:', e))
+
       return NextResponse.json({ ok: true })
     }
     case 'update-member-role': {
@@ -200,9 +228,55 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ ok: true })
     }
     case 'mute-member': {
-      // No per-space mute store yet — acknowledge so the UI can confirm. Tracked
-      // as a follow-up (would add a community_space_members.muted flag + gate).
-      return NextResponse.json({ ok: true, note: 'mute not yet enforced' })
+      // Mute a member in this space (read-only — the post/comment write paths
+      // check community_space_members.muted). Callable two ways:
+      //   • directly with memberId (admin Manage-member modal), or
+      //   • with flagId from the moderation queue (resolve the flagged author).
+      let memberId = b.memberId as string | undefined
+      if (!memberId && b.flagId) {
+        const { data: flag } = await db
+          .from('community_flags')
+          .select('content_type, content_id')
+          .eq('id', b.flagId)
+          .maybeSingle()
+        const f = flag as { content_type: string; content_id: string } | null
+        if (f?.content_type === 'post') {
+          const { data } = await db.from('community_posts').select('author_member_id').eq('id', f.content_id).maybeSingle()
+          memberId = (data as { author_member_id: string } | null)?.author_member_id
+        } else if (f?.content_type === 'comment') {
+          const { data } = await db.from('community_comments').select('author_member_id').eq('id', f.content_id).maybeSingle()
+          memberId = (data as { author_member_id: string } | null)?.author_member_id
+        }
+      }
+      if (!memberId) return NextResponse.json({ error: 'Could not resolve member to mute' }, { status: 404 })
+
+      // Members can post in open spaces without a roster row, so upsert one
+      // carrying the mute rather than only updating an existing row.
+      const { data: existing } = await db
+        .from('community_space_members')
+        .select('id')
+        .eq('space_id', spaceId)
+        .eq('member_id', memberId)
+        .maybeSingle()
+      if (existing) {
+        await db.from('community_space_members').update({ muted: true }).eq('id', (existing as { id: string }).id)
+      } else {
+        await db.from('community_space_members').insert({ space_id: spaceId, member_id: memberId, role: 'member', status: 'active', muted: true })
+      }
+
+      // Resolve the originating flag (if any) so the report leaves the queue.
+      if (b.flagId) {
+        await db
+          .from('community_flags')
+          .update({ status: 'resolved', resolved_by: adminMemberId, resolved_at: new Date().toISOString() })
+          .eq('id', b.flagId)
+      }
+      return NextResponse.json({ ok: true })
+    }
+    case 'unmute-member': {
+      if (!b.memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
+      await db.from('community_space_members').update({ muted: false }).eq('space_id', spaceId).eq('member_id', b.memberId)
+      return NextResponse.json({ ok: true })
     }
 
     default:

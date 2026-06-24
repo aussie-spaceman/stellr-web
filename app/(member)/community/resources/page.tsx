@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { FileText, Lock } from 'lucide-react'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, memberCanAccess } from '@/lib/community'
+import { getCurrentMember, memberCanAccess, resourceTierAllowed } from '@/lib/community'
 import { ResourceDownloadButton } from '@/components/community/ResourceDownloadButton'
 
 export const metadata = { title: 'Community · Resources' }
@@ -47,8 +47,12 @@ export default async function ResourcesPage() {
   const downloadableIds = new Set<string>()
   await Promise.all(
     (resources ?? []).map(async (r) => {
-      if (await memberCanAccess(member, 'resource', (r as ResourceRow).id, (r as ResourceRow).min_tier_rank, 'download'))
-        downloadableIds.add((r as ResourceRow).id)
+      const id = (r as ResourceRow).id
+      const [tierOk, accessOk] = await Promise.all([
+        resourceTierAllowed(member, id),
+        memberCanAccess(member, 'resource', id, (r as ResourceRow).min_tier_rank, 'download'),
+      ])
+      if (tierOk && accessOk) downloadableIds.add(id)
     }),
   )
 

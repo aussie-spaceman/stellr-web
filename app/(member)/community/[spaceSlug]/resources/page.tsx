@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { getCurrentMember } from '@/lib/community'
+import { getCurrentMember, resourceTierAllowed } from '@/lib/community'
 import { getSpaceForMember } from '@/lib/spaces'
 import { supabaseServer } from '@/lib/supabase'
 import { SpaceShell } from '@/components/community/spaces/SpaceShell'
@@ -38,7 +38,15 @@ export default async function SpaceResourcesPage({
     created_at: string
     members: Rel | Rel[] | null
   }
-  const items: ResourceItem[] = ((data ?? []) as unknown as Row[]).map((r) => {
+  // Honour per-resource tier overrides: hide resources this member isn't allowed
+  // to download (admins see everything).
+  const rows = (data ?? []) as unknown as Row[]
+  const allowedIds = new Set<string>()
+  await Promise.all(rows.map(async (r) => {
+    if (await resourceTierAllowed(member, r.id)) allowedIds.add(r.id)
+  }))
+
+  const items: ResourceItem[] = rows.filter((r) => allowedIds.has(r.id)).map((r) => {
     const u = Array.isArray(r.members) ? r.members[0] ?? null : r.members
     return {
       id: r.id,

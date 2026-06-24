@@ -157,6 +157,49 @@ async function eventParticipants(slug: string): Promise<Participant[]> {
   })
 }
 
+/**
+ * Members of a space Object. A space's trainable Object is its container
+ * (mentoring_cohorts, container_type='space', campaign_ref=slug), but members
+ * actually join through community_space_members — so resolve the real space by
+ * slug and read its active roster. Falls back to the container roster when no
+ * matching community_spaces row exists (e.g. a non-space container).
+ */
+async function spaceParticipants(containerId: string): Promise<Participant[]> {
+  const db = supabaseServer()
+  const { data: container } = await db
+    .from('mentoring_cohorts')
+    .select('name, campaign_ref')
+    .eq('id', containerId)
+    .maybeSingle()
+  const slug = (container as { campaign_ref?: string } | null)?.campaign_ref
+  if (!slug) return cohortParticipants(containerId)
+
+  const { data: space } = await db
+    .from('community_spaces')
+    .select('id, name')
+    .eq('slug', slug)
+    .maybeSingle()
+  if (!space) return cohortParticipants(containerId)
+
+  const group = (space as { name: string }).name ?? (container as { name?: string } | null)?.name ?? 'Space'
+  const { data: members } = await db
+    .from('community_space_members')
+    .select('member_id, members(first_name, last_name, age_bracket)')
+    .eq('space_id', (space as { id: string }).id)
+    .eq('status', 'active')
+
+  return (members ?? []).map((sm) => {
+    const m = Array.isArray(sm.members) ? sm.members[0] : sm.members
+    const mm = m as { first_name?: string; last_name?: string; age_bracket?: string } | null
+    return {
+      memberId: sm.member_id as string,
+      name: [mm?.first_name, mm?.last_name].filter(Boolean).join(' ') || 'Member',
+      ageBracket: mm?.age_bracket ?? null,
+      group,
+    }
+  })
+}
+
 /** Members of a cohort/workshop/space Object (group = cohort name). */
 async function cohortParticipants(cohortId: string): Promise<Participant[]> {
   const db = supabaseServer()
@@ -275,7 +318,9 @@ export async function getObjectTracking(
     return computeTracking(courses, participants, opts)
   }
   const courses = await mandatoryCoursesForCohort(objectRef)
-  const participants = await cohortParticipants(objectRef)
+  const participants = objectType === 'space'
+    ? await spaceParticipants(objectRef)
+    : await cohortParticipants(objectRef)
   return computeTracking(courses, participants, opts)
 }
 

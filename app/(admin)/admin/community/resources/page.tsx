@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { formatDateShort } from '@/lib/utils'
+import { resolveTierMap } from '@/lib/tiers-server'
 import { ResourceUploadForm } from '@/components/admin/community/ResourceUploadForm'
 import { ResourceRowActions } from '@/components/admin/community/ResourceRowActions'
 import { FileText } from 'lucide-react'
@@ -15,7 +16,7 @@ function formatBytes(bytes: number | null): string {
 
 export default async function AdminCommunityResourcesPage() {
   const db = supabaseServer()
-  const [{ data: resources }, { data: spaces }] = await Promise.all([
+  const [{ data: resources }, { data: spaces }, { data: resourceTiers }, tierMap] = await Promise.all([
     db
       .from('community_resources')
       .select('id, title, description, file_type, file_size_bytes, min_tier_rank, created_at, community_spaces(name)')
@@ -25,7 +26,16 @@ export default async function AdminCommunityResourcesPage() {
       .select('id, name')
       .eq('is_archived', false)
       .order('display_order'),
+    db.from('community_resource_tiers').select('resource_id, tier_id'),
+    resolveTierMap(),
   ])
+
+  // Map each resource → its per-tier allowlist (empty = open to all).
+  const tiersByResource = new Map<string, string[]>()
+  for (const r of (resourceTiers ?? []) as { resource_id: string; tier_id: string }[]) {
+    tiersByResource.set(r.resource_id, [...(tiersByResource.get(r.resource_id) ?? []), r.tier_id])
+  }
+  const allTiers = tierMap.rows.map((t) => ({ id: t.id, name: t.name }))
 
   return (
     <div className="space-y-6">
@@ -76,7 +86,11 @@ export default async function AdminCommunityResourcesPage() {
                     {formatDateShort(r.created_at)}
                   </td>
                   <td className="px-4 py-3">
-                    <ResourceRowActions resourceId={r.id} minTierRank={r.min_tier_rank} />
+                    <ResourceRowActions
+                      resourceId={r.id}
+                      allTiers={allTiers}
+                      assignedTierIds={tiersByResource.get(r.id) ?? []}
+                    />
                   </td>
                 </tr>
               )

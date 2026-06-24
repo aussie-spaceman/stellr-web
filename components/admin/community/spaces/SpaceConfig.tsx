@@ -336,6 +336,13 @@ function ResourcesTab({
         {resources.length === 0 && <p className="px-3 py-4 text-center text-sm text-brand-muted-soft">No resources yet.</p>}
       </div>
 
+      {/* FUTURE (global reference-content catalogue): the handoff (screen 20) also
+          wants a "pick from existing reference content" multi-select here, in
+          addition to upload. Deferred until the global resource catalogue ships
+          (separate build). To wire it up then: add a tab/section to this modal that
+          lists catalogue items and POSTs the chosen ids to a new
+          `assign-resource` action on /api/admin/community/spaces/[id] (mirroring
+          assign-training in TrainingTab). Upload-only for now. */}
       <Modal open={open} onClose={() => setOpen(false)} title="Assign resource" subtitle="Upload a file to this space’s Resources."
         footer={<>
           <button onClick={() => setOpen(false)} className={btnGhost}>Cancel</button>

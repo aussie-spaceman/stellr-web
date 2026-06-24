@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, memberCanAccess, signedDownloadUrl } from '@/lib/community'
+import { getCurrentMember, memberCanAccess, resourceTierAllowed, signedDownloadUrl } from '@/lib/community'
 import { getSpaceAccessById } from '@/lib/spaces'
 
 // GET /api/community/resources/[id]/download
@@ -34,6 +34,12 @@ export async function GET(
     }
   } else if (!(await memberCanAccess(member, 'resource', resource.id, resource.min_tier_rank, 'download'))) {
     return NextResponse.json({ error: 'Upgrade required' }, { status: 403 })
+  }
+
+  // Per-resource tier override: when set, it narrows access on top of the
+  // space/tier gate above (admins bypass).
+  if (!(await resourceTierAllowed(member, resource.id as string))) {
+    return NextResponse.json({ error: 'No access to this resource' }, { status: 403 })
   }
 
   const url = await signedDownloadUrl(resource.storage_path)

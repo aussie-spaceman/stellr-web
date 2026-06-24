@@ -3,6 +3,8 @@ import { notFound, redirect } from 'next/navigation'
 import { getCurrentMember } from '@/lib/community'
 import { getSpaceForMember } from '@/lib/spaces'
 import { supabaseServer } from '@/lib/supabase'
+import { resolveTierMap } from '@/lib/tiers-server'
+import { describeAssignedTiers } from '@/lib/tiers'
 import { SpaceShell } from '@/components/community/spaces/SpaceShell'
 import { LockedSpaceGate } from '@/components/community/spaces/LockedSpaceGate'
 
@@ -29,6 +31,15 @@ export default async function SpaceTrainingPage({
   const space = await getSpaceForMember(member, spaceSlug)
   if (!space) notFound()
   if (!space.access.canAccess) return <LockedSpaceGate space={space} />
+
+  // Tier note (handoff): which membership tier grants this space's training. Space
+  // training is space-scoped, so the note is the space's access requirement — open
+  // spaces are included for everyone; private/secret name their assigned tiers.
+  const tierMap = await resolveTierMap()
+  const tierNote =
+    space.access_type === 'open' || space.assignedTierIds.length === 0
+      ? 'Included with your membership'
+      : `Included with ${describeAssignedTiers(space.assignedTierIds, tierMap.nameById)}`
 
   const db = supabaseServer()
   const { data: links } = await db
@@ -114,6 +125,7 @@ export default async function SpaceTrainingPage({
                           {c.mandatory ? 'Mandatory' : 'Optional'}
                         </span>
                       </div>
+                      <p className="mt-1 text-[11px] font-subheading font-semibold uppercase tracking-[0.04em] text-brand-muted-soft">{tierNote}</p>
                       {c.description && <p className="mt-1 text-sm text-brand-muted">{c.description}</p>}
                     </div>
                     <span className="shrink-0 text-xs font-subheading font-semibold" style={{ color: statusColor }}>

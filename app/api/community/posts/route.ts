@@ -128,6 +128,53 @@ export async function POST(req: Request) {
   return NextResponse.json({ id: data.id, spaceSlug })
 }
 
+// PATCH /api/community/posts — moderate a channel post. Currently: pin/unpin as a
+// channel announcement (the "Pinned announcement" ribbon). Restricted to a space's
+// admins/mentors (or a platform admin) — the in-space moderator roles.
+export async function PATCH(req: Request) {
+  const member = await getCurrentMember()
+  if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+
+  const body = await req.json().catch(() => ({}))
+  const postId = typeof body.postId === 'string' ? body.postId : null
+  if (!postId || body.action !== 'toggle-announcement') {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+  }
+
+  const db = supabaseServer()
+  const { data: post } = await db
+    .from('community_posts')
+    .select('id, space_id, is_announcement')
+    .eq('id', postId)
+    .maybeSingle()
+  if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+
+  // Moderator check: platform admin, or an admin/mentor on this space's roster.
+  let canModerate = member.isAdmin
+  if (!canModerate && post.space_id) {
+    const { data: roster } = await db
+      .from('community_space_members')
+      .select('role, status')
+      .eq('space_id', post.space_id as string)
+      .eq('member_id', member.id)
+      .maybeSingle()
+    const r = roster as { role: string; status: string } | null
+    canModerate = r?.status === 'active' && (r.role === 'admin' || r.role === 'mentor')
+  }
+  if (!canModerate) return NextResponse.json({ error: 'Moderators only' }, { status: 403 })
+
+  // Pin + announcement travel together: the ribbon keys off is_announcement, the
+  // feed ordering keys off is_pinned.
+  const next = !post.is_announcement
+  const { error } = await db
+    .from('community_posts')
+    .update({ is_announcement: next, is_pinned: next })
+    .eq('id', postId)
+  if (error) return NextResponse.json({ error: 'Could not update post' }, { status: 500 })
+
+  return NextResponse.json({ ok: true, isAnnouncement: next })
+}
+
 function fireMentions(
   bodyJson: unknown,
   member: { id: string; first_name: string | null; last_name: string | null },

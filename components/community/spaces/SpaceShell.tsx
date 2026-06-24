@@ -70,7 +70,7 @@ export function SpaceShell({ space, activeKey, children }: Props) {
       {/* ── Mobile compact header + chip bar ── */}
       <div className="lg:hidden">
         <div className="flex items-center gap-2 px-1 pb-2">
-          <Link href="/community" className="text-brand-muted-soft" aria-label="All spaces">
+          <Link href="/community" className="-ml-2 flex h-11 w-11 items-center justify-center text-brand-muted-soft" aria-label="All spaces">
             <ChevronLeft className="h-5 w-5" />
           </Link>
           <h2 className="font-heading text-[16px] text-brand-blue-dark">{space.name}</h2>
@@ -133,7 +133,7 @@ function Chip({ href, active, label }: { href: string; active: boolean; label: s
   return (
     <Link
       href={href}
-      className={`flex min-h-[36px] shrink-0 items-center whitespace-nowrap rounded-full px-3 text-sm transition-colors ${
+      className={`flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-full px-4 text-sm transition-colors ${
         active ? 'bg-[#2C53C6] font-semibold text-white' : 'bg-brand-canvas text-brand-muted'
       }`}
     >

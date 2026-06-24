@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { notifyMember } from '@/lib/notify'
+import { sendEmail } from '@/lib/email'
 
 // Per-space admin config actions (Spaces design, screens 11–17 + modals 19/21/22).
 // One JSON action router keeps the (many) small mutations in one place. Resource
@@ -89,7 +90,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           .maybeSingle()
         memberId = (data as { id: string } | null)?.id
       }
-      if (!memberId) return NextResponse.json({ error: 'No member found for that email' }, { status: 404 })
+      // No account yet for this email → can't create a roster row (member_id is a
+      // hard FK). Option A: email a "create your account" invitation instead, with
+      // no pending row. Once they register, an admin re-invites them by then-member.
+      // (A future pending-invite table would let this auto-claim on first login.)
+      if (!memberId) {
+        const email = String(b.email ?? '').trim()
+        if (!email) return NextResponse.json({ error: 'An email is required to invite' }, { status: 400 })
+        const { data: space } = await db
+          .from('community_spaces')
+          .select('name')
+          .eq('id', spaceId)
+          .maybeSingle()
+        const spaceName = (space as { name: string } | null)?.name ?? 'a Stellr space'
+        const signUpUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.stellreducation.org'}/sign-up`
+        await sendEmail({
+          to: email,
+          subject: `You're invited to ${spaceName} on Stellr`,
+          html: `<p>You've been invited to join the <strong>${spaceName}</strong> space on Stellr.</p>
+<p><a href="${signUpUrl}">Create your account</a> to get started — once you're in, an admin can add you to the space.</p>`,
+          text: `You've been invited to join ${spaceName} on Stellr. Create your account to get started: ${signUpUrl}`,
+        }).catch((e) => console.error('[spaces] invite-by-email send error:', e))
+        return NextResponse.json({ ok: true, invitedByEmail: true })
+      }
+
       const { error } = await db.from('community_space_members').upsert(
         {
           space_id: spaceId,

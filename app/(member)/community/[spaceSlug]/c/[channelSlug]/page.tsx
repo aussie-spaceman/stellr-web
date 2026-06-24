@@ -34,6 +34,7 @@ export default async function ChannelPage({
         channelName={channel.name}
         selfId={member.id}
         canPost={canPostInSpace(member, space.postingPolicy, space.myRole, space.myMuted)}
+        canModerate={member.isAdmin || space.myRole === 'admin' || space.myRole === 'mentor'}
         allowUploads={space.allowMemberUploads || member.isAdmin}
         initialPosts={posts}
       />

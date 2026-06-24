@@ -80,8 +80,10 @@ export async function GET() {
 }
 
 // PATCH /api/admin/community/resources — per-resource permission override.
-// Body: { id, minTierRank?, spaceId? }. minTierRank gates download access
-// (0 = all members, ≥1 = paid tiers); spaceId re-homes the resource.
+// Body: { id, minTierRank?, spaceId?, tierIds? }. minTierRank gates download
+// access (0 = all members, ≥1 = paid tiers); spaceId re-homes the resource;
+// tierIds (array) sets the per-tier allowlist — empty array clears it (open to
+// all who can reach the resource).
 export async function PATCH(req: Request) {
   const { sessionClaims } = await auth()
   const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
@@ -90,14 +92,31 @@ export async function PATCH(req: Request) {
   const b = await req.json().catch(() => ({}))
   if (!b.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
+  const db = supabaseServer()
+
   const patch: Record<string, unknown> = {}
   if (b.minTierRank !== undefined) patch.min_tier_rank = Math.max(0, parseInt(String(b.minTierRank), 10) || 0)
   if (b.spaceId !== undefined) patch.space_id = b.spaceId || null
-  if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
+  if (Object.keys(patch).length > 0) {
+    const { error } = await db.from('community_resources').update(patch).eq('id', b.id)
+    if (error) return NextResponse.json({ error: 'Could not update resource' }, { status: 500 })
+  }
 
-  const db = supabaseServer()
-  const { error } = await db.from('community_resources').update(patch).eq('id', b.id)
-  if (error) return NextResponse.json({ error: 'Could not update resource' }, { status: 500 })
+  // Per-tier allowlist: replace the set when an array is supplied.
+  if (Array.isArray(b.tierIds)) {
+    await db.from('community_resource_tiers').delete().eq('resource_id', b.id)
+    const tierIds = (b.tierIds as unknown[]).filter((t): t is string => typeof t === 'string')
+    if (tierIds.length > 0) {
+      const { error } = await db
+        .from('community_resource_tiers')
+        .insert(tierIds.map((tier_id) => ({ resource_id: b.id, tier_id })))
+      if (error) return NextResponse.json({ error: 'Could not update resource tiers' }, { status: 500 })
+    }
+  }
+
+  if (Object.keys(patch).length === 0 && !Array.isArray(b.tierIds)) {
+    return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
+  }
   return NextResponse.json({ ok: true })
 }
 

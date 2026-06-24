@@ -18,6 +18,8 @@ interface Props {
   channelName: string
   selfId: string
   canPost: boolean
+  /** Admin/mentor in this space — may pin posts as announcements. */
+  canModerate: boolean
   allowUploads: boolean
   initialPosts: FeedPost[]
 }
@@ -49,6 +51,7 @@ export function ChannelFeed({
   channelName,
   selfId,
   canPost,
+  canModerate,
   allowUploads,
   initialPosts,
 }: Props) {
@@ -74,7 +77,12 @@ export function ChannelFeed({
     return () => clearInterval(t)
   }, [load])
 
-  // Realtime push on new/changed posts in this channel.
+  // Realtime push on new/changed posts in this channel, plus replies and
+  // reactions so those update live too. community_comments/community_reactions
+  // carry no channel_id (they key off post/comment ids), so they can't be
+  // server-filtered to this channel — load() re-reads only this channel, so a
+  // stray event just triggers one scoped refetch. Polling covers the gap when
+  // realtime isn't authenticated.
   useEffect(() => {
     let channel: ReturnType<ReturnType<typeof createBrowserSupabase>['channel']> | null = null
     try {
@@ -84,6 +92,16 @@ export function ChannelFeed({
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'community_posts', filter: `channel_id=eq.${channelId}` },
+          () => load()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'community_comments' },
+          () => load()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'community_reactions' },
           () => load()
         )
         .subscribe()
@@ -186,7 +204,7 @@ export function ChannelFeed({
           </p>
         )}
         {posts.map((p) => (
-          <PostCard key={p.id} post={p} selfId={selfId} onFlag={(label) => setFlag({ type: 'post', id: p.id, label })} onChanged={load} onFlagReply={(id) => setFlag({ type: 'comment', id })} canReply={canPost} />
+          <PostCard key={p.id} post={p} selfId={selfId} onFlag={(label) => setFlag({ type: 'post', id: p.id, label })} onChanged={load} onFlagReply={(id) => setFlag({ type: 'comment', id })} canReply={canPost} canModerate={canModerate} />
         ))}
       </div>
 
@@ -210,6 +228,7 @@ function PostCard({
   onFlagReply,
   onChanged,
   canReply,
+  canModerate,
 }: {
   post: FeedPost
   selfId: string
@@ -217,10 +236,25 @@ function PostCard({
   onFlagReply: (id: string) => void
   onChanged: () => void
   canReply: boolean
+  canModerate: boolean
 }) {
   const [replying, setReplying] = useState(false)
   const [reply, setReply] = useState('')
   const [busy, setBusy] = useState(false)
+
+  const togglePin = async () => {
+    const res = await fetch('/api/community/posts', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ postId: post.id, action: 'toggle-announcement' }),
+    })
+    if (res.ok) {
+      toast(post.isAnnouncement ? 'Unpinned' : 'Pinned as announcement')
+      onChanged()
+    } else {
+      toast('Could not update post')
+    }
+  }
 
   const sendReply = async () => {
     if (!reply.trim()) return
@@ -285,13 +319,25 @@ function PostCard({
             )}
           </div>
         </div>
-        <button
-          onClick={() => onFlag(post.title ?? undefined)}
-          aria-label="Report this post"
-          className="text-brand-muted-soft hover:text-red-500"
-        >
-          <Flag className="h-3.5 w-3.5" />
-        </button>
+        <div className="flex shrink-0 items-center">
+          {canModerate && (
+            <button
+              onClick={togglePin}
+              aria-label={post.isAnnouncement ? 'Unpin announcement' : 'Pin as announcement'}
+              title={post.isAnnouncement ? 'Unpin announcement' : 'Pin as announcement'}
+              className={`flex h-11 w-11 items-center justify-center ${post.isAnnouncement ? 'text-brand-blue' : 'text-brand-muted-soft hover:text-brand-blue'}`}
+            >
+              <Pin className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            onClick={() => onFlag(post.title ?? undefined)}
+            aria-label="Report this post"
+            className="flex h-11 w-11 items-center justify-center text-brand-muted-soft hover:text-red-500"
+          >
+            <Flag className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       {(post.replies.length > 0 || replying) && (

@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Trash2, GripVertical, Pencil, Check, X, ChevronDown, ChevronRight,
-  Radio, Video, FileText, Paperclip, Link2, Play, Upload,
+  Radio, Video, FileText, Paperclip, Play, Upload,
 } from 'lucide-react'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { ObjectAssignments, type AdminTier } from '@/components/admin/training/ObjectAssignments'
 import { RecordSession } from '@/components/admin/training/RecordSession'
+import { LessonResources } from '@/components/admin/training/LessonResources'
 import type { TrainableObject } from '@/lib/training-admin'
 import type { AdminModule, AdminSection, AdminLesson } from '@/components/admin/community/TrainingManager'
 import { deriveType, THEME_META, TYPE_META, type CourseTheme } from '@/lib/training-display'
@@ -224,6 +225,7 @@ function CourseMetaCard({ course: m, onDone }: { course: AdminModule; onDone: ()
 }
 
 function CertTemplate({ moduleId, hasTemplate, onDone }: { moduleId: string; hasTemplate: boolean; onDone: () => void }) {
+  const previewHref = `/api/admin/training/cert-preview?moduleId=${moduleId}`
   const [busy, setBusy] = useState(false)
   const upload = async (file: File) => {
     setBusy(true)
@@ -260,6 +262,9 @@ function CertTemplate({ moduleId, hasTemplate, onDone }: { moduleId: string; has
           <input type="file" accept="application/pdf" className="hidden" disabled={busy} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
         </label>
       )}
+      <a href={previewHref} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium text-brand-blue-bright hover:underline">
+        Preview
+      </a>
     </span>
   )
 }
@@ -449,7 +454,7 @@ function LessonEditor({
   const existing = target?.lesson
   const [contentKind, setContentKind] = useState<ContentKey>(existing?.content_kind ?? 'live')
   const [title, setTitle] = useState(existing?.title ?? '')
-  const [url, setUrl] = useState('')
+  const [url, setUrl] = useState(existing?.external_url ?? '')
   const [file, setFile] = useState<File | null>(null)
   const [minutes, setMinutes] = useState(existing?.estimated_minutes ? String(existing.estimated_minutes) : '')
   const [body, setBody] = useState(existing?.body ?? '')
@@ -466,41 +471,79 @@ function LessonEditor({
   }
 
   const active = CONTENT_TYPES.find((c) => c.key === contentKind) ?? CONTENT_TYPES[0]
-  const needsUrl = !existing && active.input === 'url'
-  const needsFile = !existing && active.input === 'file'
+  // Whether the content (type/url/file) is being set — always for a new lesson;
+  // for an existing one, only when the admin changes the type, the URL, or picks
+  // a new file. An unchanged existing lesson is a metadata-only edit.
+  const contentChanged =
+    !existing ||
+    contentKind !== existing.content_kind ||
+    (active.input === 'url' && url.trim() !== (existing.external_url ?? '')) ||
+    (active.input === 'file' && !!file)
+  const showDropzone = active.input !== 'none' && (contentChanged || !existing)
 
   const save = async () => {
     if (!title.trim()) { setError('Add a lesson title.'); return }
+    if (contentChanged && active.input === 'url' && !url.trim()) { setError('Add a URL for this lesson.'); return }
+    if (contentChanged && active.input === 'file' && !file) { setError('Choose a file to upload.'); return }
     setBusy(true); setError(null)
     try {
-      if (existing) {
-        // Edit: title / notes / status (content type fixed after creation).
+      if (existing && !contentChanged) {
+        // Metadata-only edit.
         const res = await fetch('/api/admin/community/training/items', {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: existing.id, title: title.trim(), body, status, estimatedMinutes: minutes ? Number(minutes) : undefined }),
         })
         if (res.ok) onSaved(); else setError('Could not save lesson.')
-      } else {
-        if (needsUrl && !url.trim()) { setError('Add a URL for this lesson.'); setBusy(false); return }
-        if (needsFile && !file) { setError('Choose a file to upload.'); setBusy(false); return }
-        const fd = new FormData()
-        fd.set('moduleId', moduleId)
-        if (target.sectionId) fd.set('sectionId', target.sectionId)
-        fd.set('title', title.trim())
-        fd.set('contentKind', contentKind)
-        fd.set('status', status)
-        fd.set('displayOrder', String(lessonCount))
-        if (minutes) fd.set('estimatedMinutes', minutes)
-        if (body.trim()) fd.set('body', body)
-        if (needsUrl) fd.set('externalUrl', url)
-        if (needsFile && file) fd.set('file', file)
-        const res = await fetch('/api/admin/community/training/items', { method: 'POST', body: fd })
-        if (res.ok) onSaved(); else { const d = await res.json().catch(() => ({})); setError(d.error || 'Could not add lesson.') }
+        return
       }
+
+      if (existing) {
+        // Edit incl. content change. Multipart when a file is involved.
+        let res: Response
+        if (active.input === 'file' && file) {
+          const fd = new FormData()
+          fd.set('id', existing.id)
+          fd.set('title', title.trim())
+          fd.set('status', status)
+          fd.set('contentKind', contentKind)
+          if (minutes) fd.set('estimatedMinutes', minutes)
+          fd.set('body', body)
+          fd.set('file', file)
+          res = await fetch('/api/admin/community/training/items', { method: 'PATCH', body: fd })
+        } else {
+          res = await fetch('/api/admin/community/training/items', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: existing.id, title: title.trim(), body, status,
+              estimatedMinutes: minutes ? Number(minutes) : undefined,
+              contentKind, externalUrl: active.input === 'url' ? url.trim() : undefined,
+            }),
+          })
+        }
+        if (res.ok) onSaved(); else { const d = await res.json().catch(() => ({})); setError(d.error || 'Could not save lesson.') }
+        return
+      }
+
+      // New lesson.
+      const fd = new FormData()
+      fd.set('moduleId', moduleId)
+      if (target.sectionId) fd.set('sectionId', target.sectionId)
+      fd.set('title', title.trim())
+      fd.set('contentKind', contentKind)
+      fd.set('status', status)
+      fd.set('displayOrder', String(lessonCount))
+      if (minutes) fd.set('estimatedMinutes', minutes)
+      if (body.trim()) fd.set('body', body)
+      if (active.input === 'url') fd.set('externalUrl', url)
+      if (active.input === 'file' && file) fd.set('file', file)
+      const res = await fetch('/api/admin/community/training/items', { method: 'POST', body: fd })
+      if (res.ok) onSaved(); else { const d = await res.json().catch(() => ({})); setError(d.error || 'Could not add lesson.') }
     } finally {
       setBusy(false)
     }
   }
+
+  const pickType = (k: ContentKey) => { setContentKind(k); setError(null) }
 
   const remove = async () => {
     if (!existing) return
@@ -528,15 +571,12 @@ function LessonEditor({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {CONTENT_TYPES.map((c) => {
             const selected = contentKind === c.key
-            const disabled = !!existing && c.key !== contentKind
             return (
               <button
                 key={c.key}
                 type="button"
-                disabled={disabled}
-                onClick={() => { setContentKind(c.key); setError(null) }}
-                title={disabled ? 'Delete and re-add the lesson to change its content type.' : undefined}
-                className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition ${selected ? 'border-brand-blue bg-brand-soft' : 'border-brand-border hover:bg-brand-canvas'} ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
+                onClick={() => pickType(c.key)}
+                className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition ${selected ? 'border-brand-blue bg-brand-soft' : 'border-brand-border hover:bg-brand-canvas'}`}
                 style={selected ? { background: '#EAF0FE', borderColor: '#3C6DF6' } : undefined}
               >
                 <c.Icon className={`h-5 w-5 ${selected ? 'text-brand-blue-bright' : 'text-brand-muted-soft'}`} />
@@ -547,8 +587,9 @@ function LessonEditor({
         </div>
       </div>
 
-      {/* Morphing dropzone for the active type (creation only). */}
-      {!existing && (
+      {/* Morphing dropzone for the active type. Shown for new lessons and when an
+          existing lesson's content type/URL/file is being changed. */}
+      {showDropzone && (
         <div className="rounded-xl border border-dashed border-brand-border bg-brand-canvas/50 p-4">
           <div className="flex items-center gap-2">
             <active.Icon className="h-4 w-4 text-brand-muted" />
@@ -564,26 +605,22 @@ function LessonEditor({
               <input type="file" accept={active.accept} className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             </label>
           )}
-          {active.input === 'none' && <p className="mt-2 text-xs font-medium text-brand-muted-soft">{active.cta}</p>}
         </div>
       )}
 
-      {/* Existing 'live' (Record) lesson: launch + record the JaaS session here. */}
-      {existing && existing.content_kind === 'live' && (
-        <RecordSession itemId={existing.id} recordingStatus={existing.recording_status} />
+      {/* 'live' (Record) — note for new lessons; full launch/record once saved. */}
+      {contentKind === 'live' && (
+        existing && existing.content_kind === 'live' ? (
+          <RecordSession itemId={existing.id} recordingStatus={existing.recording_status} />
+        ) : (
+          <p className="rounded-xl border border-dashed border-brand-border bg-brand-canvas/50 p-4 text-xs text-brand-muted-soft">
+            {active.desc} Save the lesson, then reopen it to launch the recording session.
+          </p>
+        )
       )}
 
-      {/* Existing non-live lesson: show current content as an attached resource. */}
-      {existing && existing.content_kind !== 'live' && (
-        <div className="rounded-xl border border-brand-border p-3">
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Attached resource</p>
-          <div className="flex items-center gap-2 text-sm text-brand-muted">
-            <Link2 className="h-4 w-4 text-brand-muted-soft" />
-            {active.label}
-          </div>
-          <p className="mt-1 text-[11px] text-brand-muted-soft">Delete and re-add the lesson to replace its content.</p>
-        </div>
-      )}
+      {/* Attached resources (files / links beneath the primary content). */}
+      {existing && <LessonResources itemId={existing.id} />}
 
       <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Lesson notes (optional) — shown beneath the content" rows={3} className="w-full rounded-lg border border-brand-border px-3 py-2 text-sm" />
 

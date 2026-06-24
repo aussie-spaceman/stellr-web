@@ -39,15 +39,17 @@ function Toggle({
   icon,
   on,
   onChange,
+  disabled = false,
 }: {
   label: string
   hint?: string
   icon?: React.ReactNode
   on: boolean
   onChange: (v: boolean) => void
+  disabled?: boolean
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-3">
+    <div className={`flex items-center justify-between gap-3 py-3 ${disabled ? 'opacity-50' : ''}`}>
       <div className="flex items-start gap-3">
         {icon && (
           <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-canvas text-brand-muted">
@@ -64,8 +66,9 @@ function Toggle({
         role="switch"
         aria-checked={on}
         aria-label={label}
+        disabled={disabled}
         onClick={() => onChange(!on)}
-        className="relative h-6 w-11 shrink-0 rounded-full transition-colors"
+        className="relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed"
         style={{ background: on ? '#1FA97A' : '#D7DBE8' }}
       >
         <span
@@ -162,7 +165,7 @@ export function RemindersTab({ courses }: { courses: ReminderCourse[] }) {
             <div className="mt-2 divide-y divide-brand-hairline">
               <Toggle label="In-app notification" hint="Shows in the bell menu and dashboard" icon={<Bell className="h-4 w-4" />} on={settings.remind_inapp} onChange={(v) => update('remind_inapp', v)} />
               <Toggle label="Email" hint="Sent to the member's email" icon={<Mail className="h-4 w-4" />} on={settings.remind_email} onChange={(v) => update('remind_email', v)} />
-              <Toggle label="SMS / text message" hint="For members with a verified mobile" icon={<MessageSquare className="h-4 w-4" />} on={settings.remind_sms} onChange={(v) => update('remind_sms', v)} />
+              <Toggle label="SMS / text message" hint="Coming soon — SMS delivery is not yet enabled" icon={<MessageSquare className="h-4 w-4" />} on={false} disabled onChange={() => {}} />
             </div>
           </div>
 

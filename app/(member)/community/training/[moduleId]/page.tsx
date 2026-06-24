@@ -3,7 +3,7 @@ import { formatDateShort } from '@/lib/utils'
 import Link from 'next/link'
 import { ArrowLeft, Lock, Clock, FileText, ExternalLink } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
-import { getModule, getLesson, deriveType, TYPE_META } from '@/lib/training'
+import { getModule, getLesson, listLessonResources, deriveType, TYPE_META } from '@/lib/training'
 import { getAssignedCourses, roleLabel, OBJECT_TYPE_LABELS } from '@/lib/training-portal'
 import { ThemePill, RequiredPill, OptionalPill } from '@/components/training/Pills'
 import { deadlineInfo } from '@/components/training/deadline'
@@ -91,6 +91,7 @@ export default async function CourseDetailPage({
   const dueAt = dueDates.sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0] ?? null
   const dl = deadlineInfo(dueAt)
 
+  const resources = await listLessonResources(currentId)
   const typeMeta = TYPE_META[deriveType(mod.material_kind)]
   const pct = mod.itemCount > 0 ? Math.round((mod.completedCount / mod.itemCount) * 100) : 0
   const displayName = [member.first_name, member.last_name].filter(Boolean).join(' ') || 'Member'
@@ -169,21 +170,25 @@ export default async function CourseDetailPage({
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-brand-muted">{lesson.body}</p>
           )}
 
-          {/* Resources — derived from the lesson's own downloadable/link content.
-              DEV: a dedicated per-lesson "attached resources" table is a future
-              enhancement; today the lesson's content is its resource. */}
-          {!lesson.locked && lesson.media && (lesson.media.type === 'document' || lesson.media.type === 'link') && (
+          {/* Attached resources — files/links the admin added to this lesson. */}
+          {!lesson.locked && resources.length > 0 && (
             <div className="rounded-2xl border border-brand-border bg-white p-4">
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Resources</p>
-              <a
-                href={lesson.media.type === 'document' ? lesson.media.url : lesson.media.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-lg border border-brand-hairline px-3 py-2 text-sm font-medium text-brand-muted transition hover:bg-brand-canvas"
-              >
-                {lesson.media.type === 'document' ? <FileText className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
-                {lesson.title}
-              </a>
+              <ul className="space-y-1.5">
+                {resources.map((r) => (
+                  <li key={r.id}>
+                    <a
+                      href={r.url ?? '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 rounded-lg border border-brand-hairline px-3 py-2 text-sm font-medium text-brand-muted transition hover:bg-brand-canvas"
+                    >
+                      {r.kind === 'file' ? <FileText className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
+                      {r.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 

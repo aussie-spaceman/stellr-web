@@ -20,6 +20,7 @@ const COHORT_TYPE: Record<string, ObjectType> = {
   space: 'space',
   community: 'space',
   training: 'space',
+  workshop: 'workshop',
 }
 
 /** Every Object a course can be assigned to (scope 'all') or only those that
@@ -83,73 +84,111 @@ export interface EventTracking {
   summary: { complete: number; in_progress: number; not_started: number; overdue: number }
 }
 
-/** Mandatory courses assigned to an Object (across both assignment tables). */
-async function mandatoryCoursesFor(refs: string[]) {
-  if (refs.length === 0) return [] as { moduleId: string; title: string; dueAt: string | null }[]
+type TrackCourse = { moduleId: string; title: string; dueAt: string | null }
+interface Participant {
+  memberId: string
+  name: string
+  ageBracket: string | null
+  group: string
+}
+
+const moduleTitle = (row: { training_modules?: unknown }) => {
+  const m = Array.isArray(row.training_modules) ? row.training_modules[0] : row.training_modules
+  return (m as { title?: string } | null)?.title ?? 'Course'
+}
+
+/** Mandatory courses for event/campaign refs (legacy + new assignment tables). */
+async function mandatoryCoursesForEvent(refs: string[]): Promise<TrackCourse[]> {
+  if (refs.length === 0) return []
   const db = supabaseServer()
-  const cols = new Map<string, { moduleId: string; title: string; dueAt: string | null }>()
+  const cols = new Map<string, TrackCourse>()
   const [{ data: legacy }, { data: rich }] = await Promise.all([
-    db
-      .from('training_assignments')
-      .select('module_id, due_at, training_modules(title)')
-      .in('event_ref', refs)
-      .eq('is_mandatory', true),
-    db
-      .from('course_object_assignments')
-      .select('module_id, due_at, default_requirement, tier_requirements, training_modules(title)')
-      .in('object_ref', refs),
+    db.from('training_assignments').select('module_id, due_at, training_modules(title)').in('event_ref', refs).eq('is_mandatory', true),
+    db.from('course_object_assignments').select('module_id, due_at, default_requirement, tier_requirements, training_modules(title)').in('object_ref', refs),
   ])
-  const title = (row: { training_modules?: unknown }) => {
-    const m = Array.isArray(row.training_modules) ? row.training_modules[0] : row.training_modules
-    return (m as { title?: string } | null)?.title ?? 'Course'
-  }
   for (const a of legacy ?? [])
-    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: title(a), dueAt: (a.due_at as string | null) ?? null })
+    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null })
   for (const a of rich ?? []) {
     const tr = (a.tier_requirements as Record<string, string> | null) ?? {}
     if (a.default_requirement !== 'mandatory' && !Object.values(tr).includes('mandatory')) continue
-    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: title(a), dueAt: (a.due_at as string | null) ?? null })
+    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null })
   }
   return [...cols.values()]
 }
 
-/**
- * Per-participant completion of an event Object's mandatory training. Each
- * participant gets one aggregate status. Supports age-bracket + outstanding-only
- * filtering. (Cohort/space Objects use cohort_members in a later pass.)
- */
-export async function getEventTracking(
-  objectRef: string,
-  opts: { bracket?: string; outstanding?: boolean } = {}
-): Promise<EventTracking> {
+/** Mandatory courses for a cohort/workshop/space (new table + cohort_training_links). */
+async function mandatoryCoursesForCohort(cohortId: string): Promise<TrackCourse[]> {
   const db = supabaseServer()
-  // Resolve the Sanity _id too — legacy assignments may key off it.
-  const meta = await getEventsBySlugs([objectRef])
-  const refs = [objectRef, ...meta.map((m) => m._id)]
-  const courses = await mandatoryCoursesFor(refs)
-  const empty = { courses, rows: [], summary: { complete: 0, in_progress: 0, not_started: 0, overdue: 0 } }
-  if (courses.length === 0) return empty
+  const cols = new Map<string, TrackCourse>()
+  const [{ data: rich }, { data: links }] = await Promise.all([
+    db.from('course_object_assignments').select('module_id, due_at, default_requirement, tier_requirements, training_modules(title)').eq('object_ref', cohortId),
+    db.from('cohort_training_links').select('module_id, due_at, training_modules(title)').eq('cohort_id', cohortId).eq('is_mandatory', true),
+  ])
+  for (const a of rich ?? []) {
+    const tr = (a.tier_requirements as Record<string, string> | null) ?? {}
+    if (a.default_requirement !== 'mandatory' && !Object.values(tr).includes('mandatory')) continue
+    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null })
+  }
+  for (const a of links ?? [])
+    cols.set(a.module_id as string, { moduleId: a.module_id as string, title: moduleTitle(a), dueAt: (a.due_at as string | null) ?? null })
+  return [...cols.values()]
+}
 
-  const { data: regs } = await db
-    .from('registrations')
-    .select('id, school_name')
-    .eq('event_slug', objectRef)
+/** Participants of an event/campaign Object (group = school registered under). */
+async function eventParticipants(slug: string): Promise<Participant[]> {
+  const db = supabaseServer()
+  const { data: regs } = await db.from('registrations').select('id, school_name').eq('event_slug', slug)
   const regIds = (regs ?? []).map((r) => r.id as string)
+  if (regIds.length === 0) return []
   const groupByReg = new Map((regs ?? []).map((r) => [r.id as string, (r.school_name as string) ?? 'Group']))
-  if (regIds.length === 0) return empty
-
   const { data: parts } = await db
     .from('participants')
     .select('member_id, first_name, last_name, registration_id, members(age_bracket)')
     .in('registration_id', regIds)
     .not('member_id', 'is', null)
+  return (parts ?? []).map((p) => {
+    const m = Array.isArray(p.members) ? p.members[0] : p.members
+    return {
+      memberId: p.member_id as string,
+      name: [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Participant',
+      ageBracket: (m as { age_bracket?: string } | null)?.age_bracket ?? null,
+      group: groupByReg.get(p.registration_id as string) ?? 'Group',
+    }
+  })
+}
+
+/** Members of a cohort/workshop/space Object (group = cohort name). */
+async function cohortParticipants(cohortId: string): Promise<Participant[]> {
+  const db = supabaseServer()
+  const [{ data: cohort }, { data: members }] = await Promise.all([
+    db.from('mentoring_cohorts').select('name').eq('id', cohortId).maybeSingle(),
+    db.from('cohort_members').select('member_id, members(first_name, last_name, age_bracket)').eq('cohort_id', cohortId),
+  ])
+  const group = (cohort?.name as string) ?? 'Cohort'
+  return (members ?? []).map((cm) => {
+    const m = Array.isArray(cm.members) ? cm.members[0] : cm.members
+    const mm = m as { first_name?: string; last_name?: string; age_bracket?: string } | null
+    return {
+      memberId: cm.member_id as string,
+      name: [mm?.first_name, mm?.last_name].filter(Boolean).join(' ') || 'Member',
+      ageBracket: mm?.age_bracket ?? null,
+      group,
+    }
+  })
+}
+
+/** Shared completion roll-up: one aggregate status per participant. */
+async function computeTracking(
+  courses: TrackCourse[],
+  participants: Participant[],
+  opts: { bracket?: string; outstanding?: boolean }
+): Promise<EventTracking> {
+  const summaryZero = { complete: 0, in_progress: 0, not_started: 0, overdue: 0 }
+  if (courses.length === 0 || participants.length === 0) return { courses, rows: [], summary: summaryZero }
+  const db = supabaseServer()
 
   const moduleIds = courses.map((c) => c.moduleId)
-  const { data: items } = await db
-    .from('training_items')
-    .select('id, module_id')
-    .in('module_id', moduleIds)
-    .eq('status', 'published')
+  const { data: items } = await db.from('training_items').select('id, module_id').in('module_id', moduleIds).eq('status', 'published')
   const itemsByModule = new Map<string, string[]>()
   for (const it of items ?? []) {
     const arr = itemsByModule.get(it.module_id as string) ?? []
@@ -158,7 +197,7 @@ export async function getEventTracking(
   }
   const allItemIds = (items ?? []).map((i) => i.id as string)
 
-  const memberIds = [...new Set((parts ?? []).map((p) => p.member_id as string))]
+  const memberIds = [...new Set(participants.map((p) => p.memberId))]
   const completedByMember = new Map<string, Set<string>>()
   const lastByMember = new Map<string, string>()
   if (memberIds.length > 0 && allItemIds.length > 0) {
@@ -180,14 +219,9 @@ export async function getEventTracking(
   }
 
   const now = Date.now()
-  let rows: TrackingRow[] = (parts ?? []).map((p) => {
-    const mid = p.member_id as string
-    const completed = completedByMember.get(mid) ?? new Set<string>()
-    const m = Array.isArray(p.members) ? p.members[0] : p.members
-    // Aggregate status across all mandatory courses.
-    let anyOverdue = false
-    let anyStarted = false
-    let allComplete = true
+  let rows: TrackingRow[] = participants.map((p) => {
+    const completed = completedByMember.get(p.memberId) ?? new Set<string>()
+    let anyOverdue = false, anyStarted = false, allComplete = true
     for (const c of courses) {
       const ids = itemsByModule.get(c.moduleId) ?? []
       const done = ids.filter((id) => completed.has(id)).length
@@ -200,25 +234,11 @@ export async function getEventTracking(
         anyStarted = true
       }
     }
-    const status: TrackStatus = allComplete
-      ? 'complete'
-      : anyOverdue
-        ? 'overdue'
-        : anyStarted
-          ? 'in_progress'
-          : 'not_started'
-    return {
-      memberId: mid,
-      name: [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Participant',
-      ageBracket: (m as { age_bracket?: string } | null)?.age_bracket ?? null,
-      group: groupByReg.get(p.registration_id as string) ?? 'Group',
-      status,
-      lastActivity: lastByMember.get(mid) ?? null,
-    }
+    const status: TrackStatus = allComplete ? 'complete' : anyOverdue ? 'overdue' : anyStarted ? 'in_progress' : 'not_started'
+    return { memberId: p.memberId, name: p.name, ageBracket: p.ageBracket, group: p.group, status, lastActivity: lastByMember.get(p.memberId) ?? null }
   })
 
   if (opts.bracket && opts.bracket !== 'all') rows = rows.filter((r) => r.ageBracket === opts.bracket)
-
   const summary = {
     complete: rows.filter((r) => r.status === 'complete').length,
     in_progress: rows.filter((r) => r.status === 'in_progress').length,
@@ -226,8 +246,28 @@ export async function getEventTracking(
     overdue: rows.filter((r) => r.status === 'overdue').length,
   }
   if (opts.outstanding) rows = rows.filter((r) => r.status !== 'complete')
-
   return { courses, rows, summary }
+}
+
+/**
+ * Per-participant completion of an Object's mandatory training, one aggregate
+ * status each. Dispatches on Object type: event/campaign use registrations;
+ * cohort/workshop/space use cohort membership. Age-bracket + outstanding filters.
+ */
+export async function getObjectTracking(
+  objectType: ObjectType,
+  objectRef: string,
+  opts: { bracket?: string; outstanding?: boolean } = {}
+): Promise<EventTracking> {
+  if (objectType === 'competition' || objectType === 'campaign') {
+    const meta = await getEventsBySlugs([objectRef])
+    const courses = await mandatoryCoursesForEvent([objectRef, ...meta.map((m) => m._id)])
+    const participants = await eventParticipants(objectRef)
+    return computeTracking(courses, participants, opts)
+  }
+  const courses = await mandatoryCoursesForCohort(objectRef)
+  const participants = await cohortParticipants(objectRef)
+  return computeTracking(courses, participants, opts)
 }
 
 /* ─── Overview ───────────────────────────────────────────────────────────── */
@@ -262,19 +302,20 @@ export async function getAdminOverview(): Promise<AdminOverview> {
   ])
 
   // Per-Object readiness (event/campaign Objects only — they carry registrations).
-  const eventObjects = objects.filter((o) => o.type === 'competition' || o.type === 'campaign')
+  // Readiness across every assigned Object (events, campaigns, cohorts, spaces…).
   const readiness: ObjectReadiness[] = []
   let pctSum = 0
   let needsAttention = 0
-  for (const o of eventObjects) {
-    const t = await getEventTracking(o.ref)
-    const total = t.rows.length || t.summary.complete + t.summary.in_progress + t.summary.not_started + t.summary.overdue
+  const tracked = await Promise.all(objects.map((o) => getObjectTracking(o.type, o.ref)))
+  objects.forEach((o, i) => {
+    const t = tracked[i]
+    const total = t.summary.complete + t.summary.in_progress + t.summary.not_started + t.summary.overdue
     const pct = total > 0 ? Math.round((t.summary.complete / total) * 100) : 0
     const hasOverdue = t.summary.overdue > 0
     if (hasOverdue) needsAttention++
     pctSum += pct
     readiness.push({ ref: o.ref, label: o.label, type: o.type, pct, hasOverdue })
-  }
+  })
   readiness.sort((a, b) => a.pct - b.pct)
 
   return {

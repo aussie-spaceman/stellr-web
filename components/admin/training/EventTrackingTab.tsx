@@ -50,23 +50,24 @@ export function EventTrackingTab({
   const [data, setData] = useState<EventTracking | null>(null)
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [channels, setChannels] = useState({ email: true, sms: false })
   const [sent, setSent] = useState(false)
 
-  const objectLabel = objects.find((o) => o.ref === objectRef)?.label ?? 'this event'
+  const selectedObject = objects.find((o) => o.ref === objectRef)
+  const objectLabel = selectedObject?.label ?? 'this event'
 
   const load = useCallback(async () => {
     if (!objectRef) return
     setLoading(true)
     setSelected(new Set())
     try {
-      const qs = new URLSearchParams({ objectRef, bracket, outstanding: outstanding ? '1' : '0' })
+      const objectType = objects.find((o) => o.ref === objectRef)?.type ?? 'competition'
+      const qs = new URLSearchParams({ objectType, objectRef, bracket, outstanding: outstanding ? '1' : '0' })
       const res = await fetch(`/api/admin/training/tracking?${qs}`)
       setData(res.ok ? await res.json() : null)
     } finally {
       setLoading(false)
     }
-  }, [objectRef, bracket, outstanding])
+  }, [objectRef, bracket, outstanding, objects])
 
   useEffect(() => {
     load()
@@ -90,7 +91,7 @@ export function EventTrackingTab({
     const res = await fetch('/api/admin/training/bulk-notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ memberIds: [...selected], objectLabel, channels }),
+      body: JSON.stringify({ memberIds: [...selected], objectLabel }),
     })
     if (res.ok) {
       setSent(true)
@@ -158,20 +159,12 @@ export function EventTrackingTab({
           <span className="text-sm font-semibold">{selected.size} incomplete selected</span>
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-xs text-white/70">Notify via</span>
-            <button
-              onClick={() => setChannels((c) => ({ ...c, email: !c.email }))}
-              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition"
-              style={channels.email ? { background: '#3C6DF6', color: '#fff' } : { background: 'rgba(255,255,255,.12)', color: '#fff' }}
-            >
-              <Mail className="h-3.5 w-3.5" /> Email
-            </button>
-            <button
-              onClick={() => setChannels((c) => ({ ...c, sms: !c.sms }))}
-              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition"
-              style={channels.sms ? { background: '#3C6DF6', color: '#fff' } : { background: 'rgba(255,255,255,.12)', color: '#fff' }}
-            >
-              <MessageSquare className="h-3.5 w-3.5" /> SMS
-            </button>
+            <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold" style={{ background: '#3C6DF6', color: '#fff' }}>
+              <Mail className="h-3.5 w-3.5" /> In-app + Email
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white/50" style={{ background: 'rgba(255,255,255,.08)' }} title="SMS reminders are coming soon">
+              <MessageSquare className="h-3.5 w-3.5" /> SMS · soon
+            </span>
             <button
               onClick={sendReminders}
               className="inline-flex items-center gap-1.5 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-blue-bright"

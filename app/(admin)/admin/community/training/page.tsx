@@ -27,7 +27,7 @@ async function builderContent(initialCourseId?: string) {
       .select(
         'id, title, description, material_kind, course_type, theme, cert_template_path, start_date, event_ref, min_tier_rank, is_published, ' +
           'training_sections(id, title, display_order, drip_days), ' +
-          'training_items(id, title, content_kind, status, section_id, display_order, estimated_minutes, body, recording_status), ' +
+          'training_items(id, title, content_kind, status, section_id, display_order, estimated_minutes, body, external_url, recording_status), ' +
           'course_object_assignments(id, object_type, object_ref, object_label, default_requirement, tier_requirements, due_at)'
       )
       .order('display_order', { ascending: true }),

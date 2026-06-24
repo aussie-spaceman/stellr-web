@@ -463,6 +463,31 @@ export async function getLesson(
   }
 }
 
+export interface LessonResource {
+  id: string
+  kind: 'file' | 'link'
+  title: string
+  url: string | null
+}
+
+/** Resolved attached resources for a lesson (signed URLs for files). */
+export async function listLessonResources(itemId: string): Promise<LessonResource[]> {
+  const db = supabaseServer()
+  const { data } = await db
+    .from('training_item_resources')
+    .select('id, kind, title, storage_path, external_url, display_order')
+    .eq('item_id', itemId)
+    .order('display_order', { ascending: true })
+  const out: LessonResource[] = []
+  for (const r of data ?? []) {
+    const url = r.kind === 'file'
+      ? (r.storage_path ? await signedDownloadUrl(r.storage_path as string) : null)
+      : (r.external_url as string | null)
+    out.push({ id: r.id as string, kind: r.kind as 'file' | 'link', title: r.title as string, url })
+  }
+  return out
+}
+
 /** Resolve an item to a signed download URL after an access + drip check. */
 export async function getItemDownload(
   member: CommunityMember,

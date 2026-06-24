@@ -5,6 +5,7 @@ import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
 import { getVideoProvider, getEmbedConfig } from '@/lib/video-provider'
 import { VideoRoom } from '@/components/video/VideoRoom'
+import { CohortLiveRoom } from '@/components/community/mentoring/CohortLiveRoom'
 
 export const metadata = { title: 'Community · Session Room' }
 
@@ -53,6 +54,30 @@ export default async function SessionRoomPage({ params }: { params: Promise<{ id
   const backHref = session.cohort_id
     ? `/community/mentoring/${session.cohort_id}`
     : '/community/coaching'
+  const displayName = [member.first_name, member.last_name].filter(Boolean).join(' ') || 'Member'
+
+  // Mentoring cohort sessions get the bespoke dark-stage live screen with host
+  // controls + agenda + auto-record. (Coaching keeps the simple embed.)
+  if (session.cohort_id) {
+    const { data: acts } = await db
+      .from('session_actions')
+      .select('title')
+      .eq('cohort_id', session.cohort_id)
+      .order('display_order')
+      .limit(6)
+    const agenda = (acts ?? []).map((a) => (a as { title: string }).title)
+    return (
+      <CohortLiveRoom
+        embed={{ scriptSrc: embed.scriptSrc, domain: embed.domain, roomName: embed.roomName }}
+        jwt={token}
+        displayName={displayName}
+        title={session.title ?? 'Mentoring session'}
+        isHost={isHost}
+        backHref={backHref}
+        agenda={agenda}
+      />
+    )
+  }
 
   return (
     <div>
@@ -69,7 +94,7 @@ export default async function SessionRoomPage({ params }: { params: Promise<{ id
         domain={embed.domain}
         roomName={embed.roomName}
         jwt={token}
-        displayName={[member.first_name, member.last_name].filter(Boolean).join(' ') || 'Member'}
+        displayName={displayName}
       />
     </div>
   )

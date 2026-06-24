@@ -89,6 +89,7 @@ export interface AdminLesson {
   display_order: number
   estimated_minutes: number | null
   body: string | null
+  external_url?: string | null
   /** For 'live' (Record) lessons: none | pending | available. */
   recording_status?: string | null
 }

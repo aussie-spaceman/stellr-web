@@ -100,23 +100,77 @@ export async function POST(req: Request) {
   return NextResponse.json({ id: data.id })
 }
 
-// PATCH — update a lesson (rename, publish/unpublish, move section, reorder).
+// PATCH — update a lesson. Accepts JSON (rename, publish, move, reorder, change
+// content type/URL) OR multipart/form-data (when replacing the file for a
+// video/document/resource lesson). Changing content type re-points the media:
+// switching to a file kind requires a file; to a URL kind requires externalUrl;
+// to 'live' clears both (the room is derived from the item id).
 export async function PATCH(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  const body = await req.json().catch(() => ({}))
-  const { id } = body
+  const db = supabaseServer()
+
+  const isMultipart = (req.headers.get('content-type') ?? '').includes('multipart/form-data')
+  let fields: Record<string, unknown> = {}
+  let file: File | null = null
+  if (isMultipart) {
+    const form = await req.formData()
+    file = form.get('file') as File | null
+    fields = Object.fromEntries([...form.entries()].filter(([k]) => k !== 'file'))
+  } else {
+    fields = await req.json().catch(() => ({}))
+  }
+
+  const id = fields.id as string | undefined
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
   const patch: Record<string, unknown> = {}
-  if (typeof body.title === 'string') patch.title = body.title.trim()
-  if (typeof body.body === 'string') patch.body = body.body.trim() || null
-  if (body.status === 'draft' || body.status === 'published') patch.status = body.status
-  if ('sectionId' in body) patch.section_id = body.sectionId || null
-  if (typeof body.displayOrder === 'number') patch.display_order = body.displayOrder
-  if (typeof body.estimatedMinutes === 'number') patch.estimated_minutes = body.estimatedMinutes
+  if (typeof fields.title === 'string') patch.title = fields.title.trim()
+  if (typeof fields.body === 'string') patch.body = fields.body.trim() || null
+  if (fields.status === 'draft' || fields.status === 'published') patch.status = fields.status
+  if ('sectionId' in fields) patch.section_id = fields.sectionId || null
+  if (fields.displayOrder != null && !Number.isNaN(Number(fields.displayOrder))) patch.display_order = Number(fields.displayOrder)
+  if (fields.estimatedMinutes != null && fields.estimatedMinutes !== '' && !Number.isNaN(Number(fields.estimatedMinutes))) {
+    patch.estimated_minutes = Number(fields.estimatedMinutes)
+  }
+
+  // Content type / media change.
+  const contentKind = fields.contentKind as string | undefined
+  if (contentKind) {
+    const ALLOWED = ['video', 'document', 'google_doc', 'link', 'live']
+    if (!ALLOWED.includes(contentKind)) return NextResponse.json({ error: 'Invalid contentKind' }, { status: 400 })
+    patch.content_kind = contentKind
+    const externalUrl = (fields.externalUrl as string | undefined)?.trim() || null
+    const needsFile = contentKind === 'video' || contentKind === 'document'
+    const needsUrl = contentKind === 'google_doc' || contentKind === 'link'
+
+    if (needsFile) {
+      if (file) {
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+        const storagePath = `training/${Date.now()}-${safeName}`
+        const { error: upErr } = await db.storage
+          .from(RESOURCES_BUCKET)
+          .upload(storagePath, file, { contentType: file.type || 'application/octet-stream', upsert: false })
+        if (upErr) {
+          console.error('[training] item re-upload error:', upErr)
+          return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
+        }
+        patch.storage_path = storagePath
+        patch.external_url = null
+      }
+      // no file provided → keep existing storage_path (metadata-only edit)
+    } else if (needsUrl) {
+      if (!externalUrl) return NextResponse.json({ error: 'externalUrl required for this content type' }, { status: 400 })
+      patch.external_url = externalUrl
+      patch.storage_path = null
+    } else {
+      // 'live' — room derived from item id; clear media.
+      patch.external_url = null
+      patch.storage_path = null
+    }
+  }
+
   if (Object.keys(patch).length === 0) return NextResponse.json({ ok: true })
 
-  const db = supabaseServer()
   const { error } = await db.from('training_items').update(patch).eq('id', id)
   if (error) {
     console.error('[training] item update error:', error)

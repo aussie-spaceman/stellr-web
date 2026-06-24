@@ -14,7 +14,6 @@ export function ResourceUploadForm({ spaces }: { spaces: Space[] }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [spaceId, setSpaceId] = useState('')
-  const [minTierRank, setMinTierRank] = useState('1')
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -34,7 +33,6 @@ export function ResourceUploadForm({ spaces }: { spaces: Space[] }) {
     fd.append('title', title.trim())
     if (description.trim()) fd.append('description', description.trim())
     if (spaceId) fd.append('spaceId', spaceId)
-    fd.append('minTierRank', minTierRank)
 
     try {
       const res = await fetch('/api/admin/community/resources', {
@@ -98,32 +96,23 @@ export function ResourceUploadForm({ spaces }: { spaces: Space[] }) {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-brand-muted mb-1">Space</label>
-          <select
-            value={spaceId}
-            onChange={(e) => setSpaceId(e.target.value)}
-            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
-          >
-            <option value="">— All spaces —</option>
-            {spaces.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-brand-muted mb-1">Download access</label>
-          <select
-            value={minTierRank}
-            onChange={(e) => setMinTierRank(e.target.value)}
-            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
-          >
-            <option value="0">All members (free + paid)</option>
-            <option value="1">Paid members only</option>
-          </select>
-        </div>
+      <div>
+        <label className="block text-sm font-medium text-brand-muted mb-1">
+          Space <span className="font-normal text-brand-muted-soft">(optional)</span>
+        </label>
+        <select
+          value={spaceId}
+          onChange={(e) => setSpaceId(e.target.value)}
+          className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
+        >
+          <option value="">— All spaces —</option>
+          {spaces.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-brand-muted-soft">
+          Access is inherited from the object a resource is attached to — there’s no per-file download gate.
+        </p>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

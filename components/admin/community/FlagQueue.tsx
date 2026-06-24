@@ -8,11 +8,14 @@ import { ExternalLink } from 'lucide-react'
 
 interface FlagRow {
   id: string
-  content_type: 'post' | 'comment'
+  content_type: 'post' | 'comment' | 'resource'
   content_id: string
   reason: string | null
+  note?: string | null
   status: string
   created_at: string
+  resourceTitle?: string | null
+  sourceObject?: string | null
   flagged_by_member: { first_name: string | null; last_name: string | null; email: string | null } | null
   resolved_by_member: { first_name: string | null; last_name: string | null } | null
 }
@@ -60,19 +63,31 @@ export function FlagQueue({ flags }: Props) {
                 <span className="rounded-full bg-brand-hairline px-2 py-0.5 text-xs font-medium capitalize text-brand-muted">
                   {flag.content_type}
                 </span>
-                <span className="font-mono text-xs text-brand-muted-soft">{flag.content_id.slice(0, 8)}…</span>
-                <Link
-                  href={`/community/general/${flag.content_type === 'post' ? flag.content_id : ''}`}
-                  target="_blank"
-                  className="text-brand-muted-soft hover:text-brand-muted"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </Link>
+                {flag.content_type === 'resource' ? (
+                  <span className="truncate text-sm font-semibold text-brand-blue-dark">
+                    {flag.resourceTitle ?? 'Resource'}
+                  </span>
+                ) : (
+                  <>
+                    <span className="font-mono text-xs text-brand-muted-soft">{flag.content_id.slice(0, 8)}…</span>
+                    <Link
+                      href={`/community/general/${flag.content_type === 'post' ? flag.content_id : ''}`}
+                      target="_blank"
+                      className="text-brand-muted-soft hover:text-brand-muted"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  </>
+                )}
               </div>
               {flag.reason && (
                 <p className="text-sm text-brand-muted">
-                  <span className="font-medium">Reason:</span> {flag.reason}
+                  <span className="font-medium">Reason:</span> <span className="capitalize">{flag.reason}</span>
                 </p>
+              )}
+              {flag.note && <p className="text-sm text-brand-muted">“{flag.note}”</p>}
+              {flag.content_type === 'resource' && flag.sourceObject && (
+                <p className="text-xs text-brand-muted-soft">Viewed in {flag.sourceObject}</p>
               )}
               <p className="text-xs text-brand-muted-soft">
                 Flagged by {memberName(flag.flagged_by_member)}
@@ -96,7 +111,7 @@ export function FlagQueue({ flags }: Props) {
                   disabled={loading === flag.id}
                   className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
                 >
-                  Hide content
+                  {flag.content_type === 'resource' ? 'Remove resource' : 'Hide content'}
                 </button>
                 <button
                   onClick={() => resolve(flag.id, 'resolved', false)}

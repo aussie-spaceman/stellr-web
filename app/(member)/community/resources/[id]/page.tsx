@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
 import { getResourceDetail } from '@/lib/resources-catalogue'
 import { ResourceDetailHeader } from '@/components/community/resources/ResourceDetailHeader'
+import { ResourceFlagButton } from '@/components/community/resources/ResourceFlagButton'
 
 export const metadata = { title: 'Community · Resource' }
 
@@ -104,12 +105,13 @@ export default async function ResourceDetailPage({ params }: { params: Promise<{
         {detail.description && <p className="mt-4 text-sm text-brand-muted">{detail.description}</p>}
       </section>
 
-      {/* Flag — wired in PR3 (reuses the chat moderation pipeline). */}
+      {/* Flag — reuses the shared chat moderation pipeline (community_flags). */}
       <section id="flag-section" className="mt-4 rounded-2xl border border-brand-border bg-white p-5">
         <h2 className="font-heading text-sm uppercase tracking-wide text-brand-blue-dark">Report a problem</h2>
-        <p className="mt-2 text-sm text-brand-muted-soft">
-          Flagging routes to the moderation queue. (Coming with PR3.)
+        <p className="mb-3 mt-1 text-sm text-brand-muted-soft">
+          Reports go to the moderation team. Tell us what’s wrong with this resource.
         </p>
+        <ResourceFlagButton binaryId={detail.binaryId} containerRef={detail.viewedInContainerId} />
       </section>
     </div>
   )

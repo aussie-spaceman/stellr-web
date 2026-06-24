@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
+import { logActivity } from '@/lib/activity-log'
 
 function requireAdmin(sessionClaims: Record<string, unknown> | null | undefined) {
   const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
@@ -52,7 +53,7 @@ export async function PATCH(req: Request) {
 
   const { data: flag } = await db
     .from('community_flags')
-    .select('content_type, content_id')
+    .select('content_type, content_id, viewed_in_container')
     .eq('id', flagId)
     .maybeSingle()
 
@@ -68,8 +69,40 @@ export async function PATCH(req: Request) {
     .eq('id', flagId)
 
   if (action === 'resolved' && hideContent) {
-    const table = flag.content_type === 'post' ? 'community_posts' : 'community_comments'
-    await db.from(table).update({ status: 'hidden' }).eq('id', flag.content_id)
+    if (flag.content_type === 'resource') {
+      // Remove just the attachment in the container it was flagged from — the
+      // binary and its other attachments survive (handover §4.7). Binary-wide
+      // delete lives in the central admin index (PR4).
+      if (flag.viewed_in_container) {
+        await db
+          .from('container_contents')
+          .delete()
+          .eq('container_id', flag.viewed_in_container as string)
+          .in('content_type', ['resource', 'recording'])
+          .eq('content_ref', flag.content_id)
+      }
+      // Log against the uploader (handover §4.7: action is auditable + author-facing).
+      const { data: bin } = await db
+        .from('community_resources')
+        .select('uploaded_by, title')
+        .eq('id', flag.content_id)
+        .maybeSingle()
+      const uploaderId = (bin?.uploaded_by as string | null) ?? null
+      if (uploaderId) {
+        logActivity({
+          memberId: uploaderId,
+          category: 'community',
+          action: 'resource_attachment_removed',
+          summary: `A flagged resource “${(bin?.title as string) ?? 'resource'}” was removed from an object by moderation`,
+          metadata: { binaryId: flag.content_id, container: flag.viewed_in_container, flagId },
+          actorType: 'admin',
+          actorMemberId: admin?.id ?? null,
+        }).catch(() => {})
+      }
+    } else {
+      const table = flag.content_type === 'post' ? 'community_posts' : 'community_comments'
+      await db.from(table).update({ status: 'hidden' }).eq('id', flag.content_id)
+    }
   }
 
   return NextResponse.json({ ok: true })

@@ -7,6 +7,10 @@ const flagSchema = z.object({
   contentType: z.enum(['post', 'comment', 'resource']),
   contentId: z.string().uuid(),
   reason: z.string().trim().max(700).optional(),
+  // Resource flags (handover §4.3): optional free-text note + the container the
+  // resource was viewed in (the same binary can be fine in one object, not another).
+  note: z.string().trim().max(700).optional(),
+  containerRef: z.string().uuid().optional(),
 })
 
 // POST /api/community/flag — member or teacher flags a post, comment, or resource
@@ -17,7 +21,7 @@ export async function POST(req: Request) {
 
   const parsed = flagSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
-  const { contentType, contentId, reason } = parsed.data
+  const { contentType, contentId, reason, note, containerRef } = parsed.data
 
   const db = supabaseServer()
 
@@ -38,6 +42,8 @@ export async function POST(req: Request) {
     content_id: contentId,
     flagged_by: member.id,
     reason: reason ?? null,
+    note: note ?? null,
+    viewed_in_container: containerRef ?? null,
   })
 
   return NextResponse.json({ ok: true })

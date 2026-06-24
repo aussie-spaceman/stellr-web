@@ -1,41 +1,49 @@
+import Link from 'next/link'
+import { FileText, Link as LinkIcon, PlayCircle, Database, HardDrive, Copy, Flag } from 'lucide-react'
 import { supabaseServer } from '@/lib/supabase'
 import { formatDateShort } from '@/lib/utils'
-import { resolveTierMap } from '@/lib/tiers-server'
+import { getAdminResourceIndex } from '@/lib/resource-admin'
 import { ResourceUploadForm } from '@/components/admin/community/ResourceUploadForm'
-import { ResourceRowActions } from '@/components/admin/community/ResourceRowActions'
-import { FileText } from 'lucide-react'
+import { AdminBinaryActions } from '@/components/admin/community/AdminBinaryActions'
 
 export const metadata = { title: 'Admin — Community Resources' }
 
-function formatBytes(bytes: number | null): string {
-  if (!bytes) return '—'
+function formatBytes(bytes: number): string {
+  if (!bytes) return '0 B'
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
-export default async function AdminCommunityResourcesPage() {
-  const db = supabaseServer()
-  const [{ data: resources }, { data: spaces }, { data: resourceTiers }, tierMap] = await Promise.all([
-    db
-      .from('community_resources')
-      .select('id, title, description, file_type, file_size_bytes, min_tier_rank, created_at, community_spaces(name)')
-      .order('created_at', { ascending: false }),
-    db
-      .from('community_spaces')
-      .select('id, name')
-      .eq('is_archived', false)
-      .order('display_order'),
-    db.from('community_resource_tiers').select('resource_id, tier_id'),
-    resolveTierMap(),
-  ])
+function typeLabel(fileType: string | null, isLink: boolean): string {
+  if (isLink) return 'Link'
+  if (fileType?.startsWith('video/')) return 'Video'
+  return fileType?.split('/')[1]?.toUpperCase() ?? 'File'
+}
 
-  // Map each resource → its per-tier allowlist (empty = open to all).
-  const tiersByResource = new Map<string, string[]>()
-  for (const r of (resourceTiers ?? []) as { resource_id: string; tier_id: string }[]) {
-    tiersByResource.set(r.resource_id, [...(tiersByResource.get(r.resource_id) ?? []), r.tier_id])
-  }
-  const allTiers = tierMap.rows.map((t) => ({ id: t.id, name: t.name }))
+// Central resource management (handover §4.6). ONE row per stored binary with a
+// volume/dedup stat strip. The legacy "Space" column and "Download Access" filter
+// are gone — access lives on the container, not the file. The upload form remains
+// the admin path that creates a binary unconditionally (the force-duplicate
+// override, decision 5).
+export default async function AdminCommunityResourcesPage() {
+  const { rows, stats } = await getAdminResourceIndex()
+
+  // The upload form still needs the spaces list for its (legacy) optional target.
+  const db = supabaseServer()
+  const { data: spaces } = await db
+    .from('community_spaces')
+    .select('id, name')
+    .eq('is_archived', false)
+    .order('display_order')
+
+  const statCards = [
+    { icon: <Database className="h-4 w-4" />, label: 'Stored binaries', value: String(stats.binaryCount) },
+    { icon: <HardDrive className="h-4 w-4" />, label: 'Total volume', value: formatBytes(stats.totalBytes) },
+    { icon: <Copy className="h-4 w-4" />, label: 'Duplicates prevented', value: String(stats.duplicatesPrevented) },
+    { icon: <Flag className="h-4 w-4" />, label: 'Open flags', value: String(stats.openFlags) },
+  ]
 
   return (
     <div className="space-y-6">
@@ -45,60 +53,76 @@ export default async function AdminCommunityResourcesPage() {
         </p>
         <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Community Resources</h1>
         <p className="mt-0.5 text-sm text-brand-muted-soft">
-          {(resources ?? []).length} resources · Upload files for members to access
+          One row per stored file. Access is inherited from the object a resource is attached to.
         </p>
+      </div>
+
+      {/* Stat strip */}
+      <div className="grid gap-3 sm:grid-cols-4">
+        {statCards.map((s) => (
+          <div key={s.label} className="rounded-xl border border-brand-border bg-white p-4">
+            <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">
+              {s.icon} {s.label}
+            </p>
+            <p className="mt-1.5 font-heading text-2xl text-brand-blue-dark">{s.value}</p>
+          </div>
+        ))}
       </div>
 
       <ResourceUploadForm spaces={spaces ?? []} />
 
-      <div className="rounded-xl border border-brand-border bg-white overflow-hidden">
+      <div className="overflow-hidden rounded-xl border border-brand-border bg-white">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-brand-hairline bg-brand-canvas text-left">
-              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Title</th>
-              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Space</th>
+              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Resource</th>
+              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Type</th>
               <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Size</th>
-              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Added</th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Access &amp; actions</th>
+              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Attached to</th>
+              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-brand-hairline">
-            {(resources ?? []).map((r) => {
-              const space = Array.isArray(r.community_spaces)
-                ? r.community_spaces[0]
-                : r.community_spaces
+            {rows.map((r) => {
+              const Icon = r.isLink ? LinkIcon : r.fileType?.startsWith('video/') ? PlayCircle : FileText
               return (
                 <tr key={r.id} className="hover:bg-brand-canvas">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 shrink-0 text-brand-muted-soft" />
-                      <div>
-                        <p className="font-medium text-brand-blue-dark">{r.title}</p>
-                        {r.description && (
-                          <p className="text-xs text-brand-muted-soft line-clamp-1">{r.description}</p>
-                        )}
+                      <Icon className="h-4 w-4 shrink-0 text-brand-muted-soft" />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-brand-blue-dark">{r.title}</p>
+                          {r.pendingFlags > 0 && (
+                            <Link
+                              href="/admin/community/moderation"
+                              className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600"
+                            >
+                              {r.pendingFlags} flag{r.pendingFlags === 1 ? '' : 's'}
+                            </Link>
+                          )}
+                        </div>
+                        <p className="text-xs text-brand-muted-soft">
+                          {r.uploaderName ?? 'Unknown'} · {formatDateShort(r.createdAt)}
+                        </p>
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-brand-muted">{(space as { name: string } | null)?.name ?? '—'}</td>
-                  <td className="px-4 py-3 text-brand-muted-soft">{formatBytes(r.file_size_bytes)}</td>
-                  <td className="px-4 py-3 text-brand-muted-soft">
-                    {formatDateShort(r.created_at)}
+                  <td className="px-4 py-3 text-brand-muted">{typeLabel(r.fileType, r.isLink)}</td>
+                  <td className="px-4 py-3 text-brand-muted-soft">{r.isLink ? '—' : formatBytes(r.sizeBytes ?? 0)}</td>
+                  <td className="px-4 py-3 text-brand-muted">
+                    {r.attachedCount} object{r.attachedCount === 1 ? '' : 's'}
                   </td>
                   <td className="px-4 py-3">
-                    <ResourceRowActions
-                      resourceId={r.id}
-                      allTiers={allTiers}
-                      assignedTierIds={tiersByResource.get(r.id) ?? []}
-                    />
+                    <AdminBinaryActions binaryId={r.id} title={r.title} attachedObjects={r.attachedObjects} />
                   </td>
                 </tr>
               )
             })}
-            {(!resources || resources.length === 0) && (
+            {rows.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-sm text-brand-muted-soft">
-                  No resources uploaded yet.
+                  No resources yet.
                 </td>
               </tr>
             )}

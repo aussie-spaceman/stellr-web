@@ -14,7 +14,7 @@ export default async function AdminModerationPage({
   const { data: flagsRaw } = await db
     .from('community_flags')
     .select(`
-      id, content_type, content_id, reason, status, created_at,
+      id, content_type, content_id, reason, note, viewed_in_container, status, created_at,
       flagged_by_member:flagged_by(first_name, last_name, email),
       resolved_by_member:resolved_by(first_name, last_name)
     `)
@@ -23,10 +23,31 @@ export default async function AdminModerationPage({
 
   // Normalise the aliased join columns from array shape to object shape.
   type FlagRaw = typeof flagsRaw extends (infer T)[] | null ? T : never
-  const flags = (flagsRaw ?? []).map((f: FlagRaw) => ({
+  const base = (flagsRaw ?? []).map((f: FlagRaw) => ({
     ...f,
     flagged_by_member: Array.isArray(f.flagged_by_member) ? f.flagged_by_member[0] ?? null : f.flagged_by_member,
     resolved_by_member: Array.isArray(f.resolved_by_member) ? f.resolved_by_member[0] ?? null : f.resolved_by_member,
+  }))
+
+  // Resolve resource titles + source-object names for resource flags (§4.7).
+  const resourceFlags = base.filter((f) => f.content_type === 'resource')
+  const binaryIds = [...new Set(resourceFlags.map((f) => f.content_id))]
+  const containerIds = [...new Set(resourceFlags.map((f) => f.viewed_in_container).filter((x): x is string => !!x))]
+  const [titles, objects] = await Promise.all([
+    binaryIds.length
+      ? db.from('community_resources').select('id, title').in('id', binaryIds)
+      : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+    containerIds.length
+      ? db.from('mentoring_cohorts').select('id, name').in('id', containerIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+  ])
+  const titleMap = new Map((titles.data ?? []).map((r) => [r.id as string, r.title as string]))
+  const objectMap = new Map((objects.data ?? []).map((r) => [r.id as string, (r.name as string).split(' — ')[0]]))
+
+  const flags = base.map((f) => ({
+    ...f,
+    resourceTitle: f.content_type === 'resource' ? titleMap.get(f.content_id) ?? null : null,
+    sourceObject: f.viewed_in_container ? objectMap.get(f.viewed_in_container) ?? null : null,
   }))
 
   return (
@@ -35,7 +56,7 @@ export default async function AdminModerationPage({
         <div>
           <h1 className="font-heading uppercase text-title text-brand-blue-dark">Content Moderation</h1>
           <p className="mt-0.5 text-sm text-brand-muted-soft">
-            Review flagged posts and comments (FR-COM-07)
+            Review flagged posts, comments and resources (FR-COM-07)
           </p>
         </div>
         <div className="flex gap-2 text-sm">

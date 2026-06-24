@@ -17,7 +17,6 @@ export async function POST(req: Request) {
   const title = (formData.get('title') as string | null)?.trim()
   const description = (formData.get('description') as string | null)?.trim() || null
   const spaceId = (formData.get('spaceId') as string | null) || null
-  const minTierRank = parseInt((formData.get('minTierRank') as string) ?? '0', 10)
 
   if (!file || !title) {
     return NextResponse.json({ error: 'file and title are required' }, { status: 400 })
@@ -50,7 +49,6 @@ export async function POST(req: Request) {
       storage_path: storagePath,
       file_type: file.type || null,
       file_size_bytes: file.size,
-      min_tier_rank: isNaN(minTierRank) ? 0 : minTierRank,
       uploaded_by: uploader?.id ?? null,
     })
     .select('id')
@@ -73,17 +71,16 @@ export async function GET() {
   const db = supabaseServer()
   const { data } = await db
     .from('community_resources')
-    .select('id, title, description, file_type, file_size_bytes, min_tier_rank, created_at, community_spaces(name)')
+    .select('id, title, description, file_type, file_size_bytes, created_at, community_spaces(name)')
     .order('created_at', { ascending: false })
 
   return NextResponse.json({ resources: data ?? [] })
 }
 
-// PATCH /api/admin/community/resources — per-resource permission override.
-// Body: { id, minTierRank?, spaceId?, tierIds? }. minTierRank gates download
-// access (0 = all members, ≥1 = paid tiers); spaceId re-homes the resource;
-// tierIds (array) sets the per-tier allowlist — empty array clears it (open to
-// all who can reach the resource).
+// PATCH /api/admin/community/resources — edit a stored binary.
+// Body: { id, title?, spaceId? }. title renames the binary; spaceId re-homes it.
+// Per-resource access (min_tier_rank / tier allowlist) was retired with the
+// catalogue (decision 6b) — access is inherited from the container.
 export async function PATCH(req: Request) {
   const { sessionClaims } = await auth()
   const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
@@ -95,28 +92,16 @@ export async function PATCH(req: Request) {
   const db = supabaseServer()
 
   const patch: Record<string, unknown> = {}
-  if (b.minTierRank !== undefined) patch.min_tier_rank = Math.max(0, parseInt(String(b.minTierRank), 10) || 0)
+  // Binary-level rename (handover §4.6 edit). Changes the stored binary's title;
+  // per-attachment display_name overrides still win in each container.
+  if (typeof b.title === 'string' && b.title.trim()) patch.title = b.title.trim().slice(0, 200)
   if (b.spaceId !== undefined) patch.space_id = b.spaceId || null
-  if (Object.keys(patch).length > 0) {
-    const { error } = await db.from('community_resources').update(patch).eq('id', b.id)
-    if (error) return NextResponse.json({ error: 'Could not update resource' }, { status: 500 })
-  }
 
-  // Per-tier allowlist: replace the set when an array is supplied.
-  if (Array.isArray(b.tierIds)) {
-    await db.from('community_resource_tiers').delete().eq('resource_id', b.id)
-    const tierIds = (b.tierIds as unknown[]).filter((t): t is string => typeof t === 'string')
-    if (tierIds.length > 0) {
-      const { error } = await db
-        .from('community_resource_tiers')
-        .insert(tierIds.map((tier_id) => ({ resource_id: b.id, tier_id })))
-      if (error) return NextResponse.json({ error: 'Could not update resource tiers' }, { status: 500 })
-    }
-  }
-
-  if (Object.keys(patch).length === 0 && !Array.isArray(b.tierIds)) {
+  if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
   }
+  const { error } = await db.from('community_resources').update(patch).eq('id', b.id)
+  if (error) return NextResponse.json({ error: 'Could not update resource' }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
 
@@ -142,6 +127,15 @@ export async function DELETE(req: Request) {
     const { error: storageError } = await db.storage.from(RESOURCES_BUCKET).remove([storagePath])
     if (storageError) console.error('[community] resource storage delete error:', storageError)
   }
+
+  // Cascade: remove every container_contents attachment of this binary (content_ref
+  // is a text reference, not an FK, so it won't cascade on its own). The delete
+  // disappears the resource from every object it was attached to (handover §4.6).
+  await db
+    .from('container_contents')
+    .delete()
+    .in('content_type', ['resource', 'recording'])
+    .eq('content_ref', id)
 
   const { error } = await db.from('community_resources').delete().eq('id', id)
   if (error) return NextResponse.json({ error: 'Could not delete resource' }, { status: 500 })

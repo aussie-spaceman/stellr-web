@@ -195,28 +195,6 @@ export async function memberCanAccess(
 }
 
 /**
- * Per-resource tier allowlist gate. A resource with no rows in
- * community_resource_tiers is unrestricted (returns true → fall back to the
- * caller's space/tier logic). When tiers ARE listed, only members holding one of
- * them (or platform admins) pass. Layer this on top of the existing space/tier
- * gate so admins can narrow an individual resource to specific tiers.
- */
-export async function resourceTierAllowed(
-  member: CommunityMember,
-  resourceId: string
-): Promise<boolean> {
-  if (member.isAdmin) return true
-  const db = supabaseServer()
-  const { data } = await db
-    .from('community_resource_tiers')
-    .select('tier_id')
-    .eq('resource_id', resourceId)
-  if (!data || data.length === 0) return true // unrestricted
-  const allowed = new Set((data as { tier_id: string }[]).map((r) => r.tier_id))
-  return member.activeTierIds.some((id) => allowed.has(id))
-}
-
-/**
  * Whether a training module was assigned (via the admin Space config) to any
  * Space the member is an *active* roster member of. Such courses are open to the
  * space's members regardless of their membership tier.

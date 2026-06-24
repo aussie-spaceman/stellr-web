@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, memberCanAccess, resourceTierAllowed, signedDownloadUrl } from '@/lib/community'
+import { getCurrentMember, signedDownloadUrl } from '@/lib/community'
 import { getSpaceAccessById } from '@/lib/spaces'
 
 // GET /api/community/resources/[id]/download
@@ -18,28 +18,23 @@ export async function GET(
 
   const { data: resource } = await db
     .from('community_resources')
-    .select('id, storage_path, min_tier_rank, title, space_id')
+    .select('id, storage_path, title, space_id')
     .eq('id', id)
     .maybeSingle()
 
   if (!resource) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!resource.storage_path) return NextResponse.json({ error: 'Not a downloadable file' }, { status: 400 })
 
-  // Space-scoped resources are gated by the space's Open/Private/Secret access
-  // model (069), not the legacy min_tier_rank — so a Secret/Private space's files
-  // aren't reachable on tier alone. Resources with no space fall back to tier.
+  // Access is inherited from the container, not the file (decision 6b — no
+  // per-resource ACL). Space-scoped files are gated by the space's
+  // Open/Private/Secret model; standalone library files are open to members
+  // (catalogue downloads of container-attached files go through the
+  // container-gated attachment route instead).
   if (resource.space_id) {
     const access = await getSpaceAccessById(member, resource.space_id as string)
     if (!access?.canAccess) {
       return NextResponse.json({ error: 'No access to this resource' }, { status: 403 })
     }
-  } else if (!(await memberCanAccess(member, 'resource', resource.id, resource.min_tier_rank, 'download'))) {
-    return NextResponse.json({ error: 'Upgrade required' }, { status: 403 })
-  }
-
-  // Per-resource tier override: when set, it narrows access on top of the
-  // space/tier gate above (admins bypass).
-  if (!(await resourceTierAllowed(member, resource.id as string))) {
-    return NextResponse.json({ error: 'No access to this resource' }, { status: 403 })
   }
 
   const url = await signedDownloadUrl(resource.storage_path)

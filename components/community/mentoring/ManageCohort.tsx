@@ -10,6 +10,7 @@ import { MaterialDownloadButton } from '@/components/community/MaterialDownloadB
 import { MemberSearchField, type PickedPerson } from '@/components/community/mentoring/MemberSearchField'
 import { ModalShell, ModalField, inputCls, ScheduleAllModal, ScheduleOneModal } from '@/components/community/mentoring/ScheduleModals'
 import { CohortResourceAttacher, type AttachedFileResource } from '@/components/community/mentoring/CohortResourceAttacher'
+import { AddResourceForm } from '@/components/community/resources/AddResourceForm'
 import { formatSessionTime, themeTile, type CohortTheme } from '@/lib/mentoring-format'
 import type { RosterMember, CohortActionGroup } from '@/lib/mentoring'
 
@@ -136,10 +137,11 @@ export function ManageCohort(props: {
         />
       )}
       {tab === 'resources' && (
-        <>
+        <div className="space-y-4">
           <ResourcesPane resources={props.resources} modules={props.modules} tz={cohort.timezone} post={post} />
+          <AddResourceForm containerId={cohort.id} objectName={cohort.name} />
           <CohortResourceAttacher cohortId={cohort.id} attached={props.fileResources} tz={cohort.timezone} />
-        </>
+        </div>
       )}
       {tab === 'actions' && (
         <ActionsPane groups={props.actionGroups} tz={cohort.timezone} onAssign={() => setModal('assignAction')} />

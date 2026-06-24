@@ -337,6 +337,8 @@ export interface ResourceDetail {
   uploadedByName: string | null
   addedAt: string
   ownedByMe: boolean
+  /** The container the clicked attachment lives in — flag context (PR3). */
+  viewedInContainerId: string
   /** Every container this member can reach the binary through ("How you have access"). */
   attachments: {
     attachmentId: string
@@ -417,6 +419,7 @@ export async function getResourceDetail(
     uploadedByName: binary.uploadedBy ? names.get(binary.uploadedBy) ?? null : null,
     addedAt: binary.createdAt,
     ownedByMe: !!binary.uploadedBy && binary.uploadedBy === member.id,
+    viewedInContainerId: clicked.container_id as string,
     attachments,
   }
 }

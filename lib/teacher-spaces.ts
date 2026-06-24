@@ -66,7 +66,9 @@ export async function getTeacherGroups(member: CommunityMember): Promise<Teacher
 
   return rows.map((r) => {
     const students: GroupStudent[] = (r.participants ?? [])
-      .filter((p) => !p.event_role || STUDENT_ROLES.has(p.event_role))
+      // Require an EXPLICIT student role — a null event_role is not assumed to be a
+      // student (would otherwise over-count adults/teachers into the roster).
+      .filter((p) => !!p.event_role && STUDENT_ROLES.has(p.event_role))
       .map((p) => ({
         participantId: p.id,
         memberId: p.member_id,

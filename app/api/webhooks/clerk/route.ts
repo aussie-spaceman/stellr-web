@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { normalizeEmail } from '@/lib/member-enums'
+import { claimPendingSpaceInvites } from '@/lib/spaces'
 
 // Clerk sends user.created / user.updated / user.deleted events here.
 // This keeps the members table in sync with Clerk identity records.
@@ -75,15 +76,17 @@ export async function POST(req: Request) {
       .eq('email', primaryEmail)
       .maybeSingle()
 
+    let memberId: string | null = null
     if (existing) {
       // Link the existing member record to the new Clerk user
       await db
         .from('members')
         .update({ clerk_user_id: data.id, profile_photo_url: data.image_url })
         .eq('id', existing.id)
+      memberId = (existing as { id: string }).id
     } else {
       // Create a minimal member record; they complete their profile on /account
-      await db.from('members').insert({
+      const { data: created } = await db.from('members').insert({
         clerk_user_id: data.id,
         first_name: data.first_name ?? '',
         last_name: data.last_name ?? '',
@@ -93,7 +96,16 @@ export async function POST(req: Request) {
         age_bracket: 'adult',
         event_role: 'subscriber',
         is_active: true,
-      })
+      }).select('id').maybeSingle()
+      memberId = (created as { id: string } | null)?.id ?? null
+    }
+
+    // Auto-claim any space invites that were parked against this email before they
+    // had an account (#1 pending-invite). Best-effort — never fail the webhook.
+    if (memberId) {
+      await claimPendingSpaceInvites(memberId, primaryEmail).catch((e) =>
+        console.error('[clerk webhook] claim space invites error:', e)
+      )
     }
   }
 

@@ -1,4 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
+import { normalizeEmail } from '@/lib/member-enums'
 import type { CommunityMember } from '@/lib/community'
 
 // ─── Spaces access + directory model (design_handoff_spaces) ─────────────────
@@ -352,6 +353,68 @@ export async function getSpaceAccessById(
     ? { role: mineRow.role, status: mineRow.status, muted: !!mineRow.muted }
     : null
   return resolveSpaceAccess(member, s as { access_type: SpaceAccessType }, assignedTierIds, membership)
+}
+
+/**
+ * Park a space invite for an email that has no account yet (member_id is a hard
+ * FK, so we can't roster them). Claimed on signup by claimPendingSpaceInvites.
+ * Returns false if the email is blank.
+ */
+export async function createPendingSpaceInvite(
+  spaceId: string,
+  email: string,
+  role: 'mentor' | 'member',
+  invitedBy: string | null
+): Promise<boolean> {
+  const normalized = normalizeEmail(email)
+  if (!normalized) return false
+  const db = supabaseServer()
+  await db.from('community_space_invites').upsert(
+    { space_id: spaceId, email: normalized, role, invited_by: invitedBy, claimed_at: null, claimed_member_id: null },
+    { onConflict: 'space_id,email' }
+  )
+  return true
+}
+
+/**
+ * Claim any pending space invites for a newly-created member (matched by email):
+ * convert each into a real 'invited' roster row so they get the normal
+ * accept/decline banner, then mark the pending invite claimed. Best-effort, safe
+ * to call on every signup. Returns the number of invites claimed.
+ */
+export async function claimPendingSpaceInvites(memberId: string, email: string): Promise<number> {
+  const normalized = normalizeEmail(email)
+  if (!normalized) return 0
+  const db = supabaseServer()
+
+  const { data: pending } = await db
+    .from('community_space_invites')
+    .select('id, space_id, role, invited_by, invited_at')
+    .eq('email', normalized)
+    .is('claimed_at', null)
+
+  const rows = (pending ?? []) as { id: string; space_id: string; role: 'mentor' | 'member'; invited_by: string | null; invited_at: string }[]
+  let claimed = 0
+  for (const inv of rows) {
+    // Don't clobber an existing roster row (e.g. they already joined).
+    await db.from('community_space_members').upsert(
+      {
+        space_id: inv.space_id,
+        member_id: memberId,
+        role: inv.role,
+        status: 'invited',
+        invited_by: inv.invited_by,
+        invited_at: inv.invited_at,
+      },
+      { onConflict: 'space_id,member_id', ignoreDuplicates: true }
+    )
+    await db
+      .from('community_space_invites')
+      .update({ claimed_at: new Date().toISOString(), claimed_member_id: memberId })
+      .eq('id', inv.id)
+    claimed++
+  }
+  return claimed
 }
 
 /** Whether a member is muted in a given space (for the comment write path). */

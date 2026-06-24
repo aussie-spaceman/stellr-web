@@ -1,7 +1,8 @@
 import { supabaseServer } from '@/lib/supabase'
 import { formatDateShort } from '@/lib/utils'
 import { ResourceUploadForm } from '@/components/admin/community/ResourceUploadForm'
-import { FileText, Lock } from 'lucide-react'
+import { ResourceRowActions } from '@/components/admin/community/ResourceRowActions'
+import { FileText } from 'lucide-react'
 
 export const metadata = { title: 'Admin — Community Resources' }
 
@@ -46,9 +47,9 @@ export default async function AdminCommunityResourcesPage() {
             <tr className="border-b border-brand-hairline bg-brand-canvas text-left">
               <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Title</th>
               <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Space</th>
-              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Access</th>
               <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Size</th>
               <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Added</th>
+              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Access &amp; actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-brand-hairline">
@@ -70,20 +71,12 @@ export default async function AdminCommunityResourcesPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-brand-muted">{(space as { name: string } | null)?.name ?? '—'}</td>
-                  <td className="px-4 py-3">
-                    {r.min_tier_rank > 0 ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                        <Lock className="h-3 w-3" /> Paid only
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
-                        All members
-                      </span>
-                    )}
-                  </td>
                   <td className="px-4 py-3 text-brand-muted-soft">{formatBytes(r.file_size_bytes)}</td>
                   <td className="px-4 py-3 text-brand-muted-soft">
                     {formatDateShort(r.created_at)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <ResourceRowActions resourceId={r.id} minTierRank={r.min_tier_rank} />
                   </td>
                 </tr>
               )

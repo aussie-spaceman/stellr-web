@@ -67,6 +67,7 @@ export default async function MemberDirectoryPage({
       )
     `)
     .eq('is_visible', true)
+    .eq('members.is_active', true)
 
   const { data: entries } = await query
 

@@ -17,7 +17,7 @@ export default async function MemberLayout({ children }: { children: React.React
   return (
     <div className="min-h-screen bg-surface">
       <div className="flex">
-        <AppSidebar canHost={showHosting} isTeacher={isTeacher} isAdmin={isAdmin} />
+        <AppSidebar canHost={showHosting} isTeacher={isTeacher} />
 
         <div className="flex min-h-screen min-w-0 flex-1 flex-col">
           <AppTopBar isAdmin={isAdmin} />

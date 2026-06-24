@@ -28,7 +28,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { sessionClaims } = await auth()
+  const { userId, sessionClaims } = await auth()
   if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const b = await req.json().catch(() => ({}))
@@ -62,6 +62,22 @@ export async function POST(req: Request) {
   // Every space starts with a default "general" channel + a sync container.
   await db.from('community_channels').insert({ space_id: data.id, slug: 'general', name: 'General', display_order: 0 })
   await ensureSpaceContainer(db, slug, b.name.trim())
+
+  // Seed the creating admin as an active space member so the new space shows ≥1
+  // member from the outset (counts are status='active' only).
+  if (userId) {
+    const { data: me } = await db.from('members').select('id').eq('clerk_user_id', userId).maybeSingle()
+    const creatorId = (me as { id: string } | null)?.id
+    if (creatorId) {
+      await db.from('community_space_members').insert({
+        space_id: data.id,
+        member_id: creatorId,
+        role: 'admin',
+        status: 'active',
+        accepted_at: new Date().toISOString(),
+      })
+    }
+  }
   return NextResponse.json({ id: data.id })
 }
 

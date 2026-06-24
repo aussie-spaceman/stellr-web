@@ -11,7 +11,7 @@ export const ACCESS_META: Record<
 > = {
   open:    { label: 'Open',    color: '#1FA97A', tint: '#EDFAF4', icon: Globe,  blurb: 'Anyone in the community can join and post.' },
   private: { label: 'Private', color: '#E0922F', tint: '#FBEFDD', icon: Lock,   blurb: 'Visible to all, but joining is gated by your membership tier.' },
-  secret:  { label: 'Secret',  color: '#7C5CFC', tint: '#F6F2FF', icon: EyeOff, blurb: 'Hidden unless your tier grants access.' },
+  secret:  { label: 'Secret',  color: '#7C5CFC', tint: '#F6F2FF', icon: EyeOff, blurb: 'Not publicly visible — if you can see it, others may not be able to.' },
 }
 
 export function AccessBadge({ type, size = 'md' }: { type: SpaceAccessType; size?: 'sm' | 'md' }) {

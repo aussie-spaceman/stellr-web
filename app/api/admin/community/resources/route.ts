@@ -78,3 +78,53 @@ export async function GET() {
 
   return NextResponse.json({ resources: data ?? [] })
 }
+
+// PATCH /api/admin/community/resources — per-resource permission override.
+// Body: { id, minTierRank?, spaceId? }. minTierRank gates download access
+// (0 = all members, ≥1 = paid tiers); spaceId re-homes the resource.
+export async function PATCH(req: Request) {
+  const { sessionClaims } = await auth()
+  const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
+  if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const b = await req.json().catch(() => ({}))
+  if (!b.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+  const patch: Record<string, unknown> = {}
+  if (b.minTierRank !== undefined) patch.min_tier_rank = Math.max(0, parseInt(String(b.minTierRank), 10) || 0)
+  if (b.spaceId !== undefined) patch.space_id = b.spaceId || null
+  if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
+
+  const db = supabaseServer()
+  const { error } = await db.from('community_resources').update(patch).eq('id', b.id)
+  if (error) return NextResponse.json({ error: 'Could not update resource' }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
+// DELETE /api/admin/community/resources?id=<uuid> — remove a single resource,
+// deleting its stored file first so the bucket doesn't accumulate orphans.
+export async function DELETE(req: Request) {
+  const { sessionClaims } = await auth()
+  const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
+  if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const id = new URL(req.url).searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+  const db = supabaseServer()
+  const { data: resource } = await db
+    .from('community_resources')
+    .select('storage_path')
+    .eq('id', id)
+    .maybeSingle()
+
+  const storagePath = (resource as { storage_path: string | null } | null)?.storage_path
+  if (storagePath) {
+    const { error: storageError } = await db.storage.from(RESOURCES_BUCKET).remove([storagePath])
+    if (storageError) console.error('[community] resource storage delete error:', storageError)
+  }
+
+  const { error } = await db.from('community_resources').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: 'Could not delete resource' }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}

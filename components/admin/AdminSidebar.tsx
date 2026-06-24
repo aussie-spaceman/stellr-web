@@ -33,6 +33,7 @@ const SECTIONS: Section[] = [
   {
     label: 'Community', href: '/admin/community/resources', color: '#3f78d6', icon: MessagesSquare,
     items: [
+      { href: '/admin/community/spaces', label: 'Spaces' },
       { href: '/admin/community/resources', label: 'Resources' },
       { href: '/admin/community/announcements', label: 'Announcements' },
       { href: '/admin/community/moderation', label: 'Moderation' },

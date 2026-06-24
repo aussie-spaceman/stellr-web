@@ -481,20 +481,83 @@ function MembersTab({
   )
 }
 
+type MemberHit = { id: string; first_name: string | null; last_name: string | null; email: string | null; membership_id: string | null }
+
 function InviteMemberModal({ open, onClose, act }: { open: boolean; onClose: () => void; act: Act }) {
-  const [email, setEmail] = useState('')
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<MemberHit[]>([])
+  const [searching, setSearching] = useState(false)
+  const [picked, setPicked] = useState<MemberHit | null>(null)
   const [role, setRole] = useState<SpaceRole>('member')
+
+  const reset = () => { setQuery(''); setResults([]); setPicked(null); setRole('member') }
+
+  // Search the real member database — admins can only invite existing members.
+  const search = async (q: string) => {
+    setQuery(q)
+    setPicked(null)
+    if (q.trim().length < 2) { setResults([]); return }
+    setSearching(true)
+    try {
+      const res = await fetch(`/api/admin/members/search?q=${encodeURIComponent(q.trim())}`)
+      const j = await res.json().catch(() => ({}))
+      setResults(res.ok ? (j.members ?? []) : [])
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  const labelFor = (m: MemberHit) =>
+    [m.first_name, m.last_name].filter(Boolean).join(' ') || m.email || 'Member'
+
   return (
-    <Modal open={open} onClose={onClose} title="Invite member" subtitle="They’ll see an invite on their Spaces directory."
+    <Modal open={open} onClose={() => { reset(); onClose() }} title="Invite member" subtitle="They’ll see an invite on their Spaces directory."
       footer={<>
-        <button onClick={onClose} className={btnGhost}>Cancel</button>
-        <button disabled={!email.trim()} onClick={async () => { if (await act({ action: 'invite-member', email: email.trim(), role }, 'Invitation sent')) { setEmail(''); onClose() } }} className={btnPrimary}>Send invitation</button>
+        <button onClick={() => { reset(); onClose() }} className={btnGhost}>Cancel</button>
+        <button
+          disabled={!picked}
+          onClick={async () => { if (picked && await act({ action: 'invite-member', memberId: picked.id, role }, 'Invitation sent')) { reset(); onClose() } }}
+          className={btnPrimary}
+        >Send invitation</button>
       </>}
     >
-      <Field label="Email">
-        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="member@email.com" className={inputCls} />
+      <Field label="Member">
+        {picked ? (
+          <div className="flex items-center justify-between rounded-lg border border-brand-border px-3 py-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-subheading font-semibold text-brand-blue-dark">{labelFor(picked)}</p>
+              {picked.email && <p className="truncate text-xs text-brand-muted-soft">{picked.email}</p>}
+            </div>
+            <button onClick={() => { setPicked(null); setQuery('') }} className="text-xs text-brand-blue hover:underline">Change</button>
+          </div>
+        ) : (
+          <>
+            <input
+              value={query}
+              onChange={(e) => search(e.target.value)}
+              placeholder="Search members by name or email…"
+              className={inputCls}
+            />
+            {query.trim().length >= 2 && (
+              <div className="mt-1 max-h-44 divide-y divide-brand-hairline overflow-y-auto rounded-lg border border-brand-border">
+                {searching && <p className="px-3 py-2 text-xs text-brand-muted-soft">Searching…</p>}
+                {!searching && results.length === 0 && <p className="px-3 py-2 text-xs text-brand-muted-soft">No members found.</p>}
+                {results.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => { setPicked(m); setResults([]) }}
+                    className="block w-full px-3 py-2 text-left hover:bg-brand-canvas"
+                  >
+                    <p className="text-sm text-brand-blue-dark">{labelFor(m)}</p>
+                    {m.email && <p className="text-xs text-brand-muted-soft">{m.email}</p>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </Field>
-      <RoleSegmented role={role} setRole={setRole} />
+      <RoleSegmented role={role} setRole={setRole} roles={['member', 'mentor']} />
     </Modal>
   )
 }
@@ -524,11 +587,19 @@ function ManageMemberModal({ member, onClose, act }: { member: AdminSpaceConfig[
   )
 }
 
-function RoleSegmented({ role, setRole }: { role: SpaceRole; setRole: (r: SpaceRole) => void }) {
+function RoleSegmented({
+  role,
+  setRole,
+  roles = ['member', 'mentor', 'admin'],
+}: {
+  role: SpaceRole
+  setRole: (r: SpaceRole) => void
+  roles?: SpaceRole[]
+}) {
   return (
     <Field label="Role">
       <div className="inline-flex rounded-lg border border-brand-border p-0.5">
-        {(['member', 'mentor', 'admin'] as SpaceRole[]).map((r) => (
+        {roles.map((r) => (
           <button key={r} onClick={() => setRole(r)} className={`rounded-[7px] px-3 py-1.5 text-sm capitalize ${role === r ? 'bg-brand-blue text-white' : 'text-brand-muted'}`}>{r}</button>
         ))}
       </div>

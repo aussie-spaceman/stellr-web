@@ -199,6 +199,10 @@ async function computeTracking(
 
   const memberIds = [...new Set(participants.map((p) => p.memberId))]
   const completedByMember = new Map<string, Set<string>>()
+  // Any progress row (in_progress OR completed) means the member has started the
+  // item — used so someone mid-course shows as "in progress" rather than "not
+  // started" even before they finish their first lesson.
+  const startedByMember = new Map<string, Set<string>>()
   const lastByMember = new Map<string, string>()
   if (memberIds.length > 0 && allItemIds.length > 0) {
     const { data: prog } = await db
@@ -207,6 +211,9 @@ async function computeTracking(
       .in('member_id', memberIds)
       .in('item_id', allItemIds)
     for (const p of prog ?? []) {
+      const startedSet = startedByMember.get(p.member_id as string) ?? new Set<string>()
+      startedSet.add(p.item_id as string)
+      startedByMember.set(p.member_id as string, startedSet)
       if (p.status === 'completed') {
         const set = completedByMember.get(p.member_id as string) ?? new Set<string>()
         set.add(p.item_id as string)
@@ -221,6 +228,7 @@ async function computeTracking(
   const now = Date.now()
   let rows: TrackingRow[] = participants.map((p) => {
     const completed = completedByMember.get(p.memberId) ?? new Set<string>()
+    const started = startedByMember.get(p.memberId) ?? new Set<string>()
     let anyOverdue = false, anyStarted = false, allComplete = true
     for (const c of courses) {
       const ids = itemsByModule.get(c.moduleId) ?? []
@@ -229,7 +237,8 @@ async function computeTracking(
       if (!complete) {
         allComplete = false
         if (c.dueAt && new Date(c.dueAt).getTime() < now) anyOverdue = true
-        if (done > 0) anyStarted = true
+        // Started if any lesson is completed OR has an in-progress row.
+        if (done > 0 || ids.some((id) => started.has(id))) anyStarted = true
       } else {
         anyStarted = true
       }

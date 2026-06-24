@@ -26,6 +26,7 @@ function typeLabel(n: Notification): string {
     case 'mention': return `${actorName(n.actor)} mentioned you`
     case 'announcement': return 'New announcement'
     case 'resource': return 'New resource added'
+    case 'invite': return n.body ?? `${actorName(n.actor)} invited you to a space`
     default: return n.body ?? 'New notification'
   }
 }
@@ -148,6 +149,39 @@ export function NotificationBell() {
                           })
                           setNotifications((prev) => prev.filter((x) => x.id !== n.id))
                         }}
+                        className="rounded-md px-3 py-1.5 text-xs font-medium text-brand-muted-soft hover:text-brand-muted"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </li>
+                )
+              }
+              // Space invite → inline Accept / Decline (mirrors the cohort flow).
+              if (n.type === 'invite' && n.reference_type === 'space' && n.reference_id) {
+                const respond = async (action: 'accept' | 'decline') => {
+                  await fetch('/api/community/spaces/invite/respond', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ spaceId: n.reference_id, action }),
+                  })
+                  setNotifications((prev) => prev.filter((x) => x.id !== n.id))
+                }
+                return (
+                  <li key={n.id} className="px-4 py-3">
+                    <p className="text-sm font-medium text-brand-blue-dark">
+                      {n.body ?? `${actorName(n.actor)} invited you to a space`}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        onClick={() => respond('accept')}
+                        className="rounded-md bg-space-violet px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#5B3FE0]"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => respond('decline')}
                         className="rounded-md px-3 py-1.5 text-xs font-medium text-brand-muted-soft hover:text-brand-muted"
                       >
                         Decline

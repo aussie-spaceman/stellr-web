@@ -12,7 +12,6 @@ import { RecordSession } from '@/components/admin/training/RecordSession'
 import { LessonResources } from '@/components/admin/training/LessonResources'
 import type { TrainableObject } from '@/lib/training-admin'
 import type { AdminModule, AdminSection, AdminLesson } from '@/components/admin/community/TrainingManager'
-import { deriveType, THEME_META, TYPE_META, type CourseTheme } from '@/lib/training-display'
 
 // Course builder — design-faithful single-course editor: course selector, meta
 // card (inline title · Theme · Type · Certificate · Delete/Save draft/Publish),
@@ -133,7 +132,6 @@ export function CourseBuilder({
 function CourseMetaCard({ course: m, onDone }: { course: AdminModule; onDone: () => void }) {
   const [title, setTitle] = useState(m.title)
   const [busy, setBusy] = useState(false)
-  const typeMeta = TYPE_META[deriveType(m.material_kind)]
 
   const patch = async (body: Record<string, unknown>) => {
     setBusy(true)
@@ -161,36 +159,6 @@ function CourseMetaCard({ course: m, onDone }: { course: AdminModule; onDone: ()
             className="mt-1 w-full border-0 border-b border-transparent bg-transparent p-0 font-heading text-2xl font-bold text-brand-blue-dark focus:border-brand-border focus:outline-none"
           />
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-brand-muted-soft">
-              Theme
-              <select
-                value={m.theme ?? ''}
-                onChange={(e) => patch({ theme: e.target.value || null })}
-                disabled={busy}
-                className="rounded-md border border-brand-border px-2 py-1 text-xs font-medium text-brand-muted"
-              >
-                <option value="">None</option>
-                {(['space', 'environmental', 'campaign'] as CourseTheme[]).map((t) => (
-                  <option key={t} value={t}>{THEME_META[t].label}</option>
-                ))}
-              </select>
-            </label>
-            <label className="flex items-center gap-1.5 text-xs font-medium text-brand-muted-soft">
-              Shows in
-              <select
-                value={m.material_kind}
-                onChange={(e) => patch({ materialKind: e.target.value })}
-                disabled={busy}
-                className="rounded-md border border-brand-border px-2 py-1 text-xs font-medium text-brand-muted"
-              >
-                {KINDS.map((k) => (
-                  <option key={k} value={k}>{KIND_LABELS[k]}</option>
-                ))}
-              </select>
-            </label>
-            <span className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold" style={{ background: typeMeta.tint, color: typeMeta.ink }}>
-              {typeMeta.label}
-            </span>
             <CertTemplate moduleId={m.id} hasTemplate={!!m.cert_template_path} onDone={onDone} />
           </div>
         </div>

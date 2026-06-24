@@ -78,7 +78,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     // ── Members & roles ────────────────────────────────────────────────────────
     case 'invite-member': {
-      const role = ['admin', 'mentor', 'member'].includes(b.role) ? b.role : 'member'
+      // Invites grant member or mentor only — admin is assigned later via Manage.
+      const role = b.role === 'mentor' ? 'mentor' : 'member'
       let memberId = b.memberId as string | undefined
       if (!memberId && b.email) {
         const { data } = await db

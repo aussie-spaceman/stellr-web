@@ -181,11 +181,43 @@ export async function memberCanAccess(
   // Platform admins bypass every entitlement/tier/prerequisite gate.
   if (member.isAdmin) return true
   const entitled = await memberHasEntitlement(member, targetType, targetRef, accessLevel)
-  const allowed = entitled !== null ? entitled : memberMeetsTier(member, minTierRank)
+  let allowed = entitled !== null ? entitled : memberMeetsTier(member, minTierRank)
+  // Space-assigned training is available to active members of any space it was
+  // assigned to, regardless of their tier (a course attached to a Space the member
+  // belongs to should never read "Locked").
+  if (!allowed && targetType === 'training_module') {
+    allowed = await memberHasSpaceTrainingGrant(member.id, targetRef)
+  }
   if (!allowed) return false
   // Prerequisite gate (Phase 5): even when a source grants access, a target stays
   // locked until its predecessor is complete. Completion is member-level (D6).
   return prerequisitesMet(member, targetType, targetRef)
+}
+
+/**
+ * Whether a training module was assigned (via the admin Space config) to any
+ * Space the member is an *active* roster member of. Such courses are open to the
+ * space's members regardless of their membership tier.
+ */
+export async function memberHasSpaceTrainingGrant(
+  memberId: string,
+  moduleId: string
+): Promise<boolean> {
+  const db = supabaseServer()
+  const { data: assigned } = await db
+    .from('community_space_training')
+    .select('space_id')
+    .eq('training_module_id', moduleId)
+  const spaceIds = (assigned ?? []).map((r) => (r as { space_id: string }).space_id)
+  if (spaceIds.length === 0) return false
+
+  const { data: roster } = await db
+    .from('community_space_members')
+    .select('space_id')
+    .eq('member_id', memberId)
+    .eq('status', 'active')
+    .in('space_id', spaceIds)
+  return (roster ?? []).length > 0
 }
 
 /**

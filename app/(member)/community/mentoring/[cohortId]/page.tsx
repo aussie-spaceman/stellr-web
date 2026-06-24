@@ -9,7 +9,7 @@ import {
   getCohortChannel,
   listMessages,
 } from '@/lib/sessions'
-import { getCohortFull, listCohortRoster, listMemberCohortActions } from '@/lib/mentoring'
+import { getCohortFull, listCohortRoster, listMemberCohortActions, listCohortFileResources } from '@/lib/mentoring'
 import { googleCalendarUrl } from '@/lib/calendar'
 import { CohortSpace } from '@/components/community/mentoring/CohortSpace'
 
@@ -41,13 +41,14 @@ export default async function CohortSpacePage({ params }: { params: Promise<{ co
     )
   }
 
-  const [sessions, training, channelId, actions, roster, messages] = await Promise.all([
+  const [sessions, training, channelId, actions, roster, messages, fileResources] = await Promise.all([
     listCohortSessions(cohortId),
     listCohortTraining(member, cohortId),
     getCohortChannel(cohortId),
     listMemberCohortActions(member.id, cohortId),
     listCohortRoster(cohortId),
     getCohortChannel(cohortId).then((ch) => listMessages(ch)),
+    listCohortFileResources(cohortId),
   ])
 
   const now = Date.now()
@@ -102,6 +103,13 @@ export default async function CohortSpacePage({ params }: { params: Promise<{ co
       recordings={sessions
         .filter((s) => s.recording_status === 'available')
         .map((s) => ({ id: s.id, title: s.title, start: s.scheduled_start }))}
+      fileResources={fileResources.map((r) => ({
+        resourceId: r.resourceId,
+        title: r.title,
+        fileType: r.fileType,
+        isMandatory: r.isMandatory,
+        dueAt: r.dueAt,
+      }))}
       actions={actions.map((a) => ({
         id: a.id,
         title: a.title,

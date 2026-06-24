@@ -7,7 +7,20 @@ import {
   scheduleMentoringSeries,
   inviteMembersToCohort,
 } from '@/lib/sessions'
-import { assignCohortAction } from '@/lib/mentoring'
+import { assignCohortAction, attachCohortResource, detachCohortResource, searchAttachableResources } from '@/lib/mentoring'
+
+// GET — resource-library search for the "Attach a resource" picker (mentor/admin).
+export async function GET(req: Request) {
+  const member = await getCurrentMember()
+  if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  const { searchParams } = new URL(req.url)
+  const cohortId = searchParams.get('cohortId') ?? ''
+  if (!cohortId || (!member.isAdmin && !(await isCohortMentor(cohortId, member.id)))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  const results = await searchAttachableResources(searchParams.get('q') ?? '')
+  return NextResponse.json({ results })
+}
 
 // POST /api/community/mentoring/manage — a cohort's mentor configures it
 // (PRD §11): assign training material, and schedule a session series.
@@ -57,6 +70,16 @@ export async function POST(req: Request) {
         remindBeforeHours: b.remind ? 24 : null,
       })
       return NextResponse.json({ ok: true, assigned: n })
+    }
+    case 'attachResource': {
+      if (!b.resourceId) return NextResponse.json({ error: 'resourceId required' }, { status: 400 })
+      await attachCohortResource(b.cohortId, b.resourceId, !!b.mandatory, b.dueAt || null)
+      return NextResponse.json({ ok: true })
+    }
+    case 'detachResource': {
+      if (!b.resourceId) return NextResponse.json({ error: 'resourceId required' }, { status: 400 })
+      await detachCohortResource(b.cohortId, b.resourceId)
+      return NextResponse.json({ ok: true })
     }
     case 'invite': {
       const ids = Array.isArray(b.memberIds) ? b.memberIds : []

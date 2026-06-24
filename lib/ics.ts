@@ -55,6 +55,29 @@ export function buildIcs(e: IcsEvent): string {
   return lines.join('\r\n')
 }
 
+/** Build a multi-event calendar feed (METHOD:PUBLISH) for "Sync all" downloads. */
+export function buildIcsCalendar(events: IcsEvent[], calendarName = 'Stellr Mentoring'): string {
+  const head = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Stellr Education//Community//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    `X-WR-CALNAME:${escape(calendarName)}`,
+  ]
+  const body: string[] = []
+  for (const e of events) {
+    body.push('BEGIN:VEVENT', `UID:${e.uid}`, `DTSTAMP:${fmt(new Date())}`, `DTSTART:${fmt(e.start)}`, `DTEND:${fmt(e.end)}`, `SUMMARY:${escape(e.title)}`)
+    if (e.description || e.url) {
+      const text = [e.description, e.url ? `Join: ${e.url}` : ''].filter(Boolean).join('\n')
+      body.push(`DESCRIPTION:${escape(text)}`)
+    }
+    if (e.url) body.push(`LOCATION:${escape(e.url)}`)
+    body.push('STATUS:CONFIRMED', 'END:VEVENT')
+  }
+  return [...head, ...body, 'END:VCALENDAR'].join('\r\n')
+}
+
 /** Build an .ics and return it base64-encoded for an email attachment. */
 export function buildIcsAttachment(e: IcsEvent): { filename: string; content: string; contentType: string } {
   const ics = buildIcs(e)

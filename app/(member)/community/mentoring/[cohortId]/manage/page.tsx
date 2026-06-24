@@ -12,6 +12,7 @@ import {
   getCohortFull,
   listCohortRoster,
   listCohortActionsForMentor,
+  listCohortFileResources,
 } from '@/lib/mentoring'
 import { ManageCohort } from '@/components/community/mentoring/ManageCohort'
 
@@ -32,13 +33,14 @@ export default async function ManageCohortPage({
   const allowed = member.isAdmin || (await isCohortMentor(cohortId, member.id))
   if (!allowed) redirect(`/community/mentoring/${cohortId}`)
 
-  const [sessions, training, roster, actionGroups, modules, channelId] = await Promise.all([
+  const [sessions, training, roster, actionGroups, modules, channelId, fileResources] = await Promise.all([
     listCohortSessions(cohortId),
     listCohortTraining(member, cohortId),
     listCohortRoster(cohortId),
     listCohortActionsForMentor(cohortId),
     listModules(member),
     getCohortChannel(cohortId),
+    listCohortFileResources(cohortId),
   ])
 
   const db = supabaseServer()
@@ -68,6 +70,7 @@ export default async function ManageCohortPage({
         recordingStatus: s.recording_status,
       }))}
       resources={training.map((t) => ({ moduleId: t.moduleId, title: t.title, isMandatory: t.isMandatory, dueAt: t.dueAt }))}
+      fileResources={fileResources}
       actionGroups={actionGroups}
       modules={modules.map((m) => ({ id: m.id, title: m.title }))}
       channelId={channelId}

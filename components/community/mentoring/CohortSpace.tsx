@@ -8,6 +8,7 @@ import {
 import { ChatPanel } from '@/components/community/ChatPanel'
 import { JoinButton } from '@/components/community/JoinButton'
 import { MaterialDownloadButton } from '@/components/community/MaterialDownloadButton'
+import { ResourceDownloadButton } from '@/components/community/ResourceDownloadButton'
 import { formatSessionTime, themeTile, type CohortTheme } from '@/lib/mentoring-format'
 
 type Tab = 'overview' | 'sessions' | 'resources' | 'actions' | 'chat'
@@ -46,6 +47,13 @@ interface ActionRow {
   dueDate: string | null
   kind: 'training' | 'task'
 }
+interface FileResourceRow {
+  resourceId: string
+  title: string
+  fileType: string | null
+  isMandatory: boolean
+  dueAt: string | null
+}
 
 export function CohortSpace(props: {
   cohort: CohortMeta
@@ -53,6 +61,7 @@ export function CohortSpace(props: {
   sessions: SessionRow[]
   resources: ResourceRow[]
   recordings: { id: string; title: string | null; start: string }[]
+  fileResources: FileResourceRow[]
   actions: ActionRow[]
   nextSession: { id: string; title: string | null; start: string; end: string | null; gcalUrl: string | null } | null
   lastMessage: { author: string; body: string } | null
@@ -139,8 +148,8 @@ export function CohortSpace(props: {
 
       {/* ── Panes ── */}
       {tab === 'overview' && <OverviewPane {...props} />}
-      {tab === 'sessions' && <SessionsPane sessions={props.sessions} tz={cohort.timezone} isMentor={cohort.isMentor} />}
-      {tab === 'resources' && <ResourcesPane resources={props.resources} recordings={props.recordings} tz={cohort.timezone} />}
+      {tab === 'sessions' && <SessionsPane sessions={props.sessions} tz={cohort.timezone} isMentor={cohort.isMentor} cohortId={cohort.id} />}
+      {tab === 'resources' && <ResourcesPane resources={props.resources} recordings={props.recordings} fileResources={props.fileResources} tz={cohort.timezone} />}
       {tab === 'actions' && <ActionsPane actions={props.actions} tz={cohort.timezone} mentorName={cohort.mentorName} />}
       {tab === 'chat' && (
         <ChatPanel
@@ -277,7 +286,7 @@ function OverviewPane(props: React.ComponentProps<typeof CohortSpace>) {
 }
 
 // ── Sessions ────────────────────────────────────────────────────────────────
-function SessionsPane({ sessions, tz, isMentor }: { sessions: SessionRow[]; tz: string; isMentor: boolean }) {
+function SessionsPane({ sessions, tz, isMentor, cohortId }: { sessions: SessionRow[]; tz: string; isMentor: boolean; cohortId: string }) {
   const now = Date.now()
   const sorted = [...sessions].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
   const nextId = sorted.find((s) => s.status === 'scheduled' && new Date(s.start).getTime() > now)?.id
@@ -287,6 +296,14 @@ function SessionsPane({ sessions, tz, isMentor }: { sessions: SessionRow[]; tz: 
   }
   return (
     <Card>
+      <div className="mb-3 flex justify-end">
+        <a
+          href={`/api/community/mentoring/${cohortId}/calendar`}
+          className="inline-flex items-center gap-1.5 rounded-[9px] bg-primary-soft px-3.5 py-2 text-[13px] font-semibold text-primary hover:bg-primary/15"
+        >
+          <CalendarPlus className="h-4 w-4" /> Sync all to calendar
+        </a>
+      </div>
       <ul className="divide-y divide-line-light">
         {sorted.map((s) => {
           const t = formatSessionTime(s.start, s.end, tz)
@@ -328,13 +345,15 @@ function SessionsPane({ sessions, tz, isMentor }: { sessions: SessionRow[]; tz: 
 function ResourcesPane({
   resources,
   recordings,
+  fileResources,
   tz,
 }: {
   resources: ResourceRow[]
   recordings: { id: string; title: string | null; start: string }[]
+  fileResources: FileResourceRow[]
   tz: string
 }) {
-  if (resources.length === 0 && recordings.length === 0) {
+  if (resources.length === 0 && recordings.length === 0 && fileResources.length === 0) {
     return <Card><p className="text-sm text-content-muted">No resources yet. Session recordings appear here automatically.</p></Card>
   }
   return (
@@ -366,6 +385,29 @@ function ResourcesPane({
         return (
           <div key={r.moduleId}>
             {r.canAccess ? <Link href={`/community/training/${r.moduleId}`}>{inner}</Link> : inner}
+          </div>
+        )
+      })}
+      {fileResources.map((r) => {
+        const isLink = (r.fileType ?? '').toLowerCase() === 'link' || (r.fileType ?? '').toLowerCase() === 'url'
+        return (
+          <div key={r.resourceId} className="flex items-center justify-between gap-3 rounded-card border border-line bg-white p-4">
+            <div className="flex items-center gap-3">
+              <IconTile kind={isLink ? 'link' : 'file'} />
+              <div>
+                <p className="flex items-center gap-2 font-medium text-ink">
+                  {r.title}
+                  <span className={`rounded-pill px-2 py-0.5 text-[10px] font-bold ${r.isMandatory ? 'bg-space-violet-chip text-space-violet-text' : 'bg-surface text-content-muted'}`}>
+                    {r.isMandatory ? 'MANDATORY' : 'OPTIONAL'}
+                  </span>
+                </p>
+                <p className="text-[12.5px] text-content-muted">
+                  {isLink ? 'Link' : (r.fileType ? r.fileType.toUpperCase() : 'File')}
+                  {r.dueAt && <> · due {new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(new Date(r.dueAt))}</>}
+                </p>
+              </div>
+            </div>
+            <ResourceDownloadButton resourceId={r.resourceId} title={r.title} />
           </div>
         )
       })}

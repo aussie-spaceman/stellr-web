@@ -625,6 +625,15 @@ export async function archiveCohort(cohortId: string): Promise<void> {
     .from('mentoring_cohorts')
     .update({ lifecycle: 'archived', is_active: false })
     .eq('id', cohortId)
+  // Archive = "close the chat and all video calls, keep all data". Chat re-gates
+  // via container persistence; cancel any still-upcoming sessions so their rooms
+  // can no longer be joined (the room page 404s cancelled sessions).
+  await db
+    .from('sessions')
+    .update({ status: 'cancelled' })
+    .eq('cohort_id', cohortId)
+    .eq('status', 'scheduled')
+    .gt('scheduled_start', new Date().toISOString())
 }
 
 export async function deleteCohort(cohortId: string): Promise<void> {
@@ -980,6 +989,76 @@ export async function listCohortRoster(cohortId: string): Promise<RosterMember[]
       actionsTotal: totalByMember.get(r.member_id) ?? 0,
     }
   })
+}
+
+// ─── Cohort file/link resources (community_resources via container_contents) ──
+// The Resources tab unifies training courses (cohort_training_links) + auto
+// recordings + standalone files attached from the community resource library.
+
+export interface CohortFileResource {
+  resourceId: string
+  title: string
+  fileType: string | null
+  isMandatory: boolean
+  dueAt: string | null
+}
+
+/** Standalone file resources attached to a cohort (content_type='resource'). */
+export async function listCohortFileResources(cohortId: string): Promise<CohortFileResource[]> {
+  const db = supabaseServer()
+  const { data: links } = await db
+    .from('container_contents')
+    .select('content_ref, is_mandatory, due_at, display_order')
+    .eq('container_id', cohortId)
+    .eq('content_type', 'resource')
+    .order('display_order')
+  if (!links || links.length === 0) return []
+  const refs = links.map((l) => l.content_ref as string)
+  const { data: res } = await db
+    .from('community_resources')
+    .select('id, title, file_type')
+    .in('id', refs)
+  const meta = new Map((res ?? []).map((r) => [r.id as string, r as { id: string; title: string; file_type: string | null }]))
+  return links
+    .filter((l) => meta.has(l.content_ref as string))
+    .map((l) => {
+      const m = meta.get(l.content_ref as string)!
+      return {
+        resourceId: m.id,
+        title: m.title,
+        fileType: m.file_type,
+        isMandatory: !!l.is_mandatory,
+        dueAt: (l.due_at as string | null) ?? null,
+      }
+    })
+}
+
+/** Search the community resource library to attach to a cohort (mentor picker). */
+export async function searchAttachableResources(q: string): Promise<{ id: string; title: string; fileType: string | null }[]> {
+  const db = supabaseServer()
+  let query = db.from('community_resources').select('id, title, file_type').order('created_at', { ascending: false }).limit(10)
+  if (q.trim()) query = query.ilike('title', `%${q.trim()}%`)
+  const { data } = await query
+  return (data ?? []).map((r) => ({ id: r.id as string, title: r.title as string, fileType: (r.file_type as string | null) ?? null }))
+}
+
+/** Attach (or update meta of) a community resource on a cohort. Idempotent. */
+export async function attachCohortResource(cohortId: string, resourceId: string, mandatory: boolean, dueAt: string | null): Promise<void> {
+  const db = supabaseServer()
+  await db.from('container_contents').upsert(
+    { container_id: cohortId, content_type: 'resource', content_ref: resourceId, is_mandatory: mandatory, due_at: dueAt },
+    { onConflict: 'container_id,content_type,content_ref' },
+  )
+}
+
+export async function detachCohortResource(cohortId: string, resourceId: string): Promise<void> {
+  const db = supabaseServer()
+  await db
+    .from('container_contents')
+    .delete()
+    .eq('container_id', cohortId)
+    .eq('content_type', 'resource')
+    .eq('content_ref', resourceId)
 }
 
 // ─── Mentee landing aggregation ─────────────────────────────────────────────

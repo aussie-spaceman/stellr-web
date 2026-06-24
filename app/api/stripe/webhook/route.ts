@@ -8,6 +8,7 @@ import { handleStoreOrderPaid } from '@/lib/store/orders'
 import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
 import { fireTierPurchased } from '@/lib/membership-grants'
 import { enrollAfterPayment } from '@/lib/mentoring'
+import { enrollWorkshopAfterPayment, grantWorkshopTopup } from '@/lib/workshops'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -357,6 +358,28 @@ export async function POST(req: NextRequest) {
               stripe_session_id: session.id,
             })),
           )
+        }
+      } else if (session.metadata?.type === 'workshop_enrollment') {
+        // One-off coaching-workshop purchase → enroll + record purchase.
+        const { memberId, workshopId } = session.metadata
+        if (memberId && workshopId) {
+          await enrollWorkshopAfterPayment(memberId, workshopId, session.id)
+          await persistStripeCustomer(session)
+          await logActivity({
+            memberId,
+            category: 'billing',
+            action: 'payment_received',
+            summary: `Coaching workshop payment received${fmtMoney(session.amount_total, session.currency)}`,
+            metadata: { kind: 'workshop', workshopId, amount: session.amount_total, currency: session.currency },
+            actorType: 'stripe',
+          })
+        }
+      } else if (session.metadata?.type === 'workshop_topup') {
+        // Purchased workshop credits (top-up pack) → grant available credits.
+        const { memberId } = session.metadata
+        const qty = Math.max(1, Math.floor(Number(session.metadata?.quantity) || 1))
+        if (memberId) {
+          await grantWorkshopTopup(memberId, qty, session.id)
         }
       } else if (session.metadata?.type === 'store_order') {
         // Web-store purchase (direct-to-consumer) — mark paid, place the Printful

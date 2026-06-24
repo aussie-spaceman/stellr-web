@@ -15,6 +15,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseServer } from '@/lib/supabase'
 import { logActivity, type Actor, type ActorType } from '@/lib/activity-log'
+import { grantCredits, type CreditType } from '@/lib/credits'
 
 export type GrantTrigger =
   | 'signup'
@@ -52,13 +53,20 @@ export interface GrantRule {
     /** tier_purchased only: the acquired tier must be one of these for the rule to fire. */
     source_tier_ids?: string[]
   }
-  grant_tier_id: string
+  /** Null for credit-granting rules (grant_kind='credits'). */
+  grant_tier_id: string | null
   duration_kind: 'months' | 'until_grad_july1' | 'lifetime' | 'match_source'
   duration_months: number | null
   grant_target: GrantTarget
   replaces_free: boolean
   priority: number
   is_active: boolean
+  /** 'tier' (grant a membership tier) | 'credits' (grant wallet credits). Default 'tier'. */
+  grant_kind?: 'tier' | 'credits'
+  /** credits only: which wallet to top up. */
+  grant_credit_type?: CreditType | null
+  /** credits only: how many credits to grant. */
+  grant_quantity?: number | null
 }
 
 const LIFETIME_DAYS = 365 * 100
@@ -241,6 +249,13 @@ export interface TriggerContext {
   graduationYear?: number | null
   /** tier_purchased only: the tier the member just acquired (rule match + match_source expiry). */
   sourceTierId?: string | null
+  /**
+   * Idempotency seed for credit grants — pass the underlying event id (event
+   * participation id, source membership id, …) so a credit-granting rule fires
+   * once per real occurrence, not once per webhook retry / re-fire. Defaults to
+   * the member id (one grant ever) when omitted.
+   */
+  grantKeySeed?: string | null
 }
 
 /**
@@ -271,6 +286,45 @@ export async function applyGrantTrigger(
   const rule = (rules as GrantRule[]).find((r) => matchesConditions(r, member, ctx)) ?? null
   if (!rule) return { rule: null, granted: false, reason: 'no_tier' }
 
+  // Credit-pack grant: hand out N wallet credits (cohort/workshop) instead of a
+  // tier. Honours the same self / registered_students fan-out as the tier path.
+  if (rule.grant_kind === 'credits') {
+    const creditType = rule.grant_credit_type ?? null
+    const qty = rule.grant_quantity ?? 0
+    if (!creditType || qty <= 0) return { rule, granted: false, reason: 'no_tier' }
+
+    const seed = ctx.grantKeySeed ?? memberId
+    const targets =
+      rule.grant_target === 'registered_students' ? await registeredStudentIds(db, memberId) : [memberId]
+
+    let grantedCount = 0
+    for (const tid of targets) {
+      const n = await grantCredits(tid, creditType, qty, {
+        source: 'grant',
+        grantKey: `${rule.id}:${seed}:${tid}`,
+      })
+      if (n > 0) {
+        grantedCount++
+        await logActivity(
+          {
+            memberId: tid,
+            category: 'billing',
+            action: 'credit_granted',
+            summary: `Granted ${n} ${creditType === 'workshop' ? 'workshop' : 'cohort'} credit${n === 1 ? '' : 's'} (${rule.name})`,
+            metadata: { ruleId: rule.id, creditType, quantity: n, trigger },
+            actorType: 'system',
+          },
+          db,
+        )
+      }
+    }
+    return { rule, granted: grantedCount > 0, grantedCount }
+  }
+
+  // Tier grant path: a tier rule always names a tier (DB shape constraint).
+  const grantTierId = rule.grant_tier_id
+  if (!grantTierId) return { rule, granted: false, reason: 'no_tier' }
+
   // Resolve duration → months | expiresAt.
   let months: number | null | undefined
   let expiresAt: string | null | undefined
@@ -294,7 +348,7 @@ export async function applyGrantTrigger(
     let grantedCount = 0
     for (const sid of studentIds) {
       const r = await grantTier(
-        { memberId: sid, tierId: rule.grant_tier_id, months, expiresAt, source: 'rule', ruleId: rule.id, replacesFree: rule.replaces_free },
+        { memberId: sid, tierId: grantTierId, months, expiresAt, source: 'rule', ruleId: rule.id, replacesFree: rule.replaces_free },
         db,
       )
       if (r.granted) grantedCount++
@@ -305,7 +359,7 @@ export async function applyGrantTrigger(
   const result = await grantTier(
     {
       memberId,
-      tierId: rule.grant_tier_id,
+      tierId: grantTierId,
       months,
       expiresAt,
       source: 'rule',

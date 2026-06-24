@@ -43,10 +43,10 @@ export async function POST(
   // role/bracket; an empty rule set is a no-op. Best-effort — never block the save.
   const grants: Array<{ trigger: string; rule: string | null; granted: boolean }> = []
   try {
-    const attend = await applyGrantTrigger(memberId, 'event_attendance', {}, db)
+    const attend = await applyGrantTrigger(memberId, 'event_attendance', { grantKeySeed: data.id }, db)
     grants.push({ trigger: 'event_attendance', rule: attend.rule?.name ?? null, granted: attend.granted })
     if (award) {
-      const won = await applyGrantTrigger(memberId, 'event_award', { award }, db)
+      const won = await applyGrantTrigger(memberId, 'event_award', { award, grantKeySeed: data.id }, db)
       grants.push({ trigger: 'event_award', rule: won.rule?.name ?? null, granted: won.granted })
     }
   } catch (e) {

@@ -23,6 +23,7 @@ export default async function MembershipAccessPage() {
             monthlyPriceCents: t.monthlyPriceCents,
             includesFreeMentoring: t.includesFreeMentoring,
             creditsGrant: t.creditsGrant,
+            workshopCreditsGrant: t.workshopCreditsGrant,
           }))}
           cohorts={cohorts}
         />

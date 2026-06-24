@@ -10,6 +10,7 @@ interface TierRow {
   monthlyPriceCents: number | null
   includesFreeMentoring: boolean
   creditsGrant: number
+  workshopCreditsGrant: number
 }
 interface CohortRow {
   id: string
@@ -41,6 +42,10 @@ export function MembershipAccess({ tiers: initialTiers, cohorts: initialCohorts 
     setTiers((p) => p.map((t) => (t.id === id ? { ...t, creditsGrant: value } : t)))
     await adminPost({ action: 'updateTier', tierId: id, creditsGrant: value })
   }
+  const setWorkshopCredits = async (id: string, value: number) => {
+    setTiers((p) => p.map((t) => (t.id === id ? { ...t, workshopCreditsGrant: value } : t)))
+    await adminPost({ action: 'updateTier', tierId: id, workshopCreditsGrant: value })
+  }
 
   return (
     <div className="space-y-8 pt-4">
@@ -53,7 +58,8 @@ export function MembershipAccess({ tiers: initialTiers, cohorts: initialCohorts 
               <th className="py-2.5">Tier</th>
               <th className="py-2.5">Price / mo</th>
               <th className="py-2.5">Mentoring</th>
-              <th className="py-2.5">Credits / yr</th>
+              <th className="py-2.5">Cohort credits / yr</th>
+              <th className="py-2.5">Workshop credits / yr</th>
             </tr>
           </thead>
           <tbody>
@@ -78,12 +84,21 @@ export function MembershipAccess({ tiers: initialTiers, cohorts: initialCohorts 
                     className="w-20 rounded-[8px] border border-line px-2.5 py-1.5 text-sm"
                   />
                 </td>
+                <td className="py-3">
+                  <input
+                    type="number"
+                    min={0}
+                    value={t.workshopCreditsGrant}
+                    onChange={(e) => setWorkshopCredits(t.id, Math.max(0, Number(e.target.value) || 0))}
+                    className="w-20 rounded-[8px] border border-line px-2.5 py-1.5 text-sm"
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
         <p className="mt-3 text-[12px] text-content-faint">
-          The 9 buyable tiers. Toggle free mentoring per tier; credits roll over and 1 credit = 1 cohort enrollment.
+          The 9 buyable tiers. Toggle free mentoring per tier; credits roll over. 1 cohort credit = 1 cohort enrollment; 1 workshop credit = 1 workshop enrollment.
         </p>
       </section>
 

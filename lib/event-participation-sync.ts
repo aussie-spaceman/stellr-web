@@ -60,10 +60,11 @@ export async function recordEventParticipation(
         metadata: { eventSlug: p.eventSlug, eventTitle: p.eventTitle ?? null },
         actorType: 'system',
       }, db)
-      // Competition registration grant rules (e.g. school student → Pathfinder).
-      // The rule's role condition decides who actually qualifies; non-students
-      // simply match no rule. Non-fatal.
-      await applyGrantTrigger(p.memberId, 'competition_registration', {}, db)
+      // Competition registration grant rules (e.g. school student → Pathfinder,
+      // or N workshop/cohort credits). The rule's role condition decides who
+      // qualifies; non-matchers are a no-op. Seeded on the event slug so a credit
+      // grant fires once per member per event. Non-fatal.
+      await applyGrantTrigger(p.memberId, 'competition_registration', { grantKeySeed: p.eventSlug }, db)
     }
   } catch (e) {
     console.error('[event-participation] recordEventParticipation failed (non-fatal):', e)

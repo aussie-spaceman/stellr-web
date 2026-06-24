@@ -15,6 +15,10 @@ export interface RuleRow {
   replaces_free: boolean
   priority: number
   is_active: boolean
+  /** 'tier' (default) grants a membership tier; 'credits' grants wallet credits. */
+  grant_kind?: 'tier' | 'credits'
+  grant_credit_type?: 'mentoring' | 'workshop' | null
+  grant_quantity?: number | null
 }
 
 export interface TierOption {
@@ -57,7 +61,17 @@ const emptyDraft = (tierId: string): RuleRow => ({
   replaces_free: true,
   priority: 10,
   is_active: true,
+  grant_kind: 'tier',
+  grant_credit_type: null,
+  grant_quantity: null,
 })
+
+/** Label for a credit-granting rule, e.g. "2 workshop credits". */
+function creditLabel(r: RuleRow): string {
+  const n = r.grant_quantity ?? 0
+  const kind = r.grant_credit_type === 'workshop' ? 'workshop' : 'cohort'
+  return `${n} ${kind} credit${n === 1 ? '' : 's'}`
+}
 
 export function RulesClient({ initialRules, tiers }: { initialRules: RuleRow[]; tiers: TierOption[] }) {
   const [rules, setRules] = useState<RuleRow[]>(initialRules)
@@ -130,10 +144,18 @@ export function RulesClient({ initialRules, tiers }: { initialRules: RuleRow[]; 
               {r.conditions.age_bracket && <Chip color="gray">{r.conditions.age_bracket}</Chip>}
               {r.conditions.award_contains && <Chip color="gray">award ~ “{r.conditions.award_contains}”</Chip>}
               <span className="text-brand-muted-soft">grant</span>
-              <Chip color="blue">{tierName(r.grant_tier_id)}</Chip>
+              {(r.grant_kind ?? 'tier') === 'credits' ? (
+                <Chip color="blue">{creditLabel(r)}</Chip>
+              ) : (
+                <Chip color="blue">{tierName(r.grant_tier_id)}</Chip>
+              )}
               {r.grant_target === 'registered_students' && <Chip color="gray">to registered students</Chip>}
-              <span className="text-brand-muted-soft">for</span>
-              <Chip color="purple">{durationLabel(r)}</Chip>
+              {(r.grant_kind ?? 'tier') === 'tier' && (
+                <>
+                  <span className="text-brand-muted-soft">for</span>
+                  <Chip color="purple">{durationLabel(r)}</Chip>
+                </>
+              )}
               <span className="ml-auto flex items-center gap-3">
                 <span className="text-[11px] text-brand-muted-soft">priority {r.priority}</span>
                 <button onClick={() => toggle(r)} title={r.is_active ? 'Active' : 'Paused'}>
@@ -253,11 +275,32 @@ function RuleForm({
           </Field>
         )}
 
-        <Field label="Grant tier">
-          <select value={draft.grant_tier_id} onChange={(e) => set({ grant_tier_id: e.target.value })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-            {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}{t.is_free ? ' (free)' : ''}</option>)}
+        <Field label="Grant">
+          <select value={draft.grant_kind ?? 'tier'} onChange={(e) => set({ grant_kind: e.target.value as RuleRow['grant_kind'] })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
+            <option value="tier">A membership tier</option>
+            <option value="credits">Wallet credits (cohort / workshop)</option>
           </select>
         </Field>
+
+        {(draft.grant_kind ?? 'tier') === 'credits' ? (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Credit type">
+              <select value={draft.grant_credit_type ?? 'workshop'} onChange={(e) => set({ grant_credit_type: e.target.value as RuleRow['grant_credit_type'] })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
+                <option value="workshop">Workshop credits</option>
+                <option value="mentoring">Cohort credits</option>
+              </select>
+            </Field>
+            <Field label="Quantity">
+              <input value={draft.grant_quantity ?? ''} onChange={(e) => set({ grant_quantity: e.target.value ? Number(e.target.value.replace(/[^0-9]/g, '')) : null })} placeholder="e.g. 2" className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
+            </Field>
+          </div>
+        ) : (
+          <Field label="Grant tier">
+            <select value={draft.grant_tier_id} onChange={(e) => set({ grant_tier_id: e.target.value })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
+              {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}{t.is_free ? ' (free)' : ''}</option>)}
+            </select>
+          </Field>
+        )}
 
         <Field label="Grant to">
           <select value={draft.grant_target} onChange={(e) => set({ grant_target: e.target.value as RuleRow['grant_target'] })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
@@ -266,21 +309,23 @@ function RuleForm({
           </select>
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Duration">
-            <select value={draft.duration_kind} onChange={(e) => set({ duration_kind: e.target.value as RuleRow['duration_kind'] })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-              <option value="months">For N months</option>
-              <option value="until_grad_july1">Until July 1 of grad year</option>
-              <option value="lifetime">Lifetime</option>
-              <option value="match_source">Match the triggering membership</option>
-            </select>
-          </Field>
-          {draft.duration_kind === 'months' && (
-            <Field label="Months">
-              <input value={draft.duration_months ?? ''} onChange={(e) => set({ duration_months: e.target.value ? Number(e.target.value.replace(/[^0-9]/g, '')) : null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
+        {(draft.grant_kind ?? 'tier') === 'tier' && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Duration">
+              <select value={draft.duration_kind} onChange={(e) => set({ duration_kind: e.target.value as RuleRow['duration_kind'] })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
+                <option value="months">For N months</option>
+                <option value="until_grad_july1">Until July 1 of grad year</option>
+                <option value="lifetime">Lifetime</option>
+                <option value="match_source">Match the triggering membership</option>
+              </select>
             </Field>
-          )}
-        </div>
+            {draft.duration_kind === 'months' && (
+              <Field label="Months">
+                <input value={draft.duration_months ?? ''} onChange={(e) => set({ duration_months: e.target.value ? Number(e.target.value.replace(/[^0-9]/g, '')) : null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
+              </Field>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Priority (higher wins)">
@@ -293,7 +338,7 @@ function RuleForm({
         </div>
 
         <div className="flex gap-2 pt-2">
-          <button onClick={onSubmit} disabled={!draft.name || !draft.grant_tier_id} className="flex-1 text-sm bg-brand-blue text-white rounded-md py-2 hover:bg-brand-blue-dark disabled:opacity-40">
+          <button onClick={onSubmit} disabled={!draft.name || ((draft.grant_kind ?? 'tier') === 'credits' ? !((draft.grant_quantity ?? 0) > 0) : !draft.grant_tier_id)} className="flex-1 text-sm bg-brand-blue text-white rounded-md py-2 hover:bg-brand-blue-dark disabled:opacity-40">
             {draft.id ? 'Save changes' : 'Create rule'}
           </button>
           <button onClick={onCancel} className="flex-1 text-sm border border-brand-border rounded-md py-2 text-brand-muted hover:bg-brand-canvas">

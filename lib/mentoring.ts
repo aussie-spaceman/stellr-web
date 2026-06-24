@@ -17,6 +17,8 @@ import type { AccessKind, CohortTheme } from '@/lib/mentoring-format'
 import { notifyMembers } from '@/lib/notify'
 import { linkCohortTraining, inviteMembersToCohort } from '@/lib/sessions'
 import { logActivity } from '@/lib/activity-log'
+import { syncAllowance, getCredits, consumeOldestCredit } from '@/lib/credits'
+import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 
 // ─── Credits ────────────────────────────────────────────────────────────────
 
@@ -36,64 +38,13 @@ export interface MentoringCredits {
  * rows, unused credits simply roll over into the next period (decision D3).
  */
 export async function syncMentoringAllowance(member: CommunityMember): Promise<void> {
-  const db = supabaseServer()
-
-  // Active memberships + their tier's annual grant.
-  const today = new Date().toISOString().split('T')[0]
-  const { data: ms } = await db
-    .from('member_memberships')
-    .select('id, tier_id, renewal_status, expires_at, membership_tiers(mentoring_credits_grant)')
-    .eq('member_id', member.id)
-    .eq('renewal_status', 'active')
-
-  type Row = {
-    id: string
-    expires_at: string | null
-    membership_tiers: { mentoring_credits_grant: number } | { mentoring_credits_grant: number }[] | null
-  }
-  const rows = ((ms ?? []) as unknown as Row[]).filter((m) => !m.expires_at || m.expires_at >= today)
-
-  for (const m of rows) {
-    const tier = Array.isArray(m.membership_tiers) ? m.membership_tiers[0] : m.membership_tiers
-    const grant = tier?.mentoring_credits_grant ?? 0
-    if (grant <= 0) continue
-
-    const { count } = await db
-      .from('session_credits')
-      .select('id', { count: 'exact', head: true })
-      .eq('member_id', member.id)
-      .eq('session_type', 'mentoring')
-      .eq('source', 'allowance')
-      .eq('grant_key', m.id)
-    const have = count ?? 0
-    const missing = grant - have
-    if (missing > 0) {
-      await db.from('session_credits').insert(
-        Array.from({ length: missing }, () => ({
-          member_id: member.id,
-          session_type: 'mentoring',
-          status: 'available',
-          source: 'allowance',
-          grant_key: m.id,
-        })),
-      )
-    }
-  }
+  // Delegates to the shared wallet core (lib/credits.ts), scoped to cohort credits.
+  await syncAllowance(member, 'mentoring')
 }
 
 /** The member's mentoring-credit balance (syncs the annual allowance first). */
 export async function getMentoringCredits(member: CommunityMember): Promise<MentoringCredits> {
-  await syncMentoringAllowance(member)
-  const db = supabaseServer()
-  const [{ count: avail }, { count: used }] = await Promise.all([
-    db.from('session_credits').select('id', { count: 'exact', head: true })
-      .eq('member_id', member.id).eq('session_type', 'mentoring').eq('status', 'available'),
-    db.from('session_credits').select('id', { count: 'exact', head: true })
-      .eq('member_id', member.id).eq('session_type', 'mentoring').eq('status', 'consumed'),
-  ])
-  const remaining = avail ?? 0
-  const usedN = used ?? 0
-  return { remaining, used: usedN, total: remaining + usedN }
+  return getCredits(member, 'mentoring')
 }
 
 /** True if any of the member's active tiers includes free mentoring (the toggle). */
@@ -283,7 +234,7 @@ export async function listOpenCohorts(member: CommunityMember): Promise<OpenCoho
 
 export type EnrollResult =
   | { ok: true }
-  | { ok: false; reason: 'not-open' | 'already-enrolled' | 'no-credit' | 'needs-payment' | 'error' }
+  | { ok: false; reason: 'not-open' | 'already-enrolled' | 'no-credit' | 'needs-payment' | 'needs-agreement' | 'error' }
 
 async function addToRosterActive(cohortId: string, memberId: string): Promise<void> {
   const db = supabaseServer()
@@ -298,33 +249,23 @@ async function addToRosterActive(cohortId: string, memberId: string): Promise<vo
 
 /** Enroll into an open cohort using one mentoring credit. */
 export async function enrollWithCredit(member: CommunityMember, cohortId: string): Promise<EnrollResult> {
-  const db = supabaseServer()
   const cohort = await getCohortFull(cohortId)
   if (!cohort || !cohort.isOpen) return { ok: false, reason: 'not-open' }
   const access = await resolveCohortAccess(member, cohort)
   if (access.enrolled) return { ok: false, reason: 'already-enrolled' }
+  // Minor participation-agreement gate (report-only unless ACCESS_GATES_ENFORCE).
+  const gate = await reportEnrollmentGate(member, { kind: 'cohort', containerId: cohortId, containerName: cohort.name })
+  if (accessGatesEnforced() && !gate.unlocked) return { ok: false, reason: 'needs-agreement' }
   if (access.kind === 'free') {
     await addToRosterActive(cohortId, member.id)
     return { ok: true }
   }
   if (!access.canUseCredit) return { ok: false, reason: 'no-credit' }
 
-  // Consume the oldest available credit (FIFO) and tie it to this cohort.
-  const { data: credit } = await db
-    .from('session_credits')
-    .select('id')
-    .eq('member_id', member.id)
-    .eq('session_type', 'mentoring')
-    .eq('status', 'available')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-  if (!credit) return { ok: false, reason: 'no-credit' }
+  // Consume the oldest available cohort credit (FIFO), tied to this cohort.
+  const consumed = await consumeOldestCredit(member.id, 'mentoring', cohortId)
+  if (!consumed) return { ok: false, reason: 'no-credit' }
 
-  await db
-    .from('session_credits')
-    .update({ status: 'consumed', consumed_at: new Date().toISOString(), consumed_cohort_id: cohortId })
-    .eq('id', credit.id)
   await addToRosterActive(cohortId, member.id)
   return { ok: true }
 }
@@ -336,6 +277,8 @@ export async function enrollFree(member: CommunityMember, cohortId: string): Pro
   const access = await resolveCohortAccess(member, cohort)
   if (access.enrolled) return { ok: false, reason: 'already-enrolled' }
   if (access.kind !== 'free') return { ok: false, reason: 'needs-payment' }
+  const gate = await reportEnrollmentGate(member, { kind: 'cohort', containerId: cohortId, containerName: cohort.name })
+  if (accessGatesEnforced() && !gate.unlocked) return { ok: false, reason: 'needs-agreement' }
   await addToRosterActive(cohortId, member.id)
   return { ok: true }
 }
@@ -874,7 +817,10 @@ export interface MentoringTier {
   /** Monthly USD price in cents, read live from Stripe (null if not on Stripe). */
   monthlyPriceCents: number | null
   includesFreeMentoring: boolean
+  /** Annual cohort-credit grant (membership_tiers.mentoring_credits_grant). */
   creditsGrant: number
+  /** Annual workshop-credit grant (membership_tiers.workshop_credits_grant). */
+  workshopCreditsGrant: number
 }
 
 /** The 9 buyable membership tiers with live Stripe pricing + mentoring config,
@@ -883,7 +829,7 @@ export async function listMentoringTiers(): Promise<MentoringTier[]> {
   const db = supabaseServer()
   const { data } = await db
     .from('membership_tiers')
-    .select('id, name, is_free, stripe_price_id_monthly, includes_free_mentoring, mentoring_credits_grant')
+    .select('id, name, is_free, stripe_price_id_monthly, includes_free_mentoring, mentoring_credits_grant, workshop_credits_grant')
     .in('name', ALL_TIER_NAMES)
 
   type Row = {
@@ -893,6 +839,7 @@ export async function listMentoringTiers(): Promise<MentoringTier[]> {
     stripe_price_id_monthly: string | null
     includes_free_mentoring: boolean | null
     mentoring_credits_grant: number | null
+    workshop_credits_grant: number | null
   }
   const rows = (data ?? []) as Row[]
   const stripe = stripeClient()
@@ -916,6 +863,7 @@ export async function listMentoringTiers(): Promise<MentoringTier[]> {
         monthlyPriceCents,
         includesFreeMentoring: !!r.includes_free_mentoring,
         creditsGrant: r.mentoring_credits_grant ?? 0,
+        workshopCreditsGrant: r.workshop_credits_grant ?? 0,
       } satisfies MentoringTier
     }),
   )
@@ -926,12 +874,13 @@ export async function listMentoringTiers(): Promise<MentoringTier[]> {
 /** Update a tier's mentoring config (admin Membership & access). */
 export async function updateTierMentoring(
   tierId: string,
-  patch: { includesFreeMentoring?: boolean; creditsGrant?: number },
+  patch: { includesFreeMentoring?: boolean; creditsGrant?: number; workshopCreditsGrant?: number },
 ): Promise<void> {
   const db = supabaseServer()
   const row: Record<string, unknown> = {}
   if (patch.includesFreeMentoring !== undefined) row.includes_free_mentoring = patch.includesFreeMentoring
   if (patch.creditsGrant !== undefined) row.mentoring_credits_grant = Math.max(0, Math.floor(patch.creditsGrant))
+  if (patch.workshopCreditsGrant !== undefined) row.workshop_credits_grant = Math.max(0, Math.floor(patch.workshopCreditsGrant))
   if (Object.keys(row).length === 0) return
   await db.from('membership_tiers').update(row).eq('id', tierId)
 }

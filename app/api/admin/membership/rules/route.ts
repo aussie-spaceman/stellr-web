@@ -15,6 +15,8 @@ function isAdmin(sessionClaims: unknown) {
 const TRIGGERS = ['signup', 'event_attendance', 'event_award', 'mentor_at_event', 'subscribe_website', 'graduation', 'manual', 'competition_registration', 'tier_purchased']
 const DURATIONS = ['months', 'until_grad_july1', 'lifetime', 'match_source']
 const GRANT_TARGETS = ['self', 'registered_students']
+const GRANT_KINDS = ['tier', 'credits']
+const CREDIT_TYPES = ['mentoring', 'workshop']
 
 export async function GET() {
   const { sessionClaims } = await auth()
@@ -34,8 +36,17 @@ export async function POST(req: Request) {
   if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const b = await req.json().catch(() => ({}))
-  if (!b.name || !b.trigger_type || !b.grant_tier_id) {
-    return NextResponse.json({ error: 'name, trigger_type, grant_tier_id required' }, { status: 400 })
+  const grantKind = b.grant_kind ?? 'tier'
+  if (!b.name || !b.trigger_type) {
+    return NextResponse.json({ error: 'name, trigger_type required' }, { status: 400 })
+  }
+  if (!GRANT_KINDS.includes(grantKind)) return NextResponse.json({ error: 'invalid grant_kind' }, { status: 400 })
+  if (grantKind === 'tier' && !b.grant_tier_id) {
+    return NextResponse.json({ error: 'grant_tier_id required for a tier rule' }, { status: 400 })
+  }
+  if (grantKind === 'credits') {
+    if (!CREDIT_TYPES.includes(b.grant_credit_type)) return NextResponse.json({ error: 'invalid grant_credit_type' }, { status: 400 })
+    if (!(Number(b.grant_quantity) > 0)) return NextResponse.json({ error: 'grant_quantity must be > 0' }, { status: 400 })
   }
   if (!TRIGGERS.includes(b.trigger_type)) return NextResponse.json({ error: 'invalid trigger_type' }, { status: 400 })
   if (b.duration_kind && !DURATIONS.includes(b.duration_kind)) {
@@ -47,13 +58,17 @@ export async function POST(req: Request) {
 
   const admin = await getCurrentMember()
   const db = supabaseServer()
+  const isCredits = grantKind === 'credits'
   const { data, error } = await db
     .from('tier_grant_rules')
     .insert({
       name: b.name,
       trigger_type: b.trigger_type,
       conditions: b.conditions ?? {},
-      grant_tier_id: b.grant_tier_id,
+      grant_kind: grantKind,
+      grant_tier_id: isCredits ? null : b.grant_tier_id,
+      grant_credit_type: isCredits ? b.grant_credit_type : null,
+      grant_quantity: isCredits ? Math.floor(Number(b.grant_quantity)) : null,
       duration_kind: b.duration_kind ?? 'months',
       duration_months: b.duration_months ?? null,
       grant_target: b.grant_target ?? 'self',
@@ -80,7 +95,7 @@ export async function PATCH(req: Request) {
   if (!b.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
-  for (const k of ['name', 'trigger_type', 'conditions', 'grant_tier_id', 'duration_kind', 'duration_months', 'grant_target', 'replaces_free', 'priority', 'is_active']) {
+  for (const k of ['name', 'trigger_type', 'conditions', 'grant_kind', 'grant_tier_id', 'grant_credit_type', 'grant_quantity', 'duration_kind', 'duration_months', 'grant_target', 'replaces_free', 'priority', 'is_active']) {
     if (b[k] !== undefined) patch[k] = b[k]
   }
   if (patch.trigger_type && !TRIGGERS.includes(patch.trigger_type as string)) {
@@ -88,6 +103,12 @@ export async function PATCH(req: Request) {
   }
   if (patch.grant_target && !GRANT_TARGETS.includes(patch.grant_target as string)) {
     return NextResponse.json({ error: 'invalid grant_target' }, { status: 400 })
+  }
+  if (patch.grant_kind && !GRANT_KINDS.includes(patch.grant_kind as string)) {
+    return NextResponse.json({ error: 'invalid grant_kind' }, { status: 400 })
+  }
+  if (patch.grant_credit_type && !CREDIT_TYPES.includes(patch.grant_credit_type as string)) {
+    return NextResponse.json({ error: 'invalid grant_credit_type' }, { status: 400 })
   }
 
   const db = supabaseServer()

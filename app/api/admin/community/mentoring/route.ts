@@ -84,6 +84,7 @@ export async function POST(req: Request) {
       await updateTierMentoring(b.tierId, {
         includesFreeMentoring: b.includesFreeMentoring,
         creditsGrant: b.creditsGrant,
+        workshopCreditsGrant: b.workshopCreditsGrant,
       })
       return NextResponse.json({ ok: true })
     }

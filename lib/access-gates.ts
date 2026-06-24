@@ -99,6 +99,61 @@ export async function eventAccessGates(member: CommunityMember, eventSlug: strin
   return { payment, docusign, unlocked: payment && docusign }
 }
 
+export interface EnrollmentGateResult {
+  /** true = not a minor, OR a participation agreement is on file. */
+  minorAgreement: boolean
+  /** Whether enrollment is allowed (currently == minorAgreement). */
+  unlocked: boolean
+}
+
+/**
+ * Minor participation-agreement gate for joining a cohort / workshop (Rec C1 of
+ * the Workshops & Cohorts access plan). A credit spend or paid seat must not let a
+ * minor into a live container without a signed agreement on file. REPORT-ONLY by
+ * default (mirrors the competition gates): logs who would be blocked and returns
+ * the status, but callers only DENY when accessGatesEnforced() is true.
+ *
+ * "On file" reuses the DocuSign validity layer: any completed envelope linked to
+ * the member (via their participant rows) counts as a participation agreement on
+ * file. Adults always pass.
+ */
+export async function reportEnrollmentGate(
+  member: CommunityMember,
+  opts: { kind: 'cohort' | 'workshop'; containerId: string; containerName?: string },
+): Promise<EnrollmentGateResult> {
+  const db = supabaseServer()
+
+  const { data: m } = await db.from('members').select('date_of_birth').eq('id', member.id).maybeSingle()
+  const minor = isMinor((m as { date_of_birth?: string | null } | null)?.date_of_birth ?? null)
+  if (!minor) return { minorAgreement: true, unlocked: true }
+
+  // Any completed DocuSign envelope on file for this member → agreement satisfied.
+  const { data: parts } = await db.from('participants').select('id').eq('member_id', member.id)
+  const pids = (parts ?? []).map((p) => (p as { id: string }).id)
+  let hasCompleted = false
+  if (pids.length) {
+    const { count } = await db
+      .from('docusign_envelopes')
+      .select('id', { count: 'exact', head: true })
+      .in('participant_id', pids)
+      .eq('status', 'completed')
+    hasCompleted = (count ?? 0) > 0
+  }
+
+  if (!hasCompleted) {
+    await logActivity({
+      memberId: member.id,
+      category: 'membership',
+      action: 'access_gate_would_block',
+      summary: `Minor would be blocked from ${opts.kind} ${opts.containerName ?? opts.containerId} (report-only): participation agreement`,
+      metadata: { kind: opts.kind, containerId: opts.containerId, gate: 'minor_agreement', mode: accessGatesEnforced() ? 'enforced' : 'report_only' },
+      actorType: 'system',
+    }).catch(() => {})
+  }
+
+  return { minorAgreement: hasCompleted, unlocked: hasCompleted }
+}
+
 /**
  * REPORT-ONLY gate check (P2). Logs when a member would be blocked from a
  * competition, but never denies — surfaces who'd be locked out ahead of the P4

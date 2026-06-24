@@ -5,7 +5,9 @@ import {
   linkCohortTraining,
   unlinkCohortTraining,
   scheduleMentoringSeries,
+  inviteMembersToCohort,
 } from '@/lib/sessions'
+import { assignCohortAction } from '@/lib/mentoring'
 
 // POST /api/community/mentoring/manage — a cohort's mentor configures it
 // (PRD §11): assign training material, and schedule a session series.
@@ -16,7 +18,7 @@ export async function POST(req: Request) {
 
   const b = await req.json().catch(() => ({}))
   if (!b.cohortId) return NextResponse.json({ error: 'cohortId required' }, { status: 400 })
-  if (!(await isCohortMentor(b.cohortId, member.id))) {
+  if (!member.isAdmin && !(await isCohortMentor(b.cohortId, member.id))) {
     return NextResponse.json({ error: 'Only the cohort mentor can manage it.' }, { status: 403 })
   }
 
@@ -44,6 +46,23 @@ export async function POST(req: Request) {
       )
       if (!r.ok) return NextResponse.json({ error: r.error ?? 'Could not schedule' }, { status: 400 })
       return NextResponse.json({ ok: true, created: r.created })
+    }
+    case 'assignAction': {
+      if (!b.title) return NextResponse.json({ error: 'title required' }, { status: 400 })
+      const n = await assignCohortAction(b.cohortId, member.id, {
+        title: b.title,
+        memberIds: Array.isArray(b.memberIds) ? b.memberIds : [],
+        dueDate: b.dueDate || null,
+        trainingModuleId: b.trainingModuleId || null,
+        remindBeforeHours: b.remind ? 24 : null,
+      })
+      return NextResponse.json({ ok: true, assigned: n })
+    }
+    case 'invite': {
+      const ids = Array.isArray(b.memberIds) ? b.memberIds : []
+      if (ids.length === 0) return NextResponse.json({ error: 'memberIds required' }, { status: 400 })
+      const n = await inviteMembersToCohort(b.cohortId, ids)
+      return NextResponse.json({ ok: true, invited: n })
     }
     default:
       return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

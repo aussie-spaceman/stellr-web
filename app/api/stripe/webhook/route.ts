@@ -7,6 +7,7 @@ import { logActivity } from '@/lib/activity-log'
 import { handleStoreOrderPaid } from '@/lib/store/orders'
 import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
 import { fireTierPurchased } from '@/lib/membership-grants'
+import { enrollAfterPayment } from '@/lib/mentoring'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -325,6 +326,37 @@ export async function POST(req: NextRequest) {
             status: 'available',
             stripe_session_id: session.id,
           })
+        }
+      } else if (session.metadata?.type === 'mentoring_cohort') {
+        // One-off cohort purchase (Mentoring redesign) → enroll + record purchase.
+        const { memberId, cohortId } = session.metadata
+        if (memberId && cohortId) {
+          await enrollAfterPayment(memberId, cohortId, session.id)
+          await persistStripeCustomer(session)
+          await logActivity({
+            memberId,
+            category: 'billing',
+            action: 'payment_received',
+            summary: `Mentoring cohort payment received${fmtMoney(session.amount_total, session.currency)}`,
+            metadata: { kind: 'mentoring_cohort', cohortId, amount: session.amount_total, currency: session.currency },
+            actorType: 'stripe',
+          })
+        }
+      } else if (session.metadata?.type === 'mentoring_topup') {
+        // Purchased extra mentoring credits (top-up pack) → grant available credits.
+        const { memberId } = session.metadata
+        const qty = Math.max(1, Math.floor(Number(session.metadata?.quantity) || 1))
+        if (memberId) {
+          const db = supabaseServer()
+          await db.from('session_credits').insert(
+            Array.from({ length: qty }, () => ({
+              member_id: memberId,
+              session_type: 'mentoring',
+              status: 'available',
+              source: 'topup',
+              stripe_session_id: session.id,
+            })),
+          )
         }
       } else if (session.metadata?.type === 'store_order') {
         // Web-store purchase (direct-to-consumer) — mark paid, place the Printful

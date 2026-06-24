@@ -122,10 +122,44 @@ export function NotificationBell() {
               <li className="px-4 py-6 text-center text-sm text-brand-muted-soft">No notifications yet.</li>
             )}
             {!loading && notifications.map((n) => {
+              // Cohort invite → inline Accept & review / Decline (handoff bell spec).
+              if (n.reference_type === 'cohort_invite' && n.reference_id) {
+                return (
+                  <li key={n.id} className="px-4 py-3">
+                    <p className="text-sm font-medium text-brand-blue-dark">
+                      {actorName(n.actor)} invited you to a mentoring cohort
+                    </p>
+                    {n.body && <p className="mt-0.5 text-xs text-brand-muted-soft">{n.body}</p>}
+                    <p className="mt-0.5 text-[11px] text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <Link
+                        href={`/community/mentoring/${n.reference_id}/invite`}
+                        onClick={() => setOpen(false)}
+                        className="rounded-md bg-space-violet px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#5B3FE0]"
+                      >
+                        Accept &amp; review
+                      </Link>
+                      <button
+                        onClick={async () => {
+                          await fetch('/api/community/cohorts/respond', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ cohortId: n.reference_id, action: 'decline' }),
+                          })
+                          setNotifications((prev) => prev.filter((x) => x.id !== n.id))
+                        }}
+                        className="rounded-md px-3 py-1.5 text-xs font-medium text-brand-muted-soft hover:text-brand-muted"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </li>
+                )
+              }
               const href =
                 n.reference_type === 'post' && n.reference_id
                   ? `/community/general/${n.reference_id}`
-                  : n.reference_type === 'cohort' && n.reference_id
+                  : (n.reference_type === 'cohort' || n.reference_type === 'cohort_invite') && n.reference_id
                     ? `/community/mentoring/${n.reference_id}`
                     : '/community'
               return (

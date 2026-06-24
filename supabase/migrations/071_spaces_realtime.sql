@@ -1,4 +1,7 @@
--- Migration 070: Spaces realtime — live channel feeds over the existing seam
+-- Migration 071: Spaces realtime — live channel feeds over the existing seam
+-- (renumbered from 070 — a parallel session shipped 070_mentoring_redesign first;
+--  that version is already recorded remotely, so this independent migration moves
+--  to 071. No SQL content change.)
 --
 -- Mirrors migration 047 (chat realtime). The Clerk-token browser client
 -- (lib/supabase-browser.ts) subscribes to community_posts / community_comments so

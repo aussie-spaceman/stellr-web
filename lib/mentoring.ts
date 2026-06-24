@@ -14,6 +14,9 @@ import 'server-only'
 import { supabaseServer } from '@/lib/supabase'
 import type { CommunityMember } from '@/lib/community'
 import type { AccessKind, CohortTheme } from '@/lib/mentoring-format'
+import { notifyMembers } from '@/lib/notify'
+import { linkCohortTraining, inviteMembersToCohort } from '@/lib/sessions'
+import { logActivity } from '@/lib/activity-log'
 
 // ─── Credits ────────────────────────────────────────────────────────────────
 
@@ -337,6 +340,648 @@ export async function enrollFree(member: CommunityMember, cohortId: string): Pro
   return { ok: true }
 }
 
+// ─── Mentor dashboard ───────────────────────────────────────────────────────
+
+export interface MentorStats {
+  nextSession: { start: string; end: string | null; cohortName: string; timezone: string } | null
+  flaggedCount: number
+  actionsDue: number
+  mentoredCohortIds: string[]
+}
+
+export async function getMentorDashboardStats(mentorId: string): Promise<MentorStats> {
+  const db = supabaseServer()
+  const { data: cohorts } = await db
+    .from('mentoring_cohorts')
+    .select('id, name, timezone')
+    .eq('mentor_member_id', mentorId)
+    .eq('container_type', 'mentoring')
+  const list = (cohorts ?? []) as { id: string; name: string; timezone: string | null }[]
+  const ids = list.map((c) => c.id)
+  if (ids.length === 0) return { nextSession: null, flaggedCount: 0, actionsDue: 0, mentoredCohortIds: [] }
+
+  const nowIso = new Date().toISOString()
+  const [{ data: sess }, { count: actionsDue }, { data: channels }] = await Promise.all([
+    db.from('sessions').select('cohort_id, scheduled_start, scheduled_end, status')
+      .in('cohort_id', ids).eq('status', 'scheduled').gt('scheduled_start', nowIso)
+      .order('scheduled_start', { ascending: true }).limit(1),
+    db.from('session_actions').select('id', { count: 'exact', head: true })
+      .in('cohort_id', ids).eq('is_done', false),
+    db.from('chat_channels').select('id').in('cohort_id', ids),
+  ])
+
+  let flaggedCount = 0
+  const channelIds = (channels ?? []).map((c) => (c as { id: string }).id)
+  if (channelIds.length) {
+    const { count } = await db
+      .from('chat_messages')
+      .select('id', { count: 'exact', head: true })
+      .in('channel_id', channelIds)
+      .not('flagged_at', 'is', null)
+      .is('deleted_at', null)
+    flaggedCount = count ?? 0
+  }
+
+  const ns = (sess ?? [])[0] as { cohort_id: string; scheduled_start: string; scheduled_end: string | null } | undefined
+  const cohort = ns ? list.find((c) => c.id === ns.cohort_id) : undefined
+  return {
+    nextSession: ns ? { start: ns.scheduled_start, end: ns.scheduled_end, cohortName: cohort?.name ?? 'Cohort', timezone: cohort?.timezone ?? 'America/Chicago' } : null,
+    flaggedCount,
+    actionsDue: actionsDue ?? 0,
+    mentoredCohortIds: ids,
+  }
+}
+
+// ─── Cohort-level actions (Actions tab) ─────────────────────────────────────
+
+export interface AssignActionOpts {
+  title: string
+  /** Specific mentees, or empty/undefined to assign to all active members. */
+  memberIds?: string[]
+  dueDate?: string | null
+  trainingModuleId?: string | null
+  remindBeforeHours?: number | null
+}
+
+/** Assign a cohort action to all mentees or selected members (one row each,
+ * grouped by a shared batch id for the mentor's completion view). */
+export async function assignCohortAction(cohortId: string, mentorId: string, opts: AssignActionOpts): Promise<number> {
+  const db = supabaseServer()
+  let targets = (opts.memberIds ?? []).filter(Boolean)
+  if (targets.length === 0) {
+    const { data } = await db
+      .from('cohort_members')
+      .select('member_id')
+      .eq('cohort_id', cohortId)
+      .eq('status', 'active')
+    targets = (data ?? []).map((r) => r.member_id as string)
+  }
+  if (targets.length === 0) return 0
+
+  const batchId = crypto.randomUUID()
+  const { error } = await db.from('session_actions').insert(
+    targets.map((member_id, i) => ({
+      cohort_id: cohortId,
+      session_id: null,
+      member_id,
+      batch_id: batchId,
+      title: opts.title,
+      created_by: mentorId,
+      display_order: i,
+      due_date: opts.dueDate ?? null,
+      training_module_id: opts.trainingModuleId ?? null,
+      remind_before_hours: opts.remindBeforeHours ?? null,
+    })),
+  )
+  if (error) return 0
+
+  const { data: cohort } = await db.from('mentoring_cohorts').select('name').eq('id', cohortId).maybeSingle()
+  await notifyMembers(targets, {
+    type: 'action',
+    body: `New action in ${(cohort?.name as string) ?? 'your cohort'}: ${opts.title}`,
+    referenceType: 'cohort',
+    referenceId: cohortId,
+    actorMemberId: mentorId,
+  })
+  return targets.length
+}
+
+export interface MenteeAction {
+  id: string
+  title: string
+  isDone: boolean
+  dueDate: string | null
+  kind: 'training' | 'task'
+}
+
+/** A mentee's actions within a cohort (cohort-tied or session-tied). */
+export async function listMemberCohortActions(memberId: string, cohortId: string): Promise<MenteeAction[]> {
+  const db = supabaseServer()
+  const { data: sess } = await db.from('sessions').select('id').eq('cohort_id', cohortId)
+  const sessionIds = (sess ?? []).map((s) => (s as { id: string }).id)
+
+  const orFilter = sessionIds.length
+    ? `cohort_id.eq.${cohortId},session_id.in.(${sessionIds.join(',')})`
+    : `cohort_id.eq.${cohortId}`
+  const { data } = await db
+    .from('session_actions')
+    .select('id, title, is_done, due_date, training_module_id')
+    .eq('member_id', memberId)
+    .or(orFilter)
+    .order('created_at', { ascending: false })
+
+  return ((data ?? []) as { id: string; title: string; is_done: boolean; due_date: string | null; training_module_id: string | null }[]).map((a) => ({
+    id: a.id,
+    title: a.title,
+    isDone: a.is_done,
+    dueDate: a.due_date,
+    kind: a.training_module_id ? 'training' : 'task',
+  }))
+}
+
+export interface CohortActionGroup {
+  batchId: string
+  title: string
+  kind: 'training' | 'task'
+  dueDate: string | null
+  remindBeforeHours: number | null
+  assigneeLabel: string
+  doneCount: number
+  totalCount: number
+}
+
+/** Actions grouped by assignment for the mentor's Actions tab ("5/8"). */
+export async function listCohortActionsForMentor(cohortId: string): Promise<CohortActionGroup[]> {
+  const db = supabaseServer()
+  const { data } = await db
+    .from('session_actions')
+    .select('id, batch_id, title, is_done, due_date, training_module_id, remind_before_hours, created_at')
+    .eq('cohort_id', cohortId)
+    .order('created_at', { ascending: false })
+
+  type Row = { id: string; batch_id: string | null; title: string; is_done: boolean; due_date: string | null; training_module_id: string | null; remind_before_hours: number | null }
+  const rows = (data ?? []) as Row[]
+  const groups = new Map<string, { rows: Row[] }>()
+  for (const r of rows) {
+    const key = r.batch_id ?? r.id
+    if (!groups.has(key)) groups.set(key, { rows: [] })
+    groups.get(key)!.rows.push(r)
+  }
+  return [...groups.entries()].map(([key, g]) => {
+    const first = g.rows[0]
+    const done = g.rows.filter((r) => r.is_done).length
+    return {
+      batchId: key,
+      title: first.title,
+      kind: first.training_module_id ? 'training' : 'task',
+      dueDate: first.due_date,
+      remindBeforeHours: first.remind_before_hours,
+      assigneeLabel: g.rows.length === 1 ? '1 mentee' : `${g.rows.length} mentees`,
+      doneCount: done,
+      totalCount: g.rows.length,
+    }
+  })
+}
+
+// ─── Cohort CRUD + management ───────────────────────────────────────────────
+
+export interface CreateCohortInput {
+  name: string
+  mentorMemberId: string | null
+  plannedSessions: number
+  theme: CohortTheme
+  timezone: string
+  isOpen: boolean
+  blurb?: string | null
+  freeForTierIds?: string[]
+  oneOffPriceCents?: number | null
+  creditCost?: number
+  inviteMemberIds?: string[]
+  resources?: { moduleId: string; mandatory: boolean; dueAt?: string | null }[]
+}
+
+/** Create a mentoring cohort, link resources, and invite members. Returns the id. */
+export async function createCohort(input: CreateCohortInput): Promise<string> {
+  const db = supabaseServer()
+  const { data, error } = await db
+    .from('mentoring_cohorts')
+    .insert({
+      name: input.name,
+      mentor_member_id: input.mentorMemberId,
+      container_type: 'mentoring',
+      lifecycle: 'active',
+      is_active: true,
+      theme: input.theme,
+      timezone: input.timezone,
+      planned_sessions: input.plannedSessions,
+      is_open: input.isOpen,
+      blurb: input.blurb ?? null,
+      free_for_tier_ids: input.freeForTierIds ?? [],
+      one_off_price_cents: input.oneOffPriceCents ?? null,
+      credit_cost: input.creditCost ?? 1,
+    })
+    .select('id')
+    .single()
+  if (error || !data) throw new Error(error?.message ?? 'Could not create cohort')
+  const cohortId = data.id as string
+
+  for (const r of input.resources ?? []) {
+    await linkCohortTraining(cohortId, r.moduleId, r.mandatory, r.dueAt ?? null)
+  }
+  if (input.inviteMemberIds && input.inviteMemberIds.length) {
+    await inviteMembersToCohort(cohortId, input.inviteMemberIds)
+  }
+  return cohortId
+}
+
+export interface UpdateCohortInput {
+  name?: string
+  mentorMemberId?: string | null
+  theme?: CohortTheme
+  timezone?: string
+  isOpen?: boolean
+  blurb?: string | null
+  freeForTierIds?: string[]
+  oneOffPriceCents?: number | null
+  creditCost?: number
+}
+
+export async function updateCohort(cohortId: string, patch: UpdateCohortInput): Promise<void> {
+  const db = supabaseServer()
+  const row: Record<string, unknown> = {}
+  if (patch.name !== undefined) row.name = patch.name
+  if (patch.mentorMemberId !== undefined) row.mentor_member_id = patch.mentorMemberId
+  if (patch.theme !== undefined) row.theme = patch.theme
+  if (patch.timezone !== undefined) row.timezone = patch.timezone
+  if (patch.isOpen !== undefined) row.is_open = patch.isOpen
+  if (patch.blurb !== undefined) row.blurb = patch.blurb
+  if (patch.freeForTierIds !== undefined) row.free_for_tier_ids = patch.freeForTierIds
+  if (patch.oneOffPriceCents !== undefined) row.one_off_price_cents = patch.oneOffPriceCents
+  if (patch.creditCost !== undefined) row.credit_cost = patch.creditCost
+  if (Object.keys(row).length === 0) return
+  await db.from('mentoring_cohorts').update(row).eq('id', cohortId)
+}
+
+/** Reassign a cohort's mentor (admin). */
+export async function reassignMentor(cohortId: string, newMentorId: string): Promise<void> {
+  const db = supabaseServer()
+  await db.from('mentoring_cohorts').update({ mentor_member_id: newMentorId }).eq('id', cohortId)
+  // Ensure the new mentor holds the global mentor capability.
+  await grantMentorRole(newMentorId)
+}
+
+/** Grant the platform-wide mentor role (the only entry point is per-cohort UI). */
+export async function grantMentorRole(memberId: string): Promise<void> {
+  const db = supabaseServer()
+  await db
+    .from('session_hosts')
+    .upsert({ member_id: memberId, can_mentor: true }, { onConflict: 'member_id' })
+}
+
+/** Archive (keep data, close chat/calls) or permanently delete a cohort. */
+export async function archiveCohort(cohortId: string): Promise<void> {
+  const db = supabaseServer()
+  await db
+    .from('mentoring_cohorts')
+    .update({ lifecycle: 'archived', is_active: false })
+    .eq('id', cohortId)
+}
+
+export async function deleteCohort(cohortId: string): Promise<void> {
+  // Refund spent enrollments BEFORE deleting (the cohort row, and the
+  // consumed_cohort_id link, vanish on delete).
+  await refundCohortMembers(cohortId)
+  const db = supabaseServer()
+  // FK cascades remove cohort_members, sessions, actions, training links, chat.
+  await db.from('mentoring_cohorts').delete().eq('id', cohortId)
+}
+
+/**
+ * Refund every member who spent something to enroll in a (cancelled) cohort.
+ * Decision D3: refunds are NOT Stripe refunds — a spent mentoring credit is
+ * returned to the member's balance, and a one-off payment becomes account credit
+ * (the existing lib/refunds ledger). Safe to call once at cancellation/deletion.
+ */
+export async function refundCohortMembers(cohortId: string): Promise<void> {
+  const db = supabaseServer()
+  const cohort = await getCohortFull(cohortId)
+  const cohortName = cohort?.name ?? 'a mentoring cohort'
+
+  const { data: spent } = await db
+    .from('session_credits')
+    .select('id, member_id, source')
+    .eq('consumed_cohort_id', cohortId)
+    .eq('status', 'consumed')
+
+  for (const c of (spent ?? []) as { id: string; member_id: string; source: string }[]) {
+    if (c.source === 'purchase') {
+      // Paid one-off → issue monetary account credit (not a Stripe refund).
+      const cents = cohort?.oneOffPriceCents ?? 0
+      if (cents > 0) {
+        await db.from('account_credits').insert({
+          member_id: c.member_id,
+          currency: 'usd',
+          amount_cents: cents,
+          remaining_cents: cents,
+          source_type: 'mentoring_cohort_refund',
+          reason: `Account credit for cancelled cohort: ${cohortName}`,
+        })
+        await logActivity({
+          memberId: c.member_id,
+          category: 'billing',
+          action: 'refund_issued',
+          summary: `Account credit issued for cancelled cohort ${cohortName}`,
+          metadata: { kind: 'mentoring_cohort_refund', cohortId, amount: cents, currency: 'usd' },
+          actorType: 'admin',
+        }, db)
+      }
+    } else {
+      // Allowance / top-up credit → return it to the member's balance.
+      await db
+        .from('session_credits')
+        .update({ status: 'available', consumed_at: null, consumed_cohort_id: null })
+        .eq('id', c.id)
+      await logActivity({
+        memberId: c.member_id,
+        category: 'billing',
+        action: 'refund_issued',
+        summary: `Mentoring credit returned — cohort ${cohortName} was cancelled`,
+        metadata: { kind: 'mentoring_credit_return', cohortId },
+        actorType: 'admin',
+      }, db)
+    }
+  }
+}
+
+// ─── Admin: cohorts list, stats, calendar ──────────────────────────────────
+
+export interface AdminCohortRow {
+  id: string
+  name: string
+  theme: CohortTheme
+  mentorName: string | null
+  memberCount: number
+  plannedSessions: number
+  heldSessions: number
+  progressPct: number
+  lifecycle: 'active' | 'archived'
+}
+
+export async function listAllCohorts(): Promise<AdminCohortRow[]> {
+  const db = supabaseServer()
+  const { data } = await db
+    .from('mentoring_cohorts')
+    .select(`${COHORT_COLS}, members:mentor_member_id(first_name,last_name), cohort_members(member_id,status)`)
+    .eq('container_type', 'mentoring')
+    .order('created_at', { ascending: false })
+
+  const cohorts = ((data ?? []) as unknown as (RawCohort & { lifecycle?: string })[]).map((c) => ({
+    full: toCohortFull(c),
+    lifecycle: (c.lifecycle as 'active' | 'archived') ?? 'active',
+  }))
+  if (cohorts.length === 0) return []
+
+  const ids = cohorts.map((c) => c.full.id)
+  const { data: sess } = await db.from('sessions').select('cohort_id, status, scheduled_start').in('cohort_id', ids)
+  const now = Date.now()
+  const held = new Map<string, number>()
+  for (const s of (sess ?? []) as { cohort_id: string; status: string; scheduled_start: string }[]) {
+    if (s.status === 'completed' || (s.status === 'scheduled' && new Date(s.scheduled_start).getTime() <= now)) {
+      held.set(s.cohort_id, (held.get(s.cohort_id) ?? 0) + 1)
+    }
+  }
+
+  return cohorts.map(({ full, lifecycle }) => {
+    const heldN = held.get(full.id) ?? 0
+    return {
+      id: full.id,
+      name: full.name,
+      theme: full.theme,
+      mentorName: full.mentorName,
+      memberCount: full.memberCount,
+      plannedSessions: full.plannedSessions,
+      heldSessions: heldN,
+      progressPct: full.plannedSessions > 0 ? Math.min(100, Math.round((heldN / full.plannedSessions) * 100)) : 0,
+      lifecycle,
+    }
+  })
+}
+
+export interface CohortAccessRow {
+  id: string
+  name: string
+  freeForTierIds: string[]
+  oneOffPriceCents: number | null
+  creditCost: number
+}
+
+/** Per-cohort access config for the Membership & access table. */
+export async function listCohortAccessRows(): Promise<CohortAccessRow[]> {
+  const db = supabaseServer()
+  const { data } = await db
+    .from('mentoring_cohorts')
+    .select('id, name, free_for_tier_ids, one_off_price_cents, credit_cost')
+    .eq('container_type', 'mentoring')
+    .eq('lifecycle', 'active')
+    .order('name', { ascending: true })
+  return ((data ?? []) as { id: string; name: string; free_for_tier_ids: string[] | null; one_off_price_cents: number | null; credit_cost: number | null }[]).map((c) => ({
+    id: c.id,
+    name: c.name,
+    freeForTierIds: c.free_for_tier_ids ?? [],
+    oneOffPriceCents: c.one_off_price_cents,
+    creditCost: c.credit_cost ?? 1,
+  }))
+}
+
+export interface AdminCohortStats {
+  activeCohorts: number
+  membersEnrolled: number
+  sessionsThisWeek: number
+  pendingInvites: number
+}
+
+export async function getAdminCohortStats(): Promise<AdminCohortStats> {
+  const db = supabaseServer()
+  const { data: cohorts } = await db
+    .from('mentoring_cohorts')
+    .select('id, lifecycle')
+    .eq('container_type', 'mentoring')
+  const ids = (cohorts ?? []).map((c) => (c as { id: string }).id)
+  const activeCohorts = (cohorts ?? []).filter((c) => ((c as { lifecycle?: string }).lifecycle ?? 'active') === 'active').length
+
+  if (ids.length === 0) return { activeCohorts: 0, membersEnrolled: 0, sessionsThisWeek: 0, pendingInvites: 0 }
+
+  const weekAhead = new Date(Date.now() + 7 * 86_400_000).toISOString()
+  const nowIso = new Date().toISOString()
+  const [{ count: enrolled }, { count: pending }, { count: thisWeek }] = await Promise.all([
+    db.from('cohort_members').select('member_id', { count: 'exact', head: true }).in('cohort_id', ids).eq('status', 'active'),
+    db.from('cohort_members').select('member_id', { count: 'exact', head: true }).in('cohort_id', ids).eq('status', 'invited'),
+    db.from('sessions').select('id', { count: 'exact', head: true }).in('cohort_id', ids).eq('status', 'scheduled').gte('scheduled_start', nowIso).lte('scheduled_start', weekAhead),
+  ])
+  return {
+    activeCohorts,
+    membersEnrolled: enrolled ?? 0,
+    sessionsThisWeek: thisWeek ?? 0,
+    pendingInvites: pending ?? 0,
+  }
+}
+
+export interface CalendarSession {
+  id: string
+  title: string | null
+  start: string
+  end: string | null
+  cohortId: string
+  cohortName: string
+  theme: CohortTheme
+}
+
+/** All mentoring sessions for the calendar (optionally bounded to a month). */
+export async function listAllMentoringSessions(): Promise<CalendarSession[]> {
+  const db = supabaseServer()
+  const { data } = await db
+    .from('sessions')
+    .select('id, title, scheduled_start, scheduled_end, cohort_id, mentoring_cohorts!inner(name, theme, container_type)')
+    .eq('mentoring_cohorts.container_type', 'mentoring')
+    .order('scheduled_start', { ascending: true })
+
+  type Row = {
+    id: string
+    title: string | null
+    scheduled_start: string
+    scheduled_end: string | null
+    cohort_id: string
+    mentoring_cohorts: { name: string; theme: string | null } | { name: string; theme: string | null }[] | null
+  }
+  return ((data ?? []) as unknown as Row[]).map((s) => {
+    const c = Array.isArray(s.mentoring_cohorts) ? s.mentoring_cohorts[0] : s.mentoring_cohorts
+    return {
+      id: s.id,
+      title: s.title,
+      start: s.scheduled_start,
+      end: s.scheduled_end,
+      cohortId: s.cohort_id,
+      cohortName: c?.name ?? 'Cohort',
+      theme: (c?.theme as CohortTheme) ?? 'space',
+    }
+  })
+}
+
+// ─── Membership tiers (Membership & access admin) ───────────────────────────
+
+import Stripe from 'stripe'
+import { ALL_TIER_NAMES, tierGroupOf, type TierGroupKey } from '@/lib/tiers'
+
+function stripeClient(): Stripe | null {
+  const key = process.env.STRIPE_SECRET_KEY
+  return key ? new Stripe(key, { apiVersion: '2026-05-27.dahlia' }) : null
+}
+
+export interface MentoringTier {
+  id: string
+  name: string
+  group: TierGroupKey | null
+  isFree: boolean
+  /** Monthly USD price in cents, read live from Stripe (null if not on Stripe). */
+  monthlyPriceCents: number | null
+  includesFreeMentoring: boolean
+  creditsGrant: number
+}
+
+/** The 9 buyable membership tiers with live Stripe pricing + mentoring config,
+ * for the admin Membership & access table. */
+export async function listMentoringTiers(): Promise<MentoringTier[]> {
+  const db = supabaseServer()
+  const { data } = await db
+    .from('membership_tiers')
+    .select('id, name, is_free, stripe_price_id_monthly, includes_free_mentoring, mentoring_credits_grant')
+    .in('name', ALL_TIER_NAMES)
+
+  type Row = {
+    id: string
+    name: string
+    is_free: boolean
+    stripe_price_id_monthly: string | null
+    includes_free_mentoring: boolean | null
+    mentoring_credits_grant: number | null
+  }
+  const rows = (data ?? []) as Row[]
+  const stripe = stripeClient()
+
+  const tiers = await Promise.all(
+    rows.map(async (r) => {
+      let monthlyPriceCents: number | null = null
+      if (stripe && r.stripe_price_id_monthly) {
+        try {
+          const p = await stripe.prices.retrieve(r.stripe_price_id_monthly)
+          monthlyPriceCents = p.unit_amount ?? null
+        } catch {
+          monthlyPriceCents = null
+        }
+      }
+      return {
+        id: r.id,
+        name: r.name,
+        group: tierGroupOf(r.name),
+        isFree: r.is_free,
+        monthlyPriceCents,
+        includesFreeMentoring: !!r.includes_free_mentoring,
+        creditsGrant: r.mentoring_credits_grant ?? 0,
+      } satisfies MentoringTier
+    }),
+  )
+  // Order to match the 9-tier display order.
+  return tiers.sort((a, b) => ALL_TIER_NAMES.indexOf(a.name) - ALL_TIER_NAMES.indexOf(b.name))
+}
+
+/** Update a tier's mentoring config (admin Membership & access). */
+export async function updateTierMentoring(
+  tierId: string,
+  patch: { includesFreeMentoring?: boolean; creditsGrant?: number },
+): Promise<void> {
+  const db = supabaseServer()
+  const row: Record<string, unknown> = {}
+  if (patch.includesFreeMentoring !== undefined) row.includes_free_mentoring = patch.includesFreeMentoring
+  if (patch.creditsGrant !== undefined) row.mentoring_credits_grant = Math.max(0, Math.floor(patch.creditsGrant))
+  if (Object.keys(row).length === 0) return
+  await db.from('membership_tiers').update(row).eq('id', tierId)
+}
+
+// ─── Roster ─────────────────────────────────────────────────────────────────
+
+export interface RosterMember {
+  memberId: string
+  name: string
+  email: string | null
+  status: 'invited' | 'active'
+  /** Open + done actions for this member within the cohort (mentor/admin view). */
+  actionsDone: number
+  actionsTotal: number
+}
+
+/** Roster for a cohort with per-member action progress (mentor + admin Members tab). */
+export async function listCohortRoster(cohortId: string): Promise<RosterMember[]> {
+  const db = supabaseServer()
+  const { data: rows } = await db
+    .from('cohort_members')
+    .select('member_id, status, members:member_id(first_name, last_name, email)')
+    .eq('cohort_id', cohortId)
+    .order('status', { ascending: true })
+
+  type Row = {
+    member_id: string
+    status: string
+    members: { first_name: string | null; last_name: string | null; email: string | null } | { first_name: string | null; last_name: string | null; email: string | null }[] | null
+  }
+  const roster = (rows ?? []) as unknown as Row[]
+  if (roster.length === 0) return []
+
+  // Per-member action progress for this cohort (cohort_id covers both
+  // cohort-level and backfilled session-level actions).
+  const doneByMember = new Map<string, number>()
+  const totalByMember = new Map<string, number>()
+  const { data: acts } = await db
+    .from('session_actions')
+    .select('member_id, is_done')
+    .eq('cohort_id', cohortId)
+  for (const a of (acts ?? []) as { member_id: string; is_done: boolean }[]) {
+    totalByMember.set(a.member_id, (totalByMember.get(a.member_id) ?? 0) + 1)
+    if (a.is_done) doneByMember.set(a.member_id, (doneByMember.get(a.member_id) ?? 0) + 1)
+  }
+
+  return roster.map((r) => {
+    const m = Array.isArray(r.members) ? r.members[0] : r.members
+    return {
+      memberId: r.member_id,
+      name: [m?.first_name, m?.last_name].filter(Boolean).join(' ') || (m?.email ?? 'Member'),
+      email: m?.email ?? null,
+      status: (r.status as 'invited' | 'active') ?? 'active',
+      actionsDone: doneByMember.get(r.member_id) ?? 0,
+      actionsTotal: totalByMember.get(r.member_id) ?? 0,
+    }
+  })
+}
+
 // ─── Mentee landing aggregation ─────────────────────────────────────────────
 
 export interface MenteeCohortCard {
@@ -411,12 +1056,14 @@ export async function listMenteeCohortCards(member: CommunityMember): Promise<Me
     .in('cohort_id', ids)
     .order('scheduled_start', { ascending: true })
 
-  // Open actions for this member, mapped to their cohort via the session.
+  // Open actions for this member in these cohorts (cohort_id backfilled for
+  // session-tied actions, so this covers both cohort- and session-level tasks).
   const { data: acts } = await db
     .from('session_actions')
-    .select('is_done, sessions!inner(cohort_id)')
+    .select('cohort_id')
     .eq('member_id', member.id)
     .eq('is_done', false)
+    .in('cohort_id', ids)
 
   const now = Date.now()
   const nextByCohort = new Map<string, { start: string; end: string | null }>()
@@ -430,9 +1077,8 @@ export async function listMenteeCohortCards(member: CommunityMember): Promise<Me
     }
   }
   const actionsByCohort = new Map<string, number>()
-  for (const a of (acts ?? []) as unknown as { sessions: { cohort_id: string } | { cohort_id: string }[] }[]) {
-    const sx = Array.isArray(a.sessions) ? a.sessions[0] : a.sessions
-    if (sx?.cohort_id) actionsByCohort.set(sx.cohort_id, (actionsByCohort.get(sx.cohort_id) ?? 0) + 1)
+  for (const a of (acts ?? []) as { cohort_id: string | null }[]) {
+    if (a.cohort_id) actionsByCohort.set(a.cohort_id, (actionsByCohort.get(a.cohort_id) ?? 0) + 1)
   }
 
   return cohorts

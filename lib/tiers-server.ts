@@ -34,3 +34,63 @@ export async function resolveTierMap(): Promise<TierMap> {
 
   return { rows, idByName, nameById, groupById }
 }
+
+/**
+ * Batch-resolve every active (unexpired) tier id held by each member. Used to
+ * evaluate space access for a group of students (teacher Group spaces view).
+ */
+export async function getActiveTierIdsByMember(memberIds: string[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>()
+  if (memberIds.length === 0) return out
+
+  const db = supabaseServer()
+  const today = new Date().toISOString().split('T')[0]
+  const { data } = await db
+    .from('member_memberships')
+    .select('member_id, tier_id, expires_at, renewal_status')
+    .in('member_id', memberIds)
+    .eq('renewal_status', 'active')
+
+  for (const m of (data ?? []) as Array<{ member_id: string; tier_id: string | null; expires_at: string | null }>) {
+    if (!m.tier_id) continue
+    if (m.expires_at && m.expires_at < today) continue
+    const arr = out.get(m.member_id) ?? []
+    if (!arr.includes(m.tier_id)) arr.push(m.tier_id)
+    out.set(m.member_id, arr)
+  }
+  return out
+}
+
+/**
+ * Batch-resolve each member's primary active (unexpired) tier name. Used for tier
+ * pills on the Members grid and elsewhere a list of members is shown.
+ */
+export async function getActiveTierNames(memberIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  if (memberIds.length === 0) return out
+
+  const db = supabaseServer()
+  const today = new Date().toISOString().split('T')[0]
+  const { data } = await db
+    .from('member_memberships')
+    .select('member_id, started_at, expires_at, renewal_status, membership_tiers(name)')
+    .in('member_id', memberIds)
+    .eq('renewal_status', 'active')
+
+  const best = new Map<string, { started: number; name: string }>()
+  for (const m of (data ?? []) as Array<{
+    member_id: string
+    started_at: string
+    expires_at: string | null
+    membership_tiers: { name: string } | { name: string }[] | null
+  }>) {
+    if (m.expires_at && m.expires_at < today) continue
+    const tier = Array.isArray(m.membership_tiers) ? m.membership_tiers[0] : m.membership_tiers
+    if (!tier?.name) continue
+    const started = new Date(m.started_at).getTime()
+    const cur = best.get(m.member_id)
+    if (!cur || started > cur.started) best.set(m.member_id, { started, name: tier.name })
+  }
+  for (const [id, v] of best) out.set(id, v.name)
+  return out
+}

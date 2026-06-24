@@ -12,11 +12,12 @@ export default async function MemberLayout({ children }: { children: React.React
   const member = await getCurrentMember()
   const caps = member ? await getHostCaps(member.id) : null
   const showHosting = !!caps && (caps.canCoach || caps.canMentor)
+  const isTeacher = member?.event_role === 'teacher'
 
   return (
     <div className="min-h-screen bg-surface">
       <div className="flex">
-        <AppSidebar canHost={showHosting} />
+        <AppSidebar canHost={showHosting} isTeacher={isTeacher} isAdmin={isAdmin} />
 
         <div className="flex min-h-screen min-w-0 flex-1 flex-col">
           <AppTopBar isAdmin={isAdmin} />

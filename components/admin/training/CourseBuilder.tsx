@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { ObjectAssignments, type AdminTier } from '@/components/admin/training/ObjectAssignments'
+import { RecordSession } from '@/components/admin/training/RecordSession'
 import type { TrainableObject } from '@/lib/training-admin'
 import type { AdminModule, AdminSection, AdminLesson } from '@/components/admin/community/TrainingManager'
 import { deriveType, THEME_META, TYPE_META, type CourseTheme } from '@/lib/training-display'
@@ -567,8 +568,13 @@ function LessonEditor({
         </div>
       )}
 
-      {/* Existing lesson: show current content as an attached resource (read-only). */}
-      {existing && (
+      {/* Existing 'live' (Record) lesson: launch + record the JaaS session here. */}
+      {existing && existing.content_kind === 'live' && (
+        <RecordSession itemId={existing.id} recordingStatus={existing.recording_status} />
+      )}
+
+      {/* Existing non-live lesson: show current content as an attached resource. */}
+      {existing && existing.content_kind !== 'live' && (
         <div className="rounded-xl border border-brand-border p-3">
           <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Attached resource</p>
           <div className="flex items-center gap-2 text-sm text-brand-muted">

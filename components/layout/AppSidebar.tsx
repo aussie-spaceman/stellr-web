@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   Home, Trophy, MessageSquare, FolderOpen, Users,
-  GraduationCap, Heart, Star, Radio,
+  GraduationCap, Heart, Star, Radio, ClipboardList, Shield,
 } from 'lucide-react'
 
 type NavItem = { label: string; href: string; icon: typeof Home }
@@ -28,6 +28,16 @@ const ACADEMY_ITEMS: NavItem[] = [
   { label: 'Hosting',   href: '/community/hosting',   icon: Radio         },
 ]
 
+// Role-scoped sections (Spaces design). Teachers additionally see Teacher Tools;
+// admins additionally see Manage Spaces (the admin portal surface).
+const TEACHER_ITEMS: NavItem[] = [
+  { label: 'Group spaces', href: '/community/teacher/group-spaces', icon: ClipboardList },
+]
+
+const ADMIN_ITEMS: NavItem[] = [
+  { label: 'Manage Spaces', href: '/admin/community/spaces', icon: Shield },
+]
+
 const MOBILE_PRIMARY: NavItem[] = [
   { label: 'Home',         href: '/home',               icon: Home          },
   { label: 'Competitions', href: '/events',             icon: Trophy        },
@@ -40,9 +50,18 @@ const NON_SPACE_PREFIXES = [
   '/community/resources', '/community/members', '/community/training',
   '/community/mentoring', '/community/coaching', '/community/hosting',
   '/community/events', '/community/sessions', '/community/search',
+  '/community/teacher',
 ]
 
-export function AppSidebar({ canHost = false }: { canHost?: boolean }) {
+export function AppSidebar({
+  canHost = false,
+  isTeacher = false,
+  isAdmin = false,
+}: {
+  canHost?: boolean
+  isTeacher?: boolean
+  isAdmin?: boolean
+}) {
   const pathname = usePathname() ?? ''
 
   const isActive = (href: string) =>
@@ -98,6 +117,26 @@ export function AppSidebar({ canHost = false }: { canHost?: boolean }) {
           {academyItems.map((item) => (
             <SidebarLink key={item.href} item={item} active={isActive(item.href)} />
           ))}
+
+          {/* Teacher Tools — clearly separated from the regular Spaces item */}
+          {isTeacher && (
+            <>
+              <SectionHeading label="Teacher Tools" />
+              {TEACHER_ITEMS.map((item) => (
+                <SidebarLink key={item.href} item={item} active={isActive(item.href)} />
+              ))}
+            </>
+          )}
+
+          {/* Admin — links across to the Manage Spaces surface */}
+          {isAdmin && (
+            <>
+              <SectionHeading label="Admin" />
+              {ADMIN_ITEMS.map((item) => (
+                <SidebarLink key={item.href} item={item} active={isActive(item.href)} />
+              ))}
+            </>
+          )}
         </nav>
       </aside>
 

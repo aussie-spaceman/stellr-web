@@ -43,6 +43,7 @@ const SECTIONS: Section[] = [
     label: 'Academy', href: '/admin/community/training', color: '#E0A23A', icon: GraduationCap,
     items: [
       { href: '/admin/community/training', label: 'Training' },
+      { href: '/admin/community/cohorts', label: 'Mentoring' },
       { href: '/admin/community/sessions', label: 'Sessions' },
       { href: '/admin/community/gates', label: 'Gates' },
     ],

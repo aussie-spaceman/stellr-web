@@ -4,6 +4,10 @@
 
 export const DEFAULT_TZ = 'America/Chicago'
 
+/** Default USD price per mentoring credit for top-up purchases (overridable via
+ * the MENTORING_CREDIT_PRICE_CENTS env var server-side). */
+export const CREDIT_PACK_PRICE_CENTS = 4000
+
 /** Selectable cohort time zones (handoff: default CT, selectable per cohort). */
 export const TIMEZONES: { value: string; label: string }[] = [
   { value: 'America/Chicago', label: 'Central Time (CT)' },
@@ -82,6 +86,19 @@ export function formatSessionTime(
     day: fmt(tz, { day: 'numeric' }, start),
     month: fmt(tz, { month: 'short' }, start),
   }
+}
+
+/** Convert a wall-clock date+time entered in a given IANA zone to a UTC ISO
+ * string. Sessions are stored in UTC and displayed back in the cohort zone. */
+export function zonedToUtcIso(dateStr: string, timeStr: string, tz: string): string {
+  const [y, mo, d] = dateStr.split('-').map(Number)
+  const [h, mi] = timeStr.split(':').map(Number)
+  const utcGuess = Date.UTC(y, mo - 1, d, h, mi, 0)
+  const guessDate = new Date(utcGuess)
+  const tzMs = new Date(guessDate.toLocaleString('en-US', { timeZone: tz })).getTime()
+  const utcMs = new Date(guessDate.toLocaleString('en-US', { timeZone: 'UTC' })).getTime()
+  const offset = tzMs - utcMs
+  return new Date(utcGuess - offset).toISOString()
 }
 
 // ─── Theme tiles (handoff: space violet / enviro green) ─────────────────────

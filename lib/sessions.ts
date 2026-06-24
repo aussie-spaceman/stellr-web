@@ -893,11 +893,20 @@ export async function inviteMembersToCohort(cohortId: string, memberIds: string[
   if (pendingIds.length) {
     const { data: cohort } = await db.from('mentoring_cohorts').select('name').eq('id', cohortId).maybeSingle()
     const name = (cohort?.name as string) ?? 'a mentoring cohort'
+    const base = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
+    const inviteUrl = `${base}/community/mentoring/${cohortId}/invite`
     await notifyMembers(pendingIds, {
       type: 'announcement',
-      body: `You've been invited to the ${name} mentoring cohort. Open Mentoring to accept.`,
-      referenceType: 'cohort',
+      body: `You've been invited to join the ${name} mentoring cohort.`,
+      // reference_type 'cohort_invite' makes the notification bell render Accept/Decline.
+      referenceType: 'cohort_invite',
       referenceId: cohortId,
+      email: {
+        subject: `You're invited to the ${name} mentoring cohort`,
+        html: `<p>You've been invited to join the <strong>${name}</strong> mentoring cohort on Stellr.</p>
+               <p><a href="${inviteUrl}">Review and accept your invitation →</a></p>`,
+        text: `You've been invited to join the ${name} mentoring cohort. Review and accept: ${inviteUrl}`,
+      },
     })
   }
   return pendingIds.length

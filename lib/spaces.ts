@@ -231,6 +231,8 @@ export interface SpaceDetail extends SpaceSummary {
   access: SpaceAccess
   myRole: SpaceRole | null
   channels: SpaceChannel[]
+  postingPolicy: 'all' | 'moderators'
+  allowMemberUploads: boolean
 }
 
 /**
@@ -245,7 +247,7 @@ export async function getSpaceForMember(
   const db = supabaseServer()
   const { data: s } = await db
     .from('community_spaces')
-    .select('id, slug, name, description, theme, access_type, is_archived')
+    .select('id, slug, name, description, theme, access_type, is_archived, posting_policy, allow_member_uploads')
     .eq('slug', slug)
     .maybeSingle()
   if (!s || s.is_archived) return null
@@ -288,6 +290,8 @@ export async function getSpaceForMember(
     access,
     myRole: membership?.status === 'active' ? membership.role : null,
     channels: (channels ?? []) as SpaceChannel[],
+    postingPolicy: ((s as { posting_policy?: 'all' | 'moderators' }).posting_policy ?? 'all'),
+    allowMemberUploads: ((s as { allow_member_uploads?: boolean }).allow_member_uploads ?? true),
   }
 }
 

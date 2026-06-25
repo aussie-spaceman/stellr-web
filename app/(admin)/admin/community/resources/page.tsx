@@ -79,6 +79,7 @@ export default async function AdminCommunityResourcesPage() {
               <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Type</th>
               <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Size</th>
               <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Attached to</th>
+              <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Opens</th>
               <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Actions</th>
             </tr>
           </thead>
@@ -113,6 +114,7 @@ export default async function AdminCommunityResourcesPage() {
                   <td className="px-4 py-3 text-brand-muted">
                     {r.attachedCount} object{r.attachedCount === 1 ? '' : 's'}
                   </td>
+                  <td className="px-4 py-3 text-brand-muted-soft">{r.downloads}</td>
                   <td className="px-4 py-3">
                     <AdminBinaryActions binaryId={r.id} title={r.title} attachedObjects={r.attachedObjects} />
                   </td>
@@ -121,7 +123,7 @@ export default async function AdminCommunityResourcesPage() {
             })}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-sm text-brand-muted-soft">
+                <td colSpan={6} className="px-4 py-6 text-center text-sm text-brand-muted-soft">
                   No resources yet.
                 </td>
               </tr>

@@ -8,13 +8,13 @@ interface Props {
   attachmentId: string
   initialName: string
   kind: ResourceKind
-  ownedByMe: boolean
+  canRename: boolean
 }
 
 // Interactive header for the resource detail page: the resolved name with an
 // owner-only inline rename, the type-aware primary action (Download / Open /
 // Watch) which re-checks the gate server-side, and the flag entry point.
-export function ResourceDetailHeader({ attachmentId, initialName, kind, ownedByMe }: Props) {
+export function ResourceDetailHeader({ attachmentId, initialName, kind, canRename }: Props) {
   const [name, setName] = useState(initialName)
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(initialName)
@@ -103,7 +103,7 @@ export function ResourceDetailHeader({ attachmentId, initialName, kind, ownedByM
       ) : (
         <div className="flex items-center gap-2">
           <h1 className="font-heading text-2xl text-brand-blue-dark">{name}</h1>
-          {ownedByMe && (
+          {canRename && (
             <button onClick={() => setEditing(true)} title="Rename" className="text-brand-muted-soft hover:text-brand-blue-dark">
               <Pencil className="h-4 w-4" />
             </button>

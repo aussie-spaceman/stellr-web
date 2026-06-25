@@ -1,5 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { memberMeetsTier, type CommunityMember } from '@/lib/community'
+import { managedContainerIds } from '@/lib/resource-upload'
+import { accessGatesEnforced, eventAccessGates } from '@/lib/access-gates'
 
 // Global Resources Catalogue — read path (Resources_Refactor handover, PR1).
 //
@@ -54,9 +56,18 @@ export interface CatalogueProvenance {
 }
 
 export interface CatalogueRow {
-  /** container_contents.id — the attachment, and the /resources/:id route param. */
+  /**
+   * 'catalogue' = a container_contents attachment (full detail/rename/flag).
+   * 'training'  = a read-only lesson resource/recording resolved live from the
+   * training tables (opens in-context; no catalogue detail/rename/flag).
+   */
+  source: 'catalogue' | 'training'
+  /**
+   * For catalogue rows: container_contents.id (the /resources/:id route param +
+   * download ref). For training rows: an open token ('tr:<id>' | 'rec:<itemId>').
+   */
   attachmentId: string
-  /** content_ref — the stored binary (community_resources.id). */
+  /** content_ref — the stored binary (community_resources.id). Empty for training. */
   binaryId: string
   contentType: 'resource' | 'recording'
   kind: ResourceKind
@@ -68,8 +79,11 @@ export interface CatalogueRow {
   uploadedById: string | null
   uploadedByName: string | null
   addedAt: string
+  downloadCount: number
   /** True when the current member uploaded the binary (drives the rename pencil). */
   ownedByMe: boolean
+  /** Whether the member may rename this attachment (uploader, or manages its container). */
+  canRename: boolean
   provenance: CatalogueProvenance
 }
 
@@ -142,7 +156,54 @@ async function memberContainers(memberId: string): Promise<Map<string, Container
       lifecycle: c.lifecycle ?? 'active',
     })
   }
+
+  // Spaces resolve their roster via community_space_members, NOT cohort_members,
+  // so they're added separately. The container's visibility comes from the space
+  // (community_spaces.access_type), not the auto-created container row.
+  await addSpaceContainers(db, memberId, map)
+
   return map
+}
+
+/** Add the member's active Spaces (community_space_members) to the container map. */
+async function addSpaceContainers(
+  db: ReturnType<typeof supabaseServer>,
+  memberId: string,
+  map: Map<string, ContainerMeta>,
+): Promise<void> {
+  const { data: rows } = await db
+    .from('community_space_members')
+    .select('community_spaces!inner(slug, name, access_type, is_archived)')
+    .eq('member_id', memberId)
+    .eq('status', 'active')
+
+  type Space = { slug: string; name: string; access_type: string | null; is_archived: boolean }
+  const spaceBySlug = new Map<string, Space>()
+  for (const r of rows ?? []) {
+    const s = (Array.isArray(r.community_spaces) ? r.community_spaces[0] : r.community_spaces) as Space | null
+    if (s && !s.is_archived) spaceBySlug.set(s.slug, s)
+  }
+  if (spaceBySlug.size === 0) return
+
+  // Map each space (by slug = campaign_ref) to its container row.
+  const { data: containers } = await db
+    .from('mentoring_cohorts')
+    .select('id, name, campaign_ref, lifecycle')
+    .eq('container_type', 'space')
+    .in('campaign_ref', [...spaceBySlug.keys()])
+
+  for (const c of containers ?? []) {
+    const space = spaceBySlug.get(c.campaign_ref as string)
+    if (!space) continue
+    map.set(c.id as string, {
+      id: c.id as string,
+      name: space.name,
+      type: 'space',
+      campaignRef: c.campaign_ref as string,
+      visibility: normaliseVisibility(space.access_type),
+      lifecycle: (c.lifecycle as string | null) ?? 'active',
+    })
+  }
 }
 
 interface RawAttachment {
@@ -184,6 +245,7 @@ interface BinaryMeta {
   fileSizeBytes: number | null
   uploadedBy: string | null
   createdAt: string
+  downloadCount: number
 }
 
 /** Resolve binary metadata (community_resources) for a set of content_refs. */
@@ -193,7 +255,7 @@ async function binariesFor(refs: string[]): Promise<Map<string, BinaryMeta>> {
   const db = supabaseServer()
   const { data } = await db
     .from('community_resources')
-    .select('id, title, description, file_type, file_size_bytes, uploaded_by, created_at')
+    .select('id, title, description, file_type, file_size_bytes, uploaded_by, created_at, download_count')
     .in('id', refs)
   for (const r of data ?? []) {
     map.set(r.id as string, {
@@ -204,6 +266,7 @@ async function binariesFor(refs: string[]): Promise<Map<string, BinaryMeta>> {
       fileSizeBytes: (r.file_size_bytes as number | null) ?? null,
       uploadedBy: (r.uploaded_by as string | null) ?? null,
       createdAt: r.created_at as string,
+      downloadCount: (r.download_count as number | null) ?? 0,
     })
   }
   return map
@@ -235,6 +298,32 @@ function passesMinMembership(member: CommunityMember, minMembership: number | nu
   return memberMeetsTier(member, minMembership)
 }
 
+/**
+ * Container ids the member is LOCKED out of by the payment ∧ DocuSign gate, when
+ * enforcement is on (handover §0.2/§3; convergence P4). Returns empty when the
+ * flag is off (report-only) so the catalogue stays roster+min_membership only.
+ * Only competition containers carry a real gate today; other types auto-pass.
+ */
+async function lockedContainerIds(
+  member: CommunityMember,
+  containers: Map<string, ContainerMeta>,
+): Promise<Set<string>> {
+  const locked = new Set<string>()
+  if (!accessGatesEnforced()) return locked
+
+  const bySlug = new Map<string, string[]>()
+  for (const c of containers.values()) {
+    if ((c.type === 'event_participation' || c.type === 'campaign_participation') && c.campaignRef) {
+      bySlug.set(c.campaignRef, [...(bySlug.get(c.campaignRef) ?? []), c.id])
+    }
+  }
+  for (const [slug, ids] of bySlug) {
+    const gate = await eventAccessGates(member, slug)
+    if (!gate.unlocked) ids.forEach((id) => locked.add(id))
+  }
+  return locked
+}
+
 export interface CatalogueQuery {
   search?: string
   /** Type filter; 'all' (default) returns every kind. */
@@ -257,17 +346,24 @@ export async function listMemberResources(
 
   const binaries = await binariesFor([...new Set(attachments.map((a) => a.contentRef))])
   const names = await uploaderNames([...binaries.values()].map((b) => b.uploadedBy).filter((x): x is string => !!x))
+  // Containers the member manages → may rename attachments in them (#6 fast-follow).
+  const managed = await managedContainerIds(member)
+  // Gate-locked containers (only when ACCESS_GATES_ENFORCE is on).
+  const locked = await lockedContainerIds(member, containers)
 
   let rows: CatalogueRow[] = []
   for (const a of attachments) {
     const container = containers.get(a.containerId)
     const binary = binaries.get(a.contentRef)
-    // Drop rows whose binary no longer resolves (e.g. deleted) or that the
-    // attachment-level membership floor excludes.
+    // Drop rows whose binary no longer resolves (e.g. deleted), that the
+    // attachment-level membership floor excludes, or whose container is gate-locked.
     if (!container || !binary) continue
+    if (locked.has(container.id)) continue
     if (!passesMinMembership(member, a.minMembership)) continue
 
+    const ownedByMe = !!binary.uploadedBy && binary.uploadedBy === member.id
     rows.push({
+      source: 'catalogue',
       attachmentId: a.id,
       binaryId: binary.id,
       contentType: a.contentType,
@@ -279,7 +375,9 @@ export async function listMemberResources(
       uploadedById: binary.uploadedBy,
       uploadedByName: binary.uploadedBy ? names.get(binary.uploadedBy) ?? null : null,
       addedAt: a.addedAt,
-      ownedByMe: !!binary.uploadedBy && binary.uploadedBy === member.id,
+      downloadCount: binary.downloadCount,
+      ownedByMe,
+      canRename: member.isAdmin || ownedByMe || managed.has(container.id),
       provenance: {
         containerId: container.id,
         containerType: container.type,
@@ -289,6 +387,9 @@ export async function listMemberResources(
       },
     })
   }
+
+  // Read-only training source: lesson resources + recordings for enrolled courses.
+  rows.push(...(await listTrainingCatalogueRows(member)))
 
   // Type filter.
   if (query.kind && query.kind !== 'all') {
@@ -303,7 +404,7 @@ export async function listMemberResources(
     )
   }
 
-  // Sort. 'downloads' falls back to recency until the binary counter lands (PR4).
+  // Sort.
   switch (query.sort ?? 'recent') {
     case 'name':
       rows.sort((a, b) => a.name.localeCompare(b.name))
@@ -315,10 +416,104 @@ export async function listMemberResources(
       )
       break
     case 'downloads':
+      rows.sort((a, b) => b.downloadCount - a.downloadCount || +new Date(b.addedAt) - +new Date(a.addedAt))
+      break
     case 'recent':
     default:
       rows.sort((a, b) => +new Date(b.addedAt) - +new Date(a.addedAt))
       break
+  }
+
+  return rows
+}
+
+/**
+ * Read-only catalogue rows for the member's training courses (decision: training
+ * is a separate content model — training_item_resources + lesson recordings — not
+ * community_resources). Scoped to courses the member is ENROLLED in
+ * (training_enrollments = the training "roster"). These rows open in-context and
+ * carry no catalogue detail / rename / flag.
+ */
+async function listTrainingCatalogueRows(member: CommunityMember): Promise<CatalogueRow[]> {
+  const db = supabaseServer()
+
+  const { data: enrollments } = await db
+    .from('training_enrollments')
+    .select('module_id')
+    .eq('member_id', member.id)
+  const moduleIds = [...new Set((enrollments ?? []).map((e) => e.module_id as string))]
+  if (moduleIds.length === 0) return []
+
+  const [{ data: modules }, { data: items }] = await Promise.all([
+    db.from('training_modules').select('id, title').in('id', moduleIds),
+    db
+      .from('training_items')
+      .select('id, module_id, title, status, recording_path, recording_status, created_at')
+      .in('module_id', moduleIds),
+  ])
+  const moduleTitle = new Map((modules ?? []).map((m) => [m.id as string, m.title as string]))
+  const publishedItems = (items ?? []).filter((i) => (i.status as string | null) !== 'draft')
+  const itemModule = new Map(publishedItems.map((i) => [i.id as string, i.module_id as string]))
+  const itemIds = publishedItems.map((i) => i.id as string)
+
+  const prov = (moduleId: string): CatalogueProvenance => ({
+    containerId: moduleId,
+    containerType: 'training',
+    label: moduleTitle.get(moduleId) ?? 'Training course',
+    href: `/community/training/${moduleId}`,
+    visibility: 'open',
+  })
+  const base = {
+    binaryId: '',
+    description: null,
+    fileSizeBytes: null,
+    uploadedById: null,
+    uploadedByName: null,
+    downloadCount: 0,
+    ownedByMe: false,
+    canRename: false,
+  }
+
+  const rows: CatalogueRow[] = []
+
+  // Lesson file/link resources.
+  if (itemIds.length > 0) {
+    const { data: res } = await db
+      .from('training_item_resources')
+      .select('id, item_id, kind, title, created_at')
+      .in('item_id', itemIds)
+    for (const r of res ?? []) {
+      const moduleId = itemModule.get(r.item_id as string)
+      if (!moduleId) continue
+      const kind = (r.kind as string) === 'link' ? 'link' : 'file'
+      rows.push({
+        ...base,
+        source: 'training',
+        attachmentId: `tr:${r.id as string}`,
+        contentType: 'resource',
+        kind,
+        name: r.title as string,
+        fileType: kind === 'link' ? 'link' : null,
+        addedAt: r.created_at as string,
+        provenance: prov(moduleId),
+      })
+    }
+  }
+
+  // Lesson recordings (live lessons whose replay is available).
+  for (const i of publishedItems) {
+    if (!i.recording_path || (i.recording_status as string | null) !== 'available') continue
+    rows.push({
+      ...base,
+      source: 'training',
+      attachmentId: `rec:${i.id as string}`,
+      contentType: 'recording',
+      kind: 'video',
+      name: `${i.title as string} (recording)`,
+      fileType: 'video/mp4',
+      addedAt: i.created_at as string,
+      provenance: prov(i.module_id as string),
+    })
   }
 
   return rows
@@ -336,7 +531,10 @@ export interface ResourceDetail {
   uploadedById: string | null
   uploadedByName: string | null
   addedAt: string
+  downloadCount: number
   ownedByMe: boolean
+  /** Whether the member may rename this attachment (uploader, or manages its container). */
+  canRename: boolean
   /** The container the clicked attachment lives in — flag context (PR3). */
   viewedInContainerId: string
   /** Every container this member can reach the binary through ("How you have access"). */
@@ -406,6 +604,8 @@ export async function getResourceDetail(
   }
 
   const names = binary.uploadedBy ? await uploaderNames([binary.uploadedBy]) : new Map<string, string>()
+  const ownedByMe = !!binary.uploadedBy && binary.uploadedBy === member.id
+  const managed = await managedContainerIds(member)
 
   return {
     binaryId,
@@ -418,7 +618,9 @@ export async function getResourceDetail(
     uploadedById: binary.uploadedBy,
     uploadedByName: binary.uploadedBy ? names.get(binary.uploadedBy) ?? null : null,
     addedAt: binary.createdAt,
-    ownedByMe: !!binary.uploadedBy && binary.uploadedBy === member.id,
+    downloadCount: binary.downloadCount,
+    ownedByMe,
+    canRename: member.isAdmin || ownedByMe || managed.has(clicked.container_id as string),
     viewedInContainerId: clicked.container_id as string,
     attachments,
   }
@@ -429,8 +631,8 @@ export async function getResourceDetail(
  * link (the destination URL is returned directly).
  */
 export type DownloadableResolution =
-  | { kind: 'file'; storagePath: string; title: string }
-  | { kind: 'link'; url: string; title: string }
+  | { kind: 'file'; storagePath: string; title: string; binaryId: string }
+  | { kind: 'link'; url: string; title: string; binaryId: string }
 
 /**
  * Resolve an attachment to its binary for open/download, re-checking access at
@@ -458,6 +660,10 @@ export async function resolveDownloadableAttachment(
   if (!container || !passesMinMembership(member, (att.min_membership as number | null) ?? null)) {
     return null
   }
+  // Gate-locked containers deny the open at request time (when enforced).
+  if (accessGatesEnforced() && (await lockedContainerIds(member, new Map([[container.id, container]]))).has(container.id)) {
+    return null
+  }
 
   const { data: binary } = await db
     .from('community_resources')
@@ -467,18 +673,72 @@ export async function resolveDownloadableAttachment(
   if (!binary) return null
 
   const title = binary.title as string
+  const binaryId = att.content_ref as string
   // A link resource (or any binary with no stored file) opens to its URL.
   if ((binary.file_type as string | null) === 'link' || !binary.storage_path) {
     const url = binary.source_url as string | null
-    return url ? { kind: 'link', url, title } : null
+    return url ? { kind: 'link', url, title, binaryId } : null
   }
-  return { kind: 'file', storagePath: binary.storage_path as string, title }
+  return { kind: 'file', storagePath: binary.storage_path as string, title, binaryId }
 }
 
 /**
- * Whether `member` may rename `attachmentId` (handover §4.4: only the binary's
- * uploader). Returns the binary id on success so the caller can patch
- * container_contents.display_name; null when not owner / not found.
+ * Resolve a training open-token ('tr:<resourceId>' | 'rec:<itemId>') to a file
+ * (sign in the caller) or a link, re-checking access at request time. Access =
+ * enrolled in the lesson's module (the training roster) or admin. Returns null
+ * when not reachable.
+ */
+export async function resolveTrainingOpen(
+  member: CommunityMember,
+  ref: string,
+): Promise<{ kind: 'file' | 'recording'; storagePath: string; title: string } | { kind: 'link'; url: string; title: string } | null> {
+  const db = supabaseServer()
+
+  const enrolledIn = async (moduleId: string): Promise<boolean> => {
+    if (member.isAdmin) return true
+    const { data } = await db
+      .from('training_enrollments')
+      .select('id')
+      .eq('member_id', member.id)
+      .eq('module_id', moduleId)
+      .maybeSingle()
+    return !!data
+  }
+
+  if (ref.startsWith('tr:')) {
+    const { data: r } = await db
+      .from('training_item_resources')
+      .select('kind, title, storage_path, external_url, training_items!inner(module_id)')
+      .eq('id', ref.slice(3))
+      .maybeSingle()
+    if (!r) return null
+    const item = Array.isArray(r.training_items) ? r.training_items[0] : r.training_items
+    const moduleId = (item as { module_id?: string } | null)?.module_id
+    if (!moduleId || !(await enrolledIn(moduleId))) return null
+    if ((r.kind as string) === 'link') {
+      return r.external_url ? { kind: 'link', url: r.external_url as string, title: r.title as string } : null
+    }
+    return r.storage_path ? { kind: 'file', storagePath: r.storage_path as string, title: r.title as string } : null
+  }
+
+  if (ref.startsWith('rec:')) {
+    const { data: item } = await db
+      .from('training_items')
+      .select('title, module_id, recording_path, recording_status')
+      .eq('id', ref.slice(4))
+      .maybeSingle()
+    if (!item || !item.recording_path || (item.recording_status as string | null) !== 'available') return null
+    if (!(await enrolledIn(item.module_id as string))) return null
+    return { kind: 'recording', storagePath: item.recording_path as string, title: item.title as string }
+  }
+
+  return null
+}
+
+/**
+ * Whether `member` may rename `attachmentId`. Allowed for the binary's uploader
+ * (handover §4.4), a manager of the attachment's container (#6 fast-follow), or a
+ * platform admin. Returns the binary id on success; null otherwise.
  */
 export async function canRenameAttachment(
   member: CommunityMember,
@@ -487,7 +747,7 @@ export async function canRenameAttachment(
   const db = supabaseServer()
   const { data: att } = await db
     .from('container_contents')
-    .select('content_ref, content_type')
+    .select('content_ref, content_type, container_id')
     .eq('id', attachmentId)
     .in('content_type', ['resource', 'recording'])
     .maybeSingle()
@@ -499,6 +759,10 @@ export async function canRenameAttachment(
     .eq('id', att.content_ref as string)
     .maybeSingle()
   if (!binary) return null
-  if (!member.isAdmin && binary.uploaded_by !== member.id) return null
+
+  if (!member.isAdmin && binary.uploaded_by !== member.id) {
+    const managed = await managedContainerIds(member)
+    if (!managed.has(att.container_id as string)) return null
+  }
   return { binaryId: binary.id as string }
 }

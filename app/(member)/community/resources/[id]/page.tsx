@@ -53,7 +53,7 @@ export default async function ResourceDetailPage({ params }: { params: Promise<{
         attachmentId={id}
         initialName={detail.name}
         kind={detail.kind}
-        ownedByMe={detail.ownedByMe}
+        canRename={detail.canRename}
       />
 
       {/* How you have access */}
@@ -100,6 +100,10 @@ export default async function ResourceDetailPage({ params }: { params: Promise<{
           <div>
             <dt className="text-xs uppercase tracking-wide text-brand-muted-soft">Added</dt>
             <dd className="text-brand-blue-dark">{added}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-brand-muted-soft">Opens</dt>
+            <dd className="text-brand-blue-dark">{detail.downloadCount}</dd>
           </div>
         </dl>
         {detail.description && <p className="mt-4 text-sm text-brand-muted">{detail.description}</p>}

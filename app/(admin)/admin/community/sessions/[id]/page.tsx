@@ -5,6 +5,7 @@ import { listModules } from '@/lib/training'
 import { supabaseServer } from '@/lib/supabase'
 import { ALL_TIER_NAMES } from '@/lib/tiers'
 import { getWorkshopFull } from '@/lib/coaching'
+import { listCohortFileResources } from '@/lib/mentoring'
 import { AdminCoachingNav } from '@/components/admin/coaching/AdminCoachingNav'
 import { AdminManageWorkshop } from '@/components/admin/coaching/AdminManageWorkshop'
 
@@ -20,13 +21,17 @@ export default async function AdminManageWorkshopPage({ params }: { params: Prom
   if (!workshop) notFound()
 
   const db = supabaseServer()
-  const [sessions, training, modules, channelId, { data: tierRows }] = await Promise.all([
+  const [sessions, training, modules, channelId, fileResources, { data: tierRows }] = await Promise.all([
     listCohortSessions(id),
     listCohortTraining(member, id),
     listModules(member),
     getCohortChannel(id),
+    listCohortFileResources(id),
     db.from('membership_tiers').select('id, name').in('name', ALL_TIER_NAMES).order('sort_order'),
   ])
+  const recordings = sessions
+    .filter((s) => s.recording_status === 'available')
+    .map((s) => ({ id: s.id, title: s.title, start: s.scheduled_start }))
 
   const { count: flaggedCount } = await db
     .from('chat_messages')
@@ -56,6 +61,8 @@ export default async function AdminManageWorkshopPage({ params }: { params: Prom
           }}
           sessions={sessions.map((s) => ({ id: s.id, title: s.title, start: s.scheduled_start, end: s.scheduled_end, status: s.status, recordingStatus: s.recording_status }))}
           resources={training.map((t) => ({ moduleId: t.moduleId, title: t.title, isMandatory: t.isMandatory, dueAt: t.dueAt }))}
+          fileResources={fileResources}
+          recordings={recordings}
           modules={modules.map((m) => ({ id: m.id, title: m.title }))}
           tiers={((tierRows ?? []) as { id: string; name: string }[]).map((t) => ({ id: t.id, name: t.name }))}
           channelId={channelId}

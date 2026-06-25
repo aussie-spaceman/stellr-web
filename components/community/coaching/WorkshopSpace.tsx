@@ -32,7 +32,7 @@ type Props = {
   allowanceRemaining: number
   sessions: SessionRow[]
   resources: ResourceRow[]
-  recordings: { id: string; title: string | null; start: string }[]
+  recordings: { id: string; title: string | null; start: string; end: string | null }[]
   fileResources: FileResourceRow[]
   actions: ActionRow[]
   nextSession: { id: string; title: string | null; start: string; end: string | null; gcalUrl: string | null } | null
@@ -45,13 +45,26 @@ type Props = {
 export function WorkshopSpace(props: Props) {
   const { workshop } = props
   const [tab, setTab] = useState<Tab>('overview')
+  const [actions, setActions] = useState(props.actions)
+
+  // Shared action toggle so the Overview mini-checklist and the Actions tab stay
+  // in sync (optimistic, reverts on failure).
+  const toggleAction = async (id: string, current: boolean) => {
+    setActions((prev) => prev.map((a) => (a.id === id ? { ...a, isDone: !current } : a)))
+    const res = await fetch('/api/community/sessions/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actionId: id, done: !current }),
+    })
+    if (!res.ok) setActions((prev) => prev.map((a) => (a.id === id ? { ...a, isDone: current } : a)))
+  }
 
   const TABS: { key: Tab; label: string; count?: number }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'sessions', label: 'Sessions' },
     { key: 'training', label: 'Training' },
     { key: 'recordings', label: 'Recordings' },
-    { key: 'actions', label: 'Actions', count: props.actions.filter((a) => !a.isDone).length || undefined },
+    { key: 'actions', label: 'Actions', count: actions.filter((a) => !a.isDone).length || undefined },
     { key: 'chat', label: 'Chat' },
   ]
 
@@ -125,11 +138,11 @@ export function WorkshopSpace(props: Props) {
       </div>
 
       {/* ── Panes ── */}
-      {tab === 'overview' && <OverviewPane {...props} />}
+      {tab === 'overview' && <OverviewPane {...props} actions={actions} onToggle={toggleAction} />}
       {tab === 'sessions' && <SessionsPane sessions={props.sessions} tz={workshop.timezone} isCoach={workshop.isCoach} workshopId={workshop.id} />}
       {tab === 'training' && <TrainingPane resources={props.resources} fileResources={props.fileResources} tz={workshop.timezone} />}
       {tab === 'recordings' && <RecordingsPane recordings={props.recordings} tz={workshop.timezone} />}
-      {tab === 'actions' && <ActionsPane actions={props.actions} tz={workshop.timezone} coachName={workshop.coachName} />}
+      {tab === 'actions' && <ActionsPane actions={actions} onToggle={toggleAction} tz={workshop.timezone} coachName={workshop.coachName} />}
       {tab === 'chat' && (
         <ChatPanel
           channelId={props.channelId}
@@ -144,8 +157,8 @@ export function WorkshopSpace(props: Props) {
 }
 
 // ── Overview ──────────────────────────────────────────────────────────────
-function OverviewPane(props: Props) {
-  const { workshop, nextSession, resources, actions, lastMessage } = props
+function OverviewPane(props: Props & { onToggle: (id: string, current: boolean) => void }) {
+  const { workshop, nextSession, resources, actions, lastMessage, onToggle } = props
   const next = nextSession ? formatSessionTime(nextSession.start, nextSession.end, workshop.timezone) : null
   const mandatory = resources.filter((r) => r.isMandatory && !(r.itemCount > 0 && r.completedCount >= r.itemCount))
   const openActions = actions.filter((a) => !a.isDone)
@@ -243,9 +256,13 @@ function OverviewPane(props: Props) {
             <ul className="mt-3 space-y-2.5">
               {actions.slice(0, 5).map((a) => (
                 <li key={a.id} className="flex items-start gap-2.5 text-sm">
-                  <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${a.isDone ? 'border-enviro-green bg-enviro-green' : 'border-content-faint'}`}>
+                  <button
+                    onClick={() => onToggle(a.id, a.isDone)}
+                    aria-label={a.isDone ? 'Mark not done' : 'Mark done'}
+                    className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${a.isDone ? 'border-enviro-green bg-enviro-green' : 'border-content-faint hover:border-enviro-green'}`}
+                  >
                     {a.isDone && <Check className="h-3 w-3 text-white" />}
-                  </span>
+                  </button>
                   <span className={a.isDone ? 'text-content-faint line-through' : 'text-content-body'}>{a.title}</span>
                 </li>
               ))}
@@ -322,9 +339,18 @@ function SessionsPane({ sessions, tz, isCoach, workshopId }: { sessions: Session
               <div className="flex items-center gap-2">
                 {s.recordingStatus === 'available' ? (
                   <MaterialDownloadButton endpoint={`/api/community/sessions/${s.id}/recording`} title={`${s.title ?? 'session'}-recording`} label="Watch recording" />
-                ) : (
-                  !isPast && <JoinButton sessionId={s.id} scheduledStart={s.start} isHost={isCoach} />
-                )}
+                ) : isNext ? (
+                  <JoinButton sessionId={s.id} scheduledStart={s.start} isHost={isCoach} />
+                ) : !isPast ? (
+                  <a
+                    href={gcalUrl(s.title ?? 'Coaching session', s.start, s.end)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-[9px] bg-primary-soft px-3.5 py-2 text-[13px] font-semibold text-primary hover:bg-primary/15"
+                  >
+                    <CalendarPlus className="h-4 w-4" /> Add to Calendar
+                  </a>
+                ) : null}
               </div>
             </li>
           )
@@ -399,7 +425,7 @@ function TrainingPane({ resources, fileResources, tz }: { resources: ResourceRow
 }
 
 // ── Recordings ──────────────────────────────────────────────────────────────
-function RecordingsPane({ recordings, tz }: { recordings: { id: string; title: string | null; start: string }[]; tz: string }) {
+function RecordingsPane({ recordings, tz }: { recordings: { id: string; title: string | null; start: string; end: string | null }[]; tz: string }) {
   if (recordings.length === 0) {
     return (
       <Card>
@@ -419,6 +445,9 @@ function RecordingsPane({ recordings, tz }: { recordings: { id: string; title: s
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white">
                 <Play className="h-5 w-5" />
               </span>
+              <span className="absolute bottom-2 right-2 rounded bg-black/55 px-1.5 py-0.5 text-[10.5px] font-semibold text-white">
+                {durationLabel(s.start, s.end)}
+              </span>
             </div>
             <div className="p-4">
               <p className="truncate font-medium text-ink">{s.title ?? 'Session recording'}</p>
@@ -436,22 +465,11 @@ function RecordingsPane({ recordings, tz }: { recordings: { id: string; title: s
 }
 
 // ── Actions ─────────────────────────────────────────────────────────────────
-function ActionsPane({ actions, tz, coachName }: { actions: ActionRow[]; tz: string; coachName: string | null }) {
-  const [items, setItems] = useState(actions)
-  const todo = items.filter((a) => !a.isDone).length
-  const done = items.length - todo
+function ActionsPane({ actions, onToggle, tz, coachName }: { actions: ActionRow[]; onToggle: (id: string, current: boolean) => void; tz: string; coachName: string | null }) {
+  const todo = actions.filter((a) => !a.isDone).length
+  const done = actions.length - todo
 
-  const toggle = async (id: string, current: boolean) => {
-    setItems((prev) => prev.map((a) => (a.id === id ? { ...a, isDone: !current } : a)))
-    const res = await fetch('/api/community/sessions/actions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actionId: id, done: !current }),
-    })
-    if (!res.ok) setItems((prev) => prev.map((a) => (a.id === id ? { ...a, isDone: current } : a)))
-  }
-
-  if (items.length === 0) return <Card><p className="text-sm text-content-muted">No actions assigned yet.</p></Card>
+  if (actions.length === 0) return <Card><p className="text-sm text-content-muted">No actions assigned yet.</p></Card>
   return (
     <Card>
       <div className="mb-3 flex gap-4 text-[13px] font-semibold">
@@ -459,10 +477,10 @@ function ActionsPane({ actions, tz, coachName }: { actions: ActionRow[]; tz: str
         <span className="text-enviro-green-text">{done} done</span>
       </div>
       <ul className="divide-y divide-line-light">
-        {items.map((a) => (
+        {actions.map((a) => (
           <li key={a.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
             <button
-              onClick={() => toggle(a.id, a.isDone)}
+              onClick={() => onToggle(a.id, a.isDone)}
               className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors ${a.isDone ? 'border-enviro-green bg-enviro-green' : 'border-content-faint hover:border-enviro-green'}`}
               aria-label={a.isDone ? 'Mark not done' : 'Mark done'}
             >
@@ -495,6 +513,24 @@ function ActionsPane({ actions, tz, coachName }: { actions: ActionRow[]; tz: str
 // ── Shared bits ─────────────────────────────────────────────────────────────
 function fmtDay(iso: string, tz: string): string {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(new Date(iso))
+}
+function durationLabel(start: string, end: string | null): string {
+  const s = new Date(start).getTime()
+  const e = end ? new Date(end).getTime() : s + 60 * 60_000
+  const mins = Math.max(1, Math.round((e - s) / 60_000))
+  return mins >= 60 && mins % 60 === 0 ? `${mins / 60} hr` : `${mins} min`
+}
+function gcalUrl(title: string, start: string, end: string | null): string {
+  const fmt = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+  const s = new Date(start)
+  const e = end ? new Date(end) : new Date(s.getTime() + 90 * 60_000)
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title,
+    dates: `${fmt(s.toISOString())}/${fmt(e.toISOString())}`,
+    details: 'Stellr coaching session',
+  })
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 function Tag({ mandatory }: { mandatory: boolean }) {
   return (

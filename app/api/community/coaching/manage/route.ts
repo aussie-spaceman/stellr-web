@@ -5,6 +5,8 @@ import {
   linkCohortTraining,
   unlinkCohortTraining,
   scheduleCoachingSeries,
+  rescheduleSession,
+  hostRespond,
 } from '@/lib/sessions'
 import { assignCohortAction, attachCohortResource, detachCohortResource, searchAttachableResources } from '@/lib/mentoring'
 
@@ -64,6 +66,22 @@ export async function POST(req: Request) {
       )
       if (!r.ok) return NextResponse.json({ error: r.error ?? 'Could not schedule' }, { status: 400 })
       return NextResponse.json({ ok: true, created: r.created })
+    }
+    case 'rescheduleSession': {
+      if (!b.sessionId || !b.startIso) return NextResponse.json({ error: 'sessionId and startIso required' }, { status: 400 })
+      const coachId = await coachOf(workshopId)
+      if (!coachId) return NextResponse.json({ error: 'No coach assigned' }, { status: 400 })
+      const ok = await rescheduleSession(b.sessionId, coachId, b.startIso, { durationMin: Number(b.durationMin) || undefined, title: b.title ?? undefined })
+      if (!ok) return NextResponse.json({ error: 'Could not reschedule' }, { status: 400 })
+      return NextResponse.json({ ok: true })
+    }
+    case 'cancelSession': {
+      if (!b.sessionId) return NextResponse.json({ error: 'sessionId required' }, { status: 400 })
+      const coachId = await coachOf(workshopId)
+      if (!coachId) return NextResponse.json({ error: 'No coach assigned' }, { status: 400 })
+      const ok = await hostRespond(b.sessionId, coachId, 'cancelled')
+      if (!ok) return NextResponse.json({ error: 'Could not cancel' }, { status: 400 })
+      return NextResponse.json({ ok: true })
     }
     case 'assignAction': {
       if (!b.title) return NextResponse.json({ error: 'title required' }, { status: 400 })

@@ -8,8 +8,9 @@ import { ChatPanel } from '@/components/community/ChatPanel'
 import { JoinButton } from '@/components/community/JoinButton'
 import { MaterialDownloadButton } from '@/components/community/MaterialDownloadButton'
 import { MemberSearchField, type PickedPerson } from '@/components/community/mentoring/MemberSearchField'
-import { ModalShell, ScheduleAllModal, ScheduleOneModal } from '@/components/community/mentoring/ScheduleModals'
-import { formatSessionTime } from '@/lib/mentoring-format'
+import { ModalShell, ScheduleAllModal, ScheduleOneModal, EditSessionModal } from '@/components/community/mentoring/ScheduleModals'
+import { CohortResourceAttacher, type AttachedFileResource } from '@/components/community/mentoring/CohortResourceAttacher'
+import { formatSessionTime, TIMEZONES } from '@/lib/mentoring-format'
 
 type Tab = 'member' | 'schedule' | 'resources' | 'chat' | 'settings'
 
@@ -38,6 +39,8 @@ export function AdminManageWorkshop(props: {
   workshop: WorkshopMeta
   sessions: SessionRow[]
   resources: ResourceRow[]
+  fileResources: AttachedFileResource[]
+  recordings: { id: string; title: string | null; start: string }[]
   modules: ModuleOpt[]
   tiers: { id: string; name: string }[]
   channelId: string
@@ -48,7 +51,8 @@ export function AdminManageWorkshop(props: {
   const { workshop } = props
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('member')
-  const [modal, setModal] = useState<null | 'scheduleAll' | 'scheduleOne' | 'setMember'>(null)
+  const [modal, setModal] = useState<null | 'scheduleAll' | 'scheduleOne' | 'setMember' | 'reassignCoach'>(null)
+  const [editSession, setEditSession] = useState<SessionRow | null>(null)
   const now = Date.now()
   const remaining = Math.max(0, workshop.plannedSessions - props.sessions.length)
 
@@ -84,7 +88,10 @@ export function AdminManageWorkshop(props: {
             <span className="flex h-9 w-9 items-center justify-center rounded-[10px] font-display text-sm font-bold text-white" style={{ background: 'linear-gradient(150deg,#7C5CFC,#5B3FE0)' }}>{workshop.name.charAt(0)}</span>
             <h1 className="font-display text-[26px] font-bold tracking-[-0.02em]">{workshop.name}</h1>
           </div>
-          <button onClick={() => setTab('settings')} className="rounded-[9px] border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10">Settings</button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setModal('reassignCoach')} className="rounded-[9px] border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10">Reassign coach</button>
+            <button onClick={() => setTab('settings')} className="rounded-[9px] border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10">Settings</button>
+          </div>
         </div>
         <nav className="mt-5 flex gap-6 border-b border-white/10">
           {TABS.map((t) => {
@@ -141,7 +148,18 @@ export function AdminManageWorkshop(props: {
                     <div className="flex h-11 w-11 flex-col items-center justify-center rounded-[10px] bg-surface"><span className="font-display text-[15px] font-bold leading-none text-ink">{t.day}</span><span className="text-[10px] uppercase text-content-muted">{t.month}</span></div>
                     <div><p className="font-medium text-ink">{s.title ?? 'Coaching session'}</p><p className="text-[13px] text-content-secondary">{t.timeLine}</p></div>
                   </div>
-                  {s.recordingStatus === 'available' ? <MaterialDownloadButton endpoint={`/api/community/sessions/${s.id}/recording`} title="recording" label="Recording" /> : !isPast ? <JoinButton sessionId={s.id} scheduledStart={s.start} isHost /> : <span className="text-[13px] text-content-faint">—</span>}
+                  <div className="flex items-center gap-2">
+                    {s.recordingStatus === 'available' ? (
+                      <MaterialDownloadButton endpoint={`/api/community/sessions/${s.id}/recording`} title="recording" label="Recording" />
+                    ) : !isPast ? (
+                      <>
+                        <JoinButton sessionId={s.id} scheduledStart={s.start} isHost />
+                        <button onClick={() => setEditSession(s)} className="rounded-[9px] border border-line px-3 py-1.5 text-[13px] font-semibold text-content-secondary hover:border-space-violet hover:text-space-violet">Edit</button>
+                      </>
+                    ) : (
+                      <span className="text-[13px] text-content-faint">—</span>
+                    )}
+                  </div>
                 </li>
               )
             })}
@@ -159,7 +177,13 @@ export function AdminManageWorkshop(props: {
       )}
 
       {/* Resources */}
-      {tab === 'resources' && <AdminResources resources={props.resources} modules={props.modules} tz={workshop.timezone} manage={manage} />}
+      {tab === 'resources' && (
+        <div className="space-y-4">
+          <AdminResources resources={props.resources} modules={props.modules} tz={workshop.timezone} manage={manage} />
+          <CohortResourceAttacher cohortId={workshop.id} attached={props.fileResources} tz={workshop.timezone} endpoint={MANAGE_ENDPOINT} />
+          <RecordingsList recordings={props.recordings} tz={workshop.timezone} />
+        </div>
+      )}
 
       {/* Chat */}
       {tab === 'chat' && <ChatPanel channelId={props.channelId} selfMemberId={props.selfMemberId} selfName={props.selfName} title={workshop.name} canModerate />}
@@ -169,10 +193,57 @@ export function AdminManageWorkshop(props: {
 
       {modal === 'scheduleAll' && <ScheduleAllModal tz={workshop.timezone} count={remaining} onClose={() => setModal(null)} onSubmit={manage} />}
       {modal === 'scheduleOne' && <ScheduleOneModal tz={workshop.timezone} onClose={() => setModal(null)} onSubmit={manage} />}
+      {editSession && <EditSessionModal tz={workshop.timezone} session={editSession} onClose={() => setEditSession(null)} onSubmit={async (p) => { const ok = await manage(p); if (ok) setEditSession(null); return ok }} />}
       {modal === 'setMember' && (
         <SetMemberModal existing={!!workshop.memberId} onClose={() => setModal(null)} onSubmit={(memberId) => admin({ action: 'setMember', workshopId: workshop.id, memberId })} />
       )}
+      {modal === 'reassignCoach' && (
+        <ReassignCoachModal currentCoach={workshop.coachName} onClose={() => setModal(null)} onSubmit={(newCoachId) => admin({ action: 'reassignCoach', workshopId: workshop.id, newCoachId })} />
+      )}
     </div>
+  )
+}
+
+function RecordingsList({ recordings, tz }: { recordings: { id: string; title: string | null; start: string }[]; tz: string }) {
+  return (
+    <Card>
+      <h2 className="font-display text-[16px] font-bold text-ink">Recordings</h2>
+      {recordings.length === 0 ? (
+        <p className="mt-2 text-sm text-content-muted">No recordings yet. Every live session is recorded automatically and appears here.</p>
+      ) : (
+        <ul className="mt-3 divide-y divide-line-light">
+          {recordings.map((s) => (
+            <li key={s.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+              <span className="flex items-center gap-2 font-medium text-ink">
+                {s.title ?? 'Session recording'}
+                <span className="rounded-pill bg-surface px-2 py-0.5 text-[10px] font-bold text-content-muted">AUTO</span>
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-[12.5px] text-content-muted">{new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(new Date(s.start))}</span>
+                <MaterialDownloadButton endpoint={`/api/community/sessions/${s.id}/recording`} title={`${s.title ?? 'session'}-recording`} label="Watch" />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  )
+}
+
+function ReassignCoachModal({ currentCoach, onClose, onSubmit }: { currentCoach: string | null; onClose: () => void; onSubmit: (newCoachId: string) => Promise<boolean> }) {
+  const [picked, setPicked] = useState<PickedPerson[]>([])
+  const [busy, setBusy] = useState(false)
+  return (
+    <ModalShell title="Reassign coach" onClose={onClose}>
+      <p className="text-[13px] text-content-muted">
+        Current coach: <strong>{currentCoach ?? 'none'}</strong>. The new coach gains full management access to this workshop.
+      </p>
+      <MemberSearchField endpoint={ADMIN_SEARCH} selected={picked} onChange={(n) => setPicked(n.slice(-1))} placeholder="Search for a coach…" />
+      <div className="flex justify-end gap-2">
+        <button onClick={onClose} className="rounded-[9px] px-4 py-2.5 text-sm font-medium text-content-secondary hover:bg-surface">Cancel</button>
+        <button onClick={async () => { if (picked[0]) { setBusy(true); if (!(await onSubmit(picked[0].id))) setBusy(false) } }} disabled={busy || !picked[0]} className="rounded-[9px] bg-space-violet px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#5B3FE0] disabled:opacity-50">{busy ? 'Reassigning…' : 'Reassign coach'}</button>
+      </div>
+    </ModalShell>
   )
 }
 
@@ -219,6 +290,7 @@ function AdminResources({ resources, modules, tz, manage }: { resources: Resourc
 function AdminSettings({ workshop, tiers, admin }: { workshop: WorkshopMeta; tiers: { id: string; name: string }[]; admin: (p: Record<string, unknown>) => Promise<boolean> }) {
   const [name, setName] = useState(workshop.name)
   const [coach, setCoach] = useState<PickedPerson[]>([])
+  const [timezone, setTimezone] = useState(workshop.timezone)
   const [confirm, setConfirm] = useState('')
   const router = useRouter()
   const freeTierNames = tiers.filter((t) => workshop.freeForTierIds.includes(t.id)).map((t) => t.name)
@@ -238,6 +310,13 @@ function AdminSettings({ workshop, tiers, admin }: { workshop: WorkshopMeta; tie
             <MemberSearchField endpoint={ADMIN_SEARCH} selected={coach} onChange={(n) => setCoach(n.slice(-1))} placeholder="Search for a coach…" />
           </div>
           <div>
+            <label className="mb-1.5 block text-[12.5px] font-semibold text-content-secondary">Time zone</label>
+            <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className="w-full rounded-[9px] border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-space-violet">
+              {TIMEZONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+            <p className="mt-1 text-[12px] text-content-faint">Shown on every session time; applies to new sessions you schedule.</p>
+          </div>
+          <div>
             <label className="mb-1.5 block text-[12.5px] font-semibold text-content-secondary">Access</label>
             <div className="flex items-center gap-3">
               <span className="inline-flex items-center gap-1.5 rounded-pill bg-enviro-green-bg px-2.5 py-1 text-[12.5px] font-medium text-enviro-green-text">
@@ -249,7 +328,7 @@ function AdminSettings({ workshop, tiers, admin }: { workshop: WorkshopMeta; tie
           <div className="flex justify-end">
             <button
               onClick={async () => {
-                await admin({ action: 'updateWorkshop', workshopId: workshop.id, name })
+                await admin({ action: 'updateWorkshop', workshopId: workshop.id, name, timezone })
                 if (coach[0]) await admin({ action: 'reassignCoach', workshopId: workshop.id, newCoachId: coach[0].id })
                 router.refresh()
               }}

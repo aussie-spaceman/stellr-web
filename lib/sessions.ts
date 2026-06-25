@@ -1223,6 +1223,40 @@ export async function scheduleCoachingSeries(
   return { ok: created > 0, created, error }
 }
 
+/** Reschedule an existing session (host or admin-on-behalf): move its time and
+ *  optionally rename it, then re-send calendar invites. `hostId` must own it. */
+export async function rescheduleSession(
+  sessionId: string,
+  hostId: string,
+  startIso: string,
+  opts: { durationMin?: number; title?: string } = {},
+): Promise<boolean> {
+  const db = supabaseServer()
+  const { data: s } = await db
+    .from('sessions')
+    .select('host_member_id, scheduled_start, scheduled_end')
+    .eq('id', sessionId)
+    .maybeSingle()
+  if (!s || s.host_member_id !== hostId) return false
+  const start = new Date(startIso)
+  if (Number.isNaN(start.getTime())) return false
+  const prevDur = s.scheduled_end
+    ? Math.round((new Date(s.scheduled_end).getTime() - new Date(s.scheduled_start).getTime()) / 60_000)
+    : 60
+  const durMin = opts.durationMin ?? Math.max(15, prevDur)
+  const end = new Date(start.getTime() + durMin * 60_000)
+  const patch: Record<string, unknown> = {
+    scheduled_start: start.toISOString(),
+    scheduled_end: end.toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+  if (opts.title !== undefined) patch.title = opts.title
+  const { error } = await db.from('sessions').update(patch).eq('id', sessionId)
+  if (error) return false
+  await sendSessionInvites(sessionId)
+  return true
+}
+
 /** Link a training module to a cohort (mentor or admin). */
 export async function linkCohortTraining(
   cohortId: string,

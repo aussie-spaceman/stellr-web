@@ -18,6 +18,8 @@ export interface AdminBinaryRow {
   attachedObjects: string[]
   /** Pending resource flags against this binary. */
   pendingFlags: number
+  /** Aggregate opens/downloads across all attachments. */
+  downloads: number
 }
 
 export interface AdminResourceStats {
@@ -34,7 +36,7 @@ export async function getAdminResourceIndex(): Promise<{ rows: AdminBinaryRow[];
   const [{ data: binaries }, { data: attachments }, { data: flags }] = await Promise.all([
     db
       .from('community_resources')
-      .select('id, title, file_type, file_size_bytes, created_at, uploaded_by')
+      .select('id, title, file_type, file_size_bytes, created_at, uploaded_by, download_count')
       .order('created_at', { ascending: false }),
     db
       .from('container_contents')
@@ -50,6 +52,7 @@ export async function getAdminResourceIndex(): Promise<{ rows: AdminBinaryRow[];
     file_size_bytes: number | null
     created_at: string
     uploaded_by: string | null
+    download_count: number | null
   }[]
 
   // Resolve container names + uploader names.
@@ -95,6 +98,7 @@ export async function getAdminResourceIndex(): Promise<{ rows: AdminBinaryRow[];
       attachedCount: objs.length,
       attachedObjects: objs,
       pendingFlags: flagCount.get(b.id) ?? 0,
+      downloads: b.download_count ?? 0,
     }
   })
 

@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
+import { attachSpaceResource } from '@/lib/container-sync'
 
 // POST /api/admin/community/spaces/[id]/resources (multipart) — admin uploads a
 // file into a space's Resources (Assign resource modal, screen 20).
@@ -71,5 +72,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     console.error('[admin] resource insert error:', error)
     return NextResponse.json({ error: 'Failed to save resource' }, { status: 500 })
   }
+  await attachSpaceResource(db, spaceId, data.id)
   return NextResponse.json({ id: data.id })
 }

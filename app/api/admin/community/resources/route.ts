@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, RESOURCES_BUCKET } from '@/lib/community'
+import { attachSpaceResource } from '@/lib/container-sync'
 
 // POST /api/admin/community/resources — upload a file + create a resource record.
 // Expects multipart/form-data: file, title, description?, spaceId?, minTierRank?
@@ -58,6 +59,9 @@ export async function POST(req: Request) {
     console.error('[community] resource db insert error:', dbError)
     return NextResponse.json({ error: 'Failed to save resource' }, { status: 500 })
   }
+
+  // Space-targeted uploads also surface in the global catalogue.
+  if (spaceId) await attachSpaceResource(db, spaceId, resource.id)
 
   return NextResponse.json({ id: resource.id })
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getCurrentMember, RESOURCES_BUCKET } from '@/lib/community'
 import { getSpaceForMember } from '@/lib/spaces'
 import { supabaseServer } from '@/lib/supabase'
+import { attachSpaceResource } from '@/lib/container-sync'
 
 const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
 
@@ -83,6 +84,9 @@ export async function POST(req: Request) {
     console.error('[community] resource attach insert error:', error)
     return NextResponse.json({ error: 'Failed to save resource' }, { status: 500 })
   }
+
+  // Surface it in the global catalogue (container_contents on the space container).
+  await attachSpaceResource(db, space.id, data.id)
 
   return NextResponse.json({ id: data.id })
 }

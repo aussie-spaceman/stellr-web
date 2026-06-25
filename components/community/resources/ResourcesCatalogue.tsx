@@ -10,10 +10,10 @@ import {
   List as ListIcon,
   Download,
   Pencil,
-  Flag,
   Search,
 } from 'lucide-react'
 import type { CatalogueRow, ResourceKind, CatalogueSort } from '@/lib/resources-catalogue'
+import { ResourceFlagModal } from '@/components/community/resources/ResourceFlagModal'
 
 // Source object colour-code (handover §6). Not in the named token set — kept as a
 // small local map so the dot/border can tint by origin object type.
@@ -67,7 +67,11 @@ function actionLabel(kind: ResourceKind): string {
  * Files download; links/recordings open in a new tab.
  */
 async function openAttachment(row: CatalogueRow, name: string): Promise<string | null> {
-  const res = await fetch(`/api/community/resources/attachment/${row.attachmentId}/download`)
+  const endpoint =
+    row.source === 'training'
+      ? `/api/community/resources/training-open?ref=${encodeURIComponent(row.attachmentId)}`
+      : `/api/community/resources/attachment/${row.attachmentId}/download`
+  const res = await fetch(endpoint)
   const json = await res.json().catch(() => ({}))
   if (!res.ok) return json.error ?? 'Could not open this resource'
   if (row.kind === 'file') {
@@ -180,12 +184,15 @@ function NameWithRename({
     )
   }
 
+  // Training rows have no catalogue detail page — link to the course instead.
+  const nameHref = row.source === 'training' ? row.provenance.href ?? '#' : `/community/resources/${row.attachmentId}`
+
   return (
     <span className="inline-flex items-center gap-1.5">
-      <Link href={`/community/resources/${row.attachmentId}`} className="font-semibold text-brand-blue-dark hover:underline">
+      <Link href={nameHref} className="font-semibold text-brand-blue-dark hover:underline">
         {name}
       </Link>
-      {row.ownedByMe && (
+      {row.canRename && (
         <button
           onClick={() => {
             setValue(name)
@@ -339,13 +346,11 @@ export function ResourcesCatalogue({ rows: initialRows }: { rows: CatalogueRow[]
               </div>
               <p className="mt-1 text-xs text-brand-muted-soft">{metaLine(row)}</p>
               <div className="mt-4 flex items-center justify-between">
-                <Link
-                  href={`/community/resources/${row.attachmentId}`}
-                  className="text-brand-muted-soft hover:text-red-500"
-                  title="Report this resource"
-                >
-                  <Flag className="h-3.5 w-3.5" />
-                </Link>
+                {row.source === 'catalogue' ? (
+                  <ResourceFlagModal binaryId={row.binaryId} containerRef={row.provenance.containerId} />
+                ) : (
+                  <span />
+                )}
                 <RowActions row={row} name={row.name} />
               </div>
             </div>
@@ -375,13 +380,11 @@ export function ResourcesCatalogue({ rows: initialRows }: { rows: CatalogueRow[]
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-3">
-                <Link
-                  href={`/community/resources/${row.attachmentId}`}
-                  className="text-brand-muted-soft hover:text-red-500"
-                  title="Report this resource"
-                >
-                  <Flag className="h-3.5 w-3.5" />
-                </Link>
+                {row.source === 'catalogue' ? (
+                  <ResourceFlagModal binaryId={row.binaryId} containerRef={row.provenance.containerId} />
+                ) : (
+                  <span />
+                )}
                 <RowActions row={row} name={row.name} />
               </div>
             </li>

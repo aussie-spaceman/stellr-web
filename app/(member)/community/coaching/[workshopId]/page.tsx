@@ -82,7 +82,7 @@ export default async function WorkshopSpacePage({ params }: { params: Promise<{ 
       }))}
       recordings={sessions
         .filter((s) => s.recording_status === 'available')
-        .map((s) => ({ id: s.id, title: s.title, start: s.scheduled_start }))}
+        .map((s) => ({ id: s.id, title: s.title, start: s.scheduled_start, end: s.scheduled_end }))}
       fileResources={fileResources.map((r) => ({
         resourceId: r.resourceId,
         title: r.title,

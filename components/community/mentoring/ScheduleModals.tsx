@@ -4,6 +4,13 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { zonedToUtcIso, TIMEZONES } from '@/lib/mentoring-format'
 
+function localParts(iso: string, tz: string): { date: string; time: string } {
+  const d = new Date(iso)
+  const date = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+  const time = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(d)
+  return { date, time }
+}
+
 export const inputCls = 'w-full rounded-[9px] border border-line px-3.5 py-2.5 text-sm outline-none focus:border-space-violet'
 
 export function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
@@ -66,6 +73,62 @@ export function ScheduleAllModal({ tz: cohortTz, count, onClose, onSubmit }: { t
       <div className="flex justify-end gap-2">
         <button onClick={onClose} className="rounded-[9px] px-4 py-2.5 text-sm font-medium text-content-secondary hover:bg-surface">Cancel</button>
         <button onClick={submit} disabled={busy || !date} className="rounded-[9px] bg-space-violet px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#5B3FE0] disabled:opacity-50">{busy ? 'Scheduling…' : `Schedule ${count} session${count === 1 ? '' : 's'}`}</button>
+      </div>
+    </ModalShell>
+  )
+}
+
+export function EditSessionModal({
+  tz: cohortTz,
+  session,
+  onClose,
+  onSubmit,
+}: {
+  tz: string
+  session: { id: string; title: string | null; start: string; end: string | null }
+  onClose: () => void
+  onSubmit: Submit
+}) {
+  const init = localParts(session.start, cohortTz)
+  const initialDur = session.end
+    ? Math.max(15, Math.round((new Date(session.end).getTime() - new Date(session.start).getTime()) / 60_000))
+    : 90
+  const [title, setTitle] = useState(session.title ?? '')
+  const [date, setDate] = useState(init.date)
+  const [time, setTime] = useState(init.time)
+  const [duration, setDuration] = useState(initialDur)
+  const [tz, setTz] = useState(cohortTz)
+  const [busy, setBusy] = useState<null | 'save' | 'cancel'>(null)
+
+  const save = async () => {
+    if (!date) return
+    setBusy('save')
+    const ok = await onSubmit({ action: 'rescheduleSession', sessionId: session.id, startIso: zonedToUtcIso(date, time, tz), durationMin: duration, title: title || undefined })
+    if (!ok) setBusy(null)
+  }
+  const cancel = async () => {
+    setBusy('cancel')
+    const ok = await onSubmit({ action: 'cancelSession', sessionId: session.id })
+    if (!ok) setBusy(null)
+  }
+
+  return (
+    <ModalShell title="Edit session" onClose={onClose}>
+      <ModalField label="Session title"><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Coaching session" className={inputCls} /></ModalField>
+      <ModalField label="Date"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} /></ModalField>
+      <div className="grid grid-cols-2 gap-3">
+        <ModalField label="Start time"><input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={inputCls} /></ModalField>
+        <ModalField label="Duration (min)"><input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value) || 60)} className={inputCls} /></ModalField>
+      </div>
+      <ModalField label="Time zone">
+        <select value={tz} onChange={(e) => setTz(e.target.value)} className={inputCls}>{TIMEZONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select>
+      </ModalField>
+      <div className="flex items-center justify-between gap-2">
+        <button onClick={cancel} disabled={busy !== null} className="rounded-[9px] px-3 py-2.5 text-sm font-medium text-danger hover:bg-danger/5 disabled:opacity-50">{busy === 'cancel' ? 'Cancelling…' : 'Cancel session'}</button>
+        <div className="flex gap-2">
+          <button onClick={onClose} className="rounded-[9px] px-4 py-2.5 text-sm font-medium text-content-secondary hover:bg-surface">Close</button>
+          <button onClick={save} disabled={busy !== null || !date} className="rounded-[9px] bg-space-violet px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#5B3FE0] disabled:opacity-50">{busy === 'save' ? 'Saving…' : 'Save changes'}</button>
+        </div>
       </div>
     </ModalShell>
   )

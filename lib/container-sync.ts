@@ -149,6 +149,36 @@ export async function ensureSpaceContainer(
   return (created?.id as string) ?? null
 }
 
+/**
+ * Attach a community resource to its Space's container so it surfaces in the
+ * global catalogue. Space resources are inserted into community_resources with a
+ * space_id; the catalogue resolves via container_contents, so without this row a
+ * Space upload (chat attach / admin upload) never appears in /community/resources.
+ * Idempotent + non-fatal.
+ */
+export async function attachSpaceResource(
+  db: SupabaseClient,
+  spaceId: string,
+  resourceId: string,
+): Promise<void> {
+  try {
+    const { data: space } = await db
+      .from('community_spaces')
+      .select('slug, name')
+      .eq('id', spaceId)
+      .maybeSingle()
+    if (!space) return
+    const containerId = await ensureSpaceContainer(db, space.slug as string, space.name as string)
+    if (!containerId) return
+    await db.from('container_contents').upsert(
+      { container_id: containerId, content_type: 'resource', content_ref: resourceId },
+      { onConflict: 'container_id,content_type,content_ref', ignoreDuplicates: true },
+    )
+  } catch (e) {
+    console.error('[container-sync] attachSpaceResource failed (non-fatal):', e)
+  }
+}
+
 /** Get-or-create the container for a training module (campaign_ref = module uuid as text). */
 export async function ensureTrainingContainer(
   db: SupabaseClient,

@@ -51,13 +51,24 @@ export default async function SessionRoomPage({ params }: { params: Promise<{ id
   // the open meet.jit.si dev fallback).
   const embed = getEmbedConfig(session.provider_room)
 
-  const backHref = session.cohort_id
-    ? `/community/mentoring/${session.cohort_id}`
-    : '/community/coaching'
+  // Coaching workshops and mentoring cohorts are both mentoring_cohorts rows with
+  // a cohort_id on the session; resolve which so the back link + default title
+  // point at the right area.
+  let containerType: string | null = null
+  if (session.cohort_id) {
+    const { data: c } = await db.from('mentoring_cohorts').select('container_type').eq('id', session.cohort_id).maybeSingle()
+    containerType = (c?.container_type as string | null) ?? null
+  }
+  const isCoaching = containerType === 'coaching'
+  const backHref = !session.cohort_id
+    ? '/community/coaching'
+    : isCoaching
+      ? `/community/coaching/${session.cohort_id}`
+      : `/community/mentoring/${session.cohort_id}`
   const displayName = [member.first_name, member.last_name].filter(Boolean).join(' ') || 'Member'
 
-  // Mentoring cohort sessions get the bespoke dark-stage live screen with host
-  // controls + agenda + auto-record. (Coaching keeps the simple embed.)
+  // Cohort + coaching-workshop sessions get the bespoke dark-stage live screen
+  // with host controls + agenda + auto-record.
   if (session.cohort_id) {
     const { data: acts } = await db
       .from('session_actions')
@@ -71,7 +82,7 @@ export default async function SessionRoomPage({ params }: { params: Promise<{ id
         embed={{ scriptSrc: embed.scriptSrc, domain: embed.domain, roomName: embed.roomName }}
         jwt={token}
         displayName={displayName}
-        title={session.title ?? 'Mentoring session'}
+        title={session.title ?? (isCoaching ? 'Coaching session' : 'Mentoring session')}
         isHost={isHost}
         backHref={backHref}
         agenda={agenda}

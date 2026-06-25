@@ -7,7 +7,7 @@ import { Plus, Calendar } from 'lucide-react'
 import { ChatPanel } from '@/components/community/ChatPanel'
 import { JoinButton } from '@/components/community/JoinButton'
 import { MaterialDownloadButton } from '@/components/community/MaterialDownloadButton'
-import { ModalShell, ModalField, inputCls, ScheduleAllModal, ScheduleOneModal } from '@/components/community/mentoring/ScheduleModals'
+import { ModalShell, ModalField, inputCls, ScheduleAllModal, ScheduleOneModal, EditSessionModal } from '@/components/community/mentoring/ScheduleModals'
 import { CohortResourceAttacher, type AttachedFileResource } from '@/components/community/mentoring/CohortResourceAttacher'
 import { AddResourceForm } from '@/components/community/resources/AddResourceForm'
 import { formatSessionTime } from '@/lib/mentoring-format'
@@ -45,6 +45,7 @@ export function ManageWorkshop(props: {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('schedule')
   const [modal, setModal] = useState<null | 'scheduleAll' | 'scheduleOne' | 'assignAction'>(null)
+  const [editSession, setEditSession] = useState<SessionRow | null>(null)
 
   const now = Date.now()
   const nextSession = [...props.sessions]
@@ -121,7 +122,7 @@ export function ManageWorkshop(props: {
       </div>
 
       {tab === 'schedule' && (
-        <SchedulePane sessions={props.sessions} tz={workshop.timezone} remaining={remaining} onScheduleAll={() => setModal('scheduleAll')} onScheduleOne={() => setModal('scheduleOne')} />
+        <SchedulePane sessions={props.sessions} tz={workshop.timezone} remaining={remaining} onScheduleAll={() => setModal('scheduleAll')} onScheduleOne={() => setModal('scheduleOne')} onEdit={setEditSession} />
       )}
       {tab === 'training' && (
         <div className="space-y-4">
@@ -138,12 +139,13 @@ export function ManageWorkshop(props: {
       {modal === 'scheduleAll' && <ScheduleAllModal tz={workshop.timezone} count={remaining} onClose={() => setModal(null)} onSubmit={post} />}
       {modal === 'scheduleOne' && <ScheduleOneModal tz={workshop.timezone} onClose={() => setModal(null)} onSubmit={post} />}
       {modal === 'assignAction' && <AssignActionModal modules={props.modules} memberName={workshop.memberName} onClose={() => setModal(null)} onSubmit={post} />}
+      {editSession && <EditSessionModal tz={workshop.timezone} session={editSession} onClose={() => setEditSession(null)} onSubmit={async (p) => { const ok = await post(p); if (ok) setEditSession(null); return ok }} />}
     </div>
   )
 }
 
 // ── Schedule ────────────────────────────────────────────────────────────────
-function SchedulePane({ sessions, tz, remaining, onScheduleAll, onScheduleOne }: { sessions: SessionRow[]; tz: string; remaining: number; onScheduleAll: () => void; onScheduleOne: () => void }) {
+function SchedulePane({ sessions, tz, remaining, onScheduleAll, onScheduleOne, onEdit }: { sessions: SessionRow[]; tz: string; remaining: number; onScheduleAll: () => void; onScheduleOne: () => void; onEdit: (s: SessionRow) => void }) {
   const now = Date.now()
   const sorted = [...sessions].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
   const nextId = sorted.find((s) => s.status === 'scheduled' && new Date(s.start).getTime() > now)?.id
@@ -180,13 +182,18 @@ function SchedulePane({ sessions, tz, remaining, onScheduleAll, onScheduleOne }:
                   <p className="text-[13px] text-content-secondary">{t.timeLine}</p>
                 </div>
               </div>
-              <div>
+              <div className="flex items-center gap-2">
                 {s.recordingStatus === 'available' ? (
                   <MaterialDownloadButton endpoint={`/api/community/sessions/${s.id}/recording`} title={`${s.title ?? 'session'}-recording`} label="Recording" />
                 ) : isNext ? (
-                  <JoinButton sessionId={s.id} scheduledStart={s.start} isHost />
+                  <>
+                    <JoinButton sessionId={s.id} scheduledStart={s.start} isHost />
+                    <button onClick={() => onEdit(s)} className="rounded-[9px] border border-line px-3 py-1.5 text-[13px] font-semibold text-content-secondary hover:border-space-violet hover:text-space-violet">Edit</button>
+                  </>
+                ) : !isPast ? (
+                  <button onClick={() => onEdit(s)} className="rounded-[9px] border border-line px-3.5 py-1.5 text-[13px] font-semibold text-content-secondary hover:border-space-violet hover:text-space-violet">Edit</button>
                 ) : (
-                  <span className="text-[13px] text-content-faint">{isPast ? '—' : 'Scheduled'}</span>
+                  <span className="text-[13px] text-content-faint">—</span>
                 )}
               </div>
             </li>

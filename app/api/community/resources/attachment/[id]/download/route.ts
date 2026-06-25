@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, signedDownloadUrl } from '@/lib/community'
 import { resolveDownloadableAttachment } from '@/lib/resources-catalogue'
 import { logActivity } from '@/lib/activity-log'
@@ -25,13 +26,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     if (!url) return NextResponse.json({ error: 'Could not generate download link' }, { status: 500 })
   }
 
-  // Per-binary open/download signal, tagged with the attachment it was opened from.
+  // Per-binary open/download signal: bump the aggregate counter + log the event.
+  const db = supabaseServer()
+  db.rpc('increment_resource_download', { rid: resolved.binaryId }).then(() => {}, () => {})
   logActivity({
     memberId: member.id,
     category: 'community',
     action: 'resource_downloaded',
     summary: `Opened resource “${resolved.title}”`,
-    metadata: { attachmentId: id, kind: resolved.kind },
+    metadata: { attachmentId: id, binaryId: resolved.binaryId, kind: resolved.kind },
     actorType: 'member',
   }).catch(() => {})
 

@@ -9,6 +9,7 @@ import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
 import { fireTierPurchased } from '@/lib/membership-grants'
 import { enrollAfterPayment } from '@/lib/mentoring'
 import { enrollWorkshopAfterPayment, grantWorkshopTopup } from '@/lib/workshops'
+import { confirmPaidBooking, redeemCoupon, grantTierAllocations } from '@/lib/entitlements'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -217,7 +218,7 @@ async function activateMembership(
     ? new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     : new Date(Date.now() + 366 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-  await db.from('member_memberships').insert({
+  const { data: inserted } = await db.from('member_memberships').insert({
     member_id: memberId,
     tier_id: tierId,
     started_at: startedAt,
@@ -227,7 +228,7 @@ async function activateMembership(
     source: 'stripe',
     stripe_subscription_id: stripeSubscriptionId,
     billing_interval: billingInterval,
-  })
+  }).select('id').single()
 
   // Audit trail — paid membership activated via Stripe (this path bypasses grantTier).
   const { data: tier } = await db.from('membership_tiers').select('name').eq('id', tierId).maybeSingle()
@@ -243,6 +244,16 @@ async function activateMembership(
   // Fan-out grant rules keyed off acquiring a tier — e.g. an educator buying
   // Innovator/Trailblazer upgrades the students they registered to Pathfinder.
   await fireTierPurchased(memberId, tierId, db)
+
+  // ADDITIVE (entitlements ledger): materialise this tier's free coaching/mentoring
+  // allocations into the new ledger, idempotent on the membership id. Non-fatal —
+  // runs alongside the existing session_credits grant until the cutover.
+  try {
+    const membershipId = (inserted as { id?: string } | null)?.id
+    if (membershipId) await grantTierAllocations(memberId, membershipId)
+  } catch (err) {
+    console.error('[stripe/webhook] grantTierAllocations (non-fatal):', err)
+  }
 }
 
 async function expireMembership(stripeSubscriptionId: string) {
@@ -396,6 +407,39 @@ export async function POST(req: NextRequest) {
         const qty = Math.max(1, Math.floor(Number(session.metadata?.quantity) || 1))
         if (memberId) {
           await grantWorkshopTopup(memberId, qty, session.id)
+        }
+      } else if (session.metadata?.type === 'entitlement_booking') {
+        // À-la-carte coaching/mentoring/training booking via the entitlements
+        // ledger. Records the purchased (refundable) entitlement + reserves the
+        // seat. If the cohort filled between checkout and webhook, refund + stop.
+        const { memberId, offeringId, participantId, coupon } = session.metadata
+        const creditApplied = Math.max(0, Math.floor(Number(session.metadata?.creditAppliedCents) || 0))
+        const amount = session.amount_total ?? 0
+        if (memberId && offeringId) {
+          const intent = typeof session.payment_intent === 'string' ? session.payment_intent : null
+          try {
+            const bookingId = await confirmPaidBooking({
+              memberId,
+              offeringId,
+              stripePaymentId: intent ?? session.id,
+              amountChargedCents: amount,
+              creditAppliedCents: creditApplied,
+              participantId: participantId ?? null,
+            })
+            if (coupon) await redeemCoupon(coupon, memberId, bookingId, amount)
+            await persistStripeCustomer(session)
+            await logActivity({
+              memberId,
+              category: 'billing',
+              action: 'payment_received',
+              summary: `Booking payment received${fmtMoney(session.amount_total, session.currency)}`,
+              metadata: { kind: 'entitlement_booking', offeringId, amount, currency: session.currency },
+              actorType: 'stripe',
+            })
+          } catch (err) {
+            console.error('[stripe/webhook] entitlement_booking confirm failed, refunding:', err)
+            if (intent) await getStripe().refunds.create({ payment_intent: intent })
+          }
         }
       } else if (session.metadata?.type === 'store_order') {
         // Web-store purchase (direct-to-consumer) — mark paid, place the Printful

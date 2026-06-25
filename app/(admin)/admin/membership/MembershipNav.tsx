@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation'
 const TABS = [
   { href: '/admin/membership', label: 'Tiers', exact: true },
   { href: '/admin/membership/rules', label: 'Grant rules', exact: false },
+  { href: '/admin/membership/discounts', label: 'Discounts', exact: false },
   { href: '/admin/community/entitlements', label: 'Access', exact: false },
   { href: '/admin/membership/members', label: 'Members', exact: false },
 ]

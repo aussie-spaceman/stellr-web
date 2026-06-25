@@ -21,6 +21,10 @@
       "schedule": "0 6 * * *"
     },
     {
+      "path": "/api/cron/entitlements",
+      "schedule": "0 5 * * *"
+    },
+    {
       "path": "/api/cron/campaigns",
       "schedule": "0 9 * * *"
     },

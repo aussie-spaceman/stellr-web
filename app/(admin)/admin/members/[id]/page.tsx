@@ -68,6 +68,7 @@ export default async function AdminMemberPage({
                 ordered_at: summary.check.ordered_at,
                 expires_at: summary.check.expires_at,
                 provider_report_ref: summary.check.provider_report_ref,
+                includes_canceled: summary.check.includes_canceled,
               }
             : null,
         }

@@ -12,6 +12,7 @@ import { MyRegistrations } from '@/components/member/MyRegistrations'
 import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
 import { AddressBook } from '@/components/account/AddressBook'
 import { OrdersList } from '@/components/account/OrdersList'
+import { EntitlementsSummary } from '@/components/account/EntitlementsSummary'
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline'
 import Link from 'next/link'
 
@@ -219,7 +220,10 @@ export default async function AccountPage({
 
       {/* Billing tab */}
       {activeTab === 'billing' && showBilling && (
-        <BillingHistory />
+        <div className="flex flex-col gap-6">
+          <EntitlementsSummary memberId={member.id} />
+          <BillingHistory />
+        </div>
       )}
 
       {/* Activity tab */}

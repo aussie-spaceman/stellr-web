@@ -50,7 +50,12 @@ export async function POST(req: Request) {
     updated_at: now,
   }
   if (parsed.reportRef) update.provider_report_ref = parsed.reportRef
-  if (parsed.status === 'passed' || parsed.status === 'referred') {
+  if (parsed.assessment != null) update.assessment = parsed.assessment
+  if (parsed.includesCanceled != null) update.includes_canceled = parsed.includesCanceled
+
+  // passed/referred/cancelled are a finished report; expired = invite never used.
+  const reportCompleted = parsed.status === 'passed' || parsed.status === 'referred' || parsed.status === 'cancelled'
+  if (reportCompleted) {
     update.completed_at = now
     if (parsed.status === 'passed') {
       const expires = new Date()
@@ -61,17 +66,27 @@ export async function POST(req: Request) {
 
   await db.from('member_background_checks').update(update).eq('id', row.id)
 
-  if (parsed.status === 'passed' || parsed.status === 'referred') {
+  // Audit the meaningful terminal transitions.
+  const AUDIT: Record<string, { action: string; summary: string }> = {
+    passed: { action: 'background_check_passed', summary: 'Background check completed — cleared' },
+    referred: { action: 'background_check_referred', summary: 'Background check completed — flagged for review' },
+    cancelled: { action: 'background_check_cancelled', summary: 'Background check canceled before completion' },
+    expired: { action: 'background_check_expired', summary: 'Background check invitation expired without completion' },
+  }
+  const audit = AUDIT[parsed.status]
+  if (audit) {
     await logActivity(
       {
         memberId: row.member_id as string,
         category: 'compliance',
-        action: parsed.status === 'passed' ? 'background_check_passed' : 'background_check_referred',
-        summary:
-          parsed.status === 'passed'
-            ? 'Background check completed — cleared'
-            : 'Background check completed — flagged for review',
-        metadata: { result: parsed.result, reportRef: parsed.reportRef },
+        action: audit.action,
+        summary: parsed.includesCanceled ? `${audit.summary} (includes canceled screenings)` : audit.summary,
+        metadata: {
+          result: parsed.result,
+          assessment: parsed.assessment ?? null,
+          includesCanceled: parsed.includesCanceled ?? false,
+          reportRef: parsed.reportRef,
+        },
         actorType: 'system',
       },
       db,

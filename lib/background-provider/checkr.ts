@@ -45,14 +45,29 @@ function authHeader(): string {
   return `Basic ${Buffer.from(`${ENV.apiKey}:`).toString('base64')}`
 }
 
-async function checkrPost<T>(path: string, body: Record<string, unknown>): Promise<T> {
+async function checkrPost<T>(
+  path: string,
+  body: Record<string, unknown>,
+  extraHeaders: Record<string, string> = {},
+): Promise<T> {
   const res = await fetch(`${ENV.baseUrl}${path}`, {
     method: 'POST',
-    headers: { Authorization: authHeader(), 'Content-Type': 'application/json' },
+    headers: { Authorization: authHeader(), 'Content-Type': 'application/json', ...extraHeaders },
     body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error(`Checkr ${path} failed: ${res.status} ${await res.text()}`)
   return (await res.json()) as T
+}
+
+// Basic data validation before any POST (Checkr REQUIRED): reject obviously bad
+// input here so we surface a clear error rather than a 400 from Checkr's API.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+function validateOrder(input: BackgroundOrderInput): void {
+  const problems: string[] = []
+  if (!input.firstName?.trim()) problems.push('first name')
+  if (!input.lastName?.trim()) problems.push('last name')
+  if (!input.email?.trim() || !EMAIL_RE.test(input.email.trim())) problems.push('a valid email address')
+  if (problems.length) throw new Error(`Background check needs ${problems.join(', ')} before it can be ordered`)
 }
 
 // ─── Webhook parsing ─────────────────────────────────────────────────────────
@@ -62,12 +77,32 @@ interface CheckrEnvelope {
   data?: { object?: Record<string, unknown> }
 }
 
-// Map a Checkr report (status + result) to our domain status. Only a complete
-// report is terminal: complete+clear → passed, complete+consider → referred.
-// pending/suspended/resumed mean Checkr is still working → in_progress.
-function mapReport(status: string | undefined, result: string | null): MappedStatus {
+// Map a Checkr report to our domain status.
+//
+// "Assess" support (REQUIRED): the assessment tag takes precedence over the raw
+// result — look at `assessment` first and use it if present, otherwise fall back
+// to `result`. eligible → passed; review/escalated → referred (needs a human).
+//
+// Only a `complete` report is terminal. A complete report with no result and no
+// assessment but canceled screenings (Complete Now with nothing reportable) is a
+// cancellation, not a pass. pending/suspended/resumed → still in progress.
+function mapReport(
+  status: string | undefined,
+  result: string | null,
+  assessment: string | null,
+  includesCanceled: boolean,
+): MappedStatus {
   if ((status ?? '').toLowerCase() !== 'complete') return 'in_progress'
-  return (result ?? '').toLowerCase() === 'clear' ? 'passed' : 'referred'
+
+  const a = (assessment ?? '').toLowerCase()
+  if (a) return a === 'eligible' ? 'passed' : 'referred'
+
+  const r = (result ?? '').toLowerCase()
+  if (r === 'clear') return 'passed'
+  if (r === 'consider') return 'referred'
+  // No usable result/assessment on a complete report: a fully-partial cancellation,
+  // else surface for review rather than silently passing.
+  return includesCanceled ? 'cancelled' : 'referred'
 }
 
 export const checkrProvider: BackgroundProvider = {
@@ -77,23 +112,34 @@ export const checkrProvider: BackgroundProvider = {
 
   async order(input: BackgroundOrderInput): Promise<BackgroundOrder> {
     if (!configured()) throw new Error('Checkr not configured (CHECKR_API_KEY / CHECKR_PACKAGE_SLUG)')
+    validateOrder(input)
 
-    // 1) Candidate shell — the candidate supplies SSN/PII on the hosted page.
-    const candidate = await checkrPost<{ id: string }>('/candidates', {
-      first_name: input.firstName,
-      last_name: input.lastName,
-      email: input.email,
-      no_middle_name: true,
-    })
+    const state = (input.state || ENV.workLocation || '').toUpperCase()
+    const workLocations = [{ country: 'US', ...(state ? { state } : {}) }]
+
+    // 1) Candidate shell — the candidate supplies SSN/PII on the hosted page. We
+    // send work_locations here too (Account Hierarchy requirement) but NOT the SSN
+    // or DL (Checkr doesn't pre-populate them). An idempotency key prevents a
+    // retry from creating a duplicate candidate within Checkr's 24h window.
+    const candidate = await checkrPost<{ id: string }>(
+      '/candidates',
+      {
+        first_name: input.firstName.trim(),
+        last_name: input.lastName.trim(),
+        email: input.email.trim(),
+        no_middle_name: true,
+        work_locations: workLocations,
+      },
+      input.idempotencyKey ? { 'Idempotency-Key': input.idempotencyKey } : {},
+    )
 
     // 2) Invitation — Checkr emails the candidate and returns the hosted apply URL.
-    const state = (input.state || ENV.workLocation || '').toUpperCase()
     const invitation = await checkrPost<{ id: string; invitation_url?: string; status?: string }>(
       '/invitations',
       {
         candidate_id: candidate.id,
         package: ENV.packageSlug,
-        work_locations: [{ country: 'US', ...(state ? { state } : {}) }],
+        work_locations: workLocations,
       },
     )
 
@@ -129,16 +175,32 @@ export const checkrProvider: BackgroundProvider = {
     const type = env.type ?? ''
     const obj = env.data?.object ?? {}
 
-    // Reports carry candidate_id + result; invitations carry candidate_id + report_id.
+    // Reports carry candidate_id + result/assessment; invitations carry
+    // candidate_id + report_id.
     const candidateRef = (obj.candidate_id as string) ?? null
     const result = (obj.result as string) ?? null
+    const assessment = (obj.assessment as string) ?? null
+    const includesCanceled = obj.includes_canceled === true
 
+    // ── Report lifecycle ──────────────────────────────────────────────────────
     if (type.startsWith('report.')) {
       const reportRef = (obj.id as string) ?? null
-      const status = mapReport(obj.status as string | undefined, result)
-      return { candidateRef, invitationRef: null, reportRef, status, result }
+      const base = { candidateRef, invitationRef: null, reportRef, result, assessment, includesCanceled }
+
+      // report.canceled — every screening canceled before any completed.
+      if (type === 'report.canceled') return { ...base, status: 'cancelled', result: result ?? 'canceled' }
+      // report.engaged — an adjudicator engaged the report; treat as cleared.
+      if (type === 'report.engaged') return { ...base, status: 'passed' }
+      // Adverse action / dispute — flagged for human review.
+      if (type === 'report.pre_adverse_action' || type === 'report.post_adverse_action' || type === 'report.disputed')
+        return { ...base, status: 'referred' }
+      // suspended/resumed — Checkr is still working the report.
+      if (type === 'report.suspended' || type === 'report.resumed') return { ...base, status: 'in_progress' }
+      // report.completed (and any other report.* carrying a status) — map it.
+      return { ...base, status: mapReport(obj.status as string | undefined, result, assessment, includesCanceled) }
     }
 
+    // ── Invitation lifecycle ──────────────────────────────────────────────────
     if (type === 'invitation.completed') {
       // The report now exists; mark in-progress and capture its id. The terminal
       // outcome arrives via report.completed.
@@ -152,10 +214,15 @@ export const checkrProvider: BackgroundProvider = {
     }
 
     if (type === 'invitation.expired') {
-      return { candidateRef, invitationRef: (obj.id as string) ?? null, reportRef: null, status: null, result: 'expired' }
+      return { candidateRef, invitationRef: (obj.id as string) ?? null, reportRef: null, status: 'expired', result: 'expired' }
     }
 
-    // Other events (candidate.*, report.created without a useful delta, etc.) are ignored.
+    if (type === 'invitation.deleted') {
+      return { candidateRef, invitationRef: (obj.id as string) ?? null, reportRef: null, status: 'cancelled', result: 'canceled' }
+    }
+
+    // Other events (candidate.*, invitation.created — we already record 'invited'
+    // at order time, report.created without a useful delta, etc.) are ignored.
     return null
   },
 }

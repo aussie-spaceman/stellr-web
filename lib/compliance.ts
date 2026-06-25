@@ -39,8 +39,12 @@ export interface TeacherLicense {
 
 export interface BackgroundCheck {
   id: string
-  status: 'invited' | 'in_progress' | 'passed' | 'referred' | 'cancelled' | 'error'
+  status: 'invited' | 'in_progress' | 'passed' | 'referred' | 'cancelled' | 'expired' | 'error'
   result: string | null
+  /** Checkr Assess tag (eligible / review / escalated), when present. */
+  assessment: string | null
+  /** A completed report that contained one or more canceled screenings. */
+  includes_canceled: boolean
   /** Vendor report id (Checkr) — the handle for a "view report" link. */
   provider_report_ref: string | null
   ordered_at: string
@@ -121,9 +125,12 @@ export function deriveCompliance(
   const bcInProcess = !!check && (check.status === 'invited' || check.status === 'in_progress')
 
   if (bcValid) {
+    const base = check!.expires_at
+      ? `Background check valid until ${fmtDate(check!.expires_at)}`
+      : 'Background check passed'
     return {
       state: 'valid_bc',
-      detail: check!.expires_at ? `Background check valid until ${fmtDate(check!.expires_at)}` : 'Background check passed',
+      detail: check!.includes_canceled ? `${base} (completed with canceled screenings)` : base,
       license,
       check,
     }
@@ -148,10 +155,12 @@ export function deriveCompliance(
     return { state: 'in_process', detail: 'License awaiting verification', license, check }
   }
 
-  // Required, but nothing valid on file — missing, expired, or referred.
+  // Required, but nothing valid on file — missing, expired, referred or canceled.
   let detail = 'No valid clearance on file'
   if (license && licenseExpired(license, ref)) detail = `License expired ${fmtDate(license.expiry_date)}`
   else if (check?.status === 'referred') detail = 'Background check flagged for review'
+  else if (check?.status === 'cancelled') detail = 'Background check was canceled — re-order required'
+  else if (check?.status === 'expired') detail = 'Background check invitation expired — re-order required'
   else if (check?.status === 'passed' && check.expires_at) detail = `Background check expired ${fmtDate(check.expires_at)}`
   return { state: 'invalid', detail, license, check }
 }
@@ -171,7 +180,7 @@ interface MemberComplianceRow {
 const COMPLIANCE_SELECT = `
   id, email, event_role, date_of_birth,
   member_teacher_licenses(id, license_number, licensing_state, expiry_date, verified_at, verified_label),
-  member_background_checks(id, status, result, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url)
+  member_background_checks(id, status, result, assessment, includes_canceled, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url)
 `
 
 export interface ComplianceRecords {

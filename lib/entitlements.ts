@@ -24,14 +24,6 @@ export type EntitlementKind = 'coaching_session' | 'cohort_access' | 'call_serie
 export type DiscountKind = 'tier' | 'coupon'
 export type DiscountType = 'percent' | 'fixed'
 
-// An entitlement of a given kind is scoped against this offering_type.
-const KIND_TO_OFFERING: Record<EntitlementKind, OfferingType | null> = {
-  coaching_session: 'coaching_session',
-  cohort_access: 'mentoring_cohort',
-  call_series: 'call_series',
-  training_access: 'training_content',
-  generic: null,
-}
 
 export interface Quote {
   includedAvailable: boolean
@@ -133,6 +125,38 @@ export async function getCreditBalanceCents(memberId: string): Promise<number> {
   const { data, error } = await ent().rpc('fn_credit_balance', { p_member: memberId })
   if (error) throw new Error(`getCreditBalanceCents: ${error.message}`)
   return Number(data ?? 0)
+}
+
+export interface BookingRow {
+  id: string
+  offering_id: string
+  status: 'reserved' | 'attended' | 'no_show' | 'cancelled'
+  amount_charged_cents: number
+  created_at: string
+}
+
+export interface EntitlementSummary {
+  coachingBalance: number
+  mentoringBalance: number
+  creditCents: number
+  bookings: BookingRow[]
+}
+
+/** A member's dashboard view: included balances, store credit, recent bookings. */
+export async function getMemberEntitlementSummary(memberId: string): Promise<EntitlementSummary> {
+  const [coachingBalance, mentoringBalance, creditCents] = await Promise.all([
+    getAllocationBalance(memberId, 'coaching_session', 'coaching_session'),
+    getAllocationBalance(memberId, 'cohort_access', 'mentoring_cohort'),
+    getCreditBalanceCents(memberId),
+  ])
+  const { data, error } = await ent()
+    .from('bookings')
+    .select('id, offering_id, status, amount_charged_cents, created_at')
+    .eq('member_id', memberId)
+    .order('created_at', { ascending: false })
+    .limit(10)
+  if (error) throw new Error(`getMemberEntitlementSummary: ${error.message}`)
+  return { coachingBalance, mentoringBalance, creditCents, bookings: (data ?? []) as BookingRow[] }
 }
 
 // ── Offerings (read) ────────────────────────────────────────────────────────────
@@ -285,53 +309,30 @@ export async function redeemCoupon(code: string, memberId: string, bookingId: st
 
 /**
  * Idempotently materialise the active tier's allocation rows (free coaching /
- * mentoring) into the member's entitlement ledger. Keyed on the membership id so
- * webhook retries never double-grant. Called from the Stripe webhook when a
- * membership activates. ADDITIVE during transition — runs alongside the existing
- * session_credits grant until the cutover migrates consumption to this ledger.
+ * mentoring) into the member's entitlement ledger for the current period.
+ * Delegates to the tested SQL (entitlements.fn_grant_member_benefits, migration
+ * 091), keyed on (membership, benefit, period) so webhook retries and overlapping
+ * cron ticks never double-grant. Returns the number of new lots created.
+ * ADDITIVE during transition — runs alongside the existing session_credits grant
+ * until the cutover migrates consumption to this ledger.
  */
-export async function grantTierAllocations(memberId: string, membershipId: string): Promise<number> {
+export async function grantTierAllocations(membershipId: string): Promise<number> {
+  const { data, error } = await ent().rpc('fn_grant_member_benefits', {
+    p_membership: membershipId,
+    p_as_of: new Date().toISOString(),
+  })
+  if (error) throw new Error(`grantTierAllocations: ${error.message}`)
+  return Number(data ?? 0)
+}
+
+/** Daily cron: re-grant per-period allowances + expire lapsed grants. */
+export async function runEntitlementsLifecycle(): Promise<{ granted: number; expired: number }> {
   const db = ent()
-  const tierCode = await getActiveTierCode(memberId)
-  if (!tierCode) return 0
-
-  const { data: benefits, error: bErr } = await db
-    .from('tier_benefits')
-    .select('id, kind, quantity, period, validity_days')
-    .eq('tier_code', tierCode)
-    .not('kind', 'is', null)
-  if (bErr) throw new Error(`grantTierAllocations: ${bErr.message}`)
-
-  let created = 0
-  for (const b of (benefits ?? []) as TierBenefit[]) {
-    if (!b.kind || !b.quantity || b.quantity <= 0) continue
-    const sourceRef = `${membershipId}:${b.id}`
-    const { count } = await db
-      .from('entitlements')
-      .select('id', { count: 'exact', head: true })
-      .eq('member_id', memberId)
-      .eq('source', 'tier_grant')
-      .eq('source_ref', sourceRef)
-    if ((count ?? 0) > 0) continue
-
-    const expiresAt = b.validity_days
-      ? new Date(Date.now() + b.validity_days * 24 * 60 * 60 * 1000).toISOString()
-      : null
-    const { error: iErr } = await db.from('entitlements').insert({
-      member_id: memberId,
-      kind: b.kind,
-      scope_type: 'offering_type',
-      offering_type: KIND_TO_OFFERING[b.kind],
-      quantity_total: b.quantity,
-      quantity_remaining: b.quantity,
-      source: 'tier_grant',
-      source_ref: sourceRef,
-      refundable: false,
-      status: 'active',
-      expires_at: expiresAt,
-    })
-    if (iErr) throw new Error(`grantTierAllocations(insert): ${iErr.message}`)
-    created += 1
-  }
-  return created
+  const [{ data: granted, error: gErr }, { data: expired, error: eErr }] = await Promise.all([
+    db.rpc('fn_regrant_periodic'),
+    db.rpc('fn_expire_lapsed_grants'),
+  ])
+  if (gErr) throw new Error(`runEntitlementsLifecycle(regrant): ${gErr.message}`)
+  if (eErr) throw new Error(`runEntitlementsLifecycle(expire): ${eErr.message}`)
+  return { granted: Number(granted ?? 0), expired: Number(expired ?? 0) }
 }

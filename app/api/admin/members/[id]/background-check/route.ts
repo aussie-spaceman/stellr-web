@@ -60,6 +60,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       firstName: member.first_name ?? '',
       lastName: member.last_name ?? '',
       state,
+      // Stable per-member key: dedupes the candidate-create on retry while still
+      // allowing a fresh invitation/report (multiple checks for one candidate).
+      idempotencyKey: `cand-${id}`,
     })
   } catch (err) {
     console.error('[admin] background-check order failed:', err)

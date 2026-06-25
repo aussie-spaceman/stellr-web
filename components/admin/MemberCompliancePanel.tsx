@@ -19,7 +19,20 @@ export interface MemberCompliance {
   state: ComplianceState
   detail: string | null
   license: TeacherLicense | null
-  check: { status: string; ordered_at: string; expires_at: string | null; provider_report_ref: string | null } | null
+  check: {
+    status: string
+    ordered_at: string
+    expires_at: string | null
+    provider_report_ref: string | null
+    includes_canceled?: boolean
+  } | null
+}
+
+// Deep link to the report in the Checkr dashboard (adjudicators only — this
+// panel is already admin-gated). Staging vs prod is inferred from the env base.
+function checkrReportUrl(reportRef: string): string {
+  const base = (process.env.NEXT_PUBLIC_CHECKR_DASHBOARD_URL ?? 'https://dashboard.checkr.com').replace(/\/$/, '')
+  return `${base}/reports/${reportRef}`
 }
 
 function fmt(iso: string) {
@@ -138,6 +151,21 @@ export function MemberCompliancePanel({
               <div className="flex justify-between">
                 <span className="text-brand-muted-soft">Valid until</span>
                 <span className="text-brand-blue-dark">{fmt(check.expires_at)}</span>
+              </div>
+            )}
+            {check.includes_canceled && (
+              <p className="text-xs text-amber-600 pt-1">Completed with one or more canceled screenings.</p>
+            )}
+            {check.provider_report_ref && (
+              <div className="pt-1">
+                <a
+                  href={checkrReportUrl(check.provider_report_ref)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium text-brand-blue hover:text-brand-blue-dark"
+                >
+                  View report in Checkr ↗
+                </a>
               </div>
             )}
           </>

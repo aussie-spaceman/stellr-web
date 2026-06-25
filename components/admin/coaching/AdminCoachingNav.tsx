@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { Star, CalendarDays, ShieldCheck, ArrowLeft } from 'lucide-react'
 
 const ITEMS = [
-  { href: '/admin/community/sessions', label: 'Workshops', icon: Star, exact: true },
+  { href: '/admin/community/sessions', label: 'Coaching workshops', icon: Star, exact: true },
   { href: '/admin/community/sessions/calendar', label: 'Sessions calendar', icon: CalendarDays },
   { href: '/admin/community/sessions/access', label: 'Membership & access', icon: ShieldCheck },
 ]

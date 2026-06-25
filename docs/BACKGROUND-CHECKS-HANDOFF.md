@@ -66,20 +66,21 @@ Mid-session the provider moved off Certn onto Checkr. The compliance layer (stat
 
 **Migrations**
 - `059_background_checks.sql` — **applied to prod** (verified: 2 tables, 16 BC columns, 6 indexes, activity-log CHECK includes `compliance`).
-- `060_checkr_provider.sql` — **NOT yet applied.** Drops `certn_application_id`; adds `provider_candidate_ref` / `provider_invitation_ref` / `provider_report_ref` / `invitation_url`; provider default → `checkr`; reconciliation indexes.
+- `060_checkr_provider.sql` — **applied to prod** (verified 2026-06-25 via migration history). Drops `certn_application_id`; adds `provider_candidate_ref` / `provider_invitation_ref` / `provider_report_ref` / `invitation_url`; provider default → `checkr`; reconciliation indexes.
+- `092_checkr_certification.sql` — **NOT yet applied.** Adds `assessment` + `includes_canceled`; widens status CHECK to add `expired`.
 
 ---
 
 ## 5. Database state (prod project `hwtzpfrnksksxlwwabqz`)
 
-- Migration **059 is live** (no real check rows — feature never exercised).
-- Migration **060 pending** → run **`supabase db push`** from the repo root (keeps CLI migration history in sync; do not apply via MCP/dashboard or it drifts).
+- Migrations **059 + 060 are live**. Prod migration history is at **090** (verified 2026-06-25); 091 (entitlements_lifecycle, unrelated) and **092** (this work) are unapplied in the repo.
+- Apply with **`supabase db push`** from the repo root (keeps CLI migration history in sync; do not apply via MCP/dashboard or it drifts).
 
 ---
 
 ## 6. Ops checklist before go-live (Checkr)
 
-1. `supabase db push` (applies 060); commit + deploy (`npx vercel deploy --prod --yes` per Hobby-plan cron gotcha).
+1. `supabase db push` (applies 092 — 060 is already live); commit + deploy (`npx vercel deploy --prod --yes` per Hobby-plan cron gotcha).
 2. In the Checkr dashboard: create a **criminal + identity package** → put its **slug** in `CHECKR_PACKAGE_SLUG`.
 3. Set `CHECKR_API_KEY` + `CHECKR_BASE_URL` (prod `https://api.checkr.com/v1`) in Vercel.
 4. Register webhook URL **`/api/webhooks/background`** in Checkr Developer Settings.
@@ -100,6 +101,60 @@ Until keys are set: ordering returns a clean **503** (`provider not configured`)
 
 ---
 
-## 8. How to resume
+## 8. API certification hardening (2026-06-25)
 
-Memory: `project_background_checks.md` (full detail) + MEMORY.md index line are current. Fastest next action: apply 060, set the Checkr env/package, run one staging order end-to-end to validate the webhook. Everything is staged in the working tree to commit and push.
+Reviewed Checkr's **Customer API Integration Guidance v3.0** + the two mock-candidate
+spreadsheets. We are the **Checkr-Hosted Flow** and an **SMB customer** (combined
+recruiting + adjudication; admins have dashboard access). The happy-path build only
+handled clear/consider — Checkr's REQUIRED items for production authorization were
+missing or wrong. Implemented (all behind the existing seam; `tsc` + `next build` clean):
+
+1. **Assess support (REQUIRED)** — `mapReport` reads `assessment` first
+   (`eligible`→passed, `review`/`escalated`→referred), falls back to `result` only
+   when assessment is absent.
+2. **Complete Now / report lifecycle (REQUIRED)** — `parseWebhook` now handles
+   `report.canceled`→cancelled, `report.engaged`→passed, pre/post-adverse-action +
+   disputed→referred, suspended/resumed→in_progress, and reads `includes_canceled`
+   on `report.completed`.
+3. **Invitation lifecycle** — `invitation.expired`→expired (previously dropped, since
+   the route skips null-status events) and `invitation.deleted`→cancelled.
+4. **Account Hierarchy (REQUIRED)** — `work_locations` now sent on `POST /candidates`
+   too (was invitation-only).
+5. **Data validation (REQUIRED)** — name/email validated before any POST.
+6. **Idempotency key (recommended)** — `cand-${memberId}` on candidate create.
+
+**Migration 092** (`092_checkr_certification.sql`, pending) adds `assessment` +
+`includes_canceled` columns and widens the status CHECK to add `expired`. New status
+vocabulary: `MappedStatus` += cancelled, expired. UI: admin panel shows a canceled-
+screenings note + "View report in Checkr ↗" link (`NEXT_PUBLIC_CHECKR_DASHBOARD_URL`,
+admin-gated); member section handles expired/cancelled copy.
+
+**Watch-out:** behaviour for `assessment=review` + `result=clear` (Alex Taylor's
+"Clear with Canceled") depends on whether the staging account has **Assess enabled**.
+Assess-on → we map to `referred`; assess-off → `passed` + canceled indicator
+("Clear w Canceled"). Confirm against the first real staging webhook and adjust the
+`mapReport` review-branch if the dashboard shows it as clear.
+
+## 9. Remaining certification path
+
+1. `supabase db push` to apply **092** (060 is already live in prod — verified via
+   migration history; prod is at 090, so push also carries 091 from the entitlements
+   work). Deploy to a staging/preview env.
+2. Set staging `CHECKR_*` env + create the criminal+identity package slug; register
+   the webhook URL `/api/webhooks/background` in Checkr Developer Settings.
+3. **Run the full mock-candidate matrix** (Bud Richman=Clear, Vito=Canceled, Alex
+   Taylor=Clear-with-Canceled [needs a crim+MVR package], the Consider candidates,
+   Remy Gonz / Jen Kasp=Pending via bad-then-good SSN). The pass criterion is that
+   the status shown in our app **matches the Checkr dashboard** for each candidate.
+4. **Name an adjudicator (REQUIRED-process)** — Checkr won't authorize prod until at
+   least one team member is identified as responsible for reviewing "consider /
+   needs review" reports.
+5. Record an **end-to-end video** and submit the **API Authorization Review Checklist**
+   (Smartsheet `c1284692a0be4d0eb73bacdffc66df32`).
+6. On approval: switch to prod keys/base URL/dashboard URL, email clients@checkr.com to
+   enable live Reports, deploy.
+
+## 10. How to resume
+
+Memory: `project_background_checks.md` (full detail) + MEMORY.md index line are current.
+Everything above is staged in the working tree to commit and push (manual git workflow).

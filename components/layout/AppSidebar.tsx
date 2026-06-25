@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   Home, Trophy, MessageSquare, FolderOpen, Users,
-  GraduationCap, Heart, Star, Radio, ClipboardList, Presentation,
+  GraduationCap, Heart, Star, Radio, ClipboardList,
 } from 'lucide-react'
 
 type NavItem = { label: string; href: string; icon: typeof Home }
@@ -24,7 +24,6 @@ const COMMUNITY_ITEMS: NavItem[] = [
 const ACADEMY_ITEMS: NavItem[] = [
   { label: 'Training',  href: '/community/training',  icon: GraduationCap },
   { label: 'Mentoring', href: '/community/mentoring', icon: Heart         },
-  { label: 'Workshops', href: '/community/workshops', icon: Presentation  },
   { label: 'Coaching',  href: '/community/coaching',  icon: Star          },
   { label: 'Hosting',   href: '/community/hosting',   icon: Radio         },
 ]

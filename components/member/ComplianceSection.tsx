@@ -97,7 +97,11 @@ export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: st
               ? 'Completed — flagged for review by Stellr'
               : data.check.status === 'invited'
                 ? 'Invitation sent — please check your email to complete it'
-                : 'In progress'}
+                : data.check.status === 'expired'
+                  ? 'Invitation expired — Stellr will re-send it'
+                  : data.check.status === 'cancelled'
+                    ? 'Canceled — Stellr will re-order it'
+                    : 'In progress'}
         </div>
       )}
 

@@ -8,12 +8,14 @@
 //
 // Our domain status (stored on member_background_checks.status) is vendor-neutral:
 //   invited      — candidate invited / awaiting their submission
-//   in_progress  — submitted, vendor processing
-//   passed       — complete, cleared (no issues)
-//   referred     — complete, flagged for human review
-// (cancelled / error are set by our own code, not the provider.)
+//   in_progress  — submitted, vendor processing (incl. suspended/resumed)
+//   passed       — complete, cleared (no disqualifying records)
+//   referred     — complete, flagged for human review (incl. adverse action)
+//   cancelled    — invitation/report canceled with nothing reportable completed
+//   expired      — the candidate never completed the invite (7-day expiry)
+// (error is set by our own code, not the provider.)
 
-export type MappedStatus = 'invited' | 'in_progress' | 'passed' | 'referred'
+export type MappedStatus = 'invited' | 'in_progress' | 'passed' | 'referred' | 'cancelled' | 'expired'
 
 export interface BackgroundOrderInput {
   firstName: string
@@ -21,6 +23,8 @@ export interface BackgroundOrderInput {
   email: string
   /** US state the person works in (drives Checkr work_locations/compliance). */
   state?: string | null
+  /** Stable key for idempotent candidate creation (avoids duplicates on retry). */
+  idempotencyKey?: string
 }
 
 export interface BackgroundOrder {
@@ -43,6 +47,10 @@ export interface BackgroundWebhookResult {
   status: MappedStatus | null
   /** Raw vendor result label (e.g. Checkr 'clear' / 'consider'). */
   result: string | null
+  /** Checkr Assess tag (eligible / review / escalated), if present. */
+  assessment?: string | null
+  /** True when a completed report included one or more canceled screenings. */
+  includesCanceled?: boolean
 }
 
 export interface BackgroundProvider {

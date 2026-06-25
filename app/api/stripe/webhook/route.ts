@@ -8,7 +8,6 @@ import { handleStoreOrderPaid } from '@/lib/store/orders'
 import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
 import { fireTierPurchased } from '@/lib/membership-grants'
 import { enrollAfterPayment } from '@/lib/mentoring'
-import { enrollWorkshopAfterPayment, grantWorkshopTopup } from '@/lib/workshops'
 import { confirmPaidBooking, redeemCoupon, grantTierAllocations } from '@/lib/entitlements'
 
 function getStripe() {
@@ -250,7 +249,7 @@ async function activateMembership(
   // runs alongside the existing session_credits grant until the cutover.
   try {
     const membershipId = (inserted as { id?: string } | null)?.id
-    if (membershipId) await grantTierAllocations(memberId, membershipId)
+    if (membershipId) await grantTierAllocations(membershipId)
   } catch (err) {
     console.error('[stripe/webhook] grantTierAllocations (non-fatal):', err)
   }
@@ -386,28 +385,6 @@ export async function POST(req: NextRequest) {
             })),
           )
         }
-      } else if (session.metadata?.type === 'workshop_enrollment') {
-        // One-off coaching-workshop purchase → enroll + record purchase.
-        const { memberId, workshopId } = session.metadata
-        if (memberId && workshopId) {
-          await enrollWorkshopAfterPayment(memberId, workshopId, session.id)
-          await persistStripeCustomer(session)
-          await logActivity({
-            memberId,
-            category: 'billing',
-            action: 'payment_received',
-            summary: `Coaching workshop payment received${fmtMoney(session.amount_total, session.currency)}`,
-            metadata: { kind: 'workshop', workshopId, amount: session.amount_total, currency: session.currency },
-            actorType: 'stripe',
-          })
-        }
-      } else if (session.metadata?.type === 'workshop_topup') {
-        // Purchased workshop credits (top-up pack) → grant available credits.
-        const { memberId } = session.metadata
-        const qty = Math.max(1, Math.floor(Number(session.metadata?.quantity) || 1))
-        if (memberId) {
-          await grantWorkshopTopup(memberId, qty, session.id)
-        }
       } else if (session.metadata?.type === 'entitlement_booking') {
         // À-la-carte coaching/mentoring/training booking via the entitlements
         // ledger. Records the purchased (refundable) entitlement + reserves the
@@ -440,6 +417,43 @@ export async function POST(req: NextRequest) {
             console.error('[stripe/webhook] entitlement_booking confirm failed, refunding:', err)
             if (intent) await getStripe().refunds.create({ payment_intent: intent })
           }
+        }
+      } else if (
+        session.metadata?.type === 'workshop_enrollment' ||
+        session.metadata?.type === 'workshop_topup'
+      ) {
+        // Legacy group-"Workshops" was merged into Coaching (25-Jun-2026) and its
+        // enroll/top-up handlers were removed. A Stripe Checkout session created
+        // before this deploy can still complete afterwards — don't silently
+        // swallow the payment. Flag it loudly + in the member activity log so it
+        // can be remediated by hand (grant a coaching credit or issue a refund).
+        const { memberId } = session.metadata
+        console.error('[stripe/webhook] stray legacy workshop payment after merge:', {
+          type: session.metadata.type,
+          memberId,
+          workshopId: session.metadata?.workshopId ?? null,
+          quantity: session.metadata?.quantity ?? null,
+          sessionId: session.id,
+          amount: session.amount_total,
+        })
+        if (memberId) {
+          await persistStripeCustomer(session)
+          await logActivity({
+            memberId,
+            category: 'billing',
+            action: 'payment_received',
+            summary: `Legacy workshop payment received${fmtMoney(session.amount_total, session.currency)} — needs manual remediation (Workshops merged into Coaching)`,
+            metadata: {
+              kind: 'legacy_workshop_stray',
+              stripeType: session.metadata.type,
+              workshopId: session.metadata?.workshopId ?? null,
+              quantity: session.metadata?.quantity ?? null,
+              sessionId: session.id,
+              amount: session.amount_total,
+              currency: session.currency,
+            },
+            actorType: 'stripe',
+          })
         }
       } else if (session.metadata?.type === 'store_order') {
         // Web-store purchase (direct-to-consumer) — mark paid, place the Printful

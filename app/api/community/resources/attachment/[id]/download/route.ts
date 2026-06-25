@@ -16,18 +16,24 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const resolved = await resolveDownloadableAttachment(member, id)
   if (!resolved) return NextResponse.json({ error: 'No access to this resource' }, { status: 403 })
 
-  const url = await signedDownloadUrl(resolved.storagePath)
-  if (!url) return NextResponse.json({ error: 'Could not generate download link' }, { status: 500 })
+  // Files stream via a short-lived signed URL; links open to their destination.
+  let url: string | null
+  if (resolved.kind === 'link') {
+    url = resolved.url
+  } else {
+    url = await signedDownloadUrl(resolved.storagePath)
+    if (!url) return NextResponse.json({ error: 'Could not generate download link' }, { status: 500 })
+  }
 
-  // Per-binary download signal, tagged with the attachment it was opened from.
+  // Per-binary open/download signal, tagged with the attachment it was opened from.
   logActivity({
     memberId: member.id,
     category: 'community',
     action: 'resource_downloaded',
-    summary: `Downloaded resource “${resolved.title}”`,
-    metadata: { attachmentId: id },
+    summary: `Opened resource “${resolved.title}”`,
+    metadata: { attachmentId: id, kind: resolved.kind },
     actorType: 'member',
   }).catch(() => {})
 
-  return NextResponse.json({ url, title: resolved.title })
+  return NextResponse.json({ url, title: resolved.title, kind: resolved.kind })
 }

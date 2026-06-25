@@ -425,22 +425,31 @@ export async function getResourceDetail(
 }
 
 /**
- * Resolve an attachment to its stored binary for download, re-checking access at
+ * What a resolved attachment opens to: a stored file (needs a signed URL) or a
+ * link (the destination URL is returned directly).
+ */
+export type DownloadableResolution =
+  | { kind: 'file'; storagePath: string; title: string }
+  | { kind: 'link'; url: string; title: string }
+
+/**
+ * Resolve an attachment to its binary for open/download, re-checking access at
  * request time (handover §4.2 "Open/Download re-checks the gate"). Access is the
  * CONTAINER's — being on the roster of the attachment's container + clearing its
- * membership floor — NOT the legacy per-binary gates. Returns null when the member
- * can't reach it. `recording` attachments have no downloadable file here.
+ * membership floor — NOT the legacy per-binary gates. Handles both files and link
+ * resources (and recordings, which resolve to whichever the binary holds).
+ * Returns null when the member can't reach it.
  */
 export async function resolveDownloadableAttachment(
   member: CommunityMember,
   attachmentId: string,
-): Promise<{ storagePath: string; title: string } | null> {
+): Promise<DownloadableResolution | null> {
   const db = supabaseServer()
   const { data: att } = await db
     .from('container_contents')
     .select('container_id, content_type, content_ref, min_membership')
     .eq('id', attachmentId)
-    .eq('content_type', 'resource')
+    .in('content_type', ['resource', 'recording'])
     .maybeSingle()
   if (!att) return null
 
@@ -452,11 +461,18 @@ export async function resolveDownloadableAttachment(
 
   const { data: binary } = await db
     .from('community_resources')
-    .select('storage_path, title')
+    .select('storage_path, source_url, file_type, title')
     .eq('id', att.content_ref as string)
     .maybeSingle()
   if (!binary) return null
-  return { storagePath: binary.storage_path as string, title: binary.title as string }
+
+  const title = binary.title as string
+  // A link resource (or any binary with no stored file) opens to its URL.
+  if ((binary.file_type as string | null) === 'link' || !binary.storage_path) {
+    const url = binary.source_url as string | null
+    return url ? { kind: 'link', url, title } : null
+  }
+  return { kind: 'file', storagePath: binary.storage_path as string, title }
 }
 
 /**

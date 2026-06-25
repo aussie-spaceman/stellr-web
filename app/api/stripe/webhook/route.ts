@@ -359,6 +359,22 @@ export async function POST(req: NextRequest) {
             })),
           )
         }
+      } else if (session.metadata?.type === 'coaching_topup') {
+        // Purchased extra coaching sessions (top-up pack) → grant available credits.
+        const { memberId } = session.metadata
+        const qty = Math.max(1, Math.floor(Number(session.metadata?.quantity) || 1))
+        if (memberId) {
+          const db = supabaseServer()
+          await db.from('session_credits').insert(
+            Array.from({ length: qty }, () => ({
+              member_id: memberId,
+              session_type: 'coaching',
+              status: 'available',
+              source: 'topup',
+              stripe_session_id: session.id,
+            })),
+          )
+        }
       } else if (session.metadata?.type === 'workshop_enrollment') {
         // One-off coaching-workshop purchase → enroll + record purchase.
         const { memberId, workshopId } = session.metadata

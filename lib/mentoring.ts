@@ -950,6 +950,8 @@ export interface CohortFileResource {
   fileType: string | null
   isMandatory: boolean
   dueAt: string | null
+  /** Per-attachment membership floor (decision 6b): null/0 = all, >0 = paid. */
+  minMembership: number | null
 }
 
 /** Standalone file resources attached to a cohort (content_type='resource'). */
@@ -957,7 +959,7 @@ export async function listCohortFileResources(cohortId: string): Promise<CohortF
   const db = supabaseServer()
   const { data: links } = await db
     .from('container_contents')
-    .select('content_ref, is_mandatory, due_at, display_order')
+    .select('content_ref, is_mandatory, due_at, display_order, min_membership')
     .eq('container_id', cohortId)
     .eq('content_type', 'resource')
     .order('display_order')
@@ -978,6 +980,7 @@ export async function listCohortFileResources(cohortId: string): Promise<CohortF
         fileType: m.file_type,
         isMandatory: !!l.is_mandatory,
         dueAt: (l.due_at as string | null) ?? null,
+        minMembership: (l.min_membership as number | null) ?? null,
       }
     })
 }

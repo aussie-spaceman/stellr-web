@@ -1,116 +1,89 @@
-import { supabaseServer } from '@/lib/supabase'
-import {
-  SessionsManager,
-  type AdminTier,
-  type AdminHost,
-  type AdminCohort,
-  type AdminEntitlement,
-  type AdminModule,
-} from '@/components/admin/community/SessionsManager'
-import { SessionCalendar } from '@/components/community/SessionCalendar'
-import { AdminOversight } from '@/components/admin/community/AdminOversight'
-import { CoachingGrant } from '@/components/admin/community/CoachingGrant'
+import Link from 'next/link'
+import { Plus } from 'lucide-react'
+import { listAllWorkshops, getAdminWorkshopStats } from '@/lib/coaching'
+import { AdminCoachingNav } from '@/components/admin/coaching/AdminCoachingNav'
 
-export const metadata = { title: 'Admin — Coaching & Mentoring' }
+export const metadata = { title: 'Admin · Coaching workshops' }
 
-function nameOf(rel: unknown): string | null {
-  const m = Array.isArray(rel) ? rel[0] : rel
-  const mm = m as { first_name?: string; last_name?: string } | null
-  if (!mm) return null
-  return [mm.first_name, mm.last_name].filter(Boolean).join(' ') || null
-}
-
-// Admin console for Coaching (FR-COM-12) + Mentoring (FR-COM-11): grant host
-// permissions, manage cohorts, and configure sessions-per-tier.
-export default async function AdminSessionsPage() {
-  const db = supabaseServer()
-
-  const [{ data: tiers }, { data: hostRows }, { data: cohortRows }, { data: ents }, { data: moduleRows }, { data: allSessions }] =
-    await Promise.all([
-      db.from('membership_tiers').select('id, name').order('sort_order'),
-      db.from('session_hosts').select('member_id, can_coach, can_mentor, members!session_hosts_member_id_fkey(first_name, last_name)'),
-      db
-        .from('mentoring_cohorts')
-        .select(
-          'id, name, lifecycle, mentor:members!mentoring_cohorts_mentor_member_id_fkey(first_name, last_name), cohort_members(member_id, status), cohort_training_links(module_id, is_mandatory, due_at, training_modules(title))',
-        )
-        .eq('container_type', 'mentoring')
-        .eq('lifecycle', 'active'),
-      db
-        .from('session_entitlements')
-        .select('tier_id, session_type, included_sessions, validity_days, extra_stripe_price_id'),
-      db.from('training_modules').select('id, title').eq('is_published', true).order('title'),
-      db.from('sessions').select('id, title, scheduled_start, status').order('scheduled_start', { ascending: false }).limit(200),
-    ])
-
-  const hosts: AdminHost[] = (hostRows ?? []).map((h) => ({
-    member_id: h.member_id as string,
-    name: nameOf(h.members) ?? 'Member',
-    can_coach: h.can_coach as boolean,
-    can_mentor: h.can_mentor as boolean,
-  }))
-
-  type TrainingLinkRow = {
-    module_id: string
-    is_mandatory: boolean
-    due_at: string | null
-    training_modules: { title?: string } | { title?: string }[] | null
-  }
-  const cohorts: AdminCohort[] = (cohortRows ?? []).map((c) => {
-    const cmRows = (Array.isArray(c.cohort_members) ? c.cohort_members : []) as Array<{ status?: string }>
-    return {
-      id: c.id as string,
-      name: c.name as string,
-      mentor_name: nameOf((c as { mentor?: unknown }).mentor),
-      member_count: cmRows.filter((m) => (m.status ?? 'active') === 'active').length,
-      invited_count: cmRows.filter((m) => m.status === 'invited').length,
-      lifecycle: ((c as { lifecycle?: string }).lifecycle as 'active' | 'archived') ?? 'active',
-      training: (
-        ((c as { cohort_training_links?: TrainingLinkRow[] }).cohort_training_links ?? []) as TrainingLinkRow[]
-      ).map((l) => ({
-        module_id: l.module_id,
-        is_mandatory: !!l.is_mandatory,
-        due_at: l.due_at ?? null,
-        title:
-          (Array.isArray(l.training_modules) ? l.training_modules[0]?.title : l.training_modules?.title) ?? 'Module',
-      })),
-    }
-  })
-
-  const modules: AdminModule[] = (moduleRows ?? []).map((m) => ({ id: m.id as string, name: m.title as string }))
+export default async function AdminWorkshopsPage() {
+  const [workshops, stats] = await Promise.all([listAllWorkshops(), getAdminWorkshopStats()])
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Coaching &amp; Mentoring</h1>
-        <p className="mt-0.5 text-sm text-brand-muted-soft">
-          Approve coaches and mentors, build cohorts, and set how many sessions each tier includes.
-        </p>
-      </div>
-
-      <section>
-        <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Session calendar</h2>
-        <div className="rounded-lg border border-brand-border bg-white p-4">
-          <SessionCalendar sessions={(allSessions ?? []) as { id: string; title: string | null; scheduled_start: string; status: string }[]} />
+    <div className="flex gap-8">
+      <AdminCoachingNav />
+      <div className="min-w-0 flex-1 space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">Coaching workshops</h1>
+          <Link href="/admin/community/sessions/new" className="inline-flex items-center gap-2 rounded-[9px] bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-deep">
+            <Plus className="h-4 w-4" /> New workshop
+          </Link>
         </div>
-      </section>
 
-      <SessionsManager
-        tiers={(tiers ?? []) as AdminTier[]}
-        hosts={hosts}
-        cohorts={cohorts}
-        entitlements={(ents ?? []) as AdminEntitlement[]}
-        modules={modules}
-      />
+        <div className="grid gap-4 sm:grid-cols-4">
+          <Stat label="Active workshops" value={stats.activeWorkshops} />
+          <Stat label="Coaches" value={stats.coaches} />
+          <Stat label="Sessions this week" value={stats.sessionsThisWeek} />
+          <Stat label="Pending invites" value={stats.pendingInvites} tone="amber" />
+        </div>
 
-      <section className="mt-10">
-        <CoachingGrant />
-      </section>
+        <div className="overflow-hidden rounded-card border border-line bg-white">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line-light text-left text-[12px] font-semibold uppercase tracking-[0.05em] text-content-faint">
+                <th className="px-5 py-3">Workshop</th>
+                <th className="px-5 py-3">Coach</th>
+                <th className="px-5 py-3">Member</th>
+                <th className="px-5 py-3">Progress</th>
+                <th className="px-5 py-3">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {workshops.length === 0 ? (
+                <tr><td colSpan={5} className="px-5 py-10 text-center text-content-muted">No workshops yet.</td></tr>
+              ) : (
+                workshops.map((w) => (
+                  <tr key={w.id} className="border-b border-line-light last:border-0 hover:bg-surface">
+                    <td className="px-5 py-3">
+                      <Link href={`/admin/community/sessions/${w.id}`} className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] font-display text-sm font-bold text-white" style={{ background: 'linear-gradient(150deg,#7C5CFC,#5B3FE0)' }}>{w.name.charAt(0)}</span>
+                        <span>
+                          <span className="block font-medium text-ink">{w.name}</span>
+                          <span className="block text-[12px] text-content-muted">Session {w.heldSessions} of {w.plannedSessions}</span>
+                        </span>
+                      </Link>
+                    </td>
+                    <td className="px-5 py-3 text-content-secondary">{w.coachName ?? '—'}</td>
+                    <td className="px-5 py-3 text-content-secondary">
+                      {w.memberName ?? '—'}
+                      {w.memberStatus === 'invited' && <span className="ml-1.5 rounded-pill bg-pathway-amber-bg px-2 py-0.5 text-[10px] font-bold text-[#C2722A]">INVITED</span>}
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex w-32 items-center gap-2">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-pill bg-[#EEF0F7]"><div className="h-full rounded-pill bg-space-violet" style={{ width: `${w.progressPct}%` }} /></div>
+                        <span className="text-[12px] text-content-muted">{w.progressPct}%</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className={`rounded-pill px-2.5 py-0.5 text-[11px] font-semibold ${w.lifecycle === 'active' ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-surface text-content-muted'}`}>
+                        {w.lifecycle === 'active' ? 'Active' : 'Archived'}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-      <section className="mt-10">
-        <h2 className="mb-4 text-lg font-semibold text-brand-blue-dark">Oversight</h2>
-        <AdminOversight cohorts={cohorts.map((c) => ({ id: c.id, name: c.name }))} />
-      </section>
+function Stat({ label, value, tone }: { label: string; value: number; tone?: 'amber' }) {
+  return (
+    <div className="rounded-card border border-line bg-white p-4">
+      <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-content-faint">{label}</p>
+      <p className={`mt-1 font-display text-[26px] font-bold ${tone === 'amber' && value > 0 ? 'text-pathway-amber' : 'text-ink'}`}>{value}</p>
     </div>
   )
 }

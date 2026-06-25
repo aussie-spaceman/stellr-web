@@ -49,7 +49,12 @@ export default async function ManageWorkshopPage({ params }: { params: Promise<{
         <h2 className="mb-3 font-display text-[16px] font-bold text-ink">Attached resources</h2>
         <AttachedResourceList
           containerId={workshop.id}
-          items={fileResources.map((r) => ({ resourceId: r.resourceId, title: r.title, fileType: r.fileType }))}
+          items={fileResources.map((r) => ({
+            resourceId: r.resourceId,
+            title: r.title,
+            fileType: r.fileType,
+            minMembership: r.minMembership,
+          }))}
         />
       </div>
     </div>

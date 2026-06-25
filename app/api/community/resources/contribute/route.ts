@@ -73,6 +73,7 @@ export async function POST(req: Request) {
     url?: string
     binaryId?: string
     displayName?: string
+    minMembership?: number | null
   }
   const containerId = b.containerId ?? ''
   if (!containerId || !(await memberManagesContainer(member, containerId))) {
@@ -115,6 +116,22 @@ export async function POST(req: Request) {
         .eq('container_id', containerId)
         .eq('content_type', 'resource')
         .eq('content_ref', b.binaryId)
+      return NextResponse.json({ ok: true })
+    }
+
+    case 'setAccess': {
+      // Per-attachment membership floor (decision 6b — the re-homed green-circle).
+      // null/0 = open to everyone on the roster; 1 = paid members only.
+      if (!b.binaryId) return NextResponse.json({ error: 'binaryId required' }, { status: 400 })
+      const floor = Number(b.minMembership) > 0 ? Math.floor(Number(b.minMembership)) : null
+      const db = supabaseServer()
+      const { error } = await db
+        .from('container_contents')
+        .update({ min_membership: floor })
+        .eq('container_id', containerId)
+        .in('content_type', ['resource', 'recording'])
+        .eq('content_ref', b.binaryId)
+      if (error) return NextResponse.json({ error: 'Could not update access' }, { status: 500 })
       return NextResponse.json({ ok: true })
     }
 

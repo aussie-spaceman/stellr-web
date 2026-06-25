@@ -1118,6 +1118,111 @@ export async function scheduleMentoringSeries(
   return { ok: created > 0, created, error }
 }
 
+// ─── Coaching workshop sessions (1-on-1, FR-COM-12) ──────────────────────────
+// A coaching workshop is a mentoring_cohorts row (container_type='coaching') with
+// exactly one coachee on the roster. Its sessions are session_type='coaching',
+// tied to the container via cohort_id, hosted by the coach. They draw on the
+// member's coaching allowance via getEntitlement('coaching') — see lib/coaching.ts.
+
+/**
+ * Schedule one coaching session for a workshop. Looks up the single coachee on
+ * the roster, fans them out as the participant, provisions the video room, and
+ * emails calendar invites to coach + coachee. Coach scheduling does NOT mark the
+ * session paid-extra; the member's "free sessions left" reflects scheduled
+ * coaching sessions, and cancelling one returns it to the allowance.
+ */
+export async function scheduleCoachingSession(
+  coachId: string,
+  workshopId: string,
+  startIso: string,
+  opts: { durationMin?: number; title?: string } = {},
+): Promise<BookResult> {
+  const db = supabaseServer()
+  const caps = await getHostCaps(coachId)
+  if (!caps.canCoach) return { ok: false, error: 'Not authorised to coach.' }
+
+  // Confirm the coach owns this workshop and find the single coachee.
+  const { data: ws } = await db
+    .from('mentoring_cohorts')
+    .select('id, mentor_member_id, container_type')
+    .eq('id', workshopId)
+    .eq('container_type', 'coaching')
+    .maybeSingle()
+  if (!ws || ws.mentor_member_id !== coachId) return { ok: false, error: 'Workshop not found.' }
+
+  const { data: roster } = await db
+    .from('cohort_members')
+    .select('member_id')
+    .eq('cohort_id', workshopId)
+    .eq('status', 'active')
+    .limit(1)
+  const coacheeId = (roster ?? [])[0]?.member_id as string | undefined
+
+  const start = new Date(startIso)
+  const end = new Date(start.getTime() + (opts.durationMin ?? 60) * 60_000)
+
+  const { data: session, error } = await db
+    .from('sessions')
+    .insert({
+      session_type: 'coaching',
+      host_member_id: coachId,
+      cohort_id: workshopId,
+      member_id: coacheeId ?? null,
+      title: opts.title ?? 'Coaching session',
+      scheduled_start: start.toISOString(),
+      scheduled_end: end.toISOString(),
+      status: 'scheduled',
+      created_by: coachId,
+    })
+    .select('id')
+    .single()
+
+  if (error || !session) {
+    console.error('[sessions] schedule coaching error:', error)
+    return { ok: false, error: 'Could not schedule session.' }
+  }
+
+  await provisionRoom(session.id, opts.title ?? 'Coaching session')
+  if (coacheeId) {
+    await db.from('session_participants').insert({ session_id: session.id, member_id: coacheeId })
+    await notifyMember(coacheeId, {
+      type: 'session',
+      body: `New coaching session scheduled for ${start.toLocaleString()}.`,
+      referenceType: 'session',
+      referenceId: session.id,
+      actorMemberId: coachId,
+    })
+  }
+  await sendSessionInvites(session.id)
+  return { ok: true, sessionId: session.id }
+}
+
+/** Schedule a series of coaching sessions `intervalDays` apart (bulk "Schedule all"). */
+export async function scheduleCoachingSeries(
+  coachId: string,
+  workshopId: string,
+  startIso: string,
+  count: number,
+  intervalDays: number,
+  durationMin: number,
+  title?: string,
+): Promise<{ ok: boolean; created: number; error?: string }> {
+  const n = Math.max(1, Math.min(Math.floor(count) || 1, 52))
+  const interval = Math.max(0, Math.floor(intervalDays) || 0)
+  const base = new Date(startIso)
+  if (Number.isNaN(base.getTime())) return { ok: false, created: 0, error: 'Invalid start date.' }
+
+  let created = 0
+  let error: string | undefined
+  for (let i = 0; i < n; i++) {
+    const start = new Date(base.getTime() + i * interval * 86_400_000)
+    const r = await scheduleCoachingSession(coachId, workshopId, start.toISOString(), { durationMin, title })
+    if (r.ok) created++
+    else error = r.error
+  }
+  return { ok: created > 0, created, error }
+}
+
 /** Link a training module to a cohort (mentor or admin). */
 export async function linkCohortTraining(
   cohortId: string,

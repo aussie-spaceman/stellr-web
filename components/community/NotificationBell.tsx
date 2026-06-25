@@ -157,6 +157,40 @@ export function NotificationBell() {
                   </li>
                 )
               }
+              // Coaching workshop invite → inline Accept & review / Decline.
+              if (n.reference_type === 'coaching_invite' && n.reference_id) {
+                return (
+                  <li key={n.id} className="px-4 py-3">
+                    <p className="text-sm font-medium text-brand-blue-dark">
+                      {actorName(n.actor)} invited you to a coaching workshop
+                    </p>
+                    {n.body && <p className="mt-0.5 text-xs text-brand-muted-soft">{n.body}</p>}
+                    <p className="mt-0.5 text-[11px] text-brand-muted-soft">Also sent to your email · {timeAgo(n.created_at)}</p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <Link
+                        href={`/community/coaching/${n.reference_id}/invite`}
+                        onClick={() => setOpen(false)}
+                        className="rounded-md bg-space-violet px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#5B3FE0]"
+                      >
+                        Accept &amp; review
+                      </Link>
+                      <button
+                        onClick={async () => {
+                          await fetch('/api/community/cohorts/respond', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ cohortId: n.reference_id, action: 'decline' }),
+                          })
+                          setNotifications((prev) => prev.filter((x) => x.id !== n.id))
+                        }}
+                        className="rounded-md px-3 py-1.5 text-xs font-medium text-brand-muted-soft hover:text-brand-muted"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </li>
+                )
+              }
               // Space invite → inline Accept / Decline (mirrors the cohort flow).
               if (n.type === 'invite' && n.reference_type === 'space' && n.reference_id) {
                 const respond = async (action: 'accept' | 'decline') => {
@@ -195,7 +229,9 @@ export function NotificationBell() {
                   ? `/community/general/${n.reference_id}`
                   : (n.reference_type === 'cohort' || n.reference_type === 'cohort_invite') && n.reference_id
                     ? `/community/mentoring/${n.reference_id}`
-                    : '/community'
+                    : (n.reference_type === 'coaching' || n.reference_type === 'coaching_invite') && n.reference_id
+                      ? `/community/coaching/${n.reference_id}`
+                      : '/community'
               return (
                 <li key={n.id}>
                   <Link

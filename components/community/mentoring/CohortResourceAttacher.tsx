@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileText, Link2, Search } from 'lucide-react'
+import { ResourceAccessSelect } from '@/components/community/resources/AttachedResourceList'
 
 export interface AttachedFileResource {
   resourceId: string
@@ -10,6 +11,7 @@ export interface AttachedFileResource {
   fileType: string | null
   isMandatory: boolean
   dueAt: string | null
+  minMembership: number | null
 }
 
 // Attach standalone files/links from the community resource library to a cohort
@@ -19,10 +21,13 @@ export function CohortResourceAttacher({
   cohortId,
   attached,
   tz,
+  endpoint = '/api/community/mentoring/manage',
 }: {
   cohortId: string
   attached: AttachedFileResource[]
   tz: string
+  /** Manage API endpoint; coaching workshops pass their own. */
+  endpoint?: string
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -31,7 +36,7 @@ export function CohortResourceAttacher({
   const [searching, setSearching] = useState(false)
 
   const post = async (payload: Record<string, unknown>) => {
-    const res = await fetch('/api/community/mentoring/manage', {
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cohortId, ...payload }),
@@ -44,7 +49,7 @@ export function CohortResourceAttacher({
     setQ(term)
     setSearching(true)
     try {
-      const res = await fetch(`/api/community/mentoring/manage?cohortId=${cohortId}&q=${encodeURIComponent(term)}`)
+      const res = await fetch(`${endpoint}?cohortId=${cohortId}&q=${encodeURIComponent(term)}`)
       if (res.ok) setResults((await res.json()).results ?? [])
     } finally {
       setSearching(false)
@@ -111,6 +116,7 @@ export function CohortResourceAttacher({
 }
 
 function AttachedRow({
+  cohortId,
   r,
   tz,
   post,
@@ -120,12 +126,29 @@ function AttachedRow({
   tz: string
   post: (p: Record<string, unknown>) => Promise<boolean>
 }) {
+  const router = useRouter()
   const [mandatory, setMandatory] = useState(r.isMandatory)
   const [due, setDue] = useState(r.dueAt ? r.dueAt.slice(0, 10) : '')
   const isLink = (r.fileType ?? '').toLowerCase() === 'link' || (r.fileType ?? '').toLowerCase() === 'url'
 
   const save = (m: boolean, d: string) =>
     post({ action: 'attachResource', resourceId: r.resourceId, mandatory: m, dueAt: d ? new Date(d).toISOString() : null })
+
+  // Per-attachment access floor posts to /contribute (the container-management
+  // endpoint), not the mentoring manage API.
+  const setAccess = async (v: 'all' | 'paid') => {
+    const res = await fetch('/api/community/resources/contribute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        containerId: cohortId,
+        action: 'setAccess',
+        binaryId: r.resourceId,
+        minMembership: v === 'paid' ? 1 : null,
+      }),
+    })
+    if (res.ok) router.refresh()
+  }
 
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
@@ -134,6 +157,7 @@ function AttachedRow({
         {r.title}
       </span>
       <div className="flex items-center gap-3">
+        <ResourceAccessSelect value={(r.minMembership ?? 0) > 0 ? 'paid' : 'all'} onChange={setAccess} />
         <label className="flex items-center gap-1.5 text-[13px] text-content-secondary">
           <input type="checkbox" checked={mandatory} onChange={(e) => { setMandatory(e.target.checked); save(e.target.checked, due) }} className="h-4 w-4 accent-space-violet" />
           Mandatory

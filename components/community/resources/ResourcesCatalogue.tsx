@@ -62,18 +62,25 @@ function actionLabel(kind: ResourceKind): string {
   return 'Download'
 }
 
-/** Triggers a catalogue download via the container-gated attachment route. */
-async function downloadAttachment(attachmentId: string, name: string): Promise<string | null> {
-  const res = await fetch(`/api/community/resources/attachment/${attachmentId}/download`)
+/**
+ * Open a catalogue attachment via the container-gated route (re-checks the gate).
+ * Files download; links/recordings open in a new tab.
+ */
+async function openAttachment(row: CatalogueRow, name: string): Promise<string | null> {
+  const res = await fetch(`/api/community/resources/attachment/${row.attachmentId}/download`)
   const json = await res.json().catch(() => ({}))
-  if (!res.ok) return json.error ?? 'Download failed'
-  const a = document.createElement('a')
-  a.href = json.url
-  a.download = name
-  a.rel = 'noopener noreferrer'
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+  if (!res.ok) return json.error ?? 'Could not open this resource'
+  if (row.kind === 'file') {
+    const a = document.createElement('a')
+    a.href = json.url
+    a.download = name
+    a.rel = 'noopener noreferrer'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  } else {
+    window.open(json.url, '_blank', 'noopener,noreferrer')
+  }
   return null
 }
 
@@ -81,34 +88,20 @@ function RowActions({ row, name }: { row: CatalogueRow; name: string }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  if (row.kind !== 'file') {
-    // Links / recordings open in a new tab (PR2 supplies the href; detail page
-    // re-checks the gate). For now route through the detail page.
-    return (
-      <Link
-        href={`/community/resources/${row.attachmentId}`}
-        className="inline-flex items-center gap-1.5 rounded-md bg-brand-blue/10 px-3 py-1.5 text-xs font-medium text-brand-blue-dark hover:bg-brand-blue/20"
-      >
-        <KindIcon kind={row.kind} className="h-3.5 w-3.5" />
-        {actionLabel(row.kind)}
-      </Link>
-    )
-  }
-
   return (
     <div className="text-right">
       <button
         onClick={async () => {
           setBusy(true)
           setErr(null)
-          setErr(await downloadAttachment(row.attachmentId, name))
+          setErr(await openAttachment(row, name))
           setBusy(false)
         }}
         disabled={busy}
         className="inline-flex items-center gap-1.5 rounded-md bg-brand-blue/10 px-3 py-1.5 text-xs font-medium text-brand-blue-dark hover:bg-brand-blue/20 disabled:opacity-50"
       >
-        <Download className="h-3.5 w-3.5" />
-        {busy ? 'Preparing…' : 'Download'}
+        {row.kind === 'file' ? <Download className="h-3.5 w-3.5" /> : <KindIcon kind={row.kind} className="h-3.5 w-3.5" />}
+        {busy ? 'Opening…' : actionLabel(row.kind)}
       </button>
       {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
     </div>

@@ -60,8 +60,8 @@ export async function getComplianceAudit(): Promise<ComplianceAudit> {
     .from('members')
     .select(`
       id, first_name, last_name, email, event_role, date_of_birth, is_active,
-      member_teacher_licenses(id, license_number, licensing_state, expiry_date, verified_at, verified_label),
-      member_background_checks(id, status, result, assessment, includes_canceled, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url)
+      member_teacher_licenses!member_id(id, license_number, licensing_state, expiry_date, verified_at, verified_label),
+      member_background_checks!member_id(id, status, result, assessment, includes_canceled, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url)
     `)
     .not('event_role', 'in', `(${STUDENT_ROLES.join(',')})`)
     .or('is_active.is.null,is_active.eq.true')

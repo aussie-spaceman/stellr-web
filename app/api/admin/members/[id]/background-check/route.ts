@@ -21,7 +21,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const { data: member } = await db
     .from('members')
-    .select('id, first_name, last_name, email, event_role, date_of_birth, member_teacher_licenses(licensing_state)')
+    .select('id, first_name, last_name, email, event_role, date_of_birth, member_teacher_licenses!member_id(licensing_state)')
     .eq('id', id)
     .maybeSingle()
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })

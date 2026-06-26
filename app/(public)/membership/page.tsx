@@ -263,8 +263,8 @@ export default async function MembershipPage() {
               <div className="flex flex-col gap-[9px] my-4 flex-1">
                 <FeatureRow>Everything in Explorer</FeatureRow>
                 <FeatureRow>Pathfinder Community Spaces</FeatureRow>
-                <FeatureRow>Quarterly mentoring cohorts</FeatureRow>
-                <FeatureRow>25% discount on mentoring &amp; coaching</FeatureRow>
+                <FeatureRow>4 × 30-min mentoring sessions</FeatureRow>
+                <FeatureRow>15% discount on mentoring &amp; coaching</FeatureRow>
                 <FeatureRow>10% store discount</FeatureRow>
               </div>
               <AutoNoteViolet>
@@ -288,8 +288,8 @@ export default async function MembershipPage() {
               <div className="flex flex-col gap-[9px] my-4 flex-1">
                 <FeatureRow>Everything in Pathfinder</FeatureRow>
                 <FeatureRow>Scholar Community Spaces</FeatureRow>
-                <FeatureRow>5 × 30-min 1:1 coaching sessions</FeatureRow>
-                <FeatureRow>30% discount on additional coaching and mentoring</FeatureRow>
+                <FeatureRow>3 × 30-min 1:1 coaching sessions</FeatureRow>
+                <FeatureRow>25% discount on additional coaching and mentoring</FeatureRow>
                 <FeatureRow>Proactive LinkedIn Support</FeatureRow>
               </div>
               <AutoNoteAmber>
@@ -348,7 +348,7 @@ export default async function MembershipPage() {
                 <FeatureRow>Contributor Community Spaces</FeatureRow>
                 <FeatureRow>Semester-long mentoring cohort</FeatureRow>
                 <FeatureRow>Career preparation &amp; internship support</FeatureRow>
-                <FeatureRow>25% discount on additional mentoring &amp; coaching</FeatureRow>
+                <FeatureRow>15% discount on additional mentoring &amp; coaching</FeatureRow>
                 <FeatureRow>LinkedIn reference · 10% store discount</FeatureRow>
               </div>
               <AutoNoteViolet>
@@ -372,8 +372,8 @@ export default async function MembershipPage() {
               <div className="flex flex-col gap-[9px] my-4 flex-1">
                 <FeatureRow>Everything in Alumni AND Contributor</FeatureRow>
                 <FeatureRow>Counselor Community Spaces</FeatureRow>
-                <FeatureRow>2 × 30-min coaching sessions included</FeatureRow>
-                <FeatureRow>30% discount on additional coaching</FeatureRow>
+                <FeatureRow>1 × 60-min coaching session included</FeatureRow>
+                <FeatureRow>25% discount on additional coaching</FeatureRow>
                 <FeatureRow>Career readiness &amp; graduate positions</FeatureRow>
                 <FeatureRow>10% store discount</FeatureRow>
               </div>
@@ -396,12 +396,12 @@ export default async function MembershipPage() {
           <SegTag bg="#EDFAF4" color="#0F6A4C">Educators &amp; teachers</SegTag>
           <SectionH2>Run competitions that actually teach</SectionH2>
           <p className="text-[16px] leading-[1.65] text-content-muted max-w-[620px] mt-[14px] mb-9">
-            Bring Stellr competitions into your classroom. The Educator tier is free — upgrade to
-            Innovator to unlock the full competition toolkit. Every student account in your cohort
-            upgrades with you. Looking for CTE? Check out our Trailblazer tier.
+            Bring Stellr competitions into your classroom. The Educator tier is free — step up to
+            Catalyst for richer classroom resources, or Innovator to unlock the full competition
+            toolkit. Looking for CTE? Check out our Trailblazer tier.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
 
             {/* Educator (free) */}
             <div className="bg-white border border-line rounded-panel py-7 px-[26px] flex flex-col">
@@ -417,6 +417,26 @@ export default async function MembershipPage() {
                 <FeatureRow>Students assigned Explorer on registration</FeatureRow>
               </div>
               <BtnPrimarySm href={`${AUTH_URL}/sign-up`}>Join free</BtnPrimarySm>
+            </div>
+
+            {/* Catalyst — paid resources tier */}
+            <div className="bg-white border border-line rounded-panel py-7 px-[26px] flex flex-col">
+              <IconTile Icon={Certificate} />
+              <p className="font-display font-bold text-[19px] text-ink">Catalyst</p>
+              <div className="flex items-baseline gap-1.5 mt-1.5">
+                <span className="font-display font-bold text-[38px] tracking-heading text-ink">{formatTierPrice(prices['Catalyst'])}</span>
+                <span className="text-[15px] text-content-faint">/year</span>
+              </div>
+              <p className="text-[13px] text-content-faint mt-[2px]">Richer classroom resources</p>
+              <div className="flex flex-col gap-[9px] my-4 flex-1">
+                <FeatureRow>Everything in Educator</FeatureRow>
+                <FeatureRow>Advanced activity planning &amp; worksheets</FeatureRow>
+                <FeatureRow>Intermediate assessment tools</FeatureRow>
+                <FeatureRow>Multi-week lesson plans</FeatureRow>
+                <FeatureRow>Intro &amp; close-out slides and calls</FeatureRow>
+                <FeatureRow>AI Ethics student guide</FeatureRow>
+              </div>
+              <BtnPrimarySm href={`${AUTH_URL}/sign-up`}>Get Catalyst</BtnPrimarySm>
             </div>
 
             {/* Innovator ($500/yr) — featured green */}
@@ -439,7 +459,7 @@ export default async function MembershipPage() {
                 <FeatureRow>Live kick-off &amp; close-out calls</FeatureRow>
                 <FeatureRow>Student certificates</FeatureRow>
                 <FeatureRow>AI PM &amp; sub-contractor tools</FeatureRow>
-                <FeatureRow>Student accounts upgraded to Pathfinder</FeatureRow>
+                <FeatureRow>Student accounts invited as Explorer</FeatureRow>
               </div>
               <BtnPrimarySm href={`${AUTH_URL}/sign-up`}>Get Innovator</BtnPrimarySm>
             </div>
@@ -455,9 +475,11 @@ export default async function MembershipPage() {
               <p className="text-[13px] text-content-faint mt-[2px]">For teachers looking to excel</p>
               <div className="flex flex-col gap-[9px] my-4 flex-1">
                 <FeatureRow>Everything in Innovator</FeatureRow>
+                <FeatureRow>Full CTE: NGSS / ISTE alignment &amp; credits</FeatureRow>
                 <FeatureRow>Bi-weekly mentoring calls (recorded)</FeatureRow>
                 <FeatureRow>CPD credits &amp; hours</FeatureRow>
-                <FeatureRow>Student awards included</FeatureRow>
+                <FeatureRow>Student awards &amp; SCORM / LMS export</FeatureRow>
+                <FeatureRow>Student accounts upgraded to Pathfinder</FeatureRow>
               </div>
               <TierCheckoutButton
                 tierName="Trailblazer"

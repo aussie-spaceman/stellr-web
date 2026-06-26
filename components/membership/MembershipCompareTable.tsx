@@ -85,8 +85,8 @@ function SchoolTable({ prices }: { prices: PriceLabels }) {
             <tr><Td>Competition entry</Td><TdC><Check /></TdC><TdC><Check /></TdC><TdC><Check /></TdC></tr>
             <GroupRow label="Mentoring & Coaching" cols={4} />
             <tr><Td>Quarterly mentoring cohorts</Td><TdC><Dash /></TdC><TdC><Check /></TdC><TdC><Check /></TdC></tr>
-            <tr><Td>Included 1:1 coaching sessions</Td><TdC><Dash /></TdC><TdC><Dash /></TdC><TdC><Part>5 × 30 min</Part></TdC></tr>
-            <tr><Td>Coaching &amp; mentoring discount</Td><TdC><Dash /></TdC><TdC><Part>25%</Part></TdC><TdC><Part>30%</Part></TdC></tr>
+            <tr><Td>Included 1:1 coaching sessions</Td><TdC><Dash /></TdC><TdC><Dash /></TdC><TdC><Part>3 × 30 min</Part></TdC></tr>
+            <tr><Td>Coaching &amp; mentoring discount</Td><TdC><Dash /></TdC><TdC><Part>15%</Part></TdC><TdC><Part>25%</Part></TdC></tr>
             <GroupRow label="Recognition" cols={4} />
             <tr><Td>Proactive LinkedIn Support</Td><TdC><Dash /></TdC><TdC><Dash /></TdC><TdC><Check /></TdC></tr>
             <tr><Td>Store discount</Td><TdC><Part>5%</Part></TdC><TdC><Part>10%</Part></TdC><TdC><Part>10%</Part></TdC></tr>
@@ -121,8 +121,8 @@ function CollegeTable({ prices }: { prices: PriceLabels }) {
             <tr><Td>Competition entry</Td><TdC><Check /></TdC><TdC><Check /></TdC><TdC><Check /></TdC></tr>
             <GroupRow label="Mentoring & Coaching" cols={4} />
             <tr><Td>Semester-long mentoring cohort</Td><TdC><Dash /></TdC><TdC><Check /></TdC><TdC><Check /></TdC></tr>
-            <tr><Td>Included 1:1 coaching sessions</Td><TdC><Dash /></TdC><TdC><Dash /></TdC><TdC><Part>2 × 30 min</Part></TdC></tr>
-            <tr><Td>Coaching &amp; mentoring discount</Td><TdC><Dash /></TdC><TdC><Part>25%</Part></TdC><TdC><Part>30%</Part></TdC></tr>
+            <tr><Td>Included 1:1 coaching sessions</Td><TdC><Dash /></TdC><TdC><Dash /></TdC><TdC><Part>1 × 60 min</Part></TdC></tr>
+            <tr><Td>Coaching &amp; mentoring discount</Td><TdC><Dash /></TdC><TdC><Part>15%</Part></TdC><TdC><Part>25%</Part></TdC></tr>
             <GroupRow label="Recognition" cols={4} />
             <tr><Td>Proactive LinkedIn Support</Td><TdC><Dash /></TdC><TdC><Check /></TdC><TdC><Check /></TdC></tr>
             <tr><Td>Store discount</Td><TdC><Part>5%</Part></TdC><TdC><Part>10%</Part></TdC><TdC><Part>10%</Part></TdC></tr>

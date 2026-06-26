@@ -21,8 +21,7 @@
 --   repriced paid tier and on Catalyst, which DISABLES paid membership checkout for
 --   those tiers until the new Price IDs are created and written back. Pre-launch
 --   this is safe (0 paying members) and prevents checkout charging the old amount.
---   Follow-up: create Stripe Prices for Pathfinder/Scholar/Contributor/Counselor/
---   Catalyst/Innovator/Trailblazer and UPDATE membership_tiers.stripe_price_id.
+--   The new annual Price IDs are set in migration 095_tier_stripe_prices.sql.
 --
 -- ⚠ FUTURE WORK (adult-mentor membership): the "adult mentor signup" grant is
 --   repointed to Subscriber as an INTERIM. There is no canonical free tier for adult
@@ -34,7 +33,7 @@
 
 begin;
 
--- 1. Reprice paid tiers to canonical and clear now-stale Stripe prices.
+-- 1. Reprice paid tiers to canonical and clear now-stale Stripe prices (set in 095).
 update membership_tiers set annual_cost_cents = 5900,  stripe_price_id = null, stripe_price_id_monthly = null where name = 'Pathfinder';
 update membership_tiers set annual_cost_cents = 11900, stripe_price_id = null, stripe_price_id_monthly = null where name = 'Scholar';
 update membership_tiers set annual_cost_cents = 24900, stripe_price_id = null, stripe_price_id_monthly = null where name = 'Contributor';

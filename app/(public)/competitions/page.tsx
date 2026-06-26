@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { Launch, Environment } from '@stellr/icons'
+import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
 import {
   Hero,
   SectionHeading,
@@ -113,7 +114,8 @@ const themes = [
 
 interface Tier {
   name: string
-  price: string
+  /** Injected from membership_tiers at render (see CompetitionsPage) — not hard-coded. */
+  price?: string
   accessNote: string
   inheritsFrom?: string
   badge?: string
@@ -124,13 +126,11 @@ interface Tier {
 const tiers: Tier[] = [
   {
     name: 'Subscriber',
-    price: 'Free',
     accessNote: 'Publicly available',
     items: ['Request for Proposal (RFP)', 'Mission Handbook', 'Examples of previous work'],
   },
   {
     name: 'Educator',
-    price: 'Free',
     accessNote: 'Free with a member account',
     inheritsFrom: 'Subscriber',
     items: [
@@ -142,7 +142,6 @@ const tiers: Tier[] = [
   },
   {
     name: 'Innovator',
-    price: '$500',
     accessNote: 'Free 1st year for event participants',
     inheritsFrom: 'Educator',
     badge: 'Best Value',
@@ -158,14 +157,14 @@ const tiers: Tier[] = [
   },
   {
     name: 'Trailblazer',
-    price: '$1,000',
     accessNote: 'Comprehensive teacher support',
     inheritsFrom: 'Innovator',
     items: ['Biweekly mentoring calls (via Community)', 'CTE credits / hours', 'Student awards'],
   },
 ]
 
-export default function CompetitionsPage() {
+export default async function CompetitionsPage() {
+  const tierPrices = await getTierPriceMap()
   return (
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
@@ -312,7 +311,7 @@ export default function CompetitionsPage() {
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-8 items-start">
                 {tiers.map((tier) => (
-                  <TierCard key={tier.name} {...tier} />
+                  <TierCard key={tier.name} {...tier} price={formatTierPrice(tierPrices[tier.name])} />
                 ))}
               </div>
 

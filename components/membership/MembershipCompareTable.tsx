@@ -4,6 +4,9 @@ import { useState } from 'react'
 
 type Tab = 'school' | 'college' | 'educators'
 
+/** name → display label (e.g. "$59/yr" or "Free"), sourced from the DB by the server page. */
+type PriceLabels = Record<string, string>
+
 const TABS: { key: Tab; label: string }[] = [
   { key: 'school', label: 'School students' },
   { key: 'college', label: 'College' },
@@ -61,7 +64,7 @@ function GroupRow({ label, cols }: { label: string; cols: number }) {
   )
 }
 
-function SchoolTable() {
+function SchoolTable({ prices }: { prices: PriceLabels }) {
   return (
     <>
       <div className="bg-white border border-line rounded-2xl overflow-hidden">
@@ -69,9 +72,9 @@ function SchoolTable() {
           <thead>
             <tr>
               <Th><span className="min-w-[230px] inline-block">Feature</span></Th>
-              <ThC>Explorer<br /><span className="font-normal text-[12px] text-content-faint">Free</span></ThC>
-              <ThC>Pathfinder<br /><span className="font-normal text-[12px] text-content-faint">$60/yr</span></ThC>
-              <ThC>Scholar<br /><span className="font-normal text-[12px] text-content-faint">$500/yr</span></ThC>
+              <ThC>Explorer<br /><span className="font-normal text-[12px] text-content-faint">{prices['Explorer']}</span></ThC>
+              <ThC>Pathfinder<br /><span className="font-normal text-[12px] text-content-faint">{prices['Pathfinder']}</span></ThC>
+              <ThC>Scholar<br /><span className="font-normal text-[12px] text-content-faint">{prices['Scholar']}</span></ThC>
             </tr>
           </thead>
           <tbody>
@@ -97,7 +100,7 @@ function SchoolTable() {
   )
 }
 
-function CollegeTable() {
+function CollegeTable({ prices }: { prices: PriceLabels }) {
   return (
     <>
       <div className="bg-white border border-line rounded-2xl overflow-hidden">
@@ -105,9 +108,9 @@ function CollegeTable() {
           <thead>
             <tr>
               <Th><span className="min-w-[230px] inline-block">Feature</span></Th>
-              <ThC>Alumni<br /><span className="font-normal text-[12px] text-content-faint">Free</span></ThC>
-              <ThC>Contributor<br /><span className="font-normal text-[12px] text-content-faint">$250/yr</span></ThC>
-              <ThC>Counselor<br /><span className="font-normal text-[12px] text-content-faint">$500/yr</span></ThC>
+              <ThC>Alumni<br /><span className="font-normal text-[12px] text-content-faint">{prices['Alumni']}</span></ThC>
+              <ThC>Contributor<br /><span className="font-normal text-[12px] text-content-faint">{prices['Contributor']}</span></ThC>
+              <ThC>Counselor<br /><span className="font-normal text-[12px] text-content-faint">{prices['Counselor']}</span></ThC>
             </tr>
           </thead>
           <tbody>
@@ -133,7 +136,7 @@ function CollegeTable() {
   )
 }
 
-function EducatorTable() {
+function EducatorTable({ prices }: { prices: PriceLabels }) {
   return (
     <>
       <div className="bg-white border border-line rounded-2xl overflow-hidden">
@@ -141,9 +144,9 @@ function EducatorTable() {
           <thead>
             <tr>
               <Th><span className="min-w-[230px] inline-block">Feature</span></Th>
-              <ThC>Educator<br /><span className="font-normal text-[12px] text-content-faint">Free</span></ThC>
-              <ThC>Innovator<br /><span className="font-normal text-[12px] text-content-faint">$500/yr</span></ThC>
-              <ThC>Trailblazer<br /><span className="font-normal text-[12px] text-content-faint">$1,000/yr</span></ThC>
+              <ThC>Educator<br /><span className="font-normal text-[12px] text-content-faint">{prices['Educator']}</span></ThC>
+              <ThC>Innovator<br /><span className="font-normal text-[12px] text-content-faint">{prices['Innovator']}</span></ThC>
+              <ThC>Trailblazer<br /><span className="font-normal text-[12px] text-content-faint">{prices['Trailblazer']}</span></ThC>
             </tr>
           </thead>
           <tbody>
@@ -171,7 +174,7 @@ function EducatorTable() {
   )
 }
 
-export function MembershipCompareTable() {
+export function MembershipCompareTable({ prices }: { prices: PriceLabels }) {
   const [active, setActive] = useState<Tab>('school')
 
   return (
@@ -193,9 +196,9 @@ export function MembershipCompareTable() {
         ))}
       </div>
 
-      {active === 'school' && <SchoolTable />}
-      {active === 'college' && <CollegeTable />}
-      {active === 'educators' && <EducatorTable />}
+      {active === 'school' && <SchoolTable prices={prices} />}
+      {active === 'college' && <CollegeTable prices={prices} />}
+      {active === 'educators' && <EducatorTable prices={prices} />}
     </div>
   )
 }

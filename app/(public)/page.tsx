@@ -4,6 +4,7 @@ import { ArrowRight, Users, Trophy, Rocket } from 'lucide-react'
 import { getFeaturedEvents, type StellarEvent } from '@/lib/sanity'
 import { EventCard } from '@/components/ui/EventCard'
 import { QuoteRotator } from '@/components/sections/QuoteRotator'
+import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
 
 export const metadata: Metadata = {
   // Title intentionally omitted: the homepage inherits the root layout's
@@ -44,10 +45,11 @@ const whatWeDo = [
   },
 ]
 
+// Prices are NOT stored here — they come from membership_tiers via getTierPriceMap()
+// (see HomePage). Only names, copy and layout live in this const.
 const membershipTiers = [
   {
     name: 'Explorer',
-    price: 'Free',
     benefits: [
       'STEM Power Skills training material',
       'Access to Community Spaces',
@@ -56,7 +58,6 @@ const membershipTiers = [
   },
   {
     name: 'Pathfinder',
-    price: '$60/yr',
     highlight: true,
     benefits: [
       '1 year free membership with competition participation',
@@ -66,7 +67,6 @@ const membershipTiers = [
   },
   {
     name: 'Scholar',
-    price: '$120/yr',
     benefits: [
       '1 year free membership to competition award winners',
       'Exclusive scholar content',
@@ -97,6 +97,11 @@ export default async function HomePage() {
   const authUrl = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
   const featuredEvents = await getFeaturedEvents().catch(() => null)
+  const tierPrices = await getTierPriceMap()
+  const tierPriceLabel = (name: string) => {
+    const label = formatTierPrice(tierPrices[name])
+    return label === 'Free' ? 'Free' : `${label}/yr`
+  }
 
   const events: StellarEvent[] = featuredEvents?.length ? featuredEvents : []
 
@@ -241,7 +246,7 @@ export default async function HomePage() {
                   </span>
                 )}
                 <h3 className="text-xl font-bold text-brand-blue-dark">{tier.name}</h3>
-                <p className="text-2xl font-bold text-brand-blue mt-1">{tier.price}</p>
+                <p className="text-2xl font-bold text-brand-blue mt-1">{tierPriceLabel(tier.name)}</p>
                 <ul className="mt-4 space-y-2">
                   {tier.benefits.map((b) => (
                     <li key={b} className="flex items-start gap-2 text-sm text-brand-grey-dark">

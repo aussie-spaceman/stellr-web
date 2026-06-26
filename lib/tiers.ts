@@ -3,10 +3,11 @@
 // The Spaces design groups the 9 membership tiers into three columns — High
 // School / College / Teacher — for the admin "Access & tiers" checkbox grid and
 // for the tier pills shown on posts and member cards. The names below are the
-// LIVE tier names (membership_tiers.name, seeded in migration 025); the prototype
-// placeholders (Explorer/Pioneer/Voyager, Cadet/Aviator/Captain, Educator/Mentor/
-// Faculty) are replaced here. Deprecated names not used: Catalyst, Luminary,
-// Counsellor (British spelling), Advisor.
+// LIVE canonical tier names (membership_tiers.name); the 10-tier / 3-family schema
+// is sourced from Operations/Content Plan.xlsx and applied in migration 094. The
+// prototype placeholders (Explorer/Pioneer/Voyager, etc.) are replaced here.
+// Retired tiers (removed in migration 094, not used): Luminary, Counsellor
+// (British spelling), Advisor, Donor, Expert.
 //
 // This module is PURE (no server imports) so client components — tier pills,
 // access grids — can import it. The DB id↔name resolver lives in
@@ -26,7 +27,7 @@ export interface TierGroup {
 export const TIER_GROUPS: TierGroup[] = [
   { key: 'high_school', label: 'High School', tierNames: ['Explorer', 'Pathfinder', 'Scholar'] },
   { key: 'college',     label: 'College',     tierNames: ['Alumni', 'Contributor', 'Counselor'] },
-  { key: 'teacher',     label: 'Teacher',     tierNames: ['Educator', 'Innovator', 'Trailblazer'] },
+  { key: 'teacher',     label: 'Teacher',     tierNames: ['Educator', 'Catalyst', 'Innovator', 'Trailblazer'] },
 ]
 
 /** Every Spaces-relevant tier name, in display order. */

@@ -4,6 +4,7 @@ import { Award, Certificate, Event, Team } from '@stellr/icons'
 import { MembershipCompareTable } from '@/components/membership/MembershipCompareTable'
 import { MembershipFaq } from '@/components/membership/MembershipFaq'
 import { TierCheckoutButton } from '@/components/membership/TierCheckoutButton'
+import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
 
 export const metadata: Metadata = {
   title: 'Membership',
@@ -154,7 +155,17 @@ function BtnPrimarySm({ href, children }: { href: string; children: React.ReactN
 }
 
 /* ════════════════════════════════════════════════════════════════════ */
-export default function MembershipPage() {
+export default async function MembershipPage() {
+  const prices = await getTierPriceMap()
+  // Pre-format "/yr" labels for the (client) compare table so it needs no server imports.
+  const priceLabels: Record<string, string> = {}
+  for (const name of [
+    'Explorer', 'Pathfinder', 'Scholar', 'Alumni', 'Contributor', 'Counselor',
+    'Educator', 'Catalyst', 'Innovator', 'Trailblazer',
+  ]) {
+    const label = formatTierPrice(prices[name])
+    priceLabels[name] = label === 'Free' ? 'Free' : `${label}/yr`
+  }
   return (
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
@@ -245,7 +256,7 @@ export default function MembershipPage() {
               <Ribbon bg="#7C5CFC">Competition participant</Ribbon>
               <p className="font-display font-bold text-[19px] text-ink">Pathfinder</p>
               <div className="flex items-baseline gap-1.5 mt-2">
-                <span className="font-display font-bold text-[40px] tracking-heading text-ink">$60</span>
+                <span className="font-display font-bold text-[40px] tracking-heading text-ink">{formatTierPrice(prices['Pathfinder'])}</span>
                 <span className="text-[15px] text-content-faint">/year</span>
               </div>
               <p className="text-[13px] text-content-faint mt-[3px]">Active competition participants</p>
@@ -270,7 +281,7 @@ export default function MembershipPage() {
               <Ribbon bg="#E0922F">Award winner</Ribbon>
               <p className="font-display font-bold text-[19px] text-ink">Scholar</p>
               <div className="flex items-baseline gap-1.5 mt-2">
-                <span className="font-display font-bold text-[40px] tracking-heading text-ink">$500</span>
+                <span className="font-display font-bold text-[40px] tracking-heading text-ink">{formatTierPrice(prices['Scholar'])}</span>
                 <span className="text-[15px] text-content-faint">/year</span>
               </div>
               <p className="text-[13px] text-content-faint mt-[3px]">Competition award winners</p>
@@ -328,7 +339,7 @@ export default function MembershipPage() {
               <Ribbon bg="#7C5CFC">1 volunteer activity</Ribbon>
               <p className="font-display font-bold text-[19px] text-ink">Contributor</p>
               <div className="flex items-baseline gap-1.5 mt-2">
-                <span className="font-display font-bold text-[40px] tracking-heading text-ink">$250</span>
+                <span className="font-display font-bold text-[40px] tracking-heading text-ink">{formatTierPrice(prices['Contributor'])}</span>
                 <span className="text-[15px] text-content-faint">/year</span>
               </div>
               <p className="text-[13px] text-content-faint mt-[3px]">Freshers &amp; Sophomores</p>
@@ -354,7 +365,7 @@ export default function MembershipPage() {
               <Ribbon bg="#3C6DF6">Most active</Ribbon>
               <p className="font-display font-bold text-[19px] text-ink">Counselor</p>
               <div className="flex items-baseline gap-1.5 mt-2">
-                <span className="font-display font-bold text-[40px] tracking-heading text-ink">$500</span>
+                <span className="font-display font-bold text-[40px] tracking-heading text-ink">{formatTierPrice(prices['Counselor'])}</span>
                 <span className="text-[15px] text-content-faint">/year</span>
               </div>
               <p className="text-[13px] text-content-faint mt-[3px]">Juniors, Seniors &amp; Post-grads</p>
@@ -417,7 +428,7 @@ export default function MembershipPage() {
               <IconTile Icon={Certificate} />
               <p className="font-display font-bold text-[19px] text-ink">Innovator</p>
               <div className="flex items-baseline gap-1.5 mt-1.5">
-                <span className="font-display font-bold text-[38px] tracking-heading text-ink">$500</span>
+                <span className="font-display font-bold text-[38px] tracking-heading text-ink">{formatTierPrice(prices['Innovator'])}</span>
                 <span className="text-[15px] text-content-faint">/year</span>
               </div>
               <p className="text-[13px] text-content-faint mt-[2px]">1st year free as a competition participant</p>
@@ -438,7 +449,7 @@ export default function MembershipPage() {
               <IconTile Icon={Award} />
               <p className="font-display font-bold text-[19px] text-ink">Trailblazer</p>
               <div className="flex items-baseline gap-1.5 mt-1.5">
-                <span className="font-display font-bold text-[38px] tracking-heading text-ink">$1,000</span>
+                <span className="font-display font-bold text-[38px] tracking-heading text-ink">{formatTierPrice(prices['Trailblazer'])}</span>
                 <span className="text-[15px] text-content-faint">/year</span>
               </div>
               <p className="text-[13px] text-content-faint mt-[2px]">For teachers looking to excel</p>
@@ -490,7 +501,7 @@ export default function MembershipPage() {
           <h2 className="font-display font-bold text-[32px] tracking-heading text-ink mt-[10px] mb-6">
             Tiers, side by side
           </h2>
-          <MembershipCompareTable />
+          <MembershipCompareTable prices={priceLabels} />
         </Wrap>
       </section>
 

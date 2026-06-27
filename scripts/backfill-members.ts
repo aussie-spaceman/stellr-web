@@ -86,7 +86,7 @@ function buildMember(p: ParticipantRow): Record<string, unknown> {
     event_role: isMinor
       ? isManager
         ? 'school_student_manager'
-        : 'school_student'
+        : 'participant'
       : normalizeEventRole(p.event_role),
     is_active: true,
   }

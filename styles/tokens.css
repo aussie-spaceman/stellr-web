@@ -27,6 +27,25 @@
   --color-border: #e4e7f2; /** Card / divider border */
   --color-border-light: #eceef6;
   --color-danger: #b0554d; /** Avoid / negative copy */
+  --bracket-school: #3c6df6; /** High-school students — aliases color.primary */
+  --bracket-school-tint: #eaf0fe;
+  --bracket-school-deep: #2c53c6; /** = color.primaryDeep */
+  --bracket-college: #7c5cfc; /** College students — aliases color.spaceViolet */
+  --bracket-college-tint: #f4f0ff;
+  --bracket-college-deep: #5b3fd6;
+  --bracket-adult: #16b6c4; /** Adults / educators — aliases color.avatarTeal */
+  --bracket-adult-tint: #e4f7f9;
+  --bracket-adult-deep: #0e8c99;
+  --tier-explorer: #7aa0fb; /** High-school · base */
+  --tier-pathfinder: #3c6df6; /** High-school */
+  --tier-scholar: #1e3fa8; /** High-school · top */
+  --tier-alumni: #a892fd; /** College · base */
+  --tier-contributor: #7c5cfc; /** College */
+  --tier-counselor: #4e2ec2; /** College · top */
+  --tier-educator: #5fd3dd; /** Adults · base */
+  --tier-catalyst: #16b6c4; /** Adults */
+  --tier-innovator: #0e8c99; /** Adults */
+  --tier-trailblazer: #0a6470; /** Adults · top */
   --theme-tint-space-bg: #f6f2ff;
   --theme-tint-space-chip: #ede6ff;
   --theme-tint-space-text: #3b2b86;

@@ -33,7 +33,7 @@ const EMPTY: ParticipantData = {
   membership_id: '', linked: false,
   first_name: '', last_name: '', nickname: '', email: '', phone: '',
   date_of_birth: '', gender: '', t_shirt_size: '', grade: '',
-  event_role: 'school_student', ethnicity: [], dietary_requirements: [],
+  event_role: 'participant', ethnicity: [], dietary_requirements: [],
   health_conditions: '', emergency_contact_first_name: '',
   emergency_contact_last_name: '', emergency_contact_email: '',
   emergency_contact_phone: '', emergency_contact_relationship: '',
@@ -57,13 +57,13 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
   // Roles are the members enum values; legacy rows may still hold 'student'.
   const [form, setForm] = useState<ParticipantData>(() =>
     initial
-      ? { ...initial, membership_id: initial.membership_id ?? '', event_role: initial.event_role === 'adult' ? 'adult' : 'school_student' }
+      ? { ...initial, membership_id: initial.membership_id ?? '', event_role: initial.event_role === 'adult' ? 'adult' : 'participant' }
       : EMPTY
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const isStudent = form.event_role === 'school_student'
+  const isStudent = form.event_role === 'participant'
 
   function set(field: keyof ParticipantData, value: string | string[]) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -148,7 +148,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
           <div>
             <label className="block text-sm font-medium text-brand-muted mb-1">Participant type</label>
             <div className="flex gap-4">
-              {([['school_student', 'Student'], ['adult', 'Adult']] as const).map(([role, label]) => (
+              {([['participant', 'Student'], ['adult', 'Adult']] as const).map(([role, label]) => (
                 <label key={role} className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"

@@ -20,7 +20,7 @@ const navLinks = [
     href: '/educate',
     dropdown: [
       { label: 'Competitions', href: '/competitions' },
-      { label: 'Activities', href: '/activities' },
+      { label: 'Campaigns', href: '/campaigns' },
       { label: 'Events', href: '/events' },
       { label: 'Scholarships', href: '/scholarship' },
       { label: 'Host An Event', href: '/host-an-event' },
@@ -69,7 +69,7 @@ const navLinks = [
 
 const getInvolvedLinks = [
   { label: 'Register For An Event', href: '/events' },
-  { label: 'Download Curriculum Material', href: '/activities' },
+  { label: 'Download Curriculum Material', href: '/campaigns' },
   { label: 'Join Our Community', href: '/sign-up' },
   { label: 'Become A Sponsor', href: 'https://www.stellreducation.org/network#corporate' },
   { label: 'Volunteer With Us', href: 'https://www.stellreducation.org/mentors' },

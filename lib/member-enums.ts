@@ -23,8 +23,9 @@ export function normalizeEmail(email: unknown): string {
 export const VALID_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'] as const
 export const VALID_AGE_BRACKETS = ['adult', 'high_school', 'college'] as const
 // 'adult' and 'school_student_manager' require migration 016 to exist in the enum.
+// 'school_student' was renamed to the canonical 'participant' in migration 097.
 export const VALID_EVENT_ROLES = [
-  'teacher', 'school_student', 'school_student_manager', 'mentor', 'subscriber', 'parent', 'adult',
+  'teacher', 'participant', 'school_student_manager', 'mentor', 'subscriber', 'parent', 'adult',
 ] as const
 export const VALID_GRADES = [
   'grade_9', 'grade_10', 'grade_11', 'grade_12',
@@ -51,10 +52,10 @@ export function normalizeAgeBracket(v: unknown): string {
 
 // Event role → enum. Defaults to 'subscriber' (the generic member role) when
 // unrecognised. ("School Student Manager" / "Adult" canonicalise to valid values;
-// the teams portal's legacy 'student' maps to 'school_student'.)
+// legacy 'student' and the pre-097 'school_student' both map to 'participant'.)
 export function normalizeEventRole(v: unknown): string {
   let c = canon(v)
-  if (c === 'student') c = 'school_student'
+  if (c === 'student' || c === 'school_student') c = 'participant'
   return (VALID_EVENT_ROLES as readonly string[]).includes(c) ? c : 'subscriber'
 }
 
@@ -106,11 +107,11 @@ export function denormalizeTshirt(v: unknown): string | undefined {
 // legacy display strings (canonicalised first); undefined when unrecognised.
 export function displayEventRole(v: unknown): string | undefined {
   let c = canon(v)
-  if (c === 'student') c = 'school_student'
+  if (c === 'student' || c === 'school_student') c = 'participant'
   return {
     teacher: 'Teacher',
-    school_student: 'School Student',
-    school_student_manager: 'School Student Manager',
+    participant: 'Participant',
+    school_student_manager: 'Student Manager',
     mentor: 'Mentor',
     subscriber: 'Subscriber',
     parent: 'Parent',

@@ -386,7 +386,7 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
         const roleCounts: Record<string, number> = {}
         for (const p of team.participants) {
           const key = p.event_role === 'school_student_manager' ? 'teacher'
-            : p.event_role === 'school_student' ? 'student'
+            : p.event_role === 'participant' ? 'student'
             : p.event_role || 'participant'
           roleCounts[key] = (roleCounts[key] ?? 0) + 1
         }
@@ -819,7 +819,7 @@ export function TeamsTab({ memberId, impersonateMemberId, readOnly = false }: Pr
   const memberQuery = impersonateMemberId ? `?memberId=${impersonateMemberId}` : ''
 
   // Manager vs participant view is driven by what the member actually owns, not
-  // by their members.event_role: a student manager's row is 'school_student' and
+  // by their members.event_role: a student manager's row is 'participant' and
   // a teacher POC can be any role, yet both fully manage a group. The teams API
   // resolves ownership (registrant + nominated teacher POC) and reports which
   // view to render via `role`.

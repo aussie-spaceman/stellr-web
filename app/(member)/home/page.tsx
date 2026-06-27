@@ -41,7 +41,7 @@ export default async function HomePage() {
   const eventRoles: string[] = []
   if (member.event_role) {
     eventRoles.push(member.event_role)
-    if (member.event_role === 'school_student_manager') eventRoles.push('school_student')
+    if (member.event_role === 'school_student_manager') eventRoles.push('participant')
   }
   const [assigned, allModules] = await Promise.all([
     getAssignedModules(member, { eventRefs, eventRoles }),

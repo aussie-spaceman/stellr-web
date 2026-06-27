@@ -85,7 +85,7 @@ export default async function AdminEventDetailPage({
     }))
     studentCount = (roster?.groups ?? [])
       .flatMap((g) => g.participants)
-      .filter((p) => p.event_role === 'school_student' || p.event_role === 'school_student_manager').length
+      .filter((p) => p.event_role === 'participant' || p.event_role === 'school_student_manager').length
   }
 
   // ── Admin assignments (overview, admins only) ─────────────────────────────

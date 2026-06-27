@@ -114,7 +114,7 @@ export default async function AccountPage({
   // Does this member own any group registration — as the registrant (teacher or
   // student manager) or the nominated teacher POC? This is the reliable signal
   // for the Teams tab: members.event_role can't be trusted (a student manager's
-  // row is 'school_student', and a teacher POC may carry any role).
+  // row is 'participant', and a teacher POC may carry any role).
   const groupOwnerOr = member.email
     ? `teacher_member_id.eq.${member.id},teacher_email.eq.${member.email},teacher_poc_email.eq.${member.email}`
     : `teacher_member_id.eq.${member.id}`
@@ -130,7 +130,7 @@ export default async function AccountPage({
     managesGroup ||
     member.event_role === 'teacher' ||
     member.event_role === 'school_student_manager'
-  const isStudent = member.event_role === 'school_student'
+  const isStudent = member.event_role === 'participant'
   const showTeams = isGroupManager || isStudent
   const showBilling = true // all members can see their participation payment history
 

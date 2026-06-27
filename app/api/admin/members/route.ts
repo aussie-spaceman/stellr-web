@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     const age = new Date().getFullYear() - dob.getFullYear()
     if (age < 18) {
       resolvedBracket = 'high_school'
-      resolvedRole = 'school_student'
+      resolvedRole = 'participant'
     }
   }
 

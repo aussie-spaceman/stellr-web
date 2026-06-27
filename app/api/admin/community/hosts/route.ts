@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     : lookup.ilike('email', String(email).trim())
   ).maybeSingle()
   if (!target) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-  if (target.event_role === 'school_student') {
+  if (target.event_role === 'participant') {
     return NextResponse.json(
       { error: 'School Students cannot be granted coach/mentor permissions.' },
       { status: 422 }

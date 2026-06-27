@@ -29,6 +29,29 @@ export const tokens = {
     "borderLight": "#ECEEF6",
     "danger": "#B0554D"
   },
+  "bracket": {
+    "school": "#3C6DF6",
+    "schoolTint": "#EAF0FE",
+    "schoolDeep": "#2C53C6",
+    "college": "#7C5CFC",
+    "collegeTint": "#F4F0FF",
+    "collegeDeep": "#5B3FD6",
+    "adult": "#16B6C4",
+    "adultTint": "#E4F7F9",
+    "adultDeep": "#0E8C99"
+  },
+  "tier": {
+    "explorer": "#7AA0FB",
+    "pathfinder": "#3C6DF6",
+    "scholar": "#1E3FA8",
+    "alumni": "#A892FD",
+    "contributor": "#7C5CFC",
+    "counselor": "#4E2EC2",
+    "educator": "#5FD3DD",
+    "catalyst": "#16B6C4",
+    "innovator": "#0E8C99",
+    "trailblazer": "#0A6470"
+  },
   "themeTint": {
     "spaceBg": "#F6F2FF",
     "spaceChip": "#EDE6FF",

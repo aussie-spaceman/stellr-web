@@ -16,7 +16,7 @@ import { formatDateShort } from '@/lib/utils'
 
 // Student roles never require a background check (even at 18+). Everyone else
 // (teacher / mentor / adult / parent / subscriber) does once they are 18.
-export const STUDENT_ROLES = ['school_student', 'school_student_manager'] as const
+export const STUDENT_ROLES = ['participant', 'school_student_manager'] as const
 
 // Background-check validity: 3 years from completion (Stellr-enforced).
 export const BC_VALIDITY_YEARS = 3

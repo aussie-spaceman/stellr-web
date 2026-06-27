@@ -7,6 +7,10 @@ const nextConfig = {
       { source: '/login', destination: '/sign-in', permanent: true },
       { source: '/signup', destination: '/sign-up', permanent: true },
       { source: '/register', destination: '/sign-up', permanent: true },
+      // 'Activities' was renamed to the canonical object name 'Campaigns'.
+      { source: '/activities', destination: '/campaigns', permanent: true },
+      // Coaching admin moved out of the deprecated shared 'sessions' route into Academy.
+      { source: '/admin/community/sessions/:path*', destination: '/admin/academy/coaching/:path*', permanent: false },
     ]
   },
   images: {

@@ -18,7 +18,7 @@ interface MentionListRef {
 function formatRole(role: string): string {
   return role
     .replace('school_student_manager', 'Student Mgr')
-    .replace('school_student', 'Student')
+    .replace('participant', 'Student')
     .replace('teacher', 'Educator')
     .replace('mentor', 'Mentor')
     .replace('parent', 'Parent')

@@ -210,7 +210,7 @@ export default function WhyDesignCompetitionsPage() {
               href="/events/curriculum"
               className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 text-white font-medium rounded-md hover:bg-white/20 transition-colors"
             >
-              Explore Curriculum Activities
+              Explore Curriculum
             </Link>
           </div>
         </div>

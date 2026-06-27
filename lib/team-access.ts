@@ -14,7 +14,7 @@
 // one stamped on the registration (e.g. the batched member upsert dropped the
 // registrant, so teacher_member_id was never set and the Clerk webhook later
 // created a fresh 'subscriber' row) — and it never recognised the student
-// manager (whose member row is school_student) or the teacher POC at all. The
+// manager (whose member row is participant) or the teacher POC at all. The
 // result was a 403 on every team action and an empty teams tab even though the
 // person clearly owns the group.
 //

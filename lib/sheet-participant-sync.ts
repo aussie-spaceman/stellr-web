@@ -30,9 +30,9 @@ function roleFromType(type: string, dateOfBirth: string | null): { eventRole: st
     t === 'adult' ? 'adult' :
     t === 'mentor' ? 'mentor' :
     t === 'teacher' ? 'teacher' :
-    'school_student'
-  if (minor) role = 'school_student'
-  return { eventRole: role, ageBracket: role === 'school_student' ? 'high_school' : 'adult' }
+    'participant'
+  if (minor) role = 'participant'
+  return { eventRole: role, ageBracket: role === 'participant' ? 'high_school' : 'adult' }
 }
 
 // Reads the linked Google Sheet and upserts members + participants, then issues

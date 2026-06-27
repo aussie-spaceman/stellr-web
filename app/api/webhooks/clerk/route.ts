@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { normalizeEmail } from '@/lib/member-enums'
 import { claimPendingSpaceInvites } from '@/lib/spaces'
+import { syncMemberClassificationRole } from '@/lib/member-roles'
 
 // Clerk sends user.created / user.updated / user.deleted events here.
 // This keeps the members table in sync with Clerk identity records.
@@ -98,6 +99,8 @@ export async function POST(req: Request) {
         is_active: true,
       }).select('id').maybeSingle()
       memberId = (created as { id: string } | null)?.id ?? null
+      // New signups are base members; seed their unified member_roles row.
+      if (memberId) await syncMemberClassificationRole(db, memberId, 'subscriber')
     }
 
     // Auto-claim any space invites that were parked against this email before they

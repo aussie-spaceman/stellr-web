@@ -9,6 +9,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
+import { MANAGE_ROLES, type MemberRole } from '@/lib/member-roles'
 
 export type ObjectType = 'event' | 'group' | 'container'
 
@@ -45,7 +46,17 @@ export async function currentUserCanManage(
     .eq('object_type', objectType)
     .eq('object_id', objectId)
     .limit(1)
-  return !!data?.length
+  if (data?.length) return true // source 2: generic object_roles manager grant
+
+  // source 3 (complementary): an object-scoped canonical MANAGE role on this object
+  // in the unified member_roles table (e.g. Moderator/Mentor/Coach).
+  const { data: roles } = await db
+    .from('member_roles')
+    .select('role')
+    .eq('member_id', member.id)
+    .eq('object_type', objectType)
+    .eq('object_id', objectId)
+  return (roles ?? []).some((r) => MANAGE_ROLES.has((r as { role: MemberRole }).role))
 }
 
 /** Every object a member manages — powers a member's "what I manage" view. */

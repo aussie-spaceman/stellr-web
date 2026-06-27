@@ -54,7 +54,7 @@ export function CreateWorkshopForm({ modules, tiers }: { modules: ModuleOpt[]; t
       })
       const data = await r.json().catch(() => ({}))
       if (!r.ok) { setError(data.error ?? 'Could not create the workshop.'); setBusy(false); return }
-      router.push(`/admin/community/sessions/${data.workshopId}`)
+      router.push(`/admin/academy/coaching/${data.workshopId}`)
     } catch {
       setError('Something went wrong.')
       setBusy(false)

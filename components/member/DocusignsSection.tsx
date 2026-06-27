@@ -86,7 +86,7 @@ function isStillMinor(dob: string | null | undefined): boolean {
 
 function memberHasGraduated(dob: string | null | undefined, role: string | null | undefined): boolean {
   if (!isStillMinor(dob)) return true
-  if (role && role !== 'school_student') return true
+  if (role && role !== 'participant') return true
   return false
 }
 

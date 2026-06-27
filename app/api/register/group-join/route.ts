@@ -11,6 +11,7 @@ import {
   normalizeEventRole, normalizeGender, normalizeGrade, normalizeTshirt,
 } from '@/lib/member-enums'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
+import { syncMemberClassificationRole } from '@/lib/member-roles'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -108,7 +109,7 @@ export async function POST(req: NextRequest) {
       grade: member.grade ?? null,
       t_shirt_size: member.tshirt_size ?? null,
       age_bracket: member.age_bracket,
-      event_role: normalizeEventRole(member.event_role ?? 'school_student'),
+      event_role: normalizeEventRole(member.event_role ?? 'participant'),
       ethnicity: [],
       dietary_requirements: [],
       health_conditions: null,
@@ -136,8 +137,8 @@ export async function POST(req: NextRequest) {
 
     const ageNow = new Date().getFullYear() - new Date(dob).getFullYear()
     const isMinor = Number.isFinite(ageNow) && ageNow < 18
-    const role = normalizeEventRole(str(d.type) || 'school_student')
-    const eventRole = isMinor && role !== 'school_student_manager' ? 'school_student' : role
+    const role = normalizeEventRole(str(d.type) || 'participant')
+    const eventRole = isMinor && role !== 'school_student_manager' ? 'participant' : role
 
     person = {
       first_name: firstName,
@@ -193,6 +194,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to create your member account. Please try again.' }, { status: 500 })
     }
     memberId = memberRow.id
+    await syncMemberClassificationRole(db, memberId, person.event_role)
 
     // Provision a passwordless Clerk account + sign-in token so the participant
     // is silently signed in on success (non-fatal — they can still sign in later

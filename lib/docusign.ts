@@ -379,7 +379,7 @@ export function classifyAgreement(
   const role = (eventRole ?? '').toLowerCase().replace(/\s+/g, '_')
   // Student participants always sign the minor agreement — role wins over age,
   // so an 18-year-old senior or student-manager still gets parental consent.
-  if (role === 'school_student' || role === 'school_student_manager') return 'minor'
+  if (role === 'participant' || role === 'school_student_manager') return 'minor'
   if (dateOfBirth && isMinor(dateOfBirth)) return 'minor'
   if (role === 'mentor') return 'mentor'
   if (!role) return null

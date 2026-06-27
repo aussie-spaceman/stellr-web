@@ -7,7 +7,7 @@ import { getAllCampaigns } from '@/lib/sanity'
 import { getCampaignDates, campaignStatusFromDates, type CampaignSeason } from '@/lib/campaigns'
 
 export const metadata: Metadata = {
-  title: 'Activities',
+  title: 'Campaigns',
   description:
     'Download real engineering challenge material and run it in your classroom any time, for free. Optionally enter a seasonal Campaign for a path to the national championships.',
 }
@@ -117,7 +117,7 @@ function pickWindow(campaigns: Campaign[], season: CampaignSeason, fallbackYear:
   return { label: dates.label, status }
 }
 
-export default async function ActivitiesPage() {
+export default async function CampaignsPage() {
   const sanityData = await getAllCampaigns().catch(() => null)
   const campaigns: Campaign[] = (sanityData as Campaign[] | null) ?? FALLBACK_CAMPAIGNS
   const fall = pickWindow(campaigns, 'fall', 2026)
@@ -127,7 +127,7 @@ export default async function ActivitiesPage() {
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <Hero
-        breadcrumb="Competitions · Activities"
+        breadcrumb="Competitions · Campaigns"
         title="Real engineering challenges, ready for your classroom."
         lead="Download the material and use it any time you like — it's yours to run on your own schedule. Or enter a seasonal Campaign and give your students a path all the way to the national championships."
       >
@@ -154,10 +154,10 @@ export default async function ActivitiesPage() {
           <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-brand-gold-ink">
             Two ways to compete
           </span>
-          {/* Active — Activities */}
+          {/* Active — Campaigns */}
           <div className="bg-white border-[1.5px] border-pathway-amber rounded-[10px] px-4 py-2.5">
             <div className="flex items-center gap-2">
-              <span className="font-subheading font-bold text-ink text-sm">Activities</span>
+              <span className="font-subheading font-bold text-ink text-sm">Campaigns</span>
               <span className="rounded-full bg-pathway-amber text-white text-[9.5px] font-bold uppercase tracking-wide px-2 py-0.5">
                 You are here
               </span>
@@ -177,7 +177,7 @@ export default async function ActivitiesPage() {
             <ArrowRight size={16} className="text-primary" />
           </Link>
           <p className="text-[13.5px] text-[#9A8453] max-w-[300px] leading-snug">
-            Both are Stellr Competitions. Activities brings the same challenges into your classroom.
+            Both are Stellr Competitions. Campaigns bring the same challenges into your classroom.
           </p>
         </div>
       </section>

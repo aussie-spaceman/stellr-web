@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   const dob = new Date(date_of_birth)
   const ageAtToday = new Date().getFullYear() - dob.getFullYear()
   const resolvedBracket = ageAtToday < 18 ? 'high_school' : age_bracket
-  const resolvedRole = ageAtToday < 18 ? 'school_student' : event_role
+  const resolvedRole = ageAtToday < 18 ? 'participant' : event_role
 
   // Resolve school FK
   let resolvedSchoolId: string | null = school_id && school_id !== 'new' ? school_id : null

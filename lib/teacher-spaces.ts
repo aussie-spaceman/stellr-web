@@ -32,7 +32,7 @@ export interface GroupSpaceRow {
   total: number
 }
 
-const STUDENT_ROLES = new Set(['school_student', 'school_student_manager'])
+const STUDENT_ROLES = new Set(['participant', 'school_student_manager'])
 
 /** Group registrations this member owns (teacher / student-manager / teacher POC). */
 export async function getTeacherGroups(member: CommunityMember): Promise<TeacherGroup[]> {

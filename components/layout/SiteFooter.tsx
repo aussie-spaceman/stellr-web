@@ -7,7 +7,7 @@ const FOOTER_COLS = [
     heading: 'Educate',
     links: [
       { label: 'Competitions', href: '/competitions' },
-      { label: 'Activities', href: '/activities' },
+      { label: 'Campaigns', href: '/campaigns' },
       { label: 'Events', href: '/events' },
       { label: 'Host An Event', href: '/host-an-event' },
     ],

@@ -70,7 +70,7 @@ export default function EducatorsPage() {
             <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange hover:bg-amber-500">
               Register as an Educator
             </a>
-            <Link href="/activities" className="btn-outline-white">
+            <Link href="/campaigns" className="btn-outline-white">
               Browse Curriculum
             </Link>
           </div>

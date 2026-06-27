@@ -126,7 +126,7 @@ export default async function ViewAsMemberPage({
 
   // Gating matches the member's own /account page exactly.
   const isGroupManager = member.event_role === 'teacher' || member.event_role === 'school_student_manager'
-  const isStudent = member.event_role === 'school_student'
+  const isStudent = member.event_role === 'participant'
   const showTeams = isGroupManager || isStudent
   const showBilling = true // all members can see their participation payment history
 

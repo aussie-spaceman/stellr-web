@@ -25,7 +25,7 @@ interface Props {
 }
 
 const ROLES = [
-  { value: 'school_student', label: 'Student (High School)', bracket: 'high_school' },
+  { value: 'participant', label: 'Student (High School)', bracket: 'high_school' },
   { value: 'school_student_manager', label: 'Student Manager (leads a group)', bracket: 'high_school' },
   { value: 'mentor', label: 'Mentor / Volunteer', bracket: 'college' },
   { value: 'teacher', label: 'Teacher / Educator', bracket: 'adult' },

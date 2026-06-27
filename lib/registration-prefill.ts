@@ -17,7 +17,7 @@ export interface RegistrationPrefill {
   /** members.age_bracket enum: 'adult' | 'high_school' | 'college'. Drives
    *  whether the individual form shows student-only fields (grade, etc.). */
   age_bracket?: string
-  /** members.event_role enum: 'teacher' | 'school_student' | 'mentor' | … */
+  /** members.event_role enum: 'teacher' | 'participant' | 'mentor' | … */
   event_role?: string
   first_name?: string
   last_name?: string

@@ -39,7 +39,7 @@ const TRIGGERS: Record<string, string> = {
   tier_purchased: 'buys / is granted a tier',
 }
 
-const ROLES = ['', 'school_student', 'school_student_manager', 'teacher', 'mentor', 'parent', 'adult']
+const ROLES = ['', 'participant', 'school_student_manager', 'teacher', 'mentor', 'parent', 'adult']
 const BRACKETS = ['', 'high_school', 'college', 'adult']
 
 function durationLabel(r: RuleRow): string {

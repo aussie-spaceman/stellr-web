@@ -79,7 +79,7 @@ export function AdminManageWorkshop(props: {
     <div className="space-y-5">
       <div className="rounded-panel px-7 py-6 text-white" style={{ background: 'radial-gradient(130% 150% at 88% -30%, #36306F, #181D44 48%, #0E1330)' }}>
         <p className="text-[12.5px] text-hero-dim">
-          <Link href="/admin/community/sessions" className="hover:text-white">Workshops</Link>
+          <Link href="/admin/academy/coaching" className="hover:text-white">Workshops</Link>
           <span className="mx-1.5 text-white/30">/</span>
           <span className="text-hero-lead">{workshop.memberName ?? workshop.name}</span>
         </p>
@@ -322,7 +322,7 @@ function AdminSettings({ workshop, tiers, admin }: { workshop: WorkshopMeta; tie
               <span className="inline-flex items-center gap-1.5 rounded-pill bg-enviro-green-bg px-2.5 py-1 text-[12.5px] font-medium text-enviro-green-text">
                 <ShieldCheck className="h-3.5 w-3.5" /> {freeTierNames.length ? `Free · ${freeTierNames.join(', ')}` : 'Eligible tiers'}
               </span>
-              <Link href="/admin/community/sessions/access" className="text-[13px] font-semibold text-primary hover:underline">Manage access →</Link>
+              <Link href="/admin/academy/coaching/access" className="text-[13px] font-semibold text-primary hover:underline">Manage access →</Link>
             </div>
           </div>
           <div className="flex justify-end">
@@ -357,7 +357,7 @@ function AdminSettings({ workshop, tiers, admin }: { workshop: WorkshopMeta; tie
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={`Type "${workshop.name}" to confirm`} className="flex-1 rounded-[9px] border border-line px-3 py-2 text-sm outline-none focus:border-danger" />
               <button
-                onClick={async () => { if ((await admin({ action: 'delete', workshopId: workshop.id }))) router.push('/admin/community/sessions') }}
+                onClick={async () => { if ((await admin({ action: 'delete', workshopId: workshop.id }))) router.push('/admin/academy/coaching') }}
                 disabled={confirm !== workshop.name}
                 className="inline-flex items-center gap-1.5 rounded-[9px] bg-danger px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
               >

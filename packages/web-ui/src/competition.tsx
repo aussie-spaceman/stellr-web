@@ -1,6 +1,7 @@
 // @stellr/web-ui — competition page composites (also reusable on Membership etc.).
 import * as React from 'react'
 import { cn } from './primitives'
+import { tierShade, tierGlow, type BracketId, type TierId } from './tier-shades'
 
 function Arrow({ size = 16 }: { size?: number }) {
   return (
@@ -99,37 +100,117 @@ export function ThemeCard({ name, Icon, iconBg, accent, border, headerBg, briefB
 }
 
 /* ── TierCard ─────────────────────────────────────────────────────────────── */
+// Two modes, chosen by whether `items` is supplied:
+//  • feature mode (items present) — the original comparison card (competitions).
+//  • select mode (no items)       — a compact, clickable tier selector with a
+//    role eyebrow + price (membership explorer).
+// The Tier-Shading system (deliverable B) layers on in either mode when a
+// `bracket`/`tier`/`shade` is supplied: a top shade strip, a shade-coloured
+// price, and — when `selected` — a 2px shade border + shade glow. With no
+// shade props it falls back to the default primary styling.
 export type TierCardProps = {
   name: string
   price: string
-  accessNote: string
+  /** Note beside the price in select mode, e.g. "per year" / "always". */
+  priceNote?: string
+  /** Subtitle under the header in feature mode. */
+  accessNote?: string
+  /** Uppercase eyebrow above the name in select mode, e.g. "Competition participant". */
+  role?: string
   inheritsFrom?: string
   badge?: string
   featured?: boolean
-  items: string[]
+  /** Feature rows. Omit to render the compact selector card. */
+  items?: string[]
+  /* Tier-Shading by age bracket (deliverable B) */
+  bracket?: BracketId
+  tier?: TierId
+  /** Explicit shade override (a colour / token reference) instead of `tier`. */
+  shade?: string
+  selected?: boolean
+  onSelect?: () => void
 }
-export function TierCard({ name, price, accessNote, inheritsFrom, badge, featured, items }: TierCardProps) {
+export function TierCard({
+  name, price, priceNote, accessNote, role, inheritsFrom, badge, featured, items,
+  tier, shade, selected, onSelect,
+}: TierCardProps) {
+  const resolvedShade = shade ?? (tier ? tierShade(tier) : undefined)
+  const glow = shade
+    ? `color-mix(in srgb, ${shade} 50%, transparent)`
+    : tier
+      ? tierGlow(tier)
+      : undefined
+  const isSelect = items === undefined
+  const clickable = onSelect != null
+  const Wrapper = (clickable ? 'button' : 'div') as React.ElementType
+
   return (
-    <div className={cn('rounded-ds-card bg-white overflow-hidden flex flex-col', featured ? 'border-2 border-primary shadow-featured' : 'border border-line')}>
-      {badge && (
+    <Wrapper
+      type={clickable ? 'button' : undefined}
+      onClick={onSelect}
+      aria-pressed={clickable ? selected : undefined}
+      className={cn(
+        'relative w-full text-left rounded-ds-card bg-white overflow-hidden flex flex-col',
+        clickable && 'cursor-pointer',
+        !resolvedShade && featured ? 'border-2 border-primary shadow-featured' : 'border border-line',
+      )}
+    >
+      {resolvedShade && (
+        <span aria-hidden="true" className="absolute top-0 left-0 right-0 h-[5px]" style={{ background: resolvedShade }} />
+      )}
+      {resolvedShade && selected && (
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 rounded-ds-card pointer-events-none"
+          style={{ border: `2px solid ${resolvedShade}`, boxShadow: `0 18px 40px -28px ${glow}` }}
+        />
+      )}
+
+      {badge && !isSelect && (
         <div className="bg-primary text-white text-center text-[10.5px] font-bold uppercase tracking-[0.06em] py-1.5">{badge}</div>
       )}
-      <div className="px-5 pt-4 pb-3.5 border-b border-line-light">
-        <div className="flex justify-between items-baseline gap-2">
-          <p className="font-bold text-ink">{name}</p>
-          <p className={cn('font-bold text-sm', price === 'Free' ? 'text-enviro-green' : 'text-ink')}>{price}</p>
+
+      {isSelect ? (
+        <div className="px-[18px] pt-[21px] pb-[15px]">
+          {role && (
+            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-content-faint leading-[1.3] min-h-[14px] mb-[7px]">{role}</p>
+          )}
+          <p className="font-display font-semibold text-[20px] text-ink mb-[3px]">{name}</p>
+          <p className="flex items-baseline gap-[5px]">
+            <span
+              className={cn('font-display font-semibold text-[22px]', !resolvedShade && 'text-primary')}
+              style={resolvedShade ? { color: resolvedShade } : undefined}
+            >
+              {price}
+            </span>
+            {priceNote && <span className="text-xs text-content-faint">{priceNote}</span>}
+          </p>
         </div>
-        <p className="text-xs text-content-muted mt-1">{accessNote}</p>
-      </div>
-      <div className="px-5 pt-3.5 pb-5 flex flex-col gap-2.5">
-        {inheritsFrom && (
-          <p className="text-[11.5px] font-bold uppercase tracking-wide text-content-faint">Everything in {inheritsFrom}, plus</p>
-        )}
-        {items.map((item) => (
-          <p key={item} className="text-sm text-content-secondary leading-snug">{item}</p>
-        ))}
-      </div>
-    </div>
+      ) : (
+        <>
+          <div className="px-5 pt-4 pb-3.5 border-b border-line-light">
+            <div className="flex justify-between items-baseline gap-2">
+              <p className="font-bold text-ink">{name}</p>
+              <p
+                className={cn('font-bold text-sm', !resolvedShade && (price === 'Free' ? 'text-enviro-green' : 'text-ink'))}
+                style={resolvedShade ? { color: resolvedShade } : undefined}
+              >
+                {price}
+              </p>
+            </div>
+            {accessNote && <p className="text-xs text-content-muted mt-1">{accessNote}</p>}
+          </div>
+          <div className="px-5 pt-3.5 pb-5 flex flex-col gap-2.5">
+            {inheritsFrom && (
+              <p className="text-[11.5px] font-bold uppercase tracking-wide text-content-faint">Everything in {inheritsFrom}, plus</p>
+            )}
+            {(items ?? []).map((item) => (
+              <p key={item} className="text-sm text-content-secondary leading-snug">{item}</p>
+            ))}
+          </div>
+        </>
+      )}
+    </Wrapper>
   )
 }
 

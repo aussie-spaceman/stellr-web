@@ -8,7 +8,7 @@ import { RESOURCES_BUCKET } from '@/lib/community'
 export const dynamic = 'force-dynamic'
 
 const ROLE_LABELS: Record<string, string> = {
-  school_student: 'Student',
+  participant: 'Student',
   school_student_manager: 'Student Manager',
   teacher: 'Teacher',
   mentor: 'Mentor',

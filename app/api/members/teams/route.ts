@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   // under, OR the nominated teacher-POC email (see lib/team-access) — not by
   // event_role, which broke whenever the session resolved to a different/duplicate
   // members row than the registration, and never recognised the student manager
-  // (a school_student member) or the teacher POC at all.
+  // (a participant member) or the teacher POC at all.
   const ownerOr = member.email
     ? `teacher_member_id.eq.${member.id},teacher_email.eq.${member.email},teacher_poc_email.eq.${member.email}`
     : `teacher_member_id.eq.${member.id}`

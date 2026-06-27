@@ -7,6 +7,7 @@ import {
   normalizeTshirt,
   normalizeEmail,
 } from '@/lib/member-enums'
+import { syncMemberClassificationRole } from '@/lib/member-roles'
 
 export interface MemberUpsertInput {
   email: string
@@ -34,6 +35,8 @@ export async function upsertMember(
   const email = normalizeEmail(input.email)
   if (!email) return null
 
+  const eventRole = normalizeEventRole(input.event_role)
+
   const { data, error } = await db
     .from('members')
     .upsert(
@@ -48,7 +51,7 @@ export async function upsertMember(
         grade: normalizeGrade(input.grade),
         tshirt_size: normalizeTshirt(input.t_shirt_size),
         age_bracket: normalizeAgeBracket(input.age_bracket),
-        event_role: normalizeEventRole(input.event_role),
+        event_role: eventRole,
         is_active: true,
       },
       { onConflict: 'email', ignoreDuplicates: false }
@@ -60,5 +63,9 @@ export async function upsertMember(
     console.error('[member-sync] Member upsert error (non-fatal):', error)
     return null
   }
+
+  // Keep the unified member_roles table current with the registration classification.
+  if (data?.id) await syncMemberClassificationRole(db, data.id, eventRole)
+
   return data?.id ?? null
 }

@@ -63,7 +63,7 @@ const pathways = [
       ['Students deliver', 'Written proposal or presentation'],
       ['Best for', 'Fitting STEM into your semester'],
     ] as [string, string][],
-    cta: { label: 'Download curriculum', href: '/activities', className: 'bg-pathway-amber-bg text-brand-gold-ink hover:bg-pathway-amber/15' },
+    cta: { label: 'Download curriculum', href: '/campaigns', className: 'bg-pathway-amber-bg text-brand-gold-ink hover:bg-pathway-amber/15' },
   },
 ]
 
@@ -345,7 +345,7 @@ export default async function CompetitionsPage() {
             <Button href="/events" as={Link} variant="primary">
               View Events
             </Button>
-            <Button href="/activities" as={Link} variant="outlineWhite">
+            <Button href="/campaigns" as={Link} variant="outlineWhite">
               Download Curriculum
             </Button>
           </>

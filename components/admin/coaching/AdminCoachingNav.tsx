@@ -5,9 +5,9 @@ import { usePathname } from 'next/navigation'
 import { Star, CalendarDays, ShieldCheck, ArrowLeft } from 'lucide-react'
 
 const ITEMS = [
-  { href: '/admin/community/sessions', label: 'Coaching workshops', icon: Star, exact: true },
-  { href: '/admin/community/sessions/calendar', label: 'Sessions calendar', icon: CalendarDays },
-  { href: '/admin/community/sessions/access', label: 'Membership & access', icon: ShieldCheck },
+  { href: '/admin/academy/coaching', label: 'Coaching workshops', icon: Star, exact: true },
+  { href: '/admin/academy/coaching/calendar', label: 'Sessions calendar', icon: CalendarDays },
+  { href: '/admin/academy/coaching/access', label: 'Membership & access', icon: ShieldCheck },
 ]
 
 export function AdminCoachingNav() {

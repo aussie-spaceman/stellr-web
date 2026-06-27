@@ -409,7 +409,7 @@ async function registeredStudentIds(db: SupabaseClient, educatorMemberId: string
     .in('registration_id', regIds)
     .not('member_id', 'is', null)
 
-  const STUDENT_ROLES = new Set(['school_student', 'school_student_manager'])
+  const STUDENT_ROLES = new Set(['participant', 'school_student_manager'])
   const ids = new Set<string>()
   for (const p of parts ?? []) {
     const m = Array.isArray(p.members) ? p.members[0] : p.members
@@ -449,7 +449,7 @@ function matchesConditions(
     // applies to them too. Teacher/mentor-scoped rules are unaffected.
     const matches =
       member.event_role === c.event_role ||
-      (c.event_role === 'school_student' && member.event_role === 'school_student_manager')
+      (c.event_role === 'participant' && member.event_role === 'school_student_manager')
     if (!matches) return false
   }
   if (c.award_contains) {

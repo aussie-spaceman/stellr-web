@@ -31,7 +31,7 @@ export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
 
 // Friendly label for a member's event participation role (members.event_role).
 const ROLE_LABELS: Record<string, string> = {
-  school_student: 'Participant',
+  participant: 'Participant',
   school_student_manager: 'Student Manager',
   teacher: 'Teacher',
   mentor: 'Mentor',
@@ -120,7 +120,7 @@ export async function getAssignedCourses(member: CommunityMember): Promise<Assig
   const eventRoles: string[] = []
   if (member.event_role) {
     eventRoles.push(member.event_role)
-    if (member.event_role === 'school_student_manager') eventRoles.push('school_student')
+    if (member.event_role === 'school_student_manager') eventRoles.push('participant')
   }
   const { ids: cohortIds, labelByRef: cohortLabel } = await memberCohorts(member.id)
 

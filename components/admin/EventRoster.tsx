@@ -283,7 +283,7 @@ export default function EventRoster({
                       <td className="px-4 py-2.5 text-brand-muted">{p.grade ?? '—'}</td>
                       <td className="px-4 py-2.5 text-brand-muted">{p.t_shirt_size ?? '—'}</td>
                       <td className="px-4 py-2.5">
-                        {p.event_role === 'school_student' ? (
+                        {p.event_role === 'participant' ? (
                           companies.length === 0 ? (
                             <span className="text-brand-muted-soft">—</span>
                           ) : (

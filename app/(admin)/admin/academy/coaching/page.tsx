@@ -14,7 +14,7 @@ export default async function AdminWorkshopsPage() {
       <div className="min-w-0 flex-1 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">Coaching workshops</h1>
-          <Link href="/admin/community/sessions/new" className="inline-flex items-center gap-2 rounded-[9px] bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-deep">
+          <Link href="/admin/academy/coaching/new" className="inline-flex items-center gap-2 rounded-[9px] bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-deep">
             <Plus className="h-4 w-4" /> New workshop
           </Link>
         </div>
@@ -44,7 +44,7 @@ export default async function AdminWorkshopsPage() {
                 workshops.map((w) => (
                   <tr key={w.id} className="border-b border-line-light last:border-0 hover:bg-surface">
                     <td className="px-5 py-3">
-                      <Link href={`/admin/community/sessions/${w.id}`} className="flex items-center gap-3">
+                      <Link href={`/admin/academy/coaching/${w.id}`} className="flex items-center gap-3">
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] font-display text-sm font-bold text-white" style={{ background: 'linear-gradient(150deg,#7C5CFC,#5B3FE0)' }}>{w.name.charAt(0)}</span>
                         <span>
                           <span className="block font-medium text-ink">{w.name}</span>

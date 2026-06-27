@@ -1,13 +1,13 @@
 // Shared membership classification rules used across admin and member portal
 
 export const ROLES_FOR_BRACKET: Record<string, string[]> = {
-  high_school: ['school_student', 'school_student_manager'],
+  high_school: ['participant', 'school_student_manager'],
   college: ['mentor'],
   adult: ['teacher', 'mentor', 'parent'],
 }
 
 export const DEFAULT_ROLE_FOR_BRACKET: Record<string, string> = {
-  high_school: 'school_student',
+  high_school: 'participant',
   college: 'mentor',
   adult: 'teacher',
 }
@@ -18,7 +18,7 @@ export const GROUP_MANAGER_ROLES = ['teacher', 'school_student_manager']
 // Roles that count as a student participant. A Student Manager is a student who
 // also organises the group, so they belong here alongside plain school students —
 // used by event Companies auto-assign and participation certificates.
-export const STUDENT_ROLES = ['school_student', 'school_student_manager']
+export const STUDENT_ROLES = ['participant', 'school_student_manager']
 
 // Canonical tier names per (bracket, role). Updated in the standardization sweep
 // (migration 094) to the 10-tier schema; the retired tiers (Advisor, Counsellor,

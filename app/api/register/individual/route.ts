@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
     const dob = new Date(date_of_birth)
     const ageNow = new Date().getFullYear() - dob.getFullYear()
     const resolvedBracket = ageNow < 18 ? 'high_school' : normalizeAgeBracket(age_bracket)
-    const resolvedRole = ageNow < 18 ? 'school_student' : normalizeEventRole(event_role)
+    const resolvedRole = ageNow < 18 ? 'participant' : normalizeEventRole(event_role)
 
     const { data: memberRow, error: memberUpsertError } = await db
       .from('members')

@@ -80,7 +80,7 @@ export function CoachingSessionsCalendar({ sessions }: { sessions: CoachingCalen
                         return (
                           <Link
                             key={s.id}
-                            href={`/admin/community/sessions/${s.workshopId}`}
+                            href={`/admin/academy/coaching/${s.workshopId}`}
                             className="block truncate rounded px-1.5 py-0.5 text-[10.5px] font-medium text-white"
                             style={{ background: colorByMember.get(keyOf(s)) }}
                             title={`${s.memberName ?? s.workshopName} · ${s.title ?? 'Session'}`}

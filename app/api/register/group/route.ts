@@ -28,16 +28,16 @@ function getStripe() {
   return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
 }
 
-// The "minor → school_student" override must never strip an organiser of their
+// The "minor → participant" override must never strip an organiser of their
 // role. A teacher / student-manager keeps it regardless of DOB — a test or
-// mistyped birthdate previously downgraded the registrant to school_student,
+// mistyped birthdate previously downgraded the registrant to participant,
 // which hid their own group from /account?tab=teams and 403'd team management.
 // Everyone else (students, additional adults, mentors) follows the age rule.
 const ORGANISER_ROLES = new Set(['teacher', 'school_student_manager'])
 function resolveRoleForAge(rawRole: unknown, ageNow: number): string {
   const role = normalizeEventRole(rawRole)
   if (ORGANISER_ROLES.has(role)) return role
-  return Number.isFinite(ageNow) && ageNow < 18 ? 'school_student' : role
+  return Number.isFinite(ageNow) && ageNow < 18 ? 'participant' : role
 }
 
 interface ParticipantPayload {

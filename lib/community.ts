@@ -44,7 +44,7 @@ export interface CommunityMember {
   activeTierIds: string[]
   /**
    * The member's primary Event Participation Role (members.event_role enum, e.g.
-   * 'school_student' | 'teacher' | 'mentor' | 'parent'). Used to resolve
+   * 'participant' | 'teacher' | 'mentor' | 'parent'). Used to resolve
    * role-targeted training assignments (FR-COM-10). Null when unset.
    */
   event_role: string | null

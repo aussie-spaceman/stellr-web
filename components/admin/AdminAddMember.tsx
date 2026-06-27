@@ -90,14 +90,14 @@ export function AdminAddMember({ tiers }: Props) {
   function handleDobChange(dob: string) {
     const age = ageFromDob(dob)
     if (age !== null && age < 18) {
-      setForm((f) => ({ ...f, date_of_birth: dob, age_bracket: 'high_school', event_role: 'school_student', tier_id: '' }))
+      setForm((f) => ({ ...f, date_of_birth: dob, age_bracket: 'high_school', event_role: 'participant', tier_id: '' }))
     } else {
       setForm((f) => ({ ...f, date_of_birth: dob }))
     }
   }
 
   const isMinor = form.date_of_birth ? (ageFromDob(form.date_of_birth) ?? 99) < 18 : false
-  const eligibleRoles = isMinor ? ['school_student'] : (ROLES_FOR_BRACKET[form.age_bracket] ?? [])
+  const eligibleRoles = isMinor ? ['participant'] : (ROLES_FOR_BRACKET[form.age_bracket] ?? [])
   const eligibleTierNames = getEligibleTierNames(form.age_bracket, form.event_role)
   const eligibleTiers = tiers.filter((t) => eligibleTierNames.includes(t.name))
   const showGrade = form.age_bracket === 'high_school' || form.age_bracket === 'college'

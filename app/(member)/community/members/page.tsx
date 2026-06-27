@@ -36,7 +36,7 @@ function formatRole(role: string | null): string {
   if (!role) return ''
   return role
     .replace('school_student_manager', 'Student Manager')
-    .replace('school_student', 'Student')
+    .replace('participant', 'Student')
     .replace('teacher', 'Teacher / Educator')
     .replace('mentor', 'Mentor')
     .replace('parent', 'Parent / Guardian')

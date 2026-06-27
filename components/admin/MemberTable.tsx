@@ -42,12 +42,12 @@ interface Props {
 }
 
 const BRACKETS = ['high_school', 'college', 'adult']
-const ROLES = ['school_student', 'mentor', 'teacher', 'donor', 'parent', 'subscriber']
+const ROLES = ['participant', 'mentor', 'teacher', 'donor', 'parent', 'subscriber']
 
 const TIER_TOOLTIPS: Record<string, string> = {
   'Explorer': 'Free tier — public content, competition listings, and basic community access.',
-  'Pathfinder': 'Paid tier ($60/yr) — full community access and event registration. Also awarded free for one year to event participants.',
-  'Scholar': 'Award winner tier ($120/yr) — all Pathfinder benefits plus exclusive content. Awarded to competition winners.',
+  'Pathfinder': 'Paid tier ($59/yr) — full community access and event registration. Also awarded free for one year to event participants.',
+  'Scholar': 'Award winner tier ($119/yr) — all Pathfinder benefits plus exclusive content. Awarded to competition winners.',
 }
 
 function label(val: string) {

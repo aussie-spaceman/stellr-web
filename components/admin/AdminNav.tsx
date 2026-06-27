@@ -36,8 +36,8 @@ const SECTIONS: Section[] = [
   {
     label: 'Academy',
     items: [
-      { href: '/admin/community/training', label: 'Training' },
-      { href: '/admin/community/cohorts', label: 'Mentoring' },
+      { href: '/admin/academy/training', label: 'Training' },
+      { href: '/admin/academy/mentoring', label: 'Mentoring' },
       { href: '/admin/academy/coaching', label: 'Coaching' },
       { href: '/admin/community/gates', label: 'Gates' },
     ],

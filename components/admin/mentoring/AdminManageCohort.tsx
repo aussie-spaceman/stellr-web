@@ -257,7 +257,7 @@ function AdminSettings({ cohort, tiers, admin }: { cohort: CohortMeta; tiers: { 
               <span className="inline-flex items-center gap-1.5 rounded-pill bg-enviro-green-bg px-2.5 py-1 text-[12.5px] font-medium text-enviro-green-text">
                 <ShieldCheck className="h-3.5 w-3.5" /> {freeTierNames.length ? `Free · ${freeTierNames.join(', ')}` : 'No free tiers'}
               </span>
-              <Link href="/admin/community/cohorts/membership" className="text-[13px] font-semibold text-primary hover:underline">Manage access →</Link>
+              <Link href="/admin/academy/mentoring/membership" className="text-[13px] font-semibold text-primary hover:underline">Manage access →</Link>
             </div>
           </div>
           <div className="flex justify-end">
@@ -292,7 +292,7 @@ function AdminSettings({ cohort, tiers, admin }: { cohort: CohortMeta; tiers: { 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={`Type "${cohort.name}" to confirm`} className="flex-1 rounded-[9px] border border-line px-3 py-2 text-sm outline-none focus:border-danger" />
               <button
-                onClick={async () => { if ((await admin({ action: 'delete', cohortId: cohort.id }))) router.push('/admin/community/cohorts') }}
+                onClick={async () => { if ((await admin({ action: 'delete', cohortId: cohort.id }))) router.push('/admin/academy/mentoring') }}
                 disabled={confirm !== cohort.name}
                 className="inline-flex items-center gap-1.5 rounded-[9px] bg-danger px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
               >

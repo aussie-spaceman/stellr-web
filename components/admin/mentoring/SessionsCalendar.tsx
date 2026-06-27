@@ -80,7 +80,7 @@ export function SessionsCalendar({ sessions }: { sessions: CalendarSession[] }) 
                         return (
                           <Link
                             key={s.id}
-                            href={`/admin/community/cohorts/${s.cohortId}`}
+                            href={`/admin/academy/mentoring/${s.cohortId}`}
                             className="block truncate rounded px-1.5 py-0.5 text-[10.5px] font-medium text-white"
                             style={{ background: colorByCohort.get(s.cohortId) }}
                             title={`${s.cohortName} · ${s.title ?? 'Session'}`}

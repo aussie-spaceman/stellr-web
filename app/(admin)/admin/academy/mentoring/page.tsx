@@ -15,7 +15,7 @@ export default async function AdminCohortsPage() {
       <div className="min-w-0 flex-1 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">Cohorts</h1>
-          <Link href="/admin/community/cohorts/new" className="inline-flex items-center gap-2 rounded-[9px] bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-deep">
+          <Link href="/admin/academy/mentoring/new" className="inline-flex items-center gap-2 rounded-[9px] bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-deep">
             <Plus className="h-4 w-4" /> New cohort
           </Link>
         </div>
@@ -47,7 +47,7 @@ export default async function AdminCohortsPage() {
                   return (
                     <tr key={c.id} className="border-b border-line-light last:border-0 hover:bg-surface">
                       <td className="px-5 py-3">
-                        <Link href={`/admin/community/cohorts/${c.id}`} className="flex items-center gap-3">
+                        <Link href={`/admin/academy/mentoring/${c.id}`} className="flex items-center gap-3">
                           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] font-display text-sm font-bold text-white" style={{ background: tile.gradient }}>{c.name.charAt(0)}</span>
                           <span>
                             <span className="block font-medium text-ink">{c.name}</span>

@@ -39,7 +39,7 @@ export default async function AdminManageCohortPage({ params }: { params: Promis
     <div className="flex gap-8">
       <AdminMentoringNav />
       <div className="min-w-0 flex-1 space-y-4">
-        <Link href="/admin/community/cohorts" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-content-muted hover:text-primary">
+        <Link href="/admin/academy/mentoring" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-content-muted hover:text-primary">
           <ArrowLeft className="h-4 w-4" /> Cohorts
         </Link>
         <AdminManageCohort

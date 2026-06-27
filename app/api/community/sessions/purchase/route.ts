@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
+import { getAcademyDiscountPercent, academyLineItemFromPrice } from '@/lib/academy-discount'
 
 // POST /api/community/sessions/purchase  Body: { sessionType: 'coaching' | 'mentoring' }
 // Starts a Stripe Checkout for one additional session (FR-COM-11/12). The price
@@ -55,10 +56,12 @@ export async function POST(req: Request) {
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
+  const academyPct = await getAcademyDiscountPercent(member.activeTierIds)
+  const lineItem = await academyLineItemFromPrice(stripe, priceId, academyPct, `Extra ${sessionType} session`)
   const session = await stripe.checkout.sessions.create({
     customer: customerId ?? undefined,
     mode: 'payment',
-    line_items: [{ price: priceId, quantity: 1 }],
+    line_items: [lineItem],
     success_url: `${baseUrl}/community/${sessionType}?purchase=success`,
     cancel_url: `${baseUrl}/community/${sessionType}`,
     metadata: { type: 'extra_session', memberId: member.id, sessionType },

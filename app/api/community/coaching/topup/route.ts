@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
+import { getAcademyDiscountPercent, discountCents } from '@/lib/academy-discount'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -27,6 +28,8 @@ export async function POST(req: Request) {
 
   // 3-pack: 10% off per session.
   const unit = quantity === 3 ? Math.round(SESSION_PRICE_CENTS * 0.9) : SESSION_PRICE_CENTS
+  // Academy membership discount stacks on top (dynamic pricing — see lib/academy-discount).
+  const unitNet = discountCents(unit, await getAcademyDiscountPercent(member.activeTierIds))
 
   const db = supabaseServer()
   const { data: m } = await db.from('members').select('email, stripe_customer_id').eq('id', member.id).maybeSingle()
@@ -39,7 +42,7 @@ export async function POST(req: Request) {
     line_items: [
       {
         quantity,
-        price_data: { currency: 'usd', unit_amount: unit, product_data: { name: 'Coaching session' } },
+        price_data: { currency: 'usd', unit_amount: unitNet, product_data: { name: 'Coaching session' } },
       },
     ],
     ...(buyer?.stripe_customer_id ? { customer: buyer.stripe_customer_id } : buyer?.email ? { customer_email: buyer.email } : {}),

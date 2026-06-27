@@ -9,6 +9,11 @@ import { NavUserButton } from './NavUserButton'
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
+// Set NEXT_PUBLIC_SIGNUPS_OPEN=false (in Vercel) + redeploy to hide the
+// "Join Free" sign-up button while the site is in public review. Log In stays
+// available throughout. Flip back to true (or remove) + redeploy to restore it.
+const SIGNUPS_OPEN = (process.env.NEXT_PUBLIC_SIGNUPS_OPEN ?? 'true') !== 'false'
+
 type NavbarProps = {
   isSignedIn?: boolean
   isAdmin?: boolean
@@ -121,12 +126,14 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
               >
                 Log In
               </a>
-              <a
-                href={`${AUTH_URL}/sign-up`}
-                className="text-primary text-[13px] font-medium hover:text-primary-deep transition-colors"
-              >
-                Join Free →
-              </a>
+              {SIGNUPS_OPEN && (
+                <a
+                  href={`${AUTH_URL}/sign-up`}
+                  className="text-primary text-[13px] font-medium hover:text-primary-deep transition-colors"
+                >
+                  Join Free →
+                </a>
+              )}
             </>
           )}
         </div>
@@ -306,13 +313,15 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
                 </a>
               ) : (
                 <>
-                  <a
-                    href={`${AUTH_URL}/sign-up`}
-                    className="block w-full text-center px-4 py-3 bg-primary text-white font-medium rounded-md hover:bg-primary-deep transition-colors"
-                    onClick={() => setMobileOpen(false)}
-                  >
-                    Join Free
-                  </a>
+                  {SIGNUPS_OPEN && (
+                    <a
+                      href={`${AUTH_URL}/sign-up`}
+                      className="block w-full text-center px-4 py-3 bg-primary text-white font-medium rounded-md hover:bg-primary-deep transition-colors"
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      Join Free
+                    </a>
+                  )}
                   <a
                     href={`${AUTH_URL}/sign-in`}
                     className="block w-full text-center px-4 py-3 border border-primary text-primary font-medium rounded-md hover:bg-primary-soft transition-colors"

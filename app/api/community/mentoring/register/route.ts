@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
 import { enrollWithCredit, enrollFree, getCohortFull, resolveCohortAccess } from '@/lib/mentoring'
+import { getAcademyDiscountPercent, academyLineItemFromPrice, discountCents } from '@/lib/academy-discount'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -58,13 +59,14 @@ export async function POST(req: Request) {
   const buyer = m as { email: string | null; stripe_customer_id: string | null } | null
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
+  const academyPct = await getAcademyDiscountPercent(member.activeTierIds)
   const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = cohort.oneOffStripePriceId
-    ? { price: cohort.oneOffStripePriceId, quantity: 1 }
+    ? await academyLineItemFromPrice(stripe, cohort.oneOffStripePriceId, academyPct, `Mentoring cohort — ${cohort.name}`)
     : {
         quantity: 1,
         price_data: {
           currency: 'usd',
-          unit_amount: cohort.oneOffPriceCents!,
+          unit_amount: discountCents(cohort.oneOffPriceCents!, academyPct),
           product_data: { name: `Mentoring cohort — ${cohort.name}` },
         },
       }

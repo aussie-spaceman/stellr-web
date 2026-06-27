@@ -22,6 +22,7 @@ import type { CommunityMember } from '@/lib/community'
 import { notifyMember, notifyMembers } from '@/lib/notify'
 import { linkCohortTraining } from '@/lib/sessions'
 import { logActivity } from '@/lib/activity-log'
+import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 import { DEFAULT_TZ } from '@/lib/mentoring-format'
 import { autoWorkshopName } from '@/lib/coaching-format'
 import Stripe from 'stripe'
@@ -905,6 +906,14 @@ export async function updateTierCoaching(tierId: string, freeSessions: number, v
 /** Called by the Stripe webhook after a successful one-off workshop payment. */
 export async function enrollAfterPayment(memberId: string, workshopId: string, stripeSessionId: string): Promise<void> {
   const db = supabaseServer()
+  // Minor-agreement backstop: never roster a minor into a live workshop without a signed
+  // agreement on file. Report-only unless ACCESS_GATES_ENFORCE; logs for admin follow-up
+  // (the member has paid, so a blocked enrolment needs manual resolution / refund).
+  const gate = await reportEnrollmentGate({ id: memberId }, { kind: 'workshop', containerId: workshopId })
+  if (accessGatesEnforced() && !gate.unlocked) {
+    console.error('[coaching] enrolment blocked by minor-agreement gate (paid):', { memberId, workshopId })
+    return
+  }
   await db.from('session_credits').insert({
     member_id: memberId,
     session_type: 'coaching',

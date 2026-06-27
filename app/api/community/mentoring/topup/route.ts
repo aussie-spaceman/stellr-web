@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
 import { CREDIT_PACK_PRICE_CENTS } from '@/lib/mentoring-format'
+import { getAcademyDiscountPercent, discountCents } from '@/lib/academy-discount'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -22,7 +23,8 @@ export async function POST(req: Request) {
   const stripe = getStripe()
   if (!stripe) return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
 
-  const unit = Number(process.env.MENTORING_CREDIT_PRICE_CENTS) || CREDIT_PACK_PRICE_CENTS
+  const unit0 = Number(process.env.MENTORING_CREDIT_PRICE_CENTS) || CREDIT_PACK_PRICE_CENTS
+  const unit = discountCents(unit0, await getAcademyDiscountPercent(member.activeTierIds))
 
   const db = supabaseServer()
   const { data: m } = await db.from('members').select('email, stripe_customer_id').eq('id', member.id).maybeSingle()

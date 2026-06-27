@@ -118,7 +118,7 @@ export interface EnrollmentGateResult {
  * file. Adults always pass.
  */
 export async function reportEnrollmentGate(
-  member: CommunityMember,
+  member: { id: string },
   opts: { kind: 'cohort' | 'workshop'; containerId: string; containerName?: string },
 ): Promise<EnrollmentGateResult> {
   const db = supabaseServer()

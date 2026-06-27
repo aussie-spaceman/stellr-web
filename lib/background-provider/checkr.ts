@@ -77,15 +77,16 @@ interface CheckrEnvelope {
   data?: { object?: Record<string, unknown> }
 }
 
-// Map a Checkr report to our domain status.
+// Map a Checkr report to our domain status, matching how Checkr's own dashboard
+// labels an SMB report (so our status always agrees with theirs).
 //
-// "Assess" support (REQUIRED): the assessment tag takes precedence over the raw
-// result — look at `assessment` first and use it if present, otherwise fall back
-// to `result`. eligible → passed; review/escalated → referred (needs a human).
-//
-// Only a `complete` report is terminal. A complete report with no result and no
-// assessment but canceled screenings (Complete Now with nothing reportable) is a
-// cancellation, not a pass. pending/suspended/resumed → still in progress.
+// Only a `complete` report is terminal (pending/suspended/resumed → in progress).
+// The raw `result` drives the status; "Assess" support means a `consider` result
+// that Assess deems `eligible` is treated as cleared. `includes_canceled` is a
+// cancellation signal, not a pass: a report that completes with no reportable
+// result but canceled screenings is "Canceled", even though Assess auto-tags it
+// `review` (that tag reflects the cancellation, not an actual record to review —
+// so it must not override a clear result or turn a cancellation into a review).
 function mapReport(
   status: string | undefined,
   result: string | null,
@@ -94,14 +95,18 @@ function mapReport(
 ): MappedStatus {
   if ((status ?? '').toLowerCase() !== 'complete') return 'in_progress'
 
-  const a = (assessment ?? '').toLowerCase()
-  if (a) return a === 'eligible' ? 'passed' : 'referred'
-
   const r = (result ?? '').toLowerCase()
+  const a = (assessment ?? '').toLowerCase()
+
+  // Completed with no reportable result but canceled screenings → "Canceled".
+  if (!r && includesCanceled) return 'cancelled'
+  // A clear result is cleared; includes_canceled is surfaced only as an indicator.
   if (r === 'clear') return 'passed'
-  if (r === 'consider') return 'referred'
-  // No usable result/assessment on a complete report: a fully-partial cancellation,
-  // else surface for review rather than silently passing.
+  // Charges found: Assess can still clear them (eligible); otherwise human review.
+  if (r === 'consider') return a === 'eligible' ? 'passed' : 'referred'
+  // No raw result but an Assess tag exists → honour it.
+  if (a) return a === 'eligible' ? 'passed' : 'referred'
+  // Complete with nothing usable: surface for review rather than silently passing.
   return includesCanceled ? 'cancelled' : 'referred'
 }
 

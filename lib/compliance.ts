@@ -26,7 +26,9 @@ export type ComplianceState =
   | 'valid_bc' // a passed, non-expired background check is on file
   | 'valid_license' // a verified, non-expired teacher license is on file
   | 'in_process' // a check is invited/running, or a license awaits verification
-  | 'invalid' // required but nothing valid on file (missing or expired)
+  | 'cancelled' // the check was canceled before completing — just needs re-ordering
+  | 'expired' // the invitation expired without completion — just needs re-ordering
+  | 'invalid' // required but nothing valid on file (missing, expired, or flagged)
 
 export interface TeacherLicense {
   id: string
@@ -155,12 +157,20 @@ export function deriveCompliance(
     return { state: 'in_process', detail: 'License awaiting verification', license, check }
   }
 
-  // Required, but nothing valid on file — missing, expired, referred or canceled.
+  // Required, but not cleared. A canceled or expired check is an operational state
+  // (the attempt ended; just re-order) — surface it distinctly rather than as a
+  // red "Invalid". The person is still not cleared, so it never reads as compliant.
+  if (check?.status === 'cancelled') {
+    return { state: 'cancelled', detail: 'Background check was canceled — re-order required', license, check }
+  }
+  if (check?.status === 'expired') {
+    return { state: 'expired', detail: 'Background check invitation expired — re-order required', license, check }
+  }
+
+  // Otherwise genuinely invalid: missing, expired clearance, or flagged for review.
   let detail = 'No valid clearance on file'
   if (license && licenseExpired(license, ref)) detail = `License expired ${fmtDate(license.expiry_date)}`
   else if (check?.status === 'referred') detail = 'Background check flagged for review'
-  else if (check?.status === 'cancelled') detail = 'Background check was canceled — re-order required'
-  else if (check?.status === 'expired') detail = 'Background check invitation expired — re-order required'
   else if (check?.status === 'passed' && check.expires_at) detail = `Background check expired ${fmtDate(check.expires_at)}`
   return { state: 'invalid', detail, license, check }
 }

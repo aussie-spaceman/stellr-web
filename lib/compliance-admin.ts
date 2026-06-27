@@ -45,6 +45,8 @@ interface MemberRow {
 // Sort: things needing attention first (invalid, then in_process), then cleared.
 const STATE_ORDER: Record<ComplianceState, number> = {
   invalid: 0,
+  cancelled: 0,
+  expired: 0,
   in_process: 1,
   valid_license: 2,
   valid_bc: 2,
@@ -92,7 +94,7 @@ export async function getComplianceAudit(): Promise<ComplianceAudit> {
   rows.sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state] || a.name.localeCompare(b.name))
 
   const counts: Record<ComplianceState, number> = {
-    not_required: 0, valid_bc: 0, valid_license: 0, in_process: 0, invalid: 0,
+    not_required: 0, valid_bc: 0, valid_license: 0, in_process: 0, cancelled: 0, expired: 0, invalid: 0,
   }
   for (const r of rows) counts[r.state]++
 

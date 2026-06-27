@@ -12,6 +12,8 @@ export const COMPLIANCE_PILL: Record<ComplianceState, { label: string; cls: stri
   valid_bc:      { label: 'BC Passed',     cls: 'bg-emerald-100 text-emerald-700' },
   valid_license: { label: 'License',       cls: 'bg-green-100 text-green-700' },
   in_process:    { label: 'In Process',    cls: 'bg-orange-100 text-orange-700' },
+  cancelled:     { label: 'Cancelled',     cls: 'bg-amber-100 text-amber-700' },
+  expired:       { label: 'Expired',       cls: 'bg-amber-100 text-amber-700' },
   invalid:       { label: 'Invalid',       cls: 'bg-red-100 text-red-700' },
 }
 

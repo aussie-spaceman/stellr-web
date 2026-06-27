@@ -32,6 +32,8 @@ const COMPLIANCE_PILLS: Record<ComplianceState, { label: string; className: stri
   valid_bc:      { label: 'BC Passed',  className: 'bg-emerald-100 text-emerald-700' },
   valid_license: { label: 'License',    className: 'bg-green-100 text-green-700' },
   in_process:    { label: 'In Process', className: 'bg-orange-100 text-orange-700' },
+  cancelled:     { label: 'Cancelled',  className: 'bg-amber-100 text-amber-700' },
+  expired:       { label: 'Expired',    className: 'bg-amber-100 text-amber-700' },
   invalid:       { label: 'Invalid',    className: 'bg-red-100 text-red-700' },
 }
 

@@ -1,13 +1,27 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
-import { OnboardingForm } from '@/components/member/OnboardingForm'
+import { OnboardingForm, type SelectedTier } from '@/components/member/OnboardingForm'
 import { supabaseServer } from '@/lib/supabase'
+import { tierBySlug } from '@/app/(public)/membership/tier-data'
 
 export const metadata = { title: 'Complete Your Profile' }
 
 // Only honour same-origin relative paths (open-redirect safety).
 function safeNext(next: string | undefined): string | null {
   return next && next.startsWith('/') && !next.startsWith('//') ? next : null
+}
+
+// The join orchestrator sends members here as `?next=/join?tier=<slug>`. We read
+// that tier so onboarding can be driven by the *purchase*, not a self-reported
+// role: student tiers skip the role question, teacher tiers show adult roles only.
+function tierFromNext(next: string | null): SelectedTier | null {
+  if (!next) return null
+  const qs = next.split('?')[1]
+  if (!qs) return null
+  const slug = new URLSearchParams(qs).get('tier')
+  if (!slug) return null
+  const t = tierBySlug(slug)
+  return t ? { slug: t.id, name: t.name, bracket: t.bracket } : null
 }
 
 export default async function OnboardingPage({
@@ -29,10 +43,7 @@ export default async function OnboardingPage({
 
   if (member?.date_of_birth && member?.gender) redirect(next ?? '/home')
 
-  const { data: tiers } = await db
-    .from('membership_tiers')
-    .select('*')
-    .order('sort_order')
+  const selectedTier = tierFromNext(next)
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -42,7 +53,7 @@ export default async function OnboardingPage({
           Tell us a bit about yourself to get the most out of your Stellr membership.
         </p>
       </div>
-      <OnboardingForm tiers={tiers ?? []} existingMember={member} next={next ?? undefined} />
+      <OnboardingForm existingMember={member} next={next ?? undefined} selectedTier={selectedTier} />
     </div>
   )
 }

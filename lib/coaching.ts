@@ -26,7 +26,7 @@ import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 import { addGlobalRole } from '@/lib/member-roles'
 import { DEFAULT_TZ } from '@/lib/mentoring-format'
 import { autoWorkshopName } from '@/lib/coaching-format'
-import { ensureMemberGrants, getKindBalanceSplit, getCoachingTierLabel, cancelCohortViaLedger } from '@/lib/entitlements'
+import { ensureMemberGrants, getKindBalanceSplit, getCoachingTierLabel, cancelCohortViaLedger, releaseCoachingBooking, getCoachingAllocationByTier, setTierCoachingAllocation } from '@/lib/entitlements'
 import Stripe from 'stripe'
 import { ALL_TIER_NAMES, tierGroupOf, type TierGroupKey } from '@/lib/tiers'
 
@@ -503,16 +503,31 @@ export async function removeWorkshopMember(workshopId: string, memberId: string)
   await db.from('cohort_members').delete().eq('cohort_id', workshopId).eq('member_id', memberId)
 }
 
-/** Archive: keep all data, close the chat + cancel upcoming sessions. */
+/** Archive: keep all data, close the chat + cancel upcoming sessions. Each cancelled
+ *  upcoming session refunds the coaching_session allocation it drew (bulk-cancel here
+ *  bypasses hostRespond, so release the bookings explicitly). */
 export async function archiveWorkshop(workshopId: string): Promise<void> {
   const db = supabaseServer()
   await db.from('mentoring_cohorts').update({ lifecycle: 'archived', is_active: false }).eq('id', workshopId)
+  const nowIso = new Date().toISOString()
+  const { data: upcoming } = await db
+    .from('sessions')
+    .select('member_id')
+    .eq('cohort_id', workshopId)
+    .eq('session_type', 'coaching')
+    .eq('status', 'scheduled')
+    .gt('scheduled_start', nowIso)
   await db
     .from('sessions')
     .update({ status: 'cancelled' })
     .eq('cohort_id', workshopId)
     .eq('status', 'scheduled')
-    .gt('scheduled_start', new Date().toISOString())
+    .gt('scheduled_start', nowIso)
+  // Release one drawn allocation per cancelled upcoming session (count is what matters;
+  // bookings aren't session-linked — see fn_release_one_booking).
+  for (const s of (upcoming ?? []) as Array<{ member_id: string | null }>) {
+    if (s.member_id) await releaseCoachingBooking(s.member_id, workshopId).catch(() => {})
+  }
 }
 
 /** Permanently delete a workshop and all its data (refunds ledger bookings first). */
@@ -772,14 +787,11 @@ export interface CoachingTier {
 /** The 9 buyable tiers with live Stripe pricing + coaching allowance config. */
 export async function listCoachingTiers(): Promise<CoachingTier[]> {
   const db = supabaseServer()
-  const [{ data: tierRows }, { data: entRows }] = await Promise.all([
+  const [{ data: tierRows }, ents] = await Promise.all([
     db.from('membership_tiers').select('id, name, is_free, stripe_price_id_monthly').in('name', ALL_TIER_NAMES),
-    db.from('session_entitlements').select('tier_id, included_sessions, validity_days').eq('session_type', 'coaching'),
+    getCoachingAllocationByTier(),
   ])
   type TR = { id: string; name: string; is_free: boolean; stripe_price_id_monthly: string | null }
-  const ents = new Map(
-    ((entRows ?? []) as { tier_id: string; included_sessions: number | null; validity_days: number | null }[]).map((e) => [e.tier_id, e]),
-  )
   const stripe = stripeClient()
 
   const tiers = await Promise.all(
@@ -800,21 +812,16 @@ export async function listCoachingTiers(): Promise<CoachingTier[]> {
         group: tierGroupOf(r.name),
         isFree: r.is_free,
         monthlyPriceCents,
-        freeSessions: e?.included_sessions ?? 0,
-        validityDays: e?.validity_days ?? null,
+        freeSessions: e?.quantity ?? 0,
+        validityDays: e?.validityDays ?? null,
       } satisfies CoachingTier
     }),
   )
   return tiers.sort((a, b) => ALL_TIER_NAMES.indexOf(a.name) - ALL_TIER_NAMES.indexOf(b.name))
 }
 
-/** Set a tier's free coaching allowance (upserts session_entitlements). */
+/** Set a tier's free coaching allowance (upserts the canonical entitlements.tier_benefits). */
 export async function updateTierCoaching(tierId: string, freeSessions: number, validityDays = 365): Promise<void> {
-  const db = supabaseServer()
-  const n = Math.max(0, Math.floor(freeSessions))
-  await db.from('session_entitlements').upsert(
-    { tier_id: tierId, session_type: 'coaching', included_sessions: n, validity_days: validityDays },
-    { onConflict: 'tier_id,session_type' },
-  )
+  await setTierCoachingAllocation(tierId, freeSessions, validityDays)
 }
 

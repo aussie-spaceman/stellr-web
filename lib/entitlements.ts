@@ -260,6 +260,58 @@ export async function setTierAllocationQuantity(id: string, quantity: number): P
   if (error) throw new Error(`setTierAllocationQuantity: ${error.message}`)
 }
 
+/** Coaching allowance (tier_benefits coaching_session) keyed by membership_tier_id —
+ *  for the admin coaching-tier display (replaces the session_entitlements read). */
+export async function getCoachingAllocationByTier(): Promise<Map<string, { quantity: number; validityDays: number | null }>> {
+  const [{ data: tiers }, { data: bens }] = await Promise.all([
+    ent().from('tiers').select('membership_tier_id, code'),
+    ent().from('tier_benefits').select('tier_code, quantity, validity_days').eq('kind', 'coaching_session'),
+  ])
+  const byCode = new Map(
+    ((bens ?? []) as Array<{ tier_code: string; quantity: number | null; validity_days: number | null }>).map((b) => [b.tier_code, b]),
+  )
+  const out = new Map<string, { quantity: number; validityDays: number | null }>()
+  for (const t of (tiers ?? []) as Array<{ membership_tier_id: string; code: string }>) {
+    const b = byCode.get(t.code)
+    if (b) out.set(t.membership_tier_id, { quantity: b.quantity ?? 0, validityDays: b.validity_days ?? null })
+  }
+  return out
+}
+
+/** Upsert a tier's coaching allowance into tier_benefits by (tier_code, kind) —
+ *  the admin coaching editor (replaces the session_entitlements upsert). */
+export async function setTierCoachingAllocation(tierId: string, freeSessions: number, validityDays = 365): Promise<void> {
+  const { data: t } = await ent().from('tiers').select('code').eq('membership_tier_id', tierId).maybeSingle()
+  const code = (t as { code?: string } | null)?.code
+  if (!code) throw new Error('setTierCoachingAllocation: no tier code for membership_tier ' + tierId)
+  const qty = Math.max(0, Math.floor(freeSessions))
+  const { data: existing } = await ent()
+    .from('tier_benefits')
+    .select('id')
+    .eq('tier_code', code)
+    .eq('kind', 'coaching_session')
+    .maybeSingle()
+  if (existing) {
+    const { error } = await ent().from('tier_benefits').update({ quantity: qty, validity_days: validityDays }).eq('id', (existing as { id: string }).id)
+    if (error) throw new Error(`setTierCoachingAllocation: ${error.message}`)
+  } else {
+    const { error } = await ent().from('tier_benefits').insert({ tier_code: code, kind: 'coaching_session', quantity: qty, period: 'one_off', validity_days: validityDays })
+    if (error) throw new Error(`setTierCoachingAllocation: ${error.message}`)
+  }
+}
+
+/** Stripe price id for buying an EXTRA session at the member's tier (tier_benefits.
+ *  extra_stripe_price_id; replaces the session_entitlements lookup). Returns the
+ *  first configured price across the member's active tiers, or null. */
+export async function getTierExtraPriceId(tierIds: string[], kind: 'coaching_session' | 'cohort_access'): Promise<string | null> {
+  if (!tierIds.length) return null
+  const { data: tiers } = await ent().from('tiers').select('code').in('membership_tier_id', tierIds)
+  const codes = ((tiers ?? []) as Array<{ code: string }>).map((t) => t.code)
+  if (!codes.length) return null
+  const { data } = await ent().from('tier_benefits').select('extra_stripe_price_id').eq('kind', kind).in('tier_code', codes)
+  return ((data ?? []) as Array<{ extra_stripe_price_id: string | null }>).map((d) => d.extra_stripe_price_id).find((p): p is string => !!p) ?? null
+}
+
 // ── Booking (write) — server-side; called from APIs / the webhook ──────────────
 
 /** Consume an included allocation for a free booking. Returns the booking id. */
@@ -469,18 +521,52 @@ export async function bookCohortFromAllocation(memberId: string, cohortId: strin
 }
 
 /**
- * Ledger-native cohort/workshop cancellation refund: for every reserved booking on
- * the cohort's offering(s), restore a drawn allocation (+1 to its lot) or refund a
- * paid booking to account credit (entitlements.account_credit_ledger), then mark the
- * booking + offering cancelled. Replaces the session_credits-scanning refundCohort-
- * Members / refundWorkshop. No-op when the cohort has no offering. Delegates to the
- * tested fn_cancel_cohort (migration 088).
+ * Cohort/workshop cancellation refund. Restores drawn ALLOCATIONS (free/included
+ * sessions) back to the entitlements ledger, and refunds PAID bookings to the
+ * GENERAL credit system (public.account_credits — redeemable at membership checkout,
+ * shown in billing) so a member keeps one spendable, visible balance (David, #3).
+ * Replaces the session_credits-scanning refundCohortMembers / refundWorkshop. No-op
+ * when the cohort has no offering.
  */
 export async function cancelCohortViaLedger(cohortId: string): Promise<void> {
+  const db = supabaseServer()
+  const { data: cohort } = await db
+    .from('mentoring_cohorts')
+    .select('name, container_type')
+    .eq('id', cohortId)
+    .maybeSingle()
+  const ct = (cohort as { container_type?: string } | null)?.container_type ?? ''
+  const isCoaching = ct === 'coaching' || ct === 'workshop'
+  const label = (cohort as { name?: string } | null)?.name ?? (isCoaching ? 'a coaching workshop' : 'a mentoring cohort')
+  const sourceType = isCoaching ? 'coaching_workshop_refund' : 'mentoring_cohort_refund'
+
   const { data: offs } = await ent().from('offerings').select('id').eq('cohort_id', cohortId)
   for (const o of (offs ?? []) as Array<{ id: string }>) {
+    // Collect paid bookings BEFORE cancellation (fn_cancel_cohort marks them cancelled).
+    const { data: paid } = await ent()
+      .from('bookings')
+      .select('member_id, amount_charged_cents, credit_applied_cents')
+      .eq('offering_id', o.id)
+      .eq('status', 'reserved')
+    const toRefund = ((paid ?? []) as Array<{ member_id: string; amount_charged_cents: number | null; credit_applied_cents: number | null }>)
+      .map((b) => ({ memberId: b.member_id, cents: (b.amount_charged_cents ?? 0) + (b.credit_applied_cents ?? 0) }))
+      .filter((x) => x.cents > 0)
+
+    // Restore allocations + cancel bookings/offering (paid arm is a no-op in SQL now).
     const { error } = await ent().rpc('fn_cancel_cohort', { p_offering: o.id })
     if (error) throw new Error(`cancelCohortViaLedger: ${error.message}`)
+
+    // Issue general account credit for each paid booking.
+    for (const r of toRefund) {
+      await db.from('account_credits').insert({
+        member_id: r.memberId,
+        currency: 'usd',
+        amount_cents: r.cents,
+        remaining_cents: r.cents,
+        source_type: sourceType,
+        reason: `Account credit for cancelled ${isCoaching ? 'coaching workshop' : 'cohort'}: ${label}`,
+      })
+    }
   }
 }
 

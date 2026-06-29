@@ -24,6 +24,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
+  // Onboarding fields are mandatory by audience (mirrors the client wizard):
+  // everyone gives a phone; students give grade/t-shirt/school + emergency
+  // contact; teachers give their school/district.
+  const isStudentBracket = age_bracket === 'high_school' || age_bracket === 'college'
+  const schoolProvided = (school_id && school_id !== 'new') || (school_id === 'new' && !!new_school_name?.trim())
+  const schoolRequired = isStudentBracket || event_role === 'teacher'
+
+  if (!phone?.trim()) {
+    return NextResponse.json({ error: 'Phone number is required' }, { status: 400 })
+  }
+  if (isStudentBracket && (!grade || !tshirt_size)) {
+    return NextResponse.json({ error: 'Grade and t-shirt size are required' }, { status: 400 })
+  }
+  if (schoolRequired && !schoolProvided) {
+    return NextResponse.json({ error: 'School is required' }, { status: 400 })
+  }
+  if (isStudentBracket && (!ec_first_name?.trim() || !ec_last_name?.trim() || !ec_email?.trim() || !ec_phone?.trim() || !ec_relationship)) {
+    return NextResponse.json({ error: 'Emergency contact details are required' }, { status: 400 })
+  }
+
   const db = supabaseServer()
 
   // Auto-override age_bracket if DOB indicates minor

@@ -1,0 +1,23 @@
+-- PHASE 5b — drop the retired `session_entitlements` table (deferral #2).
+-- ════════════════════════════════════════════════════════════════════════════
+-- ⚠️ POST-DEPLOY ONLY. Run this by hand (Supabase SQL editor or psql) AFTER the
+-- deferral-#2 code is DEPLOYED. Like the session_credits drop, it lives in docs/
+-- (not supabase/migrations/) so a routine `supabase db push` can't run it while
+-- prod still serves the pre-#2 code that reads session_entitlements.
+--
+-- WHY it's safe now: the deferral-#2 batch repointed every reader to the canonical
+-- entitlements.tier_benefits —
+--   * lib/coaching.listCoachingTiers      → getCoachingAllocationByTier (tier_benefits)
+--   * lib/coaching.updateTierCoaching      → setTierCoachingAllocation  (tier_benefits)
+--   * app/api/community/sessions/purchase  → getTierExtraPriceId (tier_benefits.extra_stripe_price_id, migration 115)
+--   * app/api/admin/community/session-entitlements/route.ts  → DELETED (orphaned)
+-- After deploy, no live code references session_entitlements (grep-clean; comments only).
+--
+-- PRECONDITIONS (verified 2026-06-29): the 5 rows are STALE placeholders (included=6
+-- for the wrong tiers — superseded by the canonical tier_benefits seed, migration 105)
+-- and every extra_stripe_price_id is NULL (no price data to preserve). The only other
+-- dependency is one service-role RLS policy, cleared by CASCADE. Re-grep the deployed
+-- code for `session_entitlements` before running.
+-- ════════════════════════════════════════════════════════════════════════════
+
+drop table if exists public.session_entitlements cascade;  -- cascade clears the service-role RLS policy

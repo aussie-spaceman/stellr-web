@@ -3,12 +3,13 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
 import { getAcademyDiscountPercent, academyLineItemFromPrice } from '@/lib/academy-discount'
+import { getTierExtraPriceId } from '@/lib/entitlements'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 
 // POST /api/community/sessions/purchase  Body: { sessionType: 'coaching' | 'mentoring' }
 // Starts a Stripe Checkout for one additional session (FR-COM-11/12). The price
-// comes from the member's tier session-entitlement (extra_stripe_price_id). On
-// completion the webhook grants a session_credit, which booking then consumes.
+// comes from the member's tier (tier_benefits.extra_stripe_price_id). On completion
+// the webhook grants a purchased entitlement lot, which booking then draws.
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
   if (!key) throw new Error('STRIPE_SECRET_KEY not set')
@@ -28,12 +29,8 @@ export async function POST(req: Request) {
   }
 
   const db = supabaseServer()
-  const { data: ents } = await db
-    .from('session_entitlements')
-    .select('extra_stripe_price_id')
-    .eq('session_type', sessionType)
-    .in('tier_id', member.activeTierIds)
-  const priceId = (ents ?? []).map((e) => e.extra_stripe_price_id).find((p): p is string => !!p)
+  const kind = sessionType === 'coaching' ? 'coaching_session' : 'cohort_access'
+  const priceId = await getTierExtraPriceId(member.activeTierIds, kind)
   if (!priceId) {
     return NextResponse.json(
       { error: 'Additional sessions are not available on your membership.' },

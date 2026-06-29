@@ -25,7 +25,7 @@ const navLinks = [
     href: '/educate',
     dropdown: [
       { label: 'Competitions', href: '/competitions' },
-      { label: 'Campaigns', href: '/campaigns' },
+      { label: 'Curriculum Campaigns', href: '/campaigns' },
       { label: 'Events', href: '/events' },
       { label: 'Scholarships', href: '/scholarship' },
       { label: 'Host An Event', href: '/host-an-event' },
@@ -100,7 +100,17 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
   const toggleMobileSection = (label: string) =>
     setMobileExpanded((prev) => (prev === label ? null : label))
 
-  const isActive = (href: string) => !!pathname?.startsWith(href)
+  // A pillar is "active" when the current path lives anywhere in its section —
+  // i.e. matches the pillar's own route OR any of its drop-down destinations
+  // (hash stripped). Without this, Educate/Community/About never highlight
+  // because their drop-down items live under different top-level routes
+  // (/competitions, /students, /why-stellr…), whereas Academy/Network do.
+  const isActive = (link: (typeof navLinks)[number]) => {
+    const roots = [link.href, ...(link.dropdown?.map((d) => d.href.split('#')[0]) ?? [])].filter(
+      Boolean,
+    )
+    return roots.some((root) => pathname === root || !!pathname?.startsWith(`${root}/`))
+  }
 
   return (
     <header className="sticky top-0 z-50">
@@ -160,7 +170,7 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
                 >
                   <button
                     className={`flex items-center gap-1 px-3 py-1.5 text-[15px] rounded-md transition-colors hover:bg-[#F0F3FF] ${
-                      isActive(link.href)
+                      isActive(link)
                         ? 'text-midnight font-semibold'
                         : 'text-content font-normal'
                     }`}

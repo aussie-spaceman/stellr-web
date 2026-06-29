@@ -14,6 +14,7 @@ import {
   DollarSign,
   ArrowRight,
 } from 'lucide-react'
+import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 
 export const metadata: Metadata = {
   title: 'For Students',
@@ -293,6 +294,15 @@ export default function StudentsPage() {
               })}
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── Testimonial ───────────────────────────────────────────────── */}
+      <section className="section-padding bg-brand-grey-light">
+        <div className="container-max max-w-3xl text-center">
+          <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">In their words</p>
+          <h2 className="text-3xl font-bold text-brand-blue-dark mb-6">Hear from a Stellr student</h2>
+          <VideoTestimonial fileId="1WU0KCiR2DmkqkYaHJXO3I11k7JTnpYsP" title="Stellr student testimonial" />
         </div>
       </section>
 

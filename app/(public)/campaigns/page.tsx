@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowRight, Check } from 'lucide-react'
 import { Document, Award, Orbit, Environment } from '@stellr/icons'
 import { Hero, Eyebrow, Button } from '@stellr/web-ui'
+import { AssetGate } from '@/components/sections/AssetGate'
 import { getAllCampaigns } from '@/lib/sanity'
 import { getCampaignDates, campaignStatusFromDates, type CampaignSeason } from '@/lib/campaigns'
 
@@ -213,9 +214,20 @@ export default async function CampaignsPage() {
                   </li>
                 ))}
               </ul>
-              <Button href="#tiers" variant="primary" className="mt-6 self-start">
-                Get the material <ArrowRight size={16} />
-              </Button>
+              <div className="mt-6 flex flex-col items-start gap-3">
+                <Button href="#tiers" variant="primary">
+                  Get the material <ArrowRight size={16} />
+                </Button>
+                <AssetGate
+                  asset="student-rfp"
+                  title="Example Student RFP"
+                  fileUrl="/files/Stellr-Example-Student-RFP.pdf"
+                  triggerLabel="See a student Request for Proposal →"
+                  eyebrow="Free · example RFP"
+                  helper="A real student RFP, sent straight to your inbox."
+                  triggerClassName="inline-flex items-center justify-center gap-2 rounded-[9px] border border-primary/40 px-5 py-3 text-sm font-semibold text-primary hover:bg-primary-soft transition-colors"
+                />
+              </div>
             </div>
 
             {/* Card B — campaign */}

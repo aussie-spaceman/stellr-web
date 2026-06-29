@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email'
+import { upsertContact } from '@/lib/hubspot'
 
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
 
@@ -47,6 +48,16 @@ export async function POST(req: Request) {
     ].join('\n')
 
     await sendEmail({ to: CONTACT_EMAIL, replyTo: email, subject, html, text })
+
+    // Capture the applicant as a marketing lead in HubSpot (best-effort —
+    // never blocks the submission if the CRM is unreachable).
+    await upsertContact({
+      email,
+      firstName,
+      lastName,
+      note: `Scholarship application — ${activity}${school ? ` (${school})` : ''}`,
+      lifecycleStage: 'lead',
+    })
 
     return NextResponse.json({ ok: true })
   } catch (err) {

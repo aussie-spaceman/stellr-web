@@ -17,7 +17,7 @@ import type { AccessKind, CohortTheme } from '@/lib/mentoring-format'
 import { notifyMembers } from '@/lib/notify'
 import { linkCohortTraining, inviteMembersToCohort } from '@/lib/sessions'
 import { logActivity } from '@/lib/activity-log'
-import { syncAllowance, getCredits, consumeOldestCredit } from '@/lib/credits'
+import { ensureMemberGrants, getKindBalance, bookCohortFromAllocation } from '@/lib/entitlements'
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 import { addGlobalRole } from '@/lib/member-roles'
 
@@ -39,13 +39,15 @@ export interface MentoringCredits {
  * rows, unused credits simply roll over into the next period (decision D3).
  */
 export async function syncMentoringAllowance(member: CommunityMember): Promise<void> {
-  // Delegates to the shared wallet core (lib/credits.ts), scoped to cohort credits.
-  await syncAllowance(member, 'mentoring')
+  // Entitlements cutover: the mentoring allowance is the cohort_access lot, materialised
+  // from tier_benefits when a membership is granted; ensure it exists before a read.
+  await ensureMemberGrants(member.id)
 }
 
-/** The member's mentoring-credit balance (syncs the annual allowance first). */
+/** The member's mentoring-session balance (cohort_access allocation; ensures grant first). */
 export async function getMentoringCredits(member: CommunityMember): Promise<MentoringCredits> {
-  return getCredits(member, 'mentoring')
+  await ensureMemberGrants(member.id)
+  return getKindBalance(member.id, 'cohort_access')
 }
 
 /** True if any of the member's active tiers includes free mentoring (the toggle). */
@@ -264,7 +266,7 @@ export async function enrollWithCredit(member: CommunityMember, cohortId: string
   if (!access.canUseCredit) return { ok: false, reason: 'no-credit' }
 
   // Consume the oldest available cohort credit (FIFO), tied to this cohort.
-  const consumed = await consumeOldestCredit(member.id, 'mentoring', cohortId)
+  const consumed = await bookCohortFromAllocation(member.id, cohortId)
   if (!consumed) return { ok: false, reason: 'no-credit' }
 
   await addToRosterActive(cohortId, member.id)

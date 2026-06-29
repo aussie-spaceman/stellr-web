@@ -325,6 +325,65 @@ export async function grantTierAllocations(membershipId: string): Promise<number
   return Number(data ?? 0)
 }
 
+/**
+ * Ensure the member's active memberships have materialised their tier allocations into
+ * the ledger (idempotent). Mirrors the old "sync allowance first, then read balance"
+ * pattern so a balance read is always accurate even before the daily cron runs.
+ */
+export async function ensureMemberGrants(memberId: string): Promise<void> {
+  const today = new Date().toISOString().split('T')[0]
+  const { data: ms } = await supabaseServer()
+    .from('member_memberships')
+    .select('id, expires_at')
+    .eq('member_id', memberId)
+    .eq('renewal_status', 'active')
+  for (const m of (ms ?? []) as Array<{ id: string; expires_at: string | null }>) {
+    if (m.expires_at && m.expires_at < today) continue
+    await grantTierAllocations(m.id).catch(() => {})
+  }
+}
+
+/** {remaining, used, total} balance for one allocation kind (sums the member's lots). */
+export async function getKindBalance(
+  memberId: string,
+  kind: EntitlementKind,
+): Promise<{ remaining: number; used: number; total: number }> {
+  const { data } = await ent()
+    .from('entitlements')
+    .select('quantity_total, quantity_remaining')
+    .eq('member_id', memberId)
+    .eq('kind', kind)
+    .in('status', ['active', 'consumed'])
+  let total = 0
+  let remaining = 0
+  for (const r of (data ?? []) as Array<{ quantity_total: number; quantity_remaining: number }>) {
+    total += r.quantity_total
+    remaining += r.quantity_remaining
+  }
+  return { remaining, used: total - remaining, total }
+}
+
+/**
+ * Book a mentoring cohort from the member's included allocation (draws the cohort's
+ * session count). Returns true if booked from allocation, false when there's no open
+ * offering for the cohort or no allocation left (caller then routes to payment).
+ */
+export async function bookCohortFromAllocation(memberId: string, cohortId: string): Promise<boolean> {
+  const { data: off } = await ent()
+    .from('offerings')
+    .select('id')
+    .eq('cohort_id', cohortId)
+    .eq('status', 'open')
+    .maybeSingle()
+  if (!off) return false
+  try {
+    await bookFromAllocation(memberId, (off as { id: string }).id)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Daily cron: re-grant per-period allowances + expire lapsed grants. */
 export async function runEntitlementsLifecycle(): Promise<{ granted: number; expired: number }> {
   const db = ent()

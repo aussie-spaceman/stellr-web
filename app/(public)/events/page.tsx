@@ -73,7 +73,11 @@ export default async function EventsPage({ searchParams }: PageProps) {
         <div className="container-max max-w-3xl text-center">
           <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">In their words</p>
           <h2 className="text-3xl font-bold text-brand-blue-dark mb-6">Hear from a participant</h2>
-          <VideoTestimonial fileId="1J-SLsgvw1pLv8Uh5w0K9UVEvqk4TnLV1" title="Stellr event testimonial" />
+          <VideoTestimonial
+            src="/videos/events-testimonial.mp4"
+            poster="/videos/events-testimonial.jpg"
+            title="Stellr event testimonial"
+          />
         </div>
       </section>
     </>

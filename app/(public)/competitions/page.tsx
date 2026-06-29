@@ -15,6 +15,7 @@ import {
   TierCard,
   ProgressionGraphic,
 } from '@stellr/web-ui'
+import { StudentWorkHero } from '@/components/sections/StudentWorkHero'
 
 export const metadata: Metadata = {
   title: 'Competitions',
@@ -63,7 +64,7 @@ const pathways = [
       ['Students deliver', 'Written proposal or presentation'],
       ['Best for', 'Fitting STEM into your semester'],
     ] as [string, string][],
-    cta: { label: 'Download curriculum', href: '/campaigns', className: 'bg-pathway-amber-bg text-brand-gold-ink hover:bg-pathway-amber/15' },
+    cta: { label: 'Download curriculum', href: '/curriculum', className: 'bg-pathway-amber-bg text-brand-gold-ink hover:bg-pathway-amber/15' },
   },
 ]
 
@@ -123,43 +124,58 @@ interface Tier {
   items: string[]
 }
 
+/* Teacher membership tiers — kept in sync with the /membership explorer
+   (app/(public)/membership/tier-data.ts → educator audience + waterfall). */
 const tiers: Tier[] = [
-  {
-    name: 'Subscriber',
-    accessNote: 'Publicly available',
-    items: ['Request for Proposal (RFP)', 'Mission Handbook', 'Examples of previous work'],
-  },
   {
     name: 'Educator',
     accessNote: 'Free with a member account',
-    inheritsFrom: 'Subscriber',
     items: [
-      'Delivery Overview & NSES map',
-      'Worksheets (cost, schedule)',
-      'Educator Community Spaces',
-      'Webinars & monthly newsletters',
+      'Request for Proposal (RFP) & Mission Handbook',
+      'Scoring rubric',
+      'Competition Guide for Teachers',
+      'Basic assessment tools',
+      'Students can register as members',
+    ],
+  },
+  {
+    name: 'Catalyst',
+    accessNote: 'Competition toolkit',
+    inheritsFrom: 'Educator',
+    items: [
+      'Lesson plans',
+      'Worksheets — cost control, Gantt, materials',
+      'Judging template',
+      'Intro & close-out calls + slides',
+      'Intermediate assessment tools',
     ],
   },
   {
     name: 'Innovator',
-    accessNote: 'Free 1st year for event participants',
-    inheritsFrom: 'Educator',
+    accessNote: 'Mentoring & AI tools',
+    inheritsFrom: 'Catalyst',
     badge: 'Best Value',
     featured: true,
     items: [
-      'Assessment Guides / Marking Rubric',
-      'Multi-week lesson plans',
-      'Agentic AI Sub-Contractors + PM tools',
-      'Live kick-off & close-out calls',
-      'Student certificates',
-      'Students upgraded to Pathfinder',
+      'Group mentoring — 8 × 30-min / semester (recorded)',
+      'Agentic AI sub-contractors + project advisor',
+      'Biweekly student feedback calls',
+      'Advanced assessment tools & question banks',
+      'Common Core alignment',
+      'Students invited as Explorer',
     ],
   },
   {
     name: 'Trailblazer',
-    accessNote: 'Comprehensive teacher support',
+    accessNote: 'For teachers who excel',
     inheritsFrom: 'Innovator',
-    items: ['Biweekly mentoring calls (via Community)', 'CTE credits / hours', 'Student awards'],
+    items: [
+      'Student awards presented',
+      'Virtual presentation deliverable (Zoom)',
+      'CTE credits · NGSS & ISTE alignment',
+      'LMS upload (SCORM)',
+      'Students upgraded to Pathfinder (12 months)',
+    ],
   },
 ]
 
@@ -176,12 +192,43 @@ export default async function CompetitionsPage() {
         pills={['High school students', 'State & national', 'Free for students to enter']}
       />
 
+      {/* ── Rotating showcase of previous student work ─────────────────── */}
+      <section className="section-padding bg-white border-b border-line">
+        <div className="container-max">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+            <div>
+              <Eyebrow>Previous student work</Eyebrow>
+              <h2 className="text-3xl font-bold text-ink mt-3">Real work from real competitions</h2>
+              <p className="text-content-secondary mt-3 leading-relaxed max-w-lg">
+                A rotating look at the proposals, presentations and designs students have produced — the
+                kind of deliverable every team builds and pitches.
+              </p>
+            </div>
+            <StudentWorkHero />
+          </div>
+        </div>
+      </section>
+
       {/* ── What's a Design Competition? ──────────────────────────────── */}
       <section className="section-padding bg-surface border-b border-line">
         <div className="container-max">
           <Eyebrow>Start here</Eyebrow>
           <h2 className="text-3xl font-bold text-ink mt-3 max-w-3xl">What&rsquo;s a Design Competition?</h2>
-          <p className="text-lg text-content-secondary mt-4 max-w-3xl leading-relaxed">
+
+          {/* Dictionary-style definition */}
+          <div className="mt-5 max-w-3xl rounded-ds-card border-l-4 border-primary bg-white px-6 py-5 shadow-card-lift">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="font-display text-2xl font-bold text-ink">Design Competition</span>
+              <span className="text-sm font-semibold uppercase tracking-[0.08em] text-content-faint">noun</span>
+              <span className="text-base italic text-content-muted">dɪˈzaɪn kɒmpɪˈtɪʃn</span>
+            </div>
+            <p className="mt-2.5 text-lg text-content-secondary leading-relaxed">
+              A high-intensity industry-simulation event, in which students adopt professional roles, are
+              given industry-specific challenges, and deliver real-world solutions.
+            </p>
+          </div>
+
+          <p className="text-lg text-content-secondary mt-6 max-w-3xl leading-relaxed">
             Students step into the role of a professional engineering team. They&rsquo;re handed a
             real-world brief — a <strong className="text-ink">Request for Proposal (RFP)</strong> — and
             have to research, design, and justify a working solution, then pitch it. It&rsquo;s a genuine
@@ -345,7 +392,7 @@ export default async function CompetitionsPage() {
             <Button href="/events" as={Link} variant="primary">
               View Events
             </Button>
-            <Button href="/campaigns" as={Link} variant="outlineWhite">
+            <Button href="/curriculum" as={Link} variant="outlineWhite">
               Download Curriculum
             </Button>
           </>

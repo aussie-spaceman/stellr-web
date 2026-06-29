@@ -19,7 +19,7 @@ const components = [
     label: 'Stellr.Educate',
     description: 'All Campaigns',
     icon: BookOpen,
-    href: '/campaigns',
+    href: '/curriculum',
   },
   {
     label: 'Stellr.Community',
@@ -43,10 +43,10 @@ const educateLinks = [
     href: '/competitions',
   },
   {
-    label: 'Campaigns',
+    label: 'Curriculum Campaigns',
     description:
       'Download curriculum material and run a Campaign in your classroom, on your schedule.',
-    href: '/campaigns',
+    href: '/curriculum',
   },
   {
     label: 'Events',

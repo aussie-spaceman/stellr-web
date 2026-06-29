@@ -7,8 +7,9 @@ const nextConfig = {
       { source: '/login', destination: '/sign-in', permanent: true },
       { source: '/signup', destination: '/sign-up', permanent: true },
       { source: '/register', destination: '/sign-up', permanent: true },
-      // 'Activities' was renamed to the canonical object name 'Campaigns'.
-      { source: '/activities', destination: '/campaigns', permanent: true },
+      // 'Activities' → 'Campaigns' → now the Curriculum Campaigns page at /curriculum.
+      { source: '/activities', destination: '/curriculum', permanent: true },
+      { source: '/campaigns', destination: '/curriculum', permanent: true },
       // Academy admin consolidated under /admin/academy (coaching/mentoring/training).
       { source: '/admin/community/sessions/:path*', destination: '/admin/academy/coaching/:path*', permanent: false },
       { source: '/admin/community/cohorts/:path*', destination: '/admin/academy/mentoring/:path*', permanent: false },

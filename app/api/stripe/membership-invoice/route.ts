@@ -60,17 +60,13 @@ export async function POST(req: Request) {
     // Resolve a valid Stripe customer (self-heals a stale/missing stored id).
     const customerId = await ensureStripeCustomer(stripe, db, member, userId)
 
-    await stripe.invoiceItems.create({
-      customer: customerId,
-      currency: 'usd',
-      amount: tier.annual_cost_cents,
-      description: `Stellr ${tier.name} membership — 12 months`,
-    })
-
+    // Create the invoice first, then attach the line item to it explicitly.
+    // (Don't rely on pending-item sweeping — that left the total at $0.)
     const invoice = await stripe.invoices.create({
       customer: customerId,
       collection_method: 'send_invoice',
       days_until_due: 14,
+      auto_advance: false,
       description: `Stellr ${tier.name} membership (annual)`,
       metadata: {
         type: 'membership_invoice',
@@ -78,6 +74,14 @@ export async function POST(req: Request) {
         tierId: tier.id,
         billingInterval: 'annual',
       },
+    })
+
+    await stripe.invoiceItems.create({
+      customer: customerId,
+      invoice: invoice.id,
+      currency: 'usd',
+      amount: tier.annual_cost_cents,
+      description: `Stellr ${tier.name} membership — 12 months`,
     })
 
     const finalized = await stripe.invoices.finalizeInvoice(invoice.id)

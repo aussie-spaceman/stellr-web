@@ -80,6 +80,9 @@ export async function POST(req: Request) {
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
+      // Bill in the price's currency (USD). Disables Stripe Adaptive Pricing,
+      // which would otherwise present the buyer's local currency (e.g. GBP).
+      adaptive_pricing: { enabled: false },
       line_items: [{ price: priceId, quantity: 1 }],
       discounts: discount ? [{ coupon: discount.couponId }] : undefined,
       success_url: `${baseUrl}/account?membership=success`,

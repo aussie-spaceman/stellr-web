@@ -364,23 +364,238 @@ export async function getKindBalance(
 }
 
 /**
- * Book a mentoring cohort from the member's included allocation (draws the cohort's
- * session count). Returns true if booked from allocation, false when there's no open
- * offering for the cohort or no allocation left (caller then routes to payment).
+ * Balance split by GRANTED (tier_grant / admin / auto = "included") vs PURCHASED
+ * (paid extras). Lets a display show "X free left" + "Y purchased" while the
+ * booking engine still draws from the combined pool. granted.{total,remaining,used}
+ * are the included allowance; purchasedRemaining is bought-and-unused.
  */
-export async function bookCohortFromAllocation(memberId: string, cohortId: string): Promise<boolean> {
+export async function getKindBalanceSplit(
+  memberId: string,
+  kind: EntitlementKind,
+): Promise<{ granted: { total: number; remaining: number; used: number }; purchasedRemaining: number }> {
+  const { data } = await ent()
+    .from('entitlements')
+    .select('quantity_total, quantity_remaining, source')
+    .eq('member_id', memberId)
+    .eq('kind', kind)
+    .in('status', ['active', 'consumed'])
+  let gTotal = 0
+  let gRemaining = 0
+  let purchasedRemaining = 0
+  for (const r of (data ?? []) as Array<{ quantity_total: number; quantity_remaining: number; source: string }>) {
+    if (r.source === 'purchased') {
+      purchasedRemaining += r.quantity_remaining
+    } else {
+      gTotal += r.quantity_total
+      gRemaining += r.quantity_remaining
+    }
+  }
+  return { granted: { total: gTotal, remaining: gRemaining, used: gTotal - gRemaining }, purchasedRemaining }
+}
+
+/**
+ * Grant a PURCHASED allocation lot into the ledger (paid extra-session topups).
+ * One refundable lot of `quantity`, idempotent on the Stripe session id (webhook
+ * retries safe). Returns rows granted (the quantity, or 0 if already granted).
+ */
+export async function grantPurchasedLot(
+  memberId: string,
+  kind: 'coaching_session' | 'cohort_access',
+  quantity: number,
+  stripeSessionId: string,
+): Promise<number> {
+  const { data, error } = await ent().rpc('fn_grant_purchased', {
+    p_member: memberId,
+    p_kind: kind,
+    p_quantity: quantity,
+    p_stripe_session: stripeSessionId,
+    p_expires_at: null,
+  })
+  if (error) throw new Error(`grantPurchasedLot: ${error.message}`)
+  return Number(data ?? 0)
+}
+
+/**
+ * Get-or-create the OPEN mentoring_cohort offering bound to a cohort (capacity null
+ * = no cap, preserving the pre-cutover no-rejection behaviour). Mentoring offerings
+ * aren't auto-synced on cohort creation, so the enroll/purchase paths ensure one
+ * here. Returns the offering id (null only if the cohort row is missing).
+ */
+export async function getOrCreateCohortOffering(cohortId: string): Promise<string | null> {
   const { data: off } = await ent()
     .from('offerings')
     .select('id')
     .eq('cohort_id', cohortId)
-    .eq('status', 'open')
+    .eq('type', 'mentoring_cohort')
     .maybeSingle()
-  if (!off) return false
+  if (off) return (off as { id: string }).id
+  const { data: c } = await supabaseServer()
+    .from('mentoring_cohorts')
+    .select('name')
+    .eq('id', cohortId)
+    .maybeSingle()
+  if (!c) return null
+  const { data: created } = await ent()
+    .from('offerings')
+    .insert({ type: 'mentoring_cohort', cohort_id: cohortId, title: (c as { name?: string }).name ?? 'Mentoring cohort', status: 'open' })
+    .select('id')
+    .maybeSingle()
+  return (created as { id: string } | null)?.id ?? null
+}
+
+/** {type, cohortId} an offering points at — for post-booking rostering decisions. */
+export async function getOfferingTarget(offeringId: string): Promise<{ type: string; cohortId: string | null } | null> {
+  const { data } = await ent().from('offerings').select('type, cohort_id').eq('id', offeringId).maybeSingle()
+  if (!data) return null
+  const o = data as { type: string; cohort_id: string | null }
+  return { type: o.type, cohortId: o.cohort_id }
+}
+
+/**
+ * Book a mentoring cohort from the member's included allocation (draws the cohort's
+ * session count). Ensures the cohort's offering exists (so the booking is recorded
+ * and refundable on cancellation). Returns true if booked from allocation, false
+ * when there's no offering or no allocation left (caller then routes to payment).
+ */
+export async function bookCohortFromAllocation(memberId: string, cohortId: string): Promise<boolean> {
+  const offeringId = await getOrCreateCohortOffering(cohortId)
+  if (!offeringId) return false
   try {
-    await bookFromAllocation(memberId, (off as { id: string }).id)
+    await bookFromAllocation(memberId, offeringId)
     return true
   } catch {
     return false
+  }
+}
+
+/**
+ * Ledger-native cohort/workshop cancellation refund: for every reserved booking on
+ * the cohort's offering(s), restore a drawn allocation (+1 to its lot) or refund a
+ * paid booking to account credit (entitlements.account_credit_ledger), then mark the
+ * booking + offering cancelled. Replaces the session_credits-scanning refundCohort-
+ * Members / refundWorkshop. No-op when the cohort has no offering. Delegates to the
+ * tested fn_cancel_cohort (migration 088).
+ */
+export async function cancelCohortViaLedger(cohortId: string): Promise<void> {
+  const { data: offs } = await ent().from('offerings').select('id').eq('cohort_id', cohortId)
+  for (const o of (offs ?? []) as Array<{ id: string }>) {
+    const { error } = await ent().rpc('fn_cancel_cohort', { p_offering: o.id })
+    if (error) throw new Error(`cancelCohortViaLedger: ${error.message}`)
+  }
+}
+
+/**
+ * Book a single coaching session from the member's included allocation (draws 1
+ * `coaching_session`). Coaching has no pre-synced offering, so get-or-create an
+ * open `coaching_session` offering bound to the coaching container (one per
+ * coachee/coach pair) and draw against it. Returns true if booked from
+ * allocation, false when there's no offering or no allocation left (caller then
+ * routes to a purchased extra).
+ */
+export async function bookCoachingSessionFromAllocation(memberId: string, containerId: string): Promise<boolean> {
+  let offeringId: string | null = null
+  const { data: off } = await ent()
+    .from('offerings')
+    .select('id')
+    .eq('cohort_id', containerId)
+    .eq('type', 'coaching_session')
+    .eq('status', 'open')
+    .maybeSingle()
+  if (off) {
+    offeringId = (off as { id: string }).id
+  } else {
+    const { data: created } = await ent()
+      .from('offerings')
+      .insert({ type: 'coaching_session', cohort_id: containerId, title: 'Coaching session', status: 'open' })
+      .select('id')
+      .maybeSingle()
+    offeringId = (created as { id: string } | null)?.id ?? null
+  }
+  if (!offeringId) return false
+  try {
+    await bookFromAllocation(memberId, offeringId)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Idempotently grant an ad-hoc allocation lot (rule-based / admin grant) into the
+ * ledger — the Phase-4 replacement for credits.grantCredits. One lot of `quantity`,
+ * scoped to the kind's offering type, never-expiring unless `expiresAt` is given.
+ * Idempotent on (member, kind, source='admin', sourceRef). Returns rows granted
+ * (the quantity, or 0 if this sourceRef was already granted).
+ */
+export async function grantAdhocEntitlement(
+  memberId: string,
+  kind: 'coaching_session' | 'cohort_access',
+  quantity: number,
+  sourceRef: string,
+  expiresAt?: string | null,
+): Promise<number> {
+  const { data, error } = await ent().rpc('fn_grant_adhoc', {
+    p_member: memberId,
+    p_kind: kind,
+    p_quantity: quantity,
+    p_source_ref: sourceRef,
+    p_expires_at: expiresAt ?? null,
+  })
+  if (error) throw new Error(`grantAdhocEntitlement: ${error.message}`)
+  return Number(data ?? 0)
+}
+
+/**
+ * Refund-on-cancel for a coaching session: release one reserved *included* booking
+ * on the member's coaching offering, restoring +1 to its lot. Returns true if a
+ * booking was released (false when there's no offering or no reserved included
+ * booking — e.g. the session was a paid extra). Mirrors getCoachingAllowance's
+ * ledger-as-source-of-truth so a cancelled session frees the allowance again.
+ */
+export async function releaseCoachingBooking(memberId: string, containerId: string): Promise<boolean> {
+  const { data: off } = await ent()
+    .from('offerings')
+    .select('id')
+    .eq('cohort_id', containerId)
+    .eq('type', 'coaching_session')
+    .maybeSingle()
+  if (!off) return false
+  const { data, error } = await ent().rpc('fn_release_one_booking', {
+    p_member: memberId,
+    p_offering: (off as { id: string }).id,
+  })
+  if (error) return false
+  return data as boolean
+}
+
+/**
+ * Display label for the active tier that grants coaching (the most generous one),
+ * plus its validity window. Counts come from the ledger (getKindBalance); this is
+ * purely for "Included with your {tierName} membership" and the period window.
+ */
+export async function getCoachingTierLabel(
+  activeTierIds: string[],
+): Promise<{ tierName: string | null; validityDays: number }> {
+  if (activeTierIds.length === 0) return { tierName: null, validityDays: 365 }
+  const { data: tiers } = await ent()
+    .from('tiers')
+    .select('code, name, membership_tier_id')
+    .in('membership_tier_id', activeTierIds)
+  const rows = (tiers ?? []) as Array<{ code: string; name: string | null }>
+  if (rows.length === 0) return { tierName: null, validityDays: 365 }
+  const { data: benes } = await ent()
+    .from('tier_benefits')
+    .select('tier_code, quantity, validity_days')
+    .eq('kind', 'coaching_session')
+    .in('tier_code', rows.map((t) => t.code))
+  let best: { tier_code: string; quantity: number; validity_days: number | null } | null = null
+  for (const b of (benes ?? []) as Array<{ tier_code: string; quantity: number; validity_days: number | null }>) {
+    if (!best || b.quantity > best.quantity) best = b
+  }
+  if (!best) return { tierName: null, validityDays: 365 }
+  return {
+    tierName: rows.find((t) => t.code === best!.tier_code)?.name ?? null,
+    validityDays: best.validity_days ?? 365,
   }
 }
 

@@ -20,7 +20,7 @@ export async function ensureStripeCustomer(
   stripe: Stripe,
   db: SupabaseClient,
   member: MemberForCustomer,
-  clerkUserId: string,
+  clerkUserId?: string | null,
 ): Promise<string> {
   const existing = member.stripe_customer_id ?? null
   if (existing) {
@@ -38,7 +38,7 @@ export async function ensureStripeCustomer(
   const customer = await stripe.customers.create({
     email: member.email ?? undefined,
     name,
-    metadata: { memberId: member.id, clerkUserId },
+    metadata: { memberId: member.id, ...(clerkUserId ? { clerkUserId } : {}) },
   })
   await db.from('members').update({ stripe_customer_id: customer.id }).eq('id', member.id)
   return customer.id

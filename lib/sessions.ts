@@ -2,6 +2,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { type CommunityMember, getCurrentMember, memberCanAccess } from '@/lib/community'
 import { containerAccessPersists } from '@/lib/containers'
 import { ensureCoachingContainer } from '@/lib/container-sync'
+import { ensureMemberGrants, bookCoachingSessionFromAllocation, releaseCoachingBooking } from '@/lib/entitlements'
 import { getVideoProvider } from '@/lib/video-provider'
 import { notifyMember, notifyMembers } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
@@ -30,95 +31,6 @@ export async function getHostCaps(memberId: string): Promise<HostCaps> {
     .eq('member_id', memberId)
     .maybeSingle()
   return { canCoach: data?.can_coach ?? false, canMentor: data?.can_mentor ?? false }
-}
-
-// ─── Entitlements (how many sessions a member's tier includes) ───────────────
-
-export interface Entitlement {
-  included: number
-  used: number
-  remaining: number
-  expiresAt: string | null
-  /** Purchased extra sessions available to book on top of the included ones. */
-  extraCredits: number
-}
-
-export async function getEntitlement(
-  member: CommunityMember,
-  type: SessionType
-): Promise<Entitlement> {
-  const db = supabaseServer()
-
-  // Purchased extra credits are available regardless of tier.
-  const { count: creditCount } = await db
-    .from('session_credits')
-    .select('id', { count: 'exact', head: true })
-    .eq('member_id', member.id)
-    .eq('session_type', type)
-    .eq('status', 'available')
-  const extraCredits = creditCount ?? 0
-
-  if (member.activeTierIds.length === 0) {
-    return { included: 0, used: 0, remaining: 0, expiresAt: null, extraCredits }
-  }
-
-  const { data: ents } = await db
-    .from('session_entitlements')
-    .select('tier_id, included_sessions, validity_days')
-    .eq('session_type', type)
-    .in('tier_id', member.activeTierIds)
-
-  // Take the most generous tier the member holds.
-  const best = (ents ?? []).reduce<{ included: number; validity: number | null }>(
-    (acc, r) =>
-      (r.included_sessions ?? 0) > acc.included
-        ? { included: r.included_sessions ?? 0, validity: r.validity_days ?? null }
-        : acc,
-    { included: 0, validity: null }
-  )
-
-  // Sessions consumed = non-paid-extra sessions the member attends, still booked.
-  const { data: attended } = await db
-    .from('session_participants')
-    .select('sessions!inner(id, session_type, status, is_paid_extra)')
-    .eq('member_id', member.id)
-
-  type Row = { sessions: { session_type: string; status: string; is_paid_extra: boolean } | { session_type: string; status: string; is_paid_extra: boolean }[] }
-  const used = ((attended ?? []) as unknown as Row[])
-    .map((r) => (Array.isArray(r.sessions) ? r.sessions[0] : r.sessions))
-    .filter(
-      (s) =>
-        s &&
-        s.session_type === type &&
-        !s.is_paid_extra &&
-        (s.status === 'scheduled' || s.status === 'completed')
-    ).length
-
-  // Expiry: earliest active membership start + validity window.
-  let expiresAt: string | null = null
-  if (best.validity != null) {
-    const { data: ms } = await db
-      .from('member_memberships')
-      .select('started_at')
-      .eq('member_id', member.id)
-      .eq('renewal_status', 'active')
-      .order('started_at', { ascending: true })
-      .limit(1)
-    const start = ms?.[0]?.started_at
-    if (start) {
-      const d = new Date(start)
-      d.setDate(d.getDate() + best.validity)
-      expiresAt = d.toISOString()
-    }
-  }
-
-  return {
-    included: best.included,
-    used,
-    remaining: Math.max(best.included - used, 0),
-    expiresAt,
-    extraCredits,
-  }
 }
 
 // ─── Availability ────────────────────────────────────────────────────────────
@@ -168,18 +80,21 @@ export async function bookCoaching(
   const caps = await getHostCaps(hostId)
   if (!caps.canCoach) return { ok: false, error: 'Selected coach is not available.' }
 
-  // Decide whether this booking draws on an included session or a paid credit.
-  const ent = await getEntitlement(member, 'coaching')
-  let usePaidExtra = false
-  if (ent.remaining <= 0) {
-    if (ent.extraCredits <= 0) {
-      return {
-        ok: false,
-        needsPurchase: true,
-        error: 'No coaching sessions remaining. Purchase an extra session to continue.',
-      }
+  // Draw 1 coaching_session from the entitlements ledger (1 per session). Both the
+  // free tier allowance AND purchased extras live there now, so a single draw covers
+  // either — if it fails the member is genuinely out and must purchase. Materialise
+  // tier grants + ensure the coaching container first (so its coaching_session
+  // offering exists and is bound to the right container) before drawing.
+  await ensureMemberGrants(member.id)
+  const containerId = await ensureCoachingContainer(db, member.id, hostId)
+
+  const drew = containerId ? await bookCoachingSessionFromAllocation(member.id, containerId) : false
+  if (!drew) {
+    return {
+      ok: false,
+      needsPurchase: true,
+      error: 'No coaching sessions remaining. Purchase an extra session to continue.',
     }
-    usePaidExtra = true
   }
 
   const start = new Date(startIso)
@@ -195,7 +110,7 @@ export async function bookCoaching(
       scheduled_start: start.toISOString(),
       scheduled_end: end.toISOString(),
       status: 'scheduled',
-      is_paid_extra: usePaidExtra,
+      is_paid_extra: false,
       created_by: member.id,
     })
     .select('id')
@@ -206,19 +121,9 @@ export async function bookCoaching(
     return { ok: false, error: 'Could not book session.' }
   }
 
-  // Converge onto the container model: ensure a coaching workshop container +
-  // roster for this coachee/coach pair so it surfaces in the member access panel
-  // and admin tooling. Non-fatal; the live access path is unchanged.
-  await ensureCoachingContainer(db, member.id, hostId)
-
-  // Claim a paid credit atomically when not covered by the included allowance.
-  if (usePaidExtra) {
-    await db.rpc('consume_session_credit', {
-      p_member_id: member.id,
-      p_session_type: 'coaching',
-      p_session_id: session.id,
-    })
-  }
+  // The coaching workshop container + roster (for the member access panel and admin
+  // tooling) was ensured above, before the allocation draw. The draw itself already
+  // decremented the ledger (free or purchased), so there's no separate credit claim.
 
   await provisionRoom(session.id, opts.title ?? 'Coaching session')
   await db.from('session_participants').insert({ session_id: session.id, member_id: member.id })
@@ -382,7 +287,7 @@ export async function hostRespond(
   const db = supabaseServer()
   const { data: session } = await db
     .from('sessions')
-    .select('id, host_member_id, member_id, cohort_id, scheduled_start')
+    .select('id, host_member_id, member_id, cohort_id, scheduled_start, session_type, is_paid_extra')
     .eq('id', sessionId)
     .maybeSingle()
   if (!session || session.host_member_id !== hostId) return false
@@ -392,6 +297,19 @@ export async function hostRespond(
     .update({ status: action, updated_at: new Date().toISOString() })
     .eq('id', sessionId)
   if (error) return false
+
+  // Refund-on-cancel: a cancelled/declined coaching session that drew an included
+  // allocation releases it back to the member's coaching_session ledger (paid
+  // extras were never auto-refunded, so leave them). Non-fatal.
+  if (
+    (action === 'cancelled' || action === 'declined') &&
+    session.session_type === 'coaching' &&
+    !session.is_paid_extra &&
+    session.member_id
+  ) {
+    const containerId = await ensureCoachingContainer(db, session.member_id as string, hostId)
+    if (containerId) await releaseCoachingBooking(session.member_id as string, containerId).catch(() => false)
+  }
 
   // Notify affected participants.
   const { data: parts } = await db
@@ -1121,8 +1039,9 @@ export async function scheduleMentoringSeries(
 // ─── Coaching workshop sessions (1-on-1, FR-COM-12) ──────────────────────────
 // A coaching workshop is a mentoring_cohorts row (container_type='coaching') with
 // exactly one coachee on the roster. Its sessions are session_type='coaching',
-// tied to the container via cohort_id, hosted by the coach. They draw on the
-// member's coaching allowance via getEntitlement('coaching') — see lib/coaching.ts.
+// tied to the container via cohort_id, hosted by the coach. They draw 1 from the
+// member's coaching_session entitlement ledger per session — see bookCoaching
+// (above) and lib/coaching.getCoachingAllowance.
 
 /**
  * Schedule one coaching session for a workshop. Looks up the single coachee on

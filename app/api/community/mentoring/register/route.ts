@@ -3,7 +3,9 @@ import Stripe from 'stripe'
 import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
 import { enrollWithCredit, enrollFree, getCohortFull, resolveCohortAccess } from '@/lib/mentoring'
+import { getOrCreateCohortOffering } from '@/lib/entitlements'
 import { getAcademyDiscountPercent, academyLineItemFromPrice, discountCents } from '@/lib/academy-discount'
+import { ensureStripeCustomer } from '@/lib/stripe-customer'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -57,6 +59,10 @@ export async function POST(req: Request) {
     .eq('id', member.id)
     .maybeSingle()
   const buyer = m as { email: string | null; stripe_customer_id: string | null } | null
+  const customerId = await ensureStripeCustomer(
+    stripe, db,
+    { id: member.id, email: buyer?.email ?? null, stripe_customer_id: buyer?.stripe_customer_id ?? null },
+  )
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
   const academyPct = await getAcademyDiscountPercent(member.activeTierIds)
@@ -71,14 +77,27 @@ export async function POST(req: Request) {
         },
       }
 
+  // Fulfilment is unified on the entitlements ledger: the webhook's
+  // entitlement_booking branch records the purchase (confirmPaidBooking) and rosters
+  // the member into the cohort. Pricing stays here (academy discount above); only the
+  // offering id is threaded through so the webhook knows what was bought.
+  const offeringId = await getOrCreateCohortOffering(cohortId)
+  if (!offeringId) return NextResponse.json({ error: 'Could not prepare this cohort for purchase' }, { status: 500 })
+
+  const bookingMeta = {
+    type: 'entitlement_booking',
+    memberId: member.id,
+    offeringId,
+    creditAppliedCents: '0',
+  }
   const checkout = await stripe.checkout.sessions.create({
     mode: 'payment',
     line_items: [lineItem],
-    ...(buyer?.stripe_customer_id ? { customer: buyer.stripe_customer_id } : buyer?.email ? { customer_email: buyer.email } : {}),
+    customer: customerId,
     success_url: `${baseUrl}/community/mentoring/${cohortId}?joined=1`,
     cancel_url: `${baseUrl}/community/mentoring/discover`,
-    metadata: { type: 'mentoring_cohort', memberId: member.id, cohortId },
-    payment_intent_data: { metadata: { type: 'mentoring_cohort', memberId: member.id, cohortId } },
+    metadata: bookingMeta,
+    payment_intent_data: { metadata: bookingMeta },
   })
 
   return NextResponse.json({ url: checkout.url })

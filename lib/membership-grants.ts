@@ -15,7 +15,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseServer } from '@/lib/supabase'
 import { logActivity, type Actor, type ActorType } from '@/lib/activity-log'
-import { grantCredits, type CreditType } from '@/lib/credits'
+import { type CreditType } from '@/lib/credits'
+import { grantAdhocEntitlement } from '@/lib/entitlements'
 
 export type GrantTrigger =
   | 'signup'
@@ -286,12 +287,15 @@ export async function applyGrantTrigger(
   const rule = (rules as GrantRule[]).find((r) => matchesConditions(r, member, ctx)) ?? null
   if (!rule) return { rule: null, granted: false, reason: 'no_tier' }
 
-  // Credit-pack grant: hand out N wallet credits (cohort/workshop) instead of a
-  // tier. Honours the same self / registered_students fan-out as the tier path.
+  // Credit-pack grant: hand out N session allocations into the entitlements ledger
+  // (Phase-4 cutover — replaces the dead session_credits wallet). Honours the same
+  // self / registered_students fan-out as the tier path. Per-session mapping
+  // (David): credit type 'mentoring' → cohort_access, 'workshop' → coaching_session.
   if (rule.grant_kind === 'credits') {
     const creditType = rule.grant_credit_type ?? null
     const qty = rule.grant_quantity ?? 0
     if (!creditType || qty <= 0) return { rule, granted: false, reason: 'no_tier' }
+    const kind = creditType === 'workshop' ? 'coaching_session' : 'cohort_access'
 
     const seed = ctx.grantKeySeed ?? memberId
     const targets =
@@ -299,10 +303,7 @@ export async function applyGrantTrigger(
 
     let grantedCount = 0
     for (const tid of targets) {
-      const n = await grantCredits(tid, creditType, qty, {
-        source: 'grant',
-        grantKey: `${rule.id}:${seed}:${tid}`,
-      })
+      const n = await grantAdhocEntitlement(tid, kind, qty, `${rule.id}:${seed}:${tid}`)
       if (n > 0) {
         grantedCount++
         await logActivity(
@@ -310,8 +311,8 @@ export async function applyGrantTrigger(
             memberId: tid,
             category: 'billing',
             action: 'credit_granted',
-            summary: `Granted ${n} ${creditType === 'workshop' ? 'workshop' : 'cohort'} credit${n === 1 ? '' : 's'} (${rule.name})`,
-            metadata: { ruleId: rule.id, creditType, quantity: n, trigger },
+            summary: `Granted ${n} ${kind === 'coaching_session' ? 'coaching' : 'mentoring'} session credit${n === 1 ? '' : 's'} (${rule.name})`,
+            metadata: { ruleId: rule.id, creditType, kind, quantity: n, trigger },
             actorType: 'system',
           },
           db,

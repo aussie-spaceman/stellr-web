@@ -83,6 +83,10 @@ export async function POST(req: Request) {
       // Bill in the price's currency (USD). Disables Stripe Adaptive Pricing,
       // which would otherwise present the buyer's local currency (e.g. GBP).
       adaptive_pricing: { enabled: false },
+      // Stripe Tax: Checkout collects the billing address and saves it to the
+      // customer so tax is computed correctly (and on renewals).
+      automatic_tax: { enabled: true },
+      customer_update: { address: 'auto' },
       line_items: [{ price: priceId, quantity: 1 }],
       discounts: discount ? [{ coupon: discount.couponId }] : undefined,
       success_url: `${baseUrl}/account?membership=success`,

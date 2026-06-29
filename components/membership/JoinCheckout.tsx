@@ -8,13 +8,14 @@ interface Props {
   tierName: string
   priceLabel: string
   priceNote: string
+  billingInterval?: 'annual' | 'monthly'
   invoiceEligible: boolean
 }
 
 // The payment step of the join flow. The member is signed in and onboarded by the
 // time they reach here. Card → Stripe Checkout (auto-renewing subscription).
 // Invoice → emailed Stripe invoice (one-time 12 months, granted on payment).
-export function JoinCheckout({ tierSlug, tierName, priceLabel, priceNote, invoiceEligible }: Props) {
+export function JoinCheckout({ tierSlug, tierName, priceLabel, priceNote, billingInterval = 'annual', invoiceEligible }: Props) {
   const [loading, setLoading] = React.useState<null | 'card' | 'invoice'>(null)
   const [error, setError] = React.useState('')
   const [invoiceSentTo, setInvoiceSentTo] = React.useState<string | null>(null)
@@ -27,7 +28,7 @@ export function JoinCheckout({ tierSlug, tierName, priceLabel, priceNote, invoic
       const res = await fetch('/api/stripe/membership-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tierName, billingInterval: 'annual' }),
+        body: JSON.stringify({ tierName, billingInterval }),
       })
       const data = await res.json()
       if (res.ok && data.url) {
@@ -114,7 +115,7 @@ export function JoinCheckout({ tierSlug, tierName, priceLabel, priceNote, invoic
       <p className="mt-5 text-[12.5px] leading-[1.55] text-content-faint">
         {invoiceEligible
           ? 'Card payments renew annually and can be cancelled anytime. Invoices are billed once for 12 months — ideal for school or district purchase orders.'
-          : 'Your membership renews annually and can be cancelled anytime.'}
+          : `Your membership renews ${billingInterval === 'monthly' ? 'monthly' : 'annually'} and can be cancelled anytime.`}
       </p>
     </div>
   )

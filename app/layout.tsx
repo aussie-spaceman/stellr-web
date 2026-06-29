@@ -50,6 +50,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           />
         </head>
         <body>
+          {/* Google Tag Manager (noscript) */}
+          {process.env.NEXT_PUBLIC_GTM_ID && (
+            <noscript>
+              {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+              <iframe
+                src={`https://www.googletagmanager.com/ns.html?id=${process.env.NEXT_PUBLIC_GTM_ID}`}
+                height="0"
+                width="0"
+                style={{ display: 'none', visibility: 'hidden' }}
+                title="Google Tag Manager"
+              />
+            </noscript>
+          )}
           {children}
           <Analytics />
           <MarketingPixels />

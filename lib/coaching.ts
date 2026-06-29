@@ -26,6 +26,7 @@ import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 import { addGlobalRole } from '@/lib/member-roles'
 import { DEFAULT_TZ } from '@/lib/mentoring-format'
 import { autoWorkshopName } from '@/lib/coaching-format'
+import { ensureMemberGrants, getKindBalanceSplit, getCoachingTierLabel, cancelCohortViaLedger } from '@/lib/entitlements'
 import Stripe from 'stripe'
 import { ALL_TIER_NAMES, tierGroupOf, type TierGroupKey } from '@/lib/tiers'
 
@@ -52,110 +53,62 @@ export interface CoachingAllowance {
 
 /**
  * The member's coaching free-session allowance for the CURRENT membership year.
- * Unlike the lifetime counter in sessions.getEntitlement, this windows `used` to
- * the active period (annual reset, no rollover) and excludes cancelled sessions
- * (refund-on-cancel).
+ *
+ * Source of truth is the entitlements ledger (entitlements.entitlements,
+ * kind='coaching_session') — the SAME lots that bookCoaching draws from — so the
+ * displayed counts never desync from what booking decrements. Both buckets live in
+ * the entitlements ledger now: included/used/remaining = GRANTED lots (tier/admin),
+ * extraCredits = PURCHASED lots (paid topups); tierName + period are display labels
+ * from the canonical tier benefit.
  */
 export async function getCoachingAllowance(member: CommunityMember): Promise<CoachingAllowance> {
   const db = supabaseServer()
 
-  // Purchased extra sessions are available regardless of tier/period.
-  const { count: creditCount } = await db
-    .from('session_credits')
-    .select('id', { count: 'exact', head: true })
-    .eq('member_id', member.id)
-    .eq('session_type', 'coaching')
-    .eq('status', 'available')
-  const extraCredits = creditCount ?? 0
+  // Materialise grants, then read the ledger split (granted = included allowance,
+  // purchased = paid extras). Source of truth is the same ledger bookCoaching draws.
+  await ensureMemberGrants(member.id)
+  const { granted, purchasedRemaining } = await getKindBalanceSplit(member.id, 'coaching_session')
+  const extraCredits = purchasedRemaining
 
-  if (member.activeTierIds.length === 0) {
+  if (granted.total <= 0 && extraCredits <= 0) {
     return { included: 0, used: 0, remaining: 0, extraCredits, periodStart: null, periodEnd: null, tierName: null }
   }
 
-  // Most generous coaching entitlement among the member's active tiers.
-  const { data: ents } = await db
-    .from('session_entitlements')
-    .select('tier_id, included_sessions, validity_days, membership_tiers(name)')
-    .eq('session_type', 'coaching')
-    .in('tier_id', member.activeTierIds)
+  // Display label + period window for the coaching-granting tier.
+  const { tierName, validityDays } = await getCoachingTierLabel(member.activeTierIds)
 
-  type EntRow = {
-    tier_id: string
-    included_sessions: number | null
-    validity_days: number | null
-    membership_tiers: { name?: string } | { name?: string }[] | null
-  }
-  const best = ((ents ?? []) as EntRow[]).reduce<{ included: number; validity: number | null; tierName: string | null }>(
-    (acc, r) => {
-      const inc = r.included_sessions ?? 0
-      if (inc > acc.included) {
-        const t = Array.isArray(r.membership_tiers) ? r.membership_tiers[0] : r.membership_tiers
-        return { included: inc, validity: r.validity_days ?? null, tierName: t?.name ?? null }
-      }
-      return acc
-    },
-    { included: 0, validity: null, tierName: null },
-  )
-
-  // Period window: anchor on the member's earliest active membership start, then
-  // roll forward by `validity` days to the current period (annual reset).
   let periodStart: string | null = null
   let periodEnd: string | null = null
-  if (best.included > 0) {
-    const { data: ms } = await db
-      .from('member_memberships')
-      .select('started_at')
-      .eq('member_id', member.id)
-      .eq('renewal_status', 'active')
-      .order('started_at', { ascending: true })
-      .limit(1)
-    const startStr = ms?.[0]?.started_at as string | undefined
-    const validity = best.validity ?? 365
-    if (startStr) {
-      const anchor = new Date(startStr)
-      if (validity > 0) {
-        const periodMs = validity * 86_400_000
-        const elapsed = Date.now() - anchor.getTime()
-        const periods = elapsed > 0 ? Math.floor(elapsed / periodMs) : 0
-        const ps = new Date(anchor.getTime() + periods * periodMs)
-        periodStart = ps.toISOString()
-        periodEnd = new Date(ps.getTime() + periodMs).toISOString()
-      } else {
-        periodStart = anchor.toISOString()
-      }
+  const { data: ms } = await db
+    .from('member_memberships')
+    .select('started_at')
+    .eq('member_id', member.id)
+    .eq('renewal_status', 'active')
+    .order('started_at', { ascending: true })
+    .limit(1)
+  const startStr = ms?.[0]?.started_at as string | undefined
+  if (startStr) {
+    const anchor = new Date(startStr)
+    if (validityDays > 0) {
+      const periodMs = validityDays * 86_400_000
+      const elapsed = Date.now() - anchor.getTime()
+      const periods = elapsed > 0 ? Math.floor(elapsed / periodMs) : 0
+      const ps = new Date(anchor.getTime() + periods * periodMs)
+      periodStart = ps.toISOString()
+      periodEnd = new Date(ps.getTime() + periodMs).toISOString()
+    } else {
+      periodStart = anchor.toISOString()
     }
   }
 
-  // Used = coaching sessions the member attends this period that aren't paid extra
-  // and aren't cancelled.
-  let used = 0
-  if (best.included > 0) {
-    const { data: attended } = await db
-      .from('session_participants')
-      .select('sessions!inner(session_type, status, is_paid_extra, scheduled_start)')
-      .eq('member_id', member.id)
-    type Row = { sessions: { session_type: string; status: string; is_paid_extra: boolean; scheduled_start: string } | { session_type: string; status: string; is_paid_extra: boolean; scheduled_start: string }[] }
-    const psMs = periodStart ? new Date(periodStart).getTime() : 0
-    used = ((attended ?? []) as unknown as Row[])
-      .map((r) => (Array.isArray(r.sessions) ? r.sessions[0] : r.sessions))
-      .filter(
-        (s) =>
-          s &&
-          s.session_type === 'coaching' &&
-          !s.is_paid_extra &&
-          (s.status === 'scheduled' || s.status === 'completed') &&
-          (!periodStart || new Date(s.scheduled_start).getTime() >= psMs),
-      ).length
-  }
-
   return {
-    included: best.included,
-    used,
-    remaining: Math.max(best.included - used, 0),
+    included: granted.total,
+    used: granted.used,
+    remaining: granted.remaining,
     extraCredits,
     periodStart,
     periodEnd,
-    tierName: best.tierName,
+    tierName,
   }
 }
 
@@ -562,53 +515,13 @@ export async function archiveWorkshop(workshopId: string): Promise<void> {
     .gt('scheduled_start', new Date().toISOString())
 }
 
-/** Permanently delete a workshop and all its data (refunds paid top-ups first). */
+/** Permanently delete a workshop and all its data (refunds ledger bookings first). */
 export async function deleteWorkshop(workshopId: string): Promise<void> {
-  await refundWorkshop(workshopId)
+  // Restore drawn coaching_session allocations + refund any paid bookings to account
+  // credit via the entitlements ledger before the offering/bookings cascade away.
+  await cancelCohortViaLedger(workshopId)
   const db = supabaseServer()
   await db.from('mentoring_cohorts').delete().eq('id', workshopId)
-}
-
-/** Return any top-up credits spent on this workshop to the member's balance. Free
- *  allowance auto-refunds (cancelled sessions stop counting), so nothing to do
- *  there. Paid one-off → monetary account credit. */
-export async function refundWorkshop(workshopId: string): Promise<void> {
-  const db = supabaseServer()
-  const ws = await getWorkshopFull(workshopId)
-  const wsName = ws?.name ?? 'a coaching workshop'
-  const { data: spent } = await db
-    .from('session_credits')
-    .select('id, member_id, source')
-    .eq('consumed_cohort_id', workshopId)
-    .eq('status', 'consumed')
-  for (const c of (spent ?? []) as { id: string; member_id: string; source: string }[]) {
-    if (c.source === 'purchase') {
-      const cents = ws?.oneOffPriceCents ?? 0
-      if (cents > 0) {
-        await db.from('account_credits').insert({
-          member_id: c.member_id,
-          currency: 'usd',
-          amount_cents: cents,
-          remaining_cents: cents,
-          source_type: 'coaching_workshop_refund',
-          reason: `Account credit for cancelled coaching workshop: ${wsName}`,
-        })
-      }
-    } else {
-      await db
-        .from('session_credits')
-        .update({ status: 'available', consumed_at: null, consumed_cohort_id: null })
-        .eq('id', c.id)
-    }
-    await logActivity({
-      memberId: c.member_id,
-      category: 'billing',
-      action: 'refund_issued',
-      summary: `Coaching credit returned — workshop ${wsName} was cancelled`,
-      metadata: { kind: 'coaching_workshop_refund', workshopId },
-      actorType: 'admin',
-    }, db)
-  }
 }
 
 // ─── Request a session (member → coach) ──────────────────────────────────────
@@ -905,28 +818,3 @@ export async function updateTierCoaching(tierId: string, freeSessions: number, v
   )
 }
 
-/** Called by the Stripe webhook after a successful one-off workshop payment. */
-export async function enrollAfterPayment(memberId: string, workshopId: string, stripeSessionId: string): Promise<void> {
-  const db = supabaseServer()
-  // Minor-agreement backstop: never roster a minor into a live workshop without a signed
-  // agreement on file. Report-only unless ACCESS_GATES_ENFORCE; logs for admin follow-up
-  // (the member has paid, so a blocked enrolment needs manual resolution / refund).
-  const gate = await reportEnrollmentGate({ id: memberId }, { kind: 'workshop', containerId: workshopId })
-  if (accessGatesEnforced() && !gate.unlocked) {
-    console.error('[coaching] enrolment blocked by minor-agreement gate (paid):', { memberId, workshopId })
-    return
-  }
-  await db.from('session_credits').insert({
-    member_id: memberId,
-    session_type: 'coaching',
-    status: 'consumed',
-    source: 'purchase',
-    consumed_cohort_id: workshopId,
-    consumed_at: new Date().toISOString(),
-    stripe_session_id: stripeSessionId,
-  })
-  await db.from('cohort_members').upsert(
-    { cohort_id: workshopId, member_id: memberId, relationship: 'participant', status: 'active', accepted_at: new Date().toISOString() },
-    { onConflict: 'cohort_id,member_id' },
-  )
-}

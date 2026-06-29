@@ -17,15 +17,30 @@ const ICONS: Record<ValueIcon, React.ComponentType<{ size?: number }>> = {
   idea: Idea, global: Global, orbit: Orbit, certificate: Certificate,
 }
 
-export default function MembershipExplorer({ prices }: { prices: Record<string, string> }) {
+export default function MembershipExplorer({
+  prices,
+  monthly = {},
+}: {
+  prices: Record<string, string>
+  /** slug → formatted monthly price; only the school/college paid tiers have one. */
+  monthly?: Record<string, string>
+}) {
   const [audienceId, setAudienceId] = React.useState<AudienceId>('school')
   const [selectedId, setSelectedId] = React.useState<TierId>('explorer')
   const [openFaq, setOpenFaq] = React.useState(0)
+  const [interval, setBillingInterval] = React.useState<'annual' | 'monthly'>('annual')
 
   const audience = AUDIENCES[audienceId]
   const pal = bracketPalette(audience.bracket)
   const isEducator = audienceId === 'educator'
-  const priceOf = (id: TierId) => prices[id] ?? 'Free'
+
+  // Monthly billing exists only for the school/college paid tiers. The toggle is
+  // shown for those audiences; teacher tiers (and free tiers) always show annual.
+  const monthlyAvailable = audience.tiers.some((t) => monthly[t.id])
+  const monthlyOn = (id: TierId) => interval === 'monthly' && !!monthly[id]
+  const priceOf = (id: TierId) => (monthlyOn(id) ? monthly[id] : prices[id] ?? 'Free')
+  const noteLabel = (t: { id: TierId; priceNote: string }) => (monthlyOn(t.id) ? 'per month' : t.priceNote)
+  const joinHref = (id: TierId) => `${AUTH_URL}/join?tier=${id}${monthlyOn(id) ? '&interval=monthly' : ''}`
 
   function selectAudience(id: AudienceId) {
     setAudienceId(id)
@@ -85,8 +100,27 @@ export default function MembershipExplorer({ prices }: { prices: Record<string, 
       <section id="explore" className="bg-surface" style={{ padding: '46px 24px 52px' }}>
         <div className="max-w-[1180px] mx-auto flex flex-col gap-6">
 
-          {/* age-bracket colour key */}
-          <BracketShadeKey className="-mt-2 mx-0.5" />
+          {/* age-bracket colour key + billing-interval toggle */}
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <BracketShadeKey className="-mt-2 mx-0.5" />
+            {monthlyAvailable && (
+              <div className="inline-flex rounded-full border border-line bg-white p-1" role="group" aria-label="Billing interval">
+                {(['annual', 'monthly'] as const).map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => setBillingInterval(opt)}
+                    aria-pressed={interval === opt}
+                    className={`cursor-pointer rounded-full px-4 py-1.5 text-[13px] font-semibold capitalize transition-colors ${
+                      interval === opt ? 'bg-ink text-white' : 'text-content-secondary hover:text-ink'
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* tier cards */}
           <div className="flex flex-wrap gap-[13px]">
@@ -97,18 +131,18 @@ export default function MembershipExplorer({ prices }: { prices: Record<string, 
                   role={t.role}
                   name={t.name}
                   price={priceOf(t.id)}
-                  priceNote={t.priceNote}
+                  priceNote={noteLabel(t)}
                   selected={t.id === selected.id}
                   onSelect={() => setSelectedId(t.id)}
                   cta={t.free
                     ? { label: 'Join Free', href: `${AUTH_URL}/sign-up?audience=${audienceId}` }
-                    : { label: 'Sign up now', href: `${AUTH_URL}/join?tier=${t.id}` }}
+                    : { label: 'Sign up now', href: joinHref(t.id) }}
                 />
               </div>
             ))}
           </div>
 
-          {isEducator ? <Waterfall selIdx={selIdx} priceOf={priceOf} /> : <TierLensDetail selected={selected} audienceName={audience.name} priceOf={priceOf} />}
+          {isEducator ? <Waterfall selIdx={selIdx} priceOf={priceOf} /> : <TierLensDetail selected={selected} audienceName={audience.name} priceOf={priceOf} priceNote={noteLabel(selected)} />}
         </div>
       </section>
 
@@ -208,11 +242,12 @@ export default function MembershipExplorer({ prices }: { prices: Record<string, 
 
 /* ── School / College — tier-lens detail panel ────────────────────────────── */
 function TierLensDetail({
-  selected, audienceName, priceOf,
+  selected, audienceName, priceOf, priceNote,
 }: {
   selected: (typeof AUDIENCES)[AudienceId]['tiers'][number]
   audienceName: string
   priceOf: (id: TierId) => string
+  priceNote: string
 }) {
   const stillPay: string[] = []
   selected.cells.forEach((c, i) => {
@@ -238,7 +273,7 @@ function TierLensDetail({
           </div>
           <div className="text-right">
             <p className="font-display font-bold text-[30px] text-ink leading-none">{priceOf(selected.id)}</p>
-            <p className="text-[13px] text-content-faint">{selected.priceNote}</p>
+            <p className="text-[13px] text-content-faint">{priceNote}</p>
           </div>
         </div>
       </div>

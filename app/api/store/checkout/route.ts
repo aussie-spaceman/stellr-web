@@ -4,6 +4,7 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { computeUnitPrice } from '@/lib/store/pricing'
 import { createPendingOrder, STORE_FLAT_SHIPPING_CENTS, type CheckoutLine } from '@/lib/store/orders'
+import { ensureStripeCustomer } from '@/lib/stripe-customer'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -47,7 +48,8 @@ export async function POST(req: Request) {
     if (member) {
       memberId = member.id
       email = member.email
-      customerId = member.stripe_customer_id
+      // Heal a stale/missing stored customer id rather than passing it blindly.
+      customerId = await ensureStripeCustomer(stripe, db, member, userId)
       const { data: mem } = await db
         .from('member_memberships')
         .select('tier_id')

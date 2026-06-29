@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
 import { getAcademyDiscountPercent, discountCents } from '@/lib/academy-discount'
+import { ensureStripeCustomer } from '@/lib/stripe-customer'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -34,6 +35,10 @@ export async function POST(req: Request) {
   const db = supabaseServer()
   const { data: m } = await db.from('members').select('email, stripe_customer_id').eq('id', member.id).maybeSingle()
   const buyer = m as { email: string | null; stripe_customer_id: string | null } | null
+  const customerId = await ensureStripeCustomer(
+    stripe, db,
+    { id: member.id, email: buyer?.email ?? null, stripe_customer_id: buyer?.stripe_customer_id ?? null },
+  )
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
   const back = workshopId ? `/community/coaching/${workshopId}/access` : '/community/coaching'
@@ -45,7 +50,7 @@ export async function POST(req: Request) {
         price_data: { currency: 'usd', unit_amount: unitNet, product_data: { name: 'Coaching session' } },
       },
     ],
-    ...(buyer?.stripe_customer_id ? { customer: buyer.stripe_customer_id } : buyer?.email ? { customer_email: buyer.email } : {}),
+    customer: customerId,
     success_url: `${baseUrl}${back}?topup=1`,
     cancel_url: `${baseUrl}${back}`,
     metadata: { type: 'coaching_topup', memberId: member.id, quantity: String(quantity) },

@@ -60,13 +60,43 @@ export async function POST(req: Request) {
     // Resolve a valid Stripe customer (self-heals a stale/missing stored id).
     const customerId = await ensureStripeCustomer(stripe, db, member, userId)
 
+    // Stripe Tax needs a billing address. Educators (the only tiers invoiceable)
+    // already have one on file via their current school — reuse it; no extra form.
+    const { data: link } = await db
+      .from('member_schools')
+      .select('schools(name, street, address_line1, address_line2, city, state, zip_code, postcode)')
+      .eq('member_id', member.id)
+      .eq('is_current', true)
+      .maybeSingle()
+    const school = (Array.isArray(link?.schools) ? link?.schools[0] : link?.schools) as
+      | { street?: string | null; address_line1?: string | null; address_line2?: string | null; city?: string | null; state?: string | null; zip_code?: string | null; postcode?: string | null }
+      | null
+    const line1 = school?.address_line1 || school?.street || null
+    const postalCode = school?.postcode || school?.zip_code || null
+    const hasTaxAddress = !!(line1 && school?.city && school?.state && postalCode)
+
+    if (hasTaxAddress) {
+      await stripe.customers.update(customerId, {
+        address: {
+          line1: line1 as string,
+          line2: school?.address_line2 || undefined,
+          city: school?.city as string,
+          state: school?.state as string,
+          postal_code: postalCode as string,
+          country: 'US',
+        },
+      })
+    }
+
     // Create the invoice first, then attach the line item to it explicitly.
     // (Don't rely on pending-item sweeping — that left the total at $0.)
+    // Tax is computed only when we have an address, so invoicing never breaks.
     const invoice = await stripe.invoices.create({
       customer: customerId,
       collection_method: 'send_invoice',
       days_until_due: 14,
       auto_advance: false,
+      automatic_tax: { enabled: hasTaxAddress },
       description: `Stellr ${tier.name} membership (annual)`,
       metadata: {
         type: 'membership_invoice',

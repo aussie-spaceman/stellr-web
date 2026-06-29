@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
 import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
+import { getMonthlyPriceMap } from '@/lib/membership-monthly'
 import { tierBySlug } from '@/app/(public)/membership/tier-data'
 import { JoinCheckout } from '@/components/membership/JoinCheckout'
 
@@ -14,15 +15,17 @@ export const metadata = { title: 'Join Stellr' }
 export default async function JoinPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tier?: string }>
+  searchParams: Promise<{ tier?: string; interval?: string }>
 }) {
-  const { tier: slug } = await searchParams
+  const sp = await searchParams
+  const slug = sp.tier
   const tier = slug ? tierBySlug(slug) : null
 
   if (!tier) redirect('/membership')
   if (tier.free) redirect('/home') // free tiers don't pay
 
-  const selfPath = `/join?tier=${tier.id}`
+  const wantMonthly = sp.interval === 'monthly'
+  const selfPath = `/join?tier=${tier.id}${wantMonthly ? '&interval=monthly' : ''}`
 
   const { userId } = await auth()
   if (!userId) redirect(`/sign-up?next=${encodeURIComponent(selfPath)}`)
@@ -39,8 +42,12 @@ export default async function JoinPage({
     redirect(`/account/onboarding?next=${encodeURIComponent(selfPath)}`)
   }
 
-  const prices = await getTierPriceMap()
-  const priceLabel = formatTierPrice(prices[tier.name])
+  const [prices, monthly] = await Promise.all([getTierPriceMap(), getMonthlyPriceMap()])
+  // Monthly only applies to the school/college paid tiers; invoice-eligible
+  // (teacher) tiers are always annual, so the two never conflict.
+  const useMonthly = wantMonthly && !!monthly[tier.name]
+  const priceLabel = useMonthly ? monthly[tier.name] : formatTierPrice(prices[tier.name])
+  const priceNote = useMonthly ? 'per month' : tier.priceNote
 
   return (
     <div className="max-w-xl mx-auto">
@@ -48,7 +55,8 @@ export default async function JoinPage({
         tierSlug={tier.id}
         tierName={tier.name}
         priceLabel={priceLabel}
-        priceNote={tier.priceNote}
+        priceNote={priceNote}
+        billingInterval={useMonthly ? 'monthly' : 'annual'}
         invoiceEligible={tier.invoiceEligible}
       />
     </div>

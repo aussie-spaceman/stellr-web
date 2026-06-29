@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getQuote, confirmPaidBooking, redeemCoupon } from '@/lib/entitlements'
+import { ensureStripeCustomer } from '@/lib/stripe-customer'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -68,12 +69,11 @@ export async function POST(req: Request) {
   const stripe = getStripe()
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
-  let customerId = member.stripe_customer_id as string | null
-  if (!customerId) {
-    const customer = await stripe.customers.create({ email: member.email as string, metadata: { memberId, clerkUserId: userId } })
-    customerId = customer.id
-    await db.from('members').update({ stripe_customer_id: customerId }).eq('id', memberId)
-  }
+  const customerId = await ensureStripeCustomer(
+    stripe, db,
+    { id: memberId, email: member.email as string | null, stripe_customer_id: member.stripe_customer_id as string | null },
+    userId,
+  )
 
   const session = await stripe.checkout.sessions.create({
     customer: customerId,

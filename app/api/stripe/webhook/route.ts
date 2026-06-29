@@ -7,8 +7,8 @@ import { logActivity } from '@/lib/activity-log'
 import { handleStoreOrderPaid } from '@/lib/store/orders'
 import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
 import { fireTierPurchased, grantTier } from '@/lib/membership-grants'
-import { enrollAfterPayment } from '@/lib/mentoring'
-import { confirmPaidBooking, redeemCoupon, grantTierAllocations } from '@/lib/entitlements'
+import { rosterAfterPaidBooking } from '@/lib/mentoring'
+import { confirmPaidBooking, redeemCoupon, grantTierAllocations, grantPurchasedLot, getOfferingTarget } from '@/lib/entitlements'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -352,64 +352,25 @@ export async function POST(req: NextRequest) {
           })
         }
       } else if (session.metadata?.type === 'extra_session') {
-        // Purchased extra coaching/mentoring session → grant a credit (FR-COM-11/12)
+        // Purchased extra coaching/mentoring session → purchased ledger lot
+        // (FR-COM-11/12). The booking engine draws it like any other allocation.
         const { memberId, sessionType } = session.metadata
         if (memberId && (sessionType === 'coaching' || sessionType === 'mentoring')) {
-          const db = supabaseServer()
-          await db.from('session_credits').insert({
-            member_id: memberId,
-            session_type: sessionType,
-            status: 'available',
-            stripe_session_id: session.id,
-          })
-        }
-      } else if (session.metadata?.type === 'mentoring_cohort') {
-        // One-off cohort purchase (Mentoring redesign) → enroll + record purchase.
-        const { memberId, cohortId } = session.metadata
-        if (memberId && cohortId) {
-          await enrollAfterPayment(memberId, cohortId, session.id)
-          await persistStripeCustomer(session)
-          await logActivity({
-            memberId,
-            category: 'billing',
-            action: 'payment_received',
-            summary: `Mentoring cohort payment received${fmtMoney(session.amount_total, session.currency)}`,
-            metadata: { kind: 'mentoring_cohort', cohortId, amount: session.amount_total, currency: session.currency },
-            actorType: 'stripe',
-          })
+          const kind = sessionType === 'coaching' ? 'coaching_session' : 'cohort_access'
+          await grantPurchasedLot(memberId, kind, 1, session.id)
         }
       } else if (session.metadata?.type === 'mentoring_topup') {
-        // Purchased extra mentoring credits (top-up pack) → grant available credits.
+        // Purchased extra mentoring credits (top-up pack) → purchased cohort_access
+        // lot (one lot of N), idempotent on the Stripe session.
         const { memberId } = session.metadata
         const qty = Math.max(1, Math.floor(Number(session.metadata?.quantity) || 1))
-        if (memberId) {
-          const db = supabaseServer()
-          await db.from('session_credits').insert(
-            Array.from({ length: qty }, () => ({
-              member_id: memberId,
-              session_type: 'mentoring',
-              status: 'available',
-              source: 'topup',
-              stripe_session_id: session.id,
-            })),
-          )
-        }
+        if (memberId) await grantPurchasedLot(memberId, 'cohort_access', qty, session.id)
       } else if (session.metadata?.type === 'coaching_topup') {
-        // Purchased extra coaching sessions (top-up pack) → grant available credits.
+        // Purchased extra coaching sessions (top-up pack) → purchased coaching_session
+        // lot (one lot of N), idempotent on the Stripe session.
         const { memberId } = session.metadata
         const qty = Math.max(1, Math.floor(Number(session.metadata?.quantity) || 1))
-        if (memberId) {
-          const db = supabaseServer()
-          await db.from('session_credits').insert(
-            Array.from({ length: qty }, () => ({
-              member_id: memberId,
-              session_type: 'coaching',
-              status: 'available',
-              source: 'topup',
-              stripe_session_id: session.id,
-            })),
-          )
-        }
+        if (memberId) await grantPurchasedLot(memberId, 'coaching_session', qty, session.id)
       } else if (session.metadata?.type === 'entitlement_booking') {
         // À-la-carte coaching/mentoring/training booking via the entitlements
         // ledger. Records the purchased (refundable) entitlement + reserves the
@@ -428,6 +389,12 @@ export async function POST(req: NextRequest) {
               creditAppliedCents: creditApplied,
               participantId: participantId ?? null,
             })
+            // Mentoring-cohort bookings also need the cohort_members roster (which
+            // grants portal access) — confirmPaidBooking only records the ledger seat.
+            const target = await getOfferingTarget(offeringId)
+            if (target?.type === 'mentoring_cohort' && target.cohortId) {
+              await rosterAfterPaidBooking(target.cohortId, memberId)
+            }
             if (coupon) await redeemCoupon(coupon, memberId, bookingId, amount)
             await persistStripeCustomer(session)
             await logActivity({

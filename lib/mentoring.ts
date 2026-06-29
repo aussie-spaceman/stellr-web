@@ -17,7 +17,7 @@ import type { AccessKind, CohortTheme } from '@/lib/mentoring-format'
 import { notifyMembers } from '@/lib/notify'
 import { linkCohortTraining, inviteMembersToCohort } from '@/lib/sessions'
 import { logActivity } from '@/lib/activity-log'
-import { ensureMemberGrants, getKindBalance, bookCohortFromAllocation } from '@/lib/entitlements'
+import { ensureMemberGrants, getKindBalance, bookCohortFromAllocation, cancelCohortViaLedger } from '@/lib/entitlements'
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 import { addGlobalRole } from '@/lib/member-roles'
 
@@ -248,6 +248,16 @@ async function addToRosterActive(cohortId: string, memberId: string): Promise<vo
       { cohort_id: cohortId, member_id: memberId, status: 'active', accepted_at: nowIso },
       { onConflict: 'cohort_id,member_id' },
     )
+}
+
+/**
+ * Roster a member into a cohort after a paid entitlement booking confirms (the
+ * Stripe webhook's entitlement_booking branch). The purchase itself is recorded in
+ * the entitlements ledger by confirmPaidBooking; this just grants cohort access.
+ * Replaces the old enrollAfterPayment session_credits-receipt path.
+ */
+export async function rosterAfterPaidBooking(cohortId: string, memberId: string): Promise<void> {
+  await addToRosterActive(cohortId, memberId)
 }
 
 /** Enroll into an open cohort using one mentoring credit. */
@@ -584,69 +594,13 @@ export async function archiveCohort(cohortId: string): Promise<void> {
 }
 
 export async function deleteCohort(cohortId: string): Promise<void> {
-  // Refund spent enrollments BEFORE deleting (the cohort row, and the
-  // consumed_cohort_id link, vanish on delete).
-  await refundCohortMembers(cohortId)
+  // Refund spent enrollments BEFORE deleting — restore drawn allocations + refund
+  // paid bookings to account credit via the entitlements ledger (the offering and
+  // its bookings vanish when the cohort row is deleted).
+  await cancelCohortViaLedger(cohortId)
   const db = supabaseServer()
   // FK cascades remove cohort_members, sessions, actions, training links, chat.
   await db.from('mentoring_cohorts').delete().eq('id', cohortId)
-}
-
-/**
- * Refund every member who spent something to enroll in a (cancelled) cohort.
- * Decision D3: refunds are NOT Stripe refunds — a spent mentoring credit is
- * returned to the member's balance, and a one-off payment becomes account credit
- * (the existing lib/refunds ledger). Safe to call once at cancellation/deletion.
- */
-export async function refundCohortMembers(cohortId: string): Promise<void> {
-  const db = supabaseServer()
-  const cohort = await getCohortFull(cohortId)
-  const cohortName = cohort?.name ?? 'a mentoring cohort'
-
-  const { data: spent } = await db
-    .from('session_credits')
-    .select('id, member_id, source')
-    .eq('consumed_cohort_id', cohortId)
-    .eq('status', 'consumed')
-
-  for (const c of (spent ?? []) as { id: string; member_id: string; source: string }[]) {
-    if (c.source === 'purchase') {
-      // Paid one-off → issue monetary account credit (not a Stripe refund).
-      const cents = cohort?.oneOffPriceCents ?? 0
-      if (cents > 0) {
-        await db.from('account_credits').insert({
-          member_id: c.member_id,
-          currency: 'usd',
-          amount_cents: cents,
-          remaining_cents: cents,
-          source_type: 'mentoring_cohort_refund',
-          reason: `Account credit for cancelled cohort: ${cohortName}`,
-        })
-        await logActivity({
-          memberId: c.member_id,
-          category: 'billing',
-          action: 'refund_issued',
-          summary: `Account credit issued for cancelled cohort ${cohortName}`,
-          metadata: { kind: 'mentoring_cohort_refund', cohortId, amount: cents, currency: 'usd' },
-          actorType: 'admin',
-        }, db)
-      }
-    } else {
-      // Allowance / top-up credit → return it to the member's balance.
-      await db
-        .from('session_credits')
-        .update({ status: 'available', consumed_at: null, consumed_cohort_id: null })
-        .eq('id', c.id)
-      await logActivity({
-        memberId: c.member_id,
-        category: 'billing',
-        action: 'refund_issued',
-        summary: `Mentoring credit returned — cohort ${cohortName} was cancelled`,
-        metadata: { kind: 'mentoring_credit_return', cohortId },
-        actorType: 'admin',
-      }, db)
-    }
-  }
 }
 
 // ─── Admin: cohorts list, stats, calendar ──────────────────────────────────
@@ -1169,18 +1123,3 @@ export async function listPendingInvitesDetailed(member: CommunityMember): Promi
   })
 }
 
-/** Called by the Stripe webhook after a successful one-off cohort payment. */
-export async function enrollAfterPayment(memberId: string, cohortId: string, stripeSessionId: string): Promise<void> {
-  const db = supabaseServer()
-  // Record the purchase as a consumed credit for an audit trail, then add to roster.
-  await db.from('session_credits').insert({
-    member_id: memberId,
-    session_type: 'mentoring',
-    status: 'consumed',
-    source: 'purchase',
-    consumed_cohort_id: cohortId,
-    consumed_at: new Date().toISOString(),
-    stripe_session_id: stripeSessionId,
-  })
-  await addToRosterActive(cohortId, memberId)
-}

@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
 import { getAcademyDiscountPercent, academyLineItemFromPrice } from '@/lib/academy-discount'
+import { ensureStripeCustomer } from '@/lib/stripe-customer'
 
 // POST /api/community/sessions/purchase  Body: { sessionType: 'coaching' | 'mentoring' }
 // Starts a Stripe Checkout for one additional session (FR-COM-11/12). The price
@@ -48,12 +49,10 @@ export async function POST(req: Request) {
     .single()
 
   const stripe = getStripe()
-  let customerId = (m?.stripe_customer_id as string | null) ?? null
-  if (!customerId && m?.email) {
-    const customer = await stripe.customers.create({ email: m.email, metadata: { memberId: member.id } })
-    customerId = customer.id
-    await db.from('members').update({ stripe_customer_id: customerId }).eq('id', member.id)
-  }
+  const customerId = await ensureStripeCustomer(
+    stripe, db,
+    { id: member.id, email: (m?.email as string | null) ?? null, stripe_customer_id: (m?.stripe_customer_id as string | null) ?? null },
+  )
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
   const academyPct = await getAcademyDiscountPercent(member.activeTierIds)

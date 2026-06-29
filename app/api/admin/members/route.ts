@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { grantTierAllocations } from '@/lib/entitlements'
 import { DEFAULT_ROLE_FOR_BRACKET } from '@/lib/membership-rules'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 
@@ -144,13 +145,15 @@ export async function POST(req: Request) {
 
   // Assign membership tier
   if (tier_id) {
-    await db.from('member_memberships').insert({
+    const { data: mm } = await db.from('member_memberships').insert({
       member_id: member.id,
       tier_id,
       started_at: new Date().toISOString().split('T')[0],
       renewal_status: 'active',
       is_complimentary: true,
-    })
+    }).select('id').maybeSingle()
+    // Materialize the tier's academy allowances into the entitlements ledger (additive).
+    if (mm?.id) await grantTierAllocations(mm.id).catch((e) => console.error('[admin/members] grantTierAllocations (non-fatal):', e))
   }
 
   return NextResponse.json({ member: { id: member.id } }, { status: 201 })

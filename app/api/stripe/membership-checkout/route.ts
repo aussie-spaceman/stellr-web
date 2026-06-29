@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { buildCreditDiscount } from '@/lib/refunds/redeem'
+import { ensureStripeCustomer } from '@/lib/stripe-customer'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -49,7 +50,7 @@ export async function POST(req: Request) {
   // Get the member record
   const { data: member } = await db
     .from('members')
-    .select('id, email, stripe_customer_id')
+    .select('id, email, first_name, last_name, stripe_customer_id')
     .eq('clerk_user_id', userId)
     .single()
 
@@ -60,52 +61,49 @@ export async function POST(req: Request) {
   const stripe = getStripe()
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
-  // Create or reuse Stripe customer
-  let customerId = member.stripe_customer_id as string | null
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: member.email,
-      metadata: { memberId: member.id, clerkUserId: userId },
-    })
-    customerId = customer.id
-    await db.from('members').update({ stripe_customer_id: customerId }).eq('id', member.id)
-  }
-
-  // Apply any available account credit (issued from a prior refund) to the first
-  // invoice. Allocations are settled in the webhook once payment completes.
-  let discount: Awaited<ReturnType<typeof buildCreditDiscount>> = null
   try {
-    const price = await stripe.prices.retrieve(priceId)
-    if (price.unit_amount && price.currency) {
-      discount = await buildCreditDiscount(stripe, member.id as string, price.currency, price.unit_amount)
-    }
-  } catch (e) {
-    console.error('[membership-checkout] credit application skipped:', e)
-  }
+    // Resolve a valid Stripe customer (self-heals a stale/missing stored id).
+    const customerId = await ensureStripeCustomer(stripe, db, member, userId)
 
-  const session = await stripe.checkout.sessions.create({
-    customer: customerId,
-    mode: 'subscription',
-    line_items: [{ price: priceId, quantity: 1 }],
-    discounts: discount ? [{ coupon: discount.couponId }] : undefined,
-    success_url: `${baseUrl}/account?membership=success`,
-    cancel_url: `${baseUrl}/membership`,
-    metadata: {
-      type: 'membership',
-      memberId: member.id,
-      tierId: tier.id,
-      billingInterval,
-      ...(discount ? { creditMemberId: member.id as string, creditAllocations: JSON.stringify(discount.allocations) } : {}),
-    },
-    subscription_data: {
+    // Apply any available account credit (issued from a prior refund) to the first
+    // invoice. Allocations are settled in the webhook once payment completes.
+    let discount: Awaited<ReturnType<typeof buildCreditDiscount>> = null
+    try {
+      const price = await stripe.prices.retrieve(priceId)
+      if (price.unit_amount && price.currency) {
+        discount = await buildCreditDiscount(stripe, member.id as string, price.currency, price.unit_amount)
+      }
+    } catch (e) {
+      console.error('[membership-checkout] credit application skipped:', e)
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: 'subscription',
+      line_items: [{ price: priceId, quantity: 1 }],
+      discounts: discount ? [{ coupon: discount.couponId }] : undefined,
+      success_url: `${baseUrl}/account?membership=success`,
+      cancel_url: `${baseUrl}/membership`,
       metadata: {
         type: 'membership',
         memberId: member.id,
         tierId: tier.id,
         billingInterval,
+        ...(discount ? { creditMemberId: member.id as string, creditAllocations: JSON.stringify(discount.allocations) } : {}),
       },
-    },
-  })
+      subscription_data: {
+        metadata: {
+          type: 'membership',
+          memberId: member.id,
+          tierId: tier.id,
+          billingInterval,
+        },
+      },
+    })
 
-  return NextResponse.json({ url: session.url })
+    return NextResponse.json({ url: session.url })
+  } catch (err) {
+    console.error('[membership-checkout] failed:', err)
+    return NextResponse.json({ error: 'Could not start checkout. Please try again.' }, { status: 500 })
+  }
 }

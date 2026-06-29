@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
+import { ensureStripeCustomer } from '@/lib/stripe-customer'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -55,19 +56,10 @@ export async function POST(req: Request) {
 
   const stripe = getStripe()
 
-  // Create or reuse the member's Stripe customer
-  let customerId = member.stripe_customer_id as string | null
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: member.email,
-      name: [member.first_name, member.last_name].filter(Boolean).join(' ') || undefined,
-      metadata: { memberId: member.id, clerkUserId: userId },
-    })
-    customerId = customer.id
-    await db.from('members').update({ stripe_customer_id: customerId }).eq('id', member.id)
-  }
-
   try {
+    // Resolve a valid Stripe customer (self-heals a stale/missing stored id).
+    const customerId = await ensureStripeCustomer(stripe, db, member, userId)
+
     await stripe.invoiceItems.create({
       customer: customerId,
       currency: 'usd',

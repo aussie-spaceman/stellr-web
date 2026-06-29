@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { notifyMember } from '@/lib/notify'
+import { grantTierAllocations } from '@/lib/entitlements'
 
 // GET /api/cron/alumni-upgrades — runs daily (see vercel.json).
 // The Alumni tier "automatically upgrades on July 1st of the School Student's
@@ -71,14 +72,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    await db.from('member_memberships').insert({
+    const { data: mm } = await db.from('member_memberships').insert({
       member_id: m.id,
       tier_id: alumniTier.id,
       started_at: today.toISOString().split('T')[0],
       renewal_status: 'active',
       is_complimentary: true,
       source: 'system',
-    })
+    }).select('id').maybeSingle()
+    if (mm?.id) await grantTierAllocations(mm.id).catch((e) => console.error('[alumni-upgrades] grantTierAllocations (non-fatal):', e))
 
     await notifyMember(m.id, {
       type: 'session',

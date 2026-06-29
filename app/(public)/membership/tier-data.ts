@@ -148,6 +148,37 @@ export const ALL_TIERS: { id: TierId; name: string }[] = AUDIENCE_ORDER.flatMap(
 /** Column labels for the school/college "what you still pay for" derivation. */
 export const PURCHASABLE_LABELS = ['Events', 'Mentoring', 'Coaching', 'Merchandise', 'Training']
 
+export interface ResolvedTier {
+  id: TierId
+  name: string
+  audience: AudienceId
+  bracket: Audience['bracket']
+  free: boolean
+  priceNote: string
+  /** Pay-by-invoice is offered only on the educator / school-district paid tiers. */
+  invoiceEligible: boolean
+}
+
+/** Resolve a tier slug (e.g. "catalyst") to its tier + audience metadata, or null. */
+export function tierBySlug(slug: string): ResolvedTier | null {
+  for (const aid of AUDIENCE_ORDER) {
+    const aud = AUDIENCES[aid]
+    const t = aud.tiers.find((x) => x.id === slug)
+    if (t) {
+      return {
+        id: t.id,
+        name: t.name,
+        audience: aid,
+        bracket: aud.bracket,
+        free: !!t.free,
+        priceNote: t.priceNote,
+        invoiceEligible: aid === 'educator' && !t.free,
+      }
+    }
+  }
+  return null
+}
+
 /* ── "What you get" value cards (audience-aware) ──────────────────────────── */
 export const VALUE_CARDS: Record<AudienceId, ValueCard[]> = {
   school: [

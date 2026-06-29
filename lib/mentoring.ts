@@ -19,6 +19,7 @@ import { linkCohortTraining, inviteMembersToCohort } from '@/lib/sessions'
 import { logActivity } from '@/lib/activity-log'
 import { syncAllowance, getCredits, consumeOldestCredit } from '@/lib/credits'
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
+import { addGlobalRole } from '@/lib/member-roles'
 
 // ─── Credits ────────────────────────────────────────────────────────────────
 
@@ -559,6 +560,7 @@ export async function grantMentorRole(memberId: string): Promise<void> {
   await db
     .from('session_hosts')
     .upsert({ member_id: memberId, can_mentor: true }, { onConflict: 'member_id' })
+  await addGlobalRole(db, memberId, 'mentor')
 }
 
 /** Archive (keep data, close chat/calls) or permanently delete a cohort. */

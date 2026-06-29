@@ -5,11 +5,21 @@ import { supabaseServer } from '@/lib/supabase'
 
 export const metadata = { title: 'Complete Your Profile' }
 
-export default async function OnboardingPage() {
-  const { userId } = await auth()
-  if (!userId) redirect('/sign-in')
+// Only honour same-origin relative paths (open-redirect safety).
+function safeNext(next: string | undefined): string | null {
+  return next && next.startsWith('/') && !next.startsWith('//') ? next : null
+}
 
-  // If member record is already complete, skip onboarding
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>
+}) {
+  const { userId } = await auth()
+  const next = safeNext((await searchParams).next)
+  if (!userId) redirect(next ? `/sign-in?next=${encodeURIComponent(next)}` : '/sign-in')
+
+  // If member record is already complete, skip onboarding (resume `next` if present)
   const db = supabaseServer()
   const { data: member } = await db
     .from('members')
@@ -17,7 +27,7 @@ export default async function OnboardingPage() {
     .eq('clerk_user_id', userId)
     .maybeSingle()
 
-  if (member?.date_of_birth && member?.gender) redirect('/home')
+  if (member?.date_of_birth && member?.gender) redirect(next ?? '/home')
 
   const { data: tiers } = await db
     .from('membership_tiers')
@@ -32,7 +42,7 @@ export default async function OnboardingPage() {
           Tell us a bit about yourself to get the most out of your Stellr membership.
         </p>
       </div>
-      <OnboardingForm tiers={tiers ?? []} existingMember={member} />
+      <OnboardingForm tiers={tiers ?? []} existingMember={member} next={next ?? undefined} />
     </div>
   )
 }

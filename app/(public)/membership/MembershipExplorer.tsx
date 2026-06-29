@@ -100,6 +100,9 @@ export default function MembershipExplorer({ prices }: { prices: Record<string, 
                   priceNote={t.priceNote}
                   selected={t.id === selected.id}
                   onSelect={() => setSelectedId(t.id)}
+                  cta={t.free
+                    ? { label: 'Join Free', href: `${AUTH_URL}/sign-up?audience=${audienceId}` }
+                    : { label: 'Sign up now', href: `${AUTH_URL}/join?tier=${t.id}` }}
                 />
               </div>
             ))}
@@ -140,15 +143,15 @@ export default function MembershipExplorer({ prices }: { prices: Record<string, 
           <h2 className="font-display font-bold text-[32px] tracking-heading text-ink mt-[10px] mb-7">What members say</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div className="bg-white border border-line rounded-2xl py-7 px-7 pl-8 relative border-l-[3px] border-l-primary">
-              <p className="text-[15px] leading-[1.65] text-ink italic mb-5">&ldquo;I competed in the 2017 and 2018 International Space Settlement Design Competitions, and they remain among my fondest memories from high school.&rdquo;</p>
-              <div className="flex items-center gap-2.5"><div className="w-9 h-9 rounded-full bg-primary-soft shrink-0" /><p className="font-semibold text-[14px] text-ink">Noah Swingle · 2017 &amp; 2018 · Mechanical Engineering, University of South Carolina</p></div>
+              <p className="text-[15px] leading-[1.65] text-ink italic mb-5">&ldquo;I competed in the 2017 and 2018 Johnson Space Center Space Design Competitions, and they remain among my fondest memories from high school.&rdquo;</p>
+              <div className="flex items-center gap-2.5"><div className="w-9 h-9 rounded-full bg-primary-soft shrink-0" /><p className="font-semibold text-[14px] text-ink">Noah Swingle · 2017 &amp; 2018 Participant · Mechanical Engineering, University of South Carolina</p></div>
             </div>
             <div className="bg-white border border-line rounded-2xl py-7 px-7 pl-8 relative border-l-[3px] border-l-space-violet">
               <p className="text-[15px] leading-[1.65] text-ink italic mb-5">&ldquo;I&rsquo;ve seen kids blossom in areas we can&rsquo;t always teach in the classroom — public speaking, problem solving, working with others.&rdquo;</p>
-              <div className="flex items-center gap-2.5"><div className="w-9 h-9 rounded-full bg-space-violet-bg shrink-0" /><p className="font-semibold text-[14px] text-ink">Linda Lamb · 2024 · English Teacher, Willcox AZ</p></div>
+              <div className="flex items-center gap-2.5"><div className="w-9 h-9 rounded-full bg-space-violet-bg shrink-0" /><p className="font-semibold text-[14px] text-ink">Linda Lamb · 2024 Volunteer · English Teacher, Willcox AZ</p></div>
             </div>
             <div className="bg-white border border-line rounded-2xl py-7 px-7 pl-8 relative border-l-[3px] border-l-enviro-green">
-              <p className="text-[15px] leading-[1.65] text-ink italic mb-5">&ldquo;I participated in two regional and two international Space Settlement Design Competitions, and I can honestly say the experience changed my life.&rdquo;</p>
+              <p className="text-[15px] leading-[1.65] text-ink italic mb-5">&ldquo;I participated in two regional and two international Space Design Competitions, and I can honestly say the experience changed my life.&rdquo;</p>
               <div className="flex items-center gap-2.5"><div className="w-9 h-9 rounded-full bg-enviro-green-bg shrink-0" /><p className="font-semibold text-[14px] text-ink">Allyson Rose · Multi-Year, Multi-Event Participant</p></div>
             </div>
           </div>

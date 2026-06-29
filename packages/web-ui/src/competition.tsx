@@ -1,7 +1,7 @@
 // @stellr/web-ui — competition page composites (also reusable on Membership etc.).
 import * as React from 'react'
 import { cn } from './primitives'
-import { tierShade, tierGlow, type BracketId, type TierId } from './tier-shades'
+import { tierShade, tierGlow, tierButtonColor, type BracketId, type TierId } from './tier-shades'
 
 function Arrow({ size = 16 }: { size?: number }) {
   return (
@@ -129,10 +129,34 @@ export type TierCardProps = {
   shade?: string
   selected?: boolean
   onSelect?: () => void
+  /** Solid CTA button (select mode). Colour defaults to the tier's contrast-safe fill. */
+  cta?: { label: string; href?: string; onClick?: () => void; color?: string }
 }
+function SelectBody({
+  role, name, price, priceNote, resolvedShade,
+}: { role?: string; name: string; price: string; priceNote?: string; resolvedShade?: string }) {
+  return (
+    <>
+      {role && (
+        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-content-faint leading-[1.3] min-h-[14px] mb-[7px]">{role}</p>
+      )}
+      <p className="font-display font-semibold text-[20px] text-ink mb-[3px]">{name}</p>
+      <p className="flex items-baseline gap-[5px]">
+        <span
+          className={cn('font-display font-semibold text-[22px]', !resolvedShade && 'text-primary')}
+          style={resolvedShade ? { color: resolvedShade } : undefined}
+        >
+          {price}
+        </span>
+        {priceNote && <span className="text-xs text-content-faint">{priceNote}</span>}
+      </p>
+    </>
+  )
+}
+
 export function TierCard({
   name, price, priceNote, accessNote, role, inheritsFrom, badge, featured, items,
-  tier, shade, selected, onSelect,
+  tier, shade, selected, onSelect, cta,
 }: TierCardProps) {
   const resolvedShade = shade ?? (tier ? tierShade(tier) : undefined)
   const glow = shade
@@ -141,17 +165,21 @@ export function TierCard({
       ? tierGlow(tier)
       : undefined
   const isSelect = items === undefined
-  const clickable = onSelect != null
-  const Wrapper = (clickable ? 'button' : 'div') as React.ElementType
+  // In select mode the card root is a div (so a CTA button can live inside
+  // without nesting buttons); the info area becomes its own select button.
+  const Wrapper = (!isSelect && onSelect != null ? 'button' : 'div') as React.ElementType
+  const rootClickable = !isSelect && onSelect != null
+  const ctaColor = cta?.color ?? (tier ? tierButtonColor(tier) : resolvedShade)
+  const CtaTag = (cta?.href ? 'a' : 'button') as React.ElementType
 
   return (
     <Wrapper
-      type={clickable ? 'button' : undefined}
-      onClick={onSelect}
-      aria-pressed={clickable ? selected : undefined}
+      type={rootClickable ? 'button' : undefined}
+      onClick={rootClickable ? onSelect : undefined}
+      aria-pressed={rootClickable ? selected : undefined}
       className={cn(
         'relative w-full text-left rounded-ds-card bg-white overflow-hidden flex flex-col',
-        clickable && 'cursor-pointer',
+        rootClickable && 'cursor-pointer',
         !resolvedShade && featured ? 'border-2 border-primary shadow-featured' : 'border border-line',
       )}
     >
@@ -171,20 +199,34 @@ export function TierCard({
       )}
 
       {isSelect ? (
-        <div className="px-[18px] pt-[21px] pb-[15px]">
-          {role && (
-            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-content-faint leading-[1.3] min-h-[14px] mb-[7px]">{role}</p>
-          )}
-          <p className="font-display font-semibold text-[20px] text-ink mb-[3px]">{name}</p>
-          <p className="flex items-baseline gap-[5px]">
-            <span
-              className={cn('font-display font-semibold text-[22px]', !resolvedShade && 'text-primary')}
-              style={resolvedShade ? { color: resolvedShade } : undefined}
+        <div className="flex flex-col flex-1">
+          {onSelect != null ? (
+            <button
+              type="button"
+              onClick={onSelect}
+              aria-pressed={selected}
+              className="text-left cursor-pointer px-[18px] pt-[21px] pb-[15px]"
             >
-              {price}
-            </span>
-            {priceNote && <span className="text-xs text-content-faint">{priceNote}</span>}
-          </p>
+              <SelectBody role={role} name={name} price={price} priceNote={priceNote} resolvedShade={resolvedShade} />
+            </button>
+          ) : (
+            <div className="px-[18px] pt-[21px] pb-[15px]">
+              <SelectBody role={role} name={name} price={price} priceNote={priceNote} resolvedShade={resolvedShade} />
+            </div>
+          )}
+          {cta && (
+            <div className="px-[18px] pb-[18px] pt-0 mt-auto">
+              <CtaTag
+                href={cta.href}
+                onClick={cta.onClick}
+                type={cta.href ? undefined : 'button'}
+                className="block w-full text-center cursor-pointer rounded-[9px] px-4 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
+                style={{ background: ctaColor }}
+              >
+                {cta.label}
+              </CtaTag>
+            </div>
+          )}
         </div>
       ) : (
         <>

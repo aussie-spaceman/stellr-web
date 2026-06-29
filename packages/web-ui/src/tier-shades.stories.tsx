@@ -73,10 +73,10 @@ export const TierCards: StoryObj = {
     <div className="p-8 max-w-content flex flex-col gap-3">
       <BracketShadeKey />
       <div className="flex flex-wrap gap-3">
-        <div className="flex-1 min-w-[200px]"><TierCard tier="educator" role="Everyone starts here" name="Educator" price="Free" priceNote="always" /></div>
-        <div className="flex-1 min-w-[200px]"><TierCard tier="catalyst" role="Competition toolkit" name="Catalyst" price="$149" priceNote="per year" selected /></div>
-        <div className="flex-1 min-w-[200px]"><TierCard tier="innovator" role="Mentoring & AI tools" name="Innovator" price="$499" priceNote="per year" /></div>
-        <div className="flex-1 min-w-[200px]"><TierCard tier="trailblazer" role="For teachers who excel" name="Trailblazer" price="$999" priceNote="per year" /></div>
+        <div className="flex-1 min-w-[200px]"><TierCard tier="educator" role="Everyone starts here" name="Educator" price="Free" priceNote="always" cta={{ label: 'Join Free', href: '#' }} /></div>
+        <div className="flex-1 min-w-[200px]"><TierCard tier="catalyst" role="Competition toolkit" name="Catalyst" price="$149" priceNote="per year" selected cta={{ label: 'Sign up now', href: '#' }} /></div>
+        <div className="flex-1 min-w-[200px]"><TierCard tier="innovator" role="Mentoring & AI tools" name="Innovator" price="$499" priceNote="per year" cta={{ label: 'Sign up now', href: '#' }} /></div>
+        <div className="flex-1 min-w-[200px]"><TierCard tier="trailblazer" role="For teachers who excel" name="Trailblazer" price="$999" priceNote="per year" cta={{ label: 'Sign up now', href: '#' }} /></div>
       </div>
     </div>
   ),

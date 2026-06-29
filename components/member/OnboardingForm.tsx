@@ -22,6 +22,8 @@ interface ExistingMember {
 interface Props {
   tiers: Tier[]
   existingMember: ExistingMember | null
+  /** Where to send the member after completing onboarding (default /home). */
+  next?: string
 }
 
 const ROLES = [
@@ -47,7 +49,7 @@ const GRADES = [
 const GENDERS = ['male', 'female', 'other']
 const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
 
-export function OnboardingForm({ tiers, existingMember }: Props) {
+export function OnboardingForm({ tiers, existingMember, next }: Props) {
   const router = useRouter()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -107,7 +109,7 @@ export function OnboardingForm({ tiers, existingMember }: Props) {
         setError(data.error ?? 'Something went wrong')
         return
       }
-      router.push('/home')
+      router.push(next ?? '/home')
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {

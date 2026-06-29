@@ -106,6 +106,26 @@ export async function getRolesByMember(memberIds: string[]): Promise<Map<string,
   return out
 }
 
+/**
+ * Add a single GLOBAL canonical role to a member (idempotent). Used when a role is
+ * granted outside registration — e.g. a member is made a mentor/coach (session host).
+ * Pass the caller's db client so it shares the request's connection.
+ */
+export async function addGlobalRole(
+  db: SupabaseClient,
+  memberId: string,
+  role: MemberRole,
+  source = 'admin',
+): Promise<void> {
+  const { error } = await db
+    .from('member_roles')
+    .upsert(
+      { member_id: memberId, role, scope: 'global' as const, source },
+      { onConflict: 'member_id,role,object_type,object_id', ignoreDuplicates: true },
+    )
+  if (error) console.error('[member-roles] addGlobalRole error (non-fatal):', error)
+}
+
 /** event_role classification → the global canonical role(s) it implies. */
 function classificationRolesFor(eventRole: string): MemberRole[] {
   switch (eventRole) {

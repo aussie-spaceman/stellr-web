@@ -6,7 +6,7 @@ import { finalizeRedemption } from '@/lib/refunds/redeem'
 import { logActivity } from '@/lib/activity-log'
 import { handleStoreOrderPaid } from '@/lib/store/orders'
 import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
-import { fireTierPurchased } from '@/lib/membership-grants'
+import { fireTierPurchased, grantTier } from '@/lib/membership-grants'
 import { enrollAfterPayment } from '@/lib/mentoring'
 import { confirmPaidBooking, redeemCoupon, grantTierAllocations } from '@/lib/entitlements'
 
@@ -255,6 +255,31 @@ async function activateMembership(
   }
 }
 
+// One-time membership bought via an emailed Stripe invoice (no subscription).
+// Granted only once the invoice is paid; 12-month term, then it simply expires
+// (no auto-renew — that's the card/subscription path). Mirrors activateMembership's
+// fan-out + allocation steps via grantTier so the two payment paths behave alike.
+async function activateInvoiceMembership(invoice: Stripe.Invoice) {
+  const memberId = invoice.metadata?.memberId
+  const tierId = invoice.metadata?.tierId
+  if (!memberId || !tierId) {
+    console.error('[stripe/webhook] membership_invoice paid but missing memberId/tierId metadata')
+    return
+  }
+  const db = supabaseServer()
+  const result = await grantTier(
+    { memberId, tierId, months: 12, source: 'stripe', replacesFree: true },
+    db,
+  )
+  // Fan-out grant rules + entitlement allocations, same as a card purchase.
+  await fireTierPurchased(memberId, tierId, db)
+  try {
+    if (result.membershipId) await grantTierAllocations(result.membershipId)
+  } catch (err) {
+    console.error('[stripe/webhook] grantTierAllocations (invoice, non-fatal):', err)
+  }
+}
+
 async function expireMembership(stripeSubscriptionId: string) {
   const db = supabaseServer()
 
@@ -488,7 +513,10 @@ export async function POST(req: NextRequest) {
     if (event.type === 'invoice.paid') {
       const invoice = event.data.object as Stripe.Invoice & { subscription?: string | null }
 
-      if (invoice.metadata?.type === 'membership' || invoice.subscription) {
+      if (invoice.metadata?.type === 'membership_invoice') {
+        // One-time membership purchased by emailed invoice — grant on payment.
+        await activateInvoiceMembership(invoice)
+      } else if (invoice.metadata?.type === 'membership' || invoice.subscription) {
         // Membership renewal — extend expires_at by the billing period
         const subscriptionId = invoice.subscription ?? null
         if (subscriptionId) {

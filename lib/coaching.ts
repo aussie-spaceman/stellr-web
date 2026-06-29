@@ -23,6 +23,7 @@ import { notifyMember, notifyMembers } from '@/lib/notify'
 import { linkCohortTraining } from '@/lib/sessions'
 import { logActivity } from '@/lib/activity-log'
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
+import { addGlobalRole } from '@/lib/member-roles'
 import { DEFAULT_TZ } from '@/lib/mentoring-format'
 import { autoWorkshopName } from '@/lib/coaching-format'
 import Stripe from 'stripe'
@@ -528,6 +529,7 @@ export async function updateWorkshop(workshopId: string, patch: UpdateWorkshopIn
 export async function grantCoachRole(memberId: string): Promise<void> {
   const db = supabaseServer()
   await db.from('session_hosts').upsert({ member_id: memberId, can_coach: true }, { onConflict: 'member_id' })
+  await addGlobalRole(db, memberId, 'coach')
 }
 
 /** Reassign a workshop's coach (admin). */

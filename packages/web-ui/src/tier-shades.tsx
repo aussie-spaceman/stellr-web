@@ -38,6 +38,29 @@ export function tierGlow(id: TierId): string {
   return `color-mix(in srgb, var(--tier-${id}) 50%, transparent)`
 }
 
+// Some tier shades are too light for legible white button text (the base/free
+// shades and Catalyst's teal). For solid CTA buttons, use a contrast-safe fill:
+// the tier's own shade where it's dark enough, else the deeper bracket tone of
+// the same hue. The card strip/price keep the true tier shade — only the button
+// darkens — so each tier still reads as its own colour.
+const TIER_BUTTON_VAR: Record<TierId, string> = {
+  explorer: 'var(--bracket-school-deep)',
+  pathfinder: 'var(--tier-pathfinder)',
+  scholar: 'var(--tier-scholar)',
+  alumni: 'var(--bracket-college-deep)',
+  contributor: 'var(--tier-contributor)',
+  counselor: 'var(--tier-counselor)',
+  educator: 'var(--bracket-adult-deep)',
+  catalyst: 'var(--bracket-adult-deep)',
+  innovator: 'var(--tier-innovator)',
+  trailblazer: 'var(--tier-trailblazer)',
+}
+
+/** A solid button fill for a tier that keeps AA contrast with white text. */
+export function tierButtonColor(id: TierId): string {
+  return TIER_BUTTON_VAR[id]
+}
+
 export interface BracketPalette {
   /** Primary accent (active pill/tab, audience eyebrow, icon colour). */
   base: string

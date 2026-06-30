@@ -192,23 +192,6 @@ export default async function CompetitionsPage() {
         pills={['High school students', 'State & national', 'Free for students to enter']}
       />
 
-      {/* ── Rotating showcase of previous student work ─────────────────── */}
-      <section className="section-padding bg-white border-b border-line">
-        <div className="container-max">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
-            <div>
-              <Eyebrow>Previous student work</Eyebrow>
-              <h2 className="text-3xl font-bold text-ink mt-3">Real work from real competitions</h2>
-              <p className="text-content-secondary mt-3 leading-relaxed max-w-lg">
-                A rotating look at the proposals, presentations and designs students have produced — the
-                kind of deliverable every team builds and pitches.
-              </p>
-            </div>
-            <StudentWorkHero />
-          </div>
-        </div>
-      </section>
-
       {/* ── What's a Design Competition? ──────────────────────────────── */}
       <section className="section-padding bg-surface border-b border-line">
         <div className="container-max">
@@ -290,6 +273,23 @@ export default async function CompetitionsPage() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Rotating showcase of previous student work ─────────────────── */}
+      <section className="section-padding bg-white border-b border-line">
+        <div className="container-max">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+            <div>
+              <Eyebrow>Previous student work</Eyebrow>
+              <h2 className="text-3xl font-bold text-ink mt-3">Real work from real competitions</h2>
+              <p className="text-content-secondary mt-3 leading-relaxed max-w-lg">
+                A rotating look at the proposals, presentations and designs students have produced — the
+                kind of deliverable every team builds and pitches.
+              </p>
+            </div>
+            <StudentWorkHero />
           </div>
         </div>
       </section>

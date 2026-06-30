@@ -10,7 +10,7 @@ import Image from 'next/image'
  * hydration mismatch. Images live in /public/student-work.
  */
 const POOL = Array.from(
-  { length: 12 },
+  { length: 15 },
   (_, i) => `/student-work/student-work-${String(i + 1).padStart(2, '0')}.png`,
 )
 const SHOW = 6

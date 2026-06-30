@@ -3,6 +3,8 @@ import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
 import { getMonthlyPriceMap } from '@/lib/membership-monthly'
 import { ALL_TIERS } from './tier-data'
 import MembershipExplorer from './MembershipExplorer'
+import { PageMedia } from '@/components/sections/PageMedia'
+import { PHOTOS, VIDEOS, QUOTES } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   title: 'Membership',
@@ -20,5 +22,15 @@ export default async function MembershipPage() {
     if (monthly[t.name]) monthlyById[t.id] = monthly[t.name]
   }
 
-  return <MembershipExplorer prices={priceById} monthly={monthlyById} />
+  return (
+    <>
+      <MembershipExplorer prices={priceById} monthly={monthlyById} />
+      <PageMedia
+        heading="A world that didn’t seem possible"
+        photos={[PHOTOS['membership-hero']]}
+        videos={[VIDEOS['testimonial-noah-swingle']]}
+        quotes={[QUOTES['2023-student']]}
+      />
+    </>
+  )
 }

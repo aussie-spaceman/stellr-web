@@ -16,6 +16,9 @@ import {
   ProgressionGraphic,
 } from '@stellr/web-ui'
 import { StudentWorkHero } from '@/components/sections/StudentWorkHero'
+import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
+import { PageMedia } from '@/components/sections/PageMedia'
+import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   title: 'Competitions',
@@ -190,6 +193,14 @@ export default async function CompetitionsPage() {
         title="Design Competitions"
         lead="Real professional STEM skills for high school students — delivered through competitive, industry-simulation activities."
         pills={['High school students', 'State & national', 'Free for students to enter']}
+        media={
+          <ResponsivePhoto
+            photo={PHOTOS['competitions-3']}
+            sizes="(max-width: 1024px) 100vw, 50vw"
+            priority
+            className="aspect-[4/3] shadow-card-lift"
+          />
+        }
       />
 
       {/* ── What's a Design Competition? ──────────────────────────────── */}
@@ -382,6 +393,16 @@ export default async function CompetitionsPage() {
           )}
         </div>
       </section>
+
+      {/* ── Media: proof, voices & student work ───────────────────────── */}
+      <PageMedia
+        heading="What the competition actually looks like"
+        intro="Real teams, real footage, and a worked example you can browse end to end."
+        photos={[PHOTOS['competitions-1'], PHOTOS['competitions-2'], PHOTOS['competitions-3']]}
+        videos={[VIDEOS['testimonial-mia-cox']]}
+        quotes={[QUOTES['hunter-dobson']]}
+        competition={[COMPETITION['previous-participant-work']]}
+      />
 
       {/* ── CTA ───────────────────────────────────────────────────────── */}
       <CtaBand

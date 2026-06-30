@@ -63,6 +63,13 @@ export function AssetGate({
         body: JSON.stringify({ name: name.trim(), email: email.trim(), asset }),
       })
       if (!res.ok) throw new Error('Request failed')
+      // Persist the subscriber flag so other gated downloads skip the modal
+      // (README §8). Best-effort — never block the success path on storage.
+      try {
+        localStorage.setItem('stellr_subscriber', email.trim())
+      } catch {
+        /* storage unavailable (private mode) — gate just asks again next time */
+      }
       setSubmitted(true)
     } catch {
       setError(true)

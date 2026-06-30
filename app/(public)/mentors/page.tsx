@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Users, Heart, Globe, Award, Clock, ArrowRight } from 'lucide-react'
+import { PageMedia } from '@/components/sections/PageMedia'
+import { PHOTOS, VIDEOS } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   title: 'For Volunteers & Mentors',
@@ -163,6 +165,13 @@ export default function MentorsPage() {
           </div>
         </div>
       </section>
+
+      {/* ── Media: mentoring in action ────────────────────────────────── */}
+      <PageMedia
+        heading="Mentoring in action"
+        photos={[PHOTOS['mentors-1'], PHOTOS['mentors-2'], PHOTOS['mentors-3']]}
+        videos={[VIDEOS['testimonial-apoorva-somani']]}
+      />
     </>
   )
 }

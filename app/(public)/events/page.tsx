@@ -3,7 +3,8 @@ import { Suspense } from 'react'
 import { getAllEvents, type StellarEvent } from '@/lib/sanity'
 import { EventCard } from '@/components/ui/EventCard'
 import { EventsFilterBar } from '@/components/sections/EventsFilterBar'
-import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
+import { PageMedia } from '@/components/sections/PageMedia'
+import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   title: 'Upcoming Events',
@@ -68,18 +69,17 @@ export default async function EventsPage({ searchParams }: PageProps) {
         </div>
       </section>
 
-      {/* Testimonial */}
-      <section className="section-padding bg-brand-grey-light border-t border-line">
-        <div className="container-max max-w-3xl text-center">
-          <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">In their words</p>
-          <h2 className="text-3xl font-bold text-brand-blue-dark mb-6">Hear from a participant</h2>
-          <VideoTestimonial
-            src="/videos/events-testimonial.mp4"
-            poster="/videos/events-testimonial.jpg"
-            title="Stellr event testimonial"
-          />
-        </div>
-      </section>
+      {/* ── Media: the event, in pictures, film & briefs ──────────────── */}
+      <PageMedia
+        heading="Inside a Stellr event"
+        intro="Galleries from the floor, a participant film, and the competition briefs to download."
+        photos={[PHOTOS['events-1'], PHOTOS['events-2'], PHOTOS['events-3'], PHOTOS['events-4'], PHOTOS['events-5']]}
+        photoHeading="On the competition floor"
+        videos={[VIDEOS['testimonial-meleah-caron']]}
+        quotes={[QUOTES['2021-parent']]}
+        competition={[COMPETITION['south-west-2022-student-presentation'], COMPETITION['south-west-2025-rfp']]}
+        background="white"
+      />
     </>
   )
 }

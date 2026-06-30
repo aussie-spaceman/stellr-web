@@ -10,6 +10,7 @@ export function Hero({
   lead,
   pills,
   glow = true,
+  media,
   children,
   className,
 }: {
@@ -19,6 +20,10 @@ export function Hero({
   lead?: React.ReactNode
   pills?: string[]
   glow?: boolean
+  /** T1 — optional media band beside the headline (photo, or poster-first
+   *  video). The app supplies the element so this package stays framework-light.
+   *  When present the hero becomes a two-column layout (not full-bleed). */
+  media?: React.ReactNode
   children?: React.ReactNode
   className?: string
 }) {
@@ -37,26 +42,31 @@ export function Hero({
         />
       )}
       <div className="relative max-w-7xl mx-auto">
-        {breadcrumb && (
-          <p className="text-hero-dim font-semibold uppercase tracking-widest text-sm mb-4">{breadcrumb}</p>
-        )}
-        {pill && (
-          <div className="inline-flex items-center gap-3 mb-6 px-4 py-2 rounded-full bg-white/5 border border-white/15 text-sm font-medium text-hero-lead">
-            <span className="text-hero-dim">{pill.accent}</span>
-            <span className="w-1 h-1 rounded-full bg-white/40" />
-            <span>{pill.rest}</span>
+        <div className={cn(media ? 'grid gap-10 lg:grid-cols-2 lg:items-center' : undefined)}>
+          <div>
+            {breadcrumb && (
+              <p className="text-hero-dim font-semibold uppercase tracking-widest text-sm mb-4">{breadcrumb}</p>
+            )}
+            {pill && (
+              <div className="inline-flex items-center gap-3 mb-6 px-4 py-2 rounded-full bg-white/5 border border-white/15 text-sm font-medium text-hero-lead">
+                <span className="text-hero-dim">{pill.accent}</span>
+                <span className="w-1 h-1 rounded-full bg-white/40" />
+                <span>{pill.rest}</span>
+              </div>
+            )}
+            <h1 className="text-4xl sm:text-5xl lg:text-ds-h1 font-bold tracking-display mb-6 max-w-3xl">{title}</h1>
+            {lead && <p className="text-lg text-hero-lead max-w-2xl leading-relaxed">{lead}</p>}
+            {pills && pills.length > 0 && (
+              <div className="flex flex-wrap gap-3 mt-8">
+                {pills.map((p) => (
+                  <InfoPill key={p}>{p}</InfoPill>
+                ))}
+              </div>
+            )}
+            {children}
           </div>
-        )}
-        <h1 className="text-4xl sm:text-5xl lg:text-ds-h1 font-bold tracking-display mb-6 max-w-3xl">{title}</h1>
-        {lead && <p className="text-lg text-hero-lead max-w-2xl leading-relaxed">{lead}</p>}
-        {pills && pills.length > 0 && (
-          <div className="flex flex-wrap gap-3 mt-8">
-            {pills.map((p) => (
-              <InfoPill key={p}>{p}</InfoPill>
-            ))}
-          </div>
-        )}
-        {children}
+          {media && <div className="w-full lg:justify-self-end">{media}</div>}
+        </div>
       </div>
     </section>
   )

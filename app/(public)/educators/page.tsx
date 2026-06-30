@@ -10,6 +10,8 @@ import {
   ShieldCheck,
   ArrowRight,
 } from 'lucide-react'
+import { PageMedia } from '@/components/sections/PageMedia'
+import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   title: 'For Educators & Schools',
@@ -241,6 +243,16 @@ export default function EducatorsPage() {
           </div>
         </div>
       </section>
+
+      {/* ── Media: educators & gated classroom material ───────────────── */}
+      <PageMedia
+        heading="What educators see"
+        intro="Hear from teachers who've run it — and download ready-to-use competition material."
+        photos={[PHOTOS['educators-1'], PHOTOS['educators-2']]}
+        videos={[VIDEOS['testimonial-jeremiah-dibley'], VIDEOS['testimonial-willcox-teachers']]}
+        quotes={[QUOTES['nahuel-de-bittencourt']]}
+        competition={[COMPETITION['jsc-2025-program-book'], COMPETITION['jsc-2025-student-presentation']]}
+      />
     </>
   )
 }

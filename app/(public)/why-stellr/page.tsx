@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { ArrowRight, Check } from 'lucide-react'
 import { Launch, Certificate, Team, Award, Global } from '@stellr/icons'
 import { Hero, Eyebrow, Button } from '@stellr/web-ui'
+import { PageMedia } from '@/components/sections/PageMedia'
+import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   title: 'Why Stellr?',
@@ -379,6 +381,16 @@ export default function WhyStellrPage() {
           </div>
         </div>
       </section>
+
+      {/* ── Media: proof, voices & student work ───────────────────────── */}
+      <PageMedia
+        heading="The proof, in their own words"
+        photos={[PHOTOS['why-1'], PHOTOS['why-2'], PHOTOS['why-3'], PHOTOS['why-4']]}
+        videos={[VIDEOS['testimonial-sepp']]}
+        quotes={[QUOTES['jason-zibart']]}
+        competition={[COMPETITION['legacy-rfp-south-dakota-2025']]}
+        background="white"
+      />
     </>
   )
 }

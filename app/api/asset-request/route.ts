@@ -3,6 +3,10 @@ import { sendEmail, MARKETING_FROM } from '@/lib/email'
 import { upsertContact } from '@/lib/hubspot'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
+// Where the gated files live. Empty → self-hosted on the site (SITE_URL/files).
+// Set NEXT_PUBLIC_MEDIA_BASE_URL (same var the manifest uses) once /files moves
+// to a bucket/CDN, and the emailed download links follow automatically.
+const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ?? '').replace(/\/+$/, '')
 
 /**
  * Registry of gated marketing assets. Each entry is emailed to the requester
@@ -16,6 +20,31 @@ const ASSETS = {
     file: '/files/Stellr-Example-Student-RFP.pdf',
     subject: 'Your example student RFP',
     note: 'Requested example student RFP (Curriculum Campaigns page)',
+  },
+  // Media-rollout gated competition material (T4). Files self-hosted in /public.
+  'jsc-2025-program-book': {
+    title: '2025 JSC — Program Book',
+    file: '/files/jsc-2025-program-book.pdf',
+    subject: 'Your copy of the 2025 JSC Program Book',
+    note: 'Requested 2025 JSC Program Book (Educators page)',
+  },
+  'jsc-2025-student-presentation': {
+    title: '2025 JSC — Student Presentation',
+    file: '/files/jsc-2025-student-presentation.pdf',
+    subject: 'Your copy of the 2025 JSC Student Presentation',
+    note: 'Requested 2025 JSC Student Presentation (Educators page)',
+  },
+  'south-west-2022-student-presentation': {
+    title: '2022 South West — Student Presentation',
+    file: '/files/south-west-2022-student-presentation.pdf',
+    subject: 'Your copy of the 2022 South West Student Presentation',
+    note: 'Requested 2022 South West Student Presentation (Events page)',
+  },
+  'south-west-2025-rfp': {
+    title: '2025 South West — RFP',
+    file: '/files/south-west-2025-rfp.pdf',
+    subject: 'Your copy of the 2025 South West RFP',
+    note: 'Requested 2025 South West RFP (Events page)',
   },
 } as const
 
@@ -38,7 +67,7 @@ export async function POST(req: Request) {
 
     const [firstName, ...rest] = cleanName.split(/\s+/)
     const lastName = rest.join(' ')
-    const downloadUrl = `${SITE_URL}${config.file}`
+    const downloadUrl = `${MEDIA_BASE || SITE_URL}${config.file}`
 
     // ── 1. Capture the lead in HubSpot as a subscriber (best-effort) ──────
     const crm = await upsertContact({

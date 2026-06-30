@@ -5,6 +5,8 @@ import { Document, Award, Orbit, Environment } from '@stellr/icons'
 import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 import { AssetGate } from '@/components/sections/AssetGate'
 import { StudentWorkHero } from '@/components/sections/StudentWorkHero'
+import { PageMedia } from '@/components/sections/PageMedia'
+import { PHOTOS, VIDEOS } from '@/lib/media-manifest'
 import { getAllCampaigns } from '@/lib/sanity'
 import { getCampaignDates, campaignStatusFromDates, type CampaignSeason } from '@/lib/campaigns'
 
@@ -557,6 +559,15 @@ export default async function CampaignsPage() {
           </div>
         </div>
       </section>
+
+      {/* ── Media: from brief to design ───────────────────────────────── */}
+      <PageMedia
+        heading="From brief to design"
+        intro="What it looks like when students run the material."
+        photos={[PHOTOS['curriculum-1'], PHOTOS['curriculum-2'], PHOTOS['curriculum-3']]}
+        videos={[VIDEOS['testimonial-teacher']]}
+        background="white"
+      />
     </>
   )
 }

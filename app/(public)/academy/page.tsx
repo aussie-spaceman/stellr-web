@@ -15,6 +15,8 @@ import {
 } from 'lucide-react'
 import { Launch, Certificate, Idea, Document, Team, Award } from '@stellr/icons'
 import { Hero, Eyebrow, Button } from '@stellr/web-ui'
+import { PageMedia } from '@/components/sections/PageMedia'
+import { PHOTOS, VIDEOS } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   title: 'Academy',
@@ -477,6 +479,13 @@ export default function AcademyPage() {
           </div>
         </div>
       </section>
+
+      {/* ── Media: training in action ─────────────────────────────────── */}
+      <PageMedia
+        heading="Training in action"
+        photos={[PHOTOS['academy-1'], PHOTOS['academy-2'], PHOTOS['academy-3']]}
+        videos={[VIDEOS['testimonial-tom-wilson']]}
+      />
     </>
   )
 }

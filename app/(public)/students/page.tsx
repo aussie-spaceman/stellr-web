@@ -15,6 +15,10 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
+import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
+import { ProofStrip } from '@/components/sections/ProofStrip'
+import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
+import { PHOTOS, VIDEOS, QUOTES } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   title: 'For Students',
@@ -88,7 +92,8 @@ export default function StudentsPage() {
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl mx-auto grid gap-10 lg:grid-cols-2 lg:items-center">
+          <div>
           <p className="text-brand-orange font-semibold uppercase tracking-widest text-sm mb-4">
             Community → For Students
           </p>
@@ -108,6 +113,13 @@ export default function StudentsPage() {
               Find an Event
             </Link>
           </div>
+          </div>
+          <ResponsivePhoto
+            photo={PHOTOS['students-hero']}
+            sizes="(max-width: 1024px) 100vw, 50vw"
+            priority
+            className="aspect-[4/3] shadow-card-lift lg:justify-self-end"
+          />
         </div>
       </section>
 
@@ -299,14 +311,26 @@ export default function StudentsPage() {
 
       {/* ── Testimonial ───────────────────────────────────────────────── */}
       <section className="section-padding bg-brand-grey-light">
-        <div className="container-max max-w-3xl text-center">
-          <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">In their words</p>
-          <h2 className="text-3xl font-bold text-brand-blue-dark mb-6">Hear from a Stellr student</h2>
-          <VideoTestimonial
-            src="/videos/students-testimonial.mp4"
-            poster="/videos/students-testimonial.jpg"
-            title="Stellr student testimonial"
-          />
+        <div className="container-max max-w-5xl">
+          <div className="text-center">
+            <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">In their words</p>
+            <h2 className="text-3xl font-bold text-brand-blue-dark mb-8">Hear from Stellr students</h2>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2">
+            {[VIDEOS['testimonial-allyson-rose'], VIDEOS['testimonial-alvina-gakhokidze']].map((v) => (
+              <figure key={v.id}>
+                <VideoTestimonial src={v.src} poster={v.poster} captionsSrc={v.captions} title={v.title} />
+                <figcaption className="mt-3 text-sm font-semibold text-brand-blue-dark">{v.title}</figcaption>
+              </figure>
+            ))}
+          </div>
+          <div className="mt-10 grid gap-6 lg:grid-cols-[1fr_2fr] lg:items-start">
+            <PullQuoteWall quotes={[QUOTES['mitra-sainsbury']]} columns={1} />
+            <ProofStrip
+              heading="Inside the competition"
+              photos={[PHOTOS['students-strip-1'], PHOTOS['students-strip-2']]}
+            />
+          </div>
         </div>
       </section>
 

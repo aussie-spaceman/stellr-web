@@ -4,6 +4,8 @@ import { ArrowRight, Users, Trophy, Rocket } from 'lucide-react'
 import { getFeaturedEvents, type StellarEvent } from '@/lib/sanity'
 import { EventCard } from '@/components/ui/EventCard'
 import { QuoteRotator } from '@/components/sections/QuoteRotator'
+import { ProofStrip } from '@/components/sections/ProofStrip'
+import { PHOTOS } from '@/lib/media-manifest'
 import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
 
 export const metadata: Metadata = {
@@ -132,6 +134,16 @@ export default async function HomePage() {
               </a>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── Proof strip ──────────────────────────────────────────────── */}
+      <section className="section-padding bg-white">
+        <div className="container-max">
+          <ProofStrip
+            heading="Real students, real competitions"
+            photos={[PHOTOS['home-hero'], PHOTOS['home-strip-1'], PHOTOS['home-strip-2'], PHOTOS['home-strip-3']]}
+          />
         </div>
       </section>
 

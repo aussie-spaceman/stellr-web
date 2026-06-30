@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Linkedin, Award, Lightbulb, Eye, Network as NetworkIcon } from 'lucide-react'
+import { PageMedia } from '@/components/sections/PageMedia'
+import { PHOTOS, VIDEOS, QUOTES } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   title: 'About Stellr',
@@ -286,6 +288,14 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
+
+      {/* ── Media: our mission & people ───────────────────────────────── */}
+      <PageMedia
+        heading="Our mission, in the room"
+        photos={[PHOTOS['about-award-1'], PHOTOS['about-award-2'], PHOTOS['about-team-1'], PHOTOS['about-team-2']]}
+        videos={[VIDEOS['testimonial-david-shaw']]}
+        quotes={[QUOTES['alvina-gakhokidze']]}
+      />
     </>
   )
 }

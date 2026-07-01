@@ -6,9 +6,11 @@ import { Paperclip, Pin, MessageSquare, Flag, FileText, X } from 'lucide-react'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
 import { Avatar } from '@/components/ui/Avatar'
 import { ReactionBar } from '@/components/community/ReactionBar'
+import { RichTextEditor } from '@/components/community/RichTextEditor'
 import { FlagModal } from '@/components/community/spaces/FlagModal'
 import { TierPill, RolePill } from '@/components/community/spaces/badges'
 import { toast } from '@/components/ui/Toast'
+import type { JSONContent } from '@tiptap/react'
 import type { FeedPost, FeedReply } from '@/lib/space-posts'
 
 interface Props {
@@ -44,6 +46,8 @@ function fmtAgo(iso: string) {
 // Channel feed (screen 02): composer + post cards with reactions, threaded
 // replies, attachments, and flagging. Streams live via Supabase Realtime
 // (Clerk-token), falling back to an 8s poll — mirrors ChatPanel.
+// The in-feed composer is the product's single post composer (F-03): rich
+// text + an optional title (NewPostForm is retired).
 export function ChannelFeed({
   spaceSlug,
   channelId,
@@ -56,7 +60,9 @@ export function ChannelFeed({
   initialPosts,
 }: Props) {
   const [posts, setPosts] = useState<FeedPost[]>(initialPosts)
-  const [draft, setDraft] = useState('')
+  const [title, setTitle] = useState('')
+  const [bodyJson, setBodyJson] = useState<JSONContent | null>(null)
+  const [bodyText, setBodyText] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [sending, setSending] = useState(false)
   const [flag, setFlag] = useState<{ type: 'post' | 'comment'; id: string; label?: string } | null>(null)
@@ -114,13 +120,18 @@ export function ChannelFeed({
   }, [channelId, getToken, load])
 
   const submit = async () => {
-    if (!draft.trim() && !file) return
+    if (!bodyText.trim() && !title.trim()) return
     setSending(true)
     try {
       const res = await fetch('/api/community/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spaceSlug, channelSlug, bodyJson: textToTiptap(draft.trim()) }),
+        body: JSON.stringify({
+          spaceSlug,
+          channelSlug,
+          title: title.trim() || undefined,
+          bodyJson: bodyJson ?? undefined,
+        }),
       })
       if (!res.ok) {
         toast('Could not post')
@@ -136,7 +147,9 @@ export function ChannelFeed({
         if (up.ok) toast('File saved to Resources')
         else toast('Posted, but the file failed to attach')
       }
-      setDraft('')
+      setTitle('')
+      setBodyJson(null)
+      setBodyText('')
       setFile(null)
       if (fileRef.current) fileRef.current.value = ''
       await load()
@@ -156,13 +169,25 @@ export function ChannelFeed({
         <div className="mb-5 rounded-[14px] border border-brand-border bg-white p-3 shadow-card">
           <div className="flex gap-3">
             <Avatar id={selfId} name="You" size="md" ring={false} />
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              rows={2}
-              placeholder="Start a post — share an update, ask a question…"
-              className="min-h-[44px] flex-1 resize-none rounded-lg border border-brand-border px-3 py-2 text-sm focus:border-brand-blue focus:outline-none"
-            />
+            <div className="min-w-0 flex-1 space-y-2">
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Add a title (optional)"
+                maxLength={300}
+                aria-label="Post title (optional)"
+                className="w-full rounded-lg border border-brand-border px-3 py-2 text-sm font-medium focus:border-brand-blue focus:outline-none"
+              />
+              <RichTextEditor
+                value={bodyJson}
+                onChange={(doc, text) => {
+                  setBodyJson(doc)
+                  setBodyText(text)
+                }}
+                placeholder="Start a post — share an update, ask a question…"
+                compact
+              />
+            </div>
           </div>
           {file && (
             <div className="mt-2 flex items-center gap-2 rounded-md bg-brand-canvas px-2 py-1 text-xs text-brand-muted">
@@ -188,7 +213,7 @@ export function ChannelFeed({
             )}
             <button
               onClick={submit}
-              disabled={sending || (!draft.trim() && !file)}
+              disabled={sending || (!bodyText.trim() && !title.trim())}
               className="rounded-lg bg-brand-blue px-4 py-1.5 text-sm font-subheading font-semibold text-white hover:bg-brand-blue-dark disabled:opacity-50"
             >
               {sending ? 'Posting…' : 'Post'}

@@ -16,10 +16,11 @@ import { CohortSpace } from '@/components/community/mentoring/CohortSpace'
 export const metadata = { title: 'Mentoring · Cohort' }
 
 export default async function CohortSpacePage({ params }: { params: Promise<{ cohortId: string }> }) {
-  const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
-
   const { cohortId } = await params
+  const member = await getCurrentMember()
+  // Fallback guest gate (middleware normally handles this first). Preserve the
+  // return path so guests resume at this cohort after sign-up + onboarding.
+  if (!member) redirect(`/sign-up?next=${encodeURIComponent(`/community/mentoring/${cohortId}`)}`)
   const [space, full] = await Promise.all([getCohortSpace(member.id, cohortId), getCohortFull(cohortId)])
   if (!space || !full) notFound()
 

@@ -8,6 +8,7 @@ import { handleStoreOrderPaid } from '@/lib/store/orders'
 import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
 import { fireTierPurchased, grantTier } from '@/lib/membership-grants'
 import { rosterAfterPaidBooking } from '@/lib/mentoring'
+import { scheduleFromRequest } from '@/lib/coaching-requests'
 import { confirmPaidBooking, redeemCoupon, grantTierAllocations, grantPurchasedLot, getOfferingTarget } from '@/lib/entitlements'
 
 function getStripe() {
@@ -371,6 +372,17 @@ export async function POST(req: NextRequest) {
         const { memberId } = session.metadata
         const qty = Math.max(1, Math.floor(Number(session.metadata?.quantity) || 1))
         if (memberId) await grantPurchasedLot(memberId, 'coaching_session', qty, session.id)
+      } else if (session.metadata?.type === 'coaching_request_pay') {
+        // Member-initiated coaching request, paid path: grant the purchased
+        // coaching_session lot (idempotent on the Stripe session), then complete the
+        // booking from the matched request. The DB is the source of truth, so the
+        // session is scheduled even if the member closed the tab. scheduleFromRequest
+        // is itself idempotent (an already-scheduled request returns its session).
+        const { memberId, requestId, start } = session.metadata
+        if (memberId && requestId && start) {
+          await grantPurchasedLot(memberId, 'coaching_session', 1, session.id)
+          await scheduleFromRequest(requestId, start)
+        }
       } else if (session.metadata?.type === 'entitlement_booking') {
         // À-la-carte coaching/mentoring/training booking via the entitlements
         // ledger. Records the purchased (refundable) entitlement + reserves the

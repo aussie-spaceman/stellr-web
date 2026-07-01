@@ -2,10 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Star, CalendarDays, ShieldCheck, ArrowLeft } from 'lucide-react'
+import { Star, CalendarDays, ShieldCheck, ArrowLeft, Inbox } from 'lucide-react'
 
 const ITEMS = [
   { href: '/admin/academy/coaching', label: 'Coaching workshops', icon: Star, exact: true },
+  { href: '/admin/academy/coaching/requests', label: 'Coaching requests', icon: Inbox },
   { href: '/admin/academy/coaching/calendar', label: 'Sessions calendar', icon: CalendarDays },
   { href: '/admin/academy/coaching/access', label: 'Membership & access', icon: ShieldCheck },
 ]

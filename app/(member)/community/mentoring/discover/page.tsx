@@ -11,7 +11,9 @@ export const metadata = { title: 'Mentoring · Find a cohort' }
 
 export default async function DiscoverPage() {
   const member = await getCurrentMember()
-  if (!member) redirect('/sign-up')
+  // Fallback guest gate (middleware normally handles this first). Preserve the
+  // return path so guests resume into discovery after sign-up + onboarding.
+  if (!member) redirect(`/sign-up?next=${encodeURIComponent('/community/mentoring/discover')}`)
 
   const [credits, open] = await Promise.all([getMentoringCredits(member), listOpenCohorts(member)])
   const creditPriceCents = Number(process.env.MENTORING_CREDIT_PRICE_CENTS) || CREDIT_PACK_PRICE_CENTS

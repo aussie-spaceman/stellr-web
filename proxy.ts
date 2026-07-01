@@ -54,7 +54,13 @@ export default clerkMiddleware(async (auth, req) => {
   }
 
   if (isCommunityRoute(req) && !userId) {
-    return NextResponse.redirect(new URL('/sign-up', req.url))
+    // Preserve the intended destination so the guest resumes here after
+    // sign-up + onboarding (e.g. an /academy "Book a mentoring session" CTA
+    // deep-links straight into /community/mentoring/discover). The sign-up
+    // page validates ?next with safeNext (same-origin relative paths only).
+    const signUp = new URL('/sign-up', req.url)
+    signUp.searchParams.set('next', url.pathname + url.search)
+    return NextResponse.redirect(signUp)
   }
 
   if (isProtectedRoute(req)) {

@@ -27,6 +27,10 @@ export const metadata: Metadata = {
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 const SIGNUP_URL = `${AUTH_URL}/signup`
 const TRAINING_URL = `${AUTH_URL}/training`
+/* Mentoring is genuinely self-serve — the CTA deep-links straight into the live
+   member discovery flow (open cohorts, included-credit vs one-off top-up). Guests
+   hit the app's sign-in gate and land here after auth. No dead-end anchors. */
+const MENTORING_URL = `${AUTH_URL}/community/mentoring/discover`
 
 /* Toggles the "Why we built it" section (#3). Wire to CMS / a feature flag if
    the marketing team want to hide it. */
@@ -86,7 +90,7 @@ const formats = [
     accessLabel: 'Competitions or purchase',
     accessText: 'text-space-violet-text',
     accessBg: 'bg-space-violet-chip',
-    button: { label: 'Learn About Mentoring', href: '#mentoring', variant: 'primary' as const },
+    button: { label: 'Book a mentoring session', href: MENTORING_URL, variant: 'primary' as const },
   },
   {
     Icon: Award,
@@ -101,7 +105,7 @@ const formats = [
     accessLabel: 'Awarded or purchase',
     accessText: 'text-[#0E8C99]',
     accessBg: 'bg-[#E3F6F8]',
-    button: { label: 'How coaching works', href: '#coaching', variant: 'softBlue' as const },
+    button: { label: 'Request a coaching session', href: '/academy/coaching/request', variant: 'softBlue' as const },
   },
 ]
 
@@ -159,11 +163,11 @@ export default function AcademyPage() {
         lead="The Academy is where high-school and college students build career-ready ability — through training that powers our Competitions, hands-on career preparation, and the STEM Power Skills schools rarely teach."
       >
         <div className="flex flex-wrap gap-3.5 mt-8">
-          <Button href="#mentoring" variant="primary">
+          <Button href={MENTORING_URL} variant="primary">
             Book a mentoring session
           </Button>
-          <Button href={SIGNUP_URL} variant="outlineWhite">
-            Join free
+          <Button href="/membership" as={Link} variant="outlineWhite">
+            See tiers &amp; pricing
           </Button>
         </div>
         <p className="text-[13px] text-hero-dim mt-6">
@@ -341,7 +345,7 @@ export default function AcademyPage() {
                   </dl>
                   <Button
                     href={f.button.href}
-                    as={f.button.href.startsWith('#') ? undefined : Link}
+                    as={f.button.href.startsWith('/') ? Link : undefined}
                     variant={f.button.variant}
                     className="mt-5 self-start"
                   >
@@ -415,12 +419,17 @@ export default function AcademyPage() {
               ))}
             </ul>
             <p className="mt-6 text-[15px] text-content-secondary leading-relaxed">
-              Mentoring is available as part of member tiers.{' '}
-              <Link href="/membership" className="font-bold text-primary">
-                Learn more about Stellr Membership
-              </Link>
-              .
+              Mentoring is included with paid member tiers — browse open cohorts and register in a
+              couple of clicks. Extra sessions can be topped up anytime.
             </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button href={MENTORING_URL} variant="primary">
+                Book a mentoring session <ArrowRight size={16} />
+              </Button>
+              <Button href="/membership" as={Link} variant="secondary">
+                Explore membership tiers
+              </Button>
+            </div>
           </div>
         </div>
       </section>
@@ -441,6 +450,18 @@ export default function AcademyPage() {
                 All coaching material is maintained indefinitely against your Stellr member profile —
                 recorded calls, private coaching chat, and shared material.
               </p>
+            </div>
+            <p className="mt-6 text-[15px] text-content-secondary leading-relaxed">
+              Tell us what you want to work on and we&rsquo;ll match you with a coach. Coaching is included with
+              our top tiers or earned by competing — otherwise you can pay per session.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button href="/academy/coaching/request" as={Link} variant="primary">
+                Request a coaching session <ArrowRight size={16} />
+              </Button>
+              <Button href="/membership" as={Link} variant="secondary">
+                Explore membership tiers
+              </Button>
             </div>
           </div>
           <div className="bg-white rounded-panel p-7 sm:p-8 shadow-card-lift">

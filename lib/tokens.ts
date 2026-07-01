@@ -17,6 +17,7 @@ export const tokens = {
     "spaceViolet": "#7C5CFC",
     "enviroGreen": "#1FA97A",
     "pathwayAmber": "#E0922F",
+    "pathwayAmberDeep": "#C2722A",
     "avatarTeal": "#16B6C4",
     "text": {
       "primary": "#2A2F45",

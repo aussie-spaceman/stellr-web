@@ -33,7 +33,7 @@ const config: Config = {
         },
         'space-violet': { DEFAULT: c.spaceViolet, bg: t.spaceBg, chip: t.spaceChip, text: t.spaceText },
         'enviro-green': { DEFAULT: c.enviroGreen, bg: t.enviroBg, chip: t.enviroChip, text: t.enviroText },
-        'pathway-amber': { DEFAULT: c.pathwayAmber, bg: t.amberSoftBg },
+        'pathway-amber': { DEFAULT: c.pathwayAmber, deep: c.pathwayAmberDeep, bg: t.amberSoftBg },
         'donate-gold': c.donateGold,
         'star-gold':   c.starGold,
         'avatar-teal': c.avatarTeal,

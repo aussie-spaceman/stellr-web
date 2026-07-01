@@ -55,7 +55,7 @@ export function SpaceCard({ space, restricted = false, joinable = false, unread 
               {unread} new
             </span>
           )}
-          {joinable && <JoinSpaceButton spaceSlug={space.slug} />}
+          {joinable && <JoinSpaceButton spaceSlug={space.slug} spaceName={space.name} />}
         </div>
       </div>
     </div>

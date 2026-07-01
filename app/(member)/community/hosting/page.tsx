@@ -21,8 +21,14 @@ export default async function HostingPage() {
       <div className="mx-auto max-w-lg text-center">
         <h1 className="font-heading uppercase text-title text-brand-blue-dark">Hosting</h1>
         <p className="mt-2 text-sm text-brand-muted-soft">
-          This area is for approved coaches and mentors. Contact an administrator if you should have
-          access.
+          This area is for approved coaches and mentors.{' '}
+          <a
+            href="mailto:hello@stellreducation.org"
+            className="font-semibold text-brand-blue hover:underline"
+          >
+            Contact an administrator
+          </a>{' '}
+          if you should have access.
         </p>
       </div>
     )

@@ -7,7 +7,7 @@ import type { TierId } from '@stellr/web-ui'
 import {
   AUDIENCES, AUDIENCE_ORDER, VALUE_CARDS, FAQS,
   WATERFALL_CATEGORIES, WATERFALL_ITEMS, WATERFALL_TOTAL, PURCHASABLE_LABELS,
-  type AudienceId, type ValueIcon,
+  tierBySlug, type AudienceId, type ValueIcon,
 } from './tier-data'
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
@@ -46,6 +46,23 @@ export default function MembershipExplorer({
     setAudienceId(id)
     setSelectedId(AUDIENCES[id].tiers[0].id)
   }
+
+  // Deep-link support: /membership#{tierSlug} (e.g. from a locked space's
+  // upgrade CTA) opens with that tier's audience + card selected and the
+  // explorer scrolled into view. Audience is client state, so the native
+  // anchor jump can't do this on its own.
+  React.useEffect(() => {
+    const slug = window.location.hash.slice(1)
+    if (!slug) return
+    const resolved = tierBySlug(slug)
+    if (!resolved) return
+    setAudienceId(resolved.audience)
+    setSelectedId(resolved.id)
+    // Wait a frame so the resolved audience's cards are in the DOM.
+    requestAnimationFrame(() => {
+      ;(document.getElementById(resolved.id) ?? document.getElementById('explore'))?.scrollIntoView()
+    })
+  }, [])
 
   const selIdx = Math.max(0, audience.tiers.findIndex((t) => t.id === selectedId))
   const selected = audience.tiers[selIdx] ?? audience.tiers[0]
@@ -125,7 +142,7 @@ export default function MembershipExplorer({
           {/* tier cards */}
           <div className="flex flex-wrap gap-[13px]">
             {audience.tiers.map((t) => (
-              <div key={t.id} className="flex-1 basis-[200px]">
+              <div key={t.id} id={t.id} className="flex-1 basis-[200px] scroll-mt-24">
                 <TierCard
                   tier={t.id}
                   role={t.role}

@@ -14,6 +14,7 @@ interface EventData extends StellarEvent {
   description?: PortableTextBlock[]
   capacity?: number
   eligibility?: string
+  schedule?: { time?: string; label?: string }[]
 }
 
 interface PageProps {
@@ -39,11 +40,46 @@ const statusConfig = {
   closed: { label: 'Registration Closed', className: 'bg-red-50 text-red-700 border-red-200' },
 }
 
-const PLACEHOLDER_FAQS = [
-  { q: 'What should my team bring on the day?', a: 'All materials for the design challenge are provided. Bring pens, notebooks, and any reference materials allowed in the event brief (sent 2 weeks before the event).' },
-  { q: 'How many students can be on a team?', a: 'Teams are typically 4–6 students. Individual entries may be accommodated — contact us for details.' },
-  { q: 'Is there a cost to participate?', a: 'Registration costs vary by event. Pathfinder members receive priority registration. Full pricing is shown during the registration process.' },
-  { q: 'What happens if we can\'t attend after registering?', a: 'Please notify us as soon as possible. Cancellations made more than 14 days before the event may be eligible for a refund or credit.' },
+// Theme → pill colour (Space = purple, Environmental = green). Falls back to the
+// neutral hero chip for any other/legacy theme value.
+const THEME_PILL: Record<string, string> = {
+  'Environmental Design Challenge': 'bg-enviro-green-chip text-enviro-green-text',
+  'Space Design Challenge': 'bg-space-violet-chip text-space-violet-text',
+}
+
+const FAQS: { q: string; a: React.ReactNode }[] = [
+  {
+    q: 'What should my team bring on the day?',
+    a: 'All competition material is provided, along with snacks and meals. Bring pens, notebooks, and general school work material. We recommend bringing a laptop or tablet if you have access to one — you will not be disadvantaged if you don’t.',
+  },
+  {
+    q: 'How many students can be on a team?',
+    a: 'This varies by competition, and by the final number of participants. Both individuals and groups can register.',
+  },
+  {
+    q: 'Is there a cost to participate?',
+    a: (
+      <>
+        Registration fees vary by event. If you wish to attend but can’t afford the fees, please look at our{' '}
+        <Link href="/scholarship" className="text-brand-blue font-medium hover:underline">
+          scholarship page
+        </Link>
+        .
+      </>
+    ),
+  },
+  {
+    q: 'What happens if I can’t attend after registering?',
+    a: (
+      <>
+        Please notify us as soon as possible. Review our{' '}
+        <Link href="/terms#refunds" className="text-brand-blue font-medium hover:underline">
+          Terms of Service
+        </Link>{' '}
+        for specifics.
+      </>
+    ),
+  },
 ]
 
 export default async function EventDetailPage({ params }: PageProps) {
@@ -51,7 +87,7 @@ export default async function EventDetailPage({ params }: PageProps) {
   const event: EventData | null = await getEventBySlug(slug).catch(() => null)
   if (!event) notFound()
 
-  const status = registrationStatus(event.registrationOpen ?? false, event.registrationOpenDate, event.registrationCloseDate)
+  const status = registrationStatus(event.registrationOpenDate, event.registrationCloseDate)
   const { label: statusLabel, className: statusClass } = statusConfig[status]
 
   // JSON-LD for this event
@@ -79,7 +115,7 @@ export default async function EventDetailPage({ params }: PageProps) {
 
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <section className="relative bg-brand-blue-dark text-white">
-        {event.image ? (
+        {event.image && (
           <div className="relative h-72 sm:h-96">
             <Image
               src={urlFor(event.image).width(1400).height(600).url()}
@@ -89,8 +125,6 @@ export default async function EventDetailPage({ params }: PageProps) {
               priority
             />
           </div>
-        ) : (
-          <div className="h-48 bg-gradient-to-br from-brand-blue-dark to-blue-900" />
         )}
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 pt-8">
@@ -102,7 +136,7 @@ export default async function EventDetailPage({ params }: PageProps) {
               </span>
             )}
             {event.type && (
-              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-white/10 text-content-faint">
+              <span className={`text-xs font-semibold px-3 py-1 rounded-full ${THEME_PILL[event.type] ?? 'bg-white/10 text-content-faint'}`}>
                 {event.type}
               </span>
             )}
@@ -174,33 +208,27 @@ export default async function EventDetailPage({ params }: PageProps) {
                 </div>
               )}
 
-              {/* Schedule placeholder */}
-              <div>
-                <h2 className="text-2xl font-bold text-brand-blue-dark mb-4">Schedule</h2>
-                <div className="space-y-3">
-                  {[
-                    { time: 'Day 1 — 08:30', label: 'Registration & welcome' },
-                    { time: 'Day 1 — 09:00', label: 'Challenge brief released — teams begin design work' },
-                    { time: 'Day 1 — 12:00', label: 'Lunch (provided)' },
-                    { time: 'Day 1 — 17:00', label: 'End of day 1' },
-                    { time: 'Day 2 — 08:30', label: 'Design work resumes' },
-                    { time: 'Day 2 — 13:00', label: 'Presentations to judges' },
-                    { time: 'Day 2 — 16:00', label: 'Awards ceremony & close' },
-                  ].map((item) => (
-                    <div key={item.time} className="flex gap-4 text-sm">
-                      <span className="font-mono text-brand-grey-mid w-40 shrink-0">{item.time}</span>
-                      <span className="text-brand-grey-dark">{item.label}</span>
-                    </div>
-                  ))}
+              {/* Schedule — from Sanity; hidden entirely when none is entered */}
+              {event.schedule && event.schedule.length > 0 && (
+                <div>
+                  <h2 className="text-2xl font-bold text-brand-blue-dark mb-4">Schedule</h2>
+                  <div className="space-y-3">
+                    {event.schedule.map((item, i) => (
+                      <div key={i} className="flex gap-4 text-sm">
+                        <span className="font-mono text-brand-grey-mid w-40 shrink-0">{item.time}</span>
+                        <span className="text-brand-grey-dark">{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs text-brand-grey-mid italic">Schedule is indicative — full timetable released 2 weeks before event.</p>
                 </div>
-                <p className="mt-3 text-xs text-brand-grey-mid italic">Schedule is indicative — full timetable released 2 weeks before event.</p>
-              </div>
+              )}
 
               {/* FAQ accordion */}
               <div>
                 <h2 className="text-2xl font-bold text-brand-blue-dark mb-4">Frequently Asked Questions</h2>
                 <div className="space-y-3">
-                  {PLACEHOLDER_FAQS.map((faq) => (
+                  {FAQS.map((faq) => (
                     <details key={faq.q} className="group border border-line rounded-lg">
                       <summary className="flex items-center justify-between p-4 cursor-pointer font-medium text-brand-blue-dark list-none">
                         {faq.q}

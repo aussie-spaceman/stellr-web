@@ -15,11 +15,7 @@ const statusConfig = {
 }
 
 export function EventCard({ event }: EventCardProps) {
-  const status = registrationStatus(
-    event.registrationOpen ?? false,
-    event.registrationOpenDate,
-    event.registrationCloseDate
-  )
+  const status = registrationStatus(event.registrationOpenDate, event.registrationCloseDate)
   const { label, className } = statusConfig[status]
 
   return (

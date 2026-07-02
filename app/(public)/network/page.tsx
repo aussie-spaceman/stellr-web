@@ -1,9 +1,12 @@
 import type { Metadata } from 'next'
+import { Fragment } from 'react'
 import Link from 'next/link'
 import { ArrowRight, Check } from 'lucide-react'
 import { Event, Certificate, Team } from '@stellr/icons'
 import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 import { JoinNetworkForm } from '@/components/forms/JoinNetworkForm'
+import { PageMedia } from '@/components/sections/PageMedia'
+import { PHOTOS, COMPETITION } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   title: 'Network',
@@ -232,8 +235,8 @@ export default function NetworkPage() {
 
       {/* ── Detail sections ───────────────────────────────────────────── */}
       {details.map((d) => (
+        <Fragment key={d.id}>
         <section
-          key={d.id}
           id={d.id}
           className={`section-padding scroll-mt-24 ${d.tinted ? 'bg-surface border-t border-line-light' : 'bg-white'}`}
         >
@@ -268,6 +271,30 @@ export default function NetworkPage() {
             </div>
           </div>
         </section>
+
+        {/* Photos from the floor — between Industry and University partners */}
+        {d.id === 'industry' && (
+          <PageMedia
+            eyebrow="See it for yourself"
+            heading="Inside the Stellr community"
+            intro="Where your partnership lands — students at Stellr events across the US."
+            photos={[PHOTOS['events-1'], PHOTOS['events-2'], PHOTOS['events-3'], PHOTOS['events-4'], PHOTOS['events-5']]}
+            photoHeading="On the competition floor"
+            background="white"
+          />
+        )}
+
+        {/* Subscriber resources — between University and Corporate partners */}
+        {d.id === 'university' && (
+          <PageMedia
+            eyebrow="Subscriber resources"
+            heading="See the work up close"
+            intro="Real student deliverables from past competitions — subscribe and we’ll email you the full PDF."
+            competition={[COMPETITION['south-west-2022-student-presentation'], COMPETITION['south-west-2025-rfp']]}
+            background="surface"
+          />
+        )}
+        </Fragment>
       ))}
 
       {/* ── Partner logo wall ─────────────────────────────────────────── */}

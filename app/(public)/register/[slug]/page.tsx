@@ -22,11 +22,7 @@ export default async function RegisterTypePage({ params }: PageProps) {
   const returnUrl = `${WWW}/register/${slug}`
   const signInUrl = `${APP}/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`
 
-  const status = registrationStatus(
-    event.registrationOpen ?? false,
-    event.registrationOpenDate,
-    event.registrationCloseDate
-  )
+  const status = registrationStatus(event.registrationOpenDate, event.registrationCloseDate)
 
   if (status !== 'open') {
     const comingSoon = status === 'coming-soon'

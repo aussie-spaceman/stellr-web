@@ -6,6 +6,7 @@ import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 import { AssetGate } from '@/components/sections/AssetGate'
 import { StudentWorkHero } from '@/components/sections/StudentWorkHero'
 import { PageMedia } from '@/components/sections/PageMedia'
+import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
 import { PHOTOS, VIDEOS } from '@/lib/media-manifest'
 import { getAllCampaigns } from '@/lib/sanity'
@@ -272,7 +273,7 @@ export default async function CampaignsPage() {
                   </li>
                 ))}
               </ul>
-              <Button href="#campaigns" variant="energy" className="mt-6 self-start">
+              <Button href="/events" variant="energy" className="mt-6 self-start">
                 See the Campaigns <ArrowRight size={16} />
               </Button>
             </div>
@@ -475,6 +476,23 @@ export default async function CampaignsPage() {
         </div>
       </section>
 
+      {/* ── Teacher video testimonial ─────────────────────────────────── */}
+      <section className="section-padding bg-surface">
+        <div className="container-max max-w-3xl mx-auto">
+          <figure>
+            <VideoTestimonial
+              src={VIDEOS['testimonial-teacher'].src}
+              poster={VIDEOS['testimonial-teacher'].poster}
+              captionsSrc={VIDEOS['testimonial-teacher'].captions}
+              title="Erin Henderson — Teacher, 2022 South West Event"
+            />
+            <figcaption className="mt-3 text-center text-sm font-semibold text-ink">
+              Erin Henderson &mdash; Teacher, 2022 South West Event
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
       {/* ── Material levels ───────────────────────────────────────────── */}
       <section id="tiers" className="section-padding bg-surface scroll-mt-24">
         <div className="container-max">
@@ -487,7 +505,7 @@ export default async function CampaignsPage() {
                 the full teaching material — see the membership page for tiers and pricing.
               </p>
             </div>
-            <Link href="/membership" className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
+            <Link href="/membership#educator" className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
               See membership &amp; pricing <ArrowRight size={14} />
             </Link>
           </div>
@@ -536,7 +554,7 @@ export default async function CampaignsPage() {
                     </li>
                   ))}
                 </ul>
-                <Button href="/membership" as={Link} variant="primary" className="mt-6 w-full">
+                <Button href="/membership#educator" as={Link} variant="primary" className="mt-6 w-full">
                   View membership &amp; pricing
                 </Button>
               </div>
@@ -571,8 +589,9 @@ export default async function CampaignsPage() {
       <PageMedia
         heading="From brief to design"
         intro="What it looks like when students run the material."
-        photos={[PHOTOS['curriculum-1'], PHOTOS['curriculum-2'], PHOTOS['curriculum-3']]}
-        videos={[VIDEOS['testimonial-teacher']]}
+        photos={[PHOTOS['curriculum-group-work'], PHOTOS['curriculum-2'], PHOTOS['curriculum-3']]}
+        align="center"
+        photoColumns={3}
         background="white"
       />
     </>

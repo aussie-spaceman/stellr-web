@@ -45,15 +45,22 @@ export function formatDateRange(start: string, end?: string): string {
   return `${formatDate(start)} – ${formatDate(end)}`
 }
 
+/**
+ * Live-event registration state, derived purely from the Open/Close dates:
+ *   • open date in the future  → 'coming-soon'
+ *   • close date in the past   → 'closed'
+ *   • otherwise (incl. no dates set) → 'open'
+ *
+ * There is no manual on/off switch for live events — an event with neither date
+ * set is open (per the Public Pages spec). Campaigns are different: they carry a
+ * manual `registrationOpen` toggle, so their callers resolve status themselves.
+ */
 export function registrationStatus(
-  open: boolean,
   openDate?: string,
   closeDate?: string
 ): 'open' | 'coming-soon' | 'closed' {
-  if (!open) {
-    if (openDate && new Date(openDate) > new Date()) return 'coming-soon'
-    return 'closed'
-  }
-  if (closeDate && new Date(closeDate) < new Date()) return 'closed'
+  const now = new Date()
+  if (openDate && new Date(openDate) > now) return 'coming-soon'
+  if (closeDate && new Date(closeDate) < now) return 'closed'
   return 'open'
 }

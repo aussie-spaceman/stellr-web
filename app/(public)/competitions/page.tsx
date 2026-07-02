@@ -264,7 +264,7 @@ export default async function CompetitionsPage() {
           </div>
 
           {/* Student testimonial */}
-          <PullQuoteWall quotes={[QUOTES['hunter-dobson']]} columns={1} className="mt-10 max-w-2xl" />
+          <PullQuoteWall quotes={[QUOTES['hunter-dobson']]} columns={1} className="mt-10 max-w-2xl mx-auto" />
         </div>
       </section>
 

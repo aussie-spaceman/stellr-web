@@ -102,7 +102,6 @@ export async function POST(req: NextRequest) {
     const eventForGate = await getEventBySlug(event_slug).catch(() => null)
     if (eventForGate) {
       const regStatus = registrationStatus(
-        eventForGate.registrationOpen ?? false,
         eventForGate.registrationOpenDate,
         eventForGate.registrationCloseDate,
       )

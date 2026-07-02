@@ -143,7 +143,7 @@ export async function getMemberEventCatalog(member: CommunityMember): Promise<Ca
       city: e.city,
       state: e.state,
       registered: false,
-      status: registrationStatus(e.registrationOpen ?? false, e.registrationOpenDate, e.registrationCloseDate),
+      status: registrationStatus(e.registrationOpenDate, e.registrationCloseDate),
     })
   }
 
@@ -163,7 +163,8 @@ export async function getMemberEventCatalog(member: CommunityMember): Promise<Ca
       title: c.title ?? slug,
       activityType: 'campaign',
       registered: false,
-      status: registrationStatus(c.registrationOpen ?? false),
+      // Campaigns keep their manual on/off toggle (no live-event Open/Close dates).
+      status: c.registrationOpen ? 'open' : 'closed',
     })
   }
 

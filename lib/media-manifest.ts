@@ -325,8 +325,13 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   'why-4': photo('why-4', 'IMG_4015', 'Washington Achievement banner'),
   // Curriculum
   'curriculum-1': photo('curriculum-1', 'IMG_9215', '3D modelling on laptops', 'Student team'),
-  'curriculum-2': photo('curriculum-2', 'IMG_9052', 'Design work on screen', 'Student team'),
-  'curriculum-3': photo('curriculum-3', 'IMG_2283', 'Students working through a brief'),
+  'curriculum-2': photo('curriculum-2', 'IMG_9052', 'Preparing to pitch', 'Student team'),
+  'curriculum-3': photo('curriculum-3', 'IMG_2283', 'Requirements analysis'),
+  'curriculum-group-work': {
+    // Source is 1440px wide — no 1920 derivative exists.
+    ...photo('curriculum-group-work', 'Drive 1PPNwa3A', 'students work in large groups, learning group dynamics and communication'),
+    widths: [480, 768, 1200],
+  },
   'curriculum-ty-white': photo('curriculum-ty-white', 'Drive 1plUOEjF', 'Mr Ty White with students at a competition'),
   // Academy · Training
   'academy-1': photo('academy-1', 'IMG_7700', 'Team delegation at the whiteboard'),

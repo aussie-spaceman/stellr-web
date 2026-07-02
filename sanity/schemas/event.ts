@@ -154,12 +154,40 @@ export const event = {
     { name: 'tagline', type: 'string', title: 'Tagline' },
     { name: 'description', type: 'array', title: 'Description', of: [{ type: 'block' }] },
     { name: 'image', type: 'image', title: 'Hero Image', options: { hotspot: true } },
+    {
+      name: 'schedule',
+      title: 'Schedule',
+      type: 'array',
+      description:
+        'Agenda rows shown on the event page. Leave empty to hide the Schedule section entirely.',
+      of: [
+        {
+          type: 'object',
+          fields: [
+            { name: 'time', type: 'string', title: 'Time', description: 'e.g. "Day 1 — 09:00"' },
+            { name: 'label', type: 'string', title: 'Activity' },
+          ],
+          preview: { select: { title: 'time', subtitle: 'label' } },
+        },
+      ],
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType === 'campaign',
+    },
 
     // ── Registration ──────────────────────────────────────────────────────────
     // For campaigns, registrationOpen is a manual on/off toggle.
     // Registration dates are automatic (derived from season+year) — not stored.
     // For live events, all three fields apply.
-    { name: 'registrationOpen', type: 'boolean', title: 'Registration Open' },
+    {
+      name: 'registrationOpen',
+      type: 'boolean',
+      title: 'Registration Open (campaigns only)',
+      description:
+        'Manual on/off switch for campaign registration. Live events ignore this — their ' +
+        'status is derived from the Registration Opens/Closes dates below (both empty = open).',
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType !== 'campaign',
+    },
     {
       name: 'registrationOpenDate',
       type: 'date',

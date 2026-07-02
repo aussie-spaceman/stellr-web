@@ -207,6 +207,7 @@ export default function AboutPage() {
             <VideoTestimonial
               src={VIDEOS['testimonial-david-shaw'].src}
               poster={VIDEOS['testimonial-david-shaw'].poster}
+              captionsSrc={VIDEOS['testimonial-david-shaw'].captions}
               title="David Shaw, Founder, Stellr Education"
             />
             <figcaption className="mt-3 text-center text-sm font-semibold text-brand-blue-dark">

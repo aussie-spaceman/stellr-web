@@ -2,8 +2,9 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Linkedin, Award, Lightbulb, Eye, Network as NetworkIcon } from 'lucide-react'
-import { PageMedia } from '@/components/sections/PageMedia'
-import { PHOTOS, VIDEOS, QUOTES } from '@/lib/media-manifest'
+import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
+import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
+import { VIDEOS, QUOTES } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   title: 'About Stellr',
@@ -201,6 +202,18 @@ export default function AboutPage() {
             })}
           </div>
 
+          {/* Founder video testimonial (moved above Our Goal, centred) */}
+          <figure className="max-w-3xl mx-auto mb-16">
+            <VideoTestimonial
+              src={VIDEOS['testimonial-david-shaw'].src}
+              poster={VIDEOS['testimonial-david-shaw'].poster}
+              title="David Shaw, Founder, Stellr Education"
+            />
+            <figcaption className="mt-3 text-center text-sm font-semibold text-brand-blue-dark">
+              David Shaw, Founder, Stellr Education
+            </figcaption>
+          </figure>
+
           {/* Our Goal */}
           <h2 className="text-3xl font-bold text-brand-blue-dark mb-4">Our Goal</h2>
           <p className="text-brand-grey-dark leading-relaxed max-w-3xl mb-6">
@@ -260,12 +273,12 @@ export default function AboutPage() {
 
       {/* ── #team ────────────────────────────────────────────────────── */}
       <section id="team" className="section-padding bg-brand-grey-light scroll-mt-36">
-        <div className="container-max">
+        <div className="container-max text-center">
           <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">Our Team</p>
           <h2 className="text-3xl font-bold text-brand-blue-dark mb-10">The people behind Stellr</h2>
 
           {/* Founder */}
-          <div className="bg-white rounded-2xl p-8 shadow-sm max-w-md mb-12">
+          <div className="bg-white rounded-2xl p-8 shadow-sm max-w-md mb-12 mx-auto text-left">
             <Avatar
               name={founder.name}
               photo={founder.photo}
@@ -320,6 +333,11 @@ export default function AboutPage() {
               </div>
             ))}
           </div>
+
+          {/* Written testimonial (moved below Advisory Board) */}
+          <div className="mt-14 max-w-2xl mx-auto text-left">
+            <PullQuoteWall quotes={[QUOTES['alvina-gakhokidze']]} columns={1} />
+          </div>
         </div>
       </section>
 
@@ -341,14 +359,6 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
-
-      {/* ── Media: our mission & people ───────────────────────────────── */}
-      <PageMedia
-        heading="Our mission, in the room"
-        photos={[PHOTOS['about-award-1'], PHOTOS['about-award-2'], PHOTOS['about-team-1'], PHOTOS['about-team-2']]}
-        videos={[VIDEOS['testimonial-david-shaw']]}
-        quotes={[QUOTES['alvina-gakhokidze']]}
-      />
     </>
   )
 }

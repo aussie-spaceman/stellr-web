@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Mail, MapPin } from 'lucide-react'
+import { Mail, MapPin, Phone } from 'lucide-react'
 import { ContactForm } from '@/components/forms/ContactForm'
 
 export const metadata: Metadata = {
@@ -60,10 +60,20 @@ export default async function ContactPage({ searchParams }: PageProps) {
                 </div>
 
                 <div className="flex items-start gap-3">
+                  <Phone size={18} className="text-brand-blue mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-brand-blue-dark">Phone</p>
+                    <a href="tel:+18018105848" className="text-sm text-brand-blue hover:underline">
+                      +1 (801) 810-5848
+                    </a>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
                   <MapPin size={18} className="text-brand-blue mt-0.5 shrink-0" />
                   <div>
                     <p className="text-sm font-semibold text-brand-blue-dark">Based in</p>
-                    <p className="text-sm text-brand-grey-dark">United States</p>
+                    <p className="text-sm text-brand-grey-dark">Salt Lake City, Utah</p>
                   </div>
                 </div>
               </div>

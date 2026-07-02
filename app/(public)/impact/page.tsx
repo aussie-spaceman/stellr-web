@@ -294,7 +294,7 @@ export default function ImpactPage() {
       </section>
 
       {/* ── 7. A note on AI ───────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-midnight text-white py-16 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(130%_120%_at_80%_-10%,#20274F_0%,#11163A_50%,#0B0F28_100%)]">
+      <section id="AI" className="relative overflow-hidden bg-midnight text-white py-16 px-4 sm:px-6 lg:px-8 scroll-mt-24 bg-[radial-gradient(130%_120%_at_80%_-10%,#20274F_0%,#11163A_50%,#0B0F28_100%)]">
         <div className="container-max">
           <Eyebrow className="text-[#9FB0FF]">A note on AI</Eyebrow>
           <h2 className="mt-3 font-display text-3xl sm:text-[44px] font-bold tracking-[-0.03em] leading-[1.05] max-w-3xl">

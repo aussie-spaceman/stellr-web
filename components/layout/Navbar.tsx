@@ -65,6 +65,7 @@ const navLinks = [
     dropdown: [
       { label: 'Why Stellr', href: '/why-stellr' },
       { label: 'Impact', href: '/impact' },
+      { label: 'A Note On AI', href: '/impact#AI' },
       { label: 'Mission', href: '/about#mission' },
       { label: 'Our Team', href: '/about#team' },
       { label: 'Contact Us', href: '/contact' },

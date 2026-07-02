@@ -207,7 +207,7 @@ export const COMPETITION: Record<string, CompetitionAsset> = {
     previewHref: '/files/legacy-rfp-south-dakota-2025.pdf',
     gated: false,
     fileHref: '/files/legacy-rfp-south-dakota-2025.pdf',
-    credit: 'InSimEd',
+    credit: 'Stellr',
   },
   'jsc-2025-program-book': {
     id: 'jsc-2025-program-book',

@@ -2,8 +2,9 @@ import type { Metadata } from 'next'
 import { ArrowRight, Check } from 'lucide-react'
 import { Launch, Certificate, Team, Award, Global } from '@stellr/icons'
 import { Hero, Eyebrow, Button } from '@stellr/web-ui'
-import { PageMedia } from '@/components/sections/PageMedia'
-import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
+import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
+import { WorkCard } from '@/components/sections/WorkCard'
+import { VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   title: 'Why Stellr?',
@@ -123,6 +124,8 @@ export default function WhyStellrPage() {
                 <p className="mt-1.5 text-[15px] text-content-secondary leading-relaxed">{c.body}</p>
               </div>
             ))}
+            {/* Free-to-download document (moved here as a fourth card) */}
+            <WorkCard asset={COMPETITION['legacy-rfp-south-dakota-2025']} />
           </div>
         </div>
       </section>
@@ -167,6 +170,17 @@ export default function WhyStellrPage() {
                 For educators &amp; schools
               </Button>
             </div>
+
+            {/* Video testimonial (moved here, under the CTA buttons) */}
+            <figure className="mt-8">
+              <VideoTestimonial
+                src={VIDEOS['testimonial-sepp'].src}
+                poster={VIDEOS['testimonial-sepp'].poster}
+                captionsSrc={VIDEOS['testimonial-sepp'].captions}
+                title={VIDEOS['testimonial-sepp'].title}
+              />
+              <figcaption className="mt-3 text-sm font-semibold text-ink">{VIDEOS['testimonial-sepp'].title}</figcaption>
+            </figure>
           </div>
 
           {/* Checklist card */}
@@ -193,8 +207,8 @@ export default function WhyStellrPage() {
 
       {/* ── Parents ───────────────────────────────────────────────────── */}
       <section id="parents" className="section-padding bg-white scroll-mt-28">
-        <div className="container-max">
-          <div className="max-w-[680px]">
+        <div className="container-max grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-14 items-start">
+          <div>
             <SectionHead
               Icon={Team}
               tileBg="bg-space-violet"
@@ -210,18 +224,25 @@ export default function WhyStellrPage() {
               career can really look like.
             </p>
 
-            {/* Testimonial */}
+            {/* Testimonial — Jason Zibart, 2025 */}
             <blockquote className="mt-7 bg-space-violet-bg border-l-[3px] border-space-violet rounded-r-xl px-7 py-6">
               <p className="font-display text-xl font-medium text-ink leading-snug">
-                &ldquo;My son said it was one of the most exciting, exhilarating, challenging and memorable
-                events in his life.&rdquo;
+                &ldquo;{QUOTES['jason-zibart'].text}&rdquo;
               </p>
-              <footer className="mt-3 text-[13.5px] text-[#6B6790]">— Parent, 2022</footer>
+              <footer className="mt-3 text-[13.5px] text-[#6B6790]">
+                &mdash; {QUOTES['jason-zibart'].name} · {QUOTES['jason-zibart'].meta}
+              </footer>
             </blockquote>
+
+            <div className="mt-7">
+              <Button href={`${WWW}/events`} variant="primary">
+                Find an event near you
+              </Button>
+            </div>
           </div>
 
-          {/* Feature cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8 max-w-[680px]">
+          {/* Feature cards — right side, stacked */}
+          <div className="flex flex-col gap-4">
             {[
               {
                 title: 'Safe & structured',
@@ -241,12 +262,6 @@ export default function WhyStellrPage() {
                 <p className="mt-2 text-[14.5px] text-content-secondary leading-relaxed">{c.body}</p>
               </div>
             ))}
-          </div>
-
-          <div className="mt-7">
-            <Button href={`${WWW}/events`} variant="primary">
-              Find an event near you
-            </Button>
           </div>
         </div>
       </section>
@@ -347,9 +362,16 @@ export default function WhyStellrPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 mt-8">
-            <Button href={`${WWW}/contact?type=sponsorship`} variant="primary">
+            {/* Prospectus download — inactive until the document is ready (matches /network). */}
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              title="Coming soon"
+              className="inline-flex items-center justify-center gap-2 rounded-control px-6 py-3 font-subheading font-semibold text-sm text-content-faint bg-surface border border-line cursor-not-allowed opacity-70"
+            >
               Request prospectus
-            </Button>
+            </button>
             <a
               href={`${WWW}/donate`}
               className="inline-flex items-center justify-center gap-2 rounded-control px-6 py-3 font-subheading font-semibold text-sm text-white bg-donate-gold hover:bg-[#C9892C] transition-colors"
@@ -357,7 +379,7 @@ export default function WhyStellrPage() {
               Make a donation
             </a>
             <p className="text-[13.5px] text-content-faint">
-              Full packages, reach statistics and impact data included.
+              Prospectus coming soon — full packages, reach statistics and impact data.
             </p>
           </div>
         </div>
@@ -381,16 +403,6 @@ export default function WhyStellrPage() {
           </div>
         </div>
       </section>
-
-      {/* ── Media: proof, voices & student work ───────────────────────── */}
-      <PageMedia
-        heading="The proof, in their own words"
-        photos={[PHOTOS['why-1'], PHOTOS['why-2'], PHOTOS['why-3'], PHOTOS['why-4']]}
-        videos={[VIDEOS['testimonial-sepp']]}
-        quotes={[QUOTES['jason-zibart']]}
-        competition={[COMPETITION['legacy-rfp-south-dakota-2025']]}
-        background="white"
-      />
     </>
   )
 }

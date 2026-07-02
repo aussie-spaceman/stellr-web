@@ -61,8 +61,9 @@ export async function POST(req: Request) {
 
     const cleanName = typeof name === 'string' ? name.trim() : ''
     const cleanEmail = typeof email === 'string' ? email.trim() : ''
-    if (!cleanName || !/\S+@\S+\.\S+/.test(cleanEmail)) {
-      return NextResponse.json({ error: 'A name and valid email are required.' }, { status: 400 })
+    // Name is optional (README §8 one-field gate); only a valid email is required.
+    if (!/\S+@\S+\.\S+/.test(cleanEmail)) {
+      return NextResponse.json({ error: 'A valid email is required.' }, { status: 400 })
     }
 
     const [firstName, ...rest] = cleanName.split(/\s+/)

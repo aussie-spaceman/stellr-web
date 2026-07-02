@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, FileText, X } from 'lucide-react'
 
 type AssetGateProps = {
@@ -18,12 +18,17 @@ type AssetGateProps = {
   helper?: string
   /** Optional className override for the trigger button. */
   triggerClassName?: string
+  /** README §8 — one-field gate: makes the name field optional (email only). */
+  emailOnly?: boolean
 }
 
 /**
  * Generic lead-capture gate: a trigger button that opens a name/email modal,
  * posts to /api/asset-request (HubSpot subscriber + emailed link), then offers
  * an immediate download. Reused for any gated marketing download.
+ *
+ * Accessibility (README §9): the modal traps focus, closes on Esc, restores
+ * focus to the trigger on close, and locks body scroll while open.
  */
 export function AssetGate({
   asset,
@@ -33,6 +38,7 @@ export function AssetGate({
   eyebrow = 'Free resource',
   helper,
   triggerClassName,
+  emailOnly = false,
 }: AssetGateProps) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
@@ -40,16 +46,61 @@ export function AssetGate({
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const lastFocused = useRef<HTMLElement | null>(null)
 
-  const valid = name.trim().length > 0 && /\S+@\S+\.\S+/.test(email)
+  const emailValid = /\S+@\S+\.\S+/.test(email)
+  const valid = emailValid && (emailOnly || name.trim().length > 0)
   const greeting = name.trim().split(/\s+/)[0] || 'there'
+
+  function openModal() {
+    lastFocused.current = document.activeElement as HTMLElement
+    setOpen(true)
+  }
 
   function close() {
     setOpen(false)
     setSubmitted(false)
     setError(false)
     setLoading(false)
+    lastFocused.current?.focus()
   }
+
+  // A11y: Esc closes, Tab is trapped inside the dialog, body scroll locks,
+  // and the first field is focused on open (README §9).
+  useEffect(() => {
+    if (!open) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    dialogRef.current?.querySelector<HTMLElement>('input, button, a[href]')?.focus()
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        close()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled])',
+      )
+      if (!focusables || focusables.length === 0) return
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -82,7 +133,7 @@ export function AssetGate({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openModal}
         className={
           triggerClassName ??
           'inline-flex items-center justify-center gap-2 rounded-[9px] bg-primary px-6 py-3.5 font-display text-[15px] font-semibold text-white hover:bg-primary-deep transition-colors'
@@ -99,7 +150,13 @@ export function AssetGate({
             if (e.target === e.currentTarget) close()
           }}
         >
-          <div className="w-full max-w-[460px] bg-white rounded-panel overflow-hidden shadow-[0_40px_90px_-28px_rgba(8,12,28,.72)]">
+          <div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
+            className="w-full max-w-[460px] bg-white rounded-panel overflow-hidden shadow-[0_40px_90px_-28px_rgba(8,12,28,.72)]"
+          >
             {/* Header band */}
             <div className="relative bg-[linear-gradient(135deg,#20264F,#0E1330)] px-7 py-6 flex items-center gap-4">
               <div className="w-14 h-[72px] shrink-0 rounded-md bg-[linear-gradient(160deg,#20264F,#0E1330)] border border-white/10 flex items-center justify-center">
@@ -135,7 +192,7 @@ export function AssetGate({
 
                   <div>
                     <label htmlFor="ag-name" className="block text-[13px] font-semibold text-ink mb-1.5">
-                      Full name
+                      {emailOnly ? 'Full name (optional)' : 'Full name'}
                     </label>
                     <input
                       id="ag-name"

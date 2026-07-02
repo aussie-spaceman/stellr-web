@@ -82,6 +82,7 @@ export function WorkCard({ asset, className = '' }: { asset: CompetitionAsset; c
               triggerLabel="Get the full PDF ↓"
               eyebrow="Subscriber resource"
               triggerClassName={CTA}
+              emailOnly
             />
           ) : (
             <a href={asset.fileHref} download className={CTA}>

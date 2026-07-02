@@ -177,9 +177,9 @@ export const VIDEOS: Record<string, VideoAsset> = {
   'testimonial-allyson-rose': video('testimonial-allyson-rose', 'Allyson Rose — participant testimonial'),
   'testimonial-alvina-gakhokidze': video('testimonial-alvina-gakhokidze', 'Alvina Gakhokidze — participant & mentor'),
   'testimonial-jeremiah-dibley': video('testimonial-jeremiah-dibley', 'Jeremiah Dibley — teacher (MVI_9290)'),
-  'testimonial-willcox-teachers': video('testimonial-willcox-teachers', 'Willcox Teachers — educator testimonial'),
+  'testimonial-willcox-teachers': video('testimonial-willcox-teachers', 'Maureen Lancaster & Praveen Payyadakathu — Willcox Unified School District'),
   'testimonial-apoorva-somani': video('testimonial-apoorva-somani', 'Apoorva Somani — red-team mentor (MVI_9316)'),
-  'testimonial-sepp': video('testimonial-sepp', 'Sepp — regional program manager'),
+  'testimonial-sepp': video('testimonial-sepp', 'Joseph “Sepp” Sprietsma — College Career Pathways'),
   'testimonial-teacher': video('testimonial-teacher', 'Teacher — English & life skills in 24 hours'),
   'testimonial-tom-wilson': video('testimonial-tom-wilson', 'Tom Wilson — educator testimonial'),
 }
@@ -355,7 +355,11 @@ export function flagMissing(kind: string, id: string): void {
   }
 }
 
-/** srcset/sizes helper for responsive photos. */
+/** srcset/sizes helper for responsive photos. The JPEG *fallback* is capped at
+ *  1200w so every fallback file stays within the §4b budget (the 1920 JPEG runs
+ *  300–600KB); AVIF — what virtually every browser receives — still serves all
+ *  widths at ~180KB, so large screens lose no quality. */
 export function photoSrcSet(p: PhotoAsset, ext: 'avif' | 'webp' | 'jpg' = 'webp'): string {
-  return (p.widths ?? PHOTO_WIDTHS).map((w) => `${p.src}-${w}.${ext} ${w}w`).join(', ')
+  const widths = (p.widths ?? PHOTO_WIDTHS).filter((w) => ext !== 'jpg' || w <= 1200)
+  return widths.map((w) => `${p.src}-${w}.${ext} ${w}w`).join(', ')
 }

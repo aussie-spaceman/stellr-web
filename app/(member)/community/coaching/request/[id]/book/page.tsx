@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
 import { getRequestById } from '@/lib/coaching-requests'
+import { getAvailability } from '@/lib/sessions'
 import { getAcademyDiscountPercent, discountCents } from '@/lib/academy-discount'
 
 export const metadata = { title: 'Coaching · Book your session' }
@@ -23,6 +24,14 @@ export default async function CoachingBookPage({ params }: { params: Promise<{ i
 
   const isPaid = req.eligibility === 'paid'
   const priceLabel = isPaid ? usd(discountCents(SESSION_PRICE_CENTS, await getAcademyDiscountPercent(member.activeTierIds))) : null
+
+  // Offer the coach's availability windows as concrete slots to pick from (with a
+  // free-time fallback in the form). Coaching or both-type windows only.
+  const windows = req.coachId
+    ? (await getAvailability(req.coachId))
+        .filter((w) => w.session_type === 'coaching' || w.session_type === 'both')
+        .map((w) => ({ weekday: w.weekday, startMinute: w.start_minute, endMinute: w.end_minute }))
+    : []
 
   // Lazy import to keep the form a client island.
   const { CoachingBookForm } = await import('@/components/community/coaching/CoachingBookForm')
@@ -49,7 +58,7 @@ export default async function CoachingBookPage({ params }: { params: Promise<{ i
       </header>
 
       <div className="rounded-panel border border-line bg-white p-6 shadow-card-lift">
-        <CoachingBookForm requestId={id} isPaid={isPaid} priceLabel={priceLabel} />
+        <CoachingBookForm requestId={id} isPaid={isPaid} priceLabel={priceLabel} windows={windows} />
       </div>
     </div>
   )

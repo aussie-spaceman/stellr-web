@@ -20,7 +20,15 @@ const ELIGIBILITY_OPTIONS: { value: CoachingEligibility; label: string }[] = [
 
 const fmtDate = (iso: string) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
 
-export function CoachingRequestQueue({ requests, coaches }: { requests: CoachingRequest[]; coaches: CoachOption[] }) {
+export function CoachingRequestQueue({
+  requests,
+  coaches,
+  suggestions = {},
+}: {
+  requests: CoachingRequest[]
+  coaches: CoachOption[]
+  suggestions?: Record<string, CoachingEligibility>
+}) {
   if (requests.length === 0) {
     return (
       <div className="rounded-card border border-dashed border-line bg-white py-14 text-center text-sm text-content-muted">
@@ -31,16 +39,16 @@ export function CoachingRequestQueue({ requests, coaches }: { requests: Coaching
   return (
     <div className="space-y-3">
       {requests.map((r) => (
-        <RequestRow key={r.id} req={r} coaches={coaches} />
+        <RequestRow key={r.id} req={r} coaches={coaches} suggested={suggestions[r.memberId]} />
       ))}
     </div>
   )
 }
 
-function RequestRow({ req, coaches }: { req: CoachingRequest; coaches: CoachOption[] }) {
+function RequestRow({ req, coaches, suggested }: { req: CoachingRequest; coaches: CoachOption[]; suggested?: CoachingEligibility }) {
   const router = useRouter()
   const [coachId, setCoachId] = useState('')
-  const [eligibility, setEligibility] = useState<CoachingEligibility | ''>('')
+  const [eligibility, setEligibility] = useState<CoachingEligibility | ''>(suggested ?? '')
   const [busy, setBusy] = useState<null | 'match' | 'decline'>(null)
   const [error, setError] = useState<string | null>(null)
   const meta = STATUS_META[req.status]
@@ -145,7 +153,7 @@ function RequestRow({ req, coaches }: { req: CoachingRequest; coaches: CoachOpti
             </select>
           </label>
           <label className="flex flex-col gap-1 text-[12px] font-semibold text-content-secondary">
-            Eligibility
+            <span>Eligibility{suggested && <span className="ml-1 font-normal text-content-muted">· suggested: {suggested}</span>}</span>
             <select
               value={eligibility}
               onChange={(e) => setEligibility(e.target.value as CoachingEligibility)}

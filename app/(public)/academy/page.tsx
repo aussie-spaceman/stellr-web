@@ -105,7 +105,7 @@ const formats = [
     leadRest: 'Private sessions with a professional matched to your goals.',
     format: 'Private 1:1 sessions',
     guidance: 'One-on-one, tailored',
-    accessLabel: 'Awarded or purchase',
+    accessLabel: 'Request, earn or buy',
     accessText: 'text-[#0E8C99]',
     accessBg: 'bg-[#E3F6F8]',
     button: { label: 'Request a coaching session', href: '/academy/coaching/request', variant: 'softBlue' as const },

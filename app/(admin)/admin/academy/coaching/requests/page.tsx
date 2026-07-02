@@ -1,4 +1,4 @@
-import { listRequests, listCoachOptions, countPendingRequests } from '@/lib/coaching-requests'
+import { listRequests, listCoachOptions, countPendingRequests, suggestEligibilities } from '@/lib/coaching-requests'
 import { AdminCoachingNav } from '@/components/admin/coaching/AdminCoachingNav'
 import { CoachingRequestQueue } from '@/components/admin/coaching/CoachingRequestQueue'
 
@@ -10,6 +10,9 @@ export default async function AdminCoachingRequestsPage() {
     listCoachOptions(),
     countPendingRequests(),
   ])
+  // Pre-fill the eligibility picker for pending rows from the member's live
+  // coaching balance (included if any free/purchased sessions remain, else paid).
+  const suggestions = await suggestEligibilities(requests.filter((r) => r.status === 'pending').map((r) => r.memberId))
 
   return (
     <div className="flex gap-8">
@@ -25,7 +28,7 @@ export default async function AdminCoachingRequestsPage() {
           Members request coaching from the Academy. Match each one with a coach and set their eligibility —
           the member then books a slot (paying only when their eligibility is <em>paid</em>).
         </p>
-        <CoachingRequestQueue requests={requests} coaches={coaches} />
+        <CoachingRequestQueue requests={requests} coaches={coaches} suggestions={suggestions} />
       </div>
     </div>
   )

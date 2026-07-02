@@ -11,6 +11,13 @@ export type ValueIcon = 'team' | 'launch' | 'award' | 'document' | 'idea' | 'glo
 export interface GetPath { kind: GetKind; text: string }
 export interface Cell { tone: 'included' | 'discount' | 'full'; label: string; sub?: string }
 
+/**
+ * Academy sessions granted at no extra cost on a tier (school/college only).
+ * `null`/omitted = nothing included → the tier's Academy perk block renders in
+ * its discount-only (academy % > 0) or full-price (0%) state instead.
+ */
+export interface AcademyIncluded { count: number; duration: string; kind: 'mentoring' | 'coaching' }
+
 export interface Tier {
   id: TierId
   name: string
@@ -20,6 +27,8 @@ export interface Tier {
   free?: boolean
   store: string
   academy: string
+  /** Academy sessions included at no extra cost (school/college redesign card). */
+  academyIncluded?: AcademyIncluded | null
   /** Educator facts-block mentoring line (waterfall only). */
   mentor?: string
   revert?: string | null
@@ -58,21 +67,23 @@ export const AUDIENCES: Record<AudienceId, Audience> = {
     tiers: [
       {
         id: 'explorer', name: 'Explorer', role: 'Everyone starts here', priceNote: 'always', free: true,
-        store: '5%', academy: '0%', revert: null,
+        store: '5%', academy: '0%', academyIncluded: null, revert: null,
         get: [{ kind: 'free', text: 'Free for every high-school student' }],
         granted: ['Dedicated Explorer community space', 'Competition & campaign entry', 'Member newsletter & webinar invites', '5% off the store'],
         cells: [ev(), full('Full price'), full('Full price'), disc('5% off'), full('Pay per session', PAY_PER_SESSION)],
       },
       {
         id: 'pathfinder', name: 'Pathfinder', role: 'Competition participant', priceNote: 'per year',
-        store: '10%', academy: '15%', revert: 'If granted via competition: reverts to Explorer after 12 months.',
+        store: '10%', academy: '15%', academyIncluded: { count: 4, duration: '30 min', kind: 'mentoring' },
+        revert: 'If granted via competition: reverts to Explorer after 12 months.',
         get: [{ kind: 'buy', text: 'Buy a Pathfinder membership' }, { kind: 'earn', text: 'Auto-assigned for 12 months to competition participants' }],
         granted: ['Everything in Explorer', 'Dedicated Pathfinder community space', 'Mentoring — 4 × 30-min cohort included', '15% off academy · 10% off store'],
         cells: [ev(), inc('Included', '4 × 30-min cohort'), disc('15% off'), disc('10% off'), disc('15% off')],
       },
       {
         id: 'scholar', name: 'Scholar', role: 'Competition award winner', priceNote: 'per year',
-        store: '10%', academy: '25%', revert: 'If granted via award: reverts to Explorer after 12 months.',
+        store: '10%', academy: '25%', academyIncluded: { count: 3, duration: '30 min', kind: 'coaching' },
+        revert: 'If granted via award: reverts to Explorer after 12 months.',
         get: [{ kind: 'buy', text: 'Buy a Scholar membership' }, { kind: 'earn', text: 'Awarded for 12 months to competition winners' }],
         granted: ['Everything in Pathfinder (including group mentoring)', 'Dedicated Scholar community space', 'Coaching — 3 × 30-min sessions included', '25% off academy · 10% off store'],
         cells: [ev(), inc('Included', 'via Pathfinder'), inc('Included', '3 × 30-min'), disc('10% off'), disc('25% off')],
@@ -87,21 +98,23 @@ export const AUDIENCES: Record<AudienceId, Audience> = {
     tiers: [
       {
         id: 'alumni', name: 'Alumni', role: 'Everyone starts here', priceNote: 'always', free: true,
-        store: '5%', academy: '10%', revert: null,
+        store: '5%', academy: '10%', academyIncluded: null, revert: null,
         get: [{ kind: 'free', text: 'Free for every college & university student' }, { kind: 'earn', text: 'School members roll up to Alumni at graduation' }],
         granted: ['Dedicated Alumni community space', 'Competition & campaign entry', 'Member newsletter & webinar invites', '10% off academy · 5% off store'],
         cells: [ev(), disc('10% off'), disc('10% off'), disc('5% off'), disc('10% off')],
       },
       {
         id: 'contributor', name: 'Contributor', role: 'Volunteer', priceNote: 'per year',
-        store: '10%', academy: '15%', revert: 'If granted via volunteering: reverts to Alumni after 12 months.',
+        store: '10%', academy: '15%', academyIncluded: { count: 8, duration: '30 min', kind: 'mentoring' },
+        revert: 'If granted via volunteering: reverts to Alumni after 12 months.',
         get: [{ kind: 'buy', text: 'Buy a Contributor membership' }, { kind: 'earn', text: 'Unlocked by volunteering (Stellr admin upgrade)' }],
         granted: ['Everything in Alumni', 'Dedicated Contributor community space', 'Mentoring — 8 × 30-min cohort included', '15% off academy · 10% off store'],
         cells: [ev(), inc('Included', '8 × 30-min cohort'), disc('15% off'), disc('10% off'), disc('15% off')],
       },
       {
         id: 'counselor', name: 'Counselor', role: 'Most active volunteer', priceNote: 'per year',
-        store: '10%', academy: '25%', revert: 'If granted via volunteering: reverts to Alumni after 12 months.',
+        store: '10%', academy: '25%', academyIncluded: { count: 1, duration: '60 min', kind: 'coaching' },
+        revert: 'If granted via volunteering: reverts to Alumni after 12 months.',
         get: [{ kind: 'buy', text: 'Buy a Counselor membership' }, { kind: 'earn', text: 'Unlocked through ongoing volunteering (admin upgrade)' }],
         granted: ['Everything in Contributor (including group mentoring)', 'Dedicated Counselor community space', 'Coaching — 1 × 60-min session included', '25% off academy · 10% off store'],
         cells: [ev(), inc('Included', 'via Contributor'), inc('Included', '1 × 60-min'), disc('10% off'), disc('25% off')],
@@ -130,7 +143,7 @@ export const AUDIENCES: Record<AudienceId, Audience> = {
         get: [{ kind: 'buy', text: 'Buy an Innovator membership' }], granted: [], cells: [],
       },
       {
-        id: 'trailblazer', name: 'Trailblazer', role: 'For teachers who excel', priceNote: 'per year',
+        id: 'trailblazer', name: 'Trailblazer', role: 'Career & Technical Education (CTE)', priceNote: 'per year',
         store: '10%', academy: '10%', mentor: 'Group mentoring included — 8 × 30-min sessions each semester. Recorded for ongoing reference', revert: null,
         get: [{ kind: 'buy', text: 'Buy a Trailblazer membership' }], granted: [], cells: [],
       },

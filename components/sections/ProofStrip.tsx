@@ -15,12 +15,15 @@ export function ProofStrip({
   photos,
   heading,
   columns = 5,
+  captions = true,
   className = '',
 }: {
   photos: PhotoAsset[]
   heading?: string
   /** Desktop column count — use 3 so a 3-photo strip fills (centres on) the row. */
   columns?: 3 | 5
+  /** Show the per-photo caption + credit line under each image. */
+  captions?: boolean
   className?: string
 }) {
   const [open, setOpen] = useState(false)
@@ -97,9 +100,13 @@ export function ProofStrip({
                 sizes="(max-width: 640px) 78vw, (max-width: 1024px) 33vw, 220px"
                 className="aspect-[4/3] transition-transform group-hover:-translate-y-0.5"
               />
-              <p className="mt-2 text-[13px] leading-snug text-content-secondary">{p.alt}</p>
-              {p.credit && (
-                <p className="text-[11px] text-content-faint">Credit: {p.credit}</p>
+              {captions && (
+                <>
+                  <p className="mt-2 text-[13px] leading-snug text-content-secondary">{p.alt}</p>
+                  {p.credit && (
+                    <p className="text-[11px] text-content-faint">Credit: {p.credit}</p>
+                  )}
+                </>
               )}
             </button>
           </li>

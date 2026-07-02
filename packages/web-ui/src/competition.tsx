@@ -118,6 +118,8 @@ export type TierCardProps = {
   accessNote?: string
   /** Uppercase eyebrow above the name in select mode, e.g. "Competition participant". */
   role?: string
+  /** Colour for the role eyebrow (select mode); defaults to grey when omitted. */
+  roleColor?: string
   inheritsFrom?: string
   badge?: string
   featured?: boolean
@@ -134,12 +136,17 @@ export type TierCardProps = {
   cta?: { label: string; href?: string; onClick?: () => void; color?: string }
 }
 function SelectBody({
-  role, name, price, priceNote, resolvedShade,
-}: { role?: string; name: string; price: string; priceNote?: string; resolvedShade?: string }) {
+  role, roleColor, name, price, priceNote, resolvedShade,
+}: { role?: string; roleColor?: string; name: string; price: string; priceNote?: string; resolvedShade?: string }) {
   return (
     <>
       {role && (
-        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-content-faint leading-[1.3] min-h-[14px] mb-[7px]">{role}</p>
+        <p
+          className={cn('text-[11px] font-bold uppercase tracking-[0.08em] leading-[1.3] min-h-[14px] mb-[7px]', !roleColor && 'text-content-faint')}
+          style={roleColor ? { color: roleColor } : undefined}
+        >
+          {role}
+        </p>
       )}
       <p className="font-display font-semibold text-[20px] text-ink mb-[3px]">{name}</p>
       <p className="flex items-baseline gap-[5px]">
@@ -156,7 +163,7 @@ function SelectBody({
 }
 
 export function TierCard({
-  name, price, priceNote, accessNote, role, inheritsFrom, badge, featured, items,
+  name, price, priceNote, accessNote, role, roleColor, inheritsFrom, badge, featured, items,
   tier, shade, selected, onSelect, cta,
 }: TierCardProps) {
   const resolvedShade = shade ?? (tier ? tierShade(tier) : undefined)
@@ -208,11 +215,11 @@ export function TierCard({
               aria-pressed={selected}
               className="text-left cursor-pointer px-[18px] pt-[21px] pb-[15px]"
             >
-              <SelectBody role={role} name={name} price={price} priceNote={priceNote} resolvedShade={resolvedShade} />
+              <SelectBody role={role} roleColor={roleColor} name={name} price={price} priceNote={priceNote} resolvedShade={resolvedShade} />
             </button>
           ) : (
             <div className="px-[18px] pt-[21px] pb-[15px]">
-              <SelectBody role={role} name={name} price={price} priceNote={priceNote} resolvedShade={resolvedShade} />
+              <SelectBody role={role} roleColor={roleColor} name={name} price={price} priceNote={priceNote} resolvedShade={resolvedShade} />
             </div>
           )}
           {cta && (

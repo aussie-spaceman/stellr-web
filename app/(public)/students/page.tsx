@@ -171,19 +171,22 @@ export default function StudentsPage() {
               )
             })}
           </div>
+        </div>
+      </section>
 
-          <div className="bg-brand-blue-dark text-white rounded-2xl p-8 sm:p-10">
-            <p className="text-xl sm:text-2xl font-bold mb-6 max-w-xl">
-              &ldquo;A down-payment on your future as a professional.&rdquo;
-            </p>
-            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
-              {hsDownPayment.map((point) => (
-                <li key={point} className="flex gap-3">
-                  <Trophy size={18} className="text-brand-orange shrink-0 mt-0.5" />
-                  <span className="text-sm text-content-faint leading-relaxed">{point}</span>
-                </li>
-              ))}
-            </ul>
+      {/* ── Directly from a previous participant (moved above College) ─── */}
+      <section className="section-padding bg-white">
+        <div className="container-max max-w-5xl mx-auto">
+          <div className="grid gap-6 lg:grid-cols-[1fr_2fr] lg:items-center">
+            <PullQuoteWall
+              quotes={[QUOTES['mitra-sainsbury']]}
+              columns={1}
+              label="Directly From A Previous Participant"
+            />
+            <ProofStrip
+              photos={[PHOTOS['students-strip-1'], PHOTOS['students-strip-2']]}
+              captions={false}
+            />
           </div>
         </div>
       </section>
@@ -237,6 +240,20 @@ export default function StudentsPage() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Student video testimonials (moved above Parents) ──────────── */}
+      <section className="section-padding bg-white">
+        <div className="container-max max-w-5xl mx-auto">
+          <div className="grid gap-6 sm:grid-cols-2">
+            {[VIDEOS['testimonial-allyson-rose'], VIDEOS['testimonial-alvina-gakhokidze']].map((v) => (
+              <figure key={v.id}>
+                <VideoTestimonial src={v.src} poster={v.poster} captionsSrc={v.captions} title={v.title} />
+                <figcaption className="mt-3 text-sm font-semibold text-brand-blue-dark">{v.title}</figcaption>
+              </figure>
+            ))}
           </div>
         </div>
       </section>
@@ -309,27 +326,21 @@ export default function StudentsPage() {
         </div>
       </section>
 
-      {/* ── Testimonial ───────────────────────────────────────────────── */}
-      <section className="section-padding bg-brand-grey-light">
-        <div className="container-max max-w-5xl">
-          <div className="text-center">
-            <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">In their words</p>
-            <h2 className="text-3xl font-bold text-brand-blue-dark mb-8">Hear from Stellr students</h2>
-          </div>
-          <div className="grid gap-6 sm:grid-cols-2">
-            {[VIDEOS['testimonial-allyson-rose'], VIDEOS['testimonial-alvina-gakhokidze']].map((v) => (
-              <figure key={v.id}>
-                <VideoTestimonial src={v.src} poster={v.poster} captionsSrc={v.captions} title={v.title} />
-                <figcaption className="mt-3 text-sm font-semibold text-brand-blue-dark">{v.title}</figcaption>
-              </figure>
-            ))}
-          </div>
-          <div className="mt-10 grid gap-6 lg:grid-cols-[1fr_2fr] lg:items-start">
-            <PullQuoteWall quotes={[QUOTES['mitra-sainsbury']]} columns={1} />
-            <ProofStrip
-              heading="Inside the competition"
-              photos={[PHOTOS['students-strip-1'], PHOTOS['students-strip-2']]}
-            />
+      {/* ── "A down-payment on your future" (moved under Parents) ──────── */}
+      <section className="section-padding bg-white">
+        <div className="container-max">
+          <div className="bg-brand-blue-dark text-white rounded-2xl p-8 sm:p-10">
+            <p className="text-xl sm:text-2xl font-bold mb-6 max-w-xl">
+              &ldquo;A down-payment on your future as a professional.&rdquo;
+            </p>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+              {hsDownPayment.map((point) => (
+                <li key={point} className="flex gap-3">
+                  <Trophy size={18} className="text-brand-orange shrink-0 mt-0.5" />
+                  <span className="text-sm text-content-faint leading-relaxed">{point}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       </section>

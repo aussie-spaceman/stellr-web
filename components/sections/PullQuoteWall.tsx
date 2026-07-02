@@ -16,7 +16,7 @@ const VOICE: Record<Audience, { color: string; tint: string; label: string }> = 
   parent: { color: '#E0A23A', tint: 'rgba(224,162,58,.09)', label: 'Parent' },
 }
 
-function QuoteCard({ quote }: { quote: QuoteAsset }) {
+function QuoteCard({ quote, labelOverride }: { quote: QuoteAsset; labelOverride?: string }) {
   const voice = VOICE[quote.audience]
   return (
     <figure
@@ -27,7 +27,7 @@ function QuoteCard({ quote }: { quote: QuoteAsset }) {
         className="mb-3 inline-flex w-fit items-center rounded-pill px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[0.06em]"
         style={{ color: voice.color, background: voice.tint }}
       >
-        {voice.label}
+        {labelOverride ?? voice.label}
       </span>
       <blockquote className="flex-1 text-[15px] leading-relaxed text-content-secondary">
         “{quote.text}”
@@ -52,11 +52,14 @@ function QuoteCard({ quote }: { quote: QuoteAsset }) {
 export function PullQuoteWall({
   quotes,
   columns = 3,
+  label,
   className = '',
 }: {
   quotes: QuoteAsset[]
   /** Max columns on desktop (1–3). */
   columns?: 1 | 2 | 3
+  /** Override the voice label pill text (e.g. "Directly From A Previous Participant"). */
+  label?: string
   className?: string
 }) {
   if (quotes.length === 0) return null
@@ -64,7 +67,7 @@ export function PullQuoteWall({
   return (
     <div className={`grid grid-cols-1 gap-5 ${cols} ${className}`}>
       {quotes.map((q) => (
-        <QuoteCard key={q.id} quote={q} />
+        <QuoteCard key={q.id} quote={q} labelOverride={label} />
       ))}
     </div>
   )

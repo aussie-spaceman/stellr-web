@@ -15,7 +15,7 @@ import { supabaseServer } from '@/lib/supabase'
 import type { CommunityMember } from '@/lib/community'
 import { bookCoaching, type BookResult } from '@/lib/sessions'
 import { getCoachingAllowance } from '@/lib/coaching'
-import { grantAdhocEntitlement } from '@/lib/entitlements'
+import { grantAdhocEntitlement, ensureMemberGrants, getKindBalanceSplit } from '@/lib/entitlements'
 import { notifyMember } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
 
@@ -189,6 +189,24 @@ export async function listCoachOptions(): Promise<CoachOption[]> {
 export async function suggestEligibility(member: CommunityMember): Promise<CoachingEligibility> {
   const allowance = await getCoachingAllowance(member)
   return allowance.remaining + allowance.extraCredits > 0 ? 'included' : 'paid'
+}
+
+/** Same suggestion keyed by member id (for the admin queue, which has no full
+ *  CommunityMember per row). Materialises tier grants first so the ledger balance
+ *  is accurate, then reads the combined coaching_session pool. */
+export async function suggestEligibilityByMemberId(memberId: string): Promise<CoachingEligibility> {
+  await ensureMemberGrants(memberId)
+  const split = await getKindBalanceSplit(memberId, 'coaching_session')
+  return split.granted.remaining + split.purchasedRemaining > 0 ? 'included' : 'paid'
+}
+
+/** Suggested eligibilities for a set of members, resolved concurrently. */
+export async function suggestEligibilities(memberIds: string[]): Promise<Record<string, CoachingEligibility>> {
+  const unique = [...new Set(memberIds)]
+  const entries = await Promise.all(
+    unique.map(async (id) => [id, await suggestEligibilityByMemberId(id)] as const),
+  )
+  return Object.fromEntries(entries)
 }
 
 // ─── Writes ──────────────────────────────────────────────────────────────────

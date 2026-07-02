@@ -57,6 +57,12 @@ export interface StellarEvent {
   registrationOpen?: boolean
   registrationOpenDate?: string
   registrationCloseDate?: string
+  // Campaign-only fields (activityType === 'campaign')
+  activityType?: 'live_event' | 'campaign'
+  season?: 'fall' | 'spring'
+  campaignYear?: number
+  deadline?: string
+  deliverable?: string
 }
 
 // ── GROQ Queries ──────────────────────────────────────────────────────────────
@@ -94,8 +100,8 @@ export async function getAllCampaigns() {
   // which matches chronological order within a year: Spring Jan–Apr, Fall Aug–Dec).
   return client.fetch(`
     *[_type == "event" && activityType == "campaign"] | order(campaignYear asc, season desc) {
-      _id, title, slug, type, season, campaignYear,
-      registrationOpen, tagline, image
+      _id, title, slug, type, season, campaignYear, deadline, deliverable,
+      activityType, registrationOpen, tagline, image
     }
   `)
 }
@@ -105,6 +111,7 @@ export async function getEventBySlug(slug: string) {
   return client.fetch(
     `*[_type == "event" && slug.current == $slug][0] {
       _id, title, slug, type, gradeLevel, date, endDate, activityType, setting, term,
+      season, campaignYear, deadline, deliverable,
       venue, city, state, tagline, description, image,
       registrationOpen, registrationOpenDate, registrationCloseDate,
       capacity, eligibility, stripePriceId, schedule[]{ time, label }

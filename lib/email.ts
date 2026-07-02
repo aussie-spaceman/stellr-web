@@ -730,3 +730,107 @@ export function communityAnnouncementEmail({
   const text = `Hi ${recipientFirstName},\n\nNew announcement: ${title}\n\n${body}\n\nRead it here: ${url}\n\n— Stellr Community`
   return { subject, html, text }
 }
+
+// ── Campaign Registrations ───────────────────────────────────────────────────
+
+// (1) Sent when a group is registered for a Campaign. Campaigns are free — there
+// is no payment step, so this simply confirms the registration and the deadline.
+export function campaignRegistrationEmail({
+  contactFirstName, groupName, campaignTitle, seasonLabel, deadlineLabel, workspaceUrl,
+}: {
+  contactFirstName: string
+  groupName: string
+  campaignTitle: string
+  seasonLabel: string
+  deadlineLabel: string
+  workspaceUrl: string
+}) {
+  const subject = `You're registered — ${campaignTitle}`
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#1e3a5f;margin-top:0">You're registered</h2>
+        <p>Hi ${contactFirstName},</p>
+        <p><strong>${groupName}</strong> is registered for <strong>${campaignTitle}</strong>. Campaigns are asynchronous and included with your membership — there's no payment and no fixed event date. Your group works at its own pace and submits a proposal before the deadline.</p>
+        <table style="border-collapse:collapse;width:100%;margin:24px 0;background:#f9fafb;border-radius:8px">
+          <tr><td style="padding:12px 16px;font-weight:600;color:#374151;width:40%">Campaign</td><td style="padding:12px 16px">${campaignTitle}</td></tr>
+          <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">Group</td><td style="padding:12px 16px">${groupName}</td></tr>
+          <tr><td style="padding:12px 16px;font-weight:600;color:#374151">Season</td><td style="padding:12px 16px">${seasonLabel}</td></tr>
+          <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">Proposal deadline</td><td style="padding:12px 16px">${deadlineLabel}</td></tr>
+        </table>
+        <p>Proposals are due <strong>${deadlineLabel}</strong>. You'll find the brief, workshop material and your team workspace in the app.</p>
+        <a href="${workspaceUrl}" style="display:inline-block;margin:8px 0 4px;padding:11px 22px;background:#3C6DF6;color:#fff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">Open your campaign</a>
+        <p style="color:#6b7280;font-size:14px;margin-top:24px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `Hi ${contactFirstName},\n\n${groupName} is registered for ${campaignTitle}. Campaigns are free with your membership — no payment, no fixed date.\n\nSeason: ${seasonLabel}\nProposal deadline: ${deadlineLabel}\n\nOpen your campaign: ${workspaceUrl}\n\n— The Stellr team`
+  return { subject, html, text }
+}
+
+// (2) Sent when a group submits its proposal. Copy mirrors the in-app preview.
+export function campaignProposalReceivedEmail({
+  contactFirstName, campaignTitle, fileName, deadlineLabel,
+}: {
+  contactFirstName: string
+  campaignTitle: string
+  fileName: string
+  deadlineLabel: string
+}) {
+  const subject = `Proposal received — ${campaignTitle}`
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#1e3a5f;margin-top:0">Proposal received</h2>
+        <p>Hi ${contactFirstName},</p>
+        <p>We've received your team's proposal (<strong>${fileName}</strong>). Judging opens after the ${deadlineLabel} deadline and results follow within three weeks. You can replace your submission any time before then from the app.</p>
+        <p style="color:#374151">— The Stellr team</p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `Hi ${contactFirstName},\n\nWe've received your team's proposal (${fileName}). Judging opens after the ${deadlineLabel} deadline and results follow within three weeks. You can replace your submission any time before then from the app.\n\n— The Stellr team`
+  return { subject, html, text }
+}
+
+// (3) Admin bulk email to everyone registered in a Campaign. The subject and
+// message are authored in the admin composer; both are HTML-escaped here.
+export function campaignBroadcastEmail({
+  subject, body, campaignTitle,
+}: {
+  subject: string
+  body: string
+  campaignTitle: string
+}) {
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const bodyHtml = esc(body).replace(/\n/g, '<br/>')
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;padding:24px 32px">
+        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
+      </div>
+      <div style="padding:32px">
+        <p style="color:#6b7280;font-size:13px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px">${esc(campaignTitle)}</p>
+        <div style="color:#374151;font-size:15px;line-height:1.6">${bodyHtml}</div>
+        <p style="color:#6b7280;font-size:14px;margin-top:24px">Reply to this email if you have any questions.</p>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
+        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
+      </div>
+    </div>
+  `
+  const text = `${body}\n\n— Stellr Education (${campaignTitle})`
+  return { subject, html, text }
+}

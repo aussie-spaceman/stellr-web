@@ -7,6 +7,8 @@ import { getEventBySlug, urlFor, wmSrc, type StellarEvent } from '@/lib/sanity'
 import { formatDateRange, formatDate, registrationStatus } from '@/lib/utils'
 import { PortableText } from 'next-sanity'
 import type { PortableTextBlock } from '@portabletext/types'
+import { CampaignDetail } from '@/components/campaigns/CampaignDetail'
+import { getMemberCampaignContext } from '@/lib/campaign-registrations'
 
 export const revalidate = 3600
 
@@ -86,6 +88,18 @@ export default async function EventDetailPage({ params }: PageProps) {
   const { slug } = await params
   const event: EventData | null = await getEventBySlug(slug).catch(() => null)
   if (!event) notFound()
+
+  // Campaigns render a dedicated, membership-aware detail view (no ticketing).
+  if (event.activityType === 'campaign') {
+    const ctx = await getMemberCampaignContext()
+    return (
+      <CampaignDetail
+        campaign={event}
+        membership={ctx.membership}
+        registered={ctx.registeredSlugs.has(slug)}
+      />
+    )
+  }
 
   const status = registrationStatus(event.registrationOpenDate, event.registrationCloseDate)
   const { label: statusLabel, className: statusClass } = statusConfig[status]

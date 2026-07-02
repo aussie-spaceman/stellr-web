@@ -9,6 +9,7 @@ import { getHomeFeed } from '@/lib/community-feed'
 import { Avatar } from '@/components/ui/Avatar'
 import { ProgressRing } from '@/components/ui/ProgressRing'
 import { WelcomeBanner } from '@/components/community/WelcomeBanner'
+import { DashboardCampaigns } from '@/components/campaigns/DashboardCampaigns'
 
 export const metadata = { title: 'Home' }
 
@@ -84,6 +85,11 @@ export default async function HomePage() {
           {firstName} <span className="text-star-gold">✦</span>
         </h1>
       </header>
+
+      {/* Campaign registrations: registered campaigns, Educator Commons, register-another, gated material */}
+      <div className="mb-8">
+        <DashboardCampaigns />
+      </div>
 
       {/* Next-event hero — colour-coded by pathway: campaigns amber, competitions primary blue */}
       {nextEvt ? (

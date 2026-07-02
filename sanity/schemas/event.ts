@@ -96,6 +96,34 @@ export const event = {
         }),
     },
 
+    // ── Campaign-only: Proposal deadline & deliverable ────────────────────────
+    // Campaigns are asynchronous — groups work at their own pace and submit a
+    // deliverable before this hard deadline. Unlike the season window (which is
+    // derived), the deadline is authored explicitly so it can fall wherever the
+    // programme sets it (e.g. Spring 2026 proposals due 15 May 2026).
+    {
+      name: 'deadline',
+      title: 'Proposal Deadline',
+      type: 'date',
+      description: 'The date the student proposal is due. Shown as the deadline banner across the site and app.',
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType !== 'campaign',
+      validation: (Rule: { custom: (fn: (v: unknown, ctx: { document?: Record<string, unknown> }) => true | string) => unknown }) =>
+        Rule.custom((value, context) => {
+          if (context.document?.activityType === 'campaign' && !value) return 'A proposal deadline is required for campaigns'
+          return true
+        }),
+    },
+    {
+      name: 'deliverable',
+      title: 'Deliverable',
+      type: 'string',
+      description: 'What each group submits — e.g. "A written proposal". Defaults to a proposal.',
+      initialValue: 'A written proposal',
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType !== 'campaign',
+    },
+
     // ── Live Event-only: Dates ────────────────────────────────────────────────
     {
       name: 'date',

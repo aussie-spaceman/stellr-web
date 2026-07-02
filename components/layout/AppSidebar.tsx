@@ -60,7 +60,12 @@ export function AppSidebar({
   const pathname = usePathname() ?? ''
 
   const isActive = (href: string) =>
-    href === '/home' ? pathname === '/home' : pathname.startsWith(href)
+    href === '/home'
+      ? pathname === '/home'
+      : // Competitions (the /events board) also owns the in-app /campaigns pages.
+        href === '/events'
+        ? pathname.startsWith('/events') || pathname.startsWith('/campaigns')
+        : pathname.startsWith(href)
 
   const spaceActive = (href: string) => {
     if (href === '/community') {

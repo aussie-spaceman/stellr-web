@@ -17,6 +17,7 @@
     "watermark:videos": "tsx scripts/watermark-videos.ts",
     "watermark:all": "tsx scripts/watermark-pdfs.ts && tsx scripts/watermark-media.ts && tsx scripts/watermark-videos.ts",
     "watermark:check": "tsx scripts/check-watermarks.ts",
+    "watermark:worker": "tsx scripts/watermark-worker.ts",
     "seed": "tsx scripts/seed-events.ts",
     "backfill:members": "tsx scripts/backfill-members.ts",
     "set-admin": "tsx scripts/set-admin.ts",

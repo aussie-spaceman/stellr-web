@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
+import { enqueueVideoWatermark } from '@/lib/watermark/video-queue'
 
 // Recording offload (FR-COM-11/12 sessions + FR-COM-10 live training lessons).
 //
@@ -88,6 +89,11 @@ async function offload(target: Target, recordingUrl: string): Promise<boolean> {
       .from(table)
       .update({ recording_path: path, recording_status: 'available' })
       .eq('id', target.id)
+
+    // Queue the recording for the "© Stellr Education" watermark (burned in by
+    // scripts/watermark-worker.ts — ffmpeg can't run here). The worker overwrites
+    // this same path in place once it processes the job.
+    await enqueueVideoWatermark(db, RESOURCES_BUCKET, path, 'recording')
     return true
   } catch (e) {
     console.error('[recording] offload failed:', e)

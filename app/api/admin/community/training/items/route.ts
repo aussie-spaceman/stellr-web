@@ -2,6 +2,8 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
+import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
+import { enqueueVideoWatermark } from '@/lib/watermark/video-queue'
 
 // Video files can be large — override the default 4 MB Next.js body limit.
 export const maxRequestBodySize = '500mb'
@@ -64,9 +66,19 @@ export async function POST(req: Request) {
   if (needsFile && file) {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     storagePath = `training/${Date.now()}-${safeName}`
+    // PDF documents are watermarked inline; videos are queued for the ffmpeg
+    // worker (can't run in this serverless route).
+    let payload: File | Uint8Array = file
+    if (contentKind === 'document' && isPdf(file.name, file.type)) {
+      try {
+        payload = new Uint8Array(await stampPdfBytes(new Uint8Array(await file.arrayBuffer())))
+      } catch (err) {
+        console.error('[training] item pdf watermark failed, storing original:', err)
+      }
+    }
     const { error: uploadError } = await db.storage
       .from(RESOURCES_BUCKET)
-      .upload(storagePath, file, {
+      .upload(storagePath, payload, {
         contentType: file.type || 'application/octet-stream',
         upsert: false,
       })
@@ -74,6 +86,7 @@ export async function POST(req: Request) {
       console.error('[training] item upload error:', uploadError)
       return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
     }
+    if (contentKind === 'video') await enqueueVideoWatermark(db, RESOURCES_BUCKET, storagePath, 'training')
   }
 
   const { data, error } = await db
@@ -147,15 +160,24 @@ export async function PATCH(req: Request) {
       if (file) {
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
         const storagePath = `training/${Date.now()}-${safeName}`
+        let payload: File | Uint8Array = file
+        if (contentKind === 'document' && isPdf(file.name, file.type)) {
+          try {
+            payload = new Uint8Array(await stampPdfBytes(new Uint8Array(await file.arrayBuffer())))
+          } catch (err) {
+            console.error('[training] item pdf watermark failed, storing original:', err)
+          }
+        }
         const { error: upErr } = await db.storage
           .from(RESOURCES_BUCKET)
-          .upload(storagePath, file, { contentType: file.type || 'application/octet-stream', upsert: false })
+          .upload(storagePath, payload, { contentType: file.type || 'application/octet-stream', upsert: false })
         if (upErr) {
           console.error('[training] item re-upload error:', upErr)
           return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
         }
         patch.storage_path = storagePath
         patch.external_url = null
+        if (contentKind === 'video') await enqueueVideoWatermark(db, RESOURCES_BUCKET, storagePath, 'training')
       }
       // no file provided → keep existing storage_path (metadata-only edit)
     } else if (needsUrl) {

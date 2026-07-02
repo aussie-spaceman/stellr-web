@@ -80,14 +80,19 @@ export default async function HomePage() {
       {/* Header */}
       <header className="mb-6">
         <p className="font-subheading text-[15px] font-medium text-brand-muted-soft">Welcome back,</p>
-        <h1 className="font-display text-display text-brand-blue-dark">{firstName} 👋</h1>
+        <h1 className="font-display text-display text-brand-blue-dark">
+          {firstName} <span className="text-star-gold">✦</span>
+        </h1>
       </header>
 
-      {/* Next-event hero */}
+      {/* Next-event hero — colour-coded by pathway: campaigns amber, competitions primary blue */}
       {nextEvt ? (
         <div
-          className="relative mb-[18px] overflow-hidden rounded-card-lg p-6 text-white"
-          style={{ background: 'linear-gradient(115deg,#E0922F,#C2722A)' }}
+          className={`relative mb-[18px] overflow-hidden rounded-card-lg p-6 text-white ${
+            nextEvt.activityType === 'campaign'
+              ? 'bg-[linear-gradient(115deg,var(--color-pathway-amber),var(--color-pathway-amber-deep))]'
+              : 'bg-[linear-gradient(115deg,var(--color-primary),var(--color-primary-deep))]'
+          }`}
         >
           <Image
             src="/images/logo-icon.svg"
@@ -104,14 +109,14 @@ export default async function HomePage() {
               <span className="font-subheading text-[12.5px] font-semibold">in {daysUntil(nextEvt.date!)} days</span>
             </div>
             <h2 className="font-heading text-[27px] uppercase">{nextEvt.title}</h2>
-            <p className="mb-4 text-[13.5px] text-orange-100">
+            <p className="mb-4 text-[13.5px] text-white/85">
               {fmtDate(nextEvt.date!)}
               {venue ? ` · ${venue}` : ''}
             </p>
             <div className="flex flex-wrap items-center gap-4">
               {prepTotal > 0 && (
                 <div className="min-w-[200px] flex-1 rounded-xl bg-white/15 p-3">
-                  <p className="mb-1.5 font-subheading text-xs font-medium text-orange-100">
+                  <p className="mb-1.5 font-subheading text-xs font-medium text-white/85">
                     Prep checklist · {prepDone} of {prepTotal} done
                   </p>
                   <div className="h-[7px] overflow-hidden rounded bg-white/25">
@@ -121,7 +126,9 @@ export default async function HomePage() {
               )}
               <Link
                 href={`/community/events/${nextEvt.slug}`}
-                className="rounded-xl bg-white px-5 py-2.5 font-subheading text-sm font-semibold text-[#C2722A]"
+                className={`rounded-xl bg-white px-5 py-2.5 font-subheading text-sm font-semibold ${
+                  nextEvt.activityType === 'campaign' ? 'text-pathway-amber-deep' : 'text-primary-deep'
+                }`}
               >
                 View event hub →
               </Link>
@@ -163,7 +170,7 @@ export default async function HomePage() {
             </ul>
           ) : (
             <div className="py-4 text-sm text-brand-muted">
-              You&apos;re all caught up on training. 🎉{' '}
+              You&apos;re all caught up on training.{' '}
               <Link href="/community/training" className="font-semibold text-brand-blue">Explore the library</Link>
             </div>
           )}
@@ -215,7 +222,7 @@ export default async function HomePage() {
           <h3 className="flex items-center gap-2 font-subheading text-base font-semibold text-brand-blue-dark">
             <span className="h-[11px] w-[11px] rounded-full bg-brand-blue" /> What&apos;s new in your spaces
           </h3>
-          <Link href="/community" className="font-subheading text-xs font-semibold text-brand-blue">View all →</Link>
+          <Link href="/community" className="font-subheading text-xs font-semibold text-brand-blue">All spaces →</Link>
         </div>
         {feed.length > 0 ? (
           <ul className="divide-y divide-brand-hairline">
@@ -238,7 +245,7 @@ export default async function HomePage() {
         ) : (
           <p className="py-4 text-sm text-brand-muted">
             Your spaces are quiet right now.{' '}
-            <Link href="/community" className="font-semibold text-brand-blue">Start a discussion →</Link>
+            <Link href="/community" className="font-semibold text-brand-blue">Browse spaces →</Link>
           </p>
         )}
       </section>

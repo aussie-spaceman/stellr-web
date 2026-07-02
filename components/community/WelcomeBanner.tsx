@@ -39,7 +39,7 @@ export function WelcomeBanner({ firstName }: { firstName: string }) {
         <X className="h-4 w-4" />
       </button>
       <p className="font-subheading text-sm font-semibold text-brand-blue-dark">
-        Welcome to Stellr, {firstName} 🎉
+        Welcome to Stellr, {firstName} <span className="text-star-gold">✦</span>
       </p>
       <p className="mt-1 max-w-2xl text-sm text-brand-muted">
         This is your home base. Here&apos;s what you&apos;ll find — use the sidebar to jump anywhere.

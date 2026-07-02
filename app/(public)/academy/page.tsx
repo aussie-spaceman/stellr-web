@@ -25,8 +25,11 @@ export const metadata: Metadata = {
 }
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
-const SIGNUP_URL = `${AUTH_URL}/signup`
-const TRAINING_URL = `${AUTH_URL}/training`
+const SIGNUP_URL = `${AUTH_URL}/sign-up`
+/* Training lives in the member portal. Deep-link there so guests are bounced
+   into the sign-up flow with training preserved as the post-onboarding
+   destination, while signed-in members land straight in training. */
+const TRAINING_URL = `${AUTH_URL}/community/training`
 /* Mentoring is genuinely self-serve — the CTA deep-links straight into the live
    member discovery flow (open cohorts, included-credit vs one-off top-up). Guests
    hit the app's sign-in gate and land here after auth. No dead-end anchors. */
@@ -74,7 +77,7 @@ const formats = [
     accessLabel: 'Free, or upgrade',
     accessText: 'text-enviro-green-text',
     accessBg: 'bg-enviro-green-bg',
-    button: { label: 'Browse training', href: TRAINING_URL, variant: 'softBlue' as const },
+    button: { label: 'Join Free to access training', href: TRAINING_URL, variant: 'softBlue' as const },
   },
   {
     Icon: Team,
@@ -359,7 +362,7 @@ export default function AcademyPage() {
       </section>
 
       {/* ── Training deep-dive ────────────────────────────────────────── */}
-      <section id="training-detail" className="section-padding bg-surface border-t border-line-light scroll-mt-24">
+      <section id="training" className="section-padding bg-surface border-t border-line-light scroll-mt-24">
         <div className="container-max grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-16 items-start">
           <div>
             <Eyebrow>Training</Eyebrow>

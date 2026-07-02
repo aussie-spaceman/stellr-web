@@ -191,13 +191,13 @@ export const VIDEOS: Record<string, VideoAsset> = {
 export const COMPETITION: Record<string, CompetitionAsset> = {
   'previous-participant-work': {
     id: 'previous-participant-work',
-    title: 'Previous Participant Work — Argonom dossier',
+    title: 'Previous Design Dossier',
     pages: null,
     thumbnail: '/files/previous-participant-work.cover.jpg',
     previewHref: '/files/previous-participant-work.pdf',
     gated: false,
     fileHref: '/files/previous-participant-work.pdf',
-    credit: 'Student team',
+    credit: '100% high school student developed material',
   },
   'legacy-rfp-south-dakota-2025': {
     id: 'legacy-rfp-south-dakota-2025',
@@ -280,18 +280,28 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   'home-strip-1': photo('home-strip-1', 'DSC_5526', 'A full room of participants and mentors'),
   'home-strip-2': photo('home-strip-2', 'IMG_9183', 'Students collaborating during a design session'),
   'home-strip-3': photo('home-strip-3', 'IMG_2741', 'Teams presenting their work'),
+  // Home proof strip — 2026-07 feedback-doc replacements
+  'home-biosphere2': photo('home-biosphere2', 'Drive 1NUyS7_k', 'Touring Biosphere2 in Arizona'),
+  'home-florida-prep': {
+    // Source is 1440px wide — no 1920 derivative exists.
+    ...photo('home-florida-prep', 'Drive 1LnJt-bR', 'Preparing for an event in Florida'),
+    widths: [480, 768, 1200],
+  },
+  'home-teamwork': photo('home-teamwork', 'Drive 1wmO0jBV', 'Teamwork makes successful STEM professionals'),
+  'home-group-dynamics': photo('home-group-dynamics', 'Drive 1_D_0qIV', 'Group dynamics at play'),
   // Competitions
-  'competitions-1': photo('competitions-1', 'IMG_9052', 'Student design work on screen', 'Student team'),
-  'competitions-2': photo('competitions-2', 'IMG_9215', '3D modelling on laptops', 'Student team'),
+  'competitions-1': photo('competitions-1', 'IMG_9052', 'Collaboration - both in person and digital', 'Student team'),
+  'competitions-2': photo('competitions-2', 'IMG_9215', 'Student learn 3D modelling as a core skill', 'Student team'),
   'competitions-3': photo('competitions-3', 'DSC_5501', 'Teams at the competition'),
+  'competitions-ksc': photo('competitions-ksc', 'Drive 1dkLNSN9', 'Exploring Kennedy Space Center before an event'),
   // Membership
   'membership-hero': photo('membership-hero', 'DSC_5526', 'The room, full — the Stellr community'),
   // Events (gallery)
-  'events-1': photo('events-1', 'DSC_5501', 'Event floor during the competition'),
-  'events-2': photo('events-2', 'DSC_5521', 'Teams presenting to judges'),
-  'events-3': photo('events-3', 'DSC_5752', 'Participants at work'),
-  'events-4': photo('events-4', 'IMG_9201', 'Collaboration in session'),
-  'events-5': photo('events-5', 'IMG_9197', 'Students during the event'),
+  'events-1': photo('events-1', 'DSC_5501', 'Future engineers learning the joys of early mornings'),
+  'events-2': photo('events-2', 'DSC_5521', 'Collaboration = listening'),
+  'events-3': photo('events-3', 'DSC_5752', 'Teamwork makes the dream work'),
+  'events-4': photo('events-4', 'IMG_9201', 'Space constraints at an overnight event in Florida'),
+  'events-5': photo('events-5', 'IMG_9197', 'Designers hard at work'),
   // About
   'about-award-1': photo('about-award-1', 'IMG_4014', 'Award-winner banner'),
   'about-award-2': photo('about-award-2', 'IMG_4015', 'Washington Achievement banner'),
@@ -317,6 +327,7 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   'curriculum-1': photo('curriculum-1', 'IMG_9215', '3D modelling on laptops', 'Student team'),
   'curriculum-2': photo('curriculum-2', 'IMG_9052', 'Design work on screen', 'Student team'),
   'curriculum-3': photo('curriculum-3', 'IMG_2283', 'Students working through a brief'),
+  'curriculum-ty-white': photo('curriculum-ty-white', 'Drive 1plUOEjF', 'Mr Ty White with students at a competition'),
   // Academy · Training
   'academy-1': photo('academy-1', 'IMG_7700', 'Team delegation at the whiteboard'),
   'academy-2': photo('academy-2', 'IMG_7702', 'Structural-board design session'),

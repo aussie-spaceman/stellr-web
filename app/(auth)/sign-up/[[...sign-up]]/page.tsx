@@ -20,18 +20,22 @@ export default async function SignUpPage({
 }: {
   searchParams: Promise<{ next?: string }>
 }) {
-  if (!SIGNUPS_OPEN) redirect('/sign-in')
-
   // Carry an optional post-onboarding destination (e.g. resume a membership
   // purchase at /join?tier=…) through the hard-coded onboarding redirect.
   const next = safeNext((await searchParams).next)
+  const signInUrl = next ? `/sign-in?next=${encodeURIComponent(next)}` : '/sign-in'
+
+  // Forward `next` through the gate too, so the destination survives for
+  // members who sign in while self-serve signups are closed.
+  if (!SIGNUPS_OPEN) redirect(signInUrl)
+
   const afterUrl = next
     ? `/account/onboarding?next=${encodeURIComponent(next)}`
     : '/account/onboarding'
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface py-12 px-4">
-      <SignUp forceRedirectUrl={afterUrl} />
+      <SignUp forceRedirectUrl={afterUrl} signInUrl={signInUrl} />
     </div>
   )
 }

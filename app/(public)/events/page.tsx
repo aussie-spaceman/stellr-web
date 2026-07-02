@@ -4,7 +4,8 @@ import { getAllEvents, type StellarEvent } from '@/lib/sanity'
 import { EventCard } from '@/components/ui/EventCard'
 import { EventsFilterBar } from '@/components/sections/EventsFilterBar'
 import { PageMedia } from '@/components/sections/PageMedia'
-import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
+import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
+import { PHOTOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   title: 'Upcoming Events',
@@ -49,6 +50,13 @@ export default async function EventsPage({ searchParams }: PageProps) {
         </div>
       </section>
 
+      {/* Written testimonial */}
+      <section className="bg-white px-4 sm:px-6 lg:px-8 pt-10">
+        <div className="container-max">
+          <PullQuoteWall quotes={[QUOTES['2021-parent']]} columns={1} className="max-w-2xl" />
+        </div>
+      </section>
+
       {/* Event grid */}
       <section className="section-padding">
         <div className="container-max">
@@ -69,14 +77,12 @@ export default async function EventsPage({ searchParams }: PageProps) {
         </div>
       </section>
 
-      {/* ── Media: the event, in pictures, film & briefs ──────────────── */}
+      {/* ── Media: the event, in pictures & briefs ────────────────────── */}
       <PageMedia
         heading="Inside a Stellr event"
-        intro="Galleries from the floor, a participant film, and the competition briefs to download."
+        intro="Galleries from the floor, and the competition briefs to download."
         photos={[PHOTOS['events-1'], PHOTOS['events-2'], PHOTOS['events-3'], PHOTOS['events-4'], PHOTOS['events-5']]}
         photoHeading="On the competition floor"
-        videos={[VIDEOS['testimonial-meleah-caron']]}
-        quotes={[QUOTES['2021-parent']]}
         competition={[COMPETITION['south-west-2022-student-presentation'], COMPETITION['south-west-2025-rfp']]}
         background="white"
       />

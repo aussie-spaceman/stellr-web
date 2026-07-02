@@ -3,6 +3,7 @@ import { Lock } from 'lucide-react'
 import { AccessBadge, SpaceIcon } from './badges'
 import { JoinSpaceButton } from './JoinSpaceButton'
 import { describeAssignedTiers } from '@/lib/tiers'
+import { membershipUpgradeHref } from '@/app/(public)/membership/tier-data'
 import type { SpaceSummary } from '@/lib/spaces'
 
 interface Props {
@@ -18,13 +19,13 @@ interface Props {
 }
 
 // A single space card on the directory (screen 01). Open/accessible cards link
-// into the space; restricted cards are dimmed and route to the locked screen;
-// open-but-unjoined (Discover) cards also surface a Join CTA.
+// into the space; restricted cards route to the locked screen and carry an
+// inline Upgrade link; open-but-unjoined (Discover) cards surface a Join CTA.
 export function SpaceCard({ space, restricted = false, joinable = false, unread = 0, tierNames = {} }: Props) {
   const body = (
     <div
       className="flex h-full flex-col rounded-[16px] border border-brand-border bg-white p-[18px] shadow-card transition"
-      style={restricted ? { opacity: 0.62 } : undefined}
+      style={restricted ? { opacity: 0.85 } : undefined}
     >
       <div className="flex items-start gap-3">
         <SpaceIcon theme={space.theme} />
@@ -41,8 +42,15 @@ export function SpaceCard({ space, restricted = false, joinable = false, unread 
 
       <div className="mt-auto flex items-center justify-between pt-3">
         {restricted ? (
-          <span className="inline-flex items-center gap-1 text-xs text-brand-muted-soft">
-            <Lock className="h-3 w-3" /> Requires {describeAssignedTiers(space.assignedTierIds, tierNames)}
+          <span className="inline-flex flex-wrap items-center gap-1 text-xs text-brand-muted-soft">
+            <Lock className="h-3 w-3" /> Requires{' '}
+            {describeAssignedTiers(space.assignedTierIds, tierNames)} ·{' '}
+            <Link
+              href={membershipUpgradeHref(space.assignedTierIds.map((id) => tierNames[id]).filter(Boolean))}
+              className="relative z-10 -m-1 p-1 font-subheading font-semibold text-brand-blue hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
+            >
+              Upgrade
+            </Link>
           </span>
         ) : (
           <span className="text-xs text-brand-muted-soft">
@@ -55,16 +63,17 @@ export function SpaceCard({ space, restricted = false, joinable = false, unread 
               {unread} new
             </span>
           )}
-          {joinable && <JoinSpaceButton spaceSlug={space.slug} />}
+          {joinable && <JoinSpaceButton spaceSlug={space.slug} spaceName={space.name} />}
         </div>
       </div>
     </div>
   )
 
-  // Joinable (open, unjoined) cards use a stretched-link overlay so the whole
-  // card navigates into the space while the Join button stays independently
-  // clickable above it (a <button> nested inside <a> would be invalid).
-  if (joinable) {
+  // Joinable (open, unjoined) and restricted cards use a stretched-link overlay
+  // so the whole card navigates — into the space, or to the locked screen —
+  // while the Join button / Upgrade link stays independently clickable above it
+  // (a <button> or <a> nested inside <a> would be invalid).
+  if (joinable || restricted) {
     return (
       <div className="relative transition hover:-translate-y-0.5">
         <Link
@@ -77,8 +86,7 @@ export function SpaceCard({ space, restricted = false, joinable = false, unread 
     )
   }
 
-  // Both accessible and restricted cards are links — restricted routes to the
-  // locked screen (which explains the tier requirement), per the handoff.
+  // Accessible cards are plain links into the space.
   return (
     <Link
       href={`/community/${space.slug}`}

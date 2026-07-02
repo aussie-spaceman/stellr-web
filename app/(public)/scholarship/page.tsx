@@ -3,6 +3,8 @@ import { Award, Team } from '@stellr/icons'
 import { Eyebrow } from '@stellr/web-ui'
 import { getAllEvents, type StellarEvent } from '@/lib/sanity'
 import { ScholarshipForm } from '@/components/forms/ScholarshipForm'
+import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
+import { VIDEOS } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   title: 'Scholarships',
@@ -106,6 +108,23 @@ export default async function ScholarshipPage() {
           <div className="bg-white border border-line rounded-panel shadow-card-lift p-7 sm:p-9">
             <ScholarshipForm activities={activities} usedFallback={usedFallback} />
           </div>
+        </div>
+      </section>
+
+      {/* ── Hear it from a participant ────────────────────────────────── */}
+      <section className="section-padding bg-white">
+        <div className="container-max">
+          <figure className="max-w-3xl mx-auto text-center">
+            <VideoTestimonial
+              src={VIDEOS['testimonial-meleah-caron'].src}
+              poster={VIDEOS['testimonial-meleah-caron'].poster}
+              captionsSrc={VIDEOS['testimonial-meleah-caron'].captions}
+              title={VIDEOS['testimonial-meleah-caron'].title}
+            />
+            <figcaption className="mt-3 text-sm font-semibold text-ink">
+              {VIDEOS['testimonial-meleah-caron'].title}
+            </figcaption>
+          </figure>
         </div>
       </section>
     </>

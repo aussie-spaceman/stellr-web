@@ -1,7 +1,9 @@
 import Link from 'next/link'
 import { Lock, ArrowLeft } from 'lucide-react'
+import { Button } from '@stellr/web-ui'
 import { ThemeDot, AccessBadge } from './badges'
 import { describeAssignedTiers } from '@/lib/tiers'
+import { membershipUpgradeHref } from '@/app/(public)/membership/tier-data'
 import type { SpaceTheme } from '@/lib/spaces'
 
 interface Props {
@@ -13,8 +15,11 @@ interface Props {
 }
 
 // Locked screen (screen 07): shown when a member opens a Private space their tier
-// can't join. No join/upgrade CTA — access is automatic by tier or admin invite.
+// can't join. Access is automatic by tier or admin invite — the CTA routes to the
+// membership page anchored at the lowest qualifying tier (F-02).
 export function LockedSpace({ name, theme, description, assignedTierIds, tierNames }: Props) {
+  const qualifyingNames = assignedTierIds.map((id) => tierNames[id]).filter(Boolean)
+  const upgradeHref = membershipUpgradeHref(qualifyingNames)
   return (
     <div className="mx-auto max-w-[560px] px-4 py-10">
       <Link
@@ -52,6 +57,12 @@ export function LockedSpace({ name, theme, description, assignedTierIds, tierNam
           <p className="mt-1 text-sm text-brand-blue-dark">
             {describeAssignedTiers(assignedTierIds, tierNames)}
           </p>
+        </div>
+
+        <div className="mt-6">
+          <Button href={upgradeHref} as={Link}>
+            See membership options →
+          </Button>
         </div>
 
         <p className="mt-4 text-xs text-brand-muted-soft">

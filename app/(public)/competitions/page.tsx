@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { Launch, Environment } from '@stellr/icons'
 import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
+import { AUDIENCES } from '../membership/tier-data'
 import {
   Hero,
   SectionHeading,
@@ -16,6 +17,9 @@ import {
   ProgressionGraphic,
 } from '@stellr/web-ui'
 import { StudentWorkHero } from '@/components/sections/StudentWorkHero'
+import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
+import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
+import { WorkCard } from '@/components/sections/WorkCard'
 import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
 import { PageMedia } from '@/components/sections/PageMedia'
 import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
@@ -116,71 +120,49 @@ const themes = [
   },
 ]
 
-interface Tier {
-  name: string
-  /** Injected from membership_tiers at render (see CompetitionsPage) — not hard-coded. */
-  price?: string
-  accessNote: string
-  inheritsFrom?: string
-  badge?: string
-  featured?: boolean
-  items: string[]
+const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
+
+/* Teacher membership tiers — structure (ids, names, roles, order) comes from
+   the /membership explorer's tier data (source of truth) so the two pages
+   can't drift; prices are injected from membership_tiers at render. Only the
+   competition-focused "what's included" summaries live here. */
+const educatorTiers = AUDIENCES.educator.tiers
+
+const TIER_ITEMS: Record<string, string[]> = {
+  educator: [
+    'Request for Proposal (RFP) & Mission Handbook',
+    'Scoring rubric',
+    'Competition Guide for Teachers',
+    'Basic assessment tools',
+    'Students can register as members',
+  ],
+  catalyst: [
+    'Lesson plans',
+    'Worksheets — cost control, Gantt, materials',
+    'Judging template',
+    'Intro & close-out calls + slides',
+    'Intermediate assessment tools',
+  ],
+  innovator: [
+    'Group mentoring — 8 × 30-min / semester (recorded)',
+    'Agentic AI sub-contractors + project advisor',
+    'Biweekly student feedback calls',
+    'Advanced assessment tools & question banks',
+    'Common Core alignment',
+    'Students invited as Explorer',
+  ],
+  trailblazer: [
+    'Student awards presented',
+    'Virtual presentation deliverable (Zoom)',
+    'CTE credits · NGSS & ISTE alignment',
+    'LMS upload (SCORM)',
+    'Students upgraded to Pathfinder (12 months)',
+  ],
 }
 
-/* Teacher membership tiers — kept in sync with the /membership explorer
-   (app/(public)/membership/tier-data.ts → educator audience + waterfall). */
-const tiers: Tier[] = [
-  {
-    name: 'Educator',
-    accessNote: 'Free with a member account',
-    items: [
-      'Request for Proposal (RFP) & Mission Handbook',
-      'Scoring rubric',
-      'Competition Guide for Teachers',
-      'Basic assessment tools',
-      'Students can register as members',
-    ],
-  },
-  {
-    name: 'Catalyst',
-    accessNote: 'Competition toolkit',
-    inheritsFrom: 'Educator',
-    items: [
-      'Lesson plans',
-      'Worksheets — cost control, Gantt, materials',
-      'Judging template',
-      'Intro & close-out calls + slides',
-      'Intermediate assessment tools',
-    ],
-  },
-  {
-    name: 'Innovator',
-    accessNote: 'Mentoring & AI tools',
-    inheritsFrom: 'Catalyst',
-    badge: 'Best Value',
-    featured: true,
-    items: [
-      'Group mentoring — 8 × 30-min / semester (recorded)',
-      'Agentic AI sub-contractors + project advisor',
-      'Biweekly student feedback calls',
-      'Advanced assessment tools & question banks',
-      'Common Core alignment',
-      'Students invited as Explorer',
-    ],
-  },
-  {
-    name: 'Trailblazer',
-    accessNote: 'For teachers who excel',
-    inheritsFrom: 'Innovator',
-    items: [
-      'Student awards presented',
-      'Virtual presentation deliverable (Zoom)',
-      'CTE credits · NGSS & ISTE alignment',
-      'LMS upload (SCORM)',
-      'Students upgraded to Pathfinder (12 months)',
-    ],
-  },
-]
+const TIER_HIGHLIGHT: Record<string, { badge: string; featured: boolean }> = {
+  innovator: { badge: 'Best Value', featured: true },
+}
 
 export default async function CompetitionsPage() {
   const tierPrices = await getTierPriceMap()
@@ -262,29 +244,6 @@ export default async function CompetitionsPage() {
             </span>
           </div>
 
-          {/* Theme teaser */}
-          <div className="mt-11">
-            <p className="font-subheading font-semibold uppercase tracking-[0.08em] text-sm text-content-muted mb-2">
-              Every competition is themed
-            </p>
-            <p className="text-content-secondary mb-5 max-w-2xl leading-relaxed">
-              For the 2027 school year, students choose from two real-world themes. Full detail is in
-              Step 2 below.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {themes.map(({ name, Icon, iconBg, accent, border, blurb }) => (
-                <div key={name} className={`bg-white border ${border} rounded-ds-card p-5 flex items-start gap-4`}>
-                  <span className={`w-10 h-10 rounded-xl ${iconBg} text-white flex items-center justify-center shrink-0`}>
-                    <Icon size={20} />
-                  </span>
-                  <div>
-                    <p className={`font-bold ${accent}`}>{name}</p>
-                    <p className="text-sm text-content-secondary mt-1 leading-relaxed">{blurb}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </section>
 
@@ -299,9 +258,13 @@ export default async function CompetitionsPage() {
                 A rotating look at the proposals, presentations and designs students have produced — the
                 kind of deliverable every team builds and pitches.
               </p>
+              <WorkCard asset={COMPETITION['previous-participant-work']} className="mt-6 max-w-lg" />
             </div>
             <StudentWorkHero />
           </div>
+
+          {/* Student testimonial */}
+          <PullQuoteWall quotes={[QUOTES['hunter-dobson']]} columns={1} className="mt-10 max-w-2xl" />
         </div>
       </section>
 
@@ -339,6 +302,23 @@ export default async function CompetitionsPage() {
         </div>
       </section>
 
+      {/* ── Hear it from a participant (Mia Cox) ──────────────────────── */}
+      <section className="section-padding bg-white">
+        <div className="container-max">
+          <figure className="max-w-3xl mx-auto text-center">
+            <VideoTestimonial
+              src={VIDEOS['testimonial-mia-cox'].src}
+              poster={VIDEOS['testimonial-mia-cox'].poster}
+              captionsSrc={VIDEOS['testimonial-mia-cox'].captions}
+              title={VIDEOS['testimonial-mia-cox'].title}
+            />
+            <figcaption className="mt-3 text-sm font-semibold text-ink">
+              {VIDEOS['testimonial-mia-cox'].title}
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
       {/* ── Step 2 — Pick a theme ─────────────────────────────────────── */}
       <section className="section-padding bg-surface">
         <div className="container-max">
@@ -368,8 +348,21 @@ export default async function CompetitionsPage() {
           {showMaterialTiers ? (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-8 items-start">
-                {tiers.map((tier) => (
-                  <TierCard key={tier.name} {...tier} price={formatTierPrice(tierPrices[tier.name])} />
+                {educatorTiers.map((t, i) => (
+                  <TierCard
+                    key={t.id}
+                    tier={t.id}
+                    name={t.name}
+                    accessNote={t.role}
+                    inheritsFrom={i > 0 ? educatorTiers[i - 1].name : undefined}
+                    badge={TIER_HIGHLIGHT[t.id]?.badge}
+                    featured={TIER_HIGHLIGHT[t.id]?.featured}
+                    items={TIER_ITEMS[t.id] ?? []}
+                    price={t.free ? 'Free' : formatTierPrice(tierPrices[t.name])}
+                    cta={t.free
+                      ? { label: 'Join Free', href: `${AUTH_URL}/sign-up?audience=educator` }
+                      : { label: 'Sign up now', href: `${AUTH_URL}/join?tier=${t.id}` }}
+                  />
                 ))}
               </div>
 
@@ -394,14 +387,13 @@ export default async function CompetitionsPage() {
         </div>
       </section>
 
-      {/* ── Media: proof, voices & student work ───────────────────────── */}
+      {/* ── Media: the competition in pictures ────────────────────────── */}
       <PageMedia
         heading="What the competition actually looks like"
-        intro="Real teams, real footage, and a worked example you can browse end to end."
-        photos={[PHOTOS['competitions-1'], PHOTOS['competitions-2'], PHOTOS['competitions-3']]}
-        videos={[VIDEOS['testimonial-mia-cox']]}
-        quotes={[QUOTES['hunter-dobson']]}
-        competition={[COMPETITION['previous-participant-work']]}
+        intro="Real teams, real venues, real work."
+        photos={[PHOTOS['competitions-1'], PHOTOS['competitions-2'], PHOTOS['competitions-ksc']]}
+        align="center"
+        photoColumns={3}
       />
 
       {/* ── CTA ───────────────────────────────────────────────────────── */}

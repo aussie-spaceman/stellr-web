@@ -104,6 +104,7 @@ export function ThemeCard({ name, Icon, iconBg, accent, border, headerBg, briefB
 //  • feature mode (items present) — the original comparison card (competitions).
 //  • select mode (no items)       — a compact, clickable tier selector with a
 //    role eyebrow + price (membership explorer).
+// `cta` renders a solid signup button at the foot of the card in either mode.
 // The Tier-Shading system (deliverable B) layers on in either mode when a
 // `bracket`/`tier`/`shade` is supplied: a top shade strip, a shade-coloured
 // price, and — when `selected` — a 2px shade border + shade glow. With no
@@ -250,6 +251,19 @@ export function TierCard({
               <p key={item} className="text-sm text-content-secondary leading-snug">{item}</p>
             ))}
           </div>
+          {cta && (
+            <div className="px-5 pb-5 mt-auto">
+              <CtaTag
+                href={cta.href}
+                onClick={cta.onClick}
+                type={cta.href ? undefined : 'button'}
+                className="block w-full text-center cursor-pointer rounded-[9px] px-4 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
+                style={{ background: ctaColor }}
+              >
+                {cta.label}
+              </CtaTag>
+            </div>
+          )}
         </>
       )}
     </Wrapper>

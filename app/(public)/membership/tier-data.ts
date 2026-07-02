@@ -179,6 +179,33 @@ export function tierBySlug(slug: string): ResolvedTier | null {
   return null
 }
 
+/**
+ * The lowest-rung tier among the given tier *names* — each audience's tiers
+ * array is already ordered free → top paid, so the lowest qualifying tier is
+ * the one earliest on its audience's ladder (ties resolve by audience order).
+ * Used by locked spaces to point "Upgrade" at the cheapest way in.
+ */
+export function lowestQualifyingTier(tierNames: string[]): ResolvedTier | null {
+  const maxRungs = Math.max(...AUDIENCE_ORDER.map((a) => AUDIENCES[a].tiers.length))
+  for (let rung = 0; rung < maxRungs; rung++) {
+    for (const aid of AUDIENCE_ORDER) {
+      const t = AUDIENCES[aid].tiers[rung]
+      if (t && tierNames.includes(t.name)) return tierBySlug(t.id)
+    }
+  }
+  return null
+}
+
+/**
+ * Membership-page destination for an upgrade CTA, anchored to the lowest
+ * qualifying tier when one resolves (compare-then-buy — not straight to
+ * checkout; the direct purchase route is /join?tier={slug}).
+ */
+export function membershipUpgradeHref(tierNames: string[]): string {
+  const tier = lowestQualifyingTier(tierNames)
+  return tier ? `/membership#${tier.id}` : '/membership'
+}
+
 /* ── "What you get" value cards (audience-aware) ──────────────────────────── */
 export const VALUE_CARDS: Record<AudienceId, ValueCard[]> = {
   school: [

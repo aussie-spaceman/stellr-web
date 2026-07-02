@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, getSpaceBySlug, memberCanAccessSpace } from '@/lib/community'
 import { markPostRead } from '@/lib/community-feed'
+import { PostHeading } from '@/components/community/PostHeading'
 import { RichTextContent } from '@/components/community/RichTextContent'
 import { ReactionBar } from '@/components/community/ReactionBar'
 import { CommentForm } from '@/components/community/CommentForm'
@@ -121,7 +122,7 @@ export default async function PostDetailPage({
       </div>
 
       <article className="rounded-lg border border-brand-border bg-white p-5">
-        <h1 className="text-xl font-bold text-brand-blue-dark">{post.title}</h1>
+        <PostHeading title={post.title} />
         <p className="mt-1 text-xs text-brand-muted-soft">
           by {nameOf(post.members as AuthorRel)} · {formatDateShort(post.created_at)}
         </p>

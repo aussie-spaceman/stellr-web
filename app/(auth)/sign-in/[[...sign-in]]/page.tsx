@@ -22,6 +22,7 @@ export default async function SignInPage({
     <div className="min-h-screen flex items-center justify-center bg-surface py-12 px-4">
       <SignIn
         forceRedirectUrl={next ?? undefined}
+        signUpUrl={next ? `/sign-up?next=${encodeURIComponent(next)}` : '/sign-up'}
         appearance={
           SIGNUPS_OPEN ? undefined : { elements: { footerAction: { display: 'none' } } }
         }

@@ -159,8 +159,6 @@ const details: Detail[] = [
   },
 ]
 
-const partnerLogos = ['South Dakota State University', 'UNLV', "Janet's Planet"]
-
 const joinBullets = [
   'Expect a more formal review — built to protect students and ensure mission alignment.',
   'Open to for-profits, B-Corps, and non-profits, anywhere in the world.',
@@ -250,6 +248,22 @@ export default function NetworkPage() {
                   <p key={i}>{para}</p>
                 ))}
               </div>
+              {/* Prospectus download — inactive until the document is ready. When
+                  live, wire to <AssetGate> (name/email → HubSpot subscriber). */}
+              {d.id === 'corporate' && (
+                <div className="mt-7">
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    title="Coming soon"
+                    className="inline-flex items-center gap-2 rounded-[10px] border border-line bg-white px-6 py-3.5 font-display text-[15px] font-semibold text-content-faint cursor-not-allowed opacity-70"
+                  >
+                    Download Our Prospectus
+                  </button>
+                  <p className="mt-2 text-[13px] text-content-faint">Coming soon — our partner prospectus is on its way.</p>
+                </div>
+              )}
             </div>
 
             {/* Right — why join */}
@@ -297,26 +311,8 @@ export default function NetworkPage() {
         </Fragment>
       ))}
 
-      {/* ── Partner logo wall ─────────────────────────────────────────── */}
-      <section className="section-padding bg-white border-t border-line-light">
-        <div className="container-max max-w-4xl text-center">
-          <Eyebrow>In good company</Eyebrow>
-          <h2 className="text-2xl font-bold text-ink mt-3">Some of the organisations in our network</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-[18px] mt-9">
-            {partnerLogos.map((name) => (
-              <div
-                key={name}
-                className="h-24 rounded-xl border border-line bg-surface flex items-center justify-center px-4 text-center font-subheading font-semibold text-[15px] text-content-body"
-              >
-                {name}
-              </div>
-            ))}
-          </div>
-          <p className="mt-6 text-[13.5px] text-content-faint">
-            Partner logo artwork to be added — names shown as placeholders.
-          </p>
-        </div>
-      </section>
+      {/* Partner logo wall ("In good company") hidden until we have written
+          permission from each partner to display their logo. */}
 
       {/* ── Join form ─────────────────────────────────────────────────── */}
       <section

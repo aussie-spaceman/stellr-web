@@ -10,7 +10,10 @@ import {
   ShieldCheck,
   ArrowRight,
 } from 'lucide-react'
-import { PageMedia } from '@/components/sections/PageMedia'
+import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
+import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
+import { ProofStrip } from '@/components/sections/ProofStrip'
+import { WorkCard } from '@/components/sections/WorkCard'
 import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
@@ -97,6 +100,13 @@ export default function EducatorsPage() {
         </div>
       </nav>
 
+      {/* ── Written testimonial (moved to top, below heading) ─────────── */}
+      <section className="section-padding bg-white">
+        <div className="container-max">
+          <PullQuoteWall quotes={[QUOTES['nahuel-de-bittencourt']]} columns={1} className="max-w-2xl mx-auto" />
+        </div>
+      </section>
+
       {/* ── #educators ────────────────────────────────────────────────── */}
       <section id="educators" className="section-padding bg-white scroll-mt-36">
         <div className="container-max">
@@ -132,6 +142,20 @@ export default function EducatorsPage() {
               Student safety comes first. All student details and access information are encrypted and
               secure, and our group registration captures the agreements your school requires.
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Educator video testimonials (moved above Stipend Plan) ────── */}
+      <section className="section-padding bg-white">
+        <div className="container-max">
+          <div className="grid gap-6 sm:grid-cols-2 max-w-5xl mx-auto">
+            {[VIDEOS['testimonial-jeremiah-dibley'], VIDEOS['testimonial-willcox-teachers']].map((v) => (
+              <figure key={v.id}>
+                <VideoTestimonial src={v.src} poster={v.poster} captionsSrc={v.captions} title={v.title} />
+                <figcaption className="mt-3 text-sm font-semibold text-brand-blue-dark">{v.title}</figcaption>
+              </figure>
+            ))}
           </div>
         </div>
       </section>
@@ -225,6 +249,22 @@ export default function EducatorsPage() {
         </div>
       </section>
 
+      {/* ── What educators see: photos + previous competition resources ─ */}
+      <section className="section-padding bg-brand-grey-light">
+        <div className="container-max max-w-4xl mx-auto">
+          <ProofStrip
+            photos={[PHOTOS['educators-1'], PHOTOS['educators-2']]}
+            captions={false}
+            columns={2}
+          />
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-5">
+            {[COMPETITION['jsc-2025-program-book'], COMPETITION['jsc-2025-student-presentation']].map((c) => (
+              <WorkCard key={c.id} asset={c} eyebrow="Previous Competition Resource" />
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── Closing CTA ───────────────────────────────────────────────── */}
       <section className="section-padding bg-brand-blue-dark text-white text-center">
         <div className="container-max max-w-2xl">
@@ -243,16 +283,6 @@ export default function EducatorsPage() {
           </div>
         </div>
       </section>
-
-      {/* ── Media: educators & gated classroom material ───────────────── */}
-      <PageMedia
-        heading="What educators see"
-        intro="Hear from teachers who've run it — and download ready-to-use competition material."
-        photos={[PHOTOS['educators-1'], PHOTOS['educators-2']]}
-        videos={[VIDEOS['testimonial-jeremiah-dibley'], VIDEOS['testimonial-willcox-teachers']]}
-        quotes={[QUOTES['nahuel-de-bittencourt']]}
-        competition={[COMPETITION['jsc-2025-program-book'], COMPETITION['jsc-2025-student-presentation']]}
-      />
     </>
   )
 }

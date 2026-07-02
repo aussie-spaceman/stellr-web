@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, RESOURCES_BUCKET } from '@/lib/community'
 import { attachSpaceResource } from '@/lib/container-sync'
+import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
 
 // POST /api/admin/community/resources — upload a file + create a resource record.
 // Expects multipart/form-data: file, title, description?, spaceId?, minTierRank?
@@ -29,9 +30,19 @@ export async function POST(req: Request) {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const storagePath = `resources/${Date.now()}-${safeName}`
 
+  // Copyright watermark on the bottom-right of every page of uploaded PDFs.
+  let payload: File | Uint8Array = file
+  if (isPdf(file.name, file.type)) {
+    try {
+      payload = new Uint8Array(await stampPdfBytes(new Uint8Array(await file.arrayBuffer())))
+    } catch (err) {
+      console.error('[community] resource watermark failed, storing original:', err)
+    }
+  }
+
   const { error: uploadError } = await db.storage
     .from(RESOURCES_BUCKET)
-    .upload(storagePath, file, {
+    .upload(storagePath, payload, {
       contentType: file.type || 'application/octet-stream',
       upsert: false,
     })

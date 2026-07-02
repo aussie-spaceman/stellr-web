@@ -9,6 +9,8 @@ import {
   WATERFALL_CATEGORIES, WATERFALL_ITEMS, WATERFALL_TOTAL,
   tierBySlug, type AudienceId, type ValueIcon, type Tier,
 } from './tier-data'
+import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
+import type { VideoAsset } from '@/lib/media-manifest'
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
@@ -20,10 +22,13 @@ const ICONS: Record<ValueIcon, React.ComponentType<{ size?: number }>> = {
 export default function MembershipExplorer({
   prices,
   monthly = {},
+  video,
 }: {
   prices: Record<string, string>
   /** slug → formatted monthly price; only the school/college paid tiers have one. */
   monthly?: Record<string, string>
+  /** Optional testimonial video rendered centred just above the FAQ. */
+  video?: VideoAsset
 }) {
   const [audienceId, setAudienceId] = React.useState<AudienceId>('school')
   const [selectedId, setSelectedId] = React.useState<TierId>('explorer')
@@ -238,6 +243,18 @@ export default function MembershipExplorer({
           </div>
         </div>
       </section>
+
+      {/* ── Video testimonial (centred, above FAQ) ────────────────────── */}
+      {video && (
+        <section className="bg-white" style={{ padding: '48px 24px' }}>
+          <div className="max-w-3xl mx-auto">
+            <figure>
+              <VideoTestimonial src={video.src} poster={video.poster} captionsSrc={video.captions} title={video.title} />
+              <figcaption className="mt-3 text-center text-sm font-semibold text-ink">{video.title}</figcaption>
+            </figure>
+          </div>
+        </section>
+      )}
 
       {/* ── FAQ ───────────────────────────────────────────────────────── */}
       <section className="bg-surface" style={{ padding: '54px 24px' }}>

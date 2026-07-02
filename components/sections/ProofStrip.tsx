@@ -20,8 +20,8 @@ export function ProofStrip({
 }: {
   photos: PhotoAsset[]
   heading?: string
-  /** Desktop column count — use 3 so a 3-photo strip fills (centres on) the row. */
-  columns?: 3 | 5
+  /** Desktop column count — 2 for large 50/50 thumbnails, 3/5 for strips. */
+  columns?: 2 | 3 | 5
   /** Show the per-photo caption + credit line under each image. */
   captions?: boolean
   className?: string
@@ -86,7 +86,7 @@ export function ProofStrip({
       {heading && <h3 className="mb-4 font-display text-lg font-bold text-ink">{heading}</h3>}
 
       {/* Strip: scroll-snap row on mobile, responsive grid ≥sm */}
-      <ul className={`-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 ${columns === 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-3'}`}>
+      <ul className={`-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:overflow-visible sm:px-0 ${columns === 2 ? 'sm:grid-cols-2 lg:grid-cols-2' : columns === 5 ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-3 lg:grid-cols-3'}`}>
         {photos.map((p, i) => (
           <li key={p.id} className="w-[78%] shrink-0 snap-start sm:w-auto">
             <button

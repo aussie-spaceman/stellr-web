@@ -18,7 +18,7 @@ import { AssetGate } from './AssetGate'
 const CTA =
   'inline-flex items-center justify-center gap-2 rounded-[9px] bg-primary px-5 py-3 font-display text-[15px] font-semibold text-white hover:bg-primary-deep transition-colors'
 
-export function WorkCard({ asset, className = '' }: { asset: CompetitionAsset; className?: string }) {
+export function WorkCard({ asset, eyebrow: eyebrowOverride, className = '' }: { asset: CompetitionAsset; eyebrow?: string; className?: string }) {
   const [subscribed, setSubscribed] = useState(false)
   useEffect(() => {
     try {
@@ -32,7 +32,7 @@ export function WorkCard({ asset, className = '' }: { asset: CompetitionAsset; c
   if (pending) flagMissing('competition', asset.id)
 
   const gated = asset.gated && !subscribed
-  const eyebrow = asset.gated ? 'Subscriber resource' : 'Free to download'
+  const eyebrow = eyebrowOverride ?? (asset.gated ? 'Subscriber resource' : 'Free to download')
 
   return (
     <div className={`flex gap-5 rounded-panel border border-line bg-white p-5 shadow-card ${className}`}>

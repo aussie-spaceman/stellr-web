@@ -176,18 +176,18 @@ export default function StudentsPage() {
 
       {/* ── Directly from a previous participant (moved above College) ─── */}
       <section className="section-padding bg-white">
-        <div className="container-max max-w-5xl mx-auto">
-          <div className="grid gap-6 lg:grid-cols-[1fr_2fr] lg:items-center">
-            <PullQuoteWall
-              quotes={[QUOTES['mitra-sainsbury']]}
-              columns={1}
-              label="Directly From A Previous Participant"
-            />
-            <ProofStrip
-              photos={[PHOTOS['students-strip-1'], PHOTOS['students-strip-2']]}
-              captions={false}
-            />
-          </div>
+        <div className="container-max max-w-4xl mx-auto">
+          <ProofStrip
+            photos={[PHOTOS['students-strip-1'], PHOTOS['students-strip-2']]}
+            captions={false}
+            columns={2}
+          />
+          <PullQuoteWall
+            quotes={[QUOTES['mitra-sainsbury']]}
+            columns={1}
+            label="Directly From A Previous Participant"
+            className="mt-8"
+          />
         </div>
       </section>
 

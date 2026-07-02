@@ -15,7 +15,8 @@ import {
 } from 'lucide-react'
 import { Launch, Certificate, Idea, Document, Team, Award } from '@stellr/icons'
 import { Hero, Eyebrow, Button } from '@stellr/web-ui'
-import { PageMedia } from '@/components/sections/PageMedia'
+import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
+import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
 import { PHOTOS, VIDEOS } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
@@ -44,7 +45,7 @@ const pillars = [
     Icon: Launch,
     tileBg: 'bg-primary-soft',
     tileColor: 'text-primary',
-    title: 'Competition training',
+    title: 'Professional Training',
     body: 'Everything you need to enter and do well in a Stellr Competition — self-paced courses, reference material and recorded webinars, ready the moment you sign up.',
   },
   {
@@ -215,6 +216,23 @@ export default function AcademyPage() {
           </div>
         </section>
       )}
+
+      {/* ── Educator video testimonial (moved above "What you need") ──── */}
+      <section className="section-padding bg-white">
+        <div className="container-max max-w-3xl mx-auto">
+          <figure>
+            <VideoTestimonial
+              src={VIDEOS['testimonial-tom-wilson'].src}
+              poster={VIDEOS['testimonial-tom-wilson'].poster}
+              captionsSrc={VIDEOS['testimonial-tom-wilson'].captions}
+              title="Tom Wilson — Arizona Educator"
+            />
+            <figcaption className="mt-3 text-center text-sm font-semibold text-ink">
+              Tom Wilson &mdash; Arizona Educator
+            </figcaption>
+          </figure>
+        </div>
+      </section>
 
       {/* ── Three things the Academy gives you ────────────────────────── */}
       <section className="section-padding bg-white">
@@ -402,14 +420,11 @@ export default function AcademyPage() {
       {/* ── Mentoring deep-dive ───────────────────────────────────────── */}
       <section id="mentoring" className="section-padding bg-white scroll-mt-24">
         <div className="container-max grid grid-cols-1 lg:grid-cols-[1fr_1.15fr] gap-14 items-center">
-          <figure
-            className="rounded-panel overflow-hidden border border-line min-h-[340px] bg-gradient-to-br from-space-violet-bg via-primary-soft to-enviro-green-bg flex items-center justify-center"
-            aria-label="Placeholder for a Stellr cohort collaboration photo"
-          >
-            <span className="flex items-center gap-2 text-content-faint text-sm font-medium">
-              <Team size={20} /> Cohort photo to be added
-            </span>
-          </figure>
+          <ResponsivePhoto
+            photo={PHOTOS['academy-mentoring-cohort']}
+            sizes="(max-width: 1024px) 100vw, 45vw"
+            className="rounded-panel border border-line"
+          />
           <div>
             <Eyebrow className="text-space-violet">Mentoring</Eyebrow>
             <h2 className="text-3xl font-bold text-ink mt-3">Go deeper, in a small group</h2>
@@ -503,13 +518,6 @@ export default function AcademyPage() {
           </div>
         </div>
       </section>
-
-      {/* ── Media: training in action ─────────────────────────────────── */}
-      <PageMedia
-        heading="Training in action"
-        photos={[PHOTOS['academy-1'], PHOTOS['academy-2'], PHOTOS['academy-3']]}
-        videos={[VIDEOS['testimonial-tom-wilson']]}
-      />
     </>
   )
 }

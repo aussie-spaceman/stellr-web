@@ -6,6 +6,7 @@ import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 import { AssetGate } from '@/components/sections/AssetGate'
 import { StudentWorkHero } from '@/components/sections/StudentWorkHero'
 import { PageMedia } from '@/components/sections/PageMedia'
+import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
 import { PHOTOS, VIDEOS } from '@/lib/media-manifest'
 import { getAllCampaigns } from '@/lib/sanity'
 import { getCampaignDates, campaignStatusFromDates, type CampaignSeason } from '@/lib/campaigns'
@@ -32,7 +33,7 @@ const FALLBACK_CAMPAIGNS: Campaign[] = [
 ]
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
-const SIGNUP_URL = `${AUTH_URL}/signup`
+const SIGNUP_URL = `${AUTH_URL}/sign-up`
 
 const gettingStarted = [
   {
@@ -186,6 +187,32 @@ export default async function CampaignsPage() {
         </div>
       </section>
 
+      {/* ── Educator quote (Ty White) ─────────────────────────────────── */}
+      <section className="section-padding bg-white">
+        <div className="container-max">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+            <figure className="rounded-panel border border-line bg-surface px-8 py-9 shadow-card-lift">
+              <blockquote className="text-xl sm:text-2xl font-semibold text-ink leading-relaxed">
+                &ldquo;Design Competitions are a textbook example of Project Based Learning (PBL). We provide
+                an open-ended challenge for students to creatively problem solve. They pursue deeper
+                understanding to overcome challenges. Students learn communication, collaboration, and
+                resilience as they struggle as part of a larger team to design and present their space
+                infrastructure.&rdquo;
+              </blockquote>
+              <figcaption className="mt-5 text-sm font-semibold text-content-secondary">
+                Mr Ty White{' '}
+                <span className="font-normal text-content-muted">· AZ Rural Teacher of the Year (2023)</span>
+              </figcaption>
+            </figure>
+            <ResponsivePhoto
+              photo={PHOTOS['curriculum-ty-white']}
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              className="rounded-panel"
+            />
+          </div>
+        </div>
+      </section>
+
       {/* ── How it works ──────────────────────────────────────────────── */}
       <section className="section-padding bg-white">
         <div className="container-max">
@@ -259,10 +286,10 @@ export default async function CampaignsPage() {
           <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-primary">
             Free resource
           </span>
-          <h2 className="text-3xl font-bold text-ink mt-4">See exactly what your students receive</h2>
+          <h2 className="text-3xl font-bold text-ink mt-4">See Exactly What Students Work On</h2>
           <p className="text-lg text-content-secondary mt-3 leading-relaxed">
-            Download a real Request for Proposal (RFP) — the same industry-style brief students are handed
-            when they take part. We&rsquo;ll email you a copy to keep.
+            Download one of our older Request For Proposals (RFP&rsquo;s) — the same industry-simulation
+            design brief we issue participating students. We&rsquo;ll email you a copy to keep.
           </p>
           <div className="mt-8 flex flex-col items-center">
             <AssetGate
@@ -445,26 +472,6 @@ export default async function CampaignsPage() {
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* ── Material levels ───────────────────────────────────────────── */}
-      {/* ── Educator quote ────────────────────────────────────────────── */}
-      <section className="section-padding bg-white">
-        <div className="container-max max-w-3xl">
-          <figure className="rounded-panel border border-line bg-surface px-8 py-9 shadow-card-lift">
-            <blockquote className="text-xl sm:text-2xl font-semibold text-ink leading-relaxed">
-              &ldquo;Design Competitions are a textbook example of Project Based Learning (PBL). We provide
-              an open-ended challenge for students to creatively problem solve. They pursue deeper
-              understanding to overcome challenges. Students learn communication, collaboration, and
-              resilience as they struggle as part of a larger team to design and present their space
-              infrastructure.&rdquo;
-            </blockquote>
-            <figcaption className="mt-5 text-sm font-semibold text-content-secondary">
-              Mr Ty White{' '}
-              <span className="font-normal text-content-muted">· AZ Rural Teacher of the Year (2023)</span>
-            </figcaption>
-          </figure>
         </div>
       </section>
 

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowRight, Rocket } from 'lucide-react'
 import { urlFor, type StellarEvent } from '@/lib/sanity'
-import { formatDateRange, registrationStatus } from '@/lib/utils'
+import { formatDate, formatDateRange, registrationStatus } from '@/lib/utils'
 
 interface EventCardProps {
   event: StellarEvent
@@ -75,12 +75,33 @@ export function EventCard({ event }: EventCardProps) {
         )}
 
         <div className="mt-auto pt-4">
-          <Link
-            href={`/events/${event.slug.current}`}
-            className="inline-flex items-center gap-1 text-sm font-semibold text-brand-blue hover:underline"
-          >
-            View Event <ArrowRight size={14} />
-          </Link>
+          {status === 'open' ? (
+            <>
+              <div className="flex items-center gap-4">
+                <Link href={`/register/${event.slug.current}`} className="btn-energy !px-4 !py-2">
+                  Register Now
+                </Link>
+                <Link
+                  href={`/events/${event.slug.current}`}
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-brand-blue hover:underline"
+                >
+                  Event details <ArrowRight size={14} />
+                </Link>
+              </div>
+              {event.registrationCloseDate && (
+                <p className="mt-2 text-xs text-brand-grey-mid">
+                  Registration closes {formatDate(event.registrationCloseDate)}
+                </p>
+              )}
+            </>
+          ) : (
+            <Link
+              href={`/events/${event.slug.current}`}
+              className="inline-flex items-center gap-1 text-sm font-semibold text-brand-blue hover:underline"
+            >
+              View Event <ArrowRight size={14} />
+            </Link>
+          )}
         </div>
       </div>
     </div>

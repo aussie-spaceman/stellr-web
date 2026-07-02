@@ -10,6 +10,17 @@ const nextConfig = {
       // 'Activities' → 'Campaigns' → now the Curriculum Campaigns page at /curriculum.
       { source: '/activities', destination: '/curriculum', permanent: true },
       { source: '/campaigns', destination: '/curriculum', permanent: true },
+      // Old "contribute" URL — contributing = volunteering as a mentor.
+      { source: '/contribute', destination: '/mentors', permanent: true },
+      // The Community nav pillar has no public landing page; on www send it to
+      // Membership. Host-scoped so the member portal at app.stellreducation.org
+      // (and localhost dev) keeps serving the real /community.
+      {
+        source: '/community',
+        destination: '/membership',
+        permanent: false,
+        has: [{ type: 'host', value: 'www.stellreducation.org' }],
+      },
       // Academy admin consolidated under /admin/academy (coaching/mentoring/training).
       { source: '/admin/community/sessions/:path*', destination: '/admin/academy/coaching/:path*', permanent: false },
       { source: '/admin/community/cohorts/:path*', destination: '/admin/academy/mentoring/:path*', permanent: false },

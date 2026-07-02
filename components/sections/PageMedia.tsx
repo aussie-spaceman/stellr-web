@@ -20,6 +20,8 @@ export function PageMedia({
   quotes = [],
   competition = [],
   background = 'surface',
+  align = 'left',
+  photoColumns,
   className = '',
 }: {
   eyebrow?: string
@@ -31,6 +33,10 @@ export function PageMedia({
   quotes?: QuoteAsset[]
   competition?: CompetitionAsset[]
   background?: 'surface' | 'white'
+  /** 'center' centres the heading block on screen (e.g. photos-only sections). */
+  align?: 'left' | 'center'
+  /** Forwarded to ProofStrip — use 3 to centre a 3-photo strip on desktop. */
+  photoColumns?: 3 | 5
   className?: string
 }) {
   const hasAny = photos.length || videos.length || quotes.length || competition.length
@@ -38,18 +44,19 @@ export function PageMedia({
 
   const bg = background === 'white' ? 'bg-white' : 'bg-surface'
   const videoCols = videos.length === 1 ? 'sm:grid-cols-1 max-w-3xl' : 'sm:grid-cols-2'
+  const headAlign = align === 'center' ? 'max-w-2xl mx-auto text-center' : 'max-w-2xl'
 
   return (
     <section className={`section-padding ${bg} ${className}`}>
       <div className="container-max">
-        <div className="max-w-2xl">
+        <div className={headAlign}>
           <p className="text-sm font-bold uppercase tracking-widest text-primary mb-3">{eyebrow}</p>
           <h2 className="text-3xl font-bold text-ink">{heading}</h2>
           {intro && <p className="mt-3 text-content-secondary leading-relaxed">{intro}</p>}
         </div>
 
         {photos.length > 0 && (
-          <ProofStrip photos={photos} heading={photoHeading} className="mt-8" />
+          <ProofStrip photos={photos} heading={photoHeading} columns={photoColumns} className="mt-8" />
         )}
 
         {videos.length > 0 && (

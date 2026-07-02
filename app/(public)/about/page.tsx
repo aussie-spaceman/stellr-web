@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Image from 'next/image'
 import Link from 'next/link'
 import { Linkedin, Award, Lightbulb, Eye, Network as NetworkIcon } from 'lucide-react'
 import { PageMedia } from '@/components/sections/PageMedia'
@@ -66,22 +67,60 @@ const values = [
 const founder = {
   name: 'David Shaw',
   role: 'Founder & Chief Inspiration Officer (CIO)',
+  location: 'Salt Lake City, Utah',
   linkedIn: 'https://www.linkedin.com/in/davidmichaelshaw87/',
+  photo: '/team/david-shaw.jpeg',
+  bio: `David is a mechanical engineer and the founder of Stellr, driven by a belief that a community of STEM professionals can be both a positive feedback loop for future generations and a way to improve career outcomes. Having built his own path — from engineering to tech, from Australia to the USA, from the military into growing the Stellr Community — he's passionate about giving young people the mentors, the soft skills, and the visibility into STEM careers that he wishes he'd had — and that industry urgently needs.`,
 }
 
 const advisoryBoard = [
-  { name: 'Jim Christensen', linkedIn: 'https://www.linkedin.com/in/jim-christensen-7b3708122/' },
-  { name: 'Rick Griffiths', linkedIn: 'https://www.linkedin.com/in/richard-a-griffith-41327534/' },
+  {
+    name: 'Jim Christensen',
+    location: 'Ames, Iowa',
+    linkedIn: 'https://www.linkedin.com/in/jim-christensen-7b3708122/',
+    photo: '/team/jim-christensen.jpeg',
+    bio: `Jim brings a career in space education to Stellr, having led K-12 programs at the Aldrin Family Foundation's ShareSpace Education. He knows first-hand how a single hands-on experience can change a student's trajectory, and he's a firm believer that giving young people real exposure to STEM careers is the surest way to inspire the next generation of explorers and engineers.`,
+  },
+  {
+    name: 'Rick Griffiths',
+    location: 'Dallas–Fort Worth region, Texas',
+    linkedIn: 'https://www.linkedin.com/in/richard-a-griffith-41327534/',
+    photo: '/team/rick-griffiths.jpeg',
+    bio: `Rick is a partially retired aerospace teacher, and fully retired US Air Force pilot, guiding high schoolers toward technical careers every day. A Stanford-trained educator, he has seen how competitions and real-world challenges turn classroom theory into genuine ambition. He champions Stellr's mission because it gives students the visibility, and the confidence, to pursue the STEM pathways in front of them.`,
+  },
   {
     name: 'Bill Allen',
+    location: 'George, Iowa',
     linkedIn: 'https://www.linkedin.com/in/bill-allen-b7006b114/',
+    photo: '/team/bill-allen.jpeg',
     bio: 'Bill remains a believer in and advocate for ISD competitions based on the positive results he has seen with former students continuing their studies and careers in engineering and STEM. By attending these competitions, students from the Midwest truly begin to see a pathway to the careers they are interested in, and begin to understand their dreams can become reality.',
   },
-  { name: 'Janet Ivey', linkedIn: 'https://www.linkedin.com/in/janetsplanet/' },
 ]
 
-function Avatar({ name, size = 'lg' }: { name: string; size?: 'lg' | 'sm' }) {
+function Avatar({
+  name,
+  photo,
+  alt,
+  size = 'lg',
+}: {
+  name: string
+  photo?: string
+  alt?: string
+  size?: 'lg' | 'sm'
+}) {
   const dim = size === 'lg' ? 'w-32 h-32 text-3xl' : 'w-20 h-20 text-xl'
+  if (photo) {
+    const px = size === 'lg' ? 128 : 80
+    return (
+      <Image
+        src={photo}
+        alt={alt ?? name}
+        width={px}
+        height={px}
+        className={`${dim} mx-auto rounded-full object-cover`}
+      />
+    )
+  }
   return (
     <div
       className={`${dim} mx-auto rounded-full bg-brand-grey-light flex items-center justify-center font-bold text-brand-grey-mid`}
@@ -227,10 +266,15 @@ export default function AboutPage() {
 
           {/* Founder */}
           <div className="bg-white rounded-2xl p-8 shadow-sm max-w-md mb-12">
-            <Avatar name={founder.name} />
+            <Avatar
+              name={founder.name}
+              photo={founder.photo}
+              alt={`${founder.name}, ${founder.role}`}
+            />
             <div className="text-center mt-4">
               <h3 className="font-bold text-brand-blue-dark text-lg">{founder.name}</h3>
               <p className="text-sm text-brand-grey-mid mt-0.5">{founder.role}</p>
+              <p className="text-sm text-brand-grey-mid mt-0.5">{founder.location}</p>
               <a
                 href={founder.linkedIn}
                 target="_blank"
@@ -241,6 +285,9 @@ export default function AboutPage() {
                 <Linkedin size={16} /> LinkedIn
               </a>
             </div>
+            {founder.bio && (
+              <p className="text-sm text-brand-grey-dark mt-6 leading-relaxed">{founder.bio}</p>
+            )}
           </div>
 
           {/* Advisory Board */}
@@ -248,8 +295,14 @@ export default function AboutPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {advisoryBoard.map((member) => (
               <div key={member.name} className="bg-white rounded-xl p-6 text-center shadow-sm">
-                <Avatar name={member.name} size="sm" />
+                <Avatar
+                  name={member.name}
+                  photo={member.photo}
+                  alt={`${member.name}, Advisory Board`}
+                  size="sm"
+                />
                 <h4 className="font-bold text-brand-blue-dark mt-4">{member.name}</h4>
+                <p className="text-xs text-brand-grey-mid mt-0.5">{member.location}</p>
                 {member.bio && (
                   <p className="text-xs text-brand-grey-dark mt-2 leading-relaxed text-left">
                     {member.bio}

@@ -153,7 +153,7 @@ export default async function DonatePage() {
                 Contact Us About Giving
               </Link>
             )}
-            <Link href="/why-stellr#donor" className="btn-secondary text-base px-8 py-4">
+            <Link href="/why-stellr#donors" className="btn-secondary text-base px-8 py-4">
               Why Support Stellr?
             </Link>
           </div>

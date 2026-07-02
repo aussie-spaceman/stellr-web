@@ -24,9 +24,9 @@ const FOOTER_COLS = [
   {
     heading: 'Academy',
     links: [
-      { label: 'Training', href: '/training' },
-      { label: 'Mentoring', href: '/mentoring' },
-      { label: 'Coaching', href: '/coaching' },
+      { label: 'Training', href: '/academy#training' },
+      { label: 'Mentoring', href: '/academy#mentoring' },
+      { label: 'Coaching', href: '/academy#coaching' },
     ],
   },
   {

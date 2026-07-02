@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowRight, Users, Trophy, Rocket } from 'lucide-react'
+import { ArrowRight, Users, Trophy, Rocket, GraduationCap, BookOpen, HeartHandshake, Microscope } from 'lucide-react'
 import { getFeaturedEvents, type StellarEvent } from '@/lib/sanity'
 import { EventCard } from '@/components/ui/EventCard'
 import { QuoteRotator } from '@/components/sections/QuoteRotator'
@@ -20,10 +20,10 @@ export const metadata: Metadata = {
 export const revalidate = 3600
 
 const roleCards = [
-  { label: 'Student', icon: '🎓', href: '/why-stellr#student' },
-  { label: 'Teacher', icon: '📚', href: '/why-stellr#teacher' },
-  { label: 'Parent', icon: '👪', href: '/why-stellr#parent' },
-  { label: 'Mentor / Volunteer', icon: '🔬', href: '/why-stellr#mentor' },
+  { label: 'Student', icon: GraduationCap, href: '/students' },
+  { label: 'Teacher', icon: BookOpen, href: '/educators' },
+  { label: 'Parent', icon: HeartHandshake, href: '/why-stellr#parents' },
+  { label: 'Mentor / Volunteer', icon: Microscope, href: '/mentors' },
 ]
 
 const whatWeDo = [
@@ -36,7 +36,7 @@ const whatWeDo = [
   {
     icon: Users,
     title: 'Mentored by Industry Experts',
-    href: '/academy',
+    href: '/academy#mentoring',
     body: 'Students network with aerospace, engineering, and science professionals who guide them through competition challenges.',
   },
   {
@@ -129,21 +129,11 @@ export default async function HomePage() {
               <Link href="/competitions" className="btn-primary text-base px-8 py-4">
                 Explore Competitions
               </Link>
-              <a href={`${authUrl}/signup`} className="btn-outline-white text-base px-8 py-4">
+              <a href={`${authUrl}/sign-up`} className="btn-outline-white text-base px-8 py-4">
                 Join Free
               </a>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* ── Proof strip ──────────────────────────────────────────────── */}
-      <section className="section-padding bg-white">
-        <div className="container-max">
-          <ProofStrip
-            heading="Real students, real competitions"
-            photos={[PHOTOS['home-hero'], PHOTOS['home-strip-1'], PHOTOS['home-strip-2'], PHOTOS['home-strip-3']]}
-          />
         </div>
       </section>
 
@@ -160,7 +150,7 @@ export default async function HomePage() {
                 href={card.href}
                 className="flex flex-col items-center gap-3 p-6 bg-white rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all border border-line-light"
               >
-                <span className="text-3xl">{card.icon}</span>
+                <card.icon size={32} className="text-brand-blue" strokeWidth={1.75} />
                 <span className="font-semibold text-brand-blue-dark">{card.label}</span>
                 <span className="text-xs text-brand-blue flex items-center gap-1">
                   Learn more <ArrowRight size={12} />
@@ -223,6 +213,23 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* ── Proof strip ──────────────────────────────────────────────── */}
+      <section className="section-padding bg-white">
+        <div className="container-max">
+          <h2 className="text-3xl font-bold text-brand-blue-dark mb-8">
+            Real students, real competitions
+          </h2>
+          <ProofStrip
+            photos={[
+              PHOTOS['home-biosphere2'],
+              PHOTOS['home-florida-prep'],
+              PHOTOS['home-teamwork'],
+              PHOTOS['home-group-dynamics'],
+            ]}
+          />
+        </div>
+      </section>
+
       {/* ── Testimonials ─────────────────────────────────────────────── */}
       <section className="bg-brand-blue-dark section-padding">
         <div className="container-max">
@@ -240,7 +247,7 @@ export default async function HomePage() {
             Find Your Place in the Stellr Community
           </h2>
           <p className="text-center text-brand-grey-dark mb-12 max-w-xl mx-auto">
-            Whether you&apos;re competing, teaching, mentoring, or supporting — there&apos;s a tier for you.
+            There&apos;s always a free tier to get started — regardless of whether you&apos;re competing, teaching, or volunteering.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
             {membershipTiers.map((tier) => (

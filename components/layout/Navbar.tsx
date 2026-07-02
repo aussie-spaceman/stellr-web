@@ -75,9 +75,9 @@ const navLinks = [
 const getInvolvedLinks = [
   { label: 'Register For An Event', href: '/events' },
   { label: 'Download Curriculum Material', href: '/curriculum' },
-  { label: 'Join Our Community', href: '/sign-up' },
-  { label: 'Become A Sponsor', href: 'https://www.stellreducation.org/network#corporate' },
-  { label: 'Volunteer With Us', href: 'https://www.stellreducation.org/mentors' },
+  { label: 'Join Our Community', href: `${AUTH_URL}/sign-up` },
+  { label: 'Become A Sponsor', href: '/network#corporate' },
+  { label: 'Volunteer With Us', href: '/mentors' },
   { label: 'Partner With Us', href: '/network' },
 ]
 

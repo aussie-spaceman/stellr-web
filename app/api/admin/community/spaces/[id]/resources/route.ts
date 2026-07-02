@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
 import { attachSpaceResource } from '@/lib/container-sync'
+import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
 
 // POST /api/admin/community/spaces/[id]/resources (multipart) — admin uploads a
 // file into a space's Resources (Assign resource modal, screen 20).
@@ -45,7 +46,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const rand = Buffer.from(`${spaceId}:${file.name}:${file.size}`).toString('base64url').slice(0, 12)
   const path = `community-resources/${spaceId}/${rand}-${safe}`
 
-  const bytes = new Uint8Array(await file.arrayBuffer())
+  let bytes = new Uint8Array(await file.arrayBuffer())
+  // Copyright watermark on the bottom-right of every page of uploaded PDFs.
+  if (isPdf(file.name, file.type)) {
+    try {
+      bytes = new Uint8Array(await stampPdfBytes(bytes))
+    } catch (err) {
+      console.error('[admin] resource watermark failed, storing original:', err)
+    }
+  }
   const { error: upErr } = await db.storage.from(RESOURCES_BUCKET).upload(path, bytes, {
     contentType: file.type || 'application/octet-stream',
     upsert: true,
@@ -62,7 +71,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       title: String(form?.get('title') ?? '').trim() || file.name,
       storage_path: path,
       file_type: fileLabel(file.name, file.type || ''),
-      file_size_bytes: file.size,
+      file_size_bytes: bytes.byteLength,
       uploaded_by: adminMemberId,
       from_chat: false,
     })

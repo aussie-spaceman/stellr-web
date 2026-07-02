@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
+import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
 
 // Admin CRUD for per-lesson attached resources (files / links) shown beneath a
 // lesson's primary content in the member Course detail.
@@ -63,7 +64,16 @@ export async function POST(req: Request) {
     if (!file) return NextResponse.json({ error: 'file required' }, { status: 400 })
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     storagePath = `training/resources/${Date.now()}-${safeName}`
-    const { error: upErr } = await db.storage.from(RESOURCES_BUCKET).upload(storagePath, file, { contentType: file.type || 'application/octet-stream', upsert: false })
+    // Copyright watermark on the bottom-right of every page of uploaded PDFs.
+    let payload: File | Uint8Array = file
+    if (isPdf(file.name, file.type)) {
+      try {
+        payload = await stampPdfBytes(new Uint8Array(await file.arrayBuffer()))
+      } catch (err) {
+        console.error('[training] resource watermark failed, storing original:', err)
+      }
+    }
+    const { error: upErr } = await db.storage.from(RESOURCES_BUCKET).upload(storagePath, payload, { contentType: file.type || 'application/octet-stream', upsert: false })
     if (upErr) {
       console.error('[training] resource upload error:', upErr)
       return NextResponse.json({ error: 'Upload failed' }, { status: 500 })

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowRight } from 'lucide-react'
-import { getAllNewsPosts, urlFor } from '@/lib/sanity'
+import { getAllNewsPosts, urlFor, wmSrc } from '@/lib/sanity'
 import { formatDate } from '@/lib/utils'
 import { categoryColors } from '@/lib/news-utils'
 
@@ -80,7 +80,7 @@ export default async function NewsPage({ searchParams }: PageProps) {
                   <div className="relative h-48 bg-gradient-to-br from-brand-blue-dark to-blue-900">
                     {post.coverImage ? (
                       <Image
-                        src={urlFor(post.coverImage).width(600).height(384).url()}
+                        src={wmSrc(urlFor(post.coverImage).width(600).height(384).url())}
                         alt={post.title}
                         fill
                         className="object-cover"

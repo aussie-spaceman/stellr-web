@@ -1,4 +1,5 @@
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from 'pdf-lib'
+import { stampPdfDocument } from '@/lib/watermark/pdf'
 
 // Badge + certificate PDF generation (PRD 6.7).
 // Badges: 3x4" landscape (user-confirmed size), tiled 2×3 on US Letter for printing.
@@ -102,6 +103,7 @@ export async function generateBadgesPdf(
     })
   }
 
+  await stampPdfDocument(doc)
   return doc.save()
 }
 
@@ -143,5 +145,6 @@ export async function generateCertificatesPdf(
     drawCentered(page, eventTitle, bold, 24, centerX, pageH / 2 - 78, maxWidth)
   }
 
+  await stampPdfDocument(doc)
   return doc.save()
 }

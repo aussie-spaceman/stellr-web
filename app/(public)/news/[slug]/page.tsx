@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { PortableText } from 'next-sanity'
-import { getNewsPostBySlug, getRelatedNewsPosts, urlFor } from '@/lib/sanity'
+import { getNewsPostBySlug, getRelatedNewsPosts, urlFor, wmSrc } from '@/lib/sanity'
 import { formatDate } from '@/lib/utils'
 import { categoryColors } from '@/lib/news-utils'
 import { SubscribeForm } from '@/components/forms/SubscribeForm'
@@ -45,7 +45,7 @@ export default async function NewsArticlePage({ params }: PageProps) {
         {post.coverImage && (
           <div className="relative h-64 sm:h-80">
             <Image
-              src={urlFor(post.coverImage).width(1400).height(560).url()}
+              src={wmSrc(urlFor(post.coverImage).width(1400).height(560).url())}
               alt={post.title}
               fill
               className="object-cover opacity-40"
@@ -98,7 +98,7 @@ export default async function NewsArticlePage({ params }: PageProps) {
                   <div className="relative h-40 bg-gradient-to-br from-brand-blue-dark to-blue-900">
                     {rel.coverImage && (
                       <Image
-                        src={urlFor(rel.coverImage).width(400).height(240).url()}
+                        src={wmSrc(urlFor(rel.coverImage).width(400).height(240).url())}
                         alt={rel.title}
                         fill
                         className="object-cover"

@@ -30,6 +30,15 @@ export function urlFor(source: SanityImageSource) {
   return builder!.image(source)
 }
 
+// Route a Sanity CDN image through the on-the-fly watermark endpoint so the
+// bytes the browser receives carry "© Stellr Education" baked in (self-hosted
+// photos are stamped at rest; CMS images are stamped here at serve time and
+// cached). Pass the finished `urlFor(...).url()` string through this.
+export function wmSrc(url: string): string {
+  if (!url) return url
+  return `/api/img?src=${encodeURIComponent(url)}`
+}
+
 // ── Shared types ──────────────────────────────────────────────────────────────
 // Core event shape returned by the event queries below.
 export interface StellarEvent {

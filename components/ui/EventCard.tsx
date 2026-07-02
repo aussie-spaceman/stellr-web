@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowRight, Rocket } from 'lucide-react'
-import { urlFor, type StellarEvent } from '@/lib/sanity'
+import { urlFor, wmSrc, type StellarEvent } from '@/lib/sanity'
 import { formatDate, formatDateRange, registrationStatus } from '@/lib/utils'
 
 interface EventCardProps {
@@ -24,7 +24,7 @@ export function EventCard({ event }: EventCardProps) {
       <div className="relative h-44 bg-gradient-to-br from-brand-blue-dark to-blue-900 flex items-center justify-center">
         {event.image ? (
           <Image
-            src={urlFor(event.image).width(600).height(352).url()}
+            src={wmSrc(urlFor(event.image).width(600).height(352).url())}
             alt={event.title}
             fill
             className="object-cover"

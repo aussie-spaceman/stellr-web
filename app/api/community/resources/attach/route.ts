@@ -3,6 +3,7 @@ import { getCurrentMember, RESOURCES_BUCKET } from '@/lib/community'
 import { getSpaceForMember } from '@/lib/spaces'
 import { supabaseServer } from '@/lib/supabase'
 import { attachSpaceResource } from '@/lib/container-sync'
+import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
 
 const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
 
@@ -56,7 +57,15 @@ export async function POST(req: Request) {
   const rand = Buffer.from(`${member.id}:${file.name}:${file.size}`).toString('base64url').slice(0, 12)
   const path = `community-resources/${space.id}/${rand}-${safe}`
 
-  const bytes = new Uint8Array(await file.arrayBuffer())
+  let bytes = new Uint8Array(await file.arrayBuffer())
+  // Copyright watermark on the bottom-right of every page of uploaded PDFs.
+  if (isPdf(file.name, file.type)) {
+    try {
+      bytes = new Uint8Array(await stampPdfBytes(bytes))
+    } catch (err) {
+      console.error('[community] resource watermark failed, storing original:', err)
+    }
+  }
   const { error: upErr } = await db.storage.from(RESOURCES_BUCKET).upload(path, bytes, {
     contentType: file.type || 'application/octet-stream',
     upsert: true,
@@ -73,7 +82,7 @@ export async function POST(req: Request) {
       title: file.name,
       storage_path: path,
       file_type: fileLabel(file.name, file.type || ''),
-      file_size_bytes: file.size,
+      file_size_bytes: bytes.byteLength,
       uploaded_by: member.id,
       from_chat: true,
       source_post_id: postId,

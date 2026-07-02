@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { THEME_META, type CourseTheme } from '@/lib/training-display'
+import { stampPdfDocument } from '@/lib/watermark/pdf'
 
 // Shared certificate PDF renderer — used by the member download
 // (/api/community/training/certificates/[id]/pdf) and the admin preview
@@ -66,5 +67,6 @@ export async function renderCertificatePdf(input: CertificateInput): Promise<Uin
     center(`Issued ${input.issuedOn} · ${input.issuer}  ·  No. ${input.certNumber}`, helv, 9, height * 0.1, muted)
   }
 
+  await stampPdfDocument(pdf)
   return pdf.save()
 }

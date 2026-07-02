@@ -3,7 +3,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { MapPin, Calendar, Users } from 'lucide-react'
-import { getEventBySlug, urlFor, type StellarEvent } from '@/lib/sanity'
+import { getEventBySlug, urlFor, wmSrc, type StellarEvent } from '@/lib/sanity'
 import { formatDateRange, formatDate, registrationStatus } from '@/lib/utils'
 import { PortableText } from 'next-sanity'
 import type { PortableTextBlock } from '@portabletext/types'
@@ -118,7 +118,7 @@ export default async function EventDetailPage({ params }: PageProps) {
         {event.image && (
           <div className="relative h-72 sm:h-96">
             <Image
-              src={urlFor(event.image).width(1400).height(600).url()}
+              src={wmSrc(urlFor(event.image).width(1400).height(600).url())}
               alt={event.title}
               fill
               className="object-cover opacity-40"

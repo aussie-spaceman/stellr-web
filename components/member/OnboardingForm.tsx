@@ -23,6 +23,9 @@ interface Props {
   next?: string
   /** The tier the member is signing up for, parsed from `next`. Drives the flow. */
   selectedTier?: SelectedTier | null
+  /** Volunteer program signup (?role=volunteer): role is locked to 'volunteer',
+   *  the member must be 18+, and the student-specific steps are skipped. */
+  volunteerFlow?: boolean
 }
 
 const ROLES = [
@@ -49,6 +52,14 @@ const GRADES = [
   { value: 'grad_phd', label: 'Grad / PhD' },
 ]
 
+// Volunteer signup asks the bracket question instead of the role question — the
+// role is always 'volunteer'; the bracket decides which free tier the signup
+// grant rules land them on (college → Alumni, adult → Educator).
+const VOLUNTEER_BRACKETS = [
+  { value: 'college', label: 'College / university student' },
+  { value: 'adult', label: 'Working adult / professional' },
+]
+
 const GENDERS = ['male', 'female', 'other']
 const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
 
@@ -62,7 +73,7 @@ function ageBracketFor(tierBracket: SelectedTier['bracket'] | null): string {
   return ''
 }
 
-export function OnboardingForm({ existingMember, next, selectedTier }: Props) {
+export function OnboardingForm({ existingMember, next, selectedTier, volunteerFlow }: Props) {
   const router = useRouter()
 
   const tierBracket = selectedTier?.bracket ?? null
@@ -76,8 +87,8 @@ export function OnboardingForm({ existingMember, next, selectedTier }: Props) {
   const [error, setError] = useState('')
 
   const [form, setForm] = useState({
-    event_role: skipRoleStep ? 'participant' : existingMember?.event_role ?? '',
-    age_bracket: ageBracketFor(tierBracket) || existingMember?.age_bracket || '',
+    event_role: volunteerFlow ? 'volunteer' : skipRoleStep ? 'participant' : existingMember?.event_role ?? '',
+    age_bracket: volunteerFlow ? '' : ageBracketFor(tierBracket) || existingMember?.age_bracket || '',
     date_of_birth: '',
     gender: '',
     phone: '',
@@ -92,7 +103,9 @@ export function OnboardingForm({ existingMember, next, selectedTier }: Props) {
 
   const [schoolSelection, setSchoolSelection] = useState<SchoolSelection | null>(null)
 
-  const isStudent = form.age_bracket === 'high_school' || form.age_bracket === 'college'
+  // Volunteers are never students for onboarding purposes — a college-bracket
+  // volunteer still skips grade/t-shirt/school/emergency-contact requirements.
+  const isStudent = !volunteerFlow && (form.age_bracket === 'high_school' || form.age_bracket === 'college')
   // Students always provide a school; teachers provide their school/district.
   // Adult mentors & parents may add one but it isn't required.
   const schoolRequired = isStudent || form.event_role === 'teacher'
@@ -129,8 +142,18 @@ export function OnboardingForm({ existingMember, next, selectedTier }: Props) {
     return !!(d.name?.trim() && d.address_line1?.trim() && d.city?.trim() && d.state?.trim() && d.postcode?.trim())
   }
 
+  function isAdultDob(dob: string): boolean {
+    if (!dob) return false
+    const d = new Date(dob)
+    const eighteenth = new Date(d.getFullYear() + 18, d.getMonth(), d.getDate())
+    return new Date() >= eighteenth
+  }
+
+  const volunteerUnderage = !!volunteerFlow && !!form.date_of_birth && !isAdultDob(form.date_of_birth)
+
   function detailsValid(): boolean {
     if (!form.date_of_birth || !form.gender || !form.phone.trim()) return false
+    if (volunteerFlow && !isAdultDob(form.date_of_birth)) return false
     if (isStudent && (!form.grade || !form.tshirt_size)) return false
     if (schoolRequired && !schoolValid(schoolSelection)) return false
     return true
@@ -212,7 +235,38 @@ export function OnboardingForm({ existingMember, next, selectedTier }: Props) {
         </p>
       )}
 
-      {stepKey === 'role' && (
+      {stepKey === 'role' && volunteerFlow && (
+        <div className="space-y-4">
+          <h2 className="text-base font-semibold text-brand-blue-dark">Which best describes you?</h2>
+          <p className="text-xs text-brand-muted-soft">
+            You&rsquo;re joining as a Stellr volunteer — this just helps us set up the right membership.
+          </p>
+          <div className="grid grid-cols-1 gap-3">
+            {VOLUNTEER_BRACKETS.map((b) => (
+              <button
+                key={b.value}
+                onClick={() => set('age_bracket', b.value)}
+                className={`text-left px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
+                  form.age_bracket === b.value
+                    ? 'border-brand-blue bg-brand-blue/5 text-brand-blue'
+                    : 'border-brand-border hover:border-brand-border text-brand-muted'
+                }`}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={goNext}
+            disabled={!form.age_bracket}
+            className="w-full mt-4 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-40"
+          >
+            Continue
+          </button>
+        </div>
+      )}
+
+      {stepKey === 'role' && !volunteerFlow && (
         <div className="space-y-4">
           <h2 className="text-base font-semibold text-brand-blue-dark">What best describes you?</h2>
           <div className="grid grid-cols-1 gap-3">
@@ -271,6 +325,13 @@ export function OnboardingForm({ existingMember, next, selectedTier }: Props) {
             <label className="block text-xs text-brand-muted-soft mb-1">Phone</label>
             <input type="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} className={inputClass} />
           </div>
+
+          {volunteerUnderage && (
+            <p className="text-sm text-red-600">
+              Stellr volunteers must be 18 or older. If you&rsquo;re a high-school student, join as a
+              student member instead.
+            </p>
+          )}
 
           {isStudent && (
             <div className="grid grid-cols-2 gap-4">

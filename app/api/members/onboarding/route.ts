@@ -5,6 +5,7 @@ import { fireCampaignEvent } from '@/lib/email-campaigns'
 import { applyGrantTrigger } from '@/lib/membership-grants'
 import { normalizeEmail } from '@/lib/member-enums'
 import { logActivity } from '@/lib/activity-log'
+import { grantVolunteerRole, dispatchVolunteerAgreement } from '@/lib/volunteer'
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
@@ -26,8 +27,11 @@ export async function POST(req: Request) {
 
   // Onboarding fields are mandatory by audience (mirrors the client wizard):
   // everyone gives a phone; students give grade/t-shirt/school + emergency
-  // contact; teachers give their school/district.
-  const isStudentBracket = age_bracket === 'high_school' || age_bracket === 'college'
+  // contact; teachers give their school/district. Volunteers are never treated
+  // as students — a college-bracket volunteer skips the student requirements —
+  // and must be 18+.
+  const isVolunteerSignup = event_role === 'volunteer'
+  const isStudentBracket = !isVolunteerSignup && (age_bracket === 'high_school' || age_bracket === 'college')
   const schoolProvided = (school_id && school_id !== 'new') || (school_id === 'new' && !!new_school_name?.trim())
   const schoolRequired = isStudentBracket || event_role === 'teacher'
 
@@ -48,6 +52,11 @@ export async function POST(req: Request) {
 
   // Auto-override age_bracket if DOB indicates minor
   const dob = new Date(date_of_birth)
+  const eighteenth = new Date(dob.getFullYear() + 18, dob.getMonth(), dob.getDate())
+  const isMinorDob = new Date() < eighteenth
+  if (isVolunteerSignup && isMinorDob) {
+    return NextResponse.json({ error: 'Stellr volunteers must be 18 or older' }, { status: 400 })
+  }
   const ageAtToday = new Date().getFullYear() - dob.getFullYear()
   const resolvedBracket = ageAtToday < 18 ? 'high_school' : age_bracket
   const resolvedRole = ageAtToday < 18 ? 'participant' : event_role
@@ -163,6 +172,19 @@ export async function POST(req: Request) {
       actorType: 'member',
       actorMemberId: memberId,
     }, db)
+  }
+
+  // Volunteer program signup: grant the additive volunteer role (which also adds
+  // the member to the Volunteer Space) and send the Volunteer Agreement. Both are
+  // idempotent / non-fatal, so a repeat profile save can't double-issue.
+  if (memberId && isVolunteerSignup) {
+    await grantVolunteerRole(db, memberId, { actorType: 'member', actorMemberId: memberId }, 'registration')
+    const { data: volunteerMember } = await db
+      .from('members')
+      .select('id, first_name, last_name, email, phone, date_of_birth')
+      .eq('id', memberId)
+      .maybeSingle()
+    if (volunteerMember) await dispatchVolunteerAgreement(db, volunteerMember)
   }
 
   // Link to school if provided

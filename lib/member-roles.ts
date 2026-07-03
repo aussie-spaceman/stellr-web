@@ -134,6 +134,7 @@ function classificationRolesFor(eventRole: string): MemberRole[] {
     case 'school_student_manager': return ['student_manager', 'participant'] // SM counts as a participant
     case 'mentor': return ['mentor']
     case 'parent': return ['parent']
+    case 'volunteer': return ['volunteer']
     case 'donor': return ['donor_sponsor']
     default: return [] // subscriber / adult → base 'member' only
   }

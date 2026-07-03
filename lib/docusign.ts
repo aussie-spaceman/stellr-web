@@ -10,6 +10,7 @@ const ENV = {
   templateId:       process.env.DOCUSIGN_TEMPLATE_ID         ?? '', // minor / guardian consent
   adultTemplateId:  process.env.DOCUSIGN_ADULT_TEMPLATE_ID   ?? '', // adult participation agreement
   mentorTemplateId: process.env.DOCUSIGN_MENTOR_TEMPLATE_ID  ?? '', // mentor participation agreement
+  volunteerTemplateId: process.env.DOCUSIGN_VOLUNTEER_TEMPLATE_ID ?? '', // volunteer agreement
   stellrRepName:  process.env.DOCUSIGN_STELLR_REP_NAME  ?? 'Stellr Education',
   stellrRepEmail: process.env.DOCUSIGN_STELLR_REP_EMAIL ?? '', // counter-signer on mentor agreements
   connectHmacKey: process.env.DOCUSIGN_CONNECT_HMAC_KEY  ?? '',
@@ -301,6 +302,58 @@ export async function createMentorAgreementEnvelope(p: MentorAgreementParams): P
   return { envelopeId: data.envelopeId, signerCount }
 }
 
+export interface VolunteerAgreementParams {
+  firstName:  string
+  lastName:   string
+  email:      string
+  phone?:     string
+  eventTitle: string
+}
+
+export async function createVolunteerAgreementEnvelope(p: VolunteerAgreementParams): Promise<CreatedEnvelope> {
+  if (!ENV.volunteerTemplateId) throw new Error('DOCUSIGN_VOLUNTEER_TEMPLATE_ID not configured')
+  const fullName = `${p.firstName} ${p.lastName}`
+  const signerCount = ENV.stellrRepEmail ? 2 : 1
+
+  // Volunteer + Stellr representative counter-sign concurrently, mirroring the
+  // mentor agreement. The 'StellrRepresentative' role must exist on the template;
+  // it is only added when DOCUSIGN_STELLR_REP_EMAIL is configured.
+  const templateRoles: object[] = [{
+    roleName:     'Volunteer',
+    name:         fullName,
+    email:        p.email,
+    routingOrder: '1',
+    tabs: {
+      textTabs: [
+        { tabLabel: 'VolunteerName',  value: fullName      },
+        { tabLabel: 'VolunteerEmail', value: p.email       },
+        { tabLabel: 'VolunteerPhone', value: p.phone ?? '' },
+        { tabLabel: 'EventTitle',     value: p.eventTitle  },
+      ],
+    },
+  }]
+  if (ENV.stellrRepEmail) {
+    templateRoles.push({
+      roleName:     'StellrRepresentative',
+      name:         ENV.stellrRepName,
+      email:        ENV.stellrRepEmail,
+      routingOrder: '1',
+    })
+  }
+
+  const body = {
+    status:       'sent',
+    emailSubject: `Volunteer Agreement — ${p.eventTitle}`,
+    templateId:   ENV.volunteerTemplateId,
+    templateRoles,
+  }
+
+  const res = await dsRequest('/envelopes', { method: 'POST', body: JSON.stringify(body) })
+  if (!res.ok) throw new Error(`DocuSign create volunteer envelope failed: ${await res.text()}`)
+  const data = await res.json() as { envelopeId: string }
+  return { envelopeId: data.envelopeId, signerCount }
+}
+
 // Per-signer progress for an in-flight envelope, used by the Connect webhook
 // to keep signers_total / signers_completed current. Carbon copies and other
 // non-signing recipients are excluded.
@@ -363,7 +416,7 @@ export function isMinor(dateOfBirth: string): boolean {
   return new Date() < eighteenth
 }
 
-export type AgreementType = 'minor' | 'adult' | 'mentor'
+export type AgreementType = 'minor' | 'adult' | 'mentor' | 'volunteer'
 
 // Which DocuSign agreement (if any) a participant needs, based on role and age:
 //   • any student (incl. Student Manager) → minor "Participation Agreement"
@@ -371,6 +424,7 @@ export type AgreementType = 'minor' | 'adult' | 'mentor'
 //     for paperwork, with their emergency contact acting as the guardian signer
 //   • other under-18 participant          → minor parental-consent form
 //   • adult registering as a mentor       → mentor participation agreement
+//   • adult in the volunteer program      → volunteer agreement
 //   • any other adult attendee            → adult participation agreement
 export function classifyAgreement(
   eventRole: string | null | undefined,
@@ -382,6 +436,7 @@ export function classifyAgreement(
   if (role === 'participant' || role === 'school_student_manager') return 'minor'
   if (dateOfBirth && isMinor(dateOfBirth)) return 'minor'
   if (role === 'mentor') return 'mentor'
+  if (role === 'volunteer') return 'volunteer'
   if (!role) return null
   return 'adult'
 }

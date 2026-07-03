@@ -22,10 +22,11 @@ export function normalizeEmail(email: unknown): string {
 
 export const VALID_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'] as const
 export const VALID_AGE_BRACKETS = ['adult', 'high_school', 'college'] as const
-// 'adult' and 'school_student_manager' require migration 016 to exist in the enum.
+// 'adult' and 'school_student_manager' require migration 016 to exist in the enum;
+// 'volunteer' requires migration 121.
 // 'school_student' was renamed to the canonical 'participant' in migration 097.
 export const VALID_EVENT_ROLES = [
-  'teacher', 'participant', 'school_student_manager', 'mentor', 'subscriber', 'parent', 'adult',
+  'teacher', 'participant', 'school_student_manager', 'mentor', 'subscriber', 'parent', 'adult', 'volunteer',
 ] as const
 export const VALID_GRADES = [
   'grade_9', 'grade_10', 'grade_11', 'grade_12',
@@ -116,5 +117,6 @@ export function displayEventRole(v: unknown): string | undefined {
     subscriber: 'Subscriber',
     parent: 'Parent',
     adult: 'Adult',
+    volunteer: 'Volunteer',
   }[c]
 }

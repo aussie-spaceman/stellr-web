@@ -3,6 +3,9 @@ import Link from 'next/link'
 import { CalendarDays, Repeat, ArrowUpRight } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
 import { getMemberEventCatalog, type CatalogEvent } from '@/lib/event-portal'
+import { supabaseServer } from '@/lib/supabase'
+import { isVolunteer, getVolunteerInterests } from '@/lib/volunteer'
+import { VolunteerInterestButton } from '@/components/member/VolunteerInterestButton'
 
 export const metadata = { title: 'Events & Campaigns' }
 
@@ -94,6 +97,13 @@ export default async function EventsPortalPage() {
   const registered = catalog.filter((e) => e.registered)
   const available = catalog.filter((e) => !e.registered)
 
+  // Volunteers can raise a hand for any catalog item they're not already on —
+  // an interest signal admins convert into an assignment manually.
+  const volunteer = await isVolunteer(member.id)
+  const interestSlugs = volunteer
+    ? new Set((await getVolunteerInterests(supabaseServer(), member.id)).map((i) => i.event_slug))
+    : new Set<string>()
+
   return (
     <div className="space-y-8">
       <div>
@@ -127,7 +137,15 @@ export default async function EventsPortalPage() {
           </h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {available.map((e) => (
-              <EventCard key={e.slug} e={e} />
+              <div key={e.slug} className="space-y-2">
+                <EventCard e={e} />
+                {volunteer && (
+                  <VolunteerInterestButton
+                    eventSlug={e.slug}
+                    initialInterested={interestSlugs.has(e.slug)}
+                  />
+                )}
+              </div>
             ))}
           </div>
         </section>

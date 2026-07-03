@@ -27,11 +27,17 @@ function tierFromNext(next: string | null): SelectedTier | null {
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>
+  searchParams: Promise<{ next?: string; role?: string }>
 }) {
   const { userId } = await auth()
-  const next = safeNext((await searchParams).next)
-  if (!userId) redirect(next ? `/sign-in?next=${encodeURIComponent(next)}` : '/sign-in')
+  const sp = await searchParams
+  const next = safeNext(sp.next)
+  // Volunteer program signup (public /volunteer page → /sign-up → here).
+  const volunteerFlow = sp.role === 'volunteer'
+  if (!userId) {
+    const selfPath = volunteerFlow ? '/account/onboarding?role=volunteer' : next
+    redirect(selfPath ? `/sign-in?next=${encodeURIComponent(selfPath)}` : '/sign-in')
+  }
 
   // If member record is already complete, skip onboarding (resume `next` if present)
   const db = supabaseServer()
@@ -48,12 +54,21 @@ export default async function OnboardingPage({
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Complete your profile</h1>
+        <h1 className="font-heading uppercase text-title text-brand-blue-dark">
+          {volunteerFlow ? 'Join as a volunteer' : 'Complete your profile'}
+        </h1>
         <p className="mt-2 text-sm text-brand-muted">
-          Tell us a bit about yourself to get the most out of your Stellr membership.
+          {volunteerFlow
+            ? 'Tell us a bit about yourself. We’ll then send your Volunteer Agreement and set up your volunteer training.'
+            : 'Tell us a bit about yourself to get the most out of your Stellr membership.'}
         </p>
       </div>
-      <OnboardingForm existingMember={member} next={next ?? undefined} selectedTier={selectedTier} />
+      <OnboardingForm
+        existingMember={member}
+        next={next ?? undefined}
+        selectedTier={selectedTier}
+        volunteerFlow={volunteerFlow}
+      />
     </div>
   )
 }

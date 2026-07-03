@@ -130,7 +130,7 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
     const downloadUrl = adminDownload
       ? `/api/admin/docusigns/${id}/download`
       : `/api/members/docusigns/${id}/download`
-    const prefix = type === 'adult' || type === 'mentor' ? 'agreement' : 'consent'
+    const prefix = type === 'adult' || type === 'mentor' || type === 'volunteer' ? 'agreement' : 'consent'
     try {
       const res = await fetch(downloadUrl)
       if (!res.ok) throw new Error('Download failed')

@@ -9,6 +9,7 @@ import { getEventRoster } from '@/lib/event-admin'
 import EventRoster from '@/components/admin/EventRoster'
 import EventManagerAssignments from '@/components/admin/EventManagerAssignments'
 import { EventAccessGrant } from '@/components/admin/events/EventAccessGrant'
+import { EventVolunteersPanel } from '@/components/admin/events/EventVolunteersPanel'
 import EventCompanies, { type CompanyRow } from '@/components/admin/EventCompanies'
 import EventBadges from '@/components/admin/EventBadges'
 import { RefundPolicyEditor } from '@/components/admin/RefundPolicyEditor'
@@ -297,6 +298,7 @@ export default async function AdminEventDetailPage({
       {tab === 'roster' && (
         <div className="space-y-6">
           <EventAccessGrant slug={slug} />
+          <EventVolunteersPanel slug={slug} />
           {!isCampaign && roster && (
             <EventCompanies eventSlug={slug} companies={companies} studentCount={studentCount} />
           )}

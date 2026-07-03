@@ -14,6 +14,11 @@ import { AddressBook } from '@/components/account/AddressBook'
 import { OrdersList } from '@/components/account/OrdersList'
 import { EntitlementsSummary } from '@/components/account/EntitlementsSummary'
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline'
+import { VolunteeringSection } from '@/components/member/VolunteeringSection'
+import {
+  isVolunteer, getVolunteerInterests, getVolunteerStatuses, getVolunteerTrainingProgress,
+  type VolunteerStatus, type VolunteerTrainingProgress,
+} from '@/lib/volunteer'
 import Link from 'next/link'
 
 export const metadata = { title: 'My Account' }
@@ -125,6 +130,21 @@ export default async function AccountPage({
     .or(groupOwnerOr)
   const managesGroup = (managedGroupCount ?? 0) > 0
 
+  // Volunteering card (profile tab) — only for members in the volunteer program.
+  const volunteer = await isVolunteer(member.id)
+  const volunteerAssignments = volunteer
+    ? ((member.event_participations ?? []) as Array<{ role?: string | null; event_slug: string | null; event_title: string | null; event_year: number | null }>)
+        .filter((p) => p.role === 'volunteer')
+        .sort((a, b) => (b.event_year ?? 0) - (a.event_year ?? 0))
+    : []
+  const [volunteerInterests, volunteerStatuses, volunteerTraining] = volunteer
+    ? await Promise.all([
+        getVolunteerInterests(db, member.id),
+        getVolunteerStatuses(db, [{ id: member.id, email: member.email, date_of_birth: member.date_of_birth }]),
+        getVolunteerTrainingProgress(db, [member.id]),
+      ])
+    : [[], {} as Record<string, VolunteerStatus>, {} as Record<string, VolunteerTrainingProgress>]
+
   const { tab: rawTab } = await searchParams
   const isGroupManager =
     managesGroup ||
@@ -190,6 +210,20 @@ export default async function AccountPage({
               />
             </div>
             <MyRegistrations registrations={myRegistrations} />
+            {volunteer && (
+              <VolunteeringSection
+                assignments={volunteerAssignments}
+                interests={volunteerInterests}
+                status={
+                  volunteerStatuses[member.id] ?? {
+                    agreement: 'missing',
+                    compliance: 'invalid',
+                    complianceDetail: null,
+                  }
+                }
+                training={volunteerTraining[member.id] ?? { completed: 0, total: 0 }}
+              />
+            )}
             <EventHistory participations={member.event_participations ?? []} editable />
             <DocusignsSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
             <ComplianceSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />

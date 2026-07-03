@@ -105,7 +105,8 @@ interface Persona {
   lastName: string
   ageBracket: (typeof VALID_AGE_BRACKETS)[number]
   eventRole: (typeof VALID_EVENT_ROLES)[number]
-  dob?: string
+  gender: 'male' | 'female' | 'other' | 'prefer_not_to_say'
+  dob: string
   tier?: string
   extraRoles?: MemberRole[]
   school?: boolean
@@ -114,26 +115,27 @@ interface Persona {
   note?: string
 }
 
+// gender/dob are NOT-NULL on the live members table (no default) — every persona supplies both.
 const PERSONAS: Persona[] = [
-  { key: 'subscriber', firstName: 'Sam', lastName: 'Subscriber', ageBracket: 'adult', eventRole: 'subscriber', tier: 'Subscriber',
+  { key: 'subscriber', firstName: 'Sam', lastName: 'Subscriber', ageBracket: 'adult', eventRole: 'subscriber', gender: 'other', dob: '1990-01-01', tier: 'Subscriber',
     note: 'Top-of-funnel free account.' },
-  { key: 'student', firstName: 'Stella', lastName: 'Student', ageBracket: 'high_school', eventRole: 'participant', dob: '2010-05-01', tier: 'Explorer', school: true,
+  { key: 'student', firstName: 'Stella', lastName: 'Student', ageBracket: 'high_school', eventRole: 'participant', gender: 'female', dob: '2010-05-01', tier: 'Explorer', school: true,
     note: 'Minor (dob 2010) so DocuSign/guardian flows apply.' },
-  { key: 'student_manager', firstName: 'Morgan', lastName: 'Manager', ageBracket: 'high_school', eventRole: 'school_student_manager', dob: '2008-03-01', tier: 'Explorer', school: true,
+  { key: 'student_manager', firstName: 'Morgan', lastName: 'Manager', ageBracket: 'high_school', eventRole: 'school_student_manager', gender: 'male', dob: '2008-03-01', tier: 'Explorer', school: true,
     note: 'Student leading a Group — sync adds student_manager + participant roles.' },
-  { key: 'teacher', firstName: 'Tara', lastName: 'Teacher', ageBracket: 'adult', eventRole: 'teacher', tier: 'Educator', school: true,
+  { key: 'teacher', firstName: 'Tara', lastName: 'Teacher', ageBracket: 'adult', eventRole: 'teacher', gender: 'female', dob: '1985-06-15', tier: 'Educator', school: true,
     note: 'Group registration + Teams portal owner.' },
-  { key: 'parent', firstName: 'Paula', lastName: 'Parent', ageBracket: 'adult', eventRole: 'parent', tier: 'Parent/Guardian',
+  { key: 'parent', firstName: 'Paula', lastName: 'Parent', ageBracket: 'adult', eventRole: 'parent', gender: 'female', dob: '1980-09-20', tier: 'Parent/Guardian',
     note: 'Guardian / DocuSign signer.' },
-  { key: 'donor', firstName: 'Dana', lastName: 'Donor', ageBracket: 'adult', eventRole: 'adult', tier: 'Subscriber', extraRoles: ['donor_sponsor'],
+  { key: 'donor', firstName: 'Dana', lastName: 'Donor', ageBracket: 'adult', eventRole: 'adult', gender: 'male', dob: '1975-04-10', tier: 'Subscriber', extraRoles: ['donor_sponsor'],
     note: 'Donor tier retired post-migr 094; seeded as adult + donor_sponsor role.' },
-  { key: 'mentor', firstName: 'Miguel', lastName: 'Mentor', ageBracket: 'college', eventRole: 'mentor', tier: 'Alumni',
+  { key: 'mentor', firstName: 'Miguel', lastName: 'Mentor', ageBracket: 'college', eventRole: 'mentor', gender: 'male', dob: '2003-11-05', tier: 'Alumni',
     note: 'College mentor/volunteer; can host Cohort sessions.' },
-  { key: 'coach', firstName: 'Cody', lastName: 'Coach', ageBracket: 'adult', eventRole: 'mentor', tier: 'Subscriber', extraRoles: ['coach'],
+  { key: 'coach', firstName: 'Cody', lastName: 'Coach', ageBracket: 'adult', eventRole: 'mentor', gender: 'male', dob: '1988-02-02', tier: 'Subscriber', extraRoles: ['coach'],
     note: 'Coach is a member_role (manage axis), not a tier.' },
-  { key: 'event_manager', firstName: 'Evan', lastName: 'Events', ageBracket: 'adult', eventRole: 'teacher', tier: 'Educator', extraRoles: ['staff'], eventManager: true,
+  { key: 'event_manager', firstName: 'Evan', lastName: 'Events', ageBracket: 'adult', eventRole: 'teacher', gender: 'other', dob: '1986-07-07', tier: 'Educator', extraRoles: ['staff'], eventManager: true,
     note: 'Scoped events admin. Verify staff_roles scope=events against live schema.' },
-  { key: 'admin', firstName: 'Alex', lastName: 'Admin', ageBracket: 'adult', eventRole: 'adult', tier: 'Educator', extraRoles: ['staff'], admin: true,
+  { key: 'admin', firstName: 'Alex', lastName: 'Admin', ageBracket: 'adult', eventRole: 'adult', gender: 'other', dob: '1984-12-12', tier: 'Educator', extraRoles: ['staff'], admin: true,
     note: 'Full admin via Clerk public_metadata.role=admin. Must re-auth to take effect.' },
 ]
 
@@ -194,8 +196,9 @@ async function ensureMember(p: Persona, email: string, clerkUserId: string | nul
     last_name: p.lastName,
     age_bracket: p.ageBracket,
     event_role: p.eventRole,
+    gender: p.gender,
+    date_of_birth: p.dob,
     is_active: true,
-    ...(p.dob ? { date_of_birth: p.dob } : {}),
     ...(clerkUserId ? { clerk_user_id: clerkUserId } : {}),
   }
   if (existing) {
@@ -216,23 +219,58 @@ async function ensureTier(memberId: string, tierName: string): Promise<string> {
     .limit(1)
     .maybeSingle()
   if (!tier) return `tier "${tierName}" not found — skipped`
-  if (!APPLY) return `would grant ${tier.name}`
-  // Import grantTier lazily so a dry run needn't touch its supabaseServer() default.
-  const { grantTier } = await import('../lib/membership-grants')
-  const res = await grantTier(
-    { memberId, tierId: tier.id, source: 'system', complimentary: true },
-    db,
-  )
-  return res.granted ? `granted ${tier.name}` : `${tier.name}: ${res.reason}`
+  if (!APPLY || memberId === 'dry') return `would grant ${tier.name}`
+  // Direct write — lib/membership-grants imports `server-only` and can't load in a Node script.
+  const { data: existing } = await db
+    .from('member_memberships')
+    .select('id')
+    .eq('member_id', memberId)
+    .eq('tier_id', tier.id)
+    .eq('renewal_status', 'active')
+    .maybeSingle()
+  if (existing) return `already on ${tier.name}`
+  const today = new Date().toISOString().split('T')[0]
+  const { error } = await db.from('member_memberships').insert({
+    member_id: memberId,
+    tier_id: tier.id,
+    started_at: today,
+    renewal_status: 'active',
+    is_complimentary: true,
+    source: 'system',
+  })
+  return error ? `${tier.name}: ${error.message}` : `granted ${tier.name}`
+}
+
+async function ensureSchool(memberId: string): Promise<string> {
+  if (!APPLY) return `would link ${TEST_SCHOOL.name}`
+  // Find-or-create the test school + link (direct write; avoids lib/school-link server-only import).
+  let { data: school } = await db
+    .from('schools').select('id').ilike('name', TEST_SCHOOL.name).limit(1).maybeSingle()
+  if (!school) {
+    const { data: created, error } = await db.from('schools').insert({
+      name: TEST_SCHOOL.name, is_active: true,
+      address_line1: TEST_SCHOOL.address_street, city: TEST_SCHOOL.address_city,
+      state: TEST_SCHOOL.address_state, postcode: TEST_SCHOOL.address_zip,
+    }).select('id').single()
+    if (error) return `school skipped: ${error.message}`
+    school = created
+  }
+  const { data: link } = await db
+    .from('member_schools').select('id').eq('member_id', memberId).eq('school_id', school.id).maybeSingle()
+  if (!link) {
+    const { error } = await db.from('member_schools')
+      .insert({ member_id: memberId, school_id: school.id, is_current: true })
+    if (error) return `link skipped: ${error.message}`
+  }
+  return `linked ${TEST_SCHOOL.name}`
 }
 
 async function ensureEventManager(memberId: string): Promise<string> {
-  if (!APPLY) return 'would add staff_roles scope=events (verify schema)'
-  // Best-effort: the staff_roles table shape isn't in tracked migrations.
+  if (!APPLY) return 'would add staff_roles scopes=[events]'
   const { error } = await db
     .from('staff_roles')
-    .upsert({ member_id: memberId, scope: 'events' }, { onConflict: 'member_id,scope', ignoreDuplicates: true })
-  return error ? `staff_roles insert skipped: ${error.message}` : 'staff_roles scope=events'
+    .upsert({ member_id: memberId, scopes: ['events'] }, { onConflict: 'member_id' })
+  return error ? `staff_roles skipped: ${error.message}` : 'staff_roles scopes=[events]'
 }
 
 // ── main ────────────────────────────────────────────────────────────────────────
@@ -243,7 +281,6 @@ async function main() {
   console.log(`Email pattern: ${emailFor('<role>')}${CLERK_TEST ? '  (clerk_test auto-verify, code 424242)' : ''}\n`)
 
   const personas = ONLY ? PERSONAS.filter((p) => ONLY.has(p.key)) : PERSONAS
-  let sharedSchoolId: string | null = null
 
   for (const p of personas) {
     const email = emailFor(p.key)
@@ -258,17 +295,7 @@ async function main() {
         await syncMemberClassificationRole(db, memberId, p.eventRole)
         for (const r of p.extraRoles ?? []) await addGlobalRole(db, memberId, r, 'seed')
         if (p.tier) console.log(`   tier:   ${await ensureTier(memberId, p.tier)}`)
-        if (p.school) {
-          const { resolveSchoolId } = await import('../lib/school-link')
-          sharedSchoolId = sharedSchoolId ?? (await resolveSchoolId(db, { ...TEST_SCHOOL }))
-          if (sharedSchoolId) {
-            await db.from('member_schools').upsert(
-              { member_id: memberId, school_id: sharedSchoolId },
-              { onConflict: 'member_id,school_id', ignoreDuplicates: true },
-            )
-            console.log(`   school: linked ${TEST_SCHOOL.name}`)
-          }
-        }
+        if (p.school) console.log(`   school: ${await ensureSchool(memberId)}`)
         if (p.eventManager) console.log(`   events: ${await ensureEventManager(memberId)}`)
         if (p.admin) console.log(`   admin:  Clerk public_metadata.role=admin set (re-auth required)`)
       } else if (!APPLY) {

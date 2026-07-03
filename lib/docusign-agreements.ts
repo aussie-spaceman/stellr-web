@@ -5,6 +5,7 @@ import {
   createConsentEnvelope,
   createAdultAgreementEnvelope,
   createMentorAgreementEnvelope,
+  createVolunteerAgreementEnvelope,
   type AgreementType,
   type CreatedEnvelope,
 } from './docusign'
@@ -17,9 +18,10 @@ import {
 
 // Human-readable label per agreement type, used in emails and the portal UI.
 export const AGREEMENT_LABEL: Record<AgreementType, string> = {
-  minor:  'Parental Consent Form',
-  adult:  'Participation Agreement',
-  mentor: 'Mentor Participation Agreement',
+  minor:     'Parental Consent Form',
+  adult:     'Participation Agreement',
+  mentor:    'Mentor Participation Agreement',
+  volunteer: 'Volunteer Agreement',
 }
 
 // Signed paperwork is valid for this long, across all Stellr events.
@@ -32,7 +34,8 @@ export function agreementExpiry(completedAt: string): Date {
 }
 
 export interface ParticipantContext {
-  participantId: string
+  /** Null for program-level agreements not tied to an event participant row. */
+  participantId: string | null
   memberId:      string | null
   eventSlug:     string
   eventTitle:    string
@@ -104,13 +107,18 @@ export async function dispatchAgreement(
       return
     }
 
-    // Adult or mentor — self-signed, sourced from the participant's own phone column
+    // Adult, mentor or volunteer — self-signed, sourced from the participant's own phone column
     const signerName = `${ctx.firstName} ${ctx.lastName}`
     const envelope = type === 'adult'
       ? await createAdultAgreementEnvelope({
           firstName: ctx.firstName, lastName: ctx.lastName, email: ctx.email,
           phone: ctx.phone ?? undefined, eventTitle: ctx.eventTitle,
           schoolName: ctx.schoolName ?? undefined, schoolState: ctx.schoolState ?? undefined,
+        })
+      : type === 'volunteer'
+      ? await createVolunteerAgreementEnvelope({
+          firstName: ctx.firstName, lastName: ctx.lastName, email: ctx.email,
+          phone: ctx.phone ?? undefined, eventTitle: ctx.eventTitle,
         })
       : await createMentorAgreementEnvelope({
           firstName: ctx.firstName, lastName: ctx.lastName, email: ctx.email,

@@ -27,9 +27,11 @@ export async function GET(req: Request) {
   return NextResponse.json({ resources: data ?? [] })
 }
 
-// POST — add a resource. Multipart (kind=file) or JSON (kind=link).
-//   file: { itemId, kind:'file', title, file }
-//   link: { itemId, kind:'link', title, externalUrl }
+// POST — add a resource. Multipart (kind=file) or JSON (kind=link | existing).
+//   file:     { itemId, kind:'file', title, file }
+//   link:     { itemId, kind:'link', title, externalUrl }
+//   existing: { itemId, kind:'existing', resourceId, title? }  ← reference a
+//             Global Resources Catalogue binary without re-uploading it.
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const db = supabaseServer()
@@ -39,6 +41,7 @@ export async function POST(req: Request) {
   let kind: string | null
   let title: string | null
   let externalUrl: string | null = null
+  let resourceId: string | null = null
   let file: File | null = null
 
   if (isMultipart) {
@@ -53,6 +56,41 @@ export async function POST(req: Request) {
     kind = b.kind ?? 'link'
     title = (b.title as string | undefined)?.trim() ?? null
     externalUrl = (b.externalUrl as string | undefined)?.trim() ?? null
+    resourceId = (b.resourceId as string | undefined) ?? null
+  }
+
+  // Attach an existing catalogue resource by reference — reuse its stored binary
+  // rather than re-uploading. Deleting the lesson resource only drops this
+  // reference row, never the shared binary.
+  if (kind === 'existing') {
+    if (!itemId || !resourceId) return NextResponse.json({ error: 'itemId and resourceId required' }, { status: 400 })
+    const { data: src } = await db
+      .from('community_resources')
+      .select('title, storage_path')
+      .eq('id', resourceId)
+      .maybeSingle()
+    if (!src?.storage_path) return NextResponse.json({ error: 'Resource not found' }, { status: 404 })
+    const { count: existingCount } = await db
+      .from('training_item_resources')
+      .select('id', { count: 'exact', head: true })
+      .eq('item_id', itemId)
+    const { data, error } = await db
+      .from('training_item_resources')
+      .insert({
+        item_id: itemId,
+        kind: 'file',
+        title: title || (src.title as string),
+        storage_path: src.storage_path as string,
+        external_url: null,
+        display_order: existingCount ?? 0,
+      })
+      .select('id')
+      .single()
+    if (error) {
+      console.error('[training] existing-resource attach error:', error)
+      return NextResponse.json({ error: 'Could not attach resource' }, { status: 500 })
+    }
+    return NextResponse.json({ id: data.id })
   }
 
   if (!itemId || !title) return NextResponse.json({ error: 'itemId and title required' }, { status: 400 })

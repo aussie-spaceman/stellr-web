@@ -153,7 +153,7 @@ export default async function AdminTrainingPage({
           <h1 className="mt-1 font-heading text-[30px] font-bold leading-tight text-brand-blue-dark">{TITLES[tab]}</h1>
         </div>
         <Link
-          href="?tab=builder"
+          href="?tab=builder&new=1"
           className="inline-flex items-center gap-1.5 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-blue-bright"
         >
           <Plus className="h-4 w-4" /> New course

@@ -17,6 +17,7 @@ import type { AccessKind, CohortTheme } from '@/lib/mentoring-format'
 import { notifyMembers } from '@/lib/notify'
 import { linkCohortTraining, inviteMembersToCohort } from '@/lib/sessions'
 import { logActivity } from '@/lib/activity-log'
+import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 import { ensureMemberGrants, getKindBalance, bookCohortFromAllocation, cancelCohortViaLedger } from '@/lib/entitlements'
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 import { addGlobalRole } from '@/lib/member-roles'
@@ -257,6 +258,8 @@ async function addToRosterActive(cohortId: string, memberId: string): Promise<vo
       { cohort_id: cohortId, member_id: memberId, status: 'active', accepted_at: nowIso },
       { onConflict: 'cohort_id,member_id' },
     )
+  // Inherit any Spaces linked to this cohort (Access Convergence).
+  await syncObjectSpaceRoster(db, 'mentoring', cohortId, memberId)
 }
 
 /**

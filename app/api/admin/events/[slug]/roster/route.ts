@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
 import { getEventBySlug } from '@/lib/sanity'
 import { ensureEventContainer } from '@/lib/container-sync'
+import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 
 // Admin direct-grant for competition access (convergence P3). Manage the members
 // an admin/event-manager has granted access to an event OUTSIDE the normal
@@ -78,6 +79,8 @@ export async function POST(req: Request, { params }: Ctx) {
     console.error('[admin/events/roster] add error:', error)
     return NextResponse.json({ error: 'Could not grant access' }, { status: 500 })
   }
+  // Inherit any Spaces linked to this event (Access Convergence).
+  await syncObjectSpaceRoster(db, 'event', slug, memberId)
   return NextResponse.json({ ok: true })
 }
 

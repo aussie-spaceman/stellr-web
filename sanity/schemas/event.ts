@@ -12,7 +12,27 @@ export const event = {
       options: { source: 'title' },
       // Slug is the join key to registrations/portal data — publishing without one
       // breaks the admin Events tab and registration links.
-      validation: (Rule: { required: () => unknown }) => Rule.required(),
+      //
+      // It also becomes the URL path segment (/events/<slug>, /register/<slug>),
+      // so it MUST be URL-safe: lowercase letters, numbers and hyphens only.
+      // Free text with spaces or punctuation (e.g. a tagline pasted into this
+      // field) produces a path Next.js can't route, which 404s both links while
+      // the card still renders. Always click "Generate" rather than typing here.
+      validation: (Rule: {
+        required: () => {
+          custom: (
+            fn: (v: { current?: string } | undefined) => true | string,
+          ) => unknown
+        }
+      }) =>
+        Rule.required().custom((value) => {
+          const current = value?.current
+          if (!current) return true // handled by required()
+          if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(current)) {
+            return 'Use lowercase letters, numbers and hyphens only — no spaces or punctuation. Click "Generate" to build one from the title.'
+          }
+          return true
+        }),
     },
 
     // ── Activity Type ─────────────────────────────────────────────────────────

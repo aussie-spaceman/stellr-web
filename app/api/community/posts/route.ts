@@ -149,7 +149,7 @@ export async function PATCH(req: Request) {
     .maybeSingle()
   if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 })
 
-  // Moderator check: platform admin, or an admin/mentor on this space's roster.
+  // Moderator check: platform admin, or an admin/moderator on this space's roster.
   let canModerate = member.isAdmin
   if (!canModerate && post.space_id) {
     const { data: roster } = await db
@@ -159,7 +159,7 @@ export async function PATCH(req: Request) {
       .eq('member_id', member.id)
       .maybeSingle()
     const r = roster as { role: string; status: string } | null
-    canModerate = r?.status === 'active' && (r.role === 'admin' || r.role === 'mentor')
+    canModerate = r?.status === 'active' && (r.role === 'admin' || r.role === 'moderator')
   }
   if (!canModerate) return NextResponse.json({ error: 'Moderators only' }, { status: 403 })
 

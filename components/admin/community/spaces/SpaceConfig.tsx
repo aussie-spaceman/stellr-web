@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  ChevronLeft, Plus, Pencil, Trash2, Check, X, Upload, Flag,
+  ChevronLeft, Plus, Pencil, Trash2, Check, X, Upload, Flag, Search, FileText,
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
@@ -97,7 +97,7 @@ export function SpaceConfig({
         <section className="min-w-0 flex-1">
           <div className="max-w-[680px] rounded-[14px] border border-brand-border bg-white p-5">
             {tab === 'general' && <GeneralTab space={space} channels={config.channels} act={act} patchSpace={patchSpace} onDelete={() => router.push('/admin/community/spaces')} />}
-            {tab === 'access' && <AccessTab space={space} assignedTierIds={config.assignedTierIds} tierIdByName={tierIdByName} act={act} patchSpace={patchSpace} />}
+            {tab === 'access' && <AccessTab space={space} assignedTierIds={config.assignedTierIds} assignedRoles={config.assignedRoles} sources={config.sources} tierIdByName={tierIdByName} act={act} patchSpace={patchSpace} />}
             {tab === 'resources' && <ResourcesTab spaceId={space.id} resources={config.resources} act={act} onUploaded={() => router.refresh()} />}
             {tab === 'training' && <TrainingTab assigned={config.assignedTraining} catalogue={config.trainingCatalogue} act={act} />}
             {tab === 'members' && <MembersTab space={space} members={config.members} act={act} patchSpace={patchSpace} />}
@@ -206,25 +206,74 @@ function GeneralTab({
   )
 }
 
+// Web-app roles that can be granted Space access (Access Convergence). Base
+// 'member' is omitted — it's defined by tier, not a grantable role. Labels mirror
+// lib/member-roles ROLE_LABELS (inlined to keep this a client component).
+const SPACE_ACCESS_ROLES: { value: string; label: string }[] = [
+  { value: 'volunteer', label: 'Volunteer' },
+  { value: 'mentor', label: 'Mentor' },
+  { value: 'coach', label: 'Coach' },
+  { value: 'teacher', label: 'Teacher' },
+  { value: 'student_manager', label: 'Student Manager' },
+  { value: 'moderator', label: 'Moderator' },
+  { value: 'staff', label: 'Staff' },
+  { value: 'participant', label: 'Participant' },
+  { value: 'donor_sponsor', label: 'Donor / Sponsor' },
+  { value: 'parent', label: 'Parent' },
+]
+const SOURCE_TYPES: { value: string; label: string }[] = [
+  { value: 'event', label: 'Event' },
+  { value: 'training', label: 'Training' },
+  { value: 'mentoring', label: 'Mentor cohort' },
+  { value: 'coaching', label: 'Coaching workshop' },
+]
+
 // ─── Access & tiers ───────────────────────────────────────────────────────────
 function AccessTab({
-  space, assignedTierIds, tierIdByName, act, patchSpace,
+  space, assignedTierIds, assignedRoles, sources, tierIdByName, act, patchSpace,
 }: {
   space: AdminSpaceConfig['space']
   assignedTierIds: string[]
+  assignedRoles: string[]
+  sources: AdminSpaceConfig['sources']
   tierIdByName: Record<string, string>
   act: Act
   patchSpace: Patch
 }) {
   const [access, setAccess] = useState<SpaceAccessType>(space.access_type)
   const [selected, setSelected] = useState<Set<string>>(new Set(assignedTierIds))
+  const [roles, setRoles] = useState<Set<string>>(new Set(assignedRoles))
+  const [srcType, setSrcType] = useState('event')
+  const [srcQuery, setSrcQuery] = useState('')
+  const [srcOptions, setSrcOptions] = useState<{ ref: string; label: string }[]>([])
+  const [srcSearching, setSrcSearching] = useState(false)
   const isOpen = access === 'open'
+
+  const linkedKeys = new Set(sources.map((s) => `${s.objectType}:${s.objectRef}`))
+  const searchSources = async (type: string, q: string) => {
+    setSrcSearching(true)
+    try {
+      const res = await fetch(`/api/admin/community/spaces/sources/search?type=${type}&q=${encodeURIComponent(q)}`)
+      const j = await res.json().catch(() => ({}))
+      setSrcOptions(res.ok ? (j.options ?? []) : [])
+    } finally {
+      setSrcSearching(false)
+    }
+  }
 
   const toggle = (id: string) => {
     setSelected((s) => {
       const n = new Set(s)
       if (n.has(id)) n.delete(id)
       else n.add(id)
+      return n
+    })
+  }
+  const toggleRole = (r: string) => {
+    setRoles((s) => {
+      const n = new Set(s)
+      if (n.has(r)) n.delete(r)
+      else n.add(r)
       return n
     })
   }
@@ -269,6 +318,17 @@ function AccessTab({
         ))}
       </div>
 
+      <p className="mt-5 mb-1 text-sm font-subheading font-semibold text-brand-blue-dark">Web-app roles</p>
+      <p className="mb-2 text-xs text-brand-muted-soft">Anyone holding a checked role can enter this space (in addition to tiers). E.g. grant a Volunteer Space to the Volunteer role.</p>
+      <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+        {SPACE_ACCESS_ROLES.map((r) => (
+          <label key={r.value} className="flex items-center gap-2 text-sm text-brand-muted">
+            <input type="checkbox" checked={roles.has(r.value)} onChange={() => toggleRole(r.value)} />
+            {r.label}
+          </label>
+        ))}
+      </div>
+
       <p className="mt-4 rounded-lg bg-brand-canvas p-2.5 text-xs text-brand-muted-soft">
         Files uploaded to this space inherit its access — they’re visible to whoever can enter the space.
       </p>
@@ -277,19 +337,85 @@ function AccessTab({
         <button
           onClick={async () => {
             await patchSpace({ access_type: access })
-            if (!isOpen) await act({ action: 'set-tiers', tierIds: [...selected] }, 'Access updated')
-            else toast('Access updated')
+            if (!isOpen) await act({ action: 'set-tiers', tierIds: [...selected] }, 'Tiers saved')
+            await act({ action: 'set-roles', roles: [...roles] }, 'Access updated')
           }}
           className="rounded-lg bg-brand-blue px-4 py-2 text-sm font-subheading font-semibold text-white hover:bg-brand-blue-dark"
         >
           Save access
         </button>
       </div>
+
+      {/* ── Inherited from objects ─────────────────────────────────────────── */}
+      <div className="mt-6 border-t border-brand-hairline pt-5">
+        <p className="mb-1 text-sm font-subheading font-semibold text-brand-blue-dark">Inherited access from objects</p>
+        <p className="mb-2 text-xs text-brand-muted-soft">
+          Members assigned to a linked Event, Training, Mentor cohort or Coaching workshop are
+          automatically rostered into this space. They can’t be invited in — only inherit.
+        </p>
+        <div className="divide-y divide-brand-hairline rounded-lg border border-brand-border">
+          {sources.map((s) => {
+            const typeLabel = SOURCE_TYPES.find((t) => t.value === s.objectType)?.label ?? s.objectType
+            return (
+              <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                <span className="rounded bg-brand-canvas px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand-muted-soft">{typeLabel}</span>
+                <span className="flex-1 truncate text-brand-blue-dark">{s.label}</span>
+                <button onClick={() => act({ action: 'remove-source', sourceId: s.id }, 'Link removed')} className="text-xs text-red-500 hover:underline">Remove</button>
+              </div>
+            )
+          })}
+          {sources.length === 0 && <p className="px-3 py-4 text-center text-sm text-brand-muted-soft">No linked objects yet.</p>}
+        </div>
+
+        {/* Searchable object picker */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <select
+            value={srcType}
+            onChange={(e) => { setSrcType(e.target.value); setSrcQuery(''); setSrcOptions([]); void searchSources(e.target.value, '') }}
+            className="rounded-lg border border-brand-border px-2 py-1.5 text-sm"
+          >
+            {SOURCE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+          <input
+            value={srcQuery}
+            onChange={(e) => { setSrcQuery(e.target.value); void searchSources(srcType, e.target.value) }}
+            onFocus={() => { if (srcOptions.length === 0) void searchSources(srcType, srcQuery) }}
+            placeholder={`Search ${SOURCE_TYPES.find((t) => t.value === srcType)?.label.toLowerCase() ?? ''}…`}
+            className="flex-1 rounded-lg border border-brand-border px-2.5 py-1.5 text-sm focus:border-brand-blue focus:outline-none"
+          />
+        </div>
+        {(srcSearching || srcOptions.length > 0) && (
+          <div className="mt-1 max-h-52 divide-y divide-brand-hairline overflow-y-auto rounded-lg border border-brand-border">
+            {srcSearching && <p className="px-3 py-2 text-xs text-brand-muted-soft">Searching…</p>}
+            {!srcSearching && srcOptions.map((o) => {
+              const already = linkedKeys.has(`${srcType}:${o.ref}`)
+              return (
+                <button
+                  key={o.ref}
+                  disabled={already}
+                  onClick={async () => {
+                    if (await act({ action: 'add-source', objectType: srcType, objectRef: o.ref }, 'Object linked')) {
+                      setSrcQuery(''); setSrcOptions([])
+                    }
+                  }}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-brand-canvas disabled:opacity-40"
+                >
+                  <span className="truncate text-brand-blue-dark">{o.label}</span>
+                  <span className="shrink-0 text-xs text-brand-blue">{already ? 'Linked' : 'Link'}</span>
+                </button>
+              )
+            })}
+            {!srcSearching && srcOptions.length === 0 && <p className="px-3 py-2 text-xs text-brand-muted-soft">No matches.</p>}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
 // ─── Resources ────────────────────────────────────────────────────────────────
+type CatalogueHit = { id: string; title: string; fileType: string | null; sizeBytes: number | null }
+
 function ResourcesTab({
   spaceId, resources, act, onUploaded,
 }: {
@@ -299,8 +425,16 @@ function ResourcesTab({
   onUploaded: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState<'upload' | 'browse'>('upload')
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
+  // Catalogue browse state.
+  const [query, setQuery] = useState('')
+  const [hits, setHits] = useState<CatalogueHit[]>([])
+  const [searching, setSearching] = useState(false)
+  const [renames, setRenames] = useState<Record<string, string>>({})
+
+  const closeModal = () => { setOpen(false); setFile(null); setQuery(''); setHits([]); setRenames({}); setMode('upload') }
 
   const upload = async () => {
     if (!file) return
@@ -311,49 +445,125 @@ function ResourcesTab({
     setBusy(false)
     if (!res.ok) return toast('Upload failed')
     toast('Resource added')
-    setFile(null)
-    setOpen(false)
+    closeModal()
     onUploaded()
   }
+
+  const search = async (q: string) => {
+    setQuery(q)
+    setSearching(true)
+    try {
+      const res = await fetch(`/api/admin/community/resources/search?q=${encodeURIComponent(q.trim())}`)
+      const j = await res.json().catch(() => ({}))
+      setHits(res.ok ? (j.results ?? []) : [])
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  // Load the catalogue's most-recent files as soon as the Browse tab is opened.
+  const switchToBrowse = () => { setMode('browse'); if (hits.length === 0) void search('') }
+
+  const attachExisting = async (hit: CatalogueHit) => {
+    const displayName = (renames[hit.id] ?? '').trim() || undefined
+    if (await act({ action: 'attach-resource', resourceId: hit.id, displayName }, 'Resource attached')) {
+      closeModal()
+      onUploaded()
+    }
+  }
+
+  // Files already attached to this space aren't offered again in the picker.
+  const attachedIds = new Set(resources.map((r) => r.id))
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <PanelTitle>Resources</PanelTitle>
-        <button onClick={() => setOpen(true)} className="inline-flex items-center gap-1 rounded-lg bg-brand-blue px-3 py-1.5 text-xs font-subheading font-semibold text-white hover:bg-brand-blue-dark">
+        <button onClick={() => { setOpen(true); setMode('upload') }} className="inline-flex items-center gap-1 rounded-lg bg-brand-blue px-3 py-1.5 text-xs font-subheading font-semibold text-white hover:bg-brand-blue-dark">
           <Plus className="h-3.5 w-3.5" /> Assign resource
         </button>
       </div>
       <div className="divide-y divide-brand-hairline rounded-lg border border-brand-border">
         {resources.map((r) => (
-          <div key={r.id} className="flex items-center gap-3 px-3 py-2.5">
+          <div key={r.attachmentId ?? r.id} className="flex items-center gap-3 px-3 py-2.5">
             <span className="rounded bg-brand-canvas px-1.5 py-0.5 text-[10px] font-bold text-brand-muted-soft">{r.fileType ?? 'FILE'}</span>
             <span className="flex-1 truncate text-sm text-brand-blue-dark">{r.title}</span>
             {r.fromChat && <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-[10px] uppercase text-brand-muted-soft">from chat</span>}
-            <button onClick={() => act({ action: 'remove-resource', resourceId: r.id }, 'Removed')} className="text-xs text-red-500 hover:underline">Remove</button>
+            {r.attachmentId && <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-[10px] uppercase text-brand-muted-soft">catalogue</span>}
+            {r.attachmentId ? (
+              <button onClick={() => act({ action: 'detach-resource', attachmentId: r.attachmentId }, 'Detached')} className="text-xs text-red-500 hover:underline">Detach</button>
+            ) : (
+              <button onClick={() => act({ action: 'remove-resource', resourceId: r.id }, 'Removed')} className="text-xs text-red-500 hover:underline">Remove</button>
+            )}
           </div>
         ))}
         {resources.length === 0 && <p className="px-3 py-4 text-center text-sm text-brand-muted-soft">No resources yet.</p>}
       </div>
 
-      {/* FUTURE (global reference-content catalogue): the handoff (screen 20) also
-          wants a "pick from existing reference content" multi-select here, in
-          addition to upload. Deferred until the global resource catalogue ships
-          (separate build). To wire it up then: add a tab/section to this modal that
-          lists catalogue items and POSTs the chosen ids to a new
-          `assign-resource` action on /api/admin/community/spaces/[id] (mirroring
-          assign-training in TrainingTab). Upload-only for now. */}
-      <Modal open={open} onClose={() => setOpen(false)} title="Assign resource" subtitle="Upload a file to this space’s Resources."
-        footer={<>
-          <button onClick={() => setOpen(false)} className={btnGhost}>Cancel</button>
-          <button onClick={upload} disabled={!file || busy} className={btnPrimary}>{busy ? 'Uploading…' : 'Upload'}</button>
-        </>}
+      <Modal open={open} onClose={closeModal} title="Assign resource" subtitle="Attach an existing file from the catalogue, or upload a new one."
+        footer={mode === 'upload' ? (
+          <>
+            <button onClick={closeModal} className={btnGhost}>Cancel</button>
+            <button onClick={upload} disabled={!file || busy} className={btnPrimary}>{busy ? 'Uploading…' : 'Upload'}</button>
+          </>
+        ) : (
+          <button onClick={closeModal} className={btnGhost}>Done</button>
+        )}
       >
-        <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-brand-border p-6 text-center text-sm text-brand-muted-soft hover:bg-brand-canvas">
-          <Upload className="h-6 w-6" />
-          {file ? file.name : 'Click to choose a file'}
-          <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        </label>
+        {/* Mode switch */}
+        <div className="mb-4 inline-flex rounded-lg border border-brand-border p-0.5">
+          <button onClick={() => setMode('upload')} className={`rounded-[7px] px-3 py-1.5 text-sm ${mode === 'upload' ? 'bg-brand-blue text-white' : 'text-brand-muted'}`}>Upload new</button>
+          <button onClick={switchToBrowse} className={`rounded-[7px] px-3 py-1.5 text-sm ${mode === 'browse' ? 'bg-brand-blue text-white' : 'text-brand-muted'}`}>Browse catalogue</button>
+        </div>
+
+        {mode === 'upload' ? (
+          <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-brand-border p-6 text-center text-sm text-brand-muted-soft hover:bg-brand-canvas">
+            <Upload className="h-6 w-6" />
+            {file ? file.name : 'Click to choose a file'}
+            <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          </label>
+        ) : (
+          <div>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted-soft" />
+              <input
+                value={query}
+                onChange={(e) => search(e.target.value)}
+                placeholder="Search the resources catalogue…"
+                className={`${inputCls} pl-8`}
+              />
+            </div>
+            <div className="mt-2 max-h-72 space-y-1 overflow-y-auto">
+              {searching && <p className="px-1 py-2 text-xs text-brand-muted-soft">Searching…</p>}
+              {!searching && hits.length === 0 && <p className="px-1 py-2 text-xs text-brand-muted-soft">No files found.</p>}
+              {hits.map((h) => {
+                const already = attachedIds.has(h.id)
+                return (
+                  <div key={h.id} className="rounded-lg border border-brand-border px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 shrink-0 text-brand-blue" />
+                      <span className="flex-1 truncate text-sm text-brand-blue-dark">{h.title}</span>
+                      <span className="rounded bg-brand-canvas px-1.5 py-0.5 text-[10px] font-bold text-brand-muted-soft">{h.fileType ?? 'FILE'}</span>
+                      <button
+                        disabled={already}
+                        onClick={() => attachExisting(h)}
+                        className="rounded-lg bg-brand-blue px-2.5 py-1 text-xs font-subheading font-semibold text-white hover:bg-brand-blue-dark disabled:opacity-40"
+                      >{already ? 'Attached' : 'Attach'}</button>
+                    </div>
+                    {!already && (
+                      <input
+                        value={renames[h.id] ?? ''}
+                        onChange={(e) => setRenames((prev) => ({ ...prev, [h.id]: e.target.value }))}
+                        placeholder="Rename for this space (optional)"
+                        className="mt-2 w-full rounded-md border border-brand-border px-2 py-1 text-xs focus:border-brand-blue focus:outline-none"
+                      />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )
@@ -495,9 +705,12 @@ function InviteMemberModal({ open, onClose, act }: { open: boolean; onClose: () 
   const [results, setResults] = useState<MemberHit[]>([])
   const [searching, setSearching] = useState(false)
   const [picked, setPicked] = useState<MemberHit | null>(null)
-  const [role, setRole] = useState<SpaceRole>('member')
+  // Invite only ever grants the Moderator role. Members themselves get into a
+  // space by inheriting access from an Object (Event, Training, Mentor Cohort,
+  // Coaching Workshop) — they cannot be invited in.
+  const role: SpaceRole = 'moderator'
 
-  const reset = () => { setQuery(''); setResults([]); setPicked(null); setRole('member') }
+  const reset = () => { setQuery(''); setResults([]); setPicked(null) }
 
   // Search the real member database — admins can only invite existing members.
   const search = async (q: string) => {
@@ -518,14 +731,14 @@ function InviteMemberModal({ open, onClose, act }: { open: boolean; onClose: () 
     [m.first_name, m.last_name].filter(Boolean).join(' ') || m.email || 'Member'
 
   return (
-    <Modal open={open} onClose={() => { reset(); onClose() }} title="Invite member" subtitle="They’ll see an invite on their Spaces directory."
+    <Modal open={open} onClose={() => { reset(); onClose() }} title="Add moderator" subtitle="Promote an existing member of this space to Moderator."
       footer={<>
         <button onClick={() => { reset(); onClose() }} className={btnGhost}>Cancel</button>
         <button
           disabled={!picked}
-          onClick={async () => { if (picked && await act({ action: 'invite-member', memberId: picked.id, role }, 'Invitation sent')) { reset(); onClose() } }}
+          onClick={async () => { if (picked && await act({ action: 'invite-member', memberId: picked.id, role }, 'Moderator added')) { reset(); onClose() } }}
           className={btnPrimary}
-        >Send invitation</button>
+        >Make moderator</button>
       </>}
     >
       <Field label="Member">
@@ -564,7 +777,10 @@ function InviteMemberModal({ open, onClose, act }: { open: boolean; onClose: () 
           </>
         )}
       </Field>
-      <RoleSegmented role={role} setRole={setRole} roles={['member', 'mentor']} />
+      <p className="text-xs text-brand-muted-soft">
+        They’ll be granted the <span className="font-semibold text-brand-muted">Moderator</span> role for this space.
+        Regular membership can’t be assigned here — members inherit access from an Event, Training, Cohort or Workshop.
+      </p>
     </Modal>
   )
 }
@@ -574,11 +790,13 @@ function ManageMemberModal({ member, onClose, act }: { member: AdminSpaceConfig[
   return (
     <Modal open onClose={onClose} title={`Manage ${member.name}`}
       footer={<>
-        <button onClick={async () => { if (await act({ action: 'remove-member', memberId: member.memberId }, 'Removed from space')) onClose() }} className="rounded-lg border border-red-200 px-4 py-2 text-sm font-subheading font-semibold text-red-600 hover:bg-red-50">Remove from space</button>
+        <button onClick={onClose} className={btnGhost}>Cancel</button>
         <button onClick={async () => { if (await act({ action: 'update-member-role', memberId: member.memberId, role }, 'Role saved')) onClose() }} className={btnPrimary}>Save role</button>
       </>}
     >
-      <RoleSegmented role={role} setRole={setRole} />
+      {/* Members can't be removed from a space here — their access is inherited from
+          an Object (Event/Training/Cohort/Workshop). Use Mute to stop them posting. */}
+      <RoleSegmented role={role} setRole={setRole} roles={['member', 'moderator']} />
       <div className="mt-4 flex items-center justify-between rounded-lg border border-brand-border px-3 py-2.5">
         <div>
           <p className="text-sm font-subheading font-semibold text-brand-blue-dark">Posting</p>
@@ -594,10 +812,17 @@ function ManageMemberModal({ member, onClose, act }: { member: AdminSpaceConfig[
   )
 }
 
+// Space role value → user-facing label.
+const SPACE_ROLE_LABEL: Record<SpaceRole, string> = {
+  member: 'Member',
+  moderator: 'Moderator',
+  admin: 'Stellr Admin',
+}
+
 function RoleSegmented({
   role,
   setRole,
-  roles = ['member', 'mentor', 'admin'],
+  roles = ['member', 'moderator'],
 }: {
   role: SpaceRole
   setRole: (r: SpaceRole) => void
@@ -607,7 +832,7 @@ function RoleSegmented({
     <Field label="Role">
       <div className="inline-flex rounded-lg border border-brand-border p-0.5">
         {roles.map((r) => (
-          <button key={r} onClick={() => setRole(r)} className={`rounded-[7px] px-3 py-1.5 text-sm capitalize ${role === r ? 'bg-brand-blue text-white' : 'text-brand-muted'}`}>{r}</button>
+          <button key={r} onClick={() => setRole(r)} className={`rounded-[7px] px-3 py-1.5 text-sm ${role === r ? 'bg-brand-blue text-white' : 'text-brand-muted'}`}>{SPACE_ROLE_LABEL[r]}</button>
         ))}
       </div>
     </Field>

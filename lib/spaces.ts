@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { normalizeEmail } from '@/lib/member-enums'
+import { getGlobalRoleNames, type MemberRole } from '@/lib/member-roles'
 import type { CommunityMember } from '@/lib/community'
 
 // ─── Spaces access + directory model (design_handoff_spaces) ─────────────────
@@ -14,10 +15,10 @@ import type { CommunityMember } from '@/lib/community'
 //             never appears in the directory otherwise.
 //
 // Access is resolved entirely in the server layer (tables are service-role only).
-// Roles within a space are admin / mentor / member (no "staff"/"moderator").
+// Roles within a space are admin (Stellr Admin) / moderator / member.
 
 export type SpaceAccessType = 'open' | 'private' | 'secret'
-export type SpaceRole = 'admin' | 'mentor' | 'member'
+export type SpaceRole = 'admin' | 'moderator' | 'member'
 export type SpaceTheme = 'space' | 'enviro' | 'campaign' | 'college'
 
 /** A member's roster row for a space (role + invite status), if any. */
@@ -47,7 +48,7 @@ export interface SpaceAccess {
   /** Whether the space should appear in the directory at all. */
   visible: boolean
   /** Why access was (not) granted — drives copy + grouping. */
-  reason: 'admin' | 'open' | 'tier' | 'roster' | 'invited' | 'denied'
+  reason: 'admin' | 'open' | 'tier' | 'role' | 'roster' | 'invited' | 'denied'
   /** Private/secret space the member can't currently enter. */
   gated: boolean
 }
@@ -60,7 +61,11 @@ export function resolveSpaceAccess(
   member: CommunityMember,
   space: { access_type: SpaceAccessType },
   assignedTierIds: string[],
-  membership: SpaceMembership | null
+  membership: SpaceMembership | null,
+  // Access Convergence: web-app roles granted to the space, and the member's own
+  // global roles. Optional so existing callers keep tier-only behaviour unchanged.
+  assignedRoles: MemberRole[] = [],
+  memberRoles: MemberRole[] = []
 ): SpaceAccess {
   // Platform admins bypass every gate and can see everything.
   if (member.isAdmin) {
@@ -80,6 +85,12 @@ export function resolveSpaceAccess(
   const tierMatch = member.activeTierIds.some((id) => assignedTierIds.includes(id))
   if (tierMatch) {
     return { canAccess: true, visible: true, reason: 'tier', gated: false }
+  }
+
+  // Web-app role match auto-grants (e.g. a Volunteer Space granted to 'volunteer').
+  const roleMatch = assignedRoles.length > 0 && memberRoles.some((r) => assignedRoles.includes(r))
+  if (roleMatch) {
+    return { canAccess: true, visible: true, reason: 'role', gated: false }
   }
 
   // No access. Private stays visible (greyed/Restricted); secret is hidden.
@@ -257,9 +268,10 @@ export async function getSpaceForMember(
     .maybeSingle()
   if (!s || s.is_archived) return null
 
-  const [{ data: tierRows }, { data: mine }, { data: channels }, { data: activeRows }] =
+  const [{ data: tierRows }, { data: roleRows }, { data: mine }, { data: channels }, { data: activeRows }] =
     await Promise.all([
       db.from('community_space_tiers').select('tier_id').eq('space_id', s.id),
+      db.from('community_space_roles').select('role').eq('space_id', s.id),
       db
         .from('community_space_members')
         .select('role, status, muted')
@@ -276,11 +288,14 @@ export async function getSpaceForMember(
     ])
 
   const assignedTierIds = (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
+  const assignedRoles = (roleRows ?? []).map((r) => (r as { role: MemberRole }).role)
   const mineRow = mine as { role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null } | null
   const membership: SpaceMembership | null = mineRow
     ? { role: mineRow.role, status: mineRow.status, muted: !!mineRow.muted }
     : null
-  const access = resolveSpaceAccess(member, s, assignedTierIds, membership)
+  // Member's global roles only matter when the space actually grants some (most don't).
+  const memberRoles = assignedRoles.length > 0 ? await getGlobalRoleNames(member.id) : []
+  const access = resolveSpaceAccess(member, s, assignedTierIds, membership, assignedRoles, memberRoles)
 
   // Secret + inaccessible → behave as not found so the URL leaks nothing.
   if (s.access_type === 'secret' && !access.canAccess) return null
@@ -317,7 +332,7 @@ export function canPostInSpace(
   if (member.isAdmin) return true
   if (muted) return false
   if (postingPolicy === 'all') return true
-  return myRole === 'admin' || myRole === 'mentor'
+  return myRole === 'admin' || myRole === 'moderator'
 }
 
 /**
@@ -337,8 +352,9 @@ export async function getSpaceAccessById(
     .maybeSingle()
   if (!s || (s as { is_archived: boolean }).is_archived) return null
 
-  const [{ data: tierRows }, { data: mine }] = await Promise.all([
+  const [{ data: tierRows }, { data: roleRows }, { data: mine }] = await Promise.all([
     db.from('community_space_tiers').select('tier_id').eq('space_id', spaceId),
+    db.from('community_space_roles').select('role').eq('space_id', spaceId),
     db
       .from('community_space_members')
       .select('role, status, muted')
@@ -348,11 +364,71 @@ export async function getSpaceAccessById(
   ])
 
   const assignedTierIds = (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
+  const assignedRoles = (roleRows ?? []).map((r) => (r as { role: MemberRole }).role)
   const mineRow = mine as { role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null } | null
   const membership: SpaceMembership | null = mineRow
     ? { role: mineRow.role, status: mineRow.status, muted: !!mineRow.muted }
     : null
-  return resolveSpaceAccess(member, s as { access_type: SpaceAccessType }, assignedTierIds, membership)
+  const memberRoles = assignedRoles.length > 0 ? await getGlobalRoleNames(member.id) : []
+  return resolveSpaceAccess(member, s as { access_type: SpaceAccessType }, assignedTierIds, membership, assignedRoles, memberRoles)
+}
+
+/**
+ * The set of member ids who should receive a notification for space-wide events
+ * (e.g. a new announcement) — i.e. "everyone with access to the space":
+ *   • Open space   → every active member (anyone in the community can enter).
+ *   • Private/Secret → members whose active membership tier is assigned to the
+ *                      space, plus anyone on the active roster.
+ * Always includes active roster members regardless of access type. In-app only.
+ */
+export async function spaceNotificationAudience(spaceId: string): Promise<string[]> {
+  const db = supabaseServer()
+  const { data: s } = await db
+    .from('community_spaces')
+    .select('access_type')
+    .eq('id', spaceId)
+    .maybeSingle()
+  if (!s) return []
+  const accessType = (s as { access_type: SpaceAccessType }).access_type
+  const ids = new Set<string>()
+
+  // Active roster members always count (inherited access from an Object, or a moderator).
+  const { data: roster } = await db
+    .from('community_space_members')
+    .select('member_id')
+    .eq('space_id', spaceId)
+    .eq('status', 'active')
+  for (const r of (roster ?? []) as { member_id: string }[]) ids.add(r.member_id)
+
+  if (accessType === 'open') {
+    const { data: all } = await db.from('members').select('id').eq('is_active', true)
+    for (const m of (all ?? []) as { id: string }[]) ids.add(m.id)
+    return [...ids]
+  }
+
+  // Private/Secret — members holding an active, unexpired tier assigned to the space.
+  const { data: tierRows } = await db
+    .from('community_space_tiers')
+    .select('tier_id')
+    .eq('space_id', spaceId)
+  const tierIds = (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
+  if (tierIds.length) {
+    const today = new Date().toISOString().split('T')[0]
+    const { data: memRows } = await db
+      .from('member_memberships')
+      .select('member_id, expires_at, members!inner(is_active)')
+      .in('tier_id', tierIds)
+      .eq('renewal_status', 'active')
+    for (const m of (memRows ?? []) as Array<{
+      member_id: string
+      expires_at: string | null
+      members: { is_active: boolean } | { is_active: boolean }[] | null
+    }>) {
+      const active = Array.isArray(m.members) ? m.members[0]?.is_active : m.members?.is_active
+      if (active && (!m.expires_at || m.expires_at >= today)) ids.add(m.member_id)
+    }
+  }
+  return [...ids]
 }
 
 /**
@@ -363,7 +439,7 @@ export async function getSpaceAccessById(
 export async function createPendingSpaceInvite(
   spaceId: string,
   email: string,
-  role: 'mentor' | 'member',
+  role: 'moderator' | 'member',
   invitedBy: string | null
 ): Promise<boolean> {
   const normalized = normalizeEmail(email)
@@ -393,7 +469,7 @@ export async function claimPendingSpaceInvites(memberId: string, email: string):
     .eq('email', normalized)
     .is('claimed_at', null)
 
-  const rows = (pending ?? []) as { id: string; space_id: string; role: 'mentor' | 'member'; invited_by: string | null; invited_at: string }[]
+  const rows = (pending ?? []) as { id: string; space_id: string; role: 'moderator' | 'member'; invited_by: string | null; invited_at: string }[]
   let claimed = 0
   for (const inv of rows) {
     // Don't clobber an existing roster row (e.g. they already joined).

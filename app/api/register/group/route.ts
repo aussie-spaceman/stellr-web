@@ -227,15 +227,39 @@ export async function POST(req: NextRequest) {
     // Amount owed for this registration: per-seat event fee × seats, or 0 when the
     // event has no Stripe price (campaigns / free events). Drives the payment gate.
     let amountDueCents = 0
+    let feeUnitAmount: number | null = null // null = price never resolved (no price / lookup failed)
     const feePriceId = (eventForGate as { stripePriceId?: string } | null)?.stripePriceId
     const feeStripe = getStripe()
     if (feePriceId && feeStripe) {
       try {
         const pr = await feeStripe.prices.retrieve(feePriceId)
-        amountDueCents = (pr.unit_amount ?? 0) * (total_participants ?? 0)
+        feeUnitAmount = pr.unit_amount ?? 0
+        amountDueCents = feeUnitAmount * (total_participants ?? 0)
       } catch (e) {
         console.error('[register/group] price lookup failed (amount_due defaults 0):', e)
       }
+    }
+
+    // Stripe rejects any charge below its per-currency minimum (~$0.50 USD). If a
+    // card registration's price × seats lands below that, the checkout session can
+    // never be created — so reject up front with a clear, actionable message
+    // rather than doing all the record-creation work below and then blowing up on
+    // the unguarded Stripe call at the very end (which orphaned the registration,
+    // participants, DocuSign envelopes, sheet and emails, and 500'd the request).
+    // `feeUnitAmount !== null` guards against a transient price-lookup failure —
+    // we only reject when we positively resolved a sub-minimum amount.
+    const STRIPE_MIN_CHARGE_CENTS = 50
+    if (
+      payment_method === 'card' &&
+      feeUnitAmount !== null &&
+      amountDueCents < STRIPE_MIN_CHARGE_CENTS
+    ) {
+      return NextResponse.json(
+        {
+          error: `Card payment isn't available for this event: the total ($${(amountDueCents / 100).toFixed(2)}) is below the $0.50 minimum for card charges. This event's price appears to be misconfigured — please contact Stellr or choose the invoice option.`,
+        },
+        { status: 400 },
+      )
     }
 
     // Create registration record
@@ -680,31 +704,51 @@ export async function POST(req: NextRequest) {
         console.error('Stripe invoice error (non-fatal):', invoiceErr)
       }
     } else if (payment_method === 'card' && stripePriceId && stripe) {
-      const session = await stripe.checkout.sessions.create({
-        mode: 'payment',
-        line_items: [{ price: stripePriceId, quantity: total_participants }],
-        client_reference_id: regId,
-        customer_email: teacher.email,
-        // Always mint a Customer so the receipt is retrievable in the billing tab
-        // (the webhook persists session.customer onto the member row).
-        customer_creation: 'always',
-        metadata: {
-          registrationId: regId,
-          eventSlug: event_slug,
-          isGroup: 'true',
-          teacherName: `${teacher.first_name} ${teacher.last_name}`,
-        },
-        success_url: (() => {
-          const u = new URL(`${SITE_URL}/register/${event_slug}/confirmation`)
-          u.searchParams.set('id', regId); u.searchParams.set('type', 'group'); u.searchParams.set('payment', 'success')
-          if (promptSpreadsheetUrl) u.searchParams.set('spreadsheet', promptSpreadsheetUrl)
-          if (incompleteAddNow && joinUrl) u.searchParams.set('join', joinUrl)
-          if (remainingCount > 0) u.searchParams.set('remaining', String(remainingCount))
-          return u.toString()
-        })(),
-        cancel_url: `${SITE_URL}/register/${event_slug}/group?cancelled=true`,
-      })
-      checkoutUrl = session.url
+      // The sub-minimum case is already rejected up front (before any records are
+      // created). This try/catch is defence-in-depth for any *other* Stripe error
+      // (e.g. a price in the wrong mode) so the registrant sees the real reason
+      // instead of a generic "Internal server error". Records already exist at this
+      // point, so we surface the failure and let the confirmation/billing flow
+      // recover rather than orphaning silently.
+      try {
+        const session = await stripe.checkout.sessions.create({
+          mode: 'payment',
+          line_items: [{ price: stripePriceId, quantity: total_participants }],
+          client_reference_id: regId,
+          customer_email: teacher.email,
+          // Always mint a Customer so the receipt is retrievable in the billing tab
+          // (the webhook persists session.customer onto the member row).
+          customer_creation: 'always',
+          metadata: {
+            registrationId: regId,
+            eventSlug: event_slug,
+            isGroup: 'true',
+            teacherName: `${teacher.first_name} ${teacher.last_name}`,
+          },
+          success_url: (() => {
+            const u = new URL(`${SITE_URL}/register/${event_slug}/confirmation`)
+            u.searchParams.set('id', regId); u.searchParams.set('type', 'group'); u.searchParams.set('payment', 'success')
+            if (promptSpreadsheetUrl) u.searchParams.set('spreadsheet', promptSpreadsheetUrl)
+            if (incompleteAddNow && joinUrl) u.searchParams.set('join', joinUrl)
+            if (remainingCount > 0) u.searchParams.set('remaining', String(remainingCount))
+            return u.toString()
+          })(),
+          cancel_url: `${SITE_URL}/register/${event_slug}/group?cancelled=true`,
+        })
+        checkoutUrl = session.url
+      } catch (checkoutErr) {
+        console.error('[register/group] card checkout session create failed:', checkoutErr)
+        const stripeMessage = checkoutErr instanceof Stripe.errors.StripeError ? checkoutErr.message : null
+        return NextResponse.json(
+          {
+            error: stripeMessage
+              ? `Payment could not be started: ${stripeMessage}`
+              : 'Payment could not be started. Your registration was saved — please contact Stellr to complete payment.',
+            registrationId: regId,
+          },
+          { status: 502 },
+        )
+      }
     } else if (member_pays_individually && details_method === 'add_now' && stripePriceId && stripe) {
       // Create individual checkout sessions for every participant, including the
       // registrant — their own seat must be billed too when members pay individually.

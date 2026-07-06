@@ -76,10 +76,11 @@ export function TierPill({ name }: { name: string }) {
   )
 }
 
-// ─── Role pill (Admin / Mentor; plain Member is omitted by callers) ───────────
+// ─── Role pill (Admin / Moderator; plain Member is omitted by callers) ─────────
+// Spaces have three permission types: Stellr Admin, Moderator, Member.
 const ROLE_META: Record<SpaceRole, { label: string; fg: string; bg: string } | null> = {
-  admin:  { label: 'Admin',  fg: '#2C53C6', bg: '#EAF0FE' },
-  mentor: { label: 'Mentor', fg: '#6A45E0', bg: '#F1ECFF' },
+  admin:     { label: 'Admin',     fg: '#2C53C6', bg: '#EAF0FE' },
+  moderator: { label: 'Moderator', fg: '#6A45E0', bg: '#F1ECFF' },
   member: null,
 }
 

@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { notifyMember } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
-import { createPendingSpaceInvite } from '@/lib/spaces'
+import { createPendingSpaceInvite, spaceNotificationAudience } from '@/lib/spaces'
+import { attachSpaceResource, ensureSpaceContainer } from '@/lib/container-sync'
 
 // Per-space admin config actions (Spaces design, screens 11–17 + modals 19/21/22).
 // One JSON action router keeps the (many) small mutations in one place. Resource
@@ -40,6 +41,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (tierIds.length) {
         await db.from('community_space_tiers').insert(tierIds.map((tier_id) => ({ space_id: spaceId, tier_id })))
       }
+      return NextResponse.json({ ok: true })
+    }
+    // Grant this space to a set of web-app roles (Access Convergence). Replaces the
+    // full set each save, mirroring set-tiers.
+    case 'set-roles': {
+      const roles: string[] = Array.isArray(b.roles) ? b.roles.filter((r: unknown) => typeof r === 'string') : []
+      await db.from('community_space_roles').delete().eq('space_id', spaceId)
+      if (roles.length) {
+        await db.from('community_space_roles').insert(roles.map((role) => ({ space_id: spaceId, role })))
+      }
+      return NextResponse.json({ ok: true })
+    }
+    // Link an Object to this space — members assigned to it inherit space access.
+    case 'add-source': {
+      const objectType = String(b.objectType ?? '')
+      const objectRef = String(b.objectRef ?? '').trim()
+      if (!['event', 'training', 'mentoring', 'coaching'].includes(objectType) || !objectRef) {
+        return NextResponse.json({ error: 'objectType and objectRef required' }, { status: 400 })
+      }
+      await db.from('community_space_sources').upsert(
+        { space_id: spaceId, object_type: objectType, object_ref: objectRef, created_by: adminMemberId },
+        { onConflict: 'space_id,object_type,object_ref', ignoreDuplicates: true },
+      )
+      return NextResponse.json({ ok: true })
+    }
+    case 'remove-source': {
+      if (!b.sourceId) return NextResponse.json({ error: 'sourceId required' }, { status: 400 })
+      await db.from('community_space_sources').delete().eq('id', String(b.sourceId)).eq('space_id', spaceId)
       return NextResponse.json({ ok: true })
     }
 
@@ -80,8 +109,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     // ── Members & roles ────────────────────────────────────────────────────────
     case 'invite-member': {
-      // Invites grant member or mentor only — admin is assigned later via Manage.
-      const role = b.role === 'mentor' ? 'mentor' : 'member'
+      // Invites grant Moderator (the only role the invite flow assigns); base
+      // membership is inherited from an Object, never invited in.
+      const role = b.role === 'moderator' ? 'moderator' : 'member'
       let memberId = b.memberId as string | undefined
       if (!memberId && b.email) {
         const { data } = await db
@@ -159,7 +189,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ ok: true })
     }
     case 'update-member-role': {
-      const role = ['admin', 'mentor', 'member'].includes(b.role) ? b.role : 'member'
+      const role = ['admin', 'moderator', 'member'].includes(b.role) ? b.role : 'member'
       if (!b.memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
       await db.from('community_space_members').update({ role }).eq('space_id', spaceId).eq('member_id', b.memberId)
       return NextResponse.json({ ok: true })
@@ -206,13 +236,37 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     case 'publish-announcement': {
       const title = String(b.title ?? '').trim()
       if (!title) return NextResponse.json({ error: 'title required' }, { status: 400 })
-      await db.from('community_announcements').insert({
-        space_id: spaceId,
-        author_member_id: adminMemberId,
-        title,
-        body: String(b.body ?? '').trim() || null,
-      })
-      return NextResponse.json({ ok: true })
+      const { data: created } = await db
+        .from('community_announcements')
+        .insert({
+          space_id: spaceId,
+          author_member_id: adminMemberId,
+          title,
+          body: String(b.body ?? '').trim() || null,
+        })
+        .select('id')
+        .single()
+
+      // Notify everyone with access to this space (in-app only). Best-effort —
+      // never fail the publish if the fan-out hits a snag.
+      try {
+        const audience = (await spaceNotificationAudience(spaceId)).filter((id) => id !== adminMemberId)
+        if (audience.length) {
+          await db.from('community_notifications').insert(
+            audience.map((recipientId) => ({
+              recipient_member_id: recipientId,
+              actor_member_id: adminMemberId,
+              type: 'announcement' as const,
+              reference_type: 'space',
+              reference_id: spaceId,
+              body: title,
+            }))
+          )
+        }
+      } catch (err) {
+        console.error('[community] announcement notification fan-out failed:', err)
+      }
+      return NextResponse.json({ ok: true, id: created?.id ?? null })
     }
     case 'delete-announcement': {
       if (!b.announcementId) return NextResponse.json({ error: 'announcementId required' }, { status: 400 })
@@ -224,6 +278,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     case 'remove-resource': {
       if (!b.resourceId) return NextResponse.json({ error: 'resourceId required' }, { status: 400 })
       await db.from('community_resources').delete().eq('id', b.resourceId).eq('space_id', spaceId)
+      return NextResponse.json({ ok: true })
+    }
+    // Attach an existing catalogue binary to this space (by reference — the binary
+    // is shared, not copied). Optional displayName renames it for this space only.
+    case 'attach-resource': {
+      if (!b.resourceId) return NextResponse.json({ error: 'resourceId required' }, { status: 400 })
+      await attachSpaceResource(db, spaceId, String(b.resourceId), b.displayName ? String(b.displayName) : null)
+      return NextResponse.json({ ok: true })
+    }
+    // Detach a catalogue attachment (removes the container_contents link only,
+    // leaving the shared binary intact for other spaces/objects).
+    case 'detach-resource': {
+      if (!b.attachmentId) return NextResponse.json({ error: 'attachmentId required' }, { status: 400 })
+      const { data: sp } = await db.from('community_spaces').select('slug, name').eq('id', spaceId).maybeSingle()
+      if (!sp) return NextResponse.json({ error: 'Space not found' }, { status: 404 })
+      const containerId = await ensureSpaceContainer(db, (sp as { slug: string }).slug, (sp as { name: string }).name)
+      // Scope the delete to this space's container so a forged id can't detach elsewhere.
+      await db
+        .from('container_contents')
+        .delete()
+        .eq('id', String(b.attachmentId))
+        .eq('container_id', containerId)
+        .eq('content_type', 'resource')
       return NextResponse.json({ ok: true })
     }
 

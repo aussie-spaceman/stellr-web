@@ -2,6 +2,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { type CommunityMember, getCurrentMember, memberCanAccess } from '@/lib/community'
 import { containerAccessPersists } from '@/lib/containers'
 import { ensureCoachingContainer } from '@/lib/container-sync'
+import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 import { ensureMemberGrants, bookCoachingSessionFromAllocation, releaseCoachingBooking } from '@/lib/entitlements'
 import { getVideoProvider } from '@/lib/video-provider'
 import { notifyMember, notifyMembers } from '@/lib/notify'
@@ -96,6 +97,8 @@ export async function bookCoaching(
       error: 'No coaching sessions remaining. Purchase an extra session to continue.',
     }
   }
+  // Inherit any Spaces linked to this coaching workshop (Access Convergence).
+  if (containerId) await syncObjectSpaceRoster(db, 'coaching', containerId, member.id)
 
   const start = new Date(startIso)
   const end = new Date(start.getTime() + (opts.durationMin ?? 30) * 60_000)

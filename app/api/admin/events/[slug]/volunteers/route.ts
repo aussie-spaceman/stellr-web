@@ -4,8 +4,9 @@ import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
 import { getEventBySlug } from '@/lib/sanity'
 import { ensureEventContainer } from '@/lib/container-sync'
-import { getVolunteerStatuses } from '@/lib/volunteer'
+import { getVolunteerStatuses, grantVolunteerRole } from '@/lib/volunteer'
 import { logActivity, actorFromAuth } from '@/lib/activity-log'
+import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 
 // Event volunteer management (PRD §15). Volunteers raise interest from the
 // member catalog (volunteer_event_interest); admins assign them here. An
@@ -137,6 +138,12 @@ export async function POST(req: Request, { params }: Ctx) {
     metadata: { eventSlug: slug, eventTitle: title },
     ...actor,
   }, db)
+
+  // Volunteer program: grant the additive 'volunteer' role (idempotent — this also
+  // rosters them into the global Volunteer Space) and inherit any Spaces linked to
+  // this event (Access Convergence).
+  await grantVolunteerRole(db, memberId, actor, 'admin')
+  await syncObjectSpaceRoster(db, 'event', slug, memberId)
 
   return NextResponse.json({ ok: true })
 }

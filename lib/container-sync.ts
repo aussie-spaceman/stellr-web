@@ -160,6 +160,7 @@ export async function attachSpaceResource(
   db: SupabaseClient,
   spaceId: string,
   resourceId: string,
+  displayName?: string | null,
 ): Promise<void> {
   try {
     const { data: space } = await db
@@ -170,10 +171,21 @@ export async function attachSpaceResource(
     if (!space) return
     const containerId = await ensureSpaceContainer(db, space.slug as string, space.name as string)
     if (!containerId) return
+    const name = displayName?.trim() || null
     await db.from('container_contents').upsert(
-      { container_id: containerId, content_type: 'resource', content_ref: resourceId },
+      { container_id: containerId, content_type: 'resource', content_ref: resourceId, display_name: name },
       { onConflict: 'container_id,content_type,content_ref', ignoreDuplicates: true },
     )
+    // Apply the rename even if the attachment row already existed (the upsert
+    // above skips updates when ignoreDuplicates is set).
+    if (name) {
+      await db
+        .from('container_contents')
+        .update({ display_name: name })
+        .eq('container_id', containerId)
+        .eq('content_type', 'resource')
+        .eq('content_ref', resourceId)
+    }
   } catch (e) {
     console.error('[container-sync] attachSpaceResource failed (non-fatal):', e)
   }

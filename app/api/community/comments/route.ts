@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, memberCanAccess, tiptapToPlainText } from '@/lib/community'
-import { isMemberMutedInSpace } from '@/lib/spaces'
+import { getCurrentMember, tiptapToPlainText } from '@/lib/community'
+import { getSpaceAccessById, isMemberMutedInSpace } from '@/lib/spaces'
 import { sendEmail, communityReplyEmail } from '@/lib/email'
 import { extractMentionIds, notifyMentions } from '@/lib/mentions'
 
@@ -87,20 +87,25 @@ export async function POST(req: Request) {
 
   const db = supabaseServer()
 
-  // Confirm the post exists and the member can access its space (tier gate).
+  // Confirm the post exists and the member can access its space. Gate on the
+  // Open/Private/Secret access model (the same resolver the feed and post-create
+  // paths use) — NOT the legacy tier-only gate, which ignored access_type and so
+  // denied replies in open spaces whenever a space entitlement grant existed
+  // (the "Could not reply" bug: members could view + post but not reply).
   const { data: post } = await db
     .from('community_posts')
-    .select('id, status, space_id, community_spaces(min_tier_rank)')
+    .select('id, status, space_id')
     .eq('id', postId)
     .maybeSingle()
 
   if (!post || post.status === 'deleted') {
     return NextResponse.json({ error: 'Post not found' }, { status: 404 })
   }
-  const spaceRel = post.community_spaces as { min_tier_rank: number } | { min_tier_rank: number }[] | null
-  const minTierRank = Array.isArray(spaceRel) ? spaceRel[0]?.min_tier_rank ?? 0 : spaceRel?.min_tier_rank ?? 0
-  if (!(await memberCanAccess(member, 'space', post.space_id as string, minTierRank, 'view'))) {
-    return NextResponse.json({ error: 'Upgrade required' }, { status: 403 })
+  if (post.space_id) {
+    const access = await getSpaceAccessById(member, post.space_id as string)
+    if (!access || !access.canAccess) {
+      return NextResponse.json({ error: 'Upgrade required' }, { status: 403 })
+    }
   }
   if (post.space_id && (await isMemberMutedInSpace(post.space_id as string, member.id))) {
     return NextResponse.json({ error: 'You have been muted in this space' }, { status: 403 })

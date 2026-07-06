@@ -10,7 +10,7 @@ import { TierPill, RolePill } from '@/components/community/spaces/badges'
 
 export const dynamic = 'force-dynamic'
 
-const ROLE_ORDER: Record<SpaceRole, number> = { admin: 0, mentor: 1, member: 2 }
+const ROLE_ORDER: Record<SpaceRole, number> = { admin: 0, moderator: 1, member: 2 }
 
 export default async function SpaceMembersPage({
   params,

@@ -306,7 +306,7 @@ function PostCard({
           className="mb-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-subheading font-semibold uppercase tracking-[0.05em]"
           style={{ background: '#FBEFDD', color: '#B5711F' }}
         >
-          <Pin className="h-3 w-3" /> Pinned announcement
+          <Pin className="h-3 w-3" /> Pinned post
         </div>
       )}
       <div className="flex items-start gap-3">
@@ -322,13 +322,30 @@ function PostCard({
           {post.bodyText && <p className="mt-1 whitespace-pre-wrap text-sm text-brand-muted">{post.bodyText}</p>}
 
           {post.attachment && (
-            <div className="mt-2 inline-flex items-center gap-2 rounded-lg border border-brand-border px-2.5 py-1.5 text-xs text-brand-muted">
-              <FileText className="h-4 w-4 text-brand-blue" />
-              {post.attachment.name}
-              <span className="rounded bg-brand-canvas px-1.5 py-0.5 text-[10px] uppercase text-brand-muted-soft">
-                {post.attachment.fileType ?? 'file'}
-              </span>
-            </div>
+            post.attachment.previewUrl ? (
+              <a
+                href={post.attachment.previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 block w-fit"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={post.attachment.previewUrl}
+                  alt={post.attachment.name}
+                  className="max-h-80 max-w-full rounded-[12px] border border-brand-border object-cover"
+                />
+                <span className="mt-1 block text-[11px] text-brand-muted-soft">{post.attachment.name}</span>
+              </a>
+            ) : (
+              <div className="mt-2 inline-flex items-center gap-2 rounded-lg border border-brand-border px-2.5 py-1.5 text-xs text-brand-muted">
+                <FileText className="h-4 w-4 text-brand-blue" />
+                {post.attachment.name}
+                <span className="rounded bg-brand-canvas px-1.5 py-0.5 text-[10px] uppercase text-brand-muted-soft">
+                  {post.attachment.fileType ?? 'file'}
+                </span>
+              </div>
+            )
           )}
 
           <div className="mt-2 flex flex-wrap items-center gap-3">

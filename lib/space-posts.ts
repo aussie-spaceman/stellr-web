@@ -1,4 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
+import { signedDownloadUrl } from '@/lib/community'
 
 // Hydrated channel-feed data (author identity + tier + space role + reactions +
 // threaded replies) for the in-space channel feed (screen 02). Used by both the
@@ -15,7 +16,7 @@ export interface FeedReply {
   authorId: string | null
   authorName: string
   tierName: string | null
-  role: 'admin' | 'mentor' | 'member' | null
+  role: 'admin' | 'moderator' | 'member' | null
   bodyText: string
   createdAt: string
   reactions: FeedReaction[]
@@ -25,6 +26,8 @@ export interface FeedAttachment {
   resourceId: string
   name: string
   fileType: string | null
+  /** Short-lived signed URL for inline rendering when the attachment is an image. */
+  previewUrl: string | null
 }
 
 export interface FeedPost {
@@ -32,7 +35,7 @@ export interface FeedPost {
   authorId: string | null
   authorName: string
   tierName: string | null
-  role: 'admin' | 'mentor' | 'member' | null
+  role: 'admin' | 'moderator' | 'member' | null
   title: string | null
   bodyText: string
   createdAt: string
@@ -131,15 +134,22 @@ export async function getChannelPosts(
   // Attachments saved from these posts (from_chat resources linked back).
   const { data: attachRows } = await db
     .from('community_resources')
-    .select('id, title, file_type, source_post_id')
+    .select('id, title, file_type, storage_path, source_post_id')
     .in('source_post_id', postIds)
 
   const attachByPost = new Map<string, FeedAttachment>()
-  for (const a of (attachRows ?? []) as Array<{ id: string; title: string; file_type: string | null; source_post_id: string | null }>) {
-    if (a.source_post_id) {
-      attachByPost.set(a.source_post_id, { resourceId: a.id, name: a.title, fileType: a.file_type })
-    }
-  }
+  await Promise.all(
+    ((attachRows ?? []) as Array<{ id: string; title: string; file_type: string | null; storage_path: string | null; source_post_id: string | null }>).map(
+      async (a) => {
+        if (!a.source_post_id) return
+        // Image attachments render inline: mint a short-lived signed URL. The feed
+        // is force-dynamic (and the realtime refetch re-runs this), so it stays fresh.
+        const isImage = a.file_type === 'IMG'
+        const previewUrl = isImage && a.storage_path ? await signedDownloadUrl(a.storage_path) : null
+        attachByPost.set(a.source_post_id, { resourceId: a.id, name: a.title, fileType: a.file_type, previewUrl })
+      }
+    )
+  )
 
   // Reactions for posts + replies.
   const { data: reactionRows } = await db
@@ -199,9 +209,9 @@ export async function getChannelPosts(
 async function resolveAuthorMeta(
   authorIds: string[],
   spaceId: string
-): Promise<{ tierByAuthor: Map<string, string>; roleByAuthor: Map<string, 'admin' | 'mentor' | 'member'> }> {
+): Promise<{ tierByAuthor: Map<string, string>; roleByAuthor: Map<string, 'admin' | 'moderator' | 'member'> }> {
   const tierByAuthor = new Map<string, string>()
-  const roleByAuthor = new Map<string, 'admin' | 'mentor' | 'member'>()
+  const roleByAuthor = new Map<string, 'admin' | 'moderator' | 'member'>()
   if (authorIds.length === 0) return { tierByAuthor, roleByAuthor }
 
   const db = supabaseServer()
@@ -238,7 +248,7 @@ async function resolveAuthorMeta(
   }
   for (const [id, v] of best) tierByAuthor.set(id, v.name)
 
-  for (const r of (roles ?? []) as Array<{ member_id: string; role: 'admin' | 'mentor' | 'member' }>) {
+  for (const r of (roles ?? []) as Array<{ member_id: string; role: 'admin' | 'moderator' | 'member' }>) {
     roleByAuthor.set(r.member_id, r.role)
   }
 

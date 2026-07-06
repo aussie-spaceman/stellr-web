@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { getActiveTierNames } from '@/lib/tiers-server'
+import { getEventsBySlugs } from '@/lib/sanity'
 import type { SpaceAccessType, SpaceRole, SpaceTheme } from '@/lib/spaces'
 
 // Loads everything the admin single-space config screen needs (screens 11–17).
@@ -17,8 +18,15 @@ export interface AdminSpaceConfig {
   }
   channels: { id: string; slug: string; name: string }[]
   assignedTierIds: string[]
+  // Web-app roles granted access to this space (Access Convergence).
+  assignedRoles: string[]
+  // Objects (Event/Training/Mentoring/Coaching) whose members inherit this space.
+  sources: { id: string; objectType: string; objectRef: string; label: string }[]
   members: { memberId: string; name: string; tierName: string | null; role: SpaceRole; status: 'invited' | 'active'; muted: boolean }[]
-  resources: { id: string; title: string; fileType: string | null; fromChat: boolean; createdAt: string }[]
+  // `attachmentId` is set for files linked from the Global Resources Catalogue
+  // (detach removes the link only); null for files uploaded to this space (remove
+  // deletes the binary).
+  resources: { id: string; title: string; fileType: string | null; fromChat: boolean; createdAt: string; attachmentId: string | null }[]
   assignedTraining: { moduleId: string; title: string; mandatory: boolean }[]
   trainingCatalogue: { id: string; title: string }[]
   announcements: { id: string; title: string; body: string | null; createdAt: string }[]
@@ -53,6 +61,8 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
   const [
     { data: channels },
     { data: tierRows },
+    { data: roleRows },
+    { data: sourceRows },
     { data: memberRows },
     { data: resourceRows },
     { data: trainRows },
@@ -61,6 +71,8 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
   ] = await Promise.all([
     db.from('community_channels').select('id, slug, name, display_order').eq('space_id', spaceId).eq('is_archived', false).order('display_order'),
     db.from('community_space_tiers').select('tier_id').eq('space_id', spaceId),
+    db.from('community_space_roles').select('role').eq('space_id', spaceId),
+    db.from('community_space_sources').select('id, object_type, object_ref').eq('space_id', spaceId).order('created_at'),
     db.from('community_space_members').select('member_id, role, status, muted, members:member_id(first_name, last_name)').eq('space_id', spaceId),
     db.from('community_resources').select('id, title, file_type, from_chat, created_at').eq('space_id', spaceId).order('created_at', { ascending: false }),
     db.from('community_space_training').select('training_module_id, is_mandatory, display_order, training_modules(title)').eq('space_id', spaceId).order('display_order'),
@@ -80,15 +92,94 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
     muted: !!m.muted,
   }))
 
+  // Resolve friendly labels for the linked-object list (raw refs are slugs/uuids).
+  const srcRows = (sourceRows ?? []) as Array<{ id: string; object_type: string; object_ref: string }>
+  const labelByKey = new Map<string, string>()
+  if (srcRows.length) {
+    const eventSlugs = srcRows.filter((r) => r.object_type === 'event').map((r) => r.object_ref)
+    const trainIds = srcRows.filter((r) => r.object_type === 'training').map((r) => r.object_ref)
+    const cohortIds = srcRows.filter((r) => r.object_type === 'mentoring' || r.object_type === 'coaching').map((r) => r.object_ref)
+    const [events, { data: mods }, { data: cohorts }] = await Promise.all([
+      eventSlugs.length ? getEventsBySlugs(eventSlugs) : Promise.resolve([]),
+      trainIds.length ? db.from('training_modules').select('id, title').in('id', trainIds) : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+      cohortIds.length ? db.from('mentoring_cohorts').select('id, name').in('id', cohortIds) : Promise.resolve({ data: [] as { id: string; name: string | null }[] }),
+    ])
+    for (const e of events as Array<{ title?: string; slug?: { current?: string } }>) {
+      const s = e.slug?.current
+      if (s) labelByKey.set(`event:${s}`, e.title ?? s)
+    }
+    for (const m of (mods ?? []) as Array<{ id: string; title: string }>) labelByKey.set(`training:${m.id}`, m.title)
+    for (const c of (cohorts ?? []) as Array<{ id: string; name: string | null }>) {
+      labelByKey.set(`mentoring:${c.id}`, c.name ?? c.id)
+      labelByKey.set(`coaching:${c.id}`, c.name ?? c.id)
+    }
+  }
+
+  // Files linked from the Global Resources Catalogue live on the space's container
+  // (container_contents), not on community_resources.space_id. Surface those too so
+  // catalogue-attached files show alongside direct uploads. content_ref has no FK,
+  // so resolve the binaries in a second query rather than an embedded join.
+  const catalogueResources: AdminSpaceConfig['resources'] = []
+  const { data: containerRow } = await db
+    .from('mentoring_cohorts')
+    .select('id')
+    .eq('container_type', 'space')
+    .eq('campaign_ref', (s as { slug: string }).slug)
+    .maybeSingle()
+  const containerId = (containerRow as { id: string } | null)?.id ?? null
+  if (containerId) {
+    const { data: cc } = await db
+      .from('container_contents')
+      .select('id, content_ref, display_name, created_at')
+      .eq('container_id', containerId)
+      .eq('content_type', 'resource')
+    const ccRows = (cc ?? []) as Array<{ id: string; content_ref: string; display_name: string | null; created_at: string }>
+    const refs = ccRows.map((r) => r.content_ref)
+    if (refs.length) {
+      const { data: bins } = await db
+        .from('community_resources')
+        .select('id, title, file_type, space_id')
+        .in('id', refs)
+      const binById = new Map(
+        ((bins ?? []) as Array<{ id: string; title: string; file_type: string | null; space_id: string | null }>).map((x) => [x.id, x]),
+      )
+      for (const row of ccRows) {
+        const bin = binById.get(row.content_ref)
+        if (!bin) continue
+        // Files uploaded to THIS space already appear via the space_id query below
+        // (with a delete-binary Remove action). Skip them here to avoid duplicates.
+        if (bin.space_id === spaceId) continue
+        catalogueResources.push({
+          id: bin.id,
+          title: row.display_name || bin.title,
+          fileType: bin.file_type,
+          fromChat: false,
+          createdAt: row.created_at,
+          attachmentId: row.id,
+        })
+      }
+    }
+  }
+
   return {
     space: s as AdminSpaceConfig['space'],
     channels: (channels ?? []).map((c) => ({ id: (c as { id: string }).id, slug: (c as { slug: string }).slug, name: (c as { name: string }).name })),
     assignedTierIds: (tierRows ?? []).map((t) => (t as { tier_id: string }).tier_id),
+    assignedRoles: (roleRows ?? []).map((r) => (r as { role: string }).role),
+    sources: srcRows.map((x) => ({
+      id: x.id,
+      objectType: x.object_type,
+      objectRef: x.object_ref,
+      label: labelByKey.get(`${x.object_type}:${x.object_ref}`) ?? x.object_ref,
+    })),
     members,
-    resources: (resourceRows ?? []).map((r) => {
-      const x = r as { id: string; title: string; file_type: string | null; from_chat: boolean; created_at: string }
-      return { id: x.id, title: x.title, fileType: x.file_type, fromChat: !!x.from_chat, createdAt: x.created_at }
-    }),
+    resources: [
+      ...(resourceRows ?? []).map((r) => {
+        const x = r as { id: string; title: string; file_type: string | null; from_chat: boolean; created_at: string }
+        return { id: x.id, title: x.title, fileType: x.file_type, fromChat: !!x.from_chat, createdAt: x.created_at, attachmentId: null }
+      }),
+      ...catalogueResources,
+    ],
     assignedTraining: (trainRows ?? []).map((t) => {
       const x = t as { training_module_id: string; is_mandatory: boolean; training_modules: { title: string } | { title: string }[] | null }
       return { moduleId: x.training_module_id, title: rel(x.training_modules)?.title ?? 'Course', mandatory: !!x.is_mandatory }

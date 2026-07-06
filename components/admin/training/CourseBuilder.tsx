@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import {
   Plus, Trash2, GripVertical, Pencil, Check, X, ChevronDown, ChevronRight,
   Radio, Video, FileText, Paperclip, Play, Upload,
@@ -61,11 +61,31 @@ export function CourseBuilder({
   initialCourseId?: string
 }) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [selectedId, setSelectedId] = useState<string>(
     initialCourseId && courses.some((c) => c.id === initialCourseId) ? initialCourseId : courses[0]?.id ?? ''
   )
   const [creating, setCreating] = useState(false)
   const course = courses.find((c) => c.id === selectedId)
+
+  // Keep the selection valid as the course list changes (e.g. after a delete or
+  // a router.refresh). If the selected course no longer exists, fall back to the
+  // first remaining course; if none remain, leave the builder and return to the
+  // Overview tab. Skipped while creating so a fresh admin isn't bounced away.
+  useEffect(() => {
+    if (creating) return
+    if (courses.length === 0) {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('tab', 'overview')
+      params.delete('course')
+      router.replace(`${pathname}?${params.toString()}`)
+      return
+    }
+    if (!courses.some((c) => c.id === selectedId)) {
+      setSelectedId(courses[0].id)
+    }
+  }, [courses, selectedId, creating, pathname, searchParams, router])
 
   return (
     <div className="space-y-5">

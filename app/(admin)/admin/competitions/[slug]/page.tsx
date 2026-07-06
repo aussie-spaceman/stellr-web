@@ -8,8 +8,8 @@ import { requireEventAccess } from '@/lib/event-access'
 import { getEventRoster } from '@/lib/event-admin'
 import EventRoster from '@/components/admin/EventRoster'
 import EventManagerAssignments from '@/components/admin/EventManagerAssignments'
-import { EventAccessGrant } from '@/components/admin/events/EventAccessGrant'
-import { EventVolunteersPanel } from '@/components/admin/events/EventVolunteersPanel'
+import { EventAccessGrant } from '@/components/admin/competitions/EventAccessGrant'
+import { EventVolunteersPanel } from '@/components/admin/competitions/EventVolunteersPanel'
 import EventCompanies, { type CompanyRow } from '@/components/admin/EventCompanies'
 import EventBadges from '@/components/admin/EventBadges'
 import { RefundPolicyEditor } from '@/components/admin/RefundPolicyEditor'
@@ -56,7 +56,7 @@ export default async function AdminEventDetailPage({
     : 'overview'
 
   const access = await requireEventAccess(slug)
-  if (!access.ok) redirect(access.status === 401 ? '/sign-in' : '/admin/events')
+  if (!access.ok) redirect(access.status === 401 ? '/sign-in' : '/admin/competitions')
 
   const event = (await getEventBySlug(slug)) as (StellarEvent & { activityType?: string }) | null
   if (!event) notFound()
@@ -191,20 +191,20 @@ export default async function AdminEventDetailPage({
   // ── Visible tabs (campaigns skip Settings) ────────────────────────────────
   const visibleTabs = isCampaign ? TABS.filter((t) => t.id !== 'settings') : TABS
 
-  const baseHref = `/admin/events/${slug}`
+  const baseHref = `/admin/competitions/${slug}`
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <Link href="/admin/events" className="text-sm text-brand-blue hover:text-brand-blue">
+        <Link href="/admin/competitions" className="text-sm text-brand-blue hover:text-brand-blue">
           ← All events
         </Link>
         <div className="flex items-center gap-3 mt-1">
           <h1 className="font-heading uppercase text-title text-brand-blue-dark">{event.title}</h1>
           {!isCampaign && tab === 'overview' && (
             <Link
-              href={`/admin/events/${slug}/check-in`}
+              href={`/admin/competitions/${slug}/check-in`}
               className="ml-auto text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5"
             >
               Check-In Console

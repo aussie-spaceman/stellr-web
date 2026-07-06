@@ -12,8 +12,12 @@ function getStripe() {
   return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
 }
 
-// Buy a pack of mentoring credits (top-up beyond the tier allowance). The Stripe
-// webhook (type 'mentoring_topup') grants `quantity` available credits on success.
+// Buy extra mentoring SESSION credits (top-up beyond the tier allowance). Mentoring
+// is accounted per session — a cohort enrollment draws its planned 4/6/8 sessions
+// from the ledger (migration 106) — so `quantity` is a number of sessions. The
+// Stripe webhook (type 'mentoring_topup') grants a purchased cohort_access lot of
+// `quantity` on success (grantPurchasedLot), which enrollment then draws FIFO
+// alongside the tier allowance (migration 122). Mirrors /api/community/coaching/topup.
 export async function POST(req: Request) {
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
@@ -44,7 +48,7 @@ export async function POST(req: Request) {
         price_data: {
           currency: 'usd',
           unit_amount: unit,
-          product_data: { name: 'Mentoring credit' },
+          product_data: { name: 'Mentoring session' },
         },
       },
     ],

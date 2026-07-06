@@ -142,7 +142,7 @@ export function AdminAddMember({ tiers }: Props) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <Link href="/admin" className="text-sm text-brand-muted-soft hover:text-brand-muted mb-1 inline-block">
+          <Link href="/admin/members" className="text-sm text-brand-muted-soft hover:text-brand-muted mb-1 inline-block">
             ← All members
           </Link>
           <h1 className="font-heading uppercase text-title text-brand-blue-dark">Add member</h1>

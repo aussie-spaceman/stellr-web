@@ -75,9 +75,15 @@ export interface CohortAccess {
   freeReason?: 'tier-free-mentoring' | 'cohort-free-for-tier'
   /** One-off price in cents (USD), when a paid option exists. */
   priceCents: number | null
-  /** Credits to spend to enroll (usually 1). */
+  /**
+   * Session credits an enrollment draws from the ledger. The entitlements engine
+   * counts mentoring PER SESSION (tier grants are N sessions/year; enrolling in a
+   * cohort draws its planned_sessions — see migration 106), so this is the cohort's
+   * planned session count, NOT the legacy mentoring_cohorts.credit_cost (1-credit-
+   * per-cohort model, superseded 2026-06-26).
+   */
   creditCost: number
-  /** Whether the member currently has enough credits. */
+  /** Whether the member currently has enough session credits. */
   canUseCredit: boolean
   /** A pre-made Stripe price id, if the admin set one. */
   stripePriceId: string | null
@@ -166,9 +172,12 @@ export async function resolveCohortAccess(member: CommunityMember, cohort: Cohor
     enrolled = !!data
   }
 
+  // What an enrollment ACTUALLY draws: fn_book_from_allocation consumes the
+  // cohort's planned session count (per-session accounting, migration 106).
+  const sessionsNeeded = Math.max(1, cohort.plannedSessions)
   const base: Omit<CohortAccess, 'enrolled' | 'kind' | 'freeReason' | 'canUseCredit'> = {
     priceCents: cohort.oneOffPriceCents,
-    creditCost: cohort.creditCost,
+    creditCost: sessionsNeeded,
     stripePriceId: cohort.oneOffStripePriceId,
   }
 
@@ -186,9 +195,9 @@ export async function resolveCohortAccess(member: CommunityMember, cohort: Cohor
     }
   }
 
-  // Otherwise: credit if they have one, else one-off payment.
+  // Otherwise: session credits if they have enough, else one-off payment.
   const credits = await getMentoringCredits(member)
-  const canUseCredit = credits.remaining >= cohort.creditCost
+  const canUseCredit = credits.remaining >= sessionsNeeded
   if (canUseCredit) {
     return { enrolled, kind: 'credit', canUseCredit, ...base }
   }
@@ -260,7 +269,7 @@ export async function rosterAfterPaidBooking(cohortId: string, memberId: string)
   await addToRosterActive(cohortId, memberId)
 }
 
-/** Enroll into an open cohort using one mentoring credit. */
+/** Enroll into an open cohort using session credits (draws the cohort's planned sessions). */
 export async function enrollWithCredit(member: CommunityMember, cohortId: string): Promise<EnrollResult> {
   const cohort = await getCohortFull(cohortId)
   if (!cohort || !cohort.isOpen) return { ok: false, reason: 'not-open' }
@@ -275,7 +284,8 @@ export async function enrollWithCredit(member: CommunityMember, cohortId: string
   }
   if (!access.canUseCredit) return { ok: false, reason: 'no-credit' }
 
-  // Consume the oldest available cohort credit (FIFO), tied to this cohort.
+  // Draw the cohort's session count from the member's lots (FIFO across lots —
+  // tier grant + purchased top-ups combine; migration 122), tied to this cohort.
   const consumed = await bookCohortFromAllocation(member.id, cohortId)
   if (!consumed) return { ok: false, reason: 'no-credit' }
 

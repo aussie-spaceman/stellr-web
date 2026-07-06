@@ -176,8 +176,8 @@ function RegisterModal({
               <PayOption
                 selected={method === 'credit'}
                 onSelect={() => setMethod('credit')}
-                title="Use 1 mentoring credit"
-                sub={`${creditsRemaining} credit${creditsRemaining === 1 ? '' : 's'} remaining`}
+                title={`Use ${cohort.access.creditCost} session credit${cohort.access.creditCost === 1 ? '' : 's'}`}
+                sub={`${creditsRemaining} session credit${creditsRemaining === 1 ? '' : 's'} remaining`}
               />
             )}
             {hasPaid && (
@@ -190,7 +190,8 @@ function RegisterModal({
             )}
             {!canCredit && !hasPaid && (
               <p className="rounded-[10px] bg-surface px-4 py-3 text-sm text-content-muted">
-                You have no mentoring credits left and this cohort has no one-off option. Upgrade your membership to join.
+                This cohort uses {cohort.access.creditCost} session credit{cohort.access.creditCost === 1 ? '' : 's'} and
+                you have {creditsRemaining} remaining. Buy more sessions from the Discover page, or upgrade your membership.
               </p>
             )}
           </div>

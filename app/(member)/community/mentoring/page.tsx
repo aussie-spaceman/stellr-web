@@ -129,7 +129,7 @@ export default async function MentoringPage() {
 
       {/* Credits footnote */}
       <p className="text-[13px] text-content-faint">
-        Your membership · <span className="font-semibold text-space-violet">{credits.remaining} mentoring credit{credits.remaining === 1 ? '' : 's'} remaining</span>
+        Your membership · <span className="font-semibold text-space-violet">{credits.remaining} session credit{credits.remaining === 1 ? '' : 's'} remaining</span>
         {' · '}
         <Link href="/community/mentoring/discover" className="font-medium text-primary hover:underline">browse open cohorts</Link>
       </p>

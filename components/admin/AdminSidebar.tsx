@@ -4,12 +4,12 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  Users, Trophy, MessagesSquare, GraduationCap, ShoppingBag, SlidersHorizontal,
+  Users, Trophy, MessagesSquare, GraduationCap, SlidersHorizontal,
 } from 'lucide-react'
 
-// Persistent admin nav (PR A1). Navy rail (desktop ≥lg) + bottom tab bar (mobile),
-// replacing the AdminNav hover-dropdown bar. Same 6 sections as before, now flat
-// and colour-coded — utilitarian, no hover-to-discover.
+// Persistent admin nav (PR A1, regrouped in the admin IA restructure). Navy rail
+// (desktop ≥lg) + bottom tab bar (mobile): Members · Competitions · Community ·
+// Academy · Operations — flat and colour-coded, no hover-to-discover.
 //
 // Event Managers (isAdmin=false) only see the Competitions section; middleware
 // already bounces them away from other /admin routes.
@@ -19,25 +19,24 @@ type Section = { label: string; href: string; color: string; icon: typeof Users;
 
 const SECTIONS: Section[] = [
   {
-    label: 'Members', href: '/admin', color: '#2C53C6', icon: Users,
+    label: 'Members', href: '/admin/members', color: '#2C53C6', icon: Users,
     items: [
-      { href: '/admin', label: 'Members' },
+      { href: '/admin/members', label: 'Members' },
       { href: '/admin/membership', label: 'Membership' },
-      { href: '/admin/community/entitlements', label: 'Access map' },
+      { href: '/admin/members/volunteers', label: 'Volunteers' },
+      { href: '/admin/schools', label: 'Schools' },
     ],
   },
   {
-    label: 'Competitions', href: '/admin/events', color: '#E0922F', icon: Trophy,
-    items: [{ href: '/admin/events', label: 'Events' }],
+    label: 'Competitions', href: '/admin/competitions', color: '#E0922F', icon: Trophy,
+    items: [{ href: '/admin/competitions', label: 'Competitions' }],
   },
   {
-    label: 'Community', href: '/admin/community/resources', color: '#3f78d6', icon: MessagesSquare,
+    label: 'Community', href: '/admin/community/spaces', color: '#3f78d6', icon: MessagesSquare,
     items: [
       { href: '/admin/community/spaces', label: 'Spaces' },
       { href: '/admin/community/resources', label: 'Resources' },
-      { href: '/admin/community/announcements', label: 'Announcements' },
       { href: '/admin/community/moderation', label: 'Moderation' },
-      { href: '/admin/email', label: 'Email' },
     ],
   },
   {
@@ -46,34 +45,33 @@ const SECTIONS: Section[] = [
       { href: '/admin/academy/training', label: 'Training' },
       { href: '/admin/academy/mentoring', label: 'Mentoring' },
       { href: '/admin/academy/coaching', label: 'Coaching' },
-      { href: '/admin/community/gates', label: 'Gates' },
     ],
   },
   {
-    label: 'Store', href: '/admin/store', color: '#3C6DF6', icon: ShoppingBag,
+    label: 'Operations', href: '/admin/activity-log', color: '#6A708C', icon: SlidersHorizontal,
     items: [
-      { href: '/admin/store', label: 'Products' },
-      { href: '/admin/store/discounts', label: 'Discounts' },
-    ],
-  },
-  {
-    label: 'Operations', href: '/admin/delegations', color: '#6A708C', icon: SlidersHorizontal,
-    items: [
+      { href: '/admin/activity-log', label: 'Activity log' },
       { href: '/admin/delegations', label: 'Delegations' },
       { href: '/admin/staff', label: 'Staff roles' },
-      { href: '/admin/schools', label: 'Schools' },
       { href: '/admin/docusigns', label: 'Consent forms' },
       { href: '/admin/compliance', label: 'Background checks' },
-      { href: '/admin/activity-log', label: 'Activity log' },
+      { href: '/admin/email', label: 'Email' },
+      { href: '/admin/store', label: 'Store' },
     ],
   },
 ]
 
+// Every navigable href, longest first — used so the most specific link wins the
+// active state (e.g. /admin/members/volunteers lights Volunteers, not Members).
+const ALL_HREFS = SECTIONS.flatMap((s) => s.items.map((i) => i.href))
+
 export function AdminSidebar({ isAdmin = true }: { isAdmin?: boolean }) {
   const pathname = usePathname() ?? ''
-  // '/admin' is the Members page AND the prefix of every route — match it exactly.
+  // Segment-boundary prefix match, and the most specific matching link wins
+  // (so /admin/members/volunteers activates Volunteers rather than Members).
+  const matches = (href: string) => pathname === href || pathname.startsWith(href + '/')
   const itemActive = (href: string) =>
-    href === '/admin' ? pathname === '/admin' : pathname.startsWith(href)
+    matches(href) && !ALL_HREFS.some((h) => h.length > href.length && matches(h))
 
   const sections = isAdmin ? SECTIONS : SECTIONS.filter((s) => s.label === 'Competitions')
 

@@ -42,7 +42,7 @@ export default async function AdminCampaignPage({ params }: PageProps) {
   const submittedCount = rows.filter((r) => r.proposal_submitted_at).length
   const studentTotal = rows.reduce((sum, r) => sum + (r.student_count ?? 0), 0)
 
-  const visible = rows.slice(0, 14)
+  const visible = rows
 
   return (
     <div className="space-y-6">
@@ -50,7 +50,7 @@ export default async function AdminCampaignPage({ params }: PageProps) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm text-content-muted">
-            <Link href="/admin/events" className="hover:text-content">Admin</Link> / Campaigns
+            <Link href="/admin/competitions" className="hover:text-content">Admin</Link> / Campaigns
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <span className="inline-flex items-center rounded-pill bg-pathway-amber-bg px-3 py-1 text-xs font-bold uppercase tracking-[0.05em] text-pathway-amber">

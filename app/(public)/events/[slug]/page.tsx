@@ -8,7 +8,9 @@ import { formatDateRange, formatDate, registrationStatus } from '@/lib/utils'
 import { PortableText } from 'next-sanity'
 import type { PortableTextBlock } from '@portabletext/types'
 import { CampaignDetail } from '@/components/campaigns/CampaignDetail'
+import { EventHeroCtas, EventNotifyButton } from '@/components/sections/EventCtas'
 import { getMemberCampaignContext } from '@/lib/campaign-registrations'
+import { CardPills } from '@/components/ui/CardPills'
 
 export const revalidate = 3600
 
@@ -40,13 +42,6 @@ const statusConfig = {
   open: { label: 'Registration Open', className: 'bg-green-100 text-green-700 border-green-200' },
   'coming-soon': { label: 'Coming Soon', className: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
   closed: { label: 'Registration Closed', className: 'bg-red-50 text-red-700 border-red-200' },
-}
-
-// Theme → pill colour (Space = purple, Environmental = green). Falls back to the
-// neutral hero chip for any other/legacy theme value.
-const THEME_PILL: Record<string, string> = {
-  'Environmental Design Challenge': 'bg-enviro-green-chip text-enviro-green-text',
-  'Space Design Challenge': 'bg-space-violet-chip text-space-violet-text',
 }
 
 const FAQS: { q: string; a: React.ReactNode }[] = [
@@ -142,19 +137,10 @@ export default async function EventDetailPage({ params }: PageProps) {
         )}
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 pt-8">
-          {/* Badges */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            {event.gradeLevel && (
-              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-600/40 text-blue-200">
-                {event.gradeLevel}
-              </span>
-            )}
-            {event.type && (
-              <span className={`text-xs font-semibold px-3 py-1 rounded-full ${THEME_PILL[event.type] ?? 'bg-white/10 text-content-faint'}`}>
-                {event.type}
-              </span>
-            )}
-            <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${statusClass}`}>
+          {/* Standardised three-pill row (Event · Grade · Theme) + status */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <CardPills kind="event" gradeLevel={event.gradeLevel} type={event.type} size="md" />
+            <span className={`text-sm font-semibold px-3 py-1.5 rounded-full border ${statusClass}`}>
               {statusLabel}
             </span>
           </div>
@@ -175,15 +161,14 @@ export default async function EventDetailPage({ params }: PageProps) {
             </p>
           )}
 
-          {/* Hero CTAs */}
-          <div className="mt-8 flex flex-wrap gap-4">
-            <a
-              href={`/register/${slug}`}
-              className="btn-primary text-base px-8 py-4"
-            >
-              Register Now
-            </a>
-          </div>
+          {/* Hero CTAs — Individual + Group registration; when registration
+              isn't open both buttons open the subscriber modal instead. */}
+          <EventHeroCtas
+            slug={slug}
+            title={event.title}
+            status={status}
+            opensLabel={event.registrationOpenDate ? formatDate(event.registrationOpenDate) : null}
+          />
         </div>
       </section>
 
@@ -336,13 +321,16 @@ export default async function EventDetailPage({ params }: PageProps) {
                     ? `Registration opens ${event.registrationOpenDate ? formatDate(event.registrationOpenDate) : 'soon'}.`
                     : 'Registration is now closed for this event.'}
                 </p>
-                {status !== 'closed' && (
+                {status === 'open' && (
                   <a
                     href={`/register/${slug}`}
                     className="btn-primary w-full justify-center text-sm"
                   >
-                    {status === 'open' ? 'Register Now' : 'Get Notified'}
+                    Register Now
                   </a>
+                )}
+                {status === 'coming-soon' && (
+                  <EventNotifyButton slug={slug} title={event.title} status={status} />
                 )}
                 <Link href="/events" className="block mt-3 text-xs text-content-faint hover:text-white transition-colors">
                   ← Back to all events
@@ -353,29 +341,6 @@ export default async function EventDetailPage({ params }: PageProps) {
         </div>
       </section>
 
-      {/* ── Registration CTA block ───────────────────────────────────── */}
-      <section className="bg-brand-blue text-white section-padding">
-        <div className="container-max text-center">
-          <h2 className="text-3xl font-bold mb-4">Ready to compete?</h2>
-          <p className="text-blue-100 mb-8 max-w-xl mx-auto">
-            Join students from across the country for one of the most challenging and rewarding STEM experiences of your school career.
-          </p>
-          <div className="flex flex-wrap justify-center gap-4">
-            <a
-              href={`/register/${slug}/individual`}
-              className="btn-outline-white text-base px-8 py-4"
-            >
-              Register as an Individual
-            </a>
-            <a
-              href={`/register/${slug}/group`}
-              className="bg-white text-brand-blue font-semibold text-base px-8 py-4 rounded-lg hover:bg-blue-50 transition-colors"
-            >
-              Register a Group
-            </a>
-          </div>
-        </div>
-      </section>
     </>
   )
 }

@@ -1,13 +1,15 @@
 import Link from 'next/link'
+import { Button } from '@stellr/web-ui'
 import type { StellarEvent } from '@/lib/sanity'
 import {
   themeFromType,
-  THEME_META,
   seasonLabel,
   deadlineInfo,
   getCampaignDates,
 } from '@/lib/campaigns'
-import { CampaignRegisterButton } from './CampaignRegisterButton'
+import { CardPills } from '@/components/ui/CardPills'
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.stellreducation.org'
 
 interface Props {
   campaign: StellarEvent
@@ -35,7 +37,6 @@ const STEPS = [
 // aware register card. Amber = Campaign; the theme keeps its violet/green coding.
 export function CampaignDetail({ campaign, membership, registered }: Props) {
   const theme = themeFromType(campaign.type)
-  const meta = THEME_META[theme]
   const season = seasonLabel(campaign.season, campaign.campaignYear)
   const dl = deadlineInfo(campaign.deadline)
   const dates =
@@ -43,14 +44,10 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
       ? getCampaignDates(campaign.season, campaign.campaignYear)
       : null
 
-  const option = {
-    slug: campaign.slug.current,
-    title: campaign.title,
-    theme,
-    themeLabel: meta.label,
-    seasonLabel: season,
-    deadlineLabel: dl?.label ?? '',
-  }
+  // One CTA for campaigns — Group Registration (or straight to the portal if the
+  // member has already registered).
+  const competeHref = registered ? `${APP_URL}/events` : `/register/${campaign.slug.current}/group`
+  const competeLabel = registered ? 'Access Campaign →' : 'Compete Now →'
 
   return (
     <>
@@ -61,14 +58,13 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
             ← All events &amp; campaigns
           </Link>
 
-          <div className="mt-6 flex flex-wrap gap-2">
-            <span className="inline-flex items-center rounded-pill bg-pathway-amber-bg px-3 py-1 text-xs font-bold uppercase tracking-[0.05em] text-pathway-amber">
-              ✦ Campaign · Async
-            </span>
-            <span className="inline-flex items-center rounded-pill border border-white/15 bg-white/5 px-3 py-1 text-xs font-bold uppercase tracking-[0.05em] text-hero-lead">
-              ✦ {meta.label}
-            </span>
-          </div>
+          <CardPills
+            kind="campaign"
+            gradeLevel={campaign.gradeLevel}
+            theme={theme}
+            size="md"
+            className="mt-6"
+          />
 
           <h1 className="mt-5 font-heading text-4xl font-bold sm:text-5xl">{campaign.title}</h1>
           {campaign.tagline && (
@@ -80,6 +76,10 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
             <Stat label="Deadline" value={dl?.label ?? 'TBC'} valueClassName="text-star-gold" />
             <Stat label="Cost" value="Free with membership" />
           </dl>
+
+          <div className="mt-8">
+            <Button href={competeHref} variant="primary">{competeLabel}</Button>
+          </div>
         </div>
       </section>
 
@@ -102,7 +102,7 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
           </ol>
         </div>
 
-        {/* Sticky register card */}
+        {/* Sticky info card — the single Compete Now CTA lives in the hero. */}
         <aside className="lg:sticky lg:top-24 lg:self-start">
           <div className="overflow-hidden rounded-panel border border-line border-t-4 border-t-pathway-amber bg-white p-6 shadow-card-lift">
             <p className="font-heading text-ds-h3 font-bold text-ink">Register your group</p>
@@ -110,21 +110,21 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
               {campaign.deliverable ?? 'A written proposal'} · due {dl?.label ?? 'the deadline'}.
             </p>
 
-            {membership?.schoolName && (
+            {membership?.schoolName ? (
               <p className="mt-4 rounded-ds-card bg-enviro-green-bg px-4 py-3 text-sm text-enviro-green-text">
                 Signed in as <strong>{membership.schoolName}</strong>
                 {membership.roleLabel ? ` · ${membership.roleLabel}` : ''} — no payment needed.
               </p>
+            ) : (
+              <p className="mt-4 rounded-ds-card bg-enviro-green-bg px-4 py-3 text-sm text-enviro-green-text">
+                Free — no payment required for Campaigns.
+              </p>
             )}
 
             <div className="mt-5">
-              <CampaignRegisterButton
-                campaign={option}
-                regContext="events"
-                membership={membership}
-                registered={registered}
-                fullWidth
-              />
+              <Button href={competeHref} variant="primary" className="w-full justify-center">
+                {competeLabel}
+              </Button>
             </div>
           </div>
         </aside>

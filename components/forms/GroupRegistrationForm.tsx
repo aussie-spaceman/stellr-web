@@ -416,7 +416,7 @@ function StudentManagerCard({ data, onEdit }: { data: StudentManagerFormData; on
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }: { eventSlug: string; eventTitle: string; prefill?: RegistrationPrefill | null }) {
+export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, isCampaign = false }: { eventSlug: string; eventTitle: string; prefill?: RegistrationPrefill | null; isCampaign?: boolean }) {
   const router = useRouter()
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn()
   const { isSignedIn } = useAuth()
@@ -702,8 +702,11 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
           student_count: studentCount,
           total_participants: totalParticipants,
           details_method: detailsMethod,
-          payment_method: paymentMethod,
-          member_pays_individually: paymentMethod === 'individual',
+          // Campaigns are always free — never send a paid payment method, and flag
+          // the registration so the API skips payment and marks it confirmed.
+          payment_method: isCampaign ? 'none' : paymentMethod,
+          is_campaign: isCampaign,
+          member_pays_individually: !isCampaign && paymentMethod === 'individual',
           // For SM: all additional_adults entries are genuinely additional (PoC is adults[0])
           // For teacher: additional_adults excludes teacher themselves. Map with the
           // ORIGINAL index (so PoC role detection holds), then drop blank/deferred
@@ -756,6 +759,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
         window.location.href = checkoutUrl
       } else {
         const params = new URLSearchParams({ id: registrationId, type: 'group' })
+        if (isCampaign) params.set('campaign', '1')
         // Surface the Sheet for the spreadsheet/email-link flows, or whenever some
         // participants were deferred for later completion (partial add-now).
         if (spreadsheetUrl && (detailsMethod !== 'add_now' || remaining > 0)) params.set('spreadsheet', encodeURIComponent(spreadsheetUrl))
@@ -1062,27 +1066,33 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
         </>
       )}
 
-      <div className="bg-white rounded-xl border border-line p-6 space-y-4">
-        <h3 className="font-semibold text-brand-blue-dark">How will the group pay?</h3>
-        <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)} className="input-field">
-          <option value="invoice">Have an invoice emailed to you</option>
-          <option value="card">Pay now via credit card</option>
-          <option value="individual">Group members will pay individually</option>
-        </select>
-        {paymentMethod === 'invoice' && <p className="text-sm text-content-muted">An invoice will be emailed to you within 1–2 business days. Registration is confirmed upon payment.</p>}
-        {paymentMethod === 'card' && (
-          <p className="text-sm text-content-muted">
-            You&apos;ll be redirected to a secure Stripe checkout page to pay for all{' '}
-            {registrantRole === 'student_manager' ? 1 + adultCount + studentCount : adultCount + studentCount} participants.
-          </p>
-        )}
-        {paymentMethod === 'individual' && (
-          <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark space-y-1">
-            <p className="font-medium">Each group member will receive an individual payment link via email.</p>
-            <p className="text-content-muted text-xs">Payment links are sent once each member is confirmed in the system — either now (if adding details today) or when they complete their self-registration.</p>
-          </div>
-        )}
-      </div>
+      {isCampaign ? (
+        <div className="bg-enviro-green-bg border border-enviro-green-chip rounded-xl p-6">
+          <p className="font-semibold text-enviro-green-text">No Payment Required For Campaigns — Good Luck!</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-line p-6 space-y-4">
+          <h3 className="font-semibold text-brand-blue-dark">How will the group pay?</h3>
+          <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)} className="input-field">
+            <option value="invoice">Have an invoice emailed to you</option>
+            <option value="card">Pay now via credit card</option>
+            <option value="individual">Group members will pay individually</option>
+          </select>
+          {paymentMethod === 'invoice' && <p className="text-sm text-content-muted">An invoice will be emailed to you within 1–2 business days. Registration is confirmed upon payment.</p>}
+          {paymentMethod === 'card' && (
+            <p className="text-sm text-content-muted">
+              You&apos;ll be redirected to a secure Stripe checkout page to pay for all{' '}
+              {registrantRole === 'student_manager' ? 1 + adultCount + studentCount : adultCount + studentCount} participants.
+            </p>
+          )}
+          {paymentMethod === 'individual' && (
+            <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-brand-blue-dark space-y-1">
+              <p className="font-medium">Each group member will receive an individual payment link via email.</p>
+              <p className="text-content-muted text-xs">Payment links are sent once each member is confirmed in the system — either now (if adding details today) or when they complete their self-registration.</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* FERPA School Data Processing Agreement */}
       <div className={`bg-white rounded-xl border p-6 space-y-3 ${dpaError ? 'border-red-300' : 'border-line'}`}>
@@ -1125,7 +1135,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill }
         <button type="button" onClick={() => setStep(1)} className="btn-outline flex-1 py-3">← Back</button>
         <button type="button" onClick={handleFinalSubmit} disabled={submitting}
           className="btn-primary flex-1 py-3 disabled:opacity-60">
-          {submitting ? 'Submitting…' : paymentMethod === 'card' ? 'Continue to Payment →' : 'Submit Registration'}
+          {submitting ? 'Submitting…' : !isCampaign && paymentMethod === 'card' ? 'Continue to Payment →' : 'Submit Registration'}
         </button>
       </div>
 

@@ -48,11 +48,11 @@ export default async function DiscoverPage() {
           Find a cohort to join
         </h1>
         <p className="mt-1.5 max-w-xl text-[15px] text-content-secondary">
-          Open cohorts you can register for now — free with your membership, with a mentoring credit, or as a one-off.
+          Open cohorts you can register for now — free with your membership, with your session credits, or as a one-off.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center rounded-pill bg-space-violet-chip px-3.5 py-1.5 text-[13px] font-semibold text-space-violet-text">
-            Your membership · {credits.remaining} mentoring credit{credits.remaining === 1 ? '' : 's'} remaining
+            Your membership · {credits.remaining} session credit{credits.remaining === 1 ? '' : 's'} remaining
           </span>
           <TopUpCredits unitPriceCents={creditPriceCents} />
         </div>

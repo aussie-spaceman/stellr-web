@@ -1,18 +1,13 @@
 'use client'
 
-import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Orbit, Environment } from '@stellr/icons'
-import {
-  CampaignRegistrationModal,
-  type CampaignOption,
-} from './CampaignRegistrationModal'
+import type { CampaignOption } from '@/lib/campaigns'
 
 // Optional final step of educator signup: offer to register a group for a
-// Campaign now. Entry point A — opens the shared modal with regContext="signup".
+// Campaign now. Entry point A — links straight into the group registration flow.
 export function SignupCampaignStep({ campaigns }: { campaigns: CampaignOption[] }) {
   const router = useRouter()
-  const [active, setActive] = useState<CampaignOption | null>(null)
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-midnight px-4 py-10">
@@ -40,7 +35,7 @@ export function SignupCampaignStep({ campaigns }: { campaigns: CampaignOption[] 
               <button
                 key={c.slug}
                 type="button"
-                onClick={() => setActive(c)}
+                onClick={() => router.push(`/register/${c.slug}/group`)}
                 className={`flex w-full items-center gap-3 rounded-ds-card border p-4 text-left transition-colors ${
                   featured
                     ? 'border-pathway-amber/40 bg-pathway-amber-bg'
@@ -70,16 +65,6 @@ export function SignupCampaignStep({ campaigns }: { campaigns: CampaignOption[] 
           Skip for now — take me to my dashboard →
         </button>
       </div>
-
-      <CampaignRegistrationModal
-        open={active !== null}
-        onClose={() => setActive(null)}
-        campaign={active}
-        regContext="signup"
-        onRegistered={() => {
-          /* success step handles navigation to /campaigns */
-        }}
-      />
     </div>
   )
 }

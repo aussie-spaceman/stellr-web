@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server'
 
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
-const isAdminEventsRoute = createRouteMatcher(['/admin/events(.*)'])
+// Competitions admin (formerly /admin/events — the old path 307s in next.config).
+const isAdminEventsRoute = createRouteMatcher(['/admin/competitions(.*)', '/admin/events(.*)'])
 // Member-only app surfaces that require a signed-in user (Home dashboard + the
 // community portal). Unauthenticated hits are bounced to sign-up.
 const isCommunityRoute = createRouteMatcher(['/community(.*)', '/home(.*)'])
@@ -73,7 +74,7 @@ export default clerkMiddleware(async (auth, req) => {
     const { sessionClaims } = await auth()
     const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
     if (role === 'event_manager') {
-      return NextResponse.redirect(new URL('/admin/events', req.url))
+      return NextResponse.redirect(new URL('/admin/competitions', req.url))
     }
   }
 })

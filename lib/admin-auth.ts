@@ -19,7 +19,7 @@ export function isAdminClaims(sessionClaims: Claims): boolean {
   return roleFromClaims(sessionClaims) === 'admin'
 }
 
-// Event Managers get access to /admin/events only, and only for events
+// Event Managers get access to /admin/competitions only, and only for events
 // they've been assigned to (event_manager_assignments table).
 export function isEventManagerClaims(sessionClaims: Claims): boolean {
   return roleFromClaims(sessionClaims) === 'event_manager'

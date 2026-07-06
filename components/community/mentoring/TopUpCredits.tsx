@@ -2,13 +2,16 @@
 
 import { useState } from 'react'
 import { Minus, Plus, X } from 'lucide-react'
-import { formatUsd } from '@/lib/mentoring-format'
+import { formatUsd, COHORT_SESSION_PACKS } from '@/lib/mentoring-format'
 
-// "Buy more credits" entry point + modal on the Discover screen. Posts to the
-// top-up checkout; the Stripe webhook grants the credits on success.
+// "Buy more sessions" entry point + modal on the Discover screen. Mentoring is
+// accounted PER SESSION (a cohort enrollment draws its planned 4/6/8 sessions from
+// the ledger — migration 106), so this sells SESSION credits, priced per session.
+// Posts to the top-up checkout; the Stripe webhook (type 'mentoring_topup') grants
+// the purchased sessions on success.
 export function TopUpCredits({ unitPriceCents }: { unitPriceCents: number }) {
   const [open, setOpen] = useState(false)
-  const [qty, setQty] = useState(1)
+  const [qty, setQty] = useState<number>(COHORT_SESSION_PACKS[0])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -40,22 +43,37 @@ export function TopUpCredits({ unitPriceCents }: { unitPriceCents: number }) {
         onClick={() => setOpen(true)}
         className="inline-flex items-center gap-1.5 rounded-pill border border-space-violet/40 px-3.5 py-1.5 text-[13px] font-semibold text-space-violet transition-colors hover:bg-space-violet-bg"
       >
-        <Plus className="h-3.5 w-3.5" /> Buy more credits
+        <Plus className="h-3.5 w-3.5" /> Buy more sessions
       </button>
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(14,19,48,.55)' }} onClick={() => setOpen(false)}>
           <div className="w-full max-w-[420px] rounded-[18px] bg-white p-6 shadow-[0_30px_70px_-20px_rgba(0,0,0,.5)]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between">
-              <h2 className="font-display text-[20px] font-bold text-ink">Buy mentoring credits</h2>
+              <h2 className="font-display text-[20px] font-bold text-ink">Buy mentoring sessions</h2>
               <button onClick={() => setOpen(false)} className="rounded-md p-1 text-content-faint hover:bg-surface" aria-label="Close"><X className="h-5 w-5" /></button>
             </div>
             <p className="mt-2 text-[13.5px] text-content-secondary">
-              Each credit registers you for one cohort and never expires. {formatUsd(unitPriceCents)} per credit.
+              Registering for a cohort uses its session count (4, 6 or 8 sessions). Sessions
+              are {formatUsd(unitPriceCents)} each, stack with your membership allowance and never expire.
             </p>
 
-            <div className="mt-4 flex items-center justify-between rounded-[12px] bg-surface p-4">
-              <span className="text-sm font-medium text-content-body">Credits</span>
+            {/* Quick picks matching the cohort formats */}
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              {COHORT_SESSION_PACKS.map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setQty(n)}
+                  className={`rounded-[12px] border px-3 py-2.5 text-center transition-colors ${qty === n ? 'border-space-violet bg-space-violet-bg' : 'border-line hover:border-space-violet/50'}`}
+                >
+                  <span className="block font-display text-[17px] font-bold text-ink">{n}</span>
+                  <span className="block text-[11.5px] text-content-muted">sessions</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 flex items-center justify-between rounded-[12px] bg-surface p-4">
+              <span className="text-sm font-medium text-content-body">Sessions</span>
               <div className="inline-flex items-center gap-3 rounded-[9px] border border-line bg-white px-2 py-1.5">
                 <button onClick={() => setQty((n) => Math.max(1, n - 1))} className="rounded-md p-1.5 text-content-secondary hover:bg-surface" aria-label="Fewer"><Minus className="h-4 w-4" /></button>
                 <span className="w-6 text-center font-display text-lg font-bold text-ink">{qty}</span>

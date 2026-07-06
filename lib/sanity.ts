@@ -86,7 +86,7 @@ export async function getAllEvents() {
   if (!client) return null
   // Excludes campaigns — those are fetched via getAllCampaigns().
   return client.fetch(`
-    *[_type == "event" && (activityType == "live_event" || !defined(activityType))] | order(date asc) {
+    *[_type == "event" && defined(slug.current) && (activityType == "live_event" || !defined(activityType))] | order(date asc) {
       _id, title, slug, type, gradeLevel, date, endDate, activityType, setting,
       venue, city, state, tagline, image, registrationOpen,
       registrationOpenDate, registrationCloseDate, featured
@@ -99,8 +99,8 @@ export async function getAllCampaigns() {
   // Ordered by year asc, then season desc ('spring' > 'fall' alphabetically,
   // which matches chronological order within a year: Spring Jan–Apr, Fall Aug–Dec).
   return client.fetch(`
-    *[_type == "event" && activityType == "campaign"] | order(campaignYear asc, season desc) {
-      _id, title, slug, type, season, campaignYear, deadline, deliverable,
+    *[_type == "event" && activityType == "campaign" && defined(slug.current)] | order(campaignYear asc, season desc) {
+      _id, title, slug, type, gradeLevel, season, campaignYear, deadline, deliverable,
       activityType, registrationOpen, tagline, image
     }
   `)

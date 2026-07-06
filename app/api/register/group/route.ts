@@ -18,6 +18,7 @@ import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 import { getMemberOnFileByMembershipId } from '@/lib/member-onfile'
 import { getCurrentMember } from '@/lib/community'
+import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
 import type { RegistrationRow } from '@/lib/database.types'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
@@ -71,6 +72,7 @@ export async function POST(req: NextRequest) {
       adult_count, student_count, total_participants,
       details_method = 'add_now',
       payment_method,
+      is_campaign = false,
       member_pays_individually = false,
       additional_adults,
       students,
@@ -98,9 +100,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Registration window gate — reject before creating any records if the
-    // event's registration isn't currently open (FR-EVT).
+    // event's registration isn't currently open (FR-EVT). Campaigns are always
+    // open (async, free) so they skip the window gate.
     const eventForGate = await getEventBySlug(event_slug).catch(() => null)
-    if (eventForGate) {
+    if (eventForGate && !is_campaign) {
       const regStatus = registrationStatus(
         eventForGate.registrationOpenDate,
         eventForGate.registrationCloseDate,
@@ -238,8 +241,13 @@ export async function POST(req: NextRequest) {
     // Create registration record
     const { data: registration, error: regError } = await db.from('registrations').insert({
       event_slug, event_title,
-      type: 'group',
-      status: 'pending',
+      // Campaign group registrations are stored as type 'campaign' so they
+      // surface in the member's campaign context + workspace (which filter on
+      // type='campaign'); regular group event registrations stay type 'group'.
+      type: is_campaign ? 'campaign' : 'group',
+      // Campaigns are free — confirmed immediately. Paid events stay pending
+      // until the Stripe webhook confirms payment.
+      status: is_campaign ? 'confirmed' : 'pending',
       amount_due_cents: amountDueCents,
       adult_count: declaredAdultCount,
       student_count: declaredStudentCount,
@@ -384,6 +392,16 @@ export async function POST(req: NextRequest) {
           registrationId: regId,
         })
       )
+    )
+
+    // Turn non-members into members: grant the free base tier (Explorer for
+    // students, Educator for adults) to anyone who still has no membership after
+    // the competition_registration grant rules ran above. Runs for events and
+    // campaigns alike. Idempotent + non-fatal — existing members are untouched.
+    await Promise.all(
+      Object.values(memberIdMap)
+        .filter((id): id is string => Boolean(id))
+        .map((memberId) => autoGrantBaseMembership(db, memberId))
     )
 
     // Persist each member's ethnicity/dietary selections onto the canonical

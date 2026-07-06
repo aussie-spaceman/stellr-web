@@ -3,17 +3,11 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-interface Space {
-  id: string
-  name: string
-}
-
-export function ResourceUploadForm({ spaces }: { spaces: Space[] }) {
+export function ResourceUploadForm() {
   const router = useRouter()
   const [file, setFile] = useState<File | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [spaceId, setSpaceId] = useState('')
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -32,7 +26,6 @@ export function ResourceUploadForm({ spaces }: { spaces: Space[] }) {
     fd.append('file', file)
     fd.append('title', title.trim())
     if (description.trim()) fd.append('description', description.trim())
-    if (spaceId) fd.append('spaceId', spaceId)
 
     try {
       const res = await fetch('/api/admin/community/resources', {
@@ -48,7 +41,6 @@ export function ResourceUploadForm({ spaces }: { spaces: Space[] }) {
       setFile(null)
       setTitle('')
       setDescription('')
-      setSpaceId('')
       router.refresh()
     } catch {
       setError('Network error — please try again.')
@@ -96,24 +88,10 @@ export function ResourceUploadForm({ spaces }: { spaces: Space[] }) {
         />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-brand-muted mb-1">
-          Space <span className="font-normal text-brand-muted-soft">(optional)</span>
-        </label>
-        <select
-          value={spaceId}
-          onChange={(e) => setSpaceId(e.target.value)}
-          className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
-        >
-          <option value="">— All spaces —</option>
-          {spaces.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-brand-muted-soft">
-          Access is inherited from the object a resource is attached to — there’s no per-file download gate.
-        </p>
-      </div>
+      <p className="text-xs text-brand-muted-soft">
+        Access is inherited from the object a resource is attached to — assign this file to a Space,
+        Cohort, Workshop or Competition from that object&apos;s admin page. There&apos;s no per-file download gate.
+      </p>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {success && <p className="text-sm text-green-600">Resource uploaded successfully.</p>}

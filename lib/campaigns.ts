@@ -130,12 +130,25 @@ export interface CampaignCardData {
   tagline?: string | null
   deadlineLabel: string
   registered?: boolean
+  /** Watermarked card-header image URL, computed server-side (urlFor + wmSrc). */
+  imageUrl?: string | null
+}
+
+// Serializable view of a campaign passed from server components to the signup /
+// dashboard campaign pickers (which link to the group registration flow).
+export interface CampaignOption {
+  slug: string
+  title: string
+  theme: CampaignTheme
+  themeLabel: string
+  seasonLabel: string
+  deadlineLabel: string
 }
 
 export function toCampaignCardData(e: StellarEvent): CampaignCardData {
   const theme = themeFromType(e.type)
   return {
-    slug: e.slug.current,
+    slug: e.slug?.current ?? '',
     title: e.title,
     theme,
     themeLabel: THEME_META[theme].label,

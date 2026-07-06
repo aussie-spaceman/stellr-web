@@ -1,9 +1,8 @@
 import { redirect } from 'next/navigation'
 import { getCurrentMember } from '@/lib/community'
 import { getAllCampaigns, type StellarEvent } from '@/lib/sanity'
-import { themeFromType, THEME_META, seasonLabel, deadlineInfo } from '@/lib/campaigns'
+import { themeFromType, THEME_META, seasonLabel, deadlineInfo, type CampaignOption } from '@/lib/campaigns'
 import { SignupCampaignStep } from '@/components/campaigns/SignupCampaignStep'
-import type { CampaignOption } from '@/components/campaigns/CampaignRegistrationModal'
 
 export const dynamic = 'force-dynamic'
 

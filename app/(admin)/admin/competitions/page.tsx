@@ -78,7 +78,7 @@ export default async function AdminEventsPage() {
           </p>
         </div>
         {access.isAdmin && (
-          <Link href="/admin/events/refund-policy" className="text-sm font-medium text-brand-blue hover:text-brand-blue border border-brand-blue rounded-lg px-3 py-1.5 shrink-0">
+          <Link href="/admin/competitions/refund-policy" className="text-sm font-medium text-brand-blue hover:text-brand-blue border border-brand-blue rounded-lg px-3 py-1.5 shrink-0">
             Refund Policy
           </Link>
         )}
@@ -114,7 +114,7 @@ export default async function AdminEventsPage() {
                     return (
                       <tr key={event._id} className="hover:bg-brand-canvas">
                         <td className="px-4 py-3 font-medium text-brand-blue-dark">
-                          <Link href={`/admin/events/${slug}`} className="text-brand-blue hover:text-brand-blue">
+                          <Link href={`/admin/competitions/${slug}`} className="text-brand-blue hover:text-brand-blue">
                             {event.title}
                           </Link>
                           <span

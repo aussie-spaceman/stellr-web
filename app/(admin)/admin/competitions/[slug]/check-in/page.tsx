@@ -11,7 +11,7 @@ export default async function EventCheckInPage({ params }: { params: Promise<{ s
   const { slug } = await params
 
   const access = await requireEventAccess(slug)
-  if (!access.ok) redirect(access.status === 401 ? '/sign-in' : '/admin/events')
+  if (!access.ok) redirect(access.status === 401 ? '/sign-in' : '/admin/competitions')
 
   const event = (await getEventBySlug(slug)) as StellarEvent | null
   if (!event) notFound()
@@ -21,7 +21,7 @@ export default async function EventCheckInPage({ params }: { params: Promise<{ s
   return (
     <div className="space-y-6">
       <div>
-        <Link href={`/admin/events/${slug}`} className="text-sm text-brand-blue hover:text-brand-blue">
+        <Link href={`/admin/competitions/${slug}`} className="text-sm text-brand-blue hover:text-brand-blue">
           ← {event.title}
         </Link>
         <h1 className="font-heading uppercase text-title text-brand-blue-dark mt-1">Check-In — {event.title}</h1>

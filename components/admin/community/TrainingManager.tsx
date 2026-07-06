@@ -1252,6 +1252,6 @@ function AddLessonForm({
 }
 
 /* ─── (AssignForm removed — course-to-competition assignment moved to the     ── */
-/* ─── event's Training tab: /admin/events/[slug]?tab=training                ── */
+/* ─── event's Training tab: /admin/competitions/[slug]?tab=training                ── */
 /* ─── Existing training_assignments rows remain and still surface to members. ── */
 

@@ -14,12 +14,13 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
   if (!event) notFound()
 
   const prefill = await getRegistrationPrefill().catch(() => null)
+  const isCampaign = event.activityType === 'campaign'
 
   return (
     <div className="min-h-screen bg-surface">
       <div className="bg-brand-blue-dark text-white py-10 px-4">
         <div className="max-w-3xl mx-auto">
-          <p className="text-blue-300 text-sm mb-4">← Group Registration</p>
+          <p className="text-blue-300 text-sm mb-4">← {isCampaign ? 'Campaign Registration' : 'Group Registration'}</p>
           <h1 className="text-2xl sm:text-3xl font-bold mb-2">{event.title}</h1>
           {event.date && (
             <p className="text-blue-300 text-sm">
@@ -37,6 +38,7 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
           eventSlug={slug}
           eventTitle={event.title}
           prefill={prefill}
+          isCampaign={isCampaign}
         />
       </div>
     </div>

@@ -6,7 +6,6 @@ import { getCurrentMember } from '@/lib/community'
 import { getAllCampaigns, type StellarEvent } from '@/lib/sanity'
 import { getMemberCampaignContext } from '@/lib/campaign-registrations'
 import { themeFromType, THEME_META, deadlineInfo, deadlinePhrase, seasonLabel } from '@/lib/campaigns'
-import { CampaignRegisterButton } from './CampaignRegisterButton'
 
 // Dashboard campaign block: registered campaigns with deadlines, the Educator
 // Commons card, a "register another" prompt, and a higher-tier-gated material
@@ -87,19 +86,9 @@ export async function DashboardCampaigns() {
               {another.title} · {seasonLabel(another.season, another.campaignYear)}
             </p>
           </div>
-          <CampaignRegisterButton
-            campaign={{
-              slug: another.slug.current,
-              title: another.title,
-              theme: themeFromType(another.type),
-              themeLabel: THEME_META[themeFromType(another.type)].label,
-              seasonLabel: seasonLabel(another.season, another.campaignYear),
-              deadlineLabel: deadlineInfo(another.deadline)?.label ?? '',
-            }}
-            regContext="member"
-            membership={ctx.membership}
-            label="Register a group"
-          />
+          <Button href={`/register/${another.slug.current}/group`} variant="primary">
+            Register a group
+          </Button>
         </div>
       )}
 

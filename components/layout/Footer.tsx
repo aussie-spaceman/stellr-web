@@ -6,8 +6,8 @@ import { SubscribeForm } from '@/components/forms/SubscribeForm'
 const footerLinks = {
   Educate: [
     { label: 'Competitions', href: '/competitions' },
-    { label: 'Curriculum Campaigns', href: '/curriculum' },
-    { label: 'Events', href: '/events' },
+    { label: 'Curriculum', href: '/curriculum' },
+    { label: 'Events & Campaigns', href: '/events' },
     { label: 'Host An Event', href: '/host-an-event' },
   ],
   Community: [

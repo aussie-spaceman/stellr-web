@@ -58,7 +58,7 @@ export default function WhyDesignCompetitionsPage() {
           </p>
           <div className="mt-10 flex flex-wrap gap-4">
             <Link
-              href="/events/register"
+              href="/competitions"
               className="inline-flex items-center gap-2 px-6 py-3 bg-brand-orange text-white font-heading font-medium rounded-md hover:bg-amber-500 transition-colors"
             >
               Register Now <ArrowRight size={16} />
@@ -177,7 +177,7 @@ export default function WhyDesignCompetitionsPage() {
           </ul>
           <div className="mt-10 flex flex-wrap gap-4">
             <Link
-              href="/events/register"
+              href="/competitions"
               className="inline-flex items-center gap-2 px-6 py-3 bg-brand-blue text-white font-medium rounded-md hover:bg-blue-800 transition-colors"
             >
               Register Your Students <ArrowRight size={16} />
@@ -207,7 +207,7 @@ export default function WhyDesignCompetitionsPage() {
               View Upcoming Events <ArrowRight size={16} />
             </Link>
             <Link
-              href="/events/curriculum"
+              href="/curriculum"
               className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 text-white font-medium rounded-md hover:bg-white/20 transition-colors"
             >
               Explore Curriculum

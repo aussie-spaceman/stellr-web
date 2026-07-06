@@ -36,7 +36,9 @@ export async function POST(req: Request) {
   if (method === 'credit') {
     const r = await enrollWithCredit(member, cohortId)
     if (!r.ok) {
-      const msg = r.reason === 'no-credit' ? 'You have no mentoring credits left' : 'Could not join this cohort'
+      const msg = r.reason === 'no-credit'
+        ? 'You do not have enough session credits for this cohort'
+        : 'Could not join this cohort'
       return NextResponse.json({ error: msg }, { status: 400 })
     }
     return NextResponse.json({ ok: true })

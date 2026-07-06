@@ -3,6 +3,7 @@ import Image from 'next/image'
 import { ArrowRight, Rocket } from 'lucide-react'
 import { urlFor, wmSrc, type StellarEvent } from '@/lib/sanity'
 import { formatDate, formatDateRange, registrationStatus } from '@/lib/utils'
+import { CardPills } from '@/components/ui/CardPills'
 
 interface EventCardProps {
   event: StellarEvent
@@ -35,18 +36,9 @@ export function EventCard({ event }: EventCardProps) {
       </div>
 
       <div className="p-5 flex flex-col flex-1">
-        {/* Badges */}
-        <div className="flex flex-wrap gap-2 mb-3">
-          {event.gradeLevel && (
-            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-blue-50 text-brand-blue">
-              {event.gradeLevel}
-            </span>
-          )}
-          {event.type && (
-            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-surface text-content-body">
-              {event.type}
-            </span>
-          )}
+        {/* Standardised three-pill row (Event · Grade · Theme) + status */}
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <CardPills kind="event" gradeLevel={event.gradeLevel} type={event.type} />
           <span className={`text-xs font-semibold px-2 py-1 rounded-full ${className}`}>
             {label}
           </span>

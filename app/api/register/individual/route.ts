@@ -10,6 +10,7 @@ import { resolveAndLinkSchool } from '@/lib/school-link'
 import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 import { getCurrentMember } from '@/lib/community'
+import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { prepareRegistrationAddons, addRegistrationAddons } from '@/lib/store/event-merch'
 
@@ -226,6 +227,11 @@ export async function POST(req: NextRequest) {
     // Record this registration in event_participations so it appears in the
     // "Event Activity" lists on the member portal and admin member page.
     await recordEventParticipation(db, { memberId, eventSlug: event_slug, eventTitle: event_title, registrationId: regId })
+
+    // Turn a non-member registrant into a member: grant the free base tier
+    // (Explorer / Educator / Alumni) if they still hold no membership after the
+    // grant rules ran above. Idempotent + non-fatal — existing members untouched.
+    await autoGrantBaseMembership(db, memberId)
 
     // Trigger the appropriate DocuSign agreement (minor consent, or self-signed
     // adult/mentor participation agreement) for this participant.

@@ -6,6 +6,7 @@ import { AdminTrainingTabs, type AdminTab } from '@/components/admin/training/Ad
 import { OverviewTab } from '@/components/admin/training/OverviewTab'
 import { EventTrackingTab } from '@/components/admin/training/EventTrackingTab'
 import { RemindersTab, type ReminderCourse } from '@/components/admin/training/RemindersTab'
+import GatesManager, { type ModuleRef, type Prereq } from '@/components/admin/training/GatesManager'
 import { CourseBuilder } from '@/components/admin/training/CourseBuilder'
 import type { AdminModule } from '@/components/admin/community/TrainingManager'
 import type { AdminTier } from '@/components/admin/training/ObjectAssignments'
@@ -66,6 +67,46 @@ async function reminderCourses(): Promise<ReminderCourse[]> {
   }))
 }
 
+// Prerequisites + on-archive persistence (formerly the /admin/community/gates
+// page): rendered as a section of the Reminders & escalation tab so every
+// per-course nudge/gate rule lives in one place.
+async function prerequisitesContent() {
+  const db = supabaseServer()
+  const [{ data: modules }, { data: prereqs }, { data: persistence }] = await Promise.all([
+    db.from('training_modules').select('id, title').order('display_order'),
+    db
+      .from('content_prerequisites')
+      .select('id, target_ref, requires_target_ref')
+      .eq('target_type', 'training_module'),
+    db
+      .from('content_persistence')
+      .select('target_ref, policy')
+      .eq('target_type', 'training_module'),
+  ])
+
+  const persistenceMap: Record<string, string> = {}
+  for (const p of (persistence ?? []) as { target_ref: string; policy: string }[]) {
+    persistenceMap[p.target_ref] = p.policy
+  }
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-base font-bold text-brand-blue-dark">Prerequisites &amp; archive behaviour</h2>
+        <p className="mt-0.5 text-sm text-brand-muted-soft">
+          Require a member to complete one course before another, and choose what stays open after a
+          container archives. These layer on top of tier/entitlement access.
+        </p>
+      </div>
+      <GatesManager
+        modules={(modules ?? []) as ModuleRef[]}
+        prereqs={(prereqs ?? []) as Prereq[]}
+        persistence={persistenceMap}
+      />
+    </section>
+  )
+}
+
 // Admin Training portal (FR-COM-10 / Training Scope): Overview · Course builder ·
 // Event tracking · Reminders & escalation. Tab + filters live in the URL so the
 // Overview "Needs attention" tile can deep-link into Event tracking.
@@ -90,7 +131,13 @@ export default async function AdminTrainingPage({
         initialOutstanding={sp.filter === 'outstanding'}
       />
     )
-  else if (tab === 'reminders') content = <RemindersTab courses={await reminderCourses()} />
+  else if (tab === 'reminders')
+    content = (
+      <div className="space-y-10">
+        <RemindersTab courses={await reminderCourses()} />
+        {await prerequisitesContent()}
+      </div>
+    )
 
   return (
     <div className="space-y-6">

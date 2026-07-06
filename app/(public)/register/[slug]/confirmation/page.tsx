@@ -3,13 +3,16 @@ import { CheckCircle, ExternalLink } from 'lucide-react'
 
 interface PageProps {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ id?: string; type?: string; payment?: string; spreadsheet?: string; join?: string; remaining?: string }>
+  searchParams: Promise<{ id?: string; type?: string; payment?: string; spreadsheet?: string; join?: string; remaining?: string; campaign?: string }>
 }
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.stellreducation.org'
 
 export default async function ConfirmationPage({ params, searchParams }: PageProps) {
   const { slug } = await params
-  const { id, type, spreadsheet, join, remaining } = await searchParams
+  const { id, type, spreadsheet, join, remaining, campaign } = await searchParams
   const isGroup = type === 'group'
+  const isCampaign = campaign === '1'
   const spreadsheetUrl = spreadsheet ? decodeURIComponent(spreadsheet) : null
   const joinUrl = join ? decodeURIComponent(join) : null
   // Some declared participants were left for later (partial "add them now").
@@ -24,11 +27,13 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
         </div>
 
         <h1 className="text-2xl sm:text-3xl font-bold text-brand-blue-dark mb-3">
-          {isGroup ? 'Group Registration Submitted!' : 'Registration Submitted!'}
+          {isCampaign ? 'Campaign Registration Confirmed!' : isGroup ? 'Group Registration Submitted!' : 'Registration Submitted!'}
         </h1>
 
         <p className="text-content-body mb-6">
-          {isGroup
+          {isCampaign
+            ? 'Your group is registered — Campaigns are free. A confirmation email has been sent to you.'
+            : isGroup
             ? 'Thank you for registering your group. A confirmation email has been sent to you.'
             : 'Thank you for registering. A confirmation email will be sent once your payment is processed.'}
         </p>
@@ -90,7 +95,22 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
 
         <div className="bg-white rounded-xl border border-line p-6 text-left space-y-3 mb-8">
           <p className="font-semibold text-brand-blue-dark">What happens next?</p>
-          {isGroup ? (
+          {isCampaign ? (
+            <ul className="space-y-2 text-sm text-content-body">
+              <li className="flex items-start gap-2">
+                <span className="text-green-500 mt-0.5">✓</span>
+                Your registration is confirmed — Campaigns are free
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-brand-blue mt-0.5">→</span>
+                Your Campaign material is available now at the Stellr Portal
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-brand-blue mt-0.5">→</span>
+                DocuSign agreements have been issued to every student registered in this Campaign — and your teacher agreement has just been issued
+              </li>
+            </ul>
+          ) : isGroup ? (
             <ul className="space-y-2 text-sm text-content-body">
               <li className="flex items-start gap-2">
                 <span className="text-green-500 mt-0.5">✓</span>
@@ -142,10 +162,24 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
           )}
         </div>
 
+        {/* Campaign — jump straight to the campaign workspace in the member web app. */}
+        {isCampaign && (
+          <div className="mb-4">
+            <a
+              href={`${APP_URL}/events`}
+              className="btn-primary w-full sm:w-auto inline-flex items-center justify-center gap-2"
+            >
+              <ExternalLink size={16} />
+              Access Campaign →
+            </a>
+            <p className="text-xs text-content-faint mt-2">Open your Campaign in the Stellr Portal to access material and manage your team.</p>
+          </div>
+        )}
+
         {/* Group participant sheet — available from the member portal.
             The sheet contains participant PII, so it's only accessible to the
             teacher / student manager who registered, after they sign in. */}
-        {isGroup && !spreadsheetUrl && id && (
+        {!isCampaign && isGroup && !spreadsheetUrl && id && (
           <div className="mb-4">
             <Link
               href="/account?tab=teams"
@@ -160,10 +194,10 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link href={`/events/${slug}`} className="btn-outline">
-            Back to Event
+            {isCampaign ? 'Back to Campaign' : 'Back to Event'}
           </Link>
           <Link href="/events" className="btn-primary">
-            Browse All Events
+            {isCampaign ? 'Browse Events & Campaigns' : 'Browse All Events'}
           </Link>
         </div>
       </div>

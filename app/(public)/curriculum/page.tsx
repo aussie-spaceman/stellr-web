@@ -13,7 +13,7 @@ import { getAllCampaigns } from '@/lib/sanity'
 import { getCampaignDates, campaignStatusFromDates, type CampaignSeason } from '@/lib/campaigns'
 
 export const metadata: Metadata = {
-  title: 'Curriculum Campaigns',
+  title: 'Curriculum',
   description:
     'Download real engineering challenge material and run it in your classroom any time, for free. Optionally enter a seasonal Campaign for a path to the national championships.',
 }
@@ -133,7 +133,7 @@ export default async function CampaignsPage() {
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <Hero
-        breadcrumb="Competitions · Campaigns"
+        breadcrumb="Competitions · Curriculum"
         title="Real engineering challenges, ready for your classroom."
         lead="Download the material and use it any time you like — it's yours to run on your own schedule. Or enter a seasonal Campaign and give your students a path all the way to the national championships."
       >
@@ -273,7 +273,7 @@ export default async function CampaignsPage() {
                   </li>
                 ))}
               </ul>
-              <Button href="/events" variant="energy" className="mt-6 self-start">
+              <Button href="/events?type=campaign" variant="energy" className="mt-6 self-start">
                 See the Campaigns <ArrowRight size={16} />
               </Button>
             </div>

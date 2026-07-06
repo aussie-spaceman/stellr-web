@@ -4,9 +4,15 @@
 
 export const DEFAULT_TZ = 'America/Chicago'
 
-/** Default USD price per mentoring credit for top-up purchases (overridable via
- * the MENTORING_CREDIT_PRICE_CENTS env var server-side). */
+/** Default USD price per mentoring SESSION credit for top-up purchases (overridable
+ * via the MENTORING_CREDIT_PRICE_CENTS env var server-side). Mentoring is accounted
+ * per session (a cohort enrollment draws its planned 4/6/8 sessions), matching the
+ * coaching per-session price. */
 export const CREDIT_PACK_PRICE_CENTS = 4000
+
+/** Canonical cohort session counts (Content Plan: Mentoring Cohort 4/6/8 sessions) —
+ * quick-pick quantities in the buy-more modal. */
+export const COHORT_SESSION_PACKS = [4, 6, 8] as const
 
 /** Selectable cohort time zones (handoff: default CT, selectable per cohort). */
 export const TIMEZONES: { value: string; label: string }[] = [
@@ -129,7 +135,7 @@ export function accessLabel(kind: AccessKind, opts: { priceCents?: number | null
   if (kind === 'free') return { text: 'Free with membership', className: 'text-enviro-green-text' }
   if (kind === 'credit') {
     const n = opts.creditCost ?? 1
-    return { text: `${n} mentoring credit${n === 1 ? '' : 's'}`, className: 'text-space-violet' }
+    return { text: `${n} session credit${n === 1 ? '' : 's'}`, className: 'text-space-violet' }
   }
   return { text: `${formatUsd(opts.priceCents ?? 0)} one-off`, className: 'text-pathway-amber' }
 }

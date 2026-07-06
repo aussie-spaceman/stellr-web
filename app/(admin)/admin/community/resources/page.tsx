@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { FileText, Link as LinkIcon, PlayCircle, Database, HardDrive, Copy, Flag } from 'lucide-react'
-import { supabaseServer } from '@/lib/supabase'
 import { formatDateShort } from '@/lib/utils'
 import { getAdminResourceIndex } from '@/lib/resource-admin'
 import { ResourceUploadForm } from '@/components/admin/community/ResourceUploadForm'
@@ -29,14 +28,6 @@ function typeLabel(fileType: string | null, isLink: boolean): string {
 // override, decision 5).
 export default async function AdminCommunityResourcesPage() {
   const { rows, stats } = await getAdminResourceIndex()
-
-  // The upload form still needs the spaces list for its (legacy) optional target.
-  const db = supabaseServer()
-  const { data: spaces } = await db
-    .from('community_spaces')
-    .select('id, name')
-    .eq('is_archived', false)
-    .order('display_order')
 
   const statCards = [
     { icon: <Database className="h-4 w-4" />, label: 'Stored binaries', value: String(stats.binaryCount) },
@@ -69,7 +60,7 @@ export default async function AdminCommunityResourcesPage() {
         ))}
       </div>
 
-      <ResourceUploadForm spaces={spaces ?? []} />
+      <ResourceUploadForm />
 
       <div className="overflow-hidden rounded-xl border border-brand-border bg-white">
         <table className="w-full text-sm">

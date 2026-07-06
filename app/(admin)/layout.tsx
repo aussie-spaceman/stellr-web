@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { UserButton } from '@clerk/nextjs'
 import { hasAdminPortalAccess, isAdminClaims } from '@/lib/admin-auth'
 import { AdminSidebar } from '@/components/admin/AdminSidebar'
+import { SiteFooter } from '@/components/layout/SiteFooter'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { userId, sessionClaims } = await auth()
@@ -30,6 +31,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 pb-24 lg:px-8 lg:pb-10">
             {children}
           </main>
+
+          {/* Footer hidden on mobile — bottom tab bar serves that role */}
+          <div className="hidden lg:block">
+            <SiteFooter variant="slim" />
+          </div>
         </div>
       </div>
     </div>

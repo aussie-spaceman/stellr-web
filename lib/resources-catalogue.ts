@@ -138,7 +138,7 @@ async function memberContainers(memberId: string): Promise<Map<string, Container
   const db = supabaseServer()
   const { data } = await db
     .from('cohort_members')
-    .select('mentoring_cohorts!inner(id, name, container_type, campaign_ref, access_type, lifecycle)')
+    .select('mentoring_cohorts!inner(id, name, container_type, campaign_ref, lifecycle)')
     .eq('member_id', memberId)
     .eq('status', 'active')
 
@@ -147,7 +147,6 @@ async function memberContainers(memberId: string): Promise<Map<string, Container
     name: string
     container_type: string
     campaign_ref: string | null
-    access_type: string | null
     lifecycle: string | null
   }
   const map = new Map<string, ContainerMeta>()
@@ -160,7 +159,11 @@ async function memberContainers(memberId: string): Promise<Map<string, Container
       name: c.name,
       type: c.container_type,
       campaignRef: c.campaign_ref,
-      visibility: normaliseVisibility(c.access_type),
+      // Non-space containers carry no per-container visibility — access is the
+      // roster + min_membership. Spaces get their real visibility from
+      // community_spaces.access_type in addSpaceContainers (which overwrites
+      // this entry). mentoring_cohorts has no access_type column.
+      visibility: 'open',
       lifecycle: c.lifecycle ?? 'active',
     })
   }

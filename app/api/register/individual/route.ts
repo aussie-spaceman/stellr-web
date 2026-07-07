@@ -107,7 +107,17 @@ export async function POST(req: NextRequest) {
         const pr = await feeStripe.prices.retrieve(feePriceId)
         amountDueCents = pr.unit_amount ?? 0
       } catch (e) {
-        console.error('[register/individual] price lookup failed (amount_due defaults 0):', e)
+        // The event has a fee price configured but Stripe can't resolve it
+        // (deleted price, or a test-mode id pasted into a live-mode event config).
+        // Don't swallow this: continuing would create orphaned registration /
+        // member / DocuSign records and then still throw when Checkout rejects
+        // the same invalid price — surfacing an opaque "Internal server error".
+        // Fail fast, before any writes, with an actionable message.
+        console.error('[register/individual] invalid stripePriceId on event', event_slug, '—', feePriceId, e)
+        return NextResponse.json(
+          { error: 'This event’s registration fee is misconfigured — please contact support before registering.' },
+          { status: 503 },
+        )
       }
     }
 

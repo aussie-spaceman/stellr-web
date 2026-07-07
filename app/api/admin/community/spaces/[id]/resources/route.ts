@@ -3,11 +3,13 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
 import { attachSpaceResource } from '@/lib/container-sync'
+import { createLinkBinary, normaliseUrl } from '@/lib/resource-upload'
 import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
 import { attachAllowed } from '@/lib/access-objects'
 
-// POST /api/admin/community/spaces/[id]/resources (multipart) — admin uploads a
-// file into a space's Resources (Assign resource modal, screen 20).
+// POST /api/admin/community/spaces/[id]/resources — admin adds a resource into a
+// space's Resources (Assign resource modal, screen 20). A file arrives as
+// multipart/form-data; a link arrives as application/json { url, title? }.
 
 function isAdmin(sessionClaims: unknown) {
   return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
@@ -37,6 +39,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       { error: 'A resource cannot be attached to a space (relationship matrix).' },
       { status: 403 },
     )
+  }
+
+  const db0 = supabaseServer()
+  let adminId: string | null = null
+  if (userId) {
+    const { data } = await db0.from('members').select('id').eq('clerk_user_id', userId).maybeSingle()
+    adminId = (data as { id: string } | null)?.id ?? null
+  }
+
+  // Link resource — JSON body, no storage object.
+  if (req.headers.get('content-type')?.includes('application/json')) {
+    const b = await req.json().catch(() => ({}))
+    const rawUrl = (typeof b.url === 'string' ? b.url : '').trim()
+    const title = (typeof b.title === 'string' ? b.title : '').trim() || rawUrl
+    if (!rawUrl) return NextResponse.json({ error: 'url required' }, { status: 400 })
+    const normalised = normaliseUrl(rawUrl)
+    if (!normalised) return NextResponse.json({ error: 'That URL is not valid' }, { status: 400 })
+
+    const created = await createLinkBinary({
+      url: rawUrl,
+      normalisedUrl: normalised,
+      title,
+      uploadedBy: adminId ?? '',
+    })
+    if ('error' in created) return NextResponse.json({ error: created.error }, { status: 500 })
+    await attachSpaceResource(db0, spaceId, created.binaryId)
+    return NextResponse.json({ id: created.binaryId })
   }
 
   const form = await req.formData().catch(() => null)

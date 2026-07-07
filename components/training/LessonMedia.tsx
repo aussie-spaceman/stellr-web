@@ -54,9 +54,15 @@ export function LessonMedia({
   }
 
   if (media.type === 'document') {
+    // PDFs render natively in an iframe; Office documents (docx/pptx/xlsx) do not,
+    // so route those through the Google Docs viewer instead of showing a blank frame.
+    const isOffice = /\.(docx?|pptx?|xlsx?)(\?|#|$)/i.test(media.url)
+    const frameSrc = isOffice
+      ? `https://docs.google.com/viewer?url=${encodeURIComponent(media.url)}&embedded=true`
+      : media.url
     return (
       <div className="overflow-hidden rounded-2xl border border-brand-border">
-        <iframe src={media.url} title={title} className="h-[60vh] w-full bg-white" />
+        <iframe src={frameSrc} title={title} className="h-[60vh] w-full bg-white" />
         <div className="flex items-center justify-end border-t border-brand-hairline bg-brand-canvas px-3 py-2">
           <a
             href={media.url}

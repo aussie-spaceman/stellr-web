@@ -184,7 +184,14 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
     if (res.ok) router.push('/admin/members')
   }
 
-  const activeMembership = member.member_memberships?.find((m) => m.renewal_status === 'active')
+  // Canonical "current tier" selection — mirror getActiveTierNames (lib/tiers-server.ts):
+  // among active memberships, drop expired ones and pick the most recently started.
+  // A naive .find(active) picked stale/expired rows when a member had several active
+  // rows (e.g. an upgrade that didn't retire the prior row), showing the wrong tier.
+  const today = new Date().toISOString().split('T')[0]
+  const activeMembership = (member.member_memberships ?? [])
+    .filter((m) => m.renewal_status === 'active' && !(m.expires_at && m.expires_at < today))
+    .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0]
   const currentSchool = member.member_schools?.find((s) => s.is_current)
 
   return (

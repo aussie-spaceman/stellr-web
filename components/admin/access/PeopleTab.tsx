@@ -40,6 +40,14 @@ const ROLE_LABELS: Record<string, string> = {
   teacher: 'Teacher', staff: 'Staff', donor_sponsor: 'Donor / Sponsor', parent: 'Parent',
 }
 
+// Plain-language explanation of each "effective access" source badge.
+const SOURCE_HINT: Record<string, string> = {
+  Roster: 'Direct roster membership on this object (added to its people list)',
+  'Rule (tier)': 'Granted automatically by a tier-based access rule',
+  'Rule (role)': 'Granted automatically by a role-based access rule',
+  Manager: 'Manages this object (coach / mentor / staff role)',
+}
+
 const TYPE_BADGE: Record<string, string> = {
   space: 'bg-purple-100 text-purple-800',
   course: 'bg-brand-blue/10 text-brand-blue',
@@ -137,7 +145,10 @@ export function PeopleTab({ onJumpToObject }: { onJumpToObject?: (ref: string) =
               <div className="flex flex-wrap gap-1.5">
                 {ALL_TIERS.map((t) => {
                   const held = person.memberships.some((m) => m.tierName === t)
-                  const allowed = !person.allowedTiers || person.allowedTiers.includes(t)
+                  // A held tier is always removable; the bracket only gates granting
+                  // NEW tiers (so an out-of-bracket tier the member already has can
+                  // still be taken off — previously it rendered as a stuck blue pill).
+                  const allowed = held || !person.allowedTiers || person.allowedTiers.includes(t)
                   return (
                     <button
                       key={t}
@@ -165,7 +176,8 @@ export function PeopleTab({ onJumpToObject }: { onJumpToObject?: (ref: string) =
               <div className="flex flex-wrap gap-1.5">
                 {ALL_ROLES.map((r) => {
                   const held = person.roles.includes(r)
-                  const allowed = !person.allowedRoles || person.allowedRoles.includes(r)
+                  // Held roles stay removable regardless of bracket (see tiers above).
+                  const allowed = held || !person.allowedRoles || person.allowedRoles.includes(r)
                   return (
                     <button
                       key={r}
@@ -175,7 +187,7 @@ export function PeopleTab({ onJumpToObject }: { onJumpToObject?: (ref: string) =
                       className={
                         'rounded-full border px-2.5 py-1 text-xs ' +
                         (held
-                          ? 'border-brand-teal bg-brand-teal/10 text-brand-teal'
+                          ? 'border-brand-teal bg-brand-teal text-white font-medium'
                           : allowed
                             ? 'border-brand-border bg-white text-brand-muted hover:bg-brand-canvas'
                             : 'border-brand-hairline bg-brand-canvas text-brand-muted-soft/60 cursor-not-allowed line-through')
@@ -209,7 +221,11 @@ export function PeopleTab({ onJumpToObject }: { onJumpToObject?: (ref: string) =
                       <span className="ml-auto flex items-center gap-1.5">
                         <span className="text-xs text-brand-muted">{row.role}</span>
                         {row.sources.map((s, i) => (
-                          <span key={i} className="rounded-full bg-brand-hairline px-2 py-0.5 text-[10px] text-brand-muted">
+                          <span
+                            key={i}
+                            title={SOURCE_HINT[s.label] ?? 'How this access is granted'}
+                            className="rounded-full bg-brand-hairline px-2 py-0.5 text-[10px] text-brand-muted"
+                          >
                             {s.label}
                           </span>
                         ))}

@@ -5,6 +5,7 @@ import { ArrowRight, Check } from 'lucide-react'
 import { Event, Certificate, Team } from '@stellr/icons'
 import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 import { JoinNetworkForm } from '@/components/forms/JoinNetworkForm'
+import { AssetGate } from '@/components/sections/AssetGate'
 import { PageMedia } from '@/components/sections/PageMedia'
 import { PHOTOS, COMPETITION } from '@/lib/media-manifest'
 
@@ -248,20 +249,18 @@ export default function NetworkPage() {
                   <p key={i}>{para}</p>
                 ))}
               </div>
-              {/* Prospectus download — inactive until the document is ready. When
-                  live, wire to <AssetGate> (name/email → HubSpot subscriber). */}
+              {/* Prospectus download — name/email gate → HubSpot subscriber + emailed link. */}
               {d.id === 'corporate' && (
                 <div className="mt-7">
-                  <button
-                    type="button"
-                    disabled
-                    aria-disabled="true"
-                    title="Coming soon"
-                    className="inline-flex items-center gap-2 rounded-[10px] border border-line bg-white px-6 py-3.5 font-display text-[15px] font-semibold text-content-faint cursor-not-allowed opacity-70"
-                  >
-                    Download Our Prospectus
-                  </button>
-                  <p className="mt-2 text-[13px] text-content-faint">Coming soon — our partner prospectus is on its way.</p>
+                  <AssetGate
+                    asset="sponsorship-prospectus"
+                    title="Sponsorship Prospectus"
+                    fileUrl="/files/Stellr-Sponsorship-Prospectus.pdf"
+                    triggerLabel="Download Our Prospectus ↓"
+                    eyebrow="Partner prospectus"
+                    helper="Full packages, reach statistics and impact data — sent straight to your inbox."
+                    triggerClassName="inline-flex items-center gap-2 rounded-[10px] bg-primary px-6 py-3.5 font-display text-[15px] font-semibold text-white hover:bg-primary-deep transition-colors"
+                  />
                 </div>
               )}
             </div>

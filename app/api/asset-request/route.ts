@@ -21,6 +21,12 @@ const ASSETS = {
     subject: 'Your example student RFP',
     note: 'Requested example student RFP (Curriculum Campaigns page)',
   },
+  'sponsorship-prospectus': {
+    title: 'Sponsorship Prospectus',
+    file: '/files/Stellr-Sponsorship-Prospectus.pdf',
+    subject: 'Your Stellr Sponsorship Prospectus',
+    note: 'Requested Sponsorship Prospectus (Network / Why Stellr page)',
+  },
   // Media-rollout gated competition material (T4). Files self-hosted in /public.
   'jsc-2025-program-book': {
     title: '2025 JSC — Program Book',

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { ArrowRight, Check } from 'lucide-react'
 import { Launch, Certificate, Team, Award, Global } from '@stellr/icons'
 import { Hero, Eyebrow, Button } from '@stellr/web-ui'
+import { AssetGate } from '@/components/sections/AssetGate'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { WorkCard } from '@/components/sections/WorkCard'
 import { VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
@@ -362,16 +363,15 @@ export default function WhyStellrPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 mt-8">
-            {/* Prospectus download — inactive until the document is ready (matches /network). */}
-            <button
-              type="button"
-              disabled
-              aria-disabled="true"
-              title="Coming soon"
-              className="inline-flex items-center justify-center gap-2 rounded-control px-6 py-3 font-subheading font-semibold text-sm text-content-faint bg-surface border border-line cursor-not-allowed opacity-70"
-            >
-              Request prospectus
-            </button>
+            {/* Prospectus download — name/email gate → HubSpot subscriber + emailed link (matches /network). */}
+            <AssetGate
+              asset="sponsorship-prospectus"
+              title="Sponsorship Prospectus"
+              fileUrl="/files/Stellr-Sponsorship-Prospectus.pdf"
+              triggerLabel="Request prospectus ↓"
+              eyebrow="Partner prospectus"
+              triggerClassName="inline-flex items-center justify-center gap-2 rounded-control px-6 py-3 font-subheading font-semibold text-sm text-ink bg-surface border border-line hover:border-primary hover:text-primary transition-colors"
+            />
             <a
               href={`${WWW}/donate`}
               className="inline-flex items-center justify-center gap-2 rounded-control px-6 py-3 font-subheading font-semibold text-sm text-white bg-donate-gold hover:bg-[#C9892C] transition-colors"
@@ -379,7 +379,7 @@ export default function WhyStellrPage() {
               Make a donation
             </a>
             <p className="text-[13.5px] text-content-faint">
-              Prospectus coming soon — full packages, reach statistics and impact data.
+              Full packages, reach statistics and impact data — sent straight to your inbox.
             </p>
           </div>
         </div>

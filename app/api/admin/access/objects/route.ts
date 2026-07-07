@@ -26,8 +26,8 @@ export async function GET() {
 
   const db = supabaseServer()
   const [containers, spaces, modules, resources, liveEvents, campaigns] = await Promise.all([
-    db.from('mentoring_cohorts').select('id, name, container_type, lifecycle'),
-    db.from('community_spaces').select('id, name, is_archived'),
+    db.from('mentoring_cohorts').select('id, name, container_type, lifecycle, campaign_ref'),
+    db.from('community_spaces').select('id, name, slug, is_archived'),
     db.from('training_modules').select('id, title'),
     db.from('community_resources').select('id, title'),
     getAllEvents().catch(() => []),
@@ -35,11 +35,23 @@ export async function GET() {
   ])
   const events = [...(liveEvents ?? []), ...(campaigns ?? [])]
 
+  // Space- and training-type containers (migration 123 plumbing for the resource
+  // catalogue) shadow a community_spaces / training_modules row, keyed by slug /
+  // module-id. Listing both the container and its canonical row doubled every such
+  // object in the list. Drop the container when its canonical row exists; keep it
+  // only when orphaned (e.g. a "Study Hall" space container with no space row).
+  const spaceSlugs = new Set(((spaces.data ?? []) as Array<{ slug: string }>).map((s) => s.slug))
+  const moduleIds = new Set(((modules.data ?? []) as Array<{ id: string }>).map((m) => m.id))
+  const isShadowContainer = (c: { container_type: string; campaign_ref: string | null }) =>
+    ['event_participation', 'campaign_participation'].includes(c.container_type) ||
+    (c.container_type === 'space' && !!c.campaign_ref && spaceSlugs.has(c.campaign_ref)) ||
+    (c.container_type === 'training' && !!c.campaign_ref && moduleIds.has(c.campaign_ref))
+
   const objects: AccessObjectListItem[] = [
-    // Event/campaign containers shadow Sanity events — list the Sanity ones (by
-    // slug) and the non-competition containers; skip the shadows to avoid dupes.
-    ...((containers.data ?? []) as Array<{ id: string; name: string; container_type: string; lifecycle: string }>)
-      .filter((c) => !['event_participation', 'campaign_participation'].includes(c.container_type))
+    // Containers that shadow a canonical row (Sanity events, community_spaces,
+    // training_modules) are dropped here; the canonical entry is listed below.
+    ...((containers.data ?? []) as Array<{ id: string; name: string; container_type: string; lifecycle: string; campaign_ref: string | null }>)
+      .filter((c) => !isShadowContainer(c))
       .map((c) => ({
         objectType: CONTAINER_TYPE_TO_OBJECT[c.container_type] ?? ('cohort' as const),
         ref: c.id,

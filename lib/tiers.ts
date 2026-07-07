@@ -33,6 +33,29 @@ export const TIER_GROUPS: TierGroup[] = [
 /** Every Spaces-relevant tier name, in display order. */
 export const ALL_TIER_NAMES: string[] = TIER_GROUPS.flatMap((g) => g.tierNames)
 
+// ─── Bracket compatibility (admin/access convergence) ───────────────────────
+//
+// Which tiers a member of a given age bracket may HOLD. Distinct from
+// TIER_GROUPS above (marketing columns): a tier can be holdable by several
+// brackets (Alumni spans all three). Keys match members.age_bracket
+// (lib/member-enums.ts). Contract: design/admin-access access-data.js
+// TIERS_BY_BRACKET. Enforced on the admin tier-grant routes and mirrored as
+// greyed-out chips on the Person 360.
+
+export type AgeBracket = 'high_school' | 'college' | 'adult'
+
+export const TIERS_BY_BRACKET: Record<AgeBracket, readonly string[]> = {
+  high_school: ['Explorer', 'Pathfinder', 'Scholar', 'Alumni'],
+  college:     ['Pathfinder', 'Scholar', 'Alumni', 'Contributor', 'Counselor', 'Catalyst'],
+  adult:       ['Contributor', 'Counselor', 'Educator', 'Catalyst', 'Innovator', 'Trailblazer', 'Alumni'],
+}
+
+/** May a member of `bracket` hold `tierName`? Unknown brackets are not gated. */
+export function tierAllowedForBracket(tierName: string, bracket: string | null | undefined): boolean {
+  const list = TIERS_BY_BRACKET[bracket as AgeBracket]
+  return !list || list.includes(tierName)
+}
+
 /** The group a tier name belongs to (for pill colour / grouping), or null. */
 export function tierGroupOf(tierName: string): TierGroupKey | null {
   for (const g of TIER_GROUPS) if (g.tierNames.includes(tierName)) return g.key

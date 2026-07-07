@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
+import { attachAllowed, resolveAccessObject } from '@/lib/access-objects'
 
 function requireAdmin(sessionClaims: Record<string, unknown> | null | undefined) {
   const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
@@ -59,6 +60,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!parsed.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
 
   const { moduleId, isMandatory = false, dueAt = null } = parsed.data
+
+  // Relationship-matrix gate (object_type_relations) — closed by default.
+  const container = await resolveAccessObject(id)
+  if (container && !(await attachAllowed(container.objectType, 'course'))) {
+    return NextResponse.json(
+      { error: `A course cannot be attached to a ${container.objectType} (relationship matrix).` },
+      { status: 403 },
+    )
+  }
   const db = supabaseServer()
 
   const { data, error } = await db

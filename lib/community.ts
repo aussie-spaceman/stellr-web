@@ -129,10 +129,11 @@ export type EntitlementTargetType =
   | 'mentoring'
   | 'coaching'
 
-export type AccessLevel = 'view' | 'download' | 'enroll' | 'host'
-
 /**
- * Whether `member` is entitled to a specific target at (at least) `accessLevel`.
+ * Whether `member` is entitled to a specific target. Access is binary — an
+ * entitlement row either grants the member's tier the target or it doesn't.
+ * What the member can DO there is decided by their role on the object, never by
+ * a graded access "level" (admin/access convergence; levels removed 2026-07).
  *
  * Returns one of:
  *   - true  → an entitlement row grants this tier the access
@@ -143,28 +144,20 @@ export type AccessLevel = 'view' | 'download' | 'enroll' | 'host'
 export async function memberHasEntitlement(
   member: CommunityMember,
   targetType: EntitlementTargetType,
-  targetRef: string,
-  accessLevel: AccessLevel = 'view'
+  targetRef: string
 ): Promise<boolean | null> {
   const db = supabaseServer()
   // Match the specific target OR a category-wide ('*') grant.
   const { data: rows } = await db
     .from('content_entitlements')
-    .select('tier_id, access_level, target_ref')
+    .select('tier_id, target_ref')
     .eq('target_type', targetType)
     .in('target_ref', [targetRef, '*'])
 
   if (!rows || rows.length === 0) return null // not configured → legacy fallback
 
-  // Higher access levels imply the lower ones (download implies view, etc.).
-  const rank: Record<AccessLevel, number> = { view: 0, download: 1, enroll: 2, host: 3 }
-  const needed = rank[accessLevel]
   const tierSet = new Set(member.activeTierIds)
-
-  return rows.some((r) => {
-    if (rank[r.access_level as AccessLevel] < needed) return false
-    return r.tier_id ? tierSet.has(r.tier_id) : false // membership-tier row
-  })
+  return rows.some((r) => (r.tier_id ? tierSet.has(r.tier_id) : false))
 }
 
 /**
@@ -175,12 +168,11 @@ export async function memberCanAccess(
   member: CommunityMember,
   targetType: EntitlementTargetType,
   targetRef: string,
-  minTierRank: number,
-  accessLevel: AccessLevel = 'view'
+  minTierRank: number
 ): Promise<boolean> {
   // Platform admins bypass every entitlement/tier/prerequisite gate.
   if (member.isAdmin) return true
-  const entitled = await memberHasEntitlement(member, targetType, targetRef, accessLevel)
+  const entitled = await memberHasEntitlement(member, targetType, targetRef)
   let allowed = entitled !== null ? entitled : memberMeetsTier(member, minTierRank)
   // Space-assigned training is available to active members of any space it was
   // assigned to, regardless of their tier (a course attached to a Space the member
@@ -229,7 +221,7 @@ export async function memberCanAccessSpace(
   member: CommunityMember,
   space: { id: string; min_tier_rank: number }
 ): Promise<boolean> {
-  return memberCanAccess(member, 'space', space.id, space.min_tier_rank, 'view')
+  return memberCanAccess(member, 'space', space.id, space.min_tier_rank)
 }
 
 /**

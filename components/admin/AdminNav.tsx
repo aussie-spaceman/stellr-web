@@ -15,8 +15,8 @@ const SECTIONS: Section[] = [
     label: 'Members & membership',
     items: [
       { href: '/admin', label: 'Members' },
-            { href: '/admin/membership', label: 'Membership' },
-      { href: '/admin/community/entitlements', label: 'Access map' },
+      { href: '/admin/access', label: 'Access' },
+      { href: '/admin/membership', label: 'Membership' },
       { href: '/admin/schools', label: 'Schools' },
     ],
   },
@@ -52,7 +52,6 @@ const SECTIONS: Section[] = [
   {
     label: 'Operations',
     items: [
-      { href: '/admin/delegations', label: 'Delegations' },
       { href: '/admin/staff', label: 'Staff roles' },
       { href: '/admin/community/moderation', label: 'Moderation' },
       { href: '/admin/docusigns', label: 'Consent forms' },

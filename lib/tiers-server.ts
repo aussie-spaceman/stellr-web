@@ -1,5 +1,32 @@
 import { supabaseServer } from '@/lib/supabase'
-import { TIER_GROUPS, ALL_TIER_NAMES, type TierMap, type TierRow } from '@/lib/tiers'
+import { TIER_GROUPS, ALL_TIER_NAMES, tierAllowedForBracket, type TierMap, type TierRow } from '@/lib/tiers'
+
+/**
+ * Bracket-compatibility guard for tier grants (admin/access convergence).
+ * Resolves the tier's name and the member's age bracket, then applies
+ * TIERS_BY_BRACKET. Returns { ok: true } or { ok: false, reason } — the admin
+ * grant routes 400 on failure; the greyed chips on the Person 360 mirror this.
+ * Rule-driven grants are validated at rule-save time instead (Rules tab).
+ */
+export async function checkTierAllowedForMember(
+  memberId: string,
+  tierId: string,
+): Promise<{ ok: boolean; reason?: string }> {
+  const db = supabaseServer()
+  const [{ data: tier }, { data: member }] = await Promise.all([
+    db.from('membership_tiers').select('name').eq('id', tierId).maybeSingle(),
+    db.from('members').select('age_bracket').eq('id', memberId).maybeSingle(),
+  ])
+  if (!tier) return { ok: false, reason: 'Unknown tier' }
+  if (!member) return { ok: false, reason: 'Unknown member' }
+  if (!tierAllowedForBracket(tier.name, member.age_bracket)) {
+    return {
+      ok: false,
+      reason: `${tier.name} is not available to ${String(member.age_bracket).replace('_', ' ')} members`,
+    }
+  }
+  return { ok: true }
+}
 
 /**
  * Resolve the live membership tiers into id/name lookups for the access grid and

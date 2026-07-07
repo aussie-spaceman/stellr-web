@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, Trash2, Power, Pencil } from 'lucide-react'
 
 export interface RuleRow {
@@ -9,17 +9,38 @@ export interface RuleRow {
   trigger_type: string
   conditions: { age_bracket?: string; event_role?: string; award_contains?: string; source_tier_ids?: string[] }
   grant_tier_id: string
-  duration_kind: 'months' | 'until_grad_july1' | 'lifetime' | 'match_source'
+  duration_kind: 'months' | 'until_grad_july1' | 'lifetime' | 'match_source' | 'until_date'
   duration_months: number | null
+  duration_until?: string | null
   grant_target: 'self' | 'registered_students'
   replaces_free: boolean
   priority: number
   is_active: boolean
-  /** 'tier' (default) grants a membership tier; 'credits' grants wallet credits. */
-  grant_kind?: 'tier' | 'credits'
+  /** 'tier' (default) grants a tier; 'credits' wallet credits; 'attach_object' /
+   * 'roster_add' are the object-anchored kinds (admin/access convergence). */
+  grant_kind?: 'tier' | 'credits' | 'attach_object' | 'roster_add'
   grant_credit_type?: 'mentoring' | 'workshop' | null
   grant_quantity?: number | null
+  /** object_created anchor: the type (and optionally one specific object) the rule fires for. */
+  object_type?: string | null
+  object_anchor_ref?: string | null
+  /** Minimum tier filter, by canonical tier name. */
+  tier_min?: string | null
+  grant_object_type?: string | null
+  grant_object_ref?: string | null
+  grant_role?: string | null
+  /** Target chosen at creation time by the New Object wizard instead of here. */
+  is_dynamic?: boolean
 }
+
+export interface ObjectOption {
+  objectType: string
+  ref: string
+  label: string
+}
+
+const OBJECT_TYPES = ['space', 'course', 'workshop', 'cohort', 'event', 'campaign', 'resource']
+const TIER_MIN_NAMES = ['Explorer', 'Pathfinder', 'Scholar', 'Alumni', 'Contributor', 'Counselor', 'Educator', 'Catalyst', 'Innovator', 'Trailblazer']
 
 export interface TierOption {
   id: string
@@ -37,12 +58,14 @@ const TRIGGERS: Record<string, string> = {
   manual: 'is granted manually',
   competition_registration: 'registers for a competition',
   tier_purchased: 'buys / is granted a tier',
+  object_created: 'a new object is created',
 }
 
 const ROLES = ['', 'participant', 'school_student_manager', 'teacher', 'mentor', 'parent', 'adult']
 const BRACKETS = ['', 'high_school', 'college', 'adult']
 
 function durationLabel(r: RuleRow): string {
+  if (r.duration_kind === 'until_date') return r.duration_until ? `until ${r.duration_until}` : 'until a date'
   if (r.duration_kind === 'until_grad_july1') return 'until July 1 of grad year'
   if (r.duration_kind === 'lifetime') return 'lifetime'
   if (r.duration_kind === 'match_source') return 'matching the triggering membership'
@@ -64,6 +87,14 @@ const emptyDraft = (tierId: string): RuleRow => ({
   grant_kind: 'tier',
   grant_credit_type: null,
   grant_quantity: null,
+  duration_until: null,
+  object_type: null,
+  object_anchor_ref: null,
+  tier_min: null,
+  grant_object_type: null,
+  grant_object_ref: null,
+  grant_role: null,
+  is_dynamic: false,
 })
 
 /** Label for a credit-granting rule, e.g. "2 workshop credits". */
@@ -76,7 +107,19 @@ function creditLabel(r: RuleRow): string {
 export function RulesClient({ initialRules, tiers }: { initialRules: RuleRow[]; tiers: TierOption[] }) {
   const [rules, setRules] = useState<RuleRow[]>(initialRules)
   const [draft, setDraft] = useState<RuleRow | null>(null)
+  const [objects, setObjects] = useState<ObjectOption[]>([])
   const tierName = (id: string) => tiers.find((t) => t.id === id)?.name ?? '—'
+  const objectLabel = (ref: string | null | undefined) =>
+    (ref && objects.find((o) => o.ref === ref)?.label) || ref || '—'
+
+  useEffect(() => {
+    let active = true
+    fetch('/api/admin/access/objects')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => active && j?.objects && setObjects(j.objects))
+      .catch(() => {})
+    return () => { active = false }
+  }, [])
 
   const refresh = async () => {
     const res = await fetch('/api/admin/membership/rules')
@@ -135,8 +178,16 @@ export function RulesClient({ initialRules, tiers }: { initialRules: RuleRow[]; 
             <div className="flex items-center gap-2 flex-wrap text-sm">
               <span className="font-medium text-brand-blue-dark">{r.name || '(untitled)'}</span>
               <span className="text-brand-muted-soft">·</span>
-              <span className="text-brand-muted-soft">When</span>
-              <Chip color="amber">{TRIGGERS[r.trigger_type] ?? r.trigger_type}</Chip>
+              <span className="text-brand-muted-soft">{r.trigger_type === 'object_created' && r.object_anchor_ref ? 'For' : 'When'}</span>
+              {r.trigger_type === 'object_created' && r.object_anchor_ref ? (
+                <Chip color="amber">{objectLabel(r.object_anchor_ref)}</Chip>
+              ) : (
+                <Chip color="amber">{TRIGGERS[r.trigger_type] ?? r.trigger_type}</Chip>
+              )}
+              {r.trigger_type === 'object_created' && r.object_type && (
+                <Chip color="gray">new {r.object_type}</Chip>
+              )}
+              {r.tier_min && <Chip color="gray">{r.tier_min}+</Chip>}
               {r.conditions.source_tier_ids?.length ? (
                 <Chip color="gray">tier: {r.conditions.source_tier_ids.map(tierName).join(', ')}</Chip>
               ) : null}
@@ -146,6 +197,10 @@ export function RulesClient({ initialRules, tiers }: { initialRules: RuleRow[]; 
               <span className="text-brand-muted-soft">grant</span>
               {(r.grant_kind ?? 'tier') === 'credits' ? (
                 <Chip color="blue">{creditLabel(r)}</Chip>
+              ) : r.grant_kind === 'attach_object' ? (
+                <Chip color="blue">attach: {r.is_dynamic ? 'chosen at creation' : objectLabel(r.grant_object_ref)}</Chip>
+              ) : r.grant_kind === 'roster_add' ? (
+                <Chip color="blue">add to: {objectLabel(r.grant_object_ref)}{r.grant_role ? ` as ${r.grant_role}` : ''}</Chip>
               ) : (
                 <Chip color="blue">{tierName(r.grant_tier_id)}</Chip>
               )}
@@ -177,6 +232,7 @@ export function RulesClient({ initialRules, tiers }: { initialRules: RuleRow[]; 
         <RuleForm
           draft={draft}
           tiers={tiers}
+          objects={objects}
           onChange={setDraft}
           onCancel={() => setDraft(null)}
           onSubmit={submit}
@@ -199,12 +255,14 @@ function Chip({ color, children }: { color: string; children: React.ReactNode })
 function RuleForm({
   draft,
   tiers,
+  objects,
   onChange,
   onCancel,
   onSubmit,
 }: {
   draft: RuleRow
   tiers: TierOption[]
+  objects: ObjectOption[]
   onChange: (r: RuleRow) => void
   onCancel: () => void
   onSubmit: () => void
@@ -234,6 +292,33 @@ function RuleForm({
             ))}
           </select>
         </Field>
+
+        {draft.trigger_type === 'object_created' && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="…of type">
+                <select value={draft.object_type ?? ''} onChange={(e) => set({ object_type: e.target.value || null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
+                  <option value="">choose a type…</option>
+                  {OBJECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
+              <Field label="…minimum tier (optional)">
+                <select value={draft.tier_min ?? ''} onChange={(e) => set({ tier_min: e.target.value || null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
+                  <option value="">any tier</option>
+                  {TIER_MIN_NAMES.map((t) => <option key={t} value={t}>{t}+</option>)}
+                </select>
+              </Field>
+            </div>
+            <Field label="For one specific object (optional — leave empty for every new object of the type)">
+              <select value={draft.object_anchor_ref ?? ''} onChange={(e) => set({ object_anchor_ref: e.target.value || null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
+                <option value="">any {draft.object_type || 'object'}</option>
+                {objects.filter((o) => !draft.object_type || o.objectType === draft.object_type).map((o) => (
+                  <option key={o.ref} value={o.ref}>{o.label}</option>
+                ))}
+              </select>
+            </Field>
+          </>
+        )}
 
         {draft.trigger_type === 'tier_purchased' && (
           <Field label="…and the tier they got is one of (leave empty = any paid tier)">
@@ -279,6 +364,8 @@ function RuleForm({
           <select value={draft.grant_kind ?? 'tier'} onChange={(e) => set({ grant_kind: e.target.value as RuleRow['grant_kind'] })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
             <option value="tier">A membership tier</option>
             <option value="credits">Wallet credits (cohort / workshop)</option>
+            <option value="attach_object">Attach an object</option>
+            <option value="roster_add">Add to a roster</option>
           </select>
         </Field>
 
@@ -294,6 +381,36 @@ function RuleForm({
               <input value={draft.grant_quantity ?? ''} onChange={(e) => set({ grant_quantity: e.target.value ? Number(e.target.value.replace(/[^0-9]/g, '')) : null })} placeholder="e.g. 2" className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
             </Field>
           </div>
+        ) : draft.grant_kind === 'attach_object' || draft.grant_kind === 'roster_add' ? (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label={draft.grant_kind === 'attach_object' ? 'Object type to attach' : 'Roster object type'}>
+                <select value={draft.grant_object_type ?? ''} onChange={(e) => set({ grant_object_type: e.target.value || null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
+                  <option value="">choose a type…</option>
+                  {OBJECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
+              <Field label={draft.grant_kind === 'attach_object' ? 'Object to attach' : 'Roster to add to'}>
+                <select value={draft.grant_object_ref ?? ''} onChange={(e) => set({ grant_object_ref: e.target.value || null })} disabled={!!draft.is_dynamic} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5 disabled:opacity-40">
+                  <option value="">choose an object…</option>
+                  {objects.filter((o) => !draft.grant_object_type || o.objectType === draft.grant_object_type).map((o) => (
+                    <option key={o.ref} value={o.ref}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            {draft.grant_kind === 'roster_add' && (
+              <Field label="…as role (optional)">
+                <input value={draft.grant_role ?? ''} onChange={(e) => set({ grant_role: e.target.value || null })} placeholder="e.g. volunteer" className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
+              </Field>
+            )}
+            {draft.grant_kind === 'attach_object' && (
+              <label className="flex items-center gap-2 text-sm text-brand-muted">
+                <input type="checkbox" checked={!!draft.is_dynamic} onChange={(e) => set({ is_dynamic: e.target.checked, grant_object_ref: e.target.checked ? null : draft.grant_object_ref })} />
+                Choose the object at creation time (New Object wizard)
+              </label>
+            )}
+          </>
         ) : (
           <Field label="Grant tier">
             <select value={draft.grant_tier_id} onChange={(e) => set({ grant_tier_id: e.target.value })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
@@ -317,6 +434,7 @@ function RuleForm({
                 <option value="until_grad_july1">Until July 1 of grad year</option>
                 <option value="lifetime">Lifetime</option>
                 <option value="match_source">Match the triggering membership</option>
+                <option value="until_date">Until a date</option>
               </select>
             </Field>
             {draft.duration_kind === 'months' && (
@@ -324,21 +442,21 @@ function RuleForm({
                 <input value={draft.duration_months ?? ''} onChange={(e) => set({ duration_months: e.target.value ? Number(e.target.value.replace(/[^0-9]/g, '')) : null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
               </Field>
             )}
+            {draft.duration_kind === 'until_date' && (
+              <Field label="Until">
+                <input type="date" value={draft.duration_until ?? ''} onChange={(e) => set({ duration_until: e.target.value || null })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
+              </Field>
+            )}
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Priority (higher wins)">
-            <input value={draft.priority} onChange={(e) => set({ priority: Number(e.target.value.replace(/[^0-9]/g, '') || 0) })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5" />
-          </Field>
-          <label className="flex items-center gap-2 text-sm text-brand-muted mt-6">
-            <input type="checkbox" checked={draft.replaces_free} onChange={(e) => set({ replaces_free: e.target.checked })} />
-            Replace active free tier
-          </label>
-        </div>
+        <label className="flex items-center gap-2 text-sm text-brand-muted">
+          <input type="checkbox" checked={draft.replaces_free} onChange={(e) => set({ replaces_free: e.target.checked })} />
+          Replace active free tier
+        </label>
 
         <div className="flex gap-2 pt-2">
-          <button onClick={onSubmit} disabled={!draft.name || ((draft.grant_kind ?? 'tier') === 'credits' ? !((draft.grant_quantity ?? 0) > 0) : !draft.grant_tier_id)} className="flex-1 text-sm bg-brand-blue text-white rounded-md py-2 hover:bg-brand-blue-dark disabled:opacity-40">
+          <button onClick={onSubmit} disabled={!draft.name || ((draft.grant_kind ?? 'tier') === 'credits' ? !((draft.grant_quantity ?? 0) > 0) : draft.grant_kind === 'attach_object' || draft.grant_kind === 'roster_add' ? !draft.grant_object_type || (!draft.grant_object_ref && !draft.is_dynamic) : !draft.grant_tier_id)} className="flex-1 text-sm bg-brand-blue text-white rounded-md py-2 hover:bg-brand-blue-dark disabled:opacity-40">
             {draft.id ? 'Save changes' : 'Create rule'}
           </button>
           <button onClick={onCancel} className="flex-1 text-sm border border-brand-border rounded-md py-2 text-brand-muted hover:bg-brand-canvas">

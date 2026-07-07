@@ -5,12 +5,6 @@ import { TiersClient, type TierRow } from '@/components/admin/membership/TiersCl
 import { RulesClient, type RuleRow, type TierOption } from '@/components/admin/membership/RulesClient'
 import { DiscountsClient } from '@/components/admin/membership/DiscountsClient'
 import { listDiscounts, listTiers, listTierBenefits } from '@/lib/entitlements'
-import {
-  EntitlementMatrix,
-  type Tier,
-  type Target,
-  type Entitlement,
-} from '@/components/admin/community/EntitlementMatrix'
 
 export const metadata = { title: 'Admin — Membership' }
 export const dynamic = 'force-dynamic'
@@ -21,8 +15,6 @@ const SUBTITLES: Record<MembershipTab, React.ReactNode> = {
   discounts: (
     <>Discounts &amp; coupons drive every à-la-carte price across the site. Changes here take effect immediately.</>
   ),
-  entitlements:
-    'Drag a membership tier onto any content row to grant access. This is the entitlement source of truth.',
 }
 
 // Membership Studio · Tiers tab. The catalog of membership tiers with their live
@@ -102,74 +94,7 @@ async function discountsContent() {
   return <DiscountsClient discounts={discounts} tiers={tiers} allocations={allocations} />
 }
 
-// Membership Studio · Access tab (FR-COM-08 + entitlement engine).
-// Surfaces every gateable target — spaces, training modules, resources, and the
-// category-wide Mentoring/Coaching grants — and lets an admin drag membership
-// tiers onto them. The mapping is the entitlement source of truth and is fully
-// editable here without code changes, per the PRD's "flexible to introduce and
-// modify in future" requirement.
-async function entitlementsContent() {
-  const db = supabaseServer()
-
-  const [{ data: tiers }, { data: spaces }, { data: modules }, { data: resources }, { data: ents }] =
-    await Promise.all([
-      db.from('membership_tiers').select('id, name, is_free, age_bracket').order('sort_order'),
-      db.from('community_spaces').select('id, name').eq('is_archived', false).order('display_order'),
-      db.from('training_modules').select('id, title, material_kind').order('display_order'),
-      db
-        .from('community_resources')
-        .select('id, title')
-        .is('event_ref', null) // event-attached resources are gated via the event itself
-        .order('created_at', { ascending: false })
-        .limit(100),
-      db
-        .from('content_entitlements')
-        .select('id, tier_id, target_type, target_ref, access_level'),
-    ])
-
-  const targets: Target[] = [
-    // Programs: a tier dropped here grants that tier access to ALL mentoring
-    // cohorts / coaching workshops (a blanket "this tier includes mentoring").
-    { type: 'mentoring', ref: '*', label: 'All mentoring cohorts', group: 'Programs (whole-category access)' },
-    { type: 'coaching', ref: '*', label: 'All coaching workshops', group: 'Programs (whole-category access)' },
-    ...(spaces ?? []).map((s) => ({
-      type: 'space' as const,
-      ref: s.id,
-      label: s.name,
-      group: 'Spaces',
-    })),
-    ...(modules ?? []).map((m) => ({
-      type: 'training_module' as const,
-      ref: m.id,
-      label: `${m.title}  ·  ${m.material_kind}`,
-      group: 'Training modules',
-    })),
-    ...(resources ?? []).map((r) => ({
-      type: 'resource' as const,
-      ref: r.id,
-      label: r.title,
-      group: 'Resources',
-    })),
-  ]
-
-  return (
-    <div className="space-y-6">
-      <p className="text-xs text-brand-muted-soft">
-        Each chip has an access level, lowest to highest: <b>View</b> (open / read it) ·{' '}
-        <b>Download</b> (save the file) · <b>Enrol</b> (join a course or program) ·{' '}
-        <b>Host</b> (run / manage it). A higher level includes the ones below it.
-      </p>
-
-      <EntitlementMatrix
-        tiers={(tiers ?? []) as Tier[]}
-        targets={targets}
-        initial={(ents ?? []) as Entitlement[]}
-      />
-    </div>
-  )
-}
-
-// Membership Studio. All four views — Tiers · Grant rules · Discounts · Access —
+// Membership Studio. Three views — Tiers · Grant rules · Discounts —
 // dispatch on ?tab= so the studio is one URL (tiers is the default).
 export default async function MembershipStudioPage({
   searchParams,
@@ -177,7 +102,7 @@ export default async function MembershipStudioPage({
   searchParams: Promise<{ tab?: string }>
 }) {
   const sp = await searchParams
-  const tab = (['tiers', 'rules', 'discounts', 'entitlements'].includes(sp.tab ?? '')
+  const tab = (['tiers', 'rules', 'discounts'].includes(sp.tab ?? '')
     ? sp.tab
     : 'tiers') as MembershipTab
 
@@ -185,7 +110,6 @@ export default async function MembershipStudioPage({
   if (tab === 'tiers') content = await tiersContent()
   else if (tab === 'rules') content = await rulesContent()
   else if (tab === 'discounts') content = await discountsContent()
-  else if (tab === 'entitlements') content = await entitlementsContent()
 
   return (
     <div>

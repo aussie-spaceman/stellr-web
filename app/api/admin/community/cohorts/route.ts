@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { inviteMembersToCohort, resendCohortInvites, scheduleMentoring } from '@/lib/sessions'
+import { attachAllowed } from '@/lib/access-objects'
 
 // Admin: mentoring cohorts (FR-COM-11) — create a cohort, assign a mentor, and
 // manage its members.
@@ -98,6 +99,13 @@ export async function PATCH(req: Request) {
   }
   // Link / unlink referenced training material for the cohort (PRD §11).
   if (b.linkModuleId) {
+    // Relationship-matrix gate (object_type_relations) — closed by default.
+    if (!(await attachAllowed('cohort', 'course'))) {
+      return NextResponse.json(
+        { error: 'A course cannot be attached to a cohort (relationship matrix).' },
+        { status: 403 },
+      )
+    }
     await db.from('cohort_training_links').upsert(
       {
         cohort_id: b.cohortId,

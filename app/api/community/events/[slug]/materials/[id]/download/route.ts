@@ -34,7 +34,7 @@ export async function GET(
   }
 
   const targetType = event.activityType === 'campaign' ? 'campaign_material' : 'event_material'
-  const ok = await memberCanAccess(member, targetType, event.eventId, resource.min_tier_rank, 'download')
+  const ok = await memberCanAccess(member, targetType, event.eventId, resource.min_tier_rank)
   if (!ok) return NextResponse.json({ error: 'Upgrade required' }, { status: 403 })
 
   const url = await signedDownloadUrl(resource.storage_path)

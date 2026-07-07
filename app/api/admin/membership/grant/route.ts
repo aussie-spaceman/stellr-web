@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { grantTier, fireTierPurchased } from '@/lib/membership-grants'
+import { checkTierAllowedForMember } from '@/lib/tiers-server'
 
 // POST /api/admin/membership/grant — admin manually places a member on a tier.
 // Body: { memberId, tierId, months? (null = lifetime), replacesFree? }
@@ -18,6 +19,10 @@ export async function POST(req: Request) {
   if (!memberId || !tierId) {
     return NextResponse.json({ error: 'memberId and tierId required' }, { status: 400 })
   }
+
+  // Bracket compatibility (TIERS_BY_BRACKET) — enforced before any write.
+  const bracketCheck = await checkTierAllowedForMember(memberId, tierId)
+  if (!bracketCheck.ok) return NextResponse.json({ error: bracketCheck.reason }, { status: 400 })
 
   const result = await grantTier({
     memberId,

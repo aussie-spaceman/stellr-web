@@ -28,7 +28,7 @@ export async function POST(req: Request) {
 
   const mod = Array.isArray(item.training_modules) ? item.training_modules[0] : item.training_modules
   const minRank = (mod as { min_tier_rank?: number } | null)?.min_tier_rank ?? 0
-  const ok = await memberCanAccess(member, 'training_module', item.module_id as string, minRank, 'view')
+  const ok = await memberCanAccess(member, 'training_module', item.module_id as string, minRank)
   if (!ok) return NextResponse.json({ error: 'Upgrade required' }, { status: 403 })
 
   const { error } = await db.rpc('set_training_progress', {

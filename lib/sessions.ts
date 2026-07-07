@@ -600,7 +600,7 @@ export async function canAccessChannel(channelId: string, memberId: string): Pro
       .select('min_tier_rank')
       .eq('id', ch.space_id)
       .maybeSingle()
-    return memberCanAccess(me, 'space', ch.space_id, (space?.min_tier_rank as number) ?? 0, 'view')
+    return memberCanAccess(me, 'space', ch.space_id, (space?.min_tier_rank as number) ?? 0)
   }
   // cohort: member must belong to the cohort (or be its mentor) AND the container's
   // content must still persist (an archived cohort re-gates unless kept open — D1).

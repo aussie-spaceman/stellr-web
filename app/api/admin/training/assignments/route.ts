@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
+import { attachAllowed, type AccessObjectType } from '@/lib/access-objects'
 
 // Admin CRUD for course_object_assignments — assign a course to an Object with
 // per-membership-tier requirements (Course builder · Assignments & requirements).
@@ -21,6 +22,14 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}))
   if (!b.moduleId || !OBJECT_TYPES.includes(b.objectType) || !b.objectRef) {
     return NextResponse.json({ error: 'moduleId, valid objectType and objectRef required' }, { status: 400 })
+  }
+  // Relationship-matrix gate (object_type_relations) — closed by default.
+  const fromType = (b.objectType === 'competition' ? 'event' : b.objectType) as AccessObjectType
+  if (!(await attachAllowed(fromType, 'course'))) {
+    return NextResponse.json(
+      { error: `A course cannot be attached to a ${fromType} (relationship matrix).` },
+      { status: 403 },
+    )
   }
   const admin = await getCurrentMember()
   const db = supabaseServer()

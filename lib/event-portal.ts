@@ -237,8 +237,7 @@ export async function getEventMaterials(
       member,
       targetType,
       event.eventId,
-      r.min_tier_rank,
-      'download'
+      r.min_tier_rank
     )
     out.push({
       id: r.id,

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-export type MembershipTab = 'tiers' | 'rules' | 'discounts' | 'entitlements'
+export type MembershipTab = 'tiers' | 'rules' | 'discounts'
 
 // Tab strip for the Membership Studio. All four views live on /admin/membership
 // and are addressed by ?tab= (tiers is the default), so this is a plain server
@@ -9,7 +9,6 @@ const TABS: { value: MembershipTab; label: string }[] = [
   { value: 'tiers', label: 'Tiers' },
   { value: 'rules', label: 'Grant rules' },
   { value: 'discounts', label: 'Discounts' },
-  { value: 'entitlements', label: 'Access' },
 ]
 
 export function MembershipNav({ active }: { active: MembershipTab }) {

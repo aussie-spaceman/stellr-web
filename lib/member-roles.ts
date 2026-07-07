@@ -44,6 +44,30 @@ export const MANAGE_ROLES: ReadonlySet<MemberRole> = new Set<MemberRole>([
   'staff', 'coach', 'mentor', 'moderator', 'student_manager', 'teacher',
 ])
 
+// ─── Bracket compatibility (admin/access convergence) ───────────────────────
+//
+// Which roles a member of a given age bracket may hold. Keys match
+// members.age_bracket (lib/member-enums.ts). Contract: design/admin-access
+// access-data.js ROLES_BY_BRACKET. Enforced on every role write below and
+// mirrored as greyed-out chips on the Person 360.
+
+export const ROLES_BY_BRACKET: Record<string, readonly MemberRole[]> = {
+  high_school: ['member', 'participant', 'student_manager'],
+  college:     ['member', 'participant', 'volunteer', 'student_manager', 'mentor'],
+  adult:       ['staff', 'coach', 'mentor', 'moderator', 'teacher', 'volunteer', 'donor_sponsor', 'parent', 'member'],
+}
+
+/** May a member of `bracket` hold `role`? Unknown brackets are not gated. */
+export function roleAllowedForBracket(role: MemberRole, bracket: string | null | undefined): boolean {
+  const list = ROLES_BY_BRACKET[bracket ?? '']
+  return !list || list.includes(role)
+}
+
+async function memberBracket(db: SupabaseClient, memberId: string): Promise<string | null> {
+  const { data } = await db.from('members').select('age_bracket').eq('id', memberId).maybeSingle()
+  return (data?.age_bracket as string | null) ?? null
+}
+
 interface RawRow {
   role: MemberRole
   scope: RoleScope
@@ -116,14 +140,25 @@ export async function addGlobalRole(
   memberId: string,
   role: MemberRole,
   source = 'admin',
-): Promise<void> {
+): Promise<{ ok: boolean; reason?: string }> {
+  // Bracket compatibility (ROLES_BY_BRACKET) — enforced before any write.
+  const bracket = await memberBracket(db, memberId)
+  if (!roleAllowedForBracket(role, bracket)) {
+    const reason = `${ROLE_LABELS[role]} is not available to ${String(bracket).replace('_', ' ')} members`
+    console.warn('[member-roles] addGlobalRole blocked:', memberId, role, bracket)
+    return { ok: false, reason }
+  }
   const { error } = await db
     .from('member_roles')
     .upsert(
       { member_id: memberId, role, scope: 'global' as const, source },
       { onConflict: 'member_id,role,object_type,object_id', ignoreDuplicates: true },
     )
-  if (error) console.error('[member-roles] addGlobalRole error (non-fatal):', error)
+  if (error) {
+    console.error('[member-roles] addGlobalRole error (non-fatal):', error)
+    return { ok: false, reason: 'Could not save role' }
+  }
+  return { ok: true }
 }
 
 /** event_role classification → the global canonical role(s) it implies. */
@@ -151,7 +186,15 @@ export async function syncMemberClassificationRole(
   memberId: string,
   eventRole: string,
 ): Promise<void> {
-  const roles: MemberRole[] = ['member', ...classificationRolesFor(eventRole)]
+  // Bracket compatibility: drop implied roles the member's bracket can't hold
+  // (e.g. a high-school registrant classified 'volunteer' keeps base 'member' only).
+  const bracket = await memberBracket(db, memberId)
+  const allowed = classificationRolesFor(eventRole).filter((r) => {
+    const ok = roleAllowedForBracket(r, bracket)
+    if (!ok) console.warn('[member-roles] classification role dropped (bracket):', memberId, r, bracket)
+    return ok
+  })
+  const roles: MemberRole[] = ['member', ...allowed]
   const rows = roles.map((role) => ({
     member_id: memberId,
     role,

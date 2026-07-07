@@ -89,8 +89,7 @@ export async function listModules(
       member,
       'training_module',
       m.id,
-      m.min_tier_rank,
-      'view'
+      m.min_tier_rank
     )
     out.push({
       id: m.id,
@@ -202,8 +201,7 @@ export async function getModule(
     member,
     'training_module',
     m.id,
-    m.min_tier_rank,
-    'view'
+    m.min_tier_rank
   )
 
   const toItem = (i: (typeof itemRows)[number]): TrainingItem => ({
@@ -509,8 +507,7 @@ export async function getItemDownload(
     member,
     'training_module',
     item.module_id as string,
-    minRank,
-    'view'
+    minRank
   )
   if (!ok) return { error: 'Upgrade required', status: 403 }
 

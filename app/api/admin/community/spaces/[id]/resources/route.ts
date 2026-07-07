@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
 import { attachSpaceResource } from '@/lib/container-sync'
 import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
+import { attachAllowed } from '@/lib/access-objects'
 
 // POST /api/admin/community/spaces/[id]/resources (multipart) — admin uploads a
 // file into a space's Resources (Assign resource modal, screen 20).
@@ -29,6 +30,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { userId, sessionClaims } = await auth()
   if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { id: spaceId } = await params
+
+  // Relationship-matrix gate (object_type_relations) — closed by default.
+  if (!(await attachAllowed('space', 'resource'))) {
+    return NextResponse.json(
+      { error: 'A resource cannot be attached to a space (relationship matrix).' },
+      { status: 403 },
+    )
+  }
 
   const form = await req.formData().catch(() => null)
   const file = form?.get('file')

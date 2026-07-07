@@ -22,7 +22,7 @@ const SECTIONS: Section[] = [
     label: 'Members', href: '/admin/members', color: '#2C53C6', icon: Users,
     items: [
       { href: '/admin/members', label: 'Members' },
-      { href: '/admin/membership', label: 'Membership' },
+      { href: '/admin/members/access', label: 'Access' },
       { href: '/admin/members/volunteers', label: 'Volunteers' },
       { href: '/admin/schools', label: 'Schools' },
     ],

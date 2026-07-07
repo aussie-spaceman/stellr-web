@@ -170,7 +170,10 @@ export default async function CourseDetailPage({
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-brand-muted">{lesson.body}</p>
           )}
 
-          {/* Attached resources — files/links the admin added to this lesson. */}
+          {/* Attached resources — files/links the admin added to this lesson.
+              Files open via the training-open redirect, which mints a fresh signed
+              URL at click time (avoids the stale/expired URL that showed a blank tab)
+              and routes Office documents through the in-browser viewer. */}
           {!lesson.locked && resources.length > 0 && (
             <div className="rounded-2xl border border-brand-border bg-white p-4">
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Resources</p>
@@ -178,7 +181,7 @@ export default async function CourseDetailPage({
                 {resources.map((r) => (
                   <li key={r.id}>
                     <a
-                      href={r.url ?? '#'}
+                      href={r.kind === 'link' ? (r.url ?? '#') : `/api/community/resources/training-open?ref=tr:${r.id}&redirect=1`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 rounded-lg border border-brand-hairline px-3 py-2 text-sm font-medium text-brand-muted transition hover:bg-brand-canvas"

@@ -14,7 +14,7 @@ function isAdmin(sessionClaims: unknown) {
   return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
 }
 
-const TRIGGERS = ['signup', 'event_attendance', 'event_award', 'mentor_at_event', 'subscribe_website', 'graduation', 'manual', 'competition_registration', 'tier_purchased', 'object_created']
+const TRIGGERS = ['signup', 'event_attendance', 'event_award', 'mentor_at_event', 'subscribe_website', 'graduation', 'manual', 'competition_registration', 'volunteer_registration', 'tier_purchased', 'object_created']
 const DURATIONS = ['months', 'until_grad_july1', 'lifetime', 'match_source', 'until_date']
 const GRANT_TARGETS = ['self', 'registered_students']
 const GRANT_KINDS = ['tier', 'credits', 'attach_object', 'roster_add']

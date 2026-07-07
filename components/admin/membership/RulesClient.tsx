@@ -48,20 +48,44 @@ export interface TierOption {
   is_free: boolean
 }
 
+// Label map for every trigger value (used to render existing rule chips, incl.
+// legacy values no longer offered for new rules).
 const TRIGGERS: Record<string, string> = {
-  signup: 'signs up',
+  signup: 'account created',
+  competition_registration: 'registers for a competition',
+  volunteer_registration: 'registered as a volunteer',
+  graduation: 'graduates high school',
+  tier_purchased: 'buys / is granted a tier',
+  object_created: 'a new object is created',
+  manual: 'is granted manually',
+  subscribe_website: 'subscribes on the website',
+  // Legacy triggers — kept so existing rules render, not offered for new rules.
   event_attendance: 'attends an event',
   event_award: 'wins an award',
   mentor_at_event: 'mentors at an event',
-  subscribe_website: 'subscribes on the website',
-  graduation: 'graduates high school',
-  manual: 'is granted manually',
-  competition_registration: 'registers for a competition',
-  tier_purchased: 'buys / is granted a tier',
-  object_created: 'a new object is created',
 }
 
-const ROLES = ['', 'participant', 'school_student_manager', 'teacher', 'mentor', 'parent', 'adult']
+// Triggers offered when creating/editing a rule, in display order. The first four
+// are the member-facing events; the rest are operational.
+const TRIGGER_OPTIONS = [
+  'signup', 'competition_registration', 'volunteer_registration', 'graduation',
+  'tier_purchased', 'object_created', 'subscribe_website', 'manual',
+]
+
+// "Role is" filters on members.event_role (matched in lib/membership-grants.ts),
+// so options must be valid event_role values — the full web-app role set.
+const ROLE_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'any role' },
+  { value: 'participant', label: 'Participant' },
+  { value: 'school_student_manager', label: 'Student Manager' },
+  { value: 'teacher', label: 'Teacher' },
+  { value: 'mentor', label: 'Mentor' },
+  { value: 'volunteer', label: 'Volunteer' },
+  { value: 'parent', label: 'Parent' },
+  { value: 'adult', label: 'Adult' },
+  { value: 'subscriber', label: 'Subscriber' },
+]
+const ROLE_LABEL: Record<string, string> = Object.fromEntries(ROLE_OPTIONS.map((r) => [r.value, r.label]))
 const BRACKETS = ['', 'high_school', 'college', 'adult']
 
 function durationLabel(r: RuleRow): string {
@@ -75,7 +99,7 @@ function durationLabel(r: RuleRow): string {
 const emptyDraft = (tierId: string): RuleRow => ({
   id: '',
   name: '',
-  trigger_type: 'event_attendance',
+  trigger_type: 'competition_registration',
   conditions: {},
   grant_tier_id: tierId,
   duration_kind: 'months',
@@ -191,7 +215,7 @@ export function RulesClient({ initialRules, tiers }: { initialRules: RuleRow[]; 
               {r.conditions.source_tier_ids?.length ? (
                 <Chip color="gray">tier: {r.conditions.source_tier_ids.map(tierName).join(', ')}</Chip>
               ) : null}
-              {r.conditions.event_role && <Chip color="gray">role: {r.conditions.event_role}</Chip>}
+              {r.conditions.event_role && <Chip color="gray">role: {ROLE_LABEL[r.conditions.event_role] ?? r.conditions.event_role}</Chip>}
               {r.conditions.age_bracket && <Chip color="gray">{r.conditions.age_bracket}</Chip>}
               {r.conditions.award_contains && <Chip color="gray">award ~ “{r.conditions.award_contains}”</Chip>}
               <span className="text-brand-muted-soft">grant</span>
@@ -212,7 +236,6 @@ export function RulesClient({ initialRules, tiers }: { initialRules: RuleRow[]; 
                 </>
               )}
               <span className="ml-auto flex items-center gap-3">
-                <span className="text-[11px] text-brand-muted-soft">priority {r.priority}</span>
                 <button onClick={() => toggle(r)} title={r.is_active ? 'Active' : 'Paused'}>
                   <Power className={'w-4 h-4 ' + (r.is_active ? 'text-green-600' : 'text-brand-muted-soft')} />
                 </button>
@@ -287,8 +310,9 @@ function RuleForm({
 
         <Field label="When (trigger)">
           <select value={draft.trigger_type} onChange={(e) => set({ trigger_type: e.target.value })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-            {Object.entries(TRIGGERS).map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
+            {/* Include the current value even if it's a legacy trigger no longer offered. */}
+            {(TRIGGER_OPTIONS.includes(draft.trigger_type) ? TRIGGER_OPTIONS : [draft.trigger_type, ...TRIGGER_OPTIONS]).map((v) => (
+              <option key={v} value={v}>{TRIGGERS[v] ?? v}</option>
             ))}
           </select>
         </Field>
@@ -344,7 +368,7 @@ function RuleForm({
         <div className="grid grid-cols-2 gap-3">
           <Field label="…and role is (optional)">
             <select value={draft.conditions.event_role ?? ''} onChange={(e) => setCond({ event_role: e.target.value || undefined })} className="w-full text-sm border border-brand-border rounded-md px-2 py-1.5">
-              {ROLES.map((r) => <option key={r} value={r}>{r || 'any role'}</option>)}
+              {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </Field>
           <Field label="…and bracket is (optional)">

@@ -425,8 +425,10 @@ function ResourcesTab({
   onUploaded: () => void
 }) {
   const [open, setOpen] = useState(false)
-  const [mode, setMode] = useState<'upload' | 'browse'>('upload')
+  const [mode, setMode] = useState<'upload' | 'link' | 'browse'>('upload')
   const [file, setFile] = useState<File | null>(null)
+  const [linkUrl, setLinkUrl] = useState('')
+  const [linkTitle, setLinkTitle] = useState('')
   const [busy, setBusy] = useState(false)
   // Catalogue browse state.
   const [query, setQuery] = useState('')
@@ -434,7 +436,7 @@ function ResourcesTab({
   const [searching, setSearching] = useState(false)
   const [renames, setRenames] = useState<Record<string, string>>({})
 
-  const closeModal = () => { setOpen(false); setFile(null); setQuery(''); setHits([]); setRenames({}); setMode('upload') }
+  const closeModal = () => { setOpen(false); setFile(null); setLinkUrl(''); setLinkTitle(''); setQuery(''); setHits([]); setRenames({}); setMode('upload') }
 
   const upload = async () => {
     if (!file) return
@@ -445,6 +447,22 @@ function ResourcesTab({
     setBusy(false)
     if (!res.ok) return toast('Upload failed')
     toast('Resource added')
+    closeModal()
+    onUploaded()
+  }
+
+  const saveLink = async () => {
+    if (!linkUrl.trim()) return
+    setBusy(true)
+    const res = await fetch(`/api/admin/community/spaces/${spaceId}/resources`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: linkUrl.trim(), title: linkTitle.trim() || undefined }),
+    })
+    setBusy(false)
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) return toast(j.error ?? 'Could not add link')
+    toast('Link added')
     closeModal()
     onUploaded()
   }
@@ -500,11 +518,16 @@ function ResourcesTab({
         {resources.length === 0 && <p className="px-3 py-4 text-center text-sm text-brand-muted-soft">No resources yet.</p>}
       </div>
 
-      <Modal open={open} onClose={closeModal} title="Assign resource" subtitle="Attach an existing file from the catalogue, or upload a new one."
+      <Modal open={open} onClose={closeModal} title="Assign resource" subtitle="Attach an existing file from the catalogue, upload a new one, or add a link."
         footer={mode === 'upload' ? (
           <>
             <button onClick={closeModal} className={btnGhost}>Cancel</button>
             <button onClick={upload} disabled={!file || busy} className={btnPrimary}>{busy ? 'Uploading…' : 'Upload'}</button>
+          </>
+        ) : mode === 'link' ? (
+          <>
+            <button onClick={closeModal} className={btnGhost}>Cancel</button>
+            <button onClick={saveLink} disabled={!linkUrl.trim() || busy} className={btnPrimary}>{busy ? 'Saving…' : 'Add link'}</button>
           </>
         ) : (
           <button onClick={closeModal} className={btnGhost}>Done</button>
@@ -513,6 +536,7 @@ function ResourcesTab({
         {/* Mode switch */}
         <div className="mb-4 inline-flex rounded-lg border border-brand-border p-0.5">
           <button onClick={() => setMode('upload')} className={`rounded-[7px] px-3 py-1.5 text-sm ${mode === 'upload' ? 'bg-brand-blue text-white' : 'text-brand-muted'}`}>Upload new</button>
+          <button onClick={() => setMode('link')} className={`rounded-[7px] px-3 py-1.5 text-sm ${mode === 'link' ? 'bg-brand-blue text-white' : 'text-brand-muted'}`}>Add link</button>
           <button onClick={switchToBrowse} className={`rounded-[7px] px-3 py-1.5 text-sm ${mode === 'browse' ? 'bg-brand-blue text-white' : 'text-brand-muted'}`}>Browse catalogue</button>
         </div>
 
@@ -522,6 +546,22 @@ function ResourcesTab({
             {file ? file.name : 'Click to choose a file'}
             <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           </label>
+        ) : mode === 'link' ? (
+          <div className="space-y-2">
+            <input
+              type="url"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://example.com/resource"
+              className={inputCls}
+            />
+            <input
+              value={linkTitle}
+              onChange={(e) => setLinkTitle(e.target.value)}
+              placeholder="Title (optional — defaults to the URL)"
+              className={inputCls}
+            />
+          </div>
         ) : (
           <div>
             <div className="relative">

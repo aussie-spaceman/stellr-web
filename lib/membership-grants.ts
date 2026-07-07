@@ -26,6 +26,9 @@ export type GrantTrigger =
   | 'subscribe_website'
   | 'graduation'
   | 'manual'
+  // Fired when a member joins the volunteer program (lib/volunteer.ts
+  // grantVolunteerRole), from either self-registration or an admin toggle.
+  | 'volunteer_registration'
   // Fired for every member registered into a competition (event or campaign), at
   // registration time. The seeded rule grants school students Pathfinder for 12mo.
   | 'competition_registration'

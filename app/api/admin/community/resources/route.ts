@@ -3,16 +3,45 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, RESOURCES_BUCKET } from '@/lib/community'
 import { attachSpaceResource } from '@/lib/container-sync'
+import { createLinkBinary, normaliseUrl } from '@/lib/resource-upload'
 import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
 
-// POST /api/admin/community/resources — upload a file + create a resource record.
-// Expects multipart/form-data: file, title, description?, spaceId?, minTierRank?
+// POST /api/admin/community/resources — create a resource record. A resource is
+// either an uploaded file (multipart/form-data: file, title, description?, spaceId?)
+// or a link (application/json: { url, title, description?, spaceId? }).
 export async function POST(req: Request) {
   const { sessionClaims } = await auth()
   const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
   if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const uploader = await getCurrentMember()
+
+  // Link resources arrive as JSON; file uploads as multipart form-data.
+  if (req.headers.get('content-type')?.includes('application/json')) {
+    const b = await req.json().catch(() => ({}))
+    const title = (typeof b.title === 'string' ? b.title : '').trim()
+    const rawUrl = (typeof b.url === 'string' ? b.url : '').trim()
+    const description = (typeof b.description === 'string' ? b.description : '').trim() || null
+    const spaceId = (typeof b.spaceId === 'string' && b.spaceId) || null
+    if (!rawUrl || !title) {
+      return NextResponse.json({ error: 'url and title are required' }, { status: 400 })
+    }
+    const normalised = normaliseUrl(rawUrl)
+    if (!normalised) return NextResponse.json({ error: 'That URL is not valid' }, { status: 400 })
+
+    const created = await createLinkBinary({
+      url: rawUrl,
+      normalisedUrl: normalised,
+      title,
+      description,
+      uploadedBy: uploader?.id ?? '',
+    })
+    if ('error' in created) return NextResponse.json({ error: created.error }, { status: 500 })
+
+    const db = supabaseServer()
+    if (spaceId) await attachSpaceResource(db, spaceId, created.binaryId)
+    return NextResponse.json({ id: created.binaryId })
+  }
 
   const formData = await req.formData()
   const file = formData.get('file') as File | null

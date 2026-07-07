@@ -1,37 +1,41 @@
 import { redirect } from 'next/navigation'
 import { getCurrentMember } from '@/lib/community'
 import { listModules } from '@/lib/training'
-import { getMyTraining, getGroupProgress, getCertificates } from '@/lib/training-portal'
-import { RoleSwitch, TrainingTabs, LayoutToggle, type MemberTab } from '@/components/training/TrainingControls'
+import { getMyTraining, getGroupProgress } from '@/lib/training-portal'
+import { TrainingTabs, type MemberTab } from '@/components/training/TrainingControls'
 import { MyTraining } from '@/components/training/MyTraining'
 import { BrowseCourses } from '@/components/training/BrowseCourses'
 import { GroupProgressView } from '@/components/training/GroupProgressView'
-import { Certificates } from '@/components/training/Certificates'
 
 export const metadata = { title: 'Academy · Training' }
 
-// Redesigned Training portal (FR-COM-10 / Training Scope). Screen + role + layout
-// state lives in the URL so the page stays server-rendered while feeling
-// single-page via Next client navigation.
+// Membership tiers that carry a teaching/group-management role. Members on any of
+// these — or with a teaching event role — see the Group progress tab automatically.
+const TEACHER_TIERS = new Set(['Educator', 'Catalyst', 'Innovator', 'Trailblazer'])
+const TEACHER_ROLES = new Set(['teacher', 'school_student_manager'])
+
+// Redesigned Training portal (FR-COM-10 / Training Scope). Screen state lives in
+// the URL so the page stays server-rendered while feeling single-page via Next
+// client navigation.
 export default async function TrainingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; role?: string; layout?: string; obj?: string }>
+  searchParams: Promise<{ tab?: string; obj?: string }>
 }) {
   const member = await getCurrentMember()
   if (!member) redirect('/sign-up')
 
   const sp = await searchParams
-  // Only members with a teaching role can act as Teacher (Student Managers are
-  // treated as Students — they never see the Teacher view or Group progress).
-  const canTeach = member.event_role === 'teacher'
-  const role: 'student' | 'teacher' = sp.role === 'teacher' && canTeach ? 'teacher' : 'student'
+  // Group progress appears automatically for members who manage a group: a
+  // teaching event role (Teacher / Student Manager) or one of the teacher tiers.
+  const canManageGroup =
+    TEACHER_ROLES.has(member.event_role ?? '') ||
+    TEACHER_TIERS.has(member.activeTierName ?? '')
 
   let tab = (sp.tab as MemberTab) || 'my'
-  if (tab === 'group' && role !== 'teacher') tab = 'my'
-  const variant: 'A' | 'B' = sp.layout === 'B' ? 'B' : 'A'
+  if (tab === 'group' && !canManageGroup) tab = 'my'
 
-  const title = role === 'teacher' ? 'Training & your group' : 'My training'
+  const title = canManageGroup ? 'Training & your group' : 'My training'
 
   return (
     <div className="space-y-6">
@@ -45,27 +49,19 @@ export default async function TrainingPage({
             {title}
           </h1>
         </div>
-        {canTeach && <RoleSwitch role={role} />}
       </div>
 
       {/* Sub-nav */}
-      <TrainingTabs active={tab} showGroup={role === 'teacher'} />
+      <TrainingTabs active={tab} showGroup={canManageGroup} />
 
       {/* Active screen */}
-      {tab === 'my' && (
-        <div className="space-y-6">
-          <LayoutToggle variant={variant} />
-          <MyTraining data={await getMyTraining(member)} variant={variant} />
-        </div>
-      )}
+      {tab === 'my' && <MyTraining data={await getMyTraining(member)} />}
 
       {tab === 'browse' && <BrowseCourses modules={await listModules(member)} />}
 
-      {tab === 'group' && role === 'teacher' && (
+      {tab === 'group' && canManageGroup && (
         <GroupProgressView data={await getGroupProgress(member, sp.obj)} />
       )}
-
-      {tab === 'certs' && <Certificates certificates={await getCertificates(member)} />}
     </div>
   )
 }

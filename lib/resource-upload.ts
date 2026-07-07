@@ -179,12 +179,14 @@ export async function createLinkBinary(opts: {
   normalisedUrl: string
   title: string
   uploadedBy: string
+  description?: string | null
 }): Promise<{ binaryId: string } | { error: string }> {
   const db = supabaseServer()
   const { data, error } = await db
     .from('community_resources')
     .insert({
       title: opts.title,
+      description: opts.description ?? null,
       source_url: opts.url,
       normalised_url: opts.normalisedUrl,
       file_type: 'link',

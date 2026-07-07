@@ -13,6 +13,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { addGlobalRole, memberHasRole } from '@/lib/member-roles'
+import { applyGrantTrigger } from '@/lib/membership-grants'
 import { dispatchAgreement, agreementExpiry } from '@/lib/docusign-agreements'
 import { deriveCompliance, loadComplianceRecordsByEmails, type ComplianceState } from '@/lib/compliance'
 import { logActivity, type Actor } from '@/lib/activity-log'
@@ -81,6 +82,9 @@ export async function grantVolunteerRole(
   await addGlobalRole(db, memberId, 'volunteer', source)
   await addToVolunteerSpace(db, memberId)
   if (!already) {
+    // Fire any 'volunteer_registration' grant rules (e.g. college volunteers →
+    // Contributor). Only on first grant so repeat saves don't re-trigger.
+    await applyGrantTrigger(memberId, 'volunteer_registration', {}, db)
     await logActivity({
       memberId,
       category: 'account',

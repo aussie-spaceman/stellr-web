@@ -20,6 +20,17 @@ export interface AdminBinaryRow {
   pendingFlags: number
   /** Aggregate opens/downloads across all attachments. */
   downloads: number
+  /**
+   * 'community' = a community_resources binary (rename/delete inline).
+   * 'training'  = a lesson recording / lesson resource, which lives in the
+   * separate training content model (training_items / training_item_resources),
+   * NOT community_resources. Surfaced here read-only so recordings are visible
+   * centrally (they otherwise only show in the course builder and the member
+   * catalogue); managed from the course builder via `builderHref`.
+   */
+  source: 'community' | 'training'
+  /** Deep link to the course builder for training rows; null for community rows. */
+  builderHref: string | null
 }
 
 export interface AdminResourceStats {
@@ -85,7 +96,7 @@ export async function getAdminResourceIndex(): Promise<{ rows: AdminBinaryRow[];
     flagCount.set(id, (flagCount.get(id) ?? 0) + 1)
   }
 
-  const rows: AdminBinaryRow[] = bins.map((b) => {
+  const communityRows: AdminBinaryRow[] = bins.map((b) => {
     const objs = attachedNames.get(b.id) ?? []
     return {
       id: b.id,
@@ -99,8 +110,17 @@ export async function getAdminResourceIndex(): Promise<{ rows: AdminBinaryRow[];
       attachedObjects: objs,
       pendingFlags: flagCount.get(b.id) ?? 0,
       downloads: b.download_count ?? 0,
+      source: 'community',
+      builderHref: null,
     }
   })
+
+  // Training content (lesson recordings + lesson resources) lives outside
+  // community_resources, so it's fetched separately and merged read-only.
+  const trainingRows = await getTrainingResourceRows()
+  const rows = [...communityRows, ...trainingRows].sort(
+    (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt),
+  )
 
   const totalAttachments = (attachments ?? []).length
   const distinctAttached = attachedNames.size
@@ -112,4 +132,93 @@ export async function getAdminResourceIndex(): Promise<{ rows: AdminBinaryRow[];
   }
 
   return { rows, stats }
+}
+
+/**
+ * Read-only admin rows for training content that isn't a community_resources
+ * binary: lesson recordings (training_items.recording_path) and lesson resources
+ * (training_item_resources). These surface in the member catalogue but, being a
+ * separate content model, were invisible on the central admin index — so JaaS
+ * recordings appeared everywhere EXCEPT here. They're managed from the course
+ * builder (builderHref), not renamed/deleted inline.
+ */
+async function getTrainingResourceRows(): Promise<AdminBinaryRow[]> {
+  const db = supabaseServer()
+
+  const [{ data: recItems }, { data: res }] = await Promise.all([
+    db
+      .from('training_items')
+      .select('id, module_id, title, created_at')
+      .eq('recording_status', 'available')
+      .not('recording_path', 'is', null),
+    db.from('training_item_resources').select('id, item_id, kind, title, created_at'),
+  ])
+
+  // Resolve the module + lesson title behind every row for the "Attached to" cell.
+  const resItemIds = [...new Set((res ?? []).map((r) => r.item_id as string))]
+  const { data: resItems } = resItemIds.length
+    ? await db.from('training_items').select('id, module_id, title').in('id', resItemIds)
+    : { data: [] as { id: string; module_id: string; title: string }[] }
+  const lessonById = new Map<string, { moduleId: string; title: string }>()
+  for (const i of [...(recItems ?? []), ...(resItems ?? [])]) {
+    lessonById.set(i.id as string, { moduleId: i.module_id as string, title: i.title as string })
+  }
+
+  const moduleIds = [...new Set([...lessonById.values()].map((l) => l.moduleId))]
+  const { data: modules } = moduleIds.length
+    ? await db.from('training_modules').select('id, title').in('id', moduleIds)
+    : { data: [] as { id: string; title: string }[] }
+  const moduleTitle = new Map((modules ?? []).map((m) => [m.id as string, m.title as string]))
+
+  const attachedTo = (lessonId: string): { label: string; moduleId: string | null } => {
+    const lesson = lessonById.get(lessonId)
+    if (!lesson) return { label: 'Unknown lesson', moduleId: null }
+    const course = moduleTitle.get(lesson.moduleId) ?? 'Training course'
+    return { label: `${course} · ${lesson.title}`, moduleId: lesson.moduleId }
+  }
+  const builderHref = (moduleId: string | null): string | null =>
+    moduleId ? `/admin/academy/training?tab=builder&course=${moduleId}` : null
+
+  const rows: AdminBinaryRow[] = []
+
+  for (const i of recItems ?? []) {
+    const { label, moduleId } = attachedTo(i.id as string)
+    rows.push({
+      id: `rec:${i.id as string}`,
+      title: `${i.title as string} (recording)`,
+      fileType: 'video/mp4',
+      isLink: false,
+      sizeBytes: null,
+      uploaderName: null,
+      createdAt: i.created_at as string,
+      attachedCount: 1,
+      attachedObjects: [label],
+      pendingFlags: 0,
+      downloads: 0,
+      source: 'training',
+      builderHref: builderHref(moduleId),
+    })
+  }
+
+  for (const r of res ?? []) {
+    const { label, moduleId } = attachedTo(r.item_id as string)
+    const isLink = (r.kind as string) === 'link'
+    rows.push({
+      id: `tr:${r.id as string}`,
+      title: r.title as string,
+      fileType: isLink ? 'link' : null,
+      isLink,
+      sizeBytes: null,
+      uploaderName: null,
+      createdAt: r.created_at as string,
+      attachedCount: 1,
+      attachedObjects: [label],
+      pendingFlags: 0,
+      downloads: 0,
+      source: 'training',
+      builderHref: builderHref(moduleId),
+    })
+  }
+
+  return rows
 }

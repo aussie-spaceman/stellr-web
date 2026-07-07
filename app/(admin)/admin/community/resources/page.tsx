@@ -95,19 +95,43 @@ export default async function AdminCommunityResourcesPage() {
                           )}
                         </div>
                         <p className="text-xs text-brand-muted-soft">
-                          {r.uploaderName ?? 'Unknown'} · {formatDateShort(r.createdAt)}
+                          {r.source === 'training'
+                            ? r.fileType?.startsWith('video/')
+                              ? 'Lesson recording'
+                              : 'Lesson resource'
+                            : r.uploaderName ?? 'Unknown'}{' '}
+                          · {formatDateShort(r.createdAt)}
                         </p>
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-brand-muted">{typeLabel(r.fileType, r.isLink)}</td>
-                  <td className="px-4 py-3 text-brand-muted-soft">{r.isLink ? '—' : formatBytes(r.sizeBytes ?? 0)}</td>
-                  <td className="px-4 py-3 text-brand-muted">
-                    {r.attachedCount} object{r.attachedCount === 1 ? '' : 's'}
+                  <td className="px-4 py-3 text-brand-muted-soft">
+                    {r.isLink || r.sizeBytes == null ? '—' : formatBytes(r.sizeBytes)}
                   </td>
-                  <td className="px-4 py-3 text-brand-muted-soft">{r.downloads}</td>
+                  <td className="px-4 py-3 text-brand-muted">
+                    {r.source === 'training'
+                      ? r.attachedObjects[0] ?? '—'
+                      : `${r.attachedCount} object${r.attachedCount === 1 ? '' : 's'}`}
+                  </td>
+                  <td className="px-4 py-3 text-brand-muted-soft">{r.source === 'training' ? '—' : r.downloads}</td>
                   <td className="px-4 py-3">
-                    <AdminBinaryActions binaryId={r.id} title={r.title} attachedObjects={r.attachedObjects} />
+                    {r.source === 'training' ? (
+                      r.builderHref ? (
+                        <div className="flex justify-end">
+                          <Link
+                            href={r.builderHref}
+                            className="text-xs font-medium text-brand-blue-dark hover:underline"
+                          >
+                            View in course
+                          </Link>
+                        </div>
+                      ) : (
+                        <p className="text-right text-xs text-brand-muted-soft">Managed in course</p>
+                      )
+                    ) : (
+                      <AdminBinaryActions binaryId={r.id} title={r.title} attachedObjects={r.attachedObjects} />
+                    )}
                   </td>
                 </tr>
               )

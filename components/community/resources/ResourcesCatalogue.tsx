@@ -184,8 +184,13 @@ function NameWithRename({
     )
   }
 
-  // Training rows have no catalogue detail page — link to the course instead.
-  const nameHref = row.source === 'training' ? row.provenance.href ?? '#' : `/community/resources/${row.attachmentId}`
+  // Training rows have no catalogue detail page — deep-link to the exact lesson
+  // (openHref) so the recording/resource opens in its own lesson, not the
+  // course's first-incomplete one. Fall back to the course, then '#'.
+  const nameHref =
+    row.source === 'training'
+      ? row.openHref ?? row.provenance.href ?? '#'
+      : `/community/resources/${row.attachmentId}`
 
   return (
     <span className="inline-flex items-center gap-1.5">

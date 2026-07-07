@@ -73,6 +73,14 @@ export interface CatalogueRow {
   kind: ResourceKind
   /** COALESCE(container_contents.display_name, community_resources.title). */
   name: string
+  /**
+   * Where the row's name links. Catalogue rows have a detail page
+   * (/resources/:id) so this is null and the caller uses the attachment route.
+   * Training rows have no detail page — this deep-links to the exact lesson
+   * (/community/training/:module?lesson=:item) so opening a lesson recording /
+   * resource lands on the RIGHT lesson, not the course's first-incomplete one.
+   */
+  openHref: string | null
   description: string | null
   fileType: string | null
   fileSizeBytes: number | null
@@ -369,6 +377,7 @@ export async function listMemberResources(
       contentType: a.contentType,
       kind: resourceKind(a.contentType, binary.fileType),
       name: a.displayName ?? binary.title,
+      openHref: null,
       description: binary.description,
       fileType: binary.fileType,
       fileSizeBytes: binary.fileSizeBytes,
@@ -493,6 +502,7 @@ async function listTrainingCatalogueRows(member: CommunityMember): Promise<Catal
         contentType: 'resource',
         kind,
         name: r.title as string,
+        openHref: `/community/training/${moduleId}?lesson=${r.item_id as string}`,
         fileType: kind === 'link' ? 'link' : null,
         addedAt: r.created_at as string,
         provenance: prov(moduleId),
@@ -510,6 +520,7 @@ async function listTrainingCatalogueRows(member: CommunityMember): Promise<Catal
       contentType: 'recording',
       kind: 'video',
       name: `${i.title as string} (recording)`,
+      openHref: `/community/training/${i.module_id as string}?lesson=${i.id as string}`,
       fileType: 'video/mp4',
       addedAt: i.created_at as string,
       provenance: prov(i.module_id as string),

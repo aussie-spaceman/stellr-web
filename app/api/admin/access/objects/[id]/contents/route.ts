@@ -6,9 +6,11 @@ import {
   attachAllowed,
   resolveAccessObject,
   OBJECT_TO_SPACE_SOURCE_TYPE,
+  SPACE_SOURCE_TYPE_TO_OBJECT,
   type AccessObjectType,
 } from '@/lib/access-objects'
 import { getCurrentMember } from '@/lib/community'
+import { getAllEvents, getAllCampaigns } from '@/lib/sanity'
 
 // /api/admin/access/objects/[id]/contents — the Contents tab of the unified
 // container detail. Contents live in two stores:
@@ -108,7 +110,48 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }),
   ]
 
-  return NextResponse.json({ object, contents })
+  // Reverse links — the objects this Space is attached to as a source (migration
+  // 123). A Space is the "to" side of Object→Space links, so this direction is
+  // never captured by the two content stores above. Surfacing it lets an admin
+  // confirm, from the Space, an attachment made from the parent object's
+  // Contents tab. Managed from the parent side; read-only here.
+  let sources: Array<{ id: string; objectType: AccessObjectType; ref: string; label: string }> = []
+  if (object.objectType === 'space') {
+    const { data: sourceRows } = await db
+      .from('community_space_sources')
+      .select('id, object_type, object_ref')
+      .eq('space_id', object.ref)
+    const srcRows = (sourceRows ?? []) as Array<{ id: string; object_type: string; object_ref: string }>
+    if (srcRows.length) {
+      // Events/campaigns are slug-keyed and live in Sanity; the rest resolve by ref.
+      const hasEventSource = srcRows.some((r) => r.object_type === 'event')
+      const events = hasEventSource
+        ? [...(await getAllEvents().catch(() => [])), ...(await getAllCampaigns().catch(() => []))]
+        : []
+      const eventMeta = new Map<string, { title: string; objectType: AccessObjectType }>()
+      for (const e of events as Array<{ slug?: { current?: string } | string; title?: string; activityType?: string }>) {
+        const slug = typeof e.slug === 'string' ? e.slug : e.slug?.current
+        if (slug) eventMeta.set(slug, { title: e.title ?? slug, objectType: e.activityType === 'campaign' ? 'campaign' : 'event' })
+      }
+      sources = await Promise.all(
+        srcRows.map(async (r) => {
+          if (r.object_type === 'event') {
+            const meta = eventMeta.get(r.object_ref)
+            return { id: r.id, objectType: meta?.objectType ?? 'event', ref: r.object_ref, label: meta?.title ?? r.object_ref }
+          }
+          const resolved = await resolveAccessObject(r.object_ref)
+          return {
+            id: r.id,
+            objectType: SPACE_SOURCE_TYPE_TO_OBJECT[r.object_type] ?? resolved?.objectType ?? 'event',
+            ref: r.object_ref,
+            label: resolved?.label ?? r.object_ref,
+          }
+        }),
+      )
+    }
+  }
+
+  return NextResponse.json({ object, contents, sources })
 }
 
 const postSchema = z.object({
@@ -165,14 +208,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       { status: 400 },
     )
   }
+  // is_mandatory is confirmed on the object's own detail page, not here, so only
+  // write it when explicitly supplied — otherwise a re-attach from this screen
+  // would reset the flag (column defaults to false on insert).
+  const payload: Record<string, unknown> = {
+    container_id: object.containerId,
+    content_type: contentType,
+    content_ref: ref,
+    due_at: dueAt ?? null,
+  }
+  if (mandatory !== undefined) payload.is_mandatory = mandatory
   const { error } = await db.from('container_contents').upsert(
-    {
-      container_id: object.containerId,
-      content_type: contentType,
-      content_ref: ref,
-      is_mandatory: mandatory ?? false,
-      due_at: dueAt ?? null,
-    },
+    payload,
     { onConflict: 'container_id,content_type,content_ref' },
   )
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

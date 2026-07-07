@@ -395,16 +395,25 @@ interface ContentEntry {
   dueAt: string | null
 }
 
+interface SourceEntry {
+  id: string
+  objectType: string
+  ref: string
+  label: string
+}
+
 function ContentsPane({ object }: { object: ObjectListItem }) {
   const [rows, setRows] = useState<ContentEntry[] | null>(null)
+  const [sources, setSources] = useState<SourceEntry[]>([])
   const [all, setAll] = useState<ObjectListItem[]>([])
   const [pickRef, setPickRef] = useState('')
-  const [mandatory, setMandatory] = useState(false)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/admin/access/objects/${encodeURIComponent(object.ref)}/contents`)
-    if (!res.ok) return setRows([])
-    setRows((await res.json()).contents ?? [])
+    if (!res.ok) { setRows([]); setSources([]); return }
+    const j = await res.json()
+    setRows(j.contents ?? [])
+    setSources(j.sources ?? [])
   }, [object.ref])
 
   useEffect(() => {
@@ -423,7 +432,7 @@ function ContentsPane({ object }: { object: ObjectListItem }) {
     const res = await fetch(`/api/admin/access/objects/${encodeURIComponent(object.ref)}/contents`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ref: target.ref, contentType, mandatory }),
+      body: JSON.stringify({ ref: target.ref, contentType }),
     })
     if (!res.ok) toast((await res.json()).error ?? 'Attach blocked', { tone: 'error' })
     setPickRef('')
@@ -449,13 +458,27 @@ function ContentsPane({ object }: { object: ObjectListItem }) {
             <option key={`${o.objectType}:${o.ref}`} value={o.ref}>[{o.objectType}] {o.label}</option>
           ))}
         </select>
-        <label className="flex items-center gap-1 text-xs text-brand-muted">
-          <input type="checkbox" checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} /> mandatory
-        </label>
         <button onClick={add} disabled={!pickRef} className="rounded-md bg-brand-blue px-3 py-1.5 text-sm text-white hover:bg-brand-blue-dark disabled:opacity-40">
           Attach
         </button>
       </div>
+
+      {sources.length > 0 && (
+        <div className="mb-3 rounded-lg border border-brand-hairline bg-brand-canvas px-3 py-2">
+          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-brand-muted-soft">Attached to</p>
+          <ul className="space-y-1">
+            {sources.map((s) => (
+              <li key={s.id} className="flex items-center gap-2 text-sm">
+                <span className={'rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ' + (TYPE_BADGE[s.objectType] ?? TYPE_BADGE.resource)}>
+                  {s.objectType}
+                </span>
+                <span className="truncate text-brand-blue-dark">{s.label}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[11px] text-brand-muted-soft">Managed from each object&apos;s Contents.</p>
+        </div>
+      )}
       {!rows ? (
         <p className="text-xs text-brand-muted-soft">Loading contents…</p>
       ) : rows.length === 0 ? (

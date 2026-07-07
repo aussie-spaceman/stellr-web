@@ -40,6 +40,21 @@ export const OBJECT_TO_SPACE_SOURCE_TYPE: Record<string, string> = {
   workshop: 'coaching',
 }
 
+/**
+ * community_space_sources.object_type → design object type. The reverse of
+ * OBJECT_TO_SPACE_SOURCE_TYPE, for surfacing on a Space the objects it is
+ * attached to (the link is created from the parent object's Contents tab, but
+ * the Space needs to display it too). 'event' covers campaigns as well — the two
+ * share a source type — so callers refine event vs campaign from the slug when
+ * a nicer badge matters.
+ */
+export const SPACE_SOURCE_TYPE_TO_OBJECT: Record<string, AccessObjectType> = {
+  event: 'event',
+  training: 'course',
+  mentoring: 'cohort',
+  coaching: 'workshop',
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**

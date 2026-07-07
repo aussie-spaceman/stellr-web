@@ -77,8 +77,9 @@ export function RecordSession({
         <p className="text-sm font-semibold text-brand-blue-dark">Recording session</p>
       </div>
       <p className="mt-0.5 text-xs text-brand-muted-soft">
-        Launch the live room as host. Start recording from the room toolbar — when the session ends the
-        recording attaches to this lesson automatically.
+        Launch the live room as host and admit yourself from the prejoin screen — file recording starts
+        automatically on join. If it doesn&rsquo;t, start it from the room toolbar (Record → file). When the
+        session ends the recording attaches to this lesson automatically.
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -143,6 +144,8 @@ export function RecordSession({
               roomName={config.roomName}
               jwt={config.jwt}
               displayName={config.displayName}
+              isHost
+              autoRecord={config.configured}
               className="w-full flex-1 bg-black"
             />
           </div>

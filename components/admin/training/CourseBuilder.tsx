@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import {
   Plus, Trash2, GripVertical, Pencil, Check, X, ChevronDown, ChevronRight,
   Radio, Video, FileText, Paperclip, Play, Upload,
@@ -17,15 +17,6 @@ import type { AdminModule, AdminSection, AdminLesson } from '@/components/admin/
 // card (inline title · Theme · Type · Certificate · Delete/Save draft/Publish),
 // Assignments & requirements, then a 2-col Curriculum + Lesson editor with the
 // 4-up content-type picker. Reuses the existing modules/sections/items APIs.
-
-const KINDS = ['general', 'event', 'campaign', 'cte', 'curriculum'] as const
-const KIND_LABELS: Record<(typeof KINDS)[number], string> = {
-  general: 'General — Library (all members)',
-  curriculum: 'Academy curriculum (all members)',
-  cte: 'CTE (all members)',
-  event: 'Event — only via participant assignment',
-  campaign: 'Campaign — only via participant assignment',
-}
 
 // The 4-up lesson content types (design) mapped onto our content_kind enum.
 type ContentKey = AdminLesson['content_kind']
@@ -61,11 +52,45 @@ export function CourseBuilder({
   initialCourseId?: string
 }) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [selectedId, setSelectedId] = useState<string>(
     initialCourseId && courses.some((c) => c.id === initialCourseId) ? initialCourseId : courses[0]?.id ?? ''
   )
-  const [creating, setCreating] = useState(false)
+  // Open the create form immediately when arrived at via the header "New course"
+  // button (?new=1) — initialise from the param so the empty-list redirect below
+  // doesn't bounce a fresh admin to Overview before they can create.
+  const [creating, setCreating] = useState(searchParams.get('new') === '1')
   const course = courses.find((c) => c.id === selectedId)
+
+  // The header "New course" button links to ?new=1. Honour it (also when already
+  // on the builder tab) and strip the trigger so cancelling doesn't re-open it.
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setCreating(true)
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete('new')
+      router.replace(`${pathname}?${params.toString()}`)
+    }
+  }, [searchParams, pathname, router])
+
+  // Keep the selection valid as the course list changes (e.g. after a delete or
+  // a router.refresh). If the selected course no longer exists, fall back to the
+  // first remaining course; if none remain, leave the builder and return to the
+  // Overview tab. Skipped while creating so a fresh admin isn't bounced away.
+  useEffect(() => {
+    if (creating) return
+    if (courses.length === 0) {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('tab', 'overview')
+      params.delete('course')
+      router.replace(`${pathname}?${params.toString()}`)
+      return
+    }
+    if (!courses.some((c) => c.id === selectedId)) {
+      setSelectedId(courses[0].id)
+    }
+  }, [courses, selectedId, creating, pathname, searchParams, router])
 
   return (
     <div className="space-y-5">
@@ -87,12 +112,6 @@ export function CourseBuilder({
           </select>
           <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted-soft" />
         </div>
-        <button
-          onClick={() => setCreating(true)}
-          className="inline-flex items-center gap-1.5 rounded-full bg-brand-blue-dark px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
-        >
-          <Plus className="h-4 w-4" /> New course
-        </button>
       </div>
 
       {creating && (
@@ -621,17 +640,17 @@ function LessonEditor({
 
 function CreateCourse({ onCancel, onCreated }: { onCancel: () => void; onCreated: (id: string) => void }) {
   const [title, setTitle] = useState('')
-  const [materialKind, setMaterialKind] = useState<(typeof KINDS)[number]>('general')
-  const [courseType, setCourseType] = useState<'self_paced' | 'structured' | 'scheduled'>('self_paced')
   const [busy, setBusy] = useState(false)
 
   const create = async () => {
     if (!title.trim()) return
     setBusy(true)
     try {
+      // Material kind / course type default server-side (general · self-paced);
+      // both are edited later in the course, so creation only needs a title.
       const res = await fetch('/api/admin/community/training/modules', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title.trim(), materialKind, courseType }),
+        body: JSON.stringify({ title: title.trim() }),
       })
       if (res.ok) { const { id } = await res.json(); onCreated(id) }
     } finally {
@@ -646,15 +665,7 @@ function CreateCourse({ onCancel, onCreated }: { onCancel: () => void; onCreated
         <button onClick={onCancel} className="text-brand-muted-soft hover:text-brand-muted"><X className="h-4 w-4" /></button>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Course title" autoFocus className="flex-1 rounded-md border border-brand-border px-3 py-2 text-sm" />
-        <select value={materialKind} onChange={(e) => setMaterialKind(e.target.value as (typeof KINDS)[number])} className="rounded-md border border-brand-border px-2 py-2 text-sm">
-          {KINDS.map((k) => <option key={k} value={k}>{KIND_LABELS[k]}</option>)}
-        </select>
-        <select value={courseType} onChange={(e) => setCourseType(e.target.value as typeof courseType)} className="rounded-md border border-brand-border px-2 py-2 text-sm">
-          <option value="self_paced">Self-paced</option>
-          <option value="structured">Structured</option>
-          <option value="scheduled">Scheduled</option>
-        </select>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && create()} placeholder="Course title" autoFocus className="flex-1 rounded-md border border-brand-border px-3 py-2 text-sm" />
         <button onClick={create} disabled={busy || !title.trim()} className="rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
           {busy ? 'Creating…' : 'Create'}
         </button>

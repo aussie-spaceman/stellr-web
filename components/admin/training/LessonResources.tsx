@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Trash2, FileText, Link2, Upload, X } from 'lucide-react'
+import { Plus, Trash2, FileText, Link2, Upload, X, Search } from 'lucide-react'
 
 // Per-lesson attached resources (files / links) shown beneath the lesson's
 // primary content on the member Course detail. Admin add/remove in the builder.
@@ -13,20 +13,57 @@ interface Resource {
   external_url: string | null
 }
 
+interface CatalogueResult {
+  id: string
+  title: string
+  fileType: string | null
+  sizeBytes: number | null
+}
+
 export function LessonResources({ itemId }: { itemId: string }) {
   const [resources, setResources] = useState<Resource[]>([])
   const [adding, setAdding] = useState(false)
-  const [mode, setMode] = useState<'link' | 'file'>('link')
+  const [mode, setMode] = useState<'link' | 'file' | 'existing'>('link')
   const [title, setTitle] = useState('')
   const [url, setUrl] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
+  const [query, setQuery] = useState('')
+  const [catalogue, setCatalogue] = useState<CatalogueResult[]>([])
+  const [searching, setSearching] = useState(false)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/admin/community/training/resources?itemId=${itemId}`)
     if (res.ok) setResources((await res.json()).resources)
   }, [itemId])
   useEffect(() => { load() }, [load])
+
+  // Search the Global Resources Catalogue (debounced) when in "existing" mode.
+  useEffect(() => {
+    if (mode !== 'existing' || !adding) return
+    let active = true
+    setSearching(true)
+    const t = setTimeout(async () => {
+      const res = await fetch(`/api/admin/community/resources/search?q=${encodeURIComponent(query)}`)
+      if (!active) return
+      const d = res.ok ? await res.json() : { results: [] }
+      if (active) { setCatalogue(d.results ?? []); setSearching(false) }
+    }, 250)
+    return () => { active = false; clearTimeout(t) }
+  }, [query, mode, adding])
+
+  const attachExisting = async (resourceId: string) => {
+    setBusy(true)
+    try {
+      const res = await fetch('/api/admin/community/training/resources', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId, kind: 'existing', resourceId }),
+      })
+      if (res.ok) { setAdding(false); setQuery(''); setCatalogue([]); load() }
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const add = async () => {
     if (!title.trim()) return
@@ -78,25 +115,52 @@ export function LessonResources({ itemId }: { itemId: string }) {
       {adding ? (
         <div className="mt-2 space-y-2 rounded-md border border-brand-border p-2">
           <div className="flex items-center gap-1">
-            {(['link', 'file'] as const).map((m) => (
+            {(['link', 'file', 'existing'] as const).map((m) => (
               <button key={m} onClick={() => setMode(m)} className={`rounded-md px-2.5 py-1 text-xs font-semibold ${mode === m ? 'bg-brand-soft text-brand-blue-dark' : 'text-brand-muted-soft'}`} style={mode === m ? { background: '#EAF0FE' } : undefined}>
-                {m === 'link' ? 'Link' : 'File'}
+                {m === 'link' ? 'Link' : m === 'file' ? 'File' : 'Existing'}
               </button>
             ))}
             <button onClick={() => setAdding(false)} className="ml-auto text-brand-muted-soft hover:text-brand-muted"><X className="h-3.5 w-3.5" /></button>
           </div>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="w-full rounded-md border border-brand-border px-2.5 py-1.5 text-sm" />
-          {mode === 'link' ? (
-            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className="w-full rounded-md border border-brand-border px-2.5 py-1.5 text-sm" />
+          {mode === 'existing' ? (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5 rounded-md border border-brand-border px-2.5 py-1.5">
+                <Search className="h-3.5 w-3.5 text-brand-muted-soft" />
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search existing resources…" autoFocus className="w-full text-sm focus:outline-none" />
+              </div>
+              <div className="max-h-44 overflow-y-auto rounded-md border border-brand-hairline">
+                {searching && <p className="px-2.5 py-2 text-xs text-brand-muted-soft">Searching…</p>}
+                {!searching && catalogue.length === 0 && <p className="px-2.5 py-2 text-xs text-brand-muted-soft">No matching resources.</p>}
+                {catalogue.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => attachExisting(r.id)}
+                    disabled={busy}
+                    className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm hover:bg-brand-canvas disabled:opacity-50"
+                  >
+                    <FileText className="h-4 w-4 shrink-0 text-brand-muted-soft" />
+                    <span className="min-w-0 flex-1 truncate text-brand-blue-dark">{r.title}</span>
+                    <Plus className="h-3.5 w-3.5 shrink-0 text-brand-muted-soft" />
+                  </button>
+                ))}
+              </div>
+            </div>
           ) : (
-            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-brand-border px-2.5 py-1.5 text-sm text-brand-muted hover:bg-brand-canvas">
-              <Upload className="h-4 w-4" /> {file ? file.name : 'Choose file'}
-              <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-            </label>
+            <>
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="w-full rounded-md border border-brand-border px-2.5 py-1.5 text-sm" />
+              {mode === 'link' ? (
+                <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className="w-full rounded-md border border-brand-border px-2.5 py-1.5 text-sm" />
+              ) : (
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-brand-border px-2.5 py-1.5 text-sm text-brand-muted hover:bg-brand-canvas">
+                  <Upload className="h-4 w-4" /> {file ? file.name : 'Choose file'}
+                  <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+                </label>
+              )}
+              <button onClick={add} disabled={busy || !title.trim()} className="rounded-md bg-brand-blue px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+                {busy ? 'Adding…' : 'Add resource'}
+              </button>
+            </>
           )}
-          <button onClick={add} disabled={busy || !title.trim()} className="rounded-md bg-brand-blue px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
-            {busy ? 'Adding…' : 'Add resource'}
-          </button>
         </div>
       ) : (
         <button onClick={() => setAdding(true)} className="mt-2 inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-brand-muted-soft hover:bg-brand-hairline hover:text-brand-blue-dark">

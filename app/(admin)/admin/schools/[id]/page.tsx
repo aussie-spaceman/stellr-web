@@ -2,6 +2,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
+import { SchoolEditForm } from '@/components/admin/SchoolEditForm'
 
 export const metadata = { title: 'Admin — School Detail' }
 
@@ -71,7 +72,7 @@ export default async function AdminSchoolDetailPage({
             {school.is_active !== false ? 'Active' : 'Inactive'}
           </span>
         </div>
-        {(school.city || school.state) && (
+        {(school.address_line1 || school.city || school.state) && (
           <p className="text-sm text-brand-muted-soft mt-0.5">
             {[school.address_line1, school.address_line2, school.city, school.state, school.postcode]
               .filter(Boolean)
@@ -82,6 +83,8 @@ export default async function AdminSchoolDetailPage({
           <DeleteEntityButton entity="school" id={school.id} name={school.name} redirectTo="/admin/schools" />
         </div>
       </div>
+
+      <SchoolEditForm school={school} />
 
       <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
         <div className="px-5 py-4 border-b border-brand-hairline flex items-center justify-between">

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Radio, X, AlertCircle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Radio, X, AlertCircle, Play, Download } from 'lucide-react'
 import { VideoRoom } from '@/components/video/VideoRoom'
 
 // Launches the JaaS/Jitsi recording room for a 'live' (Record) lesson, as host.
@@ -34,6 +34,22 @@ export function RecordSession({
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null)
+  const [showPlayer, setShowPlayer] = useState(false)
+
+  // When a recording has been offloaded to storage, fetch a short-lived signed
+  // URL so the saved session can be played back / downloaded here.
+  useEffect(() => {
+    if (recordingStatus !== 'available') { setRecordingUrl(null); return }
+    let active = true
+    ;(async () => {
+      const res = await fetch(`/api/admin/community/training/recording?itemId=${itemId}`)
+      if (!active || !res.ok) return
+      const d = await res.json().catch(() => ({}))
+      if (active) setRecordingUrl(d.url ?? null)
+    })()
+    return () => { active = false }
+  }, [itemId, recordingStatus])
 
   const launch = async () => {
     setLoading(true)
@@ -61,8 +77,9 @@ export function RecordSession({
         <p className="text-sm font-semibold text-brand-blue-dark">Recording session</p>
       </div>
       <p className="mt-0.5 text-xs text-brand-muted-soft">
-        Launch the live room as host. Start recording from the room toolbar — when the session ends the
-        recording attaches to this lesson automatically.
+        Launch the live room as host and admit yourself from the prejoin screen — file recording starts
+        automatically on join. If it doesn&rsquo;t, start it from the room toolbar (Record → file). When the
+        session ends the recording attaches to this lesson automatically.
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -76,7 +93,28 @@ export function RecordSession({
         <span className="text-xs font-medium" style={{ color: status.color }}>
           {status.label}
         </span>
+        {recordingStatus === 'available' && recordingUrl && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowPlayer((v) => !v)}
+              className="inline-flex items-center gap-1 rounded-lg border border-brand-border px-2.5 py-1.5 text-xs font-semibold text-brand-muted hover:border-brand-blue hover:text-brand-blue"
+            >
+              <Play className="h-3.5 w-3.5" /> {showPlayer ? 'Hide recording' : 'View recording'}
+            </button>
+            <a
+              href={recordingUrl}
+              download
+              className="inline-flex items-center gap-1 rounded-lg border border-brand-border px-2.5 py-1.5 text-xs font-semibold text-brand-muted hover:border-brand-blue hover:text-brand-blue"
+            >
+              <Download className="h-3.5 w-3.5" /> Download
+            </a>
+          </div>
+        )}
       </div>
+
+      {showPlayer && recordingUrl && (
+        <video src={recordingUrl} controls className="mt-3 w-full rounded-lg border border-brand-border bg-black" />
+      )}
 
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
 
@@ -106,6 +144,8 @@ export function RecordSession({
               roomName={config.roomName}
               jwt={config.jwt}
               displayName={config.displayName}
+              isHost
+              autoRecord={config.configured}
               className="w-full flex-1 bg-black"
             />
           </div>

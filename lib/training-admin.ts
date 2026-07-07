@@ -32,7 +32,9 @@ export async function listTrainableObjects(
   const [events, campaigns, { data: cohorts }] = await Promise.all([
     getAllEvents(),
     getAllCampaigns(),
-    db.from('mentoring_cohorts').select('id, name, container_type'),
+    // Only live containers — archived cohorts/workshops/spaces must not appear in
+    // the "Select an object" picker (they can no longer be assigned a course).
+    db.from('mentoring_cohorts').select('id, name, container_type').eq('lifecycle', 'active'),
   ])
 
   const all: TrainableObject[] = []

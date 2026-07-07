@@ -1,11 +1,12 @@
 import { supabaseServer } from '@/lib/supabase'
+import { getAllEvents, getAllCampaigns } from '@/lib/sanity'
 import {
   getVolunteerStatuses,
   getVolunteerTrainingProgress,
   type VolunteerStatus,
   type VolunteerTrainingProgress,
 } from '@/lib/volunteer'
-import { VolunteersConsole, type VolunteerConsoleRow } from '@/components/admin/VolunteersConsole'
+import { VolunteersConsole, type VolunteerConsoleRow, type AssignableEvent } from '@/components/admin/VolunteersConsole'
 
 export const metadata = { title: 'Admin — Volunteers' }
 export const dynamic = 'force-dynamic'
@@ -17,11 +18,27 @@ export const dynamic = 'force-dynamic'
 export default async function VolunteersAdminPage() {
   const db = supabaseServer()
 
-  const { data: roleRows } = await db
-    .from('member_roles')
-    .select('member_id')
-    .eq('role', 'volunteer')
-    .eq('scope', 'global')
+  // Events + campaigns a volunteer can be assigned to (a volunteer may cover
+  // several). Keyed by Sanity slug — the assignment API resolves the container.
+  const [eventDocs, campaignDocs, { data: roleRows }] = await Promise.all([
+    getAllEvents(),
+    getAllCampaigns(),
+    db
+      .from('member_roles')
+      .select('member_id')
+      .eq('role', 'volunteer')
+      .eq('scope', 'global'),
+  ])
+
+  type SanityDoc = { title?: string; slug?: { current?: string } }
+  const assignableEvents: AssignableEvent[] = [
+    ...((eventDocs ?? []) as SanityDoc[])
+      .filter((e) => e.slug?.current)
+      .map((e) => ({ slug: e.slug!.current as string, title: e.title ?? e.slug!.current as string, kind: 'event' as const })),
+    ...((campaignDocs ?? []) as SanityDoc[])
+      .filter((c) => c.slug?.current)
+      .map((c) => ({ slug: c.slug!.current as string, title: c.title ?? c.slug!.current as string, kind: 'campaign' as const })),
+  ]
   const memberIds = [...new Set((roleRows ?? []).map((r) => r.member_id as string))]
 
   let rows: VolunteerConsoleRow[] = []
@@ -89,11 +106,12 @@ export default async function VolunteersAdminPage() {
         <h1 className="font-heading uppercase text-title text-brand-blue-dark">Volunteers</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">
           Everyone in the volunteer program: agreement, background check, mandatory training, and
-          event assignments. Assign volunteers to a specific event from that event&apos;s roster tab.
+          event assignments. Assign a volunteer to one or more events when adding them, or with the
+          Assign action on their row.
         </p>
       </div>
 
-      <VolunteersConsole rows={rows} />
+      <VolunteersConsole rows={rows} events={assignableEvents} />
     </div>
   )
 }

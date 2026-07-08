@@ -7,7 +7,7 @@ import { sendEmail, groupMemberJoinedEmail, groupMemberIndividualPaymentEmail } 
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
 import { recordEventParticipation } from '@/lib/event-participation-sync'
-import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
+import { syncObjectSpaceRoster, reconcileEventSpaceRoster } from '@/lib/space-inheritance'
 import {
   normalizeEventRole, normalizeGender, normalizeGrade, normalizeTshirt,
 } from '@/lib/member-enums'
@@ -294,6 +294,11 @@ export async function POST(req: NextRequest) {
   // events by slug). Registering for the event is what confers Space access, so
   // the joining member must be rostered into the event's Space(s). Non-fatal.
   await syncObjectSpaceRoster(db, 'event', eventSlug, memberId)
+  // Safety net, mirroring the group-registration flow: if the per-member grant
+  // above failed transiently, the member is already in the event's cohort roster
+  // (recordEventParticipation ran just before), so reconciling the event's linked
+  // Space rosters recovers them. Non-fatal, idempotent.
+  await reconcileEventSpaceRoster(db, eventSlug)
 
   // Trigger the appropriate DocuSign agreement (minor consent, or self-signed
   // adult/mentor participation agreement) based on the participant's age and role.

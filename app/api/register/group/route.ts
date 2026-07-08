@@ -263,6 +263,27 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Same up-front rejection for a $0 invoice: if the price positively resolved
+    // to a non-positive total, no invoice can ever be sent, so reject BEFORE any
+    // records are created. Without this the registration would be created with
+    // invoice_requested=true, the invoice block below would skip the send, and
+    // every member surface would show "Invoice sent to organiser" for an invoice
+    // that never existed. (`feeUnitAmount !== null` = we only reject on a
+    // positively-resolved zero; a transient lookup failure is recovered inside
+    // the invoice block instead.)
+    if (
+      payment_method === 'invoice' &&
+      feeUnitAmount !== null &&
+      amountDueCents <= 0
+    ) {
+      return NextResponse.json(
+        {
+          error: `Invoice payment isn't available for this event: the total resolved to $${(amountDueCents / 100).toFixed(2)}. This event's price appears to be misconfigured — please contact Stellr.`,
+        },
+        { status: 400 },
+      )
+    }
+
     // Create registration record
     const { data: registration, error: regError } = await db.from('registrations').insert({
       event_slug, event_title,
@@ -696,10 +717,25 @@ export async function POST(req: NextRequest) {
         // × total_participants) was a second, independent calc that could — and did —
         // diverge from the stored amount and silently collapse to $0.00 (unit_amount
         // defaulting to 0), finalising and emailing a $0 invoice for a paid event.
-        const invoiceAmountCents = amountDueCents
-        const perSeatCents = feeUnitAmount ?? priceObj.unit_amount ?? 0
-        // Guard: never finalise/send a non-positive invoice for a paid event. If the
-        // amount collapsed to 0 the price is misconfigured — leave the registration
+        let invoiceAmountCents = amountDueCents
+        let perSeatCents = feeUnitAmount ?? 0
+        // Transient recovery: if the early price lookup failed (feeUnitAmount null →
+        // amountDueCents collapsed to 0) but THIS retrieve succeeded, re-derive the
+        // amount from the price we just fetched and persist it, so the stored
+        // amount_due_cents always matches what is actually billed. Without this, a
+        // blip on the first lookup silently dropped a correctly-priced invoice while
+        // the UI told the organiser one was sent.
+        if (feeUnitAmount === null) {
+          perSeatCents = priceObj.unit_amount ?? 0
+          invoiceAmountCents = perSeatCents * (total_participants ?? 0)
+          if (invoiceAmountCents > 0) {
+            await db.from('registrations').update({ amount_due_cents: invoiceAmountCents }).eq('id', regId)
+          }
+        }
+        // Guard: never finalise/send a non-positive invoice for a paid event. The
+        // positively-resolved-$0 case is already rejected up front (before any
+        // records exist); this backstop only remains reachable when the early lookup
+        // failed AND the price genuinely resolves to 0 — leave the registration
         // unpaid for admin follow-up rather than sending a bogus $0.00 invoice.
         if (invoiceAmountCents <= 0) {
           console.error('[register/group] invoice NOT sent — non-positive amount', {

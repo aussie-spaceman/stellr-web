@@ -21,11 +21,12 @@ export async function syncObjectSpaceRoster(
   memberId: string,
 ): Promise<void> {
   try {
-    const { data: links } = await db
+    const { data: links, error: linksErr } = await db
       .from('community_space_sources')
       .select('space_id')
       .eq('object_type', objectType)
       .eq('object_ref', objectRef)
+    if (linksErr) throw linksErr
     const spaceIds = (links ?? []).map((r) => (r as { space_id: string }).space_id)
     if (spaceIds.length === 0) return
     const { error: upsertErr } = await db.from('community_space_members').upsert(
@@ -59,11 +60,15 @@ async function objectActiveMemberIds(
 ): Promise<string[]> {
   let cohortIds: string[] = []
   if (objectType === 'event') {
-    const { data: containers } = await db
+    const { data: containers, error: containersErr } = await db
       .from('mentoring_cohorts')
       .select('id')
       .eq('container_type', 'event_participation')
       .eq('campaign_ref', objectRef)
+    // Throw on query error rather than treating it as an empty roster: callers
+    // catch + log, so a transient failure is visible instead of silently making
+    // the reconcile net a no-op (the exact condition the net exists for).
+    if (containersErr) throw containersErr
     cohortIds = (containers ?? []).map((c) => (c as { id: string }).id)
   } else if (objectType === 'mentoring' || objectType === 'coaching') {
     // For these the source ref IS the cohort id.
@@ -72,11 +77,12 @@ async function objectActiveMemberIds(
     return []
   }
   if (cohortIds.length === 0) return []
-  const { data: cm } = await db
+  const { data: cm, error: cmErr } = await db
     .from('cohort_members')
     .select('member_id')
     .in('cohort_id', cohortIds)
     .eq('status', 'active')
+  if (cmErr) throw cmErr
   return [...new Set((cm ?? []).map((r) => (r as { member_id: string }).member_id))]
 }
 
@@ -121,11 +127,12 @@ export async function reconcileEventSpaceRoster(
   eventSlug: string,
 ): Promise<void> {
   try {
-    const { data: links } = await db
+    const { data: links, error: linksErr } = await db
       .from('community_space_sources')
       .select('space_id')
       .eq('object_type', 'event')
       .eq('object_ref', eventSlug)
+    if (linksErr) throw linksErr
     const spaceIds = (links ?? []).map((r) => (r as { space_id: string }).space_id)
     if (spaceIds.length === 0) return
     for (const spaceId of spaceIds) {

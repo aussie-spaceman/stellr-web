@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -9,8 +9,9 @@ import { useAuth } from '@clerk/nextjs'
 import { useSignIn } from '@clerk/nextjs/legacy'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import FieldError from '@/components/forms/FieldError'
-import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
+import { SchoolSearchInput, SchoolSelection, schoolSelectionState } from '@/components/member/SchoolSearchInput'
 import { T_SHIRT_SIZES, GENDERS, GRADES, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, deriveAgeBracket } from '@/lib/registration-constants'
+import { inferHighSchoolGrade } from '@/lib/grade-logic'
 import { resolveSchoolPayload } from '@/lib/school-utils'
 import { MemberIdLookup, type MemberMatch } from '@/components/forms/MemberIdLookup'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
@@ -474,6 +475,17 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
   const [smSchool, setSmSchool] = useState<SchoolSelection | null>(initialSchool)
   const [schoolError, setSchoolError] = useState<string | null>(null)
 
+  // Student-Manager registers as a High-School student themselves — pre-fill
+  // their own Grade from DOB + their school's State (editable), mirroring the
+  // per-student inference above.
+  const smDob = sf.watch('date_of_birth')
+  const smSchoolState = schoolSelectionState(smSchool)
+  useEffect(() => {
+    if (registrantRole !== 'student_manager') return
+    const inferred = inferHighSchoolGrade(smDob, smSchoolState)
+    if (inferred) sf.setValue('grade', inferred)
+  }, [smDob, smSchoolState, registrantRole, sf])
+
   // For teacher: adultCount includes teacher themselves (min=1)
   // For SM: adultCount = PoC + optional second adult (min=1; PoC always required as participant)
   const [adultCount, setAdultCount] = useState(1)
@@ -535,8 +547,20 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
     setAdditionalAdults(prev => prev.map((a, idx) => idx === i ? { ...a, [field]: value } : a))
   }
 
+  // Group students are school students (High School). When a DOB is entered,
+  // pre-fill their Grade from DOB + the group school's State (Sep 1 default when
+  // unknown), re-inferring on later DOB edits. The Grade select stays editable.
   function updateStudent(i: number, field: keyof StudentData, value: string | string[]) {
-    setStudents(prev => prev.map((s, idx) => idx === i ? { ...s, [field]: value } : s))
+    setStudents(prev => prev.map((s, idx) => {
+      if (idx !== i) return s
+      const next = { ...s, [field]: value }
+      if (field === 'date_of_birth' && typeof value === 'string') {
+        const groupSchool = registrantRole === 'student_manager' ? smSchool : teacherSchool
+        const inferred = inferHighSchoolGrade(value, schoolSelectionState(groupSchool))
+        if (inferred) next.grade = inferred
+      }
+      return next
+    }))
   }
 
   // Member ID match accepted — link the slot and adopt the matched name so the

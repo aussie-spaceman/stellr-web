@@ -3,7 +3,7 @@ import { redirect, notFound } from 'next/navigation'
 import { clerkClient } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug, type StellarEvent } from '@/lib/sanity'
-import { formatDate, formatDateShort } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
 import { requireEventAccess } from '@/lib/event-access'
 import { getEventRoster } from '@/lib/event-admin'
 import EventRoster from '@/components/admin/EventRoster'
@@ -16,18 +16,15 @@ import { EventMerchandiseEditor } from '@/components/admin/EventMerchandiseEdito
 import { EventMerchBatch } from '@/components/admin/EventMerchBatch'
 import { DEFAULT_TIERS, type RefundTier } from '@/lib/refunds/policy'
 import { ContainerTraining, type ContentRow, type ModuleOption } from '@/components/admin/containers/ContainerTraining'
-import { AnnouncementForm } from '@/components/admin/community/AnnouncementForm'
-import { Megaphone } from 'lucide-react'
 
 export const metadata = { title: 'Admin — Event' }
 export const dynamic = 'force-dynamic'
 
-type Tab = 'overview' | 'roster' | 'training' | 'announcements' | 'settings'
+type Tab = 'overview' | 'roster' | 'training' | 'settings'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'roster', label: 'Roster' },
   { id: 'training', label: 'Training' },
-  { id: 'announcements', label: 'Announcements' },
   { id: 'settings', label: 'Settings' },
 ]
 
@@ -50,7 +47,7 @@ export default async function AdminEventDetailPage({
 }) {
   const { slug } = await params
   const { tab: rawTab = 'overview' } = await searchParams
-  const tab: Tab = (['overview', 'roster', 'training', 'announcements', 'settings'] as Tab[]).includes(rawTab as Tab)
+  const tab: Tab = (['overview', 'roster', 'training', 'settings'] as Tab[]).includes(rawTab as Tab)
     ? (rawTab as Tab)
     : 'overview'
 
@@ -160,31 +157,6 @@ export default async function AdminEventDetailPage({
         }))
       }
     }
-  }
-
-  // ── Announcements (announcements tab) ─────────────────────────────────────
-  let spaces: { id: string; name: string; slug: string }[] = []
-  let recentAnnouncements: { id: string; title: string; status: string; created_at: string; community_spaces: { name: string } | null }[] = []
-  if (tab === 'announcements') {
-    const [{ data: spaceRows }, { data: annRows }] = await Promise.all([
-      db.from('community_spaces').select('id, name, slug').eq('is_archived', false).order('display_order'),
-      db
-        .from('community_posts')
-        .select('id, title, status, created_at, community_spaces(name)')
-        .eq('is_announcement', true)
-        .order('created_at', { ascending: false })
-        .limit(10),
-    ])
-    spaces = (spaceRows ?? []) as typeof spaces
-    recentAnnouncements = (annRows ?? []).map((a) => ({
-      id: a.id as string,
-      title: a.title as string,
-      status: a.status as string,
-      created_at: a.created_at as string,
-      community_spaces: Array.isArray(a.community_spaces)
-        ? (a.community_spaces[0] as { name: string } | null)
-        : (a.community_spaces as { name: string } | null),
-    }))
   }
 
   // ── Visible tabs (campaigns skip Settings) ────────────────────────────────
@@ -331,39 +303,6 @@ export default async function AdminEventDetailPage({
               No container found for this event — register at least one participant first.
             </p>
           )}
-        </div>
-      )}
-
-      {/* ── Announcements ──────────────────────────────────────────────────── */}
-      {tab === 'announcements' && (
-        <div className="space-y-6">
-          <AnnouncementForm spaces={spaces} />
-          <div className="rounded-xl border border-brand-border bg-white overflow-hidden">
-            <div className="border-b border-brand-hairline bg-brand-canvas px-4 py-2.5">
-              <p className="text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Recent announcements</p>
-            </div>
-            <ul className="divide-y divide-brand-hairline">
-              {recentAnnouncements.map((a) => (
-                <li key={a.id} className="flex items-center gap-3 px-4 py-3">
-                  <Megaphone className="h-4 w-4 shrink-0 text-brand-blue" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-brand-blue-dark">{a.title}</p>
-                    <p className="text-xs text-brand-muted-soft">
-                      {a.community_spaces?.name ?? '—'} · {formatDateShort(a.created_at)}
-                      {a.status !== 'published' && (
-                        <span className="ml-2 rounded bg-brand-hairline px-1.5 py-0.5 text-xs capitalize text-brand-muted-soft">
-                          {a.status}
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </li>
-              ))}
-              {recentAnnouncements.length === 0 && (
-                <li className="px-4 py-6 text-center text-sm text-brand-muted-soft">No announcements yet.</li>
-              )}
-            </ul>
-          </div>
         </div>
       )}
 

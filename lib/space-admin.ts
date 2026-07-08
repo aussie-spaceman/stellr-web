@@ -2,6 +2,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getActiveTierNames } from '@/lib/tiers-server'
 import { getEventsBySlugs } from '@/lib/sanity'
 import type { SpaceAccessType, SpaceRole, SpaceTheme } from '@/lib/spaces'
+import type { BracketRequirements } from '@/lib/space-training'
 
 // Loads everything the admin single-space config screen needs (screens 11–17).
 
@@ -27,7 +28,7 @@ export interface AdminSpaceConfig {
   // (detach removes the link only); null for files uploaded to this space (remove
   // deletes the binary).
   resources: { id: string; title: string; fileType: string | null; fromChat: boolean; createdAt: string; attachmentId: string | null }[]
-  assignedTraining: { moduleId: string; title: string; mandatory: boolean }[]
+  assignedTraining: { moduleId: string; title: string; mandatory: boolean; bracketRequirements: BracketRequirements }[]
   trainingCatalogue: { id: string; title: string }[]
   announcements: { id: string; title: string; body: string | null; createdAt: string }[]
   moderation: {
@@ -75,7 +76,7 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
     db.from('community_space_sources').select('id, object_type, object_ref').eq('space_id', spaceId).order('created_at'),
     db.from('community_space_members').select('member_id, role, status, muted, members:member_id(first_name, last_name)').eq('space_id', spaceId),
     db.from('community_resources').select('id, title, file_type, from_chat, created_at').eq('space_id', spaceId).order('created_at', { ascending: false }),
-    db.from('community_space_training').select('training_module_id, is_mandatory, display_order, training_modules(title)').eq('space_id', spaceId).order('display_order'),
+    db.from('community_space_training').select('training_module_id, is_mandatory, bracket_requirements, display_order, training_modules(title)').eq('space_id', spaceId).order('display_order'),
     db.from('training_modules').select('id, title').eq('is_published', true).order('display_order'),
     db.from('community_announcements').select('id, title, body, created_at').eq('space_id', spaceId).order('created_at', { ascending: false }),
   ])
@@ -181,8 +182,13 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
       ...catalogueResources,
     ],
     assignedTraining: (trainRows ?? []).map((t) => {
-      const x = t as { training_module_id: string; is_mandatory: boolean; training_modules: { title: string } | { title: string }[] | null }
-      return { moduleId: x.training_module_id, title: rel(x.training_modules)?.title ?? 'Course', mandatory: !!x.is_mandatory }
+      const x = t as { training_module_id: string; is_mandatory: boolean; bracket_requirements: BracketRequirements | null; training_modules: { title: string } | { title: string }[] | null }
+      return {
+        moduleId: x.training_module_id,
+        title: rel(x.training_modules)?.title ?? 'Course',
+        mandatory: !!x.is_mandatory,
+        bracketRequirements: x.bracket_requirements ?? {},
+      }
     }),
     trainingCatalogue: (catalogue ?? []).map((c) => ({ id: (c as { id: string }).id, title: (c as { title: string }).title })),
     announcements: (annRows ?? []).map((a) => {

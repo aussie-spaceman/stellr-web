@@ -10,6 +10,8 @@ import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 import { AccessBadge, ACCESS_META, TierPill, RolePill } from '@/components/community/spaces/badges'
 import { TIER_GROUPS } from '@/lib/tiers'
+import { formatDateShort } from '@/lib/utils'
+import { SPACE_TRAINING_BRACKETS, type BracketRequirements, type AgeBracketKey } from '@/lib/space-training'
 import type { AdminSpaceConfig } from '@/lib/space-admin'
 import type { SpaceAccessType, SpaceRole, SpaceTheme } from '@/lib/spaces'
 
@@ -610,6 +612,114 @@ function ResourcesTab({
 }
 
 // ─── Training ─────────────────────────────────────────────────────────────────
+// Draft shape backing the per-bracket editor (dates as strings for <input>).
+type BracketDraft = Record<AgeBracketKey, { mandatory: boolean; due_at: string }>
+
+function emptyDraft(): BracketDraft {
+  return SPACE_TRAINING_BRACKETS.reduce((acc, b) => {
+    acc[b.value] = { mandatory: false, due_at: '' }
+    return acc
+  }, {} as BracketDraft)
+}
+
+function draftFrom(reqs: BracketRequirements): BracketDraft {
+  const d = emptyDraft()
+  for (const b of SPACE_TRAINING_BRACKETS) {
+    const e = reqs[b.value]
+    if (e) d[b.value] = { mandatory: !!e.mandatory, due_at: e.due_at ?? '' }
+  }
+  return d
+}
+
+function draftToReqs(d: BracketDraft): BracketRequirements {
+  const out: BracketRequirements = {}
+  for (const b of SPACE_TRAINING_BRACKETS) {
+    if (d[b.value].mandatory) out[b.value] = { mandatory: true, due_at: d[b.value].due_at || null }
+  }
+  return out
+}
+
+function requirementSummary(reqs: BracketRequirements): string {
+  const parts = SPACE_TRAINING_BRACKETS
+    .filter((b) => reqs[b.value]?.mandatory)
+    .map((b) => {
+      const due = reqs[b.value]?.due_at
+      return due ? `${b.label} (due ${formatDateShort(due)})` : b.label
+    })
+  return parts.length ? `Mandatory: ${parts.join(', ')}` : 'Optional for everyone'
+}
+
+// Per-bracket mandatory + deadline. Each bracket can be made mandatory with its
+// own completion deadline (deadline is disabled until mandatory is ticked).
+function BracketRequirementsEditor({ value, onChange }: { value: BracketDraft; onChange: (d: BracketDraft) => void }) {
+  return (
+    <div className="space-y-1.5">
+      {SPACE_TRAINING_BRACKETS.map((b) => {
+        const row = value[b.value]
+        return (
+          <div key={b.value} className="flex flex-wrap items-center gap-3">
+            <label className="flex w-32 items-center gap-1.5 text-xs text-brand-muted">
+              <input
+                type="checkbox"
+                checked={row.mandatory}
+                onChange={(e) => onChange({ ...value, [b.value]: { ...row, mandatory: e.target.checked } })}
+              />
+              {b.label}
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-brand-muted-soft">
+              Deadline
+              <input
+                type="date"
+                disabled={!row.mandatory}
+                value={row.due_at}
+                onChange={(e) => onChange({ ...value, [b.value]: { ...row, due_at: e.target.value } })}
+                className="rounded border border-brand-border px-2 py-1 text-xs disabled:cursor-not-allowed disabled:bg-brand-canvas disabled:text-brand-muted-soft"
+              />
+            </label>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function AssignedTrainingRow({ item, act }: { item: AdminSpaceConfig['assignedTraining'][number]; act: Act }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<BracketDraft>(() => draftFrom(item.bracketRequirements))
+
+  return (
+    <div className="px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm text-brand-blue-dark">{item.title}</p>
+          <p className="truncate text-xs text-brand-muted-soft">{requirementSummary(item.bracketRequirements)}</p>
+        </div>
+        <button
+          onClick={() => { setDraft(draftFrom(item.bracketRequirements)); setEditing((v) => !v) }}
+          className="text-xs text-brand-blue hover:underline"
+        >
+          {editing ? 'Close' : 'Edit requirements'}
+        </button>
+        <button onClick={() => act({ action: 'remove-training', moduleId: item.moduleId }, 'Removed')} className="text-xs text-red-500 hover:underline">Remove</button>
+      </div>
+      {editing && (
+        <div className="mt-3 rounded-lg border border-brand-border bg-brand-canvas p-3">
+          <BracketRequirementsEditor value={draft} onChange={setDraft} />
+          <div className="mt-3 flex justify-end">
+            <button
+              onClick={async () => {
+                const ok = await act({ action: 'set-training-requirements', moduleId: item.moduleId, bracketRequirements: draftToReqs(draft) }, 'Saved')
+                if (ok) setEditing(false)
+              }}
+              className={btnPrimary}
+            >Save</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TrainingTab({
   assigned, catalogue, act,
 }: {
@@ -619,7 +729,7 @@ function TrainingTab({
 }) {
   const [open, setOpen] = useState(false)
   const [picked, setPicked] = useState<Set<string>>(new Set())
-  const [mandatory, setMandatory] = useState(false)
+  const [draft, setDraft] = useState<BracketDraft>(emptyDraft())
   const assignedIds = new Set(assigned.map((a) => a.moduleId))
   const available = catalogue.filter((c) => !assignedIds.has(c.id))
 
@@ -627,20 +737,13 @@ function TrainingTab({
     <div>
       <div className="mb-3 flex items-center justify-between">
         <PanelTitle>Training</PanelTitle>
-        <button onClick={() => { setPicked(new Set()); setMandatory(false); setOpen(true) }} className="inline-flex items-center gap-1 rounded-lg bg-brand-blue px-3 py-1.5 text-xs font-subheading font-semibold text-white hover:bg-brand-blue-dark">
+        <button onClick={() => { setPicked(new Set()); setDraft(emptyDraft()); setOpen(true) }} className="inline-flex items-center gap-1 rounded-lg bg-brand-blue px-3 py-1.5 text-xs font-subheading font-semibold text-white hover:bg-brand-blue-dark">
           <Plus className="h-3.5 w-3.5" /> Assign training
         </button>
       </div>
       <div className="divide-y divide-brand-hairline rounded-lg border border-brand-border">
         {assigned.map((a) => (
-          <div key={a.moduleId} className="flex items-center gap-3 px-3 py-2.5">
-            <span className="flex-1 truncate text-sm text-brand-blue-dark">{a.title}</span>
-            <label className="flex items-center gap-1.5 text-xs text-brand-muted">
-              <input type="checkbox" checked={a.mandatory} onChange={(e) => act({ action: 'set-training-mandatory', moduleId: a.moduleId, mandatory: e.target.checked })} />
-              Mandatory
-            </label>
-            <button onClick={() => act({ action: 'remove-training', moduleId: a.moduleId }, 'Removed')} className="text-xs text-red-500 hover:underline">Remove</button>
-          </div>
+          <AssignedTrainingRow key={a.moduleId} item={a} act={act} />
         ))}
         {assigned.length === 0 && <p className="px-3 py-4 text-center text-sm text-brand-muted-soft">No training assigned.</p>}
       </div>
@@ -651,7 +754,8 @@ function TrainingTab({
           <button
             disabled={picked.size === 0}
             onClick={async () => {
-              for (const id of picked) await act({ action: 'assign-training', moduleId: id, mandatory })
+              const bracketRequirements = draftToReqs(draft)
+              for (const id of picked) await act({ action: 'assign-training', moduleId: id, bracketRequirements })
               toast('Training assigned')
               setOpen(false)
             }}
@@ -662,7 +766,7 @@ function TrainingTab({
         {available.length === 0 ? (
           <p className="text-sm text-brand-muted-soft">All published courses are already assigned.</p>
         ) : (
-          <div className="max-h-64 space-y-1 overflow-y-auto">
+          <div className="max-h-56 space-y-1 overflow-y-auto">
             {available.map((c) => (
               <label key={c.id} className="flex items-center gap-2 rounded-lg border border-brand-border px-3 py-2 text-sm text-brand-muted">
                 <input type="checkbox" checked={picked.has(c.id)} onChange={() => setPicked((s) => { const n = new Set(s); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n })} />
@@ -671,9 +775,11 @@ function TrainingTab({
             ))}
           </div>
         )}
-        <label className="mt-3 flex items-center gap-2 text-sm text-brand-muted">
-          <input type="checkbox" checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} /> Make mandatory
-        </label>
+        <div className="mt-4">
+          <p className="mb-1.5 text-xs font-subheading font-semibold uppercase tracking-[0.04em] text-brand-muted-soft">Mandatory for (optional)</p>
+          <BracketRequirementsEditor value={draft} onChange={setDraft} />
+          <p className="mt-1.5 text-xs text-brand-muted-soft">Leave all unticked to assign as optional. You can change this per course later.</p>
+        </div>
       </Modal>
     </div>
   )

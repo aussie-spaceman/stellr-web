@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -8,8 +8,9 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@clerk/nextjs'
 import { useSignIn } from '@clerk/nextjs/legacy'
 import FieldError from '@/components/forms/FieldError'
-import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
-import { GRADES, T_SHIRT_SIZES, GENDERS, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, deriveAgeBracket } from '@/lib/registration-constants'
+import { SchoolSearchInput, SchoolSelection, schoolSelectionState } from '@/components/member/SchoolSearchInput'
+import { HS_GRADES, COLLEGE_GRADES, T_SHIRT_SIZES, GENDERS, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, registrantTypeToAgeBracket, type RegistrantType } from '@/lib/registration-constants'
+import { inferHighSchoolGrade } from '@/lib/grade-logic'
 import { resolveSchoolPayload } from '@/lib/school-utils'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 
@@ -66,12 +67,16 @@ export default function IndividualRegistrationForm({
   // Individual registration is student-shaped by default. A signed-in adult
   // member shouldn't be asked for student-only fields (Grade) — recognise their
   // age_bracket and present the adult variant instead.
-  const isAdultMember = prefill?.age_bracket === 'adult'
-  // Unauthenticated (or non-adult-member) registrants self-identify instead:
-  // the grade list only covers students, so an adult non-student needs this to
-  // reach the Adult bracket and receive the adult participation agreement.
-  const [adultRegistrant, setAdultRegistrant] = useState(false)
-  const isAdult = isAdultMember || adultRegistrant
+  const memberBracket = prefill?.age_bracket
+  const isAdultMember = memberBracket === 'adult'
+  // "I am registering as" — three brackets. High School infers Grade from
+  // DOB + school State; College is a manual year-level pick; Adult carries no
+  // grade (and receives the adult participation agreement). Seed from the
+  // member's known bracket when signed in, else default to High School.
+  const [registrantType, setRegistrantType] = useState<RegistrantType>(
+    memberBracket === 'college' ? 'college' : memberBracket === 'adult' ? 'adult' : 'high_school'
+  )
+  const isAdult = registrantType === 'adult'
   const [step, setStep] = useState(1)
   const [merchQty, setMerchQty] = useState<Record<string, number>>({})
   const [submitting, setSubmitting] = useState(false)
@@ -120,6 +125,25 @@ export default function IndividualRegistrationForm({
 
   const ethnicity = watch('ethnicity') ?? []
   const dietary = watch('dietary_requirements') ?? []
+  const dob = watch('date_of_birth')
+  const schoolStateValue = schoolSelectionState(schoolSelection)
+
+  // High-School bracket: pre-fill Grade from DOB + the selected school's State
+  // (Sep 1 cutoff when the state is unknown). Re-runs when DOB or school change;
+  // the field stays fully user-editable — this only sets the default.
+  useEffect(() => {
+    if (registrantType !== 'high_school') return
+    const inferred = inferHighSchoolGrade(dob, schoolStateValue)
+    if (inferred) setValue('grade', inferred)
+  }, [dob, schoolStateValue, registrantType, setValue])
+
+  // Switch bracket: HS re-infers Grade, College/Adult clear it (their option
+  // lists differ, so a stale value must not linger).
+  function chooseRegistrantType(t: RegistrantType) {
+    setRegistrantType(t)
+    clearErrors('grade')
+    setValue('grade', t === 'high_school' ? inferHighSchoolGrade(getValues('date_of_birth'), schoolStateValue) : '')
+  }
 
   function toggleMulti(field: 'ethnicity' | 'dietary_requirements', value: string) {
     const current = getValues(field) ?? []
@@ -160,9 +184,10 @@ export default function IndividualRegistrationForm({
     setError(null)
     try {
       // Adult registrants carry no grade — any value left over from toggling
-      // must not leak into the bracket derivation or the payload.
+      // must not leak into the payload. Bracket comes straight from the explicit
+      // "I am registering as" choice.
       const grade = isAdult ? '' : data.grade
-      const age_bracket = deriveAgeBracket(data.date_of_birth, grade)
+      const age_bracket = registrantTypeToAgeBracket(registrantType)
 
       const res = await fetch('/api/register/individual', {
         method: 'POST',
@@ -248,31 +273,23 @@ export default function IndividualRegistrationForm({
             {!isAdultMember && (
               <div>
                 <label className="label-text">I am registering as *</label>
-                <div className="flex gap-6 mt-1">
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input
-                      type="radio"
-                      name="registrant_type"
-                      checked={!adultRegistrant}
-                      onChange={() => setAdultRegistrant(false)}
-                      className="border-line text-brand-blue"
-                    />
-                    Student
-                  </label>
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input
-                      type="radio"
-                      name="registrant_type"
-                      checked={adultRegistrant}
-                      onChange={() => {
-                        setAdultRegistrant(true)
-                        setValue('grade', '')
-                        clearErrors('grade')
-                      }}
-                      className="border-line text-brand-blue"
-                    />
-                    Adult (not a student)
-                  </label>
+                <div className="flex flex-wrap gap-x-6 gap-y-2 mt-1">
+                  {([
+                    { value: 'high_school', label: 'High School' },
+                    { value: 'college', label: 'College' },
+                    { value: 'adult', label: 'Adult (not a student)' },
+                  ] as { value: RegistrantType; label: string }[]).map((opt) => (
+                    <label key={opt.value} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="radio"
+                        name="registrant_type"
+                        checked={registrantType === opt.value}
+                        onChange={() => chooseRegistrantType(opt.value)}
+                        className="border-line text-brand-blue"
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
                 </div>
               </div>
             )}
@@ -319,6 +336,22 @@ export default function IndividualRegistrationForm({
               </div>
             </div>
 
+            {/* School is captured before DOB/Grade so its State can drive the
+                High-School grade cutoff used to pre-fill the Grade field. */}
+            <div>
+              <label className="label-text">School *</label>
+              <SchoolSearchInput
+                initialSchool={prefill?.school}
+                onChange={(sel) => { setSchoolSelection(sel); setSchoolError(null) }}
+              />
+              {registrantType === 'high_school' && (
+                <p className="mt-1 text-xs text-content-faint">
+                  Your school&apos;s state sets the grade cutoff we use to pre-fill your grade below.
+                </p>
+              )}
+              {schoolError && <FieldError message={schoolError} />}
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="label-text">Date of Birth *</label>
@@ -327,11 +360,16 @@ export default function IndividualRegistrationForm({
               </div>
               {!isAdult && (
                 <div>
-                  <label className="label-text">Grade / Year Level *</label>
+                  <label className="label-text">{registrantType === 'college' ? 'Year Level *' : 'Grade *'}</label>
                   <select {...register('grade')} className="input-field">
                     <option value="">Select…</option>
-                    {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+                    {(registrantType === 'college' ? COLLEGE_GRADES : HS_GRADES).map((g) => (
+                      <option key={g} value={g}>{registrantType === 'college' ? g : `Grade ${g}`}</option>
+                    ))}
                   </select>
+                  {registrantType === 'high_school' && (
+                    <p className="mt-1 text-xs text-content-faint">Auto-filled from your date of birth — change it if needed.</p>
+                  )}
                   <FieldError message={errors.grade?.message} />
                 </div>
               )}
@@ -354,15 +392,6 @@ export default function IndividualRegistrationForm({
                 </select>
                 <FieldError message={errors.t_shirt_size?.message} />
               </div>
-            </div>
-
-            <div>
-              <label className="label-text">School *</label>
-              <SchoolSearchInput
-                initialSchool={prefill?.school}
-                onChange={(sel) => { setSchoolSelection(sel); setSchoolError(null) }}
-              />
-              {schoolError && <FieldError message={schoolError} />}
             </div>
           </div>
 

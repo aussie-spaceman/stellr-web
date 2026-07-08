@@ -5,6 +5,8 @@ import { getSpaceForMember } from '@/lib/spaces'
 import { supabaseServer } from '@/lib/supabase'
 import { resolveTierMap } from '@/lib/tiers-server'
 import { describeAssignedTiers } from '@/lib/tiers'
+import { resolveRequirement, type BracketRequirements } from '@/lib/space-training'
+import { formatDateShort } from '@/lib/utils'
 import { SpaceShell } from '@/components/community/spaces/SpaceShell'
 import { LockedSpaceGate } from '@/components/community/spaces/LockedSpaceGate'
 
@@ -15,6 +17,7 @@ interface CourseCard {
   title: string
   description: string | null
   mandatory: boolean
+  dueAt: string | null
   total: number
   done: number
 }
@@ -44,14 +47,16 @@ export default async function SpaceTrainingPage({
   const db = supabaseServer()
   const { data: links } = await db
     .from('community_space_training')
-    .select('training_module_id, is_mandatory, display_order')
+    .select('training_module_id, is_mandatory, bracket_requirements, display_order')
     .eq('space_id', space.id)
     .order('display_order', { ascending: true })
 
   const moduleIds = (links ?? []).map((l) => (l as { training_module_id: string }).training_module_id)
-  const mandatoryById = new Map<string, boolean>()
-  for (const l of (links ?? []) as { training_module_id: string; is_mandatory: boolean }[]) {
-    mandatoryById.set(l.training_module_id, l.is_mandatory)
+  // Mandatory + deadline are resolved against THIS member's age bracket, falling
+  // back to the legacy is_mandatory flag when their bracket has no override.
+  const reqById = new Map<string, { mandatory: boolean; dueAt: string | null }>()
+  for (const l of (links ?? []) as { training_module_id: string; is_mandatory: boolean; bracket_requirements: BracketRequirements | null }[]) {
+    reqById.set(l.training_module_id, resolveRequirement(l.bracket_requirements, member.age_bracket, l.is_mandatory))
   }
 
   let cards: CourseCard[] = []
@@ -81,11 +86,13 @@ export default async function SpaceTrainingPage({
     cards = (modules ?? []).map((m) => {
       const mod = m as { id: string; title: string; description: string | null }
       const ids = itemsByModule.get(mod.id) ?? []
+      const req = reqById.get(mod.id)
       return {
         id: mod.id,
         title: mod.title,
         description: mod.description,
-        mandatory: mandatoryById.get(mod.id) ?? false,
+        mandatory: req?.mandatory ?? false,
+        dueAt: req?.dueAt ?? null,
         total: ids.length,
         done: ids.filter((id) => completed.has(id)).length,
       }
@@ -124,6 +131,14 @@ export default async function SpaceTrainingPage({
                         >
                           {c.mandatory ? 'Mandatory' : 'Optional'}
                         </span>
+                        {c.mandatory && c.dueAt && (
+                          <span
+                            className="rounded-full px-2 py-0.5 text-[10px] font-subheading font-semibold uppercase tracking-[0.05em]"
+                            style={{ background: '#FFF4E0', color: '#B4740A' }}
+                          >
+                            Due {formatDateShort(c.dueAt)}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 text-[11px] font-subheading font-semibold uppercase tracking-[0.04em] text-brand-muted-soft">{tierNote}</p>
                       {c.description && <p className="mt-1 text-sm text-brand-muted">{c.description}</p>}

@@ -32,8 +32,15 @@ export interface NewSchoolData {
 }
 
 export type SchoolSelection =
-  | { type: 'existing'; id: string; name: string }
+  | { type: 'existing'; id: string; name: string; state?: string | null }
   | { type: 'new'; data: NewSchoolData }
+
+/** US State (full name) of a school selection, if known — used to pick the
+ *  correct Kindergarten entry cutoff when inferring a student's grade. */
+export function schoolSelectionState(sel: SchoolSelection | null): string | null {
+  if (!sel) return null
+  return sel.type === 'existing' ? sel.state ?? null : sel.data.state || null
+}
 
 interface Props {
   onChange: (selection: SchoolSelection | null) => void
@@ -109,7 +116,7 @@ export function SchoolSearchInput({ onChange, initialSchool }: Props) {
     setSelectedName(school.name)
     setDropdownOpen(false)
     setResults([])
-    onChange({ type: 'existing', id: school.id, name: school.name })
+    onChange({ type: 'existing', id: school.id, name: school.name, state: school.state })
   }
 
   function handleClearSelection() {

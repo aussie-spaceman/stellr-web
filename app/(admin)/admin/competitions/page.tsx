@@ -16,10 +16,33 @@ interface CampaignEvent {
   registrationOpen?: boolean
 }
 
-import { formatDate as formatEventDate } from '@/lib/utils'
+import { formatDate as formatEventDate, registrationStatus } from '@/lib/utils'
 
 function formatDate(date?: string) {
   return date ? formatEventDate(date) : '—'
+}
+
+// Registration pill state.
+//   • Campaigns  → manual `registrationOpen` toggle (per the Sanity schema).
+//   • Live events → derived from the Opens/Closes dates (both empty = open),
+//                   matching the public event pages. The manual boolean is
+//                   hidden for live events in the CMS, so it must NOT be used
+//                   here — doing so made every live event read "Closed".
+function registrationPill(event: StellarEvent, isCampaign: boolean): { label: string; className: string } {
+  const OPEN = 'bg-green-100 text-green-700'
+  const SOON = 'bg-amber-100 text-amber-700'
+  const CLOSED = 'bg-brand-hairline text-brand-muted-soft'
+  if (isCampaign) {
+    return event.registrationOpen ? { label: 'Open', className: OPEN } : { label: 'Closed', className: CLOSED }
+  }
+  switch (registrationStatus(event.registrationOpenDate, event.registrationCloseDate)) {
+    case 'open':
+      return { label: 'Open', className: OPEN }
+    case 'coming-soon':
+      return { label: 'Coming soon', className: SOON }
+    case 'closed':
+      return { label: 'Closed', className: CLOSED }
+  }
 }
 
 export default async function AdminEventsPage() {
@@ -134,15 +157,14 @@ export default async function AdminEventsPage() {
                           {[event.venue, event.city, event.state].filter(Boolean).join(', ') || '—'}
                         </td>
                         <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${
-                              event.registrationOpen
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-brand-hairline text-brand-muted-soft'
-                            }`}
-                          >
-                            {event.registrationOpen ? 'Open' : 'Closed'}
-                          </span>
+                          {(() => {
+                            const pill = registrationPill(event, isCampaign)
+                            return (
+                              <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${pill.className}`}>
+                                {pill.label}
+                              </span>
+                            )
+                          })()}
                         </td>
                         <td className="px-4 py-3 text-right text-brand-blue-dark font-medium tabular-nums">
                           {counts.get(slug) ?? 0}

@@ -48,6 +48,9 @@ export interface CommunityMember {
    * role-targeted training assignments (FR-COM-10). Null when unset.
    */
   event_role: string | null
+  /** Age bracket ('adult' | 'high_school' | 'college'), or null when unset.
+   *  Drives per-bracket training requirements (community_space_training). */
+  age_bracket: string | null
 }
 
 /**
@@ -63,7 +66,7 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
   const { data: member } = await db
     .from('members')
     .select(`
-      id, first_name, last_name, email, event_role,
+      id, first_name, last_name, email, event_role, age_bracket,
       member_memberships(renewal_status, started_at, expires_at, tier_id, membership_tiers(name, is_free))
     `)
     .eq('clerk_user_id', userId)
@@ -105,6 +108,7 @@ export async function getCurrentMember(): Promise<CommunityMember | null> {
     email: member.email,
     isAdmin,
     event_role: (member.event_role as string | null) ?? null,
+    age_bracket: (member.age_bracket as string | null) ?? null,
     hasPaidTier,
     activeTierName: primaryTier?.name ?? null,
     activeTierIds,

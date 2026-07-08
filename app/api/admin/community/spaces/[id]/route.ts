@@ -5,6 +5,8 @@ import { notifyMember } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
 import { createPendingSpaceInvite, spaceNotificationAudience } from '@/lib/spaces'
 import { attachSpaceResource, ensureSpaceContainer } from '@/lib/container-sync'
+import { sanitizeBracketRequirements, anyBracketMandatory } from '@/lib/space-training'
+import { syncSpaceSourceRoster } from '@/lib/space-inheritance'
 
 // Per-space admin config actions (Spaces design, screens 11–17 + modals 19/21/22).
 // One JSON action router keeps the (many) small mutations in one place. Resource
@@ -64,6 +66,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         { space_id: spaceId, object_type: objectType, object_ref: objectRef, created_by: adminMemberId },
         { onConflict: 'space_id,object_type,object_ref', ignoreDuplicates: true },
       )
+      // Backfill: roster members already assigned to this Object into the space
+      // (syncObjectSpaceRoster only covers members assigned AFTER the link).
+      await syncSpaceSourceRoster(db, spaceId, objectType as 'event' | 'training' | 'mentoring' | 'coaching', objectRef)
       return NextResponse.json({ ok: true })
     }
     case 'remove-source': {
@@ -203,6 +208,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // ── Training ────────────────────────────────────────────────────────────────
     case 'assign-training': {
       if (!b.moduleId) return NextResponse.json({ error: 'moduleId required' }, { status: 400 })
+      const reqs = sanitizeBracketRequirements(b.bracketRequirements)
       const { data: last } = await db
         .from('community_space_training')
         .select('display_order')
@@ -212,16 +218,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .maybeSingle()
       const order = ((last as { display_order: number } | null)?.display_order ?? -1) + 1
       await db.from('community_space_training').upsert(
-        { space_id: spaceId, training_module_id: b.moduleId, is_mandatory: !!b.mandatory, display_order: order },
+        {
+          space_id: spaceId,
+          training_module_id: b.moduleId,
+          // Legacy rollup kept in sync for callers that still read is_mandatory.
+          is_mandatory: anyBracketMandatory(reqs),
+          bracket_requirements: reqs,
+          display_order: order,
+        },
         { onConflict: 'space_id,training_module_id' }
       )
       return NextResponse.json({ ok: true })
     }
-    case 'set-training-mandatory': {
+    case 'set-training-requirements': {
       if (!b.moduleId) return NextResponse.json({ error: 'moduleId required' }, { status: 400 })
+      const reqs = sanitizeBracketRequirements(b.bracketRequirements)
       await db
         .from('community_space_training')
-        .update({ is_mandatory: !!b.mandatory })
+        .update({ bracket_requirements: reqs, is_mandatory: anyBracketMandatory(reqs) })
         .eq('space_id', spaceId)
         .eq('training_module_id', b.moduleId)
       return NextResponse.json({ ok: true })

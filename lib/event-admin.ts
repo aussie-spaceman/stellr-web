@@ -51,6 +51,10 @@ export interface RosterGroup {
   status: string
   groupLabel: string | null // teacher/school label for group registrations
   teacherEmail: string | null
+  /** This group registration is settled by invoice (vs Stripe checkout). */
+  invoiceRequested: boolean
+  /** When the invoice was marked paid by an admin (null = outstanding). */
+  invoicePaidAt: string | null
   participants: RosterParticipant[]
 }
 
@@ -86,7 +90,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       .from('registrations')
       .select(
         `id, type, status, teacher_first_name, teacher_last_name, teacher_email, school_name,
-         member_pays_individually, invoice_requested,
+         member_pays_individually, invoice_requested, invoice_paid_at,
          participants(id, first_name, last_name, email, grade, gender, date_of_birth, t_shirt_size,
            school_name, event_role, dietary_requirements, health_conditions, company_id,
            checked_in_at, individual_payment_status,
@@ -128,9 +132,14 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
 
   const groups: RosterGroup[] = (regs ?? []).map((reg) => {
     const participants = ((reg.participants as Record<string, unknown>[]) ?? []).map((p) => {
-      const paid =
-        reg.status === 'confirmed' ||
-        (p.individual_payment_status as string | null) === 'paid'
+      // registrations.status='confirmed' is NOT proof of payment — it's set on
+      // card checkout / campaign auto-confirm and reused for access gating. An
+      // INVOICED registration is paid only when an admin marks the invoice settled
+      // (invoice_paid_at). Card/payment-link registrations confirm on the Stripe
+      // webhook (or the member's individual_payment_status).
+      const paid = reg.invoice_requested
+        ? reg.invoice_paid_at != null
+        : reg.status === 'confirmed' || (p.individual_payment_status as string | null) === 'paid'
 
       const payment_pill: PaymentPill = reg.invoice_requested
         ? paid ? 'invoice_paid' : 'invoice_issued'
@@ -208,6 +217,8 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       status: reg.status,
       groupLabel,
       teacherEmail: (reg.teacher_email as string | null) || null,
+      invoiceRequested: !!reg.invoice_requested,
+      invoicePaidAt: (reg.invoice_paid_at as string | null) ?? null,
       participants,
     }
   })

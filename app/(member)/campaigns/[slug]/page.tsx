@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect, notFound } from 'next/navigation'
-import { Orbit, Environment, Document, Team } from '@stellr/icons'
+import { Document } from '@stellr/icons'
 import { Button } from '@stellr/web-ui'
 import { getCurrentMember } from '@/lib/community'
 import { getEventBySlug } from '@/lib/sanity'
@@ -28,7 +28,6 @@ export default async function RegisteredCampaignPage({ params }: PageProps) {
 
   const theme = themeFromType(campaign.type)
   const meta = THEME_META[theme]
-  const ThemeIcon = theme === 'enviro' ? Environment : Orbit
   const dl = deadlineInfo(campaign.deadline)
   const submitted = !!reg.proposal_submitted_at
   const groupLine = [
@@ -88,8 +87,6 @@ export default async function RegisteredCampaignPage({ params }: PageProps) {
           <h2 className="font-heading text-ds-h3 font-bold text-ink">Materials &amp; workspace</h2>
           <ul className="mt-4 divide-y divide-line-light">
             <MaterialRow icon={<Document className="h-4 w-4" />} label="Brief & deliverables" href={`/events/${slug}`} tint="bg-primary-soft text-primary" />
-            <MaterialRow icon={<ThemeIcon className="h-4 w-4" />} label="Workshop slides · 4 parts" href="/community/educator-commons" tint={meta.chip} />
-            <MaterialRow icon={<Team className="h-4 w-4" />} label="Team space & chat" href="/community/educator-commons/c/general" tint="bg-enviro-green-chip text-enviro-green-text" />
           </ul>
         </section>
 

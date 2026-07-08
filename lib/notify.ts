@@ -76,3 +76,23 @@ export async function notifyMember(memberId: string, input: NotifyInput): Promis
 export async function notifyMembers(memberIds: string[], input: NotifyInput): Promise<void> {
   for (const id of memberIds) await notifyMember(id, input)
 }
+
+/**
+ * Member ids of community staff — anyone whose staff_roles.scopes grants 'all' or
+ * 'community'. Used to route member-raised issues (e.g. a flagged unavailable
+ * training resource) to the people who can fix them.
+ */
+export async function communityAdminMemberIds(): Promise<string[]> {
+  const db = supabaseServer()
+  const { data } = await db
+    .from('staff_roles')
+    .select('member_id')
+    .overlaps('scopes', ['all', 'community'])
+  return [...new Set((data ?? []).map((r) => (r as { member_id: string }).member_id).filter(Boolean))]
+}
+
+/** Notify every community admin. Best-effort; a no-op if none are configured. */
+export async function notifyCommunityAdmins(input: NotifyInput): Promise<void> {
+  const ids = await communityAdminMemberIds()
+  await notifyMembers(ids, input)
+}

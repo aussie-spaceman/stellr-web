@@ -69,29 +69,51 @@ export async function resolveSchoolId(
   return created.id
 }
 
-// Link members to a school via member_schools. Members that already have a
-// current school link are left untouched — a registration must not silently
-// move someone who is already linked elsewhere.
+// Link members to a school via member_schools. By default, members that already
+// have a current school link are left untouched — a registration must not
+// silently move someone who is already linked elsewhere.
+//
+// Pass { replace: true } to make the given school authoritative: any OTHER
+// current link is demoted (is_current=false) and the target school is set current
+// for every member. Used by the group-join flow, where the group's school wins
+// over whatever the joining member had on file (W7 school clash).
 export async function linkMembersToSchool(
   db: SupabaseClient,
   memberIds: (string | null | undefined)[],
-  schoolId: string
+  schoolId: string,
+  opts: { replace?: boolean } = {}
 ): Promise<void> {
   const ids = [...new Set(memberIds.filter((id): id is string => Boolean(id)))]
   if (ids.length === 0) return
 
-  const { data: existingLinks, error: linksError } = await db
-    .from('member_schools')
-    .select('member_id')
-    .in('member_id', ids)
-    .eq('is_current', true)
-  if (linksError) {
-    console.error('[school-link] member_schools lookup error:', linksError)
-    return
+  let toLink: string[]
+  if (opts.replace) {
+    // Demote any current link to a DIFFERENT school, then (re)link everyone to
+    // the target below so it becomes their current school.
+    const { error: demoteError } = await db
+      .from('member_schools')
+      .update({ is_current: false })
+      .in('member_id', ids)
+      .eq('is_current', true)
+      .neq('school_id', schoolId)
+    if (demoteError) {
+      console.error('[school-link] member_schools demote error:', demoteError)
+      return
+    }
+    toLink = ids
+  } else {
+    const { data: existingLinks, error: linksError } = await db
+      .from('member_schools')
+      .select('member_id')
+      .in('member_id', ids)
+      .eq('is_current', true)
+    if (linksError) {
+      console.error('[school-link] member_schools lookup error:', linksError)
+      return
+    }
+    const alreadyLinked = new Set((existingLinks ?? []).map((l) => l.member_id))
+    toLink = ids.filter((id) => !alreadyLinked.has(id))
   }
-
-  const alreadyLinked = new Set((existingLinks ?? []).map((l) => l.member_id))
-  const toLink = ids.filter((id) => !alreadyLinked.has(id))
   if (toLink.length === 0) return
 
   const today = new Date().toISOString().split('T')[0]
@@ -128,12 +150,13 @@ export async function linkMembersToSchool(
 export async function linkMembersToSchoolByName(
   db: SupabaseClient,
   memberIds: (string | null | undefined)[],
-  school: SchoolDetails
+  school: SchoolDetails,
+  opts: { replace?: boolean } = {}
 ): Promise<void> {
   try {
     const schoolId = await resolveSchoolId(db, school)
     if (!schoolId) return
-    await linkMembersToSchool(db, memberIds, schoolId)
+    await linkMembersToSchool(db, memberIds, schoolId, opts)
   } catch (e) {
     console.error('[school-link] Linking failed (non-fatal):', e)
   }

@@ -1,5 +1,9 @@
 # PLAN — Real tier gating for campaign material (finding F-04)
 
+> **OBSOLETE (migration 128):** this plan was scoped around the Educator Commons
+> page, which has since been removed as a Claude Design hallucination. Retained for
+> historical context only — do not implement as written.
+
 **Status:** proposal (no code changed). **Scope:** make the "Judging rubric & exemplar proposals — Catalyst tier" lock on the Educator Commons page a real, server-enforced gate instead of a cosmetic one.
 
 ## 1. What exists today (verified in the codebase)

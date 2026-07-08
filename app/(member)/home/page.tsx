@@ -86,7 +86,7 @@ export default async function HomePage() {
         </h1>
       </header>
 
-      {/* Campaign registrations: registered campaigns, Educator Commons, register-another, gated material */}
+      {/* Campaign registrations: registered campaigns, register-another, gated material */}
       <div className="mb-8">
         <DashboardCampaigns />
       </div>

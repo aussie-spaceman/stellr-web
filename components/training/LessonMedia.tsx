@@ -1,6 +1,7 @@
-import { ExternalLink, FileText, Play, Download } from 'lucide-react'
+import { ExternalLink, FileText, Play, Download, AlertTriangle } from 'lucide-react'
 import type { LessonMedia as LessonMediaType } from '@/lib/training'
 import { VideoRoom } from '@/components/video/VideoRoom'
+import { FlagResourceButton } from '@/components/training/FlagResourceButton'
 
 // Renders the featured media for a lesson inside the course-detail player surface.
 // Shared by the course-detail page (and any standalone lesson view).
@@ -8,10 +9,12 @@ export function LessonMedia({
   media,
   title,
   displayName,
+  itemId,
 }: {
   media: LessonMediaType
   title: string
   displayName: string
+  itemId: string
 }) {
   if (!media) {
     return (
@@ -20,6 +23,19 @@ export function LessonMedia({
           <Play className="h-9 w-9 text-white/70" />
           No media for this lesson yet
         </span>
+      </div>
+    )
+  }
+
+  if (media.type === 'unavailable') {
+    return (
+      <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-2xl bg-gradient-to-br from-[#13183A] to-[#0E1330] px-6 text-center">
+        <AlertTriangle className="h-8 w-8 text-amber-300" />
+        <p className="text-sm font-medium text-white/80">This resource is currently unavailable</p>
+        <p className="max-w-sm text-xs text-white/50">
+          The material for this lesson hasn&apos;t been published yet. Let us know and we&apos;ll get it sorted.
+        </p>
+        <FlagResourceButton itemId={itemId} />
       </div>
     )
   }

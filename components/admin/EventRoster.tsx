@@ -101,6 +101,7 @@ export default function EventRoster({
   const [moving, setMoving] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState<string | null>(null)
+  const [markingInvoice, setMarkingInvoice] = useState<string | null>(null)
 
   async function moveParticipant(participantId: string, companyId: string | null) {
     setMoving(participantId)
@@ -110,6 +111,17 @@ export default function EventRoster({
       body: JSON.stringify({ action: 'move', participantId, companyId }),
     })
     setMoving(null)
+    router.refresh()
+  }
+
+  async function markInvoicePaid(registrationId: string, paid: boolean) {
+    setMarkingInvoice(registrationId)
+    await fetch(`/api/admin/events/${eventSlug}/invoice-paid`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ registrationId, paid }),
+    })
+    setMarkingInvoice(null)
     router.refresh()
   }
 
@@ -238,16 +250,43 @@ export default function EventRoster({
                 {/* Individual registrations need no header delete — the per-row
                     "Delete Registration" removes the participant and auto-withdraws
                     the emptied registration. */}
-                {group.type === 'group' && (
-                  <DeleteEntityButton
-                    entity="registration"
-                    id={group.registrationId}
-                    name={`the group "${group.groupLabel}"`}
-                    label="Delete group"
-                    refundable
-                    className="text-xs font-medium text-red-600 hover:text-red-800 normal-case"
-                  />
-                )}
+                <span className="flex items-center gap-3">
+                  {/* Invoiced groups are settled offline — an admin records payment
+                      here so member/roster pills read truthfully and a receipt opens. */}
+                  {group.type === 'group' && group.invoiceRequested && (
+                    <span className="flex items-center gap-2 normal-case">
+                      {group.invoicePaidAt ? (
+                        <button
+                          type="button"
+                          onClick={() => markInvoicePaid(group.registrationId, false)}
+                          disabled={markingInvoice === group.registrationId}
+                          className="text-xs font-medium text-brand-muted-soft hover:text-red-700 disabled:opacity-50"
+                        >
+                          Invoice paid ✓ · mark unpaid
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => markInvoicePaid(group.registrationId, true)}
+                          disabled={markingInvoice === group.registrationId}
+                          className="text-xs font-medium text-green-700 hover:text-green-800 disabled:opacity-50"
+                        >
+                          {markingInvoice === group.registrationId ? 'Saving…' : 'Mark invoice paid'}
+                        </button>
+                      )}
+                    </span>
+                  )}
+                  {group.type === 'group' && (
+                    <DeleteEntityButton
+                      entity="registration"
+                      id={group.registrationId}
+                      name={`the group "${group.groupLabel}"`}
+                      label="Delete group"
+                      refundable
+                      className="text-xs font-medium text-red-600 hover:text-red-800 normal-case"
+                    />
+                  )}
+                </span>
               </div>
               <table className="w-full table-fixed text-sm bg-white">
                 <colgroup>

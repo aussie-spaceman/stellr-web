@@ -348,7 +348,21 @@ export type LessonMedia =
   // ends and its recording is offloaded, the lesson serves the recording as a
   // 'video' replay instead (see liveLessonMedia).
   | { type: 'live'; domain: string; scriptSrc: string; roomName: string; jwt: string }
+  // An unlocked lesson whose resource can't be served: no link provided (or a
+  // placeholder like "TBC"), a missing file, or a live room that failed to mint.
+  // The player surfaces this as "resource unavailable" + a flag-to-admin action.
+  | { type: 'unavailable' }
   | null
+
+/** True for a usable absolute http(s) URL — filters out '', 'TBC', 'n/a', etc. */
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value.trim())
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 
 function memberDisplayName(member: CommunityMember): string {
   return [member.first_name, member.last_name].filter(Boolean).join(' ') || 'Member'
@@ -366,20 +380,27 @@ async function liveLessonMedia(
 ): Promise<LessonMedia> {
   if (row.recording_status === 'available' && row.recording_path) {
     const url = await signedDownloadUrl(row.recording_path)
-    return url ? { type: 'video', url } : null
+    return url ? { type: 'video', url } : { type: 'unavailable' }
   }
 
-  const room = trainingRoomName(itemId)
-  // Moderator/recording rights go to community staff (and platform admins, who
-  // hold every scope); members join as guests with no recording control.
-  const isHost = await currentUserHasScope('community')
-  const jwt = await getVideoProvider().getJoinToken(
-    room,
-    { id: member.id, name: memberDisplayName(member), email: member.email },
-    isHost
-  )
-  const embed = getEmbedConfig(room)
-  return { type: 'live', domain: embed.domain, scriptSrc: embed.scriptSrc, roomName: embed.roomName, jwt }
+  // No recording yet → everyone (guests + hosts) gets the live room so members can
+  // join the class. Moderator/recording rights go to community staff; members join
+  // as guests. If token minting fails, surface an actionable unavailable state
+  // rather than a blank/broken player.
+  try {
+    const room = trainingRoomName(itemId)
+    const isHost = await currentUserHasScope('community')
+    const jwt = await getVideoProvider().getJoinToken(
+      room,
+      { id: member.id, name: memberDisplayName(member), email: member.email },
+      isHost
+    )
+    const embed = getEmbedConfig(room)
+    return { type: 'live', domain: embed.domain, scriptSrc: embed.scriptSrc, roomName: embed.roomName, jwt }
+  } catch (e) {
+    console.error('[training] live room token mint failed:', e)
+    return { type: 'unavailable' }
+  }
 }
 
 export interface LessonDetail {
@@ -436,10 +457,15 @@ export async function getLesson(
       media = await liveLessonMedia(member, itemId, row)
     } else if ((kind === 'video' || kind === 'document') && row.storage_path) {
       const url = await signedDownloadUrl(row.storage_path as string)
-      if (url) media = { type: kind, url }
-    } else if (row.external_url) {
+      media = url ? { type: kind, url } : { type: 'unavailable' }
+    } else if (row.external_url && isValidHttpUrl(row.external_url as string)) {
       const embed = embedSrc(row.external_url as string)
       media = embed ? { type: 'embed', src: embed } : { type: 'link', url: row.external_url as string }
+    } else {
+      // Unlocked lesson with no usable resource — missing file, or an empty /
+      // placeholder link ("TBC"). Surface an actionable unavailable state instead
+      // of a broken "Open lesson" button or blank player.
+      media = { type: 'unavailable' }
     }
   }
 

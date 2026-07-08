@@ -59,7 +59,7 @@ export async function GET(req: Request) {
       id, event_role, join_completed_at, individual_payment_status, school_name,
       registrations(
         id, event_slug, event_title, school_name, status, created_at, type,
-        member_pays_individually, invoice_requested,
+        member_pays_individually, invoice_requested, invoice_paid_at,
         teacher_first_name, teacher_last_name, teacher_member_id
       )
     `)

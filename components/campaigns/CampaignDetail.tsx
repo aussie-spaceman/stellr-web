@@ -20,7 +20,7 @@ interface Props {
 const STEPS = [
   {
     title: 'Run the workshops with your group',
-    body: 'Use the theme workshop slides and starter pack from the Educator Commons to get your students up to speed.',
+    body: 'Use the theme workshop slides and starter pack from your campaign workspace to get your students up to speed.',
   },
   {
     title: 'Develop your design and write it up',

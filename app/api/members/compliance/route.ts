@@ -13,11 +13,22 @@ export async function GET() {
 
   const db = supabaseServer()
   const summary = await loadComplianceForMember(db, member.id)
+
+  // Short-lived signed URL for the uploaded license image (private bucket).
+  let documentUrl: string | null = null
+  if (summary?.license?.document_path) {
+    const { data: signed } = await db.storage
+      .from('teacher-licenses')
+      .createSignedUrl(summary.license.document_path, 60 * 10)
+    documentUrl = signed?.signedUrl ?? null
+  }
+
   return NextResponse.json({
     required: summary ? summary.state !== 'not_required' : false,
     state: summary?.state ?? 'not_required',
     detail: summary?.detail ?? null,
     license: summary?.license ?? null,
+    documentUrl,
     check: summary?.check
       ? { status: summary.check.status, ordered_at: summary.check.ordered_at, expires_at: summary.check.expires_at }
       : null,

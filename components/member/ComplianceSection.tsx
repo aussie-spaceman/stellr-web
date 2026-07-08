@@ -9,6 +9,7 @@ interface ComplianceData {
   state: ComplianceState
   detail: string | null
   license: TeacherLicense | null
+  documentUrl: string | null
   check: { status: string; ordered_at: string; expires_at: string | null } | null
 }
 
@@ -31,6 +32,8 @@ export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: st
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [docError, setDocError] = useState('')
 
   void dateOfBirth // requirement is computed server-side; props kept for parity with DocusignsSection
   void eventRole
@@ -68,6 +71,34 @@ export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: st
       return
     }
     setEditing(false)
+    await load()
+  }
+
+  async function uploadDocument(file: File) {
+    setUploading(true)
+    setDocError('')
+    const body = new FormData()
+    body.append('file', file)
+    const res = await fetch('/api/members/compliance/document', { method: 'POST', body })
+    setUploading(false)
+    if (!res.ok) {
+      const d = await res.json().catch(() => null)
+      setDocError(d?.error ?? 'Upload failed.')
+      return
+    }
+    await load()
+  }
+
+  async function deleteDocument() {
+    setUploading(true)
+    setDocError('')
+    const res = await fetch('/api/members/compliance/document', { method: 'DELETE' })
+    setUploading(false)
+    if (!res.ok) {
+      const d = await res.json().catch(() => null)
+      setDocError(d?.error ?? 'Failed to remove document.')
+      return
+    }
     await load()
   }
 
@@ -144,6 +175,53 @@ export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: st
               Stellr will review your license. Editing it resets verification.
             </p>
           )}
+
+          {/* License image — sensitive; upload/replace/delete. Stored in a private
+              bucket and served via short-lived signed URLs. */}
+          <div className="mt-3 border-t border-brand-hairline pt-3">
+            <p className="text-xs text-brand-muted-soft mb-2">License photo / scan</p>
+            {data.documentUrl ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <a
+                  href={data.documentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium text-brand-blue hover:text-brand-blue-dark underline"
+                >
+                  View uploaded license
+                </a>
+                <label className="text-xs font-medium text-brand-blue hover:text-brand-blue-dark cursor-pointer">
+                  Replace
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    disabled={uploading}
+                    onChange={(e) => e.target.files?.[0] && uploadDocument(e.target.files[0])}
+                  />
+                </label>
+                <button
+                  onClick={deleteDocument}
+                  disabled={uploading}
+                  className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+                >
+                  {uploading ? 'Working…' : 'Delete'}
+                </button>
+              </div>
+            ) : (
+              <label className="inline-flex items-center gap-2 text-xs font-medium text-white bg-brand-blue hover:bg-brand-blue-dark rounded-lg px-3 py-1.5 cursor-pointer">
+                {uploading ? 'Uploading…' : 'Upload license photo'}
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(e) => e.target.files?.[0] && uploadDocument(e.target.files[0])}
+                />
+              </label>
+            )}
+            {docError && <p className="text-xs text-red-600 mt-1">{docError}</p>}
+          </div>
         </div>
       ) : !editing && !license ? (
         <button

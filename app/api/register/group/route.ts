@@ -15,6 +15,7 @@ import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt, normalizeEmail } from '@/lib/member-enums'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
 import { recordEventParticipation } from '@/lib/event-participation-sync'
+import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 import { getMemberOnFileByMembershipId } from '@/lib/member-onfile'
 import { getCurrentMember } from '@/lib/community'
@@ -416,6 +417,17 @@ export async function POST(req: NextRequest) {
           registrationId: regId,
         })
       )
+    )
+
+    // Grant every group member (registrant + entered participants) access to any
+    // Space linked to this event — registering for the event confers Space access.
+    // community_space_sources keys events by slug. Non-fatal, idempotent. (W7:
+    // previously neither the joining members nor the organising teacher inherited
+    // the event's Space.)
+    await Promise.all(
+      Object.values(memberIdMap)
+        .filter((id): id is string => Boolean(id))
+        .map((memberId) => syncObjectSpaceRoster(db, 'event', event_slug, memberId))
     )
 
     // Turn non-members into members: grant the free base tier (Explorer for

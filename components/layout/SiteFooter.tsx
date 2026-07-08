@@ -50,10 +50,10 @@ const FOOTER_COLS = [
 ]
 
 const socialLinks = [
-  { icon: Linkedin, label: 'LinkedIn', href: 'https://www.linkedin.com/company/industry-simulation-education/' },
-  { icon: Instagram, label: 'Instagram', href: 'https://www.instagram.com/insimeducation/' },
-  { icon: Facebook, label: 'Facebook', href: 'https://www.facebook.com/insimeducation/' },
-  { icon: Twitter, label: 'X / Twitter', href: 'https://x.com/InSimEducation' },
+  { icon: Linkedin, label: 'LinkedIn', href: 'https://www.linkedin.com/company/stellreducation/' },
+  { icon: Instagram, label: 'Instagram', href: 'https://www.instagram.com/stellreducation/' },
+  { icon: Facebook, label: 'Facebook', href: 'https://www.facebook.com/stellreducation' },
+  { icon: Twitter, label: 'X / Twitter', href: 'https://x.com/stellreducation' },
 ]
 
 function CopyrightBar() {

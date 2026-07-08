@@ -13,13 +13,20 @@ export function formatDate(dateStr: string): string {
 export const APP_TIME_ZONE = 'America/Denver'
 export const APP_LOCALE = 'en-US'
 
-/** Month-day-year for a timestamp/ISO string, e.g. "Jun 20, 2026". */
+/** Month-day-year for a timestamp/ISO string, e.g. "Jun 20, 2026".
+ *
+ * A bare calendar date ("YYYY-MM-DD", e.g. a Postgres `date` column like a
+ * membership's started_at) has no time or zone. `new Date("2026-07-08")` parses
+ * it as UTC midnight, so rendering it in APP_TIME_ZONE (Mountain) shifts it back
+ * a day ("Jul 7"). Render those in UTC so the calendar date is preserved; only
+ * true timestamps are localised to APP_TIME_ZONE. */
 export function formatDateShort(iso: string | number | Date): string {
+  const dateOnly = typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(iso)
   return new Date(iso).toLocaleDateString(APP_LOCALE, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-    timeZone: APP_TIME_ZONE,
+    timeZone: dateOnly ? 'UTC' : APP_TIME_ZONE,
   })
 }
 

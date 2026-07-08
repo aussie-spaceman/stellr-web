@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useSignIn } from '@clerk/nextjs/legacy'
 import Link from 'next/link'
+import { inferHighSchoolGrade } from '@/lib/grade-logic'
 
 interface Props {
   token: string
@@ -12,6 +13,7 @@ interface Props {
   organiserName: string
   organiserRole: string
   schoolName: string
+  schoolState: string | null
   memberPaysIndividually: boolean
   isAuthenticated: boolean
 }
@@ -55,7 +57,7 @@ const EMPTY_DETAILS: DetailsForm = {
 const inputClass = 'w-full border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue'
 
 export default function GroupJoinClient({
-  token, eventTitle, eventSlug, organiserName, organiserRole, schoolName, memberPaysIndividually, isAuthenticated,
+  token, eventTitle, eventSlug, organiserName, organiserRole, schoolName, schoolState, memberPaysIndividually, isAuthenticated,
 }: Props) {
   const { isSignedIn } = useAuth()
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn()
@@ -64,6 +66,26 @@ export default function GroupJoinClient({
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
   const [form, setForm] = useState<DetailsForm>(EMPTY_DETAILS)
+  // Invited person who already has an account → prompt them to sign in and
+  // connect it, instead of provisioning a second passwordless account.
+  const [existingAccount, setExistingAccount] = useState(false)
+
+  const signInUrl = `/sign-in?redirect_url=${encodeURIComponent(`/register/${eventSlug}/join/${token}`)}`
+
+  async function checkExistingAccount(email: string) {
+    const clean = email.trim().toLowerCase()
+    if (!clean || !clean.includes('@')) {
+      setExistingAccount(false)
+      return
+    }
+    try {
+      const res = await fetch(`/api/members/exists?email=${encodeURIComponent(clean)}`)
+      const data = await res.json()
+      setExistingAccount(!!data.hasAccount)
+    } catch {
+      setExistingAccount(false)
+    }
+  }
 
   const isStudent = form.type === 'Student'
   const isMinor = (() => {
@@ -78,6 +100,31 @@ export default function GroupJoinClient({
 
   function set(field: keyof DetailsForm, value: string | string[]) {
     setForm(prev => ({ ...prev, [field]: value }))
+  }
+
+  // Students get their Grade pre-filled from DOB + the group school's State
+  // (Sep 1 default when unknown), editable — matching the individual and
+  // group-organiser forms. Re-infers on DOB edits and when switching to Student.
+  function setDateOfBirth(value: string) {
+    setForm(prev => {
+      const next = { ...prev, date_of_birth: value }
+      if (prev.type === 'Student') {
+        const inferred = inferHighSchoolGrade(value, schoolState)
+        if (inferred) next.grade = inferred
+      }
+      return next
+    })
+  }
+
+  function setType(t: 'Student' | 'Adult') {
+    setForm(prev => {
+      const next = { ...prev, type: t }
+      if (t === 'Student') {
+        const inferred = inferHighSchoolGrade(prev.date_of_birth, schoolState)
+        if (inferred) next.grade = inferred
+      }
+      return next
+    })
   }
 
   function toggleDietary(opt: string) {
@@ -113,6 +160,10 @@ export default function GroupJoinClient({
   // ticket so they land on their account without touching the sign-in widget.
   async function handleJoinNew(e: React.FormEvent) {
     e.preventDefault()
+    if (existingAccount) {
+      setError('You already have a Stellr account — please sign in to join this group.')
+      return
+    }
     if (requiresEmergencyContact && (
       !form.emergency_contact_first_name.trim() ||
       !form.emergency_contact_last_name.trim() ||
@@ -246,7 +297,7 @@ export default function GroupJoinClient({
           <div className="flex flex-wrap gap-4">
             {(['Student', 'Adult'] as const).map(t => (
               <label key={t} className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="type" checked={form.type === t} onChange={() => set('type', t)} />
+                <input type="radio" name="type" checked={form.type === t} onChange={() => setType(t)} />
                 <span className="text-sm">{t}</span>
               </label>
             ))}
@@ -275,7 +326,9 @@ export default function GroupJoinClient({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-content-body mb-1">Email <span className="text-red-500">*</span></label>
-            <input required type="email" className={inputClass} value={form.email} onChange={e => set('email', e.target.value)} />
+            <input required type="email" className={inputClass} value={form.email}
+              onChange={e => { set('email', e.target.value); if (existingAccount) setExistingAccount(false) }}
+              onBlur={e => checkExistingAccount(e.target.value)} />
           </div>
           <div>
             <label className="block text-sm font-medium text-content-body mb-1">Phone</label>
@@ -287,7 +340,7 @@ export default function GroupJoinClient({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-content-body mb-1">Date of birth <span className="text-red-500">*</span></label>
-            <input required type="date" className={inputClass} value={form.date_of_birth} onChange={e => set('date_of_birth', e.target.value)} />
+            <input required type="date" className={inputClass} value={form.date_of_birth} onChange={e => setDateOfBirth(e.target.value)} />
           </div>
           <div>
             <label className="block text-sm font-medium text-content-body mb-1">Gender</label>
@@ -314,6 +367,7 @@ export default function GroupJoinClient({
                 <option value="">Select…</option>
                 {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
+              <p className="mt-1 text-xs text-content-faint">Auto-filled from your date of birth — change it if needed.</p>
             </div>
           )}
         </div>
@@ -389,15 +443,29 @@ export default function GroupJoinClient({
           </div>
         )}
 
+        {existingAccount && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-brand-blue-dark">
+            <p className="font-medium">You already have a Stellr account</p>
+            <p className="mt-1">
+              Sign in to join this group with your existing account —{' '}
+              <Link href={signInUrl} className="underline hover:no-underline font-medium">sign in →</Link>
+            </p>
+          </div>
+        )}
+
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">{error}</div>
         )}
 
         <div className="flex gap-3">
           <Link href={`/events/${eventSlug}`} className="btn-outline flex-1 text-center py-3">Cancel</Link>
-          <button type="submit" disabled={submitting} className="btn-primary flex-1 py-3 disabled:opacity-60">
-            {submitting ? 'Joining…' : 'Join Group →'}
-          </button>
+          {existingAccount ? (
+            <Link href={signInUrl} className="btn-primary flex-1 py-3 text-center">Sign in to join →</Link>
+          ) : (
+            <button type="submit" disabled={submitting} className="btn-primary flex-1 py-3 disabled:opacity-60">
+              {submitting ? 'Joining…' : 'Join Group →'}
+            </button>
+          )}
         </div>
       </div>
     </form>

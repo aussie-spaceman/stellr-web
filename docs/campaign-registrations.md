@@ -23,9 +23,9 @@ submit a **proposal** before a **deadline**. Content is authored in Sanity.
   `proposal_file_name`, `proposal_notes`, `proposal_submitted_at`. Reuses
   `event_slug`/`event_title`, `teacher_*`, `teacher_member_id`, `student_count`.
   Proposals live in the private `campaign-proposals` storage bucket.
-- **Educator Commons** is a real, seeded **open** Space (`community_spaces.slug =
-  'educator-commons'`, theme `campaign`) with a `general` chat channel and four
-  resource rows (one gated at `min_tier_rank = 1`).
+- ~~**Educator Commons**~~ **(removed, migration 128)** — was a seeded open Space
+  (`community_spaces.slug = 'educator-commons'`); torn out as a Claude Design
+  hallucination. Campaigns surface materials/workspace directly.
 
 ## Routes / files
 | Surface | Route | File |
@@ -33,7 +33,6 @@ submit a **proposal** before a **deadline**. Content is authored in Sanity.
 | www board | `/events` | `app/(public)/events/page.tsx` (two groups) |
 | www detail | `/events/[slug]` | branches to `components/campaigns/CampaignDetail.tsx` for campaigns |
 | app dashboard | `/home` | `components/campaigns/DashboardCampaigns.tsx` |
-| app Educator Commons | `/community/educator-commons` | static page shadowing `[spaceSlug]` |
 | app My competitions | `/campaigns` | `app/(member)/campaigns/page.tsx` |
 | app workspace | `/campaigns/[slug]` | `app/(member)/campaigns/[slug]/page.tsx` |
 | app submit | `/campaigns/[slug]/submit` | + `SubmitProposalForm` |
@@ -54,9 +53,7 @@ view/date/theme helpers in `lib/campaigns.ts`.
 
 ## Ops before go-live
 1. Apply migration `120_campaign_registrations.sql`.
-2. Upload the real Educator Commons resource files to the resources bucket and
-   repoint the placeholder `storage_path`s (Admin → Community → Resources).
-3. Author Campaigns in Sanity (`activityType = campaign`, theme, season, year,
+2. Author Campaigns in Sanity (`activityType = campaign`, theme, season, year,
    **deadline**, deliverable).
 4. Optional: point the educator signup/onboarding completion redirect at
    `/register-campaign` to surface entry point A.

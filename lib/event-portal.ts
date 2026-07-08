@@ -251,5 +251,39 @@ export async function getEventMaterials(
   return out
 }
 
+export interface PortalSpace {
+  id: string
+  slug: string
+  name: string
+}
+
+/**
+ * Non-archived Spaces linked to this event via community_space_sources
+ * (object_type='event'). These are the spaces a participant inherits access to
+ * by being registered — used to surface Space / Resources links on the portal.
+ */
+export async function getEventSpaces(event: PortalEvent): Promise<PortalSpace[]> {
+  if (!event.slug) return []
+  const db = supabaseServer()
+
+  // Event space sources are keyed by event SLUG (community_space_sources.object_ref
+  // = event_slug for object_type='event'), not the Sanity _id.
+  const { data: links } = await db
+    .from('community_space_sources')
+    .select('space_id')
+    .eq('object_type', 'event')
+    .eq('object_ref', event.slug)
+  const spaceIds = [...new Set((links ?? []).map((r) => (r as { space_id: string }).space_id))]
+  if (spaceIds.length === 0) return []
+
+  const { data: spaces } = await db
+    .from('community_spaces')
+    .select('id, slug, name')
+    .in('id', spaceIds)
+    .eq('is_archived', false)
+    .order('name', { ascending: true })
+  return (spaces ?? []) as PortalSpace[]
+}
+
 /** Re-export for routes that issue download links after the access check. */
 export { signedDownloadUrl }

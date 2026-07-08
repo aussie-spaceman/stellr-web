@@ -1,3 +1,5 @@
+import { emailLayout } from '@/lib/email-layout'
+
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 
 // Transactional sender. Must be on a Resend-verified domain and must NOT be a
@@ -87,13 +89,10 @@ export function individualConfirmationEmail({
   eventTitle: string; registrationId: string
 }) {
   const subject = `Registration Confirmed — ${eventTitle}`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">You're registered!</h2>
+  const html = emailLayout({
+    heading: "You're registered!",
+    preheader: `Your registration for ${eventTitle} is confirmed.`,
+    bodyHtml: `
         <p>Hi ${firstName},</p>
         <p>Your registration for <strong>${eventTitle}</strong> has been confirmed and payment received. We look forward to seeing you there.</p>
         <table style="border-collapse:collapse;width:100%;margin:24px 0;background:#f9fafb;border-radius:8px">
@@ -103,13 +102,8 @@ export function individualConfirmationEmail({
           <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">Reference #</td><td style="padding:12px 16px;font-family:monospace;color:#6b7280;font-size:12px">${registrationId}</td></tr>
         </table>
         <p style="color:#6b7280;font-size:14px">Keep your Membership ID handy — you'll use it to check in at the event.</p>
-        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
+  })
   const text = `Hi ${firstName},\n\nYour registration for ${eventTitle} is confirmed.\n\nMembership ID: ${membershipId}\nReference #: ${registrationId}\n\nKeep your Membership ID for check-in.\n\n— Stellr Education`
   return { subject, html, text }
 }
@@ -172,13 +166,10 @@ export function groupConfirmationEmail({
     ${joinSection}
   ` : ''
 
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">Group Registration Received</h2>
+  const html = emailLayout({
+    heading: 'Group Registration Received',
+    preheader: `Group registration received for ${eventTitle}.`,
+    bodyHtml: `
         <p>Hi ${teacherFirstName},</p>
         <p>We've received your group registration for <strong>${eventTitle}</strong>.</p>
         <table style="border-collapse:collapse;width:100%;margin:24px 0;background:#f9fafb;border-radius:8px">
@@ -196,13 +187,8 @@ export function groupConfirmationEmail({
           <li style="margin-bottom:8px">Participant agreements and parental permission forms will be issued via DocuSign if not already on record — signed paperwork stays valid for 3 years across Stellr events</li>
           <li>Event details and schedule sent closer to the date</li>
         </ul>
-        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
+  })
   const sheetText = spreadsheetUrl ? `\n\nOption 1 — Google Sheet: ${spreadsheetUrl}` : ''
   const joinText = joinUrl ? `\n\nOption 2 — Registration Link: ${joinUrl}` : ''
   const paymentText =

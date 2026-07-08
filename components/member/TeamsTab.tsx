@@ -117,6 +117,7 @@ interface StudentTeam {
     teacher_email: string | null
     member_pays_individually?: boolean
     invoice_requested?: boolean
+    invoice_paid_at?: string | null
   }
 }
 
@@ -163,9 +164,10 @@ function JoinedTeamsView({
       if (entry.individual_payment_status === 'pending') return { label: 'Payment Required', style: 'bg-brand-orange/10 text-brand-gold-ink' }
     }
     if (reg.invoice_requested) {
-      // A settled invoice (paid, or auto-settled for $0/free events) confirms the
-      // registration — show Paid rather than the perpetual "Invoice sent" pill.
-      if (reg.status === 'confirmed') return { label: 'Invoice paid', style: 'bg-green-100 text-green-700' }
+      // Paid only once an admin records the invoice settled (invoice_paid_at).
+      // registrations.status='confirmed' is NOT proof of payment, so it must not
+      // drive a green "Invoice paid" pill.
+      if (reg.invoice_paid_at) return { label: 'Invoice paid', style: 'bg-green-100 text-green-700' }
       return { label: 'Invoice sent to organiser', style: 'bg-brand-blue/10 text-brand-blue' }
     }
     return { label: 'Paid by group', style: 'bg-green-100 text-green-700' }

@@ -37,6 +37,8 @@ export interface TeacherLicense {
   expiry_date: string // ISO date
   verified_at: string | null
   verified_label: string | null
+  /** Storage path of an uploaded license image (private bucket), or null. */
+  document_path: string | null
 }
 
 export interface BackgroundCheck {
@@ -189,7 +191,7 @@ interface MemberComplianceRow {
 
 const COMPLIANCE_SELECT = `
   id, email, event_role, date_of_birth,
-  member_teacher_licenses!member_id(id, license_number, licensing_state, expiry_date, verified_at, verified_label),
+  member_teacher_licenses!member_id(id, license_number, licensing_state, expiry_date, verified_at, verified_label, document_path),
   member_background_checks!member_id(id, status, result, assessment, includes_canceled, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url)
 `
 

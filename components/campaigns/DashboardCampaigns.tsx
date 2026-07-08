@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Lock } from 'lucide-react'
-import { Orbit, Environment, Global } from '@stellr/icons'
+import { Orbit, Environment } from '@stellr/icons'
 import { Button } from '@stellr/web-ui'
 import { getCurrentMember } from '@/lib/community'
 import { getAllCampaigns, type StellarEvent } from '@/lib/sanity'
@@ -61,21 +61,6 @@ export async function DashboardCampaigns() {
           </Link>
         )
       })}
-
-      {/* Educator Commons card */}
-      <Link
-        href="/community/educator-commons"
-        className="flex items-center gap-4 rounded-ds-card border border-line bg-white p-4 hover:shadow-card-lift"
-      >
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control bg-midnight text-white">
-          <Global className="h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="font-heading font-bold text-ink">Educator Commons</p>
-          <p className="text-xs text-content-muted">Free material and group chat for every educator</p>
-        </div>
-        <span className="text-sm font-semibold text-primary">Open</span>
-      </Link>
 
       {/* Run another campaign */}
       {another && (

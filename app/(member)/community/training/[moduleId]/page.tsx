@@ -159,7 +159,7 @@ export default async function CourseDetailPage({
               )}
             </div>
           ) : (
-            <LessonMedia media={lesson.media} title={lesson.title} displayName={displayName} />
+            <LessonMedia media={lesson.media} title={lesson.title} displayName={displayName} itemId={lesson.id} />
           )}
 
           {eyebrow && (

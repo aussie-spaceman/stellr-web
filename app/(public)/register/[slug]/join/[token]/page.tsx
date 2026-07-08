@@ -21,7 +21,7 @@ export default async function GroupJoinPage({ params }: PageProps) {
   const db = supabaseServer()
   const { data: tokenRow, error } = await db
     .from('group_join_tokens')
-    .select('*, registrations(teacher_first_name, teacher_last_name, school_name, registrant_role, status, member_pays_individually, adult_count, student_count)')
+    .select('*, registrations(teacher_first_name, teacher_last_name, school_name, school_id, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count)')
     .eq('token', token)
     .eq('event_slug', slug)
     .maybeSingle()
@@ -54,9 +54,19 @@ export default async function GroupJoinPage({ params }: PageProps) {
 
   const reg = tokenRow.registrations as {
     teacher_first_name: string; teacher_last_name: string
-    school_name: string; registrant_role: string; status: string
+    school_name: string; school_id: string | null; school_address_state: string | null
+    registrant_role: string; status: string
     member_pays_individually: boolean
     adult_count: number | null; student_count: number | null
+  }
+
+  // Resolve the group school's State so the join form can pre-fill Grade from DOB,
+  // mirroring the individual/group forms. Existing-school picks store school_id with
+  // a null address_state, so fall back to the linked schools row.
+  let schoolState: string | null = reg.school_address_state ?? null
+  if (!schoolState && reg.school_id) {
+    const { data: school } = await db.from('schools').select('state').eq('id', reg.school_id).maybeSingle()
+    schoolState = school?.state ?? null
   }
 
   // Check if already registered
@@ -102,8 +112,8 @@ export default async function GroupJoinPage({ params }: PageProps) {
         {alreadyRegistered ? (
           <div className="bg-white rounded-xl border border-line p-8 text-center space-y-4">
             <div className="text-4xl">✅</div>
-            <h2 className="text-xl font-bold text-ink">You&apos;re already registered!</h2>
-            <p className="text-content-body">You&apos;ve already joined this group for <strong>{tokenRow.event_title}</strong>.</p>
+            <h2 className="text-xl font-bold text-ink">You&apos;re registered!</h2>
+            <p className="text-content-body">You&apos;ve joined this group for <strong>{tokenRow.event_title}</strong>.</p>
             <Link href="/account" className="btn-primary inline-block mt-4">View My Account →</Link>
           </div>
         ) : groupFull ? (
@@ -124,6 +134,7 @@ export default async function GroupJoinPage({ params }: PageProps) {
             organiserName={organiserName}
             organiserRole={organiserRole}
             schoolName={reg.school_name}
+            schoolState={schoolState}
             memberPaysIndividually={reg.member_pays_individually}
             isAuthenticated={!!userId}
           />

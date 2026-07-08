@@ -86,7 +86,7 @@ export async function GET(req: Request) {
         registrations(
           id, event_slug, event_title, school_name, status, created_at,
           teacher_first_name, teacher_last_name, teacher_email,
-          member_pays_individually, invoice_requested
+          member_pays_individually, invoice_requested, invoice_paid_at
         )
       `)
       .eq('member_id', member.id)
@@ -112,7 +112,7 @@ export async function GET(req: Request) {
       registrations(
         id, event_slug, event_title, school_name, status, created_at,
         teacher_first_name, teacher_last_name, teacher_email,
-        member_pays_individually, invoice_requested
+        member_pays_individually, invoice_requested, invoice_paid_at
       )
     `)
     .eq('member_id', member.id)

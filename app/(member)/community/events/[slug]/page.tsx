@@ -1,9 +1,9 @@
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { ArrowLeft, FileText, Lock } from 'lucide-react'
+import { ArrowLeft, FileText, Lock, Users, FolderOpen } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
-import { memberIsParticipant, getEventMaterials } from '@/lib/event-portal'
+import { memberIsParticipant, getEventMaterials, getEventSpaces } from '@/lib/event-portal'
 import { reportEventAccessGates, accessGatesEnforced } from '@/lib/access-gates'
 import { listModules } from '@/lib/training'
 import { MaterialDownloadButton } from '@/components/community/MaterialDownloadButton'
@@ -58,6 +58,7 @@ export default async function EventPortalPage({
   }
 
   const materials = await getEventMaterials(member, event)
+  const spaces = await getEventSpaces(event)
   const training = event.eventId
     ? await listModules(member, { eventRef: event.eventId })
     : []
@@ -101,6 +102,42 @@ export default async function EventPortalPage({
           )}
         </div>
       </div>
+
+      {spaces.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">
+            Spaces
+          </h2>
+          <ul className="space-y-3">
+            {spaces.map((s) => (
+              <li
+                key={s.id}
+                className="flex items-center justify-between gap-4 rounded-lg border border-brand-border bg-white p-4"
+              >
+                <Link href={`/community/${s.slug}`} className="flex min-w-0 items-center gap-3">
+                  <Users className="h-5 w-5 shrink-0 text-brand-muted-soft" />
+                  <span className="truncate font-semibold text-brand-blue-dark hover:underline">{s.name}</span>
+                </Link>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Link
+                    href={`/community/${s.slug}/training`}
+                    className="rounded-md border border-brand-border px-3 py-1.5 text-xs font-medium text-brand-blue-dark hover:border-brand-blue"
+                  >
+                    Training
+                  </Link>
+                  <Link
+                    href={`/community/${s.slug}/resources`}
+                    className="inline-flex items-center gap-1 rounded-md border border-brand-border px-3 py-1.5 text-xs font-medium text-brand-blue-dark hover:border-brand-blue"
+                  >
+                    <FolderOpen className="h-3.5 w-3.5" />
+                    Resources
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="mt-6">
         <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">

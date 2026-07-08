@@ -27,6 +27,7 @@ interface ParticipationReg {
   type: string | null
   member_pays_individually: boolean
   invoice_requested: boolean
+  invoice_paid_at: string | null
   teacher_first_name: string | null
   teacher_last_name: string | null
 }
@@ -75,18 +76,23 @@ function paymentLabel(p: Participation, reg: ParticipationReg): { label: string;
     if (p.individual_payment_status === 'pending') return { label: 'Payment Pending', style: 'bg-brand-orange/10 text-brand-gold-ink' }
   }
   if (reg.invoice_requested) {
-    // A settled invoice (paid, or auto-settled for $0/free events) confirms the
-    // registration — show Paid rather than the perpetual "Invoice sent" pill.
-    if (reg.status === 'confirmed') return { label: 'Invoice paid', style: 'bg-green-100 text-green-700' }
+    // An invoiced registration is "paid" only once an admin records the invoice as
+    // settled (invoice_paid_at). registrations.status='confirmed' is NOT proof of
+    // payment (it's set on card checkout / campaign auto-confirm and reused for
+    // access), so it must not drive a green "Invoice paid" pill.
+    if (reg.invoice_paid_at) return { label: 'Invoice paid', style: 'bg-green-100 text-green-700' }
     return { label: 'Invoice sent to organiser', style: 'bg-brand-blue/10 text-brand-blue' }
   }
   return { label: 'Paid by group', style: 'bg-green-100 text-green-700' }
 }
 
 // A receipt exists once the payment behind this row has settled — the member's
-// own checkout, or the group payment/invoice settled on their behalf.
+// own checkout, the group card payment, or an invoice an admin marked paid. An
+// unpaid invoice offers no receipt (showing the invoice as a "receipt" implied a
+// payment that hadn't happened).
 function receiptAvailable(p: Participation, reg: ParticipationReg): boolean {
   if (reg.member_pays_individually) return p.individual_payment_status === 'paid'
+  if (reg.invoice_requested) return !!reg.invoice_paid_at
   return reg.status === 'confirmed'
 }
 

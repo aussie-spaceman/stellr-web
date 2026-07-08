@@ -1,6 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import type { CommunityMember } from '@/lib/community'
 import { logActivity } from '@/lib/activity-log'
+import { registrationPaid } from '@/lib/payment-status'
 
 // Access gate layer (convergence P2). A single place that answers "is this
 // member's access to a competition fully unlocked?" by combining the payment and
@@ -47,10 +48,13 @@ export async function eventAccessGates(member: CommunityMember, eventSlug: strin
 
   const { data: parts } = await db
     .from('participants')
-    .select('id, date_of_birth, individual_payment_status, registrations!inner(event_slug, status, amount_due_cents)')
+    .select('id, date_of_birth, individual_payment_status, registrations!inner(event_slug, status, amount_due_cents, invoice_requested, invoice_paid_at)')
     .eq('member_id', member.id)
 
-  type Reg = { event_slug: string; status: string; amount_due_cents: number | null }
+  type Reg = {
+    event_slug: string; status: string; amount_due_cents: number | null
+    invoice_requested: boolean | null; invoice_paid_at: string | null
+  }
   type Row = {
     id: string
     date_of_birth: string | null
@@ -70,7 +74,14 @@ export async function eventAccessGates(member: CommunityMember, eventSlug: strin
   // 0/null) OR it's been paid. The member passes if all of theirs do.
   const payment = mine.every((m) => {
     const owes = (m.reg.amount_due_cents ?? 0) > 0
-    const paidThis = m.reg.status === 'confirmed' || m.row.individual_payment_status === 'paid'
+    // Shared rule (see lib/payment-status) so "paid" matches the roster/billing
+    // pills: invoiced regs need invoice_paid_at; status='confirmed' isn't proof.
+    const paidThis = registrationPaid({
+      invoiceRequested: m.reg.invoice_requested,
+      invoicePaidAt: m.reg.invoice_paid_at,
+      status: m.reg.status,
+      individualPaymentStatus: m.row.individual_payment_status,
+    })
     return !owes || paidThis
   })
 

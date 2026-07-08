@@ -9,6 +9,7 @@
     "dev": "next dev",
     "build:tokens": "node design/build-tokens.mjs",
     "lint:tokens": "node scripts/ds-lint.mjs",
+    "check:deploy-ready": "node scripts/check-deploy-ready.mjs",
     "prebuild": "node design/build-tokens.mjs && node scripts/ds-lint.mjs && tsx scripts/check-watermarks.ts",
     "build": "next build",
     "start": "next start",

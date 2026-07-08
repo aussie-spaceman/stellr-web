@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { deriveCompliance, loadComplianceRecordsByEmails, type ComplianceState } from '@/lib/compliance'
+import { registrationPaid } from '@/lib/payment-status'
 
 // Data assembly for the admin/event-manager event detail view (PRD 6.7).
 // Per-participant pill logic (user-confirmed 11-Jun-2026, supersedes the
@@ -132,14 +133,14 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
 
   const groups: RosterGroup[] = (regs ?? []).map((reg) => {
     const participants = ((reg.participants as Record<string, unknown>[]) ?? []).map((p) => {
-      // registrations.status='confirmed' is NOT proof of payment — it's set on
-      // card checkout / campaign auto-confirm and reused for access gating. An
-      // INVOICED registration is paid only when an admin marks the invoice settled
-      // (invoice_paid_at). Card/payment-link registrations confirm on the Stripe
-      // webhook (or the member's individual_payment_status).
-      const paid = reg.invoice_requested
-        ? reg.invoice_paid_at != null
-        : reg.status === 'confirmed' || (p.individual_payment_status as string | null) === 'paid'
+      // Shared rule (see lib/payment-status): invoiced regs are paid only once an
+      // admin records invoice_paid_at; status='confirmed' is not proof of payment.
+      const paid = registrationPaid({
+        invoiceRequested: reg.invoice_requested,
+        invoicePaidAt: reg.invoice_paid_at as string | null,
+        status: reg.status,
+        individualPaymentStatus: p.individual_payment_status as string | null,
+      })
 
       const payment_pill: PaymentPill = reg.invoice_requested
         ? paid ? 'invoice_paid' : 'invoice_issued'

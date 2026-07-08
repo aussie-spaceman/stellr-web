@@ -1,6 +1,15 @@
+/** Full month-day-year, e.g. "July 8, 2026". Handles both bare calendar dates
+ *  ("YYYY-MM-DD", rendered in UTC so the day never shifts) and full timestamps
+ *  (localised to APP_TIME_ZONE). Uses the fixed app locale/zone so SSR and the
+ *  browser agree (see APP_TIME_ZONE note above). */
 export function formatDate(dateStr: string): string {
-  const date = new Date(dateStr + 'T00:00:00')
-  return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(dateStr)
+  return new Date(dateStr).toLocaleDateString(APP_LOCALE, {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: dateOnly ? 'UTC' : APP_TIME_ZONE,
+  })
 }
 
 // Fixed app timezone + locale so a date/time renders identically on the server
@@ -44,10 +53,12 @@ export function formatDateTime(iso: string | number | Date): string {
 
 export function formatDateRange(start: string, end?: string): string {
   if (!end || start === end) return formatDate(start)
-  const s = new Date(start + 'T00:00:00')
-  const e = new Date(end + 'T00:00:00')
-  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
-    return `${s.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}–${e.getDate()}, ${e.getFullYear()}`
+  // Anchor both ends to UTC midnight and read/format in UTC, so a bare calendar
+  // date never shifts a day between the SSR host (UTC) and the browser.
+  const s = new Date(start + 'T00:00:00Z')
+  const e = new Date(end + 'T00:00:00Z')
+  if (s.getUTCMonth() === e.getUTCMonth() && s.getUTCFullYear() === e.getUTCFullYear()) {
+    return `${s.toLocaleDateString(APP_LOCALE, { month: 'long', day: 'numeric', timeZone: 'UTC' })}–${e.getUTCDate()}, ${e.getUTCFullYear()}`
   }
   return `${formatDate(start)} – ${formatDate(end)}`
 }

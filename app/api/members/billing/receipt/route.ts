@@ -30,13 +30,16 @@ async function receiptFromPaymentIntent(stripe: Stripe, paymentIntentId: string)
   return null
 }
 
+// Only a PAID Stripe invoice yields a receipt document — an unpaid invoice's PDF
+// is just the bill, and handing it back mislabels it as a receipt. Returns null
+// when nothing paid is found (offline-settled invoices have no Stripe record).
 async function receiptFromInvoice(stripe: Stripe, registrationId: string): Promise<string | null> {
   try {
     const found = await stripe.invoices.search({
       query: `metadata['registrationId']:'${registrationId}'`,
       limit: 10,
     })
-    const paid = found.data.find(inv => inv.status === 'paid') ?? found.data[0]
+    const paid = found.data.find(inv => inv.status === 'paid')
     return paid?.invoice_pdf ?? paid?.hosted_invoice_url ?? null
   } catch (err) {
     console.error('[billing/receipt] Invoice search failed:', err)
@@ -71,7 +74,7 @@ export async function GET(req: NextRequest) {
 
   const { data: registration } = await db
     .from('registrations')
-    .select('id, status, invoice_requested, stripe_payment_intent_id')
+    .select('id, status, invoice_requested, invoice_paid_at, stripe_payment_intent_id')
     .eq('id', participant.registration_id)
     .maybeSingle()
   if (!registration) return htmlMessage('Registration not found.', 404)
@@ -86,13 +89,19 @@ export async function GET(req: NextRequest) {
   if (!url && registration.stripe_payment_intent_id) {
     url = await receiptFromPaymentIntent(stripe, registration.stripe_payment_intent_id)
   }
-  if (!url && registration.invoice_requested) {
+  // Invoiced registrations only have a receipt once the invoice is settled. A
+  // Stripe-issued invoice yields its paid PDF; an invoice settled offline (marked
+  // paid by an admin) has no Stripe document, so fall through to the message.
+  if (!url && registration.invoice_requested && registration.invoice_paid_at) {
     url = await receiptFromInvoice(stripe, registration.id)
   }
 
   if (!url) {
+    const offlineInvoice = registration.invoice_requested && registration.invoice_paid_at
     return htmlMessage(
-      'No receipt is available for this payment yet. If the payment was recent, please check back shortly.',
+      offlineInvoice
+        ? 'This invoice was recorded as paid. A downloadable receipt isn’t available here — contact us if you need one for your records.'
+        : 'No receipt is available for this payment yet. If the payment was recent, please check back shortly.',
       404
     )
   }

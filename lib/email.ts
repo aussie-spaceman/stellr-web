@@ -212,26 +212,17 @@ export function groupMemberIndividualPaymentEmail({
   eventTitle: string; registrationId: string; paymentUrl: string
 }) {
   const subject = `Complete your payment — ${eventTitle}`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">Complete Your Registration</h2>
+  const html = emailLayout({
+    heading: 'Complete Your Registration',
+    bodyHtml: `
         <p>Hi ${memberFirstName},</p>
         <p>You've been registered for <strong>${eventTitle}</strong> as part of a group. To confirm your spot, please complete your individual payment.</p>
         <div style="margin:28px 0;text-align:center">
           <a href="${paymentUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600">Pay Now →</a>
         </div>
         <p style="color:#6b7280;font-size:14px">If you have any questions, reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-        <p style="color:#6b7280;font-size:12px">Reference: <span style="font-family:monospace">${registrationId}</span></p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:12px">Reference: <span style="font-family:monospace">${registrationId}</span></p>`,
+  })
   const text = `Hi ${memberFirstName} ${memberLastName},\n\nYou've been registered for ${eventTitle}. Please complete your payment:\n\n${paymentUrl}\n\nReference: ${registrationId}\n\n— Stellr Education`
   return { subject, html, text }
 }
@@ -243,13 +234,9 @@ export function groupJoinLinkEmail({
   eventTitle: string; joinUrl: string
 }) {
   const subject = `Share with your group — ${eventTitle} registration link`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">Your Group Registration Link</h2>
+  const html = emailLayout({
+    heading: 'Your Group Registration Link',
+    bodyHtml: `
         <p>Hi ${registrantFirstName},</p>
         <p>Your group registration for <strong>${eventTitle}</strong> has been submitted. Forward the link below to your group members so they can complete their registration details.</p>
         <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:20px;margin:24px 0">
@@ -265,13 +252,8 @@ export function groupJoinLinkEmail({
           <li>They confirm they're joining your group for ${eventTitle}</li>
           <li>You'll receive a notification each time a member completes their registration</li>
         </ul>
-        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
+  })
   const text = `Hi ${registrantFirstName} ${registrantLastName},\n\nForward this link to your group members for ${eventTitle}:\n\n${joinUrl}\n\nEach member should click the link, sign in or create an account, and confirm their participation. You'll be notified when each member completes their registration.\n\n— Stellr Education`
   return { subject, html, text }
 }
@@ -283,25 +265,16 @@ export function groupMemberJoinedEmail({
   memberEmail: string; eventTitle: string; memberCount: number; totalExpected: number
 }) {
   const subject = `${memberFirstName} ${memberLastName} has joined your group — ${eventTitle}`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">New Group Member Registered</h2>
+  const html = emailLayout({
+    heading: 'New Group Member Registered',
+    bodyHtml: `
         <p>Hi ${registrantFirstName},</p>
         <p><strong>${memberFirstName} ${memberLastName}</strong> (${memberEmail}) has completed their registration for <strong>${eventTitle}</strong>.</p>
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
           <p style="margin:0;font-weight:600;color:#166534">Group progress: ${memberCount} of ${totalExpected} members registered</p>
         </div>
-        <p style="color:#6b7280;font-size:14px">Log in to your member portal to view the full status of your group.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px">Log in to your member portal to view the full status of your group.</p>`,
+  })
   const text = `Hi ${registrantFirstName},\n\n${memberFirstName} ${memberLastName} (${memberEmail}) has registered for your group at ${eventTitle}.\n\nGroup progress: ${memberCount} of ${totalExpected} members registered.\n\n— Stellr Education`
   return { subject, html, text }
 }
@@ -313,23 +286,14 @@ export function studentLeftTeamEmail({
   studentEmail: string; eventTitle: string
 }) {
   const subject = `${studentFirstName} ${studentLastName} has left your team — ${eventTitle}`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">Team Member Removed</h2>
+  const html = emailLayout({
+    heading: 'Team Member Removed',
+    bodyHtml: `
         <p>Hi ${teacherFirstName},</p>
         <p><strong>${studentFirstName} ${studentLastName}</strong> (${studentEmail}) has removed themselves from your team for <strong>${eventTitle}</strong>.</p>
         <p style="color:#6b7280;font-size:14px">You may want to update your team details or find a replacement. Log in to your member portal to manage your team.</p>
-        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
+  })
   const text = `Hi ${teacherFirstName},\n\n${studentFirstName} ${studentLastName} (${studentEmail}) has removed themselves from your team for ${eventTitle}.\n\nLog in to your member portal to manage your team.\n\n— Stellr Education`
   return { subject, html, text }
 }
@@ -340,13 +304,9 @@ export function docusignSentToMinorEmail({
   firstName: string; guardianName: string; guardianEmail: string; eventTitle: string
 }) {
   const subject = `Action required — parental consent for ${eventTitle}`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">Parental Consent Required</h2>
+  const html = emailLayout({
+    heading: 'Parental Consent Required',
+    bodyHtml: `
         <p>Hi ${firstName},</p>
         <p>We have sent a parental consent form to <strong>${guardianName}</strong> (${guardianEmail}) for your participation in <strong>${eventTitle}</strong>.</p>
         <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:24px 0">
@@ -357,13 +317,8 @@ export function docusignSentToMinorEmail({
         <p style="color:#6b7280;font-size:14px">They will receive a separate email from DocuSign with a link to review and sign. If they haven't received it, ask them to check their spam folder.</p>
         <p style="color:#6b7280;font-size:14px">Once signed, the consent form stays on your member record and remains valid for 3 years across all Stellr events — you won't be asked again until it expires.</p>
         <p style="color:#6b7280;font-size:14px">We will send a reminder if the form hasn't been signed within one week. Once signed, you'll receive a confirmation email with a copy of the completed form.</p>
-        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
+  })
   const text = `Hi ${firstName},\n\nA parental consent form has been sent to ${guardianName} (${guardianEmail}) for your participation in ${eventTitle}.\n\nYour registration is not yet confirmed until the form is signed. Please ask your parent or guardian to check their inbox for an email from DocuSign.\n\n— Stellr Education`
   return { subject, html, text }
 }
@@ -374,13 +329,9 @@ export function docusignReminderToMinorEmail({
   firstName: string; guardianName: string; eventTitle: string
 }) {
   const subject = `Reminder — parental consent still required for ${eventTitle}`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">Consent Form Reminder</h2>
+  const html = emailLayout({
+    heading: 'Consent Form Reminder',
+    bodyHtml: `
         <p>Hi ${firstName},</p>
         <p>We haven't received a signed consent form from <strong>${guardianName}</strong> for your participation in <strong>${eventTitle}</strong>.</p>
         <p>We've sent them another reminder via DocuSign. Please let them know to check their inbox (and spam folder) for an email from DocuSign.</p>
@@ -389,13 +340,8 @@ export function docusignReminderToMinorEmail({
             <strong>Your registration remains unconfirmed</strong> until the consent form is signed. Please follow up with your parent or guardian as soon as possible.
           </p>
         </div>
-        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
+  })
   const text = `Hi ${firstName},\n\nWe haven't received a signed consent form from ${guardianName} for ${eventTitle}. We've sent them another reminder.\n\nYour registration remains unconfirmed until the form is signed.\n\n— Stellr Education`
   return { subject, html, text }
 }
@@ -406,13 +352,9 @@ export function docusignCompletedToMinorEmail({
   firstName: string; guardianName: string; eventTitle: string; downloadUrl: string
 }) {
   const subject = `Consent form signed — ${eventTitle}`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">Consent Form Signed</h2>
+  const html = emailLayout({
+    heading: 'Consent Form Signed',
+    bodyHtml: `
         <p>Hi ${firstName},</p>
         <p>Great news — <strong>${guardianName}</strong> has signed the parental consent form for your participation in <strong>${eventTitle}</strong>.</p>
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
@@ -423,13 +365,8 @@ export function docusignCompletedToMinorEmail({
           <a href="${downloadUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;font-weight:600">Download Consent Form →</a>
         </div>
         <p style="color:#6b7280;font-size:14px">DocuSign has also sent a copy directly to ${guardianName}.</p>
-        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
+  })
   const text = `Hi ${firstName},\n\n${guardianName} has signed the parental consent form for ${eventTitle}. Your registration is confirmed!\n\nDownload the signed form: ${downloadUrl}\n\n— Stellr Education`
   return { subject, html, text }
 }
@@ -444,13 +381,9 @@ export function docusignSentToSignerEmail({
   firstName: string; eventTitle: string; agreementLabel: string
 }) {
   const subject = `Action required — ${agreementLabel} for ${eventTitle}`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">Signature Required</h2>
+  const html = emailLayout({
+    heading: 'Signature Required',
+    bodyHtml: `
         <p>Hi ${firstName},</p>
         <p>We've sent you the <strong>${agreementLabel}</strong> for <strong>${eventTitle}</strong> via DocuSign.</p>
         <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:24px 0">
@@ -461,13 +394,8 @@ export function docusignSentToSignerEmail({
         <p style="color:#6b7280;font-size:14px">You'll receive a separate email from DocuSign with a link to review and sign. If it hasn't arrived, please check your spam folder.</p>
         <p style="color:#6b7280;font-size:14px">We'll send a reminder if the agreement hasn't been signed within one week. Once signed, you'll receive a confirmation with a copy of the completed document.</p>
         <p style="color:#6b7280;font-size:14px">Your signed agreement stays on your member record and remains valid for 3 years across all Stellr events — you won't be asked again until it expires.</p>
-        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
+  })
   const text = `Hi ${firstName},\n\nWe've sent you the ${agreementLabel} for ${eventTitle} via DocuSign. Your registration is not yet confirmed until it's signed. Please check your inbox for an email from DocuSign.\n\n— Stellr Education`
   return { subject, html, text }
 }
@@ -478,13 +406,9 @@ export function docusignReminderToSignerEmail({
   firstName: string; eventTitle: string; agreementLabel: string
 }) {
   const subject = `Reminder — ${agreementLabel} still required for ${eventTitle}`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">Agreement Reminder</h2>
+  const html = emailLayout({
+    heading: 'Agreement Reminder',
+    bodyHtml: `
         <p>Hi ${firstName},</p>
         <p>We haven't yet received your signed <strong>${agreementLabel}</strong> for <strong>${eventTitle}</strong>.</p>
         <p>We've sent you another reminder via DocuSign. Please check your inbox (and spam folder) for an email from DocuSign.</p>
@@ -493,13 +417,8 @@ export function docusignReminderToSignerEmail({
             <strong>Your registration remains unconfirmed</strong> until the agreement is signed. Please sign it as soon as possible.
           </p>
         </div>
-        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
+  })
   const text = `Hi ${firstName},\n\nWe haven't received your signed ${agreementLabel} for ${eventTitle}. We've sent another reminder via DocuSign.\n\nYour registration remains unconfirmed until it's signed.\n\n— Stellr Education`
   return { subject, html, text }
 }
@@ -510,13 +429,9 @@ export function docusignCompletedToSignerEmail({
   firstName: string; eventTitle: string; downloadUrl: string; agreementLabel: string
 }) {
   const subject = `${agreementLabel} signed — ${eventTitle}`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">Agreement Signed</h2>
+  const html = emailLayout({
+    heading: 'Agreement Signed',
+    bodyHtml: `
         <p>Hi ${firstName},</p>
         <p>Thank you — your <strong>${agreementLabel}</strong> for <strong>${eventTitle}</strong> has been signed.</p>
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
@@ -527,13 +442,8 @@ export function docusignCompletedToSignerEmail({
           <a href="${downloadUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;font-weight:600">Download Agreement →</a>
         </div>
         <p style="color:#6b7280;font-size:14px">DocuSign has also sent a copy directly to your email.</p>
-        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
+  })
   const text = `Hi ${firstName},\n\nYour ${agreementLabel} for ${eventTitle} has been signed. Your registration is confirmed!\n\nDownload the signed agreement: ${downloadUrl}\n\n— Stellr Education`
   return { subject, html, text }
 }
@@ -549,26 +459,17 @@ export function docusignOnFileEmail({
   const fmt = (iso: string) =>
     new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/Denver' })
   const subject = `No action needed — ${agreementLabel} already on record`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">Paperwork Already on Record</h2>
+  const html = emailLayout({
+    heading: 'Paperwork Already on Record',
+    bodyHtml: `
         <p>Hi ${firstName},</p>
         <p>Good news — the <strong>${agreementLabel}</strong> signed on ${fmt(signedOn)} is already on your Stellr member record, so no new paperwork is needed for <strong>${eventTitle}</strong>.</p>
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
           <p style="margin:0;font-weight:600;color:#14532d">No signature required — your existing agreement covers this event.</p>
         </div>
         <p style="color:#6b7280;font-size:14px">Signed agreements are valid for 3 years across all Stellr events. Yours is valid until <strong>${fmt(expiresOn)}</strong>; we'll ask for a new one only after it expires. You can view or download it any time from your member portal.</p>
-        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
+  })
   const text = `Hi ${firstName},\n\nThe ${agreementLabel} signed on ${fmt(signedOn)} is already on your Stellr member record, so no new paperwork is needed for ${eventTitle}.\n\nSigned agreements are valid for 3 years across all Stellr events — yours is valid until ${fmt(expiresOn)}. You can view or download it from your member portal.\n\n— Stellr Education`
   return { subject, html, text }
 }
@@ -579,23 +480,14 @@ export function groupPaymentConfirmedEmail({
   teacherFirstName: string; eventTitle: string; registrationId: string
 }) {
   const subject = `Payment Confirmed — ${eventTitle}`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">Payment Received — Registration Confirmed</h2>
+  const html = emailLayout({
+    heading: 'Payment Received — Registration Confirmed',
+    bodyHtml: `
         <p>Hi ${teacherFirstName},</p>
         <p>We've received your payment for <strong>${eventTitle}</strong>. Your group registration is now confirmed.</p>
         <p style="color:#6b7280;font-size:14px">Reference #: <span style="font-family:monospace">${registrationId}</span></p>
-        <p style="color:#6b7280;font-size:14px">We'll be in touch with event details closer to the date. Participant agreements and parental permission forms are issued via DocuSign if not already on record — signed paperwork stays valid for 3 years across Stellr events.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px">We'll be in touch with event details closer to the date. Participant agreements and parental permission forms are issued via DocuSign if not already on record — signed paperwork stays valid for 3 years across Stellr events.</p>`,
+  })
   const text = `Hi ${teacherFirstName},\n\nPayment received for ${eventTitle}. Your group registration is confirmed.\n\nReference #: ${registrationId}\n\n— Stellr Education`
   return { subject, html, text }
 }
@@ -643,24 +535,15 @@ export function outstandingItemsReminderEmail({
     )
     .join('')
 
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">Your registration needs attention</h2>
+  const html = emailLayout({
+    heading: 'Your registration needs attention',
+    bodyHtml: `
         <p>Hi ${firstName},</p>
         <p>Your registration for <strong>${eventTitle}</strong> is not yet complete. The following item${items.length !== 1 ? 's' : ''} need${items.length === 1 ? 's' : ''} your attention:</p>
         ${sections}
         <p style="color:#6b7280;font-size:14px">Your place is only confirmed once everything above is complete.</p>
-        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
+  })
   const text = `Hi ${firstName},\n\nYour registration for ${eventTitle} is not yet complete.\n\n${items
     .map((i) => `${i.heading.toUpperCase()}\n${i.text}`)
     .join('\n\n')}\n\nYour place is only confirmed once everything above is complete.\n\n— Stellr Education`
@@ -732,13 +615,9 @@ export function campaignRegistrationEmail({
   workspaceUrl: string
 }) {
   const subject = `You're registered — ${campaignTitle}`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">You're registered</h2>
+  const html = emailLayout({
+    heading: `You're registered`,
+    bodyHtml: `
         <p>Hi ${contactFirstName},</p>
         <p><strong>${groupName}</strong> is registered for <strong>${campaignTitle}</strong>. Campaigns are asynchronous and included with your membership — there's no payment and no fixed event date. Your group works at its own pace and submits a proposal before the deadline.</p>
         <table style="border-collapse:collapse;width:100%;margin:24px 0;background:#f9fafb;border-radius:8px">
@@ -749,13 +628,8 @@ export function campaignRegistrationEmail({
         </table>
         <p>Proposals are due <strong>${deadlineLabel}</strong>. You'll find the brief, workshop material and your team workspace in the app.</p>
         <a href="${workspaceUrl}" style="display:inline-block;margin:8px 0 4px;padding:11px 22px;background:#3C6DF6;color:#fff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">Open your campaign</a>
-        <p style="color:#6b7280;font-size:14px;margin-top:24px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px;margin-top:24px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
+  })
   const text = `Hi ${contactFirstName},\n\n${groupName} is registered for ${campaignTitle}. Campaigns are free with your membership — no payment, no fixed date.\n\nSeason: ${seasonLabel}\nProposal deadline: ${deadlineLabel}\n\nOpen your campaign: ${workspaceUrl}\n\n— The Stellr team`
   return { subject, html, text }
 }
@@ -770,22 +644,13 @@ export function campaignProposalReceivedEmail({
   deadlineLabel: string
 }) {
   const subject = `Proposal received — ${campaignTitle}`
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#1e3a5f;margin-top:0">Proposal received</h2>
+  const html = emailLayout({
+    heading: 'Proposal received',
+    bodyHtml: `
         <p>Hi ${contactFirstName},</p>
         <p>We've received your team's proposal (<strong>${fileName}</strong>). Judging opens after the ${deadlineLabel} deadline and results follow within three weeks. You can replace your submission any time before then from the app.</p>
-        <p style="color:#374151">— The Stellr team</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#374151">— The Stellr team</p>`,
+  })
   const text = `Hi ${contactFirstName},\n\nWe've received your team's proposal (${fileName}). Judging opens after the ${deadlineLabel} deadline and results follow within three weeks. You can replace your submission any time before then from the app.\n\n— The Stellr team`
   return { subject, html, text }
 }
@@ -802,21 +667,12 @@ export function campaignBroadcastEmail({
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const bodyHtml = esc(body).replace(/\n/g, '<br/>')
-  const html = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-      <div style="background:#1e3a5f;padding:24px 32px">
-        <h1 style="color:#fff;margin:0;font-size:22px">Stellr Education</h1>
-      </div>
-      <div style="padding:32px">
-        <p style="color:#6b7280;font-size:13px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px">${esc(campaignTitle)}</p>
+  const html = emailLayout({
+    heading: campaignTitle,
+    bodyHtml: `
         <div style="color:#374151;font-size:15px;line-height:1.6">${bodyHtml}</div>
-        <p style="color:#6b7280;font-size:14px;margin-top:24px">Reply to this email if you have any questions.</p>
-      </div>
-      <div style="background:#f3f4f6;padding:16px 32px;text-align:center">
-        <p style="color:#9ca3af;font-size:12px;margin:0">© ${new Date().getFullYear()} Stellr Education. All rights reserved.</p>
-      </div>
-    </div>
-  `
+        <p style="color:#6b7280;font-size:14px;margin-top:24px">Reply to this email if you have any questions.</p>`,
+  })
   const text = `${body}\n\n— Stellr Education (${campaignTitle})`
   return { subject, html, text }
 }

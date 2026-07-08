@@ -15,6 +15,7 @@ import {
   docusignSentToSignerEmail,
   docusignOnFileEmail,
 } from './email'
+import { notifyCommunityAdmins } from './notify'
 
 // Human-readable label per agreement type, used in emails and the portal UI.
 export const AGREEMENT_LABEL: Record<AgreementType, string> = {
@@ -85,7 +86,24 @@ export async function dispatchAgreement(
     }
 
     if (type === 'minor') {
-      if (!ctx.guardianEmail || !ctx.guardianFirstName) return
+      if (!ctx.guardianEmail || !ctx.guardianFirstName) {
+        // A minor's parental consent is required but there's no guardian on file,
+        // so no envelope can be issued. Silently skipping would leave the minor
+        // unpapered with nobody aware — alert admins to collect the guardian's
+        // details and re-issue. Non-fatal.
+        await notifyCommunityAdmins({
+          type: 'action',
+          body: `${ctx.firstName} ${ctx.lastName} needs a parental consent form for ${ctx.eventTitle}, but no guardian contact is on file.`,
+          referenceType: 'participant',
+          referenceId: ctx.participantId ?? undefined,
+          email: {
+            subject: `Action needed: missing guardian for ${ctx.firstName} ${ctx.lastName}`,
+            html: `<p>A parental consent form is required for <strong>${ctx.firstName} ${ctx.lastName}</strong> (${ctx.email}) for <strong>${ctx.eventTitle}</strong>, but no guardian name/email is on file — DocuSign could not be issued.</p><p>Collect the guardian's details and re-issue the consent form.</p>`,
+            text: `A parental consent form is required for ${ctx.firstName} ${ctx.lastName} (${ctx.email}) for ${ctx.eventTitle}, but no guardian contact is on file. Collect the guardian's details and re-issue.`,
+          },
+        }).catch(() => {})
+        return
+      }
       const guardianName = [ctx.guardianFirstName, ctx.guardianLastName].filter(Boolean).join(' ')
       const envelope = await createConsentEnvelope({
         minorFirstName:   ctx.firstName,

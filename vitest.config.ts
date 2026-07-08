@@ -15,6 +15,12 @@ export default defineConfig({
       '@': fileURLToPath(new URL('.', import.meta.url)),
       '@stellr/web-ui': fileURLToPath(new URL('./packages/web-ui/src/index.ts', import.meta.url)),
       '@stellr/icons': fileURLToPath(new URL('./packages/icons/src/index.tsx', import.meta.url)),
+      // The `server-only`/`client-only` guard packages throw unless the bundler
+      // sets the RSC `react-server` condition (Next does; Vitest doesn't), which
+      // blocks importing Server Components in tests. Stub them to a no-op here —
+      // the real Next build still enforces the boundary.
+      'server-only': fileURLToPath(new URL('./test/empty-module.ts', import.meta.url)),
+      'client-only': fileURLToPath(new URL('./test/empty-module.ts', import.meta.url)),
     },
   },
 })

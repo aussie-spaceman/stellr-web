@@ -27,6 +27,12 @@ vi.mock('@/lib/sessions', () => ({
 vi.mock('@/lib/community-feed', () => ({
   getHomeFeed: vi.fn().mockResolvedValue([]),
 }))
+// DashboardCampaigns is an async Server Component with its own data fetch (and its
+// own coverage); rendering it in the client test harness blanks the page. Stub it
+// so the home page itself can be asserted.
+vi.mock('@/components/campaigns/DashboardCampaigns', () => ({
+  DashboardCampaigns: () => null,
+}))
 
 import { getMemberEvents, getMemberEventCatalog } from '@/lib/event-portal'
 

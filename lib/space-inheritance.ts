@@ -28,10 +28,18 @@ export async function syncObjectSpaceRoster(
       .eq('object_ref', objectRef)
     const spaceIds = (links ?? []).map((r) => (r as { space_id: string }).space_id)
     if (spaceIds.length === 0) return
-    await db.from('community_space_members').upsert(
+    const { error: upsertErr } = await db.from('community_space_members').upsert(
       spaceIds.map((space_id) => ({ space_id, member_id: memberId, role: 'member', status: 'active' })),
       { onConflict: 'space_id,member_id', ignoreDuplicates: true },
     )
+    // Previously the upsert error was discarded, so a failed grant was invisible —
+    // the member registered successfully but silently never got Space access. Log
+    // it so the reconcile net (and admins) can see and recover it.
+    if (upsertErr) {
+      console.error('[space-inheritance] roster upsert failed (non-fatal):', {
+        objectType, objectRef, memberId, spaceIds, upsertErr,
+      })
+    }
   } catch (e) {
     console.error('[space-inheritance] syncObjectSpaceRoster failed (non-fatal):', e)
   }
@@ -87,11 +95,43 @@ export async function syncSpaceSourceRoster(
   try {
     const memberIds = await objectActiveMemberIds(db, objectType, objectRef)
     if (memberIds.length === 0) return
-    await db.from('community_space_members').upsert(
+    const { error: upsertErr } = await db.from('community_space_members').upsert(
       memberIds.map((member_id) => ({ space_id: spaceId, member_id, role: 'member', status: 'active' })),
       { onConflict: 'space_id,member_id', ignoreDuplicates: true },
     )
+    if (upsertErr) {
+      console.error('[space-inheritance] source roster upsert failed (non-fatal):', {
+        spaceId, objectType, objectRef, memberCount: memberIds.length, upsertErr,
+      })
+    }
   } catch (e) {
     console.error('[space-inheritance] syncSpaceSourceRoster failed (non-fatal):', e)
+  }
+}
+
+/**
+ * Reconcile every Space linked to an Event against that Event's full active roster.
+ * A safety net for the registration flow: even if a per-member syncObjectSpaceRoster
+ * grant above fails transiently (or a deploy landed the grant late), this backfills
+ * anyone the event's cohort roster knows about into each linked Space. Idempotent +
+ * non-fatal — mirrors syncSpaceSourceRoster but resolves the linked spaces itself.
+ */
+export async function reconcileEventSpaceRoster(
+  db: SupabaseClient,
+  eventSlug: string,
+): Promise<void> {
+  try {
+    const { data: links } = await db
+      .from('community_space_sources')
+      .select('space_id')
+      .eq('object_type', 'event')
+      .eq('object_ref', eventSlug)
+    const spaceIds = (links ?? []).map((r) => (r as { space_id: string }).space_id)
+    if (spaceIds.length === 0) return
+    for (const spaceId of spaceIds) {
+      await syncSpaceSourceRoster(db, spaceId, 'event', eventSlug)
+    }
+  } catch (e) {
+    console.error('[space-inheritance] reconcileEventSpaceRoster failed (non-fatal):', e)
   }
 }

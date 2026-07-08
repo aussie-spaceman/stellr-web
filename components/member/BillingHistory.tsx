@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { formatDateShort } from '@/lib/utils'
+import { registrationPaid } from '@/lib/payment-status'
 
 interface Invoice {
   id: string
@@ -79,8 +80,10 @@ function paymentLabel(p: Participation, reg: ParticipationReg): { label: string;
     // An invoiced registration is "paid" only once an admin records the invoice as
     // settled (invoice_paid_at). registrations.status='confirmed' is NOT proof of
     // payment (it's set on card checkout / campaign auto-confirm and reused for
-    // access), so it must not drive a green "Invoice paid" pill.
-    if (reg.invoice_paid_at) return { label: 'Invoice paid', style: 'bg-green-100 text-green-700' }
+    // access), so it must not drive a green "Invoice paid" pill. Shared helper =
+    // single source of truth, identical to the roster and Teams view.
+    if (registrationPaid({ invoiceRequested: reg.invoice_requested, invoicePaidAt: reg.invoice_paid_at, status: reg.status }))
+      return { label: 'Invoice paid', style: 'bg-green-100 text-green-700' }
     return { label: 'Invoice sent to organiser', style: 'bg-brand-blue/10 text-brand-blue' }
   }
   return { label: 'Paid by group', style: 'bg-green-100 text-green-700' }

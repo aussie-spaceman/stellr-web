@@ -5,6 +5,7 @@ import { ParticipantForm } from './ParticipantForm'
 import { EnvelopeStatusBadge } from './DocusignsSection'
 import { displayEventRole } from '@/lib/member-enums'
 import { formatDateShort } from '@/lib/utils'
+import { registrationPaid } from '@/lib/payment-status'
 import { Copy, Check } from 'lucide-react'
 
 function CopyButton({ text }: { text: string }) {
@@ -73,6 +74,8 @@ interface TeamRegistration {
   teacher_poc_last_name: string | null
   teacher_poc_email: string | null
   member_pays_individually: boolean
+  invoice_requested: boolean
+  invoice_paid_at: string | null
   details_method: string | null
   // Declared group size (migration 037). Null on older registrations.
   adult_count: number | null
@@ -166,8 +169,10 @@ function JoinedTeamsView({
     if (reg.invoice_requested) {
       // Paid only once an admin records the invoice settled (invoice_paid_at).
       // registrations.status='confirmed' is NOT proof of payment, so it must not
-      // drive a green "Invoice paid" pill.
-      if (reg.invoice_paid_at) return { label: 'Invoice paid', style: 'bg-green-100 text-green-700' }
+      // drive a green "Invoice paid" pill. Shared helper = single source of truth.
+      if (registrationPaid({ invoiceRequested: reg.invoice_requested, invoicePaidAt: reg.invoice_paid_at, status: reg.status })) {
+        return { label: 'Invoice paid', style: 'bg-green-100 text-green-700' }
+      }
       return { label: 'Invoice sent to organiser', style: 'bg-brand-blue/10 text-brand-blue' }
     }
     return { label: 'Paid by group', style: 'bg-green-100 text-green-700' }
@@ -444,6 +449,24 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
                       'Registration received — Stellr will confirm once reviewed.'
                     }
                   >{team.status}</span>
+                  {/* Payment status, distinct from the registration-status pill above.
+                      A 'confirmed' registration is NOT proof of payment: an invoiced
+                      group stays unpaid until an admin records invoice_paid_at, so the
+                      green "confirmed" pill must not be read as "paid". Uses the shared
+                      registrationPaid helper so this reads identically to the roster. */}
+                  {team.invoice_requested && (
+                    <div className="mt-1">
+                      {registrationPaid({ invoiceRequested: team.invoice_requested, invoicePaidAt: team.invoice_paid_at, status: team.status }) ? (
+                        <span className="inline-flex text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700" title="Invoice has been settled.">
+                          Invoice paid
+                        </span>
+                      ) : (
+                        <span className="inline-flex text-xs px-2 py-0.5 rounded-full font-medium bg-brand-orange/10 text-brand-gold-ink" title="An invoice has been raised for this group and is awaiting payment.">
+                          Invoice unpaid
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <svg className={`w-5 h-5 text-brand-muted-soft transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />

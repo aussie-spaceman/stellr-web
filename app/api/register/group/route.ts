@@ -15,7 +15,7 @@ import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt, normalizeEmail } from '@/lib/member-enums'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
 import { recordEventParticipation } from '@/lib/event-participation-sync'
-import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
+import { syncObjectSpaceRoster, reconcileEventSpaceRoster } from '@/lib/space-inheritance'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 import { getMemberOnFileByMembershipId } from '@/lib/member-onfile'
 import { getCurrentMember } from '@/lib/community'
@@ -429,6 +429,11 @@ export async function POST(req: NextRequest) {
         .filter((id): id is string => Boolean(id))
         .map((memberId) => syncObjectSpaceRoster(db, 'event', event_slug, memberId))
     )
+    // Safety net: reconcile the event's linked Space rosters from the cohort roster.
+    // If any per-member grant above failed transiently (the prior silent-swallow bug
+    // that stranded the Nevada 2027 group), everyone the event knows about is still
+    // enrolled. Non-fatal, idempotent.
+    await reconcileEventSpaceRoster(db, event_slug)
 
     // Turn non-members into members: grant the free base tier (Explorer for
     // students, Educator for adults) to anyone who still has no membership after
@@ -685,33 +690,50 @@ export async function POST(req: NextRequest) {
 
     if (payment_method === 'invoice' && stripePriceId && stripe) {
       try {
-        const customer = await stripe.customers.create({
-          email: teacher.email,
-          name: `${teacher.first_name} ${teacher.last_name}`,
-          metadata: { registrationId: regId, eventSlug: event_slug },
-        })
-        // Persist the Stripe customer on the registrant's member row so the
-        // invoice (and its receipt) surfaces in /account?tab=billing, which
-        // lists invoices via members.stripe_customer_id. Without this the
-        // invoice exists in Stripe but is invisible to the member.
-        if (registrantMemberId) {
-          await db.from('members').update({ stripe_customer_id: customer.id }).eq('id', registrantMemberId)
-        }
         const priceObj = await stripe.prices.retrieve(stripePriceId)
-        await stripe.invoiceItems.create({
-          customer: customer.id,
-          currency: priceObj.currency,
-          amount: (priceObj.unit_amount ?? 0) * total_participants,
-          description: `${event_title} — Group Registration (${total_participants} participant${total_participants !== 1 ? 's' : ''} × ${priceObj.currency.toUpperCase()} ${((priceObj.unit_amount ?? 0) / 100).toFixed(2)} each)`,
-        })
-        const invoice = await stripe.invoices.create({
-          customer: customer.id,
-          collection_method: 'send_invoice',
-          days_until_due: 14,
-          metadata: { registrationId: regId, eventSlug: event_slug, isGroup: 'true' },
-        })
-        const finalized = await stripe.invoices.finalizeInvoice(invoice.id)
-        await stripe.invoices.sendInvoice(finalized.id)
+        // Single source of truth for the amount: reuse amountDueCents, resolved once
+        // above from this same price × seats. Re-deriving it here (priceObj.unit_amount
+        // × total_participants) was a second, independent calc that could — and did —
+        // diverge from the stored amount and silently collapse to $0.00 (unit_amount
+        // defaulting to 0), finalising and emailing a $0 invoice for a paid event.
+        const invoiceAmountCents = amountDueCents
+        const perSeatCents = feeUnitAmount ?? priceObj.unit_amount ?? 0
+        // Guard: never finalise/send a non-positive invoice for a paid event. If the
+        // amount collapsed to 0 the price is misconfigured — leave the registration
+        // unpaid for admin follow-up rather than sending a bogus $0.00 invoice.
+        if (invoiceAmountCents <= 0) {
+          console.error('[register/group] invoice NOT sent — non-positive amount', {
+            eventSlug: event_slug, stripePriceId, perSeatCents,
+            total_participants, invoiceAmountCents,
+          })
+        } else {
+          const customer = await stripe.customers.create({
+            email: teacher.email,
+            name: `${teacher.first_name} ${teacher.last_name}`,
+            metadata: { registrationId: regId, eventSlug: event_slug },
+          })
+          // Persist the Stripe customer on the registrant's member row so the
+          // invoice (and its receipt) surfaces in /account?tab=billing, which
+          // lists invoices via members.stripe_customer_id. Without this the
+          // invoice exists in Stripe but is invisible to the member.
+          if (registrantMemberId) {
+            await db.from('members').update({ stripe_customer_id: customer.id }).eq('id', registrantMemberId)
+          }
+          await stripe.invoiceItems.create({
+            customer: customer.id,
+            currency: priceObj.currency,
+            amount: invoiceAmountCents,
+            description: `${event_title} — Group Registration (${total_participants} participant${total_participants !== 1 ? 's' : ''} × ${priceObj.currency.toUpperCase()} ${(perSeatCents / 100).toFixed(2)} each)`,
+          })
+          const invoice = await stripe.invoices.create({
+            customer: customer.id,
+            collection_method: 'send_invoice',
+            days_until_due: 14,
+            metadata: { registrationId: regId, eventSlug: event_slug, isGroup: 'true' },
+          })
+          const finalized = await stripe.invoices.finalizeInvoice(invoice.id)
+          await stripe.invoices.sendInvoice(finalized.id)
+        }
       } catch (invoiceErr) {
         console.error('Stripe invoice error (non-fatal):', invoiceErr)
       }

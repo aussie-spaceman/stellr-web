@@ -15,8 +15,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseServer } from '@/lib/supabase'
 import { logActivity, type Actor, type ActorType } from '@/lib/activity-log'
-import { type CreditType } from '@/lib/credits'
 import { grantAdhocEntitlement } from '@/lib/entitlements'
+
+// Inlined from the retired lib/credits.ts (wallet removed 2026-06-29). Survives
+// only as the tier_grant_rules.grant_credit_type CONFIG value.
+type CreditType = 'mentoring' | 'workshop'
 
 export type GrantTrigger =
   | 'signup'

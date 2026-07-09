@@ -58,3 +58,33 @@ export function clientIp(req: Request): string {
     'unknown'
   )
 }
+
+/**
+ * Per-IP guard for a public POST route. Returns a ready-to-return 429 Response
+ * (with Retry-After) when the caller is over the limit, or null to proceed.
+ * Logs every rejection so abuse patterns surface in the Vercel logs (F-17
+ * Phase 1 / Phase 3). `keySuffix` lets a route sub-key (e.g. by event slug) so
+ * one venue's Wi-Fi checking in a whole class isn't throttled as one attacker.
+ */
+export function rateLimitGuard(
+  req: Request,
+  route: string,
+  opts: { limit: number; windowMs: number },
+  keySuffix?: string,
+): Response | null {
+  const ip = clientIp(req)
+  const key = keySuffix ? `${route}:${keySuffix}:${ip}` : `${route}:${ip}`
+  const rl = checkRateLimit(key, opts)
+  if (rl.ok) return null
+  console.warn('[rate-limit] 429', route, ip)
+  return new Response(
+    JSON.stringify({ error: 'Too many requests — please wait a moment and try again.' }),
+    {
+      status: 429,
+      headers: { 'content-type': 'application/json', 'Retry-After': String(rl.retryAfterSeconds) },
+    },
+  )
+}
+
+/** Common windows for the public forms (F-17). */
+export const HOUR_MS = 60 * 60 * 1000

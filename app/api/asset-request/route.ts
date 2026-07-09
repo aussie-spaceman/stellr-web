@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sendEmail, MARKETING_FROM } from '@/lib/email'
 import { upsertContact } from '@/lib/hubspot'
+import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 // Where the gated files live. Empty → self-hosted on the site (SITE_URL/files).
@@ -57,6 +58,9 @@ const ASSETS = {
 type AssetKey = keyof typeof ASSETS
 
 export async function POST(req: Request) {
+  // Sends outbound email to the submitted address — an email-bomb vector.
+  const limited = rateLimitGuard(req, 'asset-request', { limit: 3, windowMs: HOUR_MS })
+  if (limited) return limited
   try {
     const { name, email, asset } = await req.json()
 

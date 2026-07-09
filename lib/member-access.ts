@@ -91,6 +91,18 @@ export async function getMemberAccessSummary(memberId: string): Promise<MemberAc
       .eq('mentor_member_id', memberId),
   ])
 
+  // Fail LOUD on any query error. This is an audit surface (the Person 360
+  // Effective-Access list): a transient DB failure silently swallowed as an
+  // empty result would show the member as having NO access — the wrong failure
+  // direction, since an admin could conclude a grant is missing and re-grant or
+  // mis-investigate. Callers catch and surface a 500 instead.
+  const primaryErr =
+    containerRes.error ?? spaceRes.error ?? tierRes.error ??
+    roleRes.error ?? objectRoleRes.error ?? ownedRes.error
+  if (primaryErr) {
+    throw new Error(`getMemberAccessSummary: access query failed — ${primaryErr.message}`)
+  }
+
   const rows = new Map<string, EffectiveAccessRow>()
   const upsert = (
     objectType: AccessObjectType,
@@ -147,10 +159,11 @@ export async function getMemberAccessSummary(memberId: string): Promise<MemberAc
     .filter((id): id is string => !!id)
 
   if (activeTierIds.length > 0) {
-    const { data: tierSpaces } = await db
+    const { data: tierSpaces, error: tierSpacesErr } = await db
       .from('community_space_tiers')
       .select('community_spaces!inner(id, name, is_archived)')
       .in('tier_id', activeTierIds)
+    if (tierSpacesErr) throw new Error(`getMemberAccessSummary: tier-space query failed — ${tierSpacesErr.message}`)
     for (const r of tierSpaces ?? []) {
       const s = (Array.isArray(r.community_spaces) ? r.community_spaces[0] : r.community_spaces) as SpaceJoin
       upsert('space', s.id, s.name, 'Member', { kind: 'tier', label: 'Rule (tier)' }, s.is_archived)
@@ -164,10 +177,11 @@ export async function getMemberAccessSummary(memberId: string): Promise<MemberAc
   const globalRoles = [...new Set(allRoles.filter((r) => r.scope === 'global').map((r) => r.role))]
 
   if (globalRoles.length > 0) {
-    const { data: roleSpaces } = await db
+    const { data: roleSpaces, error: roleSpacesErr } = await db
       .from('community_space_roles')
       .select('role, community_spaces!inner(id, name, is_archived)')
       .in('role', globalRoles)
+    if (roleSpacesErr) throw new Error(`getMemberAccessSummary: role-space query failed — ${roleSpacesErr.message}`)
     for (const r of roleSpaces ?? []) {
       const s = (Array.isArray(r.community_spaces) ? r.community_spaces[0] : r.community_spaces) as SpaceJoin
       upsert('space', s.id, s.name, 'Member', { kind: 'role', label: 'Rule (role)' }, s.is_archived)
@@ -219,6 +233,12 @@ export async function getMemberAccessSummary(memberId: string): Promise<MemberAc
       ? db.from('community_spaces').select('id, name, is_archived').in('id', spaceRefs)
       : Promise.resolve({ data: [] as Array<{ id: string; name: string; is_archived: boolean }> }),
   ])
+  if ('error' in containerNames && containerNames.error) {
+    throw new Error(`getMemberAccessSummary: container-label query failed — ${containerNames.error.message}`)
+  }
+  if ('error' in spaceNames && spaceNames.error) {
+    throw new Error(`getMemberAccessSummary: space-label query failed — ${spaceNames.error.message}`)
+  }
   const containerById = new Map((containerNames.data ?? []).map((c) => [c.id, c]))
   const spaceById = new Map((spaceNames.data ?? []).map((s) => [s.id, s]))
 

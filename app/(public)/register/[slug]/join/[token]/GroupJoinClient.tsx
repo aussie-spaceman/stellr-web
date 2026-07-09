@@ -106,11 +106,14 @@ export default function GroupJoinClient({
   // Students get their Grade pre-filled from DOB + the group school's State
   // (Sep 1 default when unknown), editable — matching the individual and
   // group-organiser forms. Re-infers on DOB edits and when switching to Student.
+  // clampToBand:false so a college-aged student (grade would fall outside 9–12)
+  // is NOT snapped to "12" and a manually chosen college grade isn't overwritten
+  // on a later DOB edit — the Grade list here runs from HS up to Grad/PhD.
   function setDateOfBirth(value: string) {
     setForm(prev => {
       const next = { ...prev, date_of_birth: value }
       if (prev.type === 'Student') {
-        const inferred = inferHighSchoolGrade(value, schoolState)
+        const inferred = inferHighSchoolGrade(value, schoolState, undefined, { clampToBand: false })
         if (inferred) next.grade = inferred
       }
       return next
@@ -121,7 +124,7 @@ export default function GroupJoinClient({
     setForm(prev => {
       const next = { ...prev, type: t }
       if (t === 'Student') {
-        const inferred = inferHighSchoolGrade(prev.date_of_birth, schoolState)
+        const inferred = inferHighSchoolGrade(prev.date_of_birth, schoolState, undefined, { clampToBand: false })
         if (inferred) next.grade = inferred
       }
       return next

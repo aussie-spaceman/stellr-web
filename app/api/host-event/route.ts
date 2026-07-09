@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email'
 import { upsertContact } from '@/lib/hubspot'
+import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
 
 export async function POST(req: Request) {
+  const limited = rateLimitGuard(req, 'host-event', { limit: 3, windowMs: HOUR_MS })
+  if (limited) return limited
   try {
     const {
       firstName, lastName, email, phone,

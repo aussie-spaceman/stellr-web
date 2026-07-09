@@ -13,7 +13,7 @@ import {
 } from '@/lib/member-enums'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { syncMemberClassificationRole } from '@/lib/member-roles'
-import { ageFromDob } from '@/lib/utils'
+import { ageFromDob, registrationStatus } from '@/lib/utils'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -79,6 +79,31 @@ export async function POST(req: NextRequest) {
   const registrationId = tokenRow.registration_id as string
   const eventSlug = tokenRow.event_slug as string
   const eventTitle = tokenRow.event_title as string
+
+  // Token validity alone is not enough: a still-unexpired link must not admit new
+  // participants into a registration the organiser has WITHDRAWN, nor after the
+  // event's registration window has CLOSED (the group route enforces the window on
+  // create; the join path previously did neither). Both add real participants with
+  // DocuSign envelopes, Space grants and payment emails, so gate here too.
+  if (reg.status === 'withdrawn' || reg.withdrawn_at != null) {
+    return NextResponse.json(
+      { error: 'This group registration has been withdrawn and is no longer accepting participants.' },
+      { status: 410 },
+    )
+  }
+  const joinEvent = await getEventBySlug(eventSlug).catch(() => null)
+  if (joinEvent) {
+    const regStatus = registrationStatus(
+      joinEvent.registrationOpenDate,
+      joinEvent.registrationCloseDate,
+    )
+    if (regStatus !== 'open') {
+      return NextResponse.json(
+        { error: 'Registration for this event is closed.' },
+        { status: 403 },
+      )
+    }
+  }
   const schoolName = (reg.school_name as string) ?? ''
   const memberPaysIndividually = (reg.member_pays_individually as boolean) ?? false
 

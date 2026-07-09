@@ -155,11 +155,22 @@ export type HighSchoolGrade = '9' | '10' | '11' | '12'
 export function inferHighSchoolGrade(
   dob: string,
   state?: string | null,
-  asOf?: string | Date
+  asOf?: string | Date,
+  opts?: { clampToBand?: boolean }
 ): HighSchoolGrade | '' {
   if (!dob) return ''
   try {
     const { grade } = estimateSchoolGrade(dob, { state: state ?? undefined, asOf })
+    // Default (HS-bracket forms): clamp into 9–12 — the registrant is known to be
+    // in high school, so a value just outside the band snaps to the nearest edge.
+    // clampToBand:false (forms where the student may be college-aged, e.g. the
+    // group-join form whose Grade list runs up to Grad/PhD): return '' when the
+    // computed grade is outside 9–12, so the caller does NOT overwrite a manually
+    // chosen college grade on a later DOB edit.
+    if (opts?.clampToBand === false) {
+      if (grade < 9 || grade > 12) return ''
+      return String(grade) as HighSchoolGrade
+    }
     const clamped = Math.min(12, Math.max(9, grade))
     return String(clamped) as HighSchoolGrade
   } catch {

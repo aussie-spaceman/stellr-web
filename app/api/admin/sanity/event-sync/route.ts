@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { ensureEventContainer } from '@/lib/container-sync'
 import { fireObjectCreatedRules } from '@/lib/object-created-rules'
+import { safeStrEqual } from '@/lib/secret-compare'
 
 // POST /api/admin/sanity/event-sync — Sanity → Supabase access-structure sync
 // (HANDOFF-CODE-REVIEW §7). Sanity is the source of truth for event CONTENT;
@@ -23,8 +24,13 @@ interface SanityEventPayload {
 
 export async function POST(req: Request) {
   const secret = process.env.SANITY_WEBHOOK_SECRET
-  const provided = new URL(req.url).searchParams.get('secret') ?? req.headers.get('x-webhook-secret')
-  if (!secret || provided !== secret) {
+  // Prefer the header; the ?secret= form is still accepted for existing configs
+  // but a query-string secret lands in access logs, so the header is preferred.
+  const provided = req.headers.get('x-webhook-secret') ?? new URL(req.url).searchParams.get('secret')
+  // Constant-time compare (this shared secret is the ONLY guard on this route —
+  // there's no admin session — so the compare quality matters). Fails closed when
+  // the secret is unset.
+  if (!secret || !provided || !safeStrEqual(provided, secret)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
+import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
 // POST /api/check-in — public, token-gated participant check-in (PRD 6.7).
 // Body: { slug, token, email }. The token comes from the event QR code (in-person)
@@ -13,6 +14,12 @@ export async function POST(req: Request) {
   if (!slug || !token || !email) {
     return NextResponse.json({ error: 'Missing details' }, { status: 400 })
   }
+
+  // Keyed by slug+ip and set generously: a whole class legitimately checks in
+  // from one venue's Wi-Fi (shared NAT IP), so this only stops a scraper probing
+  // emails against a token, not a real event's door traffic.
+  const limited = rateLimitGuard(req, 'check-in', { limit: 60, windowMs: HOUR_MS }, slug)
+  if (limited) return limited
 
   const db = supabaseServer()
 

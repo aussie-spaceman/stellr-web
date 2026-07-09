@@ -33,6 +33,16 @@ export async function GET() {
     getAllEvents().catch(() => []),
     getAllCampaigns().catch(() => []),
   ])
+  // Fail loud on a Supabase error rather than silently omitting a whole object
+  // type from the admin list — a dropped `community_spaces` query would render an
+  // Objects tab with no Spaces and no error, reading as "there are none".
+  const dbErr = containers.error ?? spaces.error ?? modules.error ?? resources.error
+  if (dbErr) {
+    return NextResponse.json(
+      { error: `Failed to load objects: ${dbErr.message}` },
+      { status: 500 },
+    )
+  }
   const events = [...(liveEvents ?? []), ...(campaigns ?? [])]
 
   // Space- and training-type containers (migration 123 plumbing for the resource

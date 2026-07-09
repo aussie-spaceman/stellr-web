@@ -279,6 +279,22 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Card chosen but the event has no Stripe price (or Stripe isn't configured):
+    // the card branch below would silently no-op and the request would return 201
+    // with checkoutUrl=null, leaving the registration stuck 'pending' forever with
+    // no payment path and no error. Reject up front, before any records exist.
+    if (payment_method === 'card' && (!feePriceId || !feeStripe)) {
+      console.error('[register/group] card selected but no Stripe price/config for event', {
+        event_slug, hasPrice: !!feePriceId, hasStripe: !!feeStripe,
+      })
+      return NextResponse.json(
+        {
+          error: 'Card payment is not set up for this event. Please choose the invoice option or contact Stellr.',
+        },
+        { status: 400 },
+      )
+    }
+
     // Same up-front rejection for a $0 invoice: if the price positively resolved
     // to a non-positive total, no invoice can ever be sent, so reject BEFORE any
     // records are created. Without this the registration would be created with
@@ -755,26 +771,40 @@ export async function POST(req: NextRequest) {
             total_participants, invoiceAmountCents,
           })
         } else {
-          const customer = await stripe.customers.create({
-            email: teacher.email,
-            name: `${teacher.first_name} ${teacher.last_name}`,
-            metadata: { registrationId: regId, eventSlug: event_slug },
-          })
-          // Persist the Stripe customer on the registrant's member row so the
-          // invoice (and its receipt) surfaces in /account?tab=billing, which
-          // lists invoices via members.stripe_customer_id. Without this the
-          // invoice exists in Stripe but is invisible to the member.
+          // Reuse the registrant's existing Stripe customer if they already have
+          // one (e.g. from a membership purchase). Creating a fresh customer and
+          // overwriting members.stripe_customer_id would strand their earlier
+          // invoices/receipts, since /account?tab=billing lists invoices for the
+          // single stored customer id.
+          let customerId: string | null = null
           if (registrantMemberId) {
-            await db.from('members').update({ stripe_customer_id: customer.id }).eq('id', registrantMemberId)
+            const { data: existingMember } = await db.from('members')
+              .select('stripe_customer_id').eq('id', registrantMemberId).maybeSingle()
+            customerId = (existingMember?.stripe_customer_id as string | null) ?? null
+          }
+          if (!customerId) {
+            const customer = await stripe.customers.create({
+              email: teacher.email,
+              name: `${teacher.first_name} ${teacher.last_name}`,
+              metadata: { registrationId: regId, eventSlug: event_slug },
+            })
+            customerId = customer.id
+            // Persist the new customer on the registrant's member row (so the
+            // invoice + receipt surface in the billing tab) — but only when the
+            // row has none yet, so a concurrent write is never clobbered.
+            if (registrantMemberId) {
+              await db.from('members').update({ stripe_customer_id: customerId })
+                .eq('id', registrantMemberId).is('stripe_customer_id', null)
+            }
           }
           await stripe.invoiceItems.create({
-            customer: customer.id,
+            customer: customerId,
             currency: priceObj.currency,
             amount: invoiceAmountCents,
             description: `${event_title} — Group Registration (${total_participants} participant${total_participants !== 1 ? 's' : ''} × ${priceObj.currency.toUpperCase()} ${(perSeatCents / 100).toFixed(2)} each)`,
           })
           const invoice = await stripe.invoices.create({
-            customer: customer.id,
+            customer: customerId,
             collection_method: 'send_invoice',
             days_until_due: 14,
             metadata: { registrationId: regId, eventSlug: event_slug, isGroup: 'true' },

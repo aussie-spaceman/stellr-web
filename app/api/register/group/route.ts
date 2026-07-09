@@ -279,6 +279,22 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Card chosen but the event has no Stripe price (or Stripe isn't configured):
+    // the card branch below would silently no-op and the request would return 201
+    // with checkoutUrl=null, leaving the registration stuck 'pending' forever with
+    // no payment path and no error. Reject up front, before any records exist.
+    if (payment_method === 'card' && (!feePriceId || !feeStripe)) {
+      console.error('[register/group] card selected but no Stripe price/config for event', {
+        event_slug, hasPrice: !!feePriceId, hasStripe: !!feeStripe,
+      })
+      return NextResponse.json(
+        {
+          error: 'Card payment is not set up for this event. Please choose the invoice option or contact Stellr.',
+        },
+        { status: 400 },
+      )
+    }
+
     // Same up-front rejection for a $0 invoice: if the price positively resolved
     // to a non-positive total, no invoice can ever be sent, so reject BEFORE any
     // records are created. Without this the registration would be created with

@@ -13,6 +13,8 @@
 // when the batch is committed (→ venue or school). Both reference Printful
 // sync_variant_id, mapped onto store_variants.pod_sync_variant_id.
 
+import { safeStrEqual } from '@/lib/secret-compare'
+
 const PRINTFUL_BASE = 'https://api.printful.com'
 
 export function printfulEnabled(): boolean {
@@ -154,5 +156,9 @@ export function verifyPrintfulWebhook(request: Request): boolean {
   const headerSecret = request.headers.get('x-printful-secret')
   const url = new URL(request.url)
   const querySecret = url.searchParams.get('secret')
-  return headerSecret === expected || querySecret === expected
+  // Constant-time compare against each supplied form (header preferred).
+  return (
+    (headerSecret != null && safeStrEqual(headerSecret, expected)) ||
+    (querySecret != null && safeStrEqual(querySecret, expected))
+  )
 }

@@ -5,7 +5,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { resolveAccessObject, type AccessObject } from '@/lib/access-objects'
 import { getEventRoster } from '@/lib/event-admin'
 import { checkSingletonRoleAvailable } from '@/lib/object-roles'
-import { roleAllowedForBracket, ROLE_LABELS, type MemberRole } from '@/lib/member-roles'
+import { roleAllowedForBracket, ROLE_LABELS, MANAGE_ROLES, type MemberRole } from '@/lib/member-roles'
 
 // /api/admin/access/objects/[id]/roster — one roster API for every object type
 // (convergence step 3). Dispatches on the resolved object type:
@@ -105,6 +105,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     )
   }
 
+  // The role ACTUALLY applied to the roster row. A Space only recognises
+  // 'moderator' as a manage role — every other value is a plain member — whereas
+  // a container roster carries the requested relationship (mentor/coach/…). Mirror
+  // this EFFECTIVE role, not the requested one: previously picking "mentor" for a
+  // Space wrote a manage member_roles row (granting manage rights) while the Space
+  // roster showed the person as a plain member — a silent privilege mismatch.
+  const isSpace = object.objectType === 'space' && !object.containerId
+  const effectiveRole: MemberRole = isSpace
+    ? (role === 'moderator' ? 'moderator' : 'member')
+    : role
+
   // Mirror into the unified member_roles table (object-scoped) FIRST, before the
   // roster write. For the singleton roles (workshop→coach, cohort→mentor) this
   // table carries the partial-unique index from migration 125, which is the only
@@ -114,16 +125,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // otherwise a rejected grant still lands a second coach on the roster while the
   // mirror silently fails. The pre-check stays for the friendly named-holder 409
   // on the common, non-racing path. Its error was previously discarded.
-  if (role !== 'member') {
+  if (effectiveRole !== 'member') {
     const { error: mirrorErr } = await db.from('member_roles').upsert(
-      { member_id: memberId, role, scope: 'object', object_type: object.objectType, object_id: object.ref, source: 'admin' },
+      { member_id: memberId, role: effectiveRole, scope: 'object', object_type: object.objectType, object_id: object.ref, source: 'admin' },
       { onConflict: 'member_id,role,object_type,object_id', ignoreDuplicates: true },
     )
     if (mirrorErr) {
       // 23505 = unique_violation on the singleton index (someone won the race).
       if (mirrorErr.code === '23505') {
         return NextResponse.json(
-          { error: `This ${object.objectType} already has a ${ROLE_LABELS[role] ?? role}.` },
+          { error: `This ${object.objectType} already has a ${ROLE_LABELS[effectiveRole] ?? effectiveRole}.` },
           { status: 409 },
         )
       }
@@ -131,9 +142,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  if (object.objectType === 'space' && !object.containerId) {
+  if (isSpace) {
     const { error } = await db.from('community_space_members').upsert(
-      { space_id: object.ref, member_id: memberId, role: role === 'moderator' ? 'moderator' : 'member', status: 'active' },
+      { space_id: object.ref, member_id: memberId, role: effectiveRole === 'moderator' ? 'moderator' : 'member', status: 'active' },
       { onConflict: 'space_id,member_id' },
     )
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -171,13 +182,23 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
   const db = supabaseServer()
   if (object.objectType === 'space' && !object.containerId) {
-    await db.from('community_space_members').delete().eq('space_id', object.ref).eq('member_id', memberId)
+    const { error } = await db.from('community_space_members').delete().eq('space_id', object.ref).eq('member_id', memberId)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   } else {
-    await db.from('cohort_members').delete().eq('cohort_id', object.containerId ?? object.ref).eq('member_id', memberId)
+    const { error } = await db.from('cohort_members').delete().eq('cohort_id', object.containerId ?? object.ref).eq('member_id', memberId)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  await db.from('member_roles').delete()
+  // Remove only the NON-manage object-scoped roles (the mirror of the roster
+  // membership). A manage role (moderator/mentor/coach) granted through the
+  // Managers pane or the People tab must survive a roster removal — deleting every
+  // object-scoped role here silently revoked management the admin didn't intend to
+  // touch. Manager removal is done from the Managers pane instead.
+  const manageList = [...MANAGE_ROLES].join(',')
+  const { error: rolesErr } = await db.from('member_roles').delete()
     .eq('member_id', memberId).eq('scope', 'object')
     .eq('object_type', object.objectType).eq('object_id', object.ref)
+    .not('role', 'in', `(${manageList})`)
+  if (rolesErr) return NextResponse.json({ error: rolesErr.message }, { status: 500 })
 
   return NextResponse.json({ ok: true })
 }

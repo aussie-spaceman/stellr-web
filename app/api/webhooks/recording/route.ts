@@ -149,8 +149,20 @@ export async function POST(req: Request) {
   }
 
   // ── Legacy shared-secret path (manual re-offload / testing) ──────────────
-  if (LEGACY_SECRET && req.headers.get('x-webhook-secret') !== LEGACY_SECRET) {
-    return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  // Fail CLOSED: if LEGACY_SECRET is unset this path must reject, not run
+  // unauthenticated. `offload()` does a server-side fetch(recordingUrl) and writes
+  // into the private bucket, so an unauthenticated caller here is an SSRF +
+  // arbitrary-recording-overwrite vector. Constant-time compare on the secret.
+  const provided = req.headers.get('x-webhook-secret') ?? ''
+  if (!LEGACY_SECRET) {
+    return NextResponse.json({ error: 'Legacy path disabled' }, { status: 403 })
+  }
+  {
+    const a = Buffer.from(provided)
+    const b = Buffer.from(LEGACY_SECRET)
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+    }
   }
   let body: { sessionId?: string; recordingUrl?: string }
   try {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
-import { registrationStatus } from '@/lib/utils'
+import { registrationStatus, ageFromDob } from '@/lib/utils'
 import type { RegistrationRow, ParticipantRow } from '@/lib/database.types'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt, normalizeEmail } from '@/lib/member-enums'
@@ -152,8 +152,7 @@ export async function POST(req: NextRequest) {
     const regId = (registration as Pick<RegistrationRow, 'id'>).id
 
     // Upsert member record — creates one if this email hasn't registered before
-    const dob = new Date(date_of_birth)
-    const ageNow = new Date().getFullYear() - dob.getFullYear()
+    const ageNow = ageFromDob(date_of_birth)
     const resolvedBracket = ageNow < 18 ? 'high_school' : normalizeAgeBracket(age_bracket)
     const resolvedRole = ageNow < 18 ? 'participant' : normalizeEventRole(event_role)
 

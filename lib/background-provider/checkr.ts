@@ -159,9 +159,12 @@ export const checkrProvider: BackgroundProvider = {
 
   verifyWebhook(rawBody: string, headers: Headers): boolean {
     const signature = headers.get('x-checkr-signature')
+    // Fail CLOSED when the secret is unset. This gates background-check pass/fail
+    // for people working with minors — an unconfigured secret must never accept an
+    // unauthenticated POST that could flip a compliance result.
     if (!ENV.webhookSecret) {
-      console.warn('[checkr] no API key/webhook secret set — accepting webhook unverified')
-      return true
+      console.error('[checkr] webhook secret not set — rejecting webhook (fail closed)')
+      return false
     }
     if (!signature) return false
     const expected = createHmac('sha256', ENV.webhookSecret).update(rawBody).digest('hex')

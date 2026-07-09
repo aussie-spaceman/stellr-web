@@ -1,4 +1,4 @@
-import { createSign, createHmac } from 'crypto'
+import { createSign, createHmac, timingSafeEqual } from 'crypto'
 
 const ENV = {
   oauthUrl:       process.env.DOCUSIGN_OAUTH_URL         ?? 'https://account-d.docusign.com',
@@ -402,11 +402,17 @@ export async function getEnvelopeDocument(envelopeId: string): Promise<ArrayBuff
 }
 
 export function verifyConnectHmac(body: string, signature: string): boolean {
-  if (!ENV.connectHmacKey) return true
+  // Fail CLOSED when the key is unset: an unconfigured secret must reject every
+  // request, not trust it. A misconfigured prod env otherwise let any anonymous
+  // POST drive envelope-status transitions (e.g. marking a minor's consent form
+  // "completed"). Compare in constant time to avoid leaking the digest byte-by-byte.
+  if (!ENV.connectHmacKey || !signature) return false
   const expected = createHmac('sha256', ENV.connectHmacKey)
     .update(body, 'utf8')
     .digest('base64')
-  return expected === signature
+  const a = Buffer.from(expected)
+  const b = Buffer.from(signature)
+  return a.length === b.length && timingSafeEqual(a, b)
 }
 
 export function isMinor(dateOfBirth: string): boolean {

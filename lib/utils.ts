@@ -78,7 +78,51 @@ export function registrationStatus(
   closeDate?: string
 ): 'open' | 'coming-soon' | 'closed' {
   const now = new Date()
-  if (openDate && new Date(openDate) > now) return 'coming-soon'
-  if (closeDate && new Date(closeDate) < now) return 'closed'
+  const isDateOnly = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s)
+  // Sanity's `date` fields are bare "YYYY-MM-DD" (no time/zone). Comparing them
+  // with `new Date(s)` parses at UTC midnight, so "Closes July 10" flipped to
+  // `closed` at 6 PM Mountain on July 9 — ~30h early, silently costing sign-ups.
+  // For a date-only bound, compare CALENDAR days in APP_TIME_ZONE: registration
+  // is open through the whole close day (Mountain) and opens at the start of the
+  // open day (Mountain). Full timestamps keep exact-instant comparison.
+  const todayMT = todayInAppZone()
+  if (openDate) {
+    if (isDateOnly(openDate)) { if (openDate > todayMT) return 'coming-soon' }
+    else if (new Date(openDate) > now) return 'coming-soon'
+  }
+  if (closeDate) {
+    if (isDateOnly(closeDate)) { if (closeDate < todayMT) return 'closed' }
+    else if (new Date(closeDate) < now) return 'closed'
+  }
   return 'open'
+}
+
+/** "Now" as a "YYYY-MM-DD" calendar date in APP_TIME_ZONE (en-CA gives ISO
+ *  order). Used to compare bare calendar dates without UTC-midnight drift. */
+export function todayInAppZone(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIME_ZONE,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date())
+}
+
+/** Whole years old as of today (APP_TIME_ZONE), accounting for month AND day.
+ *
+ * Year-subtraction (`thisYear - birthYear`) over-counts anyone whose birthday
+ * hasn't occurred yet this year — e.g. a Dec-2008 DOB reads as 18 in mid-2026
+ * when the person is still 17. That misclassification skips the minor→participant
+ * role override and the guardian/parental-consent requirement, so age must be
+ * exact here. A bare "YYYY-MM-DD" DOB is anchored to UTC to avoid a day shift. */
+export function ageFromDob(dob: string | Date): number {
+  const birth = typeof dob === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dob)
+    ? new Date(dob + 'T00:00:00Z')
+    : new Date(dob)
+  if (Number.isNaN(birth.getTime())) return NaN
+  const [ty, tm, td] = todayInAppZone().split('-').map(Number)
+  const by = birth.getUTCFullYear()
+  const bm = birth.getUTCMonth() + 1
+  const bd = birth.getUTCDate()
+  let age = ty - by
+  if (tm < bm || (tm === bm && td < bd)) age -= 1
+  return age
 }

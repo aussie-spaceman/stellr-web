@@ -13,6 +13,7 @@ import {
 } from '@/lib/member-enums'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { syncMemberClassificationRole } from '@/lib/member-roles'
+import { ageFromDob } from '@/lib/utils'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -136,7 +137,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'First name, last name, email and date of birth are required.' }, { status: 400 })
     }
 
-    const ageNow = new Date().getFullYear() - new Date(dob).getFullYear()
+    const ageNow = ageFromDob(dob)
     const isMinor = Number.isFinite(ageNow) && ageNow < 18
     const role = normalizeEventRole(str(d.type) || 'participant')
     const eventRole = isMinor && role !== 'school_student_manager' ? 'participant' : role

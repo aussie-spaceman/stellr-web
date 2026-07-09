@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
 import { upsertContact } from '@/lib/hubspot'
+import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
 // Newsletter / "Get Notified" subscriber capture. Accepts an email plus an
 // optional name and context (`source`, `event`) — used by the footer
 // SubscribeForm (email only) and the event-detail notify modal (name + email).
 export async function POST(req: Request) {
+  const limited = rateLimitGuard(req, 'subscribe', { limit: 5, windowMs: HOUR_MS })
+  if (limited) return limited
   try {
     const { email, name, source, event } = await req.json()
     if (!email || typeof email !== 'string' || !email.includes('@')) {

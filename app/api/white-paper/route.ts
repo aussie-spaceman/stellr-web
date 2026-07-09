@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sendEmail, MARKETING_FROM } from '@/lib/email'
 import { upsertContact } from '@/lib/hubspot'
+import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
 const PDF_FILE = 'Stellr-STEM-Power-Skills-White-Paper.pdf'
 const PDF_PUBLIC_PATH = `/files/${PDF_FILE}`
@@ -8,6 +9,10 @@ const PAPER_TITLE = 'From “Soft Skills” to STEM Power Skills'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
 export async function POST(req: Request) {
+  // Sends outbound email to the submitted address — an email-bomb vector, so
+  // throttle harder than the CRM-only forms.
+  const limited = rateLimitGuard(req, 'white-paper', { limit: 3, windowMs: HOUR_MS })
+  if (limited) return limited
   try {
     const { name, email } = await req.json()
 

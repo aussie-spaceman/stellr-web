@@ -150,10 +150,21 @@ async function markIndividualPayment(registrationId: string, participantEmail: s
   }
 }
 
-async function confirmRegistration(registrationId: string, isGroup: boolean) {
+async function confirmRegistration(
+  registrationId: string,
+  isGroup: boolean,
+  opts: { paidViaInvoice?: boolean } = {},
+) {
   const db = supabaseServer()
 
-  await db.from('registrations').update({ status: 'confirmed' }).eq('id', registrationId)
+  // For invoice-settled registrations, `status='confirmed'` alone is NOT proof of
+  // payment — `registrationPaid()` requires `invoice_paid_at` for any reg with
+  // invoice_requested. Stamp it here so paying a Stripe invoice online reconciles
+  // every paid surface (roster pills, Teams tab, billing, access gates) without an
+  // admin having to hit /api/admin/events/[slug]/invoice-paid manually.
+  const update: { status: string; invoice_paid_at?: string } = { status: 'confirmed' }
+  if (opts.paidViaInvoice) update.invoice_paid_at = new Date().toISOString()
+  await db.from('registrations').update(update).eq('id', registrationId)
 
   // Finalize event merch: allocate the included shirt to every participant
   // (sized from their t-shirt size) and activate any paid add-ons. Idempotent + non-fatal.
@@ -329,6 +340,24 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error('[stripe/webhook] Signature verification failed:', err)
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
+  }
+
+  // ── Idempotency guard ─────────────────────────────────────────────────────
+  // Stripe delivers at-least-once. Skip any event we've already fully processed
+  // so a redelivery can't re-activate a membership or re-send emails. We record
+  // the id only AFTER successful handling below (record-after-success), so an
+  // event that erred and 500'd is still retried rather than silently dropped.
+  // (Residual: two truly-concurrent deliveries of the same event could both pass
+  // this read; the per-handler idempotency — grantPurchasedLot, merch — covers
+  // that far-rarer case. Sequential redelivery-after-success is the reported bug.)
+  {
+    const seenDb = supabaseServer()
+    const { data: seen } = await seenDb
+      .from('stripe_webhook_events')
+      .select('id')
+      .eq('id', event.id)
+      .maybeSingle()
+    if (seen) return NextResponse.json({ ok: true, duplicate: true })
   }
 
   try {
@@ -520,11 +549,12 @@ export async function POST(req: NextRequest) {
           }
         }
       } else {
-        // Event registration invoice
+        // Event registration invoice — settled online. Mark paid AND stamp
+        // invoice_paid_at (this is the invoice path, so it is required).
         const registrationId = invoice.metadata?.registrationId
         const isGroup = invoice.metadata?.isGroup === 'true'
         if (registrationId) {
-          await confirmRegistration(registrationId, isGroup)
+          await confirmRegistration(registrationId, isGroup, { paidViaInvoice: true })
         }
       }
     }
@@ -536,7 +566,19 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     console.error('[stripe/webhook] Handler error:', err)
+    // Do NOT record the event as processed — returning 500 asks Stripe to retry,
+    // and the idempotency guard above must let that retry through.
     return NextResponse.json({ error: 'Handler failed' }, { status: 500 })
+  }
+
+  // Handled successfully — record so any redelivery is skipped. Non-fatal: if this
+  // write fails the worst case is a future redelivery re-processing the event.
+  try {
+    await supabaseServer()
+      .from('stripe_webhook_events')
+      .insert({ id: event.id, type: event.type })
+  } catch (e) {
+    console.error('[stripe/webhook] failed to record processed event id:', e)
   }
 
   return NextResponse.json({ ok: true })

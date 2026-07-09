@@ -5,6 +5,7 @@ import { useAuth } from '@clerk/nextjs'
 import { useSignIn } from '@clerk/nextjs/legacy'
 import Link from 'next/link'
 import { inferHighSchoolGrade } from '@/lib/grade-logic'
+import { ageFromDob } from '@/lib/utils'
 
 interface Props {
   token: string
@@ -90,7 +91,7 @@ export default function GroupJoinClient({
   const isStudent = form.type === 'Student'
   const isMinor = (() => {
     if (!form.date_of_birth) return isStudent
-    const age = new Date().getFullYear() - new Date(form.date_of_birth).getFullYear()
+    const age = ageFromDob(form.date_of_birth)
     return Number.isFinite(age) && age < 18
   })()
   // Every student signs the minor participation agreement (regardless of age),

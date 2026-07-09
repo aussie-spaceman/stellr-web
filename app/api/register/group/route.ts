@@ -3,7 +3,7 @@ import { randomBytes } from 'crypto'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
-import { registrationStatus } from '@/lib/utils'
+import { registrationStatus, ageFromDob } from '@/lib/utils'
 import {
   sendEmail,
   groupConfirmationEmail,
@@ -225,6 +225,22 @@ export async function POST(req: NextRequest) {
     const declaredAdultCount = adult_count
     const declaredStudentCount = registrant_role === 'student_manager' ? 1 + student_count : student_count
 
+    // `total_participants` is client-supplied and drives BILLING (amount_due,
+    // invoice amount, card checkout quantity). Trusting it blindly is an
+    // underpayment vector: a request declaring adult_count/student_count for 12
+    // seats but sending total_participants=2 would pay for 2 while the join-link
+    // cap admits 12. Bind it to the declared seat count — reject any mismatch
+    // before any records, price lookup, or charge.
+    const declaredSeats = declaredAdultCount + declaredStudentCount
+    if ((total_participants ?? 0) !== declaredSeats) {
+      return NextResponse.json(
+        {
+          error: `Participant count mismatch: ${total_participants ?? 0} total does not equal the ${declaredSeats} declared (${declaredAdultCount} adult, ${declaredStudentCount} student). Please refresh and try again.`,
+        },
+        { status: 400 },
+      )
+    }
+
     // Amount owed for this registration: per-seat event fee × seats, or 0 when the
     // event has no Stripe price (campaigns / free events). Drives the payment gate.
     let amountDueCents = 0
@@ -346,8 +362,7 @@ export async function POST(req: NextRequest) {
         if (p.email) linkedMemberIdByEmail.set(p.email, p._linked_member_id)
         continue
       }
-      const dob = new Date(p.date_of_birth)
-      const ageNow = new Date().getFullYear() - dob.getFullYear()
+      const ageNow = ageFromDob(p.date_of_birth)
       optionsByEmail.set(p.email, {
         ethnicity: (p as { ethnicity?: string[] }).ethnicity,
         dietary: p.dietary_requirements,
@@ -521,10 +536,7 @@ export async function POST(req: NextRequest) {
       t_shirt_size: p.t_shirt_size,
       school_name: teacher.school_name as string,
       age_bracket: p.age_bracket,
-      event_role: resolveRoleForAge(
-        p.event_role,
-        new Date().getFullYear() - new Date(p.date_of_birth).getFullYear(),
-      ),
+      event_role: resolveRoleForAge(p.event_role, ageFromDob(p.date_of_birth)),
       dietary_requirements: p.dietary_requirements ?? [],
       health_conditions: p.health_conditions || null,
       emergency_contact_first_name: p.emergency_contact_first_name || null,

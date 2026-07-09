@@ -105,6 +105,32 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     )
   }
 
+  // Mirror into the unified member_roles table (object-scoped) FIRST, before the
+  // roster write. For the singleton roles (workshop→coach, cohort→mentor) this
+  // table carries the partial-unique index from migration 125, which is the only
+  // ATOMIC guard against the check-then-act race: two admins adding different
+  // members as coach can both pass checkSingletonRoleAvailable() above, so we let
+  // the index reject the loser here (23505 → 409) BEFORE touching cohort_members —
+  // otherwise a rejected grant still lands a second coach on the roster while the
+  // mirror silently fails. The pre-check stays for the friendly named-holder 409
+  // on the common, non-racing path. Its error was previously discarded.
+  if (role !== 'member') {
+    const { error: mirrorErr } = await db.from('member_roles').upsert(
+      { member_id: memberId, role, scope: 'object', object_type: object.objectType, object_id: object.ref, source: 'admin' },
+      { onConflict: 'member_id,role,object_type,object_id', ignoreDuplicates: true },
+    )
+    if (mirrorErr) {
+      // 23505 = unique_violation on the singleton index (someone won the race).
+      if (mirrorErr.code === '23505') {
+        return NextResponse.json(
+          { error: `This ${object.objectType} already has a ${ROLE_LABELS[role] ?? role}.` },
+          { status: 409 },
+        )
+      }
+      return NextResponse.json({ error: mirrorErr.message }, { status: 500 })
+    }
+  }
+
   if (object.objectType === 'space' && !object.containerId) {
     const { error } = await db.from('community_space_members').upsert(
       { space_id: object.ref, member_id: memberId, role: role === 'moderator' ? 'moderator' : 'member', status: 'active' },
@@ -117,15 +143,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       { onConflict: 'cohort_id,member_id' },
     )
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  // Mirror into the unified member_roles table (object-scoped) so the resolver
-  // and the singleton indexes see one truth.
-  if (role !== 'member') {
-    await db.from('member_roles').upsert(
-      { member_id: memberId, role, scope: 'object', object_type: object.objectType, object_id: object.ref, source: 'admin' },
-      { onConflict: 'member_id,role,object_type,object_id', ignoreDuplicates: true },
-    )
   }
 
   return NextResponse.json({ ok: true })

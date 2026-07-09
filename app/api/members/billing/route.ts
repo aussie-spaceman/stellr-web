@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { resolveRequestMember } from '@/lib/impersonation'
+import { registrationPaid } from '@/lib/payment-status'
 import Stripe from 'stripe'
 
 function getStripe() {
@@ -68,6 +69,7 @@ export async function GET(req: Request) {
   type ParticipationReg = {
     created_at: string; type: string | null; status?: string | null
     member_pays_individually?: boolean; teacher_member_id?: string | null
+    invoice_requested?: boolean | null; invoice_paid_at?: string | null
   }
   const regOf = (p: { registrations: ParticipationReg | ParticipationReg[] | null }) =>
     Array.isArray(p.registrations) ? p.registrations[0] : p.registrations
@@ -85,13 +87,23 @@ export async function GET(req: Request) {
     .map(p => {
       const reg = regOf(p)
       let pay_kind: 'self' | 'organiser' | null = null
-      if (reg) {
-        const open = reg.status !== 'confirmed' && reg.status !== 'cancelled'
+      if (reg && reg.status !== 'cancelled') {
+        // Route "is it settled?" through the single-source rule, not raw status:
+        // an invoiced group an admin marked paid has invoice_paid_at set while
+        // status can still be 'pending', so `status !== 'confirmed'` alone wrongly
+        // reported the organiser as still owing (contradicting the paid pills
+        // elsewhere). registrationPaid() knows invoice_requested/invoice_paid_at.
+        const paid = registrationPaid({
+          invoiceRequested: reg.invoice_requested,
+          invoicePaidAt: reg.invoice_paid_at,
+          status: reg.status,
+          individualPaymentStatus: p.individual_payment_status,
+        })
         if (reg.type === 'individual') {
-          if (open) pay_kind = 'self'
+          if (!paid) pay_kind = 'self'
         } else if (reg.member_pays_individually) {
           if (p.individual_payment_status === 'pending') pay_kind = 'self'
-        } else if (open) {
+        } else if (!paid) {
           pay_kind = 'organiser'
         }
       }

@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import {
   Plus, Trash2, GripVertical, Pencil, Check, X, ChevronDown, ChevronRight,
-  Radio, Video, FileText, Paperclip, Play, Upload,
+  Radio, Video, FileText, Paperclip, Play, Upload, Sparkles,
 } from 'lucide-react'
+import { INTERACTIVE_OPTIONS } from '@/lib/interactive-lessons-meta'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { ObjectAssignments, type AdminTier } from '@/components/admin/training/ObjectAssignments'
 import { RecordSession } from '@/components/admin/training/RecordSession'
@@ -24,7 +25,7 @@ const CONTENT_TYPES: {
   key: ContentKey
   label: string
   Icon: typeof Radio
-  input: 'none' | 'url' | 'file'
+  input: 'none' | 'url' | 'file' | 'select'
   title: string
   desc: string
   cta: string
@@ -34,9 +35,10 @@ const CONTENT_TYPES: {
   { key: 'link', label: 'Video link', Icon: Video, input: 'url', title: 'Paste a video URL', desc: 'YouTube, Vimeo or any embeddable video link.', cta: 'Add URL' },
   { key: 'google_doc', label: 'Google Doc', Icon: FileText, input: 'url', title: 'Paste a Google Doc URL', desc: 'A shared Google Doc shown inline in the lesson.', cta: 'Add URL' },
   { key: 'document', label: 'Resource', Icon: Paperclip, input: 'file', title: 'Upload a file', desc: 'A PDF or document attached to this lesson.', cta: 'Choose file', accept: '.pdf,.doc,.docx,.ppt,.pptx' },
+  { key: 'interactive', label: 'Interactive', Icon: Sparkles, input: 'select', title: 'Choose an interactive tutorial', desc: 'A built-in interactive lesson (e.g. a guided tutorial with calculators), rendered natively in the player.', cta: 'Select tutorial' },
 ]
 const typeIcon = (k: ContentKey) =>
-  k === 'live' ? Radio : k === 'link' ? Video : k === 'google_doc' ? FileText : k === 'video' ? Play : Paperclip
+  k === 'live' ? Radio : k === 'link' ? Video : k === 'google_doc' ? FileText : k === 'video' ? Play : k === 'interactive' ? Sparkles : Paperclip
 
 /* ─── Root ───────────────────────────────────────────────────────────────── */
 
@@ -442,6 +444,7 @@ function LessonEditor({
   const [contentKind, setContentKind] = useState<ContentKey>(existing?.content_kind ?? 'live')
   const [title, setTitle] = useState(existing?.title ?? '')
   const [url, setUrl] = useState(existing?.external_url ?? '')
+  const [interactiveKey, setInteractiveKey] = useState(existing?.interactive_key ?? '')
   const [file, setFile] = useState<File | null>(null)
   const [minutes, setMinutes] = useState(existing?.estimated_minutes ? String(existing.estimated_minutes) : '')
   const [body, setBody] = useState(existing?.body ?? '')
@@ -465,6 +468,7 @@ function LessonEditor({
     !existing ||
     contentKind !== existing.content_kind ||
     (active.input === 'url' && url.trim() !== (existing.external_url ?? '')) ||
+    (active.input === 'select' && interactiveKey !== (existing.interactive_key ?? '')) ||
     (active.input === 'file' && !!file)
   const showDropzone = active.input !== 'none' && (contentChanged || !existing)
 
@@ -472,6 +476,7 @@ function LessonEditor({
     if (!title.trim()) { setError('Add a lesson title.'); return }
     if (contentChanged && active.input === 'url' && !url.trim()) { setError('Add a URL for this lesson.'); return }
     if (contentChanged && active.input === 'file' && !file) { setError('Choose a file to upload.'); return }
+    if (contentChanged && active.input === 'select' && !interactiveKey) { setError('Choose a tutorial for this lesson.'); return }
     setBusy(true); setError(null)
     try {
       if (existing && !contentChanged) {
@@ -504,6 +509,7 @@ function LessonEditor({
               id: existing.id, title: title.trim(), body, status,
               estimatedMinutes: minutes ? Number(minutes) : undefined,
               contentKind, externalUrl: active.input === 'url' ? url.trim() : undefined,
+              interactiveKey: active.input === 'select' ? interactiveKey : undefined,
             }),
           })
         }
@@ -522,6 +528,7 @@ function LessonEditor({
       if (minutes) fd.set('estimatedMinutes', minutes)
       if (body.trim()) fd.set('body', body)
       if (active.input === 'url') fd.set('externalUrl', url)
+      if (active.input === 'select') fd.set('interactiveKey', interactiveKey)
       if (active.input === 'file' && file) fd.set('file', file)
       const res = await fetch('/api/admin/community/training/items', { method: 'POST', body: fd })
       if (res.ok) onSaved(); else { const d = await res.json().catch(() => ({})); setError(d.error || 'Could not add lesson.') }
@@ -552,10 +559,10 @@ function LessonEditor({
 
       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Lesson title" autoFocus className="w-full rounded-lg border border-brand-border px-3 py-2 text-sm" />
 
-      {/* 4-up content-type picker */}
+      {/* Content-type picker */}
       <div>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Lesson content</p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           {CONTENT_TYPES.map((c) => {
             const selected = contentKind === c.key
             return (
@@ -591,6 +598,18 @@ function LessonEditor({
               <Upload className="h-4 w-4" /> {file ? file.name : active.cta}
               <input type="file" accept={active.accept} className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             </label>
+          )}
+          {active.input === 'select' && (
+            <select
+              value={interactiveKey}
+              onChange={(e) => setInteractiveKey(e.target.value)}
+              className="mt-2 w-full rounded-md border border-brand-border bg-white px-3 py-2 text-sm"
+            >
+              <option value="">{active.cta}…</option>
+              {INTERACTIVE_OPTIONS.map((o) => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
+            </select>
           )}
         </div>
       )}

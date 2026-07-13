@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
 import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
 import { enqueueVideoWatermark } from '@/lib/watermark/video-queue'
+import { isInteractiveKey } from '@/lib/interactive-lessons-meta'
 
 // Video files can be large — override the default 4 MB Next.js body limit.
 export const maxRequestBodySize = '500mb'
@@ -17,6 +18,7 @@ export const maxRequestBodySize = '500mb'
 //           body?       (lesson notes shown beneath the featured media)
 //           file        (required for video|document)
 //           externalUrl (required for google_doc|link — also accepts YouTube/Vimeo embeds)
+//           interactiveKey (for interactive — a key registered in lib/interactive-lessons-meta.ts)
 // PATCH (JSON) updates an existing lesson: { id, title?, body?, status?, sectionId?, displayOrder? }
 // DELETE (?id=) removes a lesson.
 
@@ -33,6 +35,7 @@ export async function POST(req: Request) {
   const title = (form.get('title') as string | null)?.trim()
   const contentKind = form.get('contentKind') as string | null
   const externalUrl = (form.get('externalUrl') as string | null)?.trim() || null
+  const interactiveKey = (form.get('interactiveKey') as string | null)?.trim() || null
   const estimatedMinutes = parseInt((form.get('estimatedMinutes') as string) ?? '', 10)
   const displayOrder = parseInt((form.get('displayOrder') as string) ?? '0', 10)
   const sectionId = (form.get('sectionId') as string | null)?.trim() || null
@@ -44,7 +47,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'moduleId, title, contentKind required' }, { status: 400 })
   }
 
-  const ALLOWED_KINDS = ['video', 'document', 'google_doc', 'link', 'live']
+  const ALLOWED_KINDS = ['video', 'document', 'google_doc', 'link', 'live', 'interactive']
   if (!ALLOWED_KINDS.includes(contentKind)) {
     return NextResponse.json({ error: 'Invalid contentKind' }, { status: 400 })
   }
@@ -58,6 +61,12 @@ export async function POST(req: Request) {
   }
   if (needsUrl && !externalUrl) {
     return NextResponse.json({ error: 'externalUrl required for google_doc/link' }, { status: 400 })
+  }
+  // 'interactive' lessons render a code-registered component. A missing key is
+  // tolerated (the player shows 'unavailable' until one is set), but a key that
+  // isn't in the registry is rejected — lessons can't point at nonexistent code.
+  if (contentKind === 'interactive' && interactiveKey && !isInteractiveKey(interactiveKey)) {
+    return NextResponse.json({ error: 'Unknown interactiveKey' }, { status: 400 })
   }
 
   const db = supabaseServer()
@@ -96,7 +105,8 @@ export async function POST(req: Request) {
       title,
       content_kind: contentKind,
       storage_path: storagePath,
-      external_url: needsFile ? null : externalUrl,
+      external_url: needsFile || contentKind === 'interactive' ? null : externalUrl,
+      interactive_key: contentKind === 'interactive' ? interactiveKey : null,
       estimated_minutes: Number.isFinite(estimatedMinutes) ? estimatedMinutes : null,
       display_order: Number.isFinite(displayOrder) ? displayOrder : 0,
       section_id: sectionId,
@@ -117,7 +127,8 @@ export async function POST(req: Request) {
 // content type/URL) OR multipart/form-data (when replacing the file for a
 // video/document/resource lesson). Changing content type re-points the media:
 // switching to a file kind requires a file; to a URL kind requires externalUrl;
-// to 'live' clears both (the room is derived from the item id).
+// to 'interactive' requires a registered interactiveKey; to 'live' clears both
+// (the room is derived from the item id).
 export async function PATCH(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const db = supabaseServer()
@@ -149,12 +160,15 @@ export async function PATCH(req: Request) {
   // Content type / media change.
   const contentKind = fields.contentKind as string | undefined
   if (contentKind) {
-    const ALLOWED = ['video', 'document', 'google_doc', 'link', 'live']
+    const ALLOWED = ['video', 'document', 'google_doc', 'link', 'live', 'interactive']
     if (!ALLOWED.includes(contentKind)) return NextResponse.json({ error: 'Invalid contentKind' }, { status: 400 })
     patch.content_kind = contentKind
     const externalUrl = (fields.externalUrl as string | undefined)?.trim() || null
+    const interactiveKey = (fields.interactiveKey as string | undefined)?.trim() || null
     const needsFile = contentKind === 'video' || contentKind === 'document'
     const needsUrl = contentKind === 'google_doc' || contentKind === 'link'
+    // Switching away from 'interactive' clears the key; switching to it sets it below.
+    patch.interactive_key = null
 
     if (needsFile) {
       if (file) {
@@ -183,6 +197,14 @@ export async function PATCH(req: Request) {
     } else if (needsUrl) {
       if (!externalUrl) return NextResponse.json({ error: 'externalUrl required for this content type' }, { status: 400 })
       patch.external_url = externalUrl
+      patch.storage_path = null
+    } else if (contentKind === 'interactive') {
+      // Key must be registered in code (lib/interactive-lessons-meta.ts).
+      if (!interactiveKey || !isInteractiveKey(interactiveKey)) {
+        return NextResponse.json({ error: 'A registered interactiveKey is required for this content type' }, { status: 400 })
+      }
+      patch.interactive_key = interactiveKey
+      patch.external_url = null
       patch.storage_path = null
     } else {
       // 'live' — room derived from item id; clear media.

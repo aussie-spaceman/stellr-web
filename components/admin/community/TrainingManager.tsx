@@ -62,7 +62,7 @@ const KIND_LABELS: Record<(typeof KINDS)[number], string> = {
   campaign: 'Campaign — only via participant assignment',
 }
 
-const CONTENT_KINDS = ['video', 'document', 'google_doc', 'link', 'live'] as const
+const CONTENT_KINDS = ['video', 'document', 'google_doc', 'link', 'live', 'interactive'] as const
 
 // Human label for the lesson-type dropdown (raw enum values aren't all readable).
 const CONTENT_KIND_LABELS: Record<(typeof CONTENT_KINDS)[number], string> = {
@@ -71,6 +71,7 @@ const CONTENT_KIND_LABELS: Record<(typeof CONTENT_KINDS)[number], string> = {
   google_doc: 'google doc',
   link: 'link',
   live: 'live video room',
+  interactive: 'interactive tutorial',
 }
 
 export interface AdminSection {
@@ -90,6 +91,8 @@ export interface AdminLesson {
   estimated_minutes: number | null
   body: string | null
   external_url?: string | null
+  /** For 'interactive' lessons: key into the code registry (lib/interactive-lessons-meta.ts). */
+  interactive_key?: string | null
   /** For 'live' (Record) lessons: none | pending | available. */
   recording_status?: string | null
 }

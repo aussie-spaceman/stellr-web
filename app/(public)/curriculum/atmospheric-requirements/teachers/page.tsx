@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Hero, Eyebrow, Button, CtaBand } from '@stellr/web-ui'
-import { OBJECTIVES, NGSS, TUTORIAL_META } from '../tutorial-data'
+import { OBJECTIVES, NGSS, TUTORIAL_META } from '@/components/interactive/atmospheric-requirements/tutorial-data'
 
 export const metadata: Metadata = {
   title: 'Atmospheric Requirements — Teacher Companion',

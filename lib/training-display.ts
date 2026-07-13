@@ -62,7 +62,7 @@ export function courseIssuer(kind: MaterialKind): string {
 export interface TrainingItem {
   id: string
   title: string
-  content_kind: 'video' | 'document' | 'google_doc' | 'link' | 'live'
+  content_kind: 'video' | 'document' | 'google_doc' | 'link' | 'live' | 'interactive'
   external_url: string | null
   estimated_minutes: number | null
   display_order: number

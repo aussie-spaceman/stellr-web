@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Check, Play, FileText, ExternalLink, Lock } from 'lucide-react'
+import { Check, Play, FileText, ExternalLink, Lock, Sparkles } from 'lucide-react'
 import type { TrainingSection, TrainingItem } from '@/lib/training'
 
 // Right-hand "Course content" outline on the course-detail page: sections with
@@ -9,6 +9,7 @@ import type { TrainingSection, TrainingItem } from '@/lib/training'
 function typeIcon(kind: TrainingItem['content_kind']) {
   if (kind === 'video' || kind === 'live') return Play
   if (kind === 'google_doc' || kind === 'link') return ExternalLink
+  if (kind === 'interactive') return Sparkles
   return FileText
 }
 

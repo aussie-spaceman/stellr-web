@@ -6,6 +6,7 @@ import {
 } from '@/lib/community'
 import { getVideoProvider, getEmbedConfig, trainingRoomName } from '@/lib/video-provider'
 import { currentUserHasScope } from '@/lib/admin-auth'
+import { isInteractiveKey } from '@/lib/interactive-lessons-meta'
 import {
   type MaterialKind,
   type CourseType,
@@ -348,6 +349,10 @@ export type LessonMedia =
   // ends and its recording is offloaded, the lesson serves the recording as a
   // 'video' replay instead (see liveLessonMedia).
   | { type: 'live'; domain: string; scriptSrc: string; roomName: string; jwt: string }
+  // A bespoke React tutorial rendered natively in the player. `key` names a
+  // component in the code registry (lib/interactive-lessons-meta.ts); keys not in
+  // the registry resolve to 'unavailable' instead.
+  | { type: 'interactive'; key: string }
   // An unlocked lesson whose resource can't be served: no link provided (or a
   // placeholder like "TBC"), a missing file, or a live room that failed to mint.
   // The player surfaces this as "resource unavailable" + a flag-to-admin action.
@@ -446,7 +451,7 @@ export async function getLesson(
   const db = supabaseServer()
   const { data: row } = await db
     .from('training_items')
-    .select('storage_path, external_url, body, content_kind, recording_path, recording_status')
+    .select('storage_path, external_url, body, content_kind, interactive_key, recording_path, recording_status')
     .eq('id', itemId)
     .maybeSingle()
 
@@ -455,6 +460,12 @@ export async function getLesson(
     const kind = row.content_kind as TrainingItem['content_kind']
     if (kind === 'live') {
       media = await liveLessonMedia(member, itemId, row)
+    } else if (kind === 'interactive') {
+      // Only registered keys render; an empty key or one whose component was
+      // removed falls back to the actionable 'unavailable' state.
+      media = isInteractiveKey(row.interactive_key as string | null)
+        ? { type: 'interactive', key: row.interactive_key as string }
+        : { type: 'unavailable' }
     } else if ((kind === 'video' || kind === 'document') && row.storage_path) {
       const url = await signedDownloadUrl(row.storage_path as string)
       media = url ? { type: kind, url } : { type: 'unavailable' }

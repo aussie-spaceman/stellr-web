@@ -2,6 +2,8 @@ import { ExternalLink, FileText, Play, Download, AlertTriangle } from 'lucide-re
 import type { LessonMedia as LessonMediaType } from '@/lib/training'
 import { VideoRoom } from '@/components/video/VideoRoom'
 import { FlagResourceButton } from '@/components/training/FlagResourceButton'
+import { InteractiveLessonHost } from '@/components/training/InteractiveLessonHost'
+import { isInteractiveKey } from '@/lib/interactive-lessons-meta'
 
 // Renders the featured media for a lesson inside the course-detail player surface.
 // Shared by the course-detail page (and any standalone lesson view).
@@ -27,7 +29,9 @@ export function LessonMedia({
     )
   }
 
-  if (media.type === 'unavailable') {
+  // An interactive lesson whose key is no longer in the registry (component
+  // removed) degrades to the same unavailable state — never a crash or blank slot.
+  if (media.type === 'unavailable' || (media.type === 'interactive' && !isInteractiveKey(media.key))) {
     return (
       <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-2xl bg-gradient-to-br from-[#13183A] to-[#0E1330] px-6 text-center">
         <AlertTriangle className="h-8 w-8 text-amber-300" />
@@ -38,6 +42,10 @@ export function LessonMedia({
         <FlagResourceButton itemId={itemId} />
       </div>
     )
+  }
+
+  if (media.type === 'interactive') {
+    return <InteractiveLessonHost lessonKey={media.key} />
   }
 
   if (media.type === 'live') {

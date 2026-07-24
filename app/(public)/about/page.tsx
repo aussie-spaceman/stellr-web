@@ -89,13 +89,14 @@ const advisoryBoard = [
     photo: '/team/rick-griffiths.jpeg',
     bio: `Rick is a partially retired aerospace teacher, and fully retired US Air Force pilot, guiding high schoolers toward technical careers every day. A Stanford-trained educator, he has seen how competitions and real-world challenges turn classroom theory into genuine ambition. He champions Stellr's mission because it gives students the visibility, and the confidence, to pursue the STEM pathways in front of them.`,
   },
-  {
-    name: 'Bill Allen',
-    location: 'George, Iowa',
-    linkedIn: 'https://www.linkedin.com/in/bill-allen-b7006b114/',
-    photo: '/team/bill-allen.jpeg',
-    bio: 'Bill remains a believer in and advocate for ISD competitions based on the positive results he has seen with former students continuing their studies and careers in engineering and STEM. By attending these competitions, students from the Midwest truly begin to see a pathway to the careers they are interested in, and begin to understand their dreams can become reality.',
-  },
+  // TEMPORARILY HIDDEN 2026-07-24 — restore in August 2026. Do not delete.
+  // {
+  //   name: 'Bill Allen',
+  //   location: 'George, Iowa',
+  //   linkedIn: 'https://www.linkedin.com/in/bill-allen-b7006b114/',
+  //   photo: '/team/bill-allen.jpeg',
+  //   bio: 'Bill remains a believer in and advocate for ISD competitions based on the positive results he has seen with former students continuing their studies and careers in engineering and STEM. By attending these competitions, students from the Midwest truly begin to see a pathway to the careers they are interested in, and begin to understand their dreams can become reality.',
+  // },
 ]
 
 function Avatar({

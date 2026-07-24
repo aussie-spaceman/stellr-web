@@ -3,6 +3,7 @@ import { getEventBySlug } from '@/lib/sanity'
 import { formatDateRange } from '@/lib/utils'
 import { getRegistrationPrefill } from '@/lib/registration-prefill'
 import GroupRegistrationForm from '@/components/forms/GroupRegistrationForm'
+import { TrackEvent } from '@/components/analytics/TrackEvent'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -18,6 +19,15 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-surface">
+      {/* Funnel: user is filling the registration form (group). No PII. */}
+      <TrackEvent
+        event={{
+          event: 'registration_started',
+          competition_name: event.title,
+          competition_id: slug,
+          participation_type: isCampaign ? 'campaign' : 'event',
+        }}
+      />
       <div className="bg-brand-blue-dark text-white py-10 px-4">
         <div className="max-w-3xl mx-auto">
           <p className="text-blue-300 text-sm mb-4">← {isCampaign ? 'Campaign Registration' : 'Group Registration'}</p>

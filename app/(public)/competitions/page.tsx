@@ -23,11 +23,14 @@ import { WorkCard } from '@/components/sections/WorkCard'
 import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
 import { PageMedia } from '@/components/sections/PageMedia'
 import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
+import { TrackEvent } from '@/components/analytics/TrackEvent'
+import { buildCompetitionSeriesJsonLd } from '@/lib/structured-data'
 
 export const metadata: Metadata = {
   title: 'Competitions',
   description:
     'Real professional STEM skills for high school students — delivered through competitive, industry-simulation Design Competitions on themes like Space and Environment.',
+  alternates: { canonical: '/competitions' },
 }
 
 /* Step 3 tier block is mid-rework — keep behind this flag (wire to CMS / a
@@ -168,6 +171,18 @@ export default async function CompetitionsPage() {
   const tierPrices = await getTierPriceMap()
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildCompetitionSeriesJsonLd()) }}
+      />
+      <TrackEvent
+        event={{
+          event: 'competition_page_view',
+          competition_name: 'Stellr Design Competitions',
+          competition_id: 'competitions',
+          participation_type: 'competition',
+        }}
+      />
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <Hero
         breadcrumb="Educate → Competitions"

@@ -5,6 +5,8 @@ import { getRegistrationPrefill } from '@/lib/registration-prefill'
 import { supabaseServer } from '@/lib/supabase'
 import { listEventAddons } from '@/lib/store/event-merch'
 import IndividualRegistrationForm from '@/components/forms/IndividualRegistrationForm'
+import { TrackEvent } from '@/components/analytics/TrackEvent'
+import { participationTypeFor } from '@/lib/analytics'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -20,6 +22,15 @@ export default async function IndividualRegistrationPage({ params }: PageProps) 
 
   return (
     <div className="min-h-screen bg-surface">
+      {/* Funnel: user is filling the registration form (individual). No PII. */}
+      <TrackEvent
+        event={{
+          event: 'registration_started',
+          competition_name: event.title,
+          competition_id: slug,
+          participation_type: participationTypeFor(event.activityType),
+        }}
+      />
       {/* Header */}
       <div className="bg-brand-blue-dark text-white py-10 px-4">
         <div className="max-w-2xl mx-auto">

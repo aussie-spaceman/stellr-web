@@ -1,11 +1,12 @@
 import type { MetadataRoute } from 'next'
-import { getAllEvents, getAllNewsPosts } from '@/lib/sanity'
+import { getAllEvents, getAllCampaigns, getAllNewsPosts } from '@/lib/sanity'
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
 const staticRoutes: MetadataRoute.Sitemap = [
   { url: BASE_URL, lastModified: new Date(), changeFrequency: 'weekly', priority: 1 },
   { url: `${BASE_URL}/events`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 },
+  { url: `${BASE_URL}/competitions`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.9 },
   { url: `${BASE_URL}/why-stellr`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.8 },
   { url: `${BASE_URL}/membership`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.8 },
   { url: `${BASE_URL}/about`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.7 },
@@ -16,8 +17,9 @@ const staticRoutes: MetadataRoute.Sitemap = [
 ]
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [events, newsPosts] = await Promise.all([
+  const [events, campaigns, newsPosts] = await Promise.all([
     getAllEvents().catch(() => null),
+    getAllCampaigns().catch(() => null),
     getAllNewsPosts().catch(() => null),
   ])
 
@@ -30,6 +32,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })
   )
 
+  // Campaigns are also served at /events/[slug] (the detail page renders the
+  // campaign view for activityType === 'campaign').
+  const campaignRoutes: MetadataRoute.Sitemap = (campaigns ?? []).map(
+    (c: { slug: { current: string } }) => ({
+      url: `${BASE_URL}/events/${c.slug.current}`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly' as const,
+      priority: 0.7,
+    })
+  )
+
   const newsRoutes: MetadataRoute.Sitemap = (newsPosts ?? []).map(
     (p: { slug: { current: string }; publishedAt?: string }) => ({
       url: `${BASE_URL}/news/${p.slug.current}`,
@@ -39,5 +52,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })
   )
 
-  return [...staticRoutes, ...eventRoutes, ...newsRoutes]
+  return [...staticRoutes, ...eventRoutes, ...campaignRoutes, ...newsRoutes]
 }

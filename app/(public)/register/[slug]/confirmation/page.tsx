@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { CheckCircle, ExternalLink } from 'lucide-react'
+import { getEventBySlug } from '@/lib/sanity'
+import { TrackEvent } from '@/components/analytics/TrackEvent'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -19,8 +21,22 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
   const remainingCount = remaining ? parseInt(remaining, 10) || 0 : 0
   const hasRemaining = isGroup && remainingCount > 0
 
+  // Reaching this route is the trusted "registration succeeded" signal — the API
+  // only redirects here after a successful submission. Fetch the title (non-PII)
+  // for the event param; `id` is an opaque reference, never personal data.
+  const event = await getEventBySlug(slug).catch(() => null)
+
   return (
     <div className="min-h-screen bg-surface flex items-center justify-center px-4 py-16">
+      <TrackEvent
+        event={{
+          event: 'registration_submitted',
+          competition_name: event?.title,
+          competition_id: slug,
+          participation_type: isCampaign ? 'campaign' : 'event',
+          ...(id ? { registration_ref: id } : {}),
+        }}
+      />
       <div className="max-w-lg w-full text-center">
         <div className="flex justify-center mb-6">
           <CheckCircle size={64} className="text-green-500" />

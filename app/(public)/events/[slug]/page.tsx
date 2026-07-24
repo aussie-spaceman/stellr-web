@@ -11,6 +11,9 @@ import { CampaignDetail } from '@/components/campaigns/CampaignDetail'
 import { EventHeroCtas, EventNotifyButton } from '@/components/sections/EventCtas'
 import { getMemberCampaignContext } from '@/lib/campaign-registrations'
 import { CardPills } from '@/components/ui/CardPills'
+import { TrackEvent } from '@/components/analytics/TrackEvent'
+import { participationTypeFor } from '@/lib/analytics'
+import { buildEventJsonLd, buildCampaignJsonLd } from '@/lib/structured-data'
 
 export const revalidate = 3600
 
@@ -29,9 +32,20 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { slug } = await params
   const event: EventData | null = await getEventBySlug(slug).catch(() => null)
   if (!event) return { title: 'Event Not Found' }
+  const isCampaign = event.activityType === 'campaign'
+  const kind = isCampaign
+    ? 'Online STEM Campaign'
+    : event.setting === 'virtual'
+    ? 'Virtual STEM Competition'
+    : 'In-Person STEM Competition'
+  const audience = event.gradeLevel === 'Middle School' ? 'Middle School' : 'High School'
+  const description =
+    event.tagline ??
+    `A Stellr ${event.type ?? 'design competition'} — a ${kind.toLowerCase()} for ${audience.toLowerCase()} students.`
   return {
-    title: event.title,
-    description: event.tagline,
+    title: `${event.title} — ${kind}`,
+    description,
+    alternates: { canonical: `/events/${slug}` },
     openGraph: event.image
       ? { images: [{ url: urlFor(event.image).width(1200).height(630).url() }] }
       : undefined,
@@ -88,38 +102,47 @@ export default async function EventDetailPage({ params }: PageProps) {
   if (event.activityType === 'campaign') {
     const ctx = await getMemberCampaignContext()
     return (
-      <CampaignDetail
-        campaign={event}
-        membership={ctx.membership}
-        registered={ctx.registeredSlugs.has(slug)}
-      />
+      <>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(buildCampaignJsonLd(event, slug)) }}
+        />
+        <TrackEvent
+          event={{
+            event: 'competition_page_view',
+            competition_name: event.title,
+            competition_id: slug,
+            participation_type: 'campaign',
+          }}
+        />
+        <CampaignDetail
+          campaign={event}
+          membership={ctx.membership}
+          registered={ctx.registeredSlugs.has(slug)}
+        />
+      </>
     )
   }
 
   const status = registrationStatus(event.registrationOpenDate, event.registrationCloseDate)
   const { label: statusLabel, className: statusClass } = statusConfig[status]
 
-  // JSON-LD for this event
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Event',
-    name: event.title,
-    startDate: event.date,
-    endDate: event.endDate ?? event.date,
-    location: {
-      '@type': 'Place',
-      name: event.venue,
-      address: `${event.city}, ${event.state}`,
-    },
-    organizer: { '@type': 'Organization', name: 'Stellr Education' },
-    url: `https://www.stellreducation.org/events/${slug}`,
-  }
+  // JSON-LD for this event (Offline/Online Event + superEvent + offer).
+  const jsonLd = buildEventJsonLd(event, slug)
 
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <TrackEvent
+        event={{
+          event: 'competition_page_view',
+          competition_name: event.title,
+          competition_id: slug,
+          participation_type: participationTypeFor(event.activityType),
+        }}
       />
 
       {/* ── Hero ─────────────────────────────────────────────────────── */}

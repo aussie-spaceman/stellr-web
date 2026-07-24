@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { ClerkProvider } from '@clerk/nextjs'
 import { Analytics } from '@vercel/analytics/react'
-import { MarketingPixels } from '@/components/analytics/MarketingPixels'
+import { GoogleTagManager } from '@/components/analytics/GoogleTagManager'
 import '../styles/globals.css'
 
 export const metadata: Metadata = {
@@ -44,6 +44,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <ClerkProvider>
       <html lang="en">
         <head>
+          {/* Google Tag Manager — analytics only, GTM-only (see GoogleTagManager.tsx) */}
+          <GoogleTagManager />
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{ __html: JSON.stringify(orgSchema) }}
@@ -65,7 +67,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           )}
           {children}
           <Analytics />
-          <MarketingPixels />
         </body>
       </html>
     </ClerkProvider>

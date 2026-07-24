@@ -49,9 +49,11 @@ export interface StellarEvent {
   gradeLevel?: string
   date?: string
   endDate?: string
+  setting?: 'in_person' | 'virtual'
   venue?: string
   city?: string
   state?: string
+  stripePriceId?: string
   tagline?: string
   image?: { asset: { _ref: string } }
   registrationOpen?: boolean

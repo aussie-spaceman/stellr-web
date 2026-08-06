@@ -12,7 +12,7 @@ import {
   normalizeEventRole, normalizeGender, normalizeGrade, normalizeTshirt,
 } from '@/lib/member-enums'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
-import { syncMemberClassificationRole } from '@/lib/member-roles'
+import { upsertMember } from '@/lib/member-sync'
 import { ageFromDob, registrationStatus } from '@/lib/utils'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
@@ -189,39 +189,36 @@ export async function POST(req: NextRequest) {
       ec_relationship: str(d.emergency_contact_relationship) || null,
     }
 
-    // Upsert the member row (by email) so they get an account, school link, and
-    // admin visibility — same contract as the registration routes.
-    const { data: memberRow, error: memberErr } = await db
-      .from('members')
-      .upsert({
-        email: person.email,
-        first_name: person.first_name,
-        last_name: person.last_name,
-        nickname: person.nickname,
-        phone: person.phone,
-        date_of_birth: person.date_of_birth,
-        gender: person.gender,
-        grade: person.grade,
-        tshirt_size: person.t_shirt_size,
-        age_bracket: person.age_bracket,
-        event_role: person.event_role,
-        is_active: true,
-        health_conditions: person.health_conditions,
-        ec_first_name: person.ec_first_name,
-        ec_last_name: person.ec_last_name,
-        ec_email: person.ec_email,
-        ec_phone: person.ec_phone,
-        ec_relationship: person.ec_relationship,
-      }, { onConflict: 'email', ignoreDuplicates: false })
-      .select('id')
-      .maybeSingle()
+    // Cross-reference against the existing membership database by email: someone
+    // already on file (added by an organiser, a past event, or another group's
+    // sheet) has THAT record updated from what they just submitted, rather than
+    // gaining a second one. Fields they left blank keep their stored values.
+    // upsertMember also keeps member_roles in step.
+    const resolvedMemberId = await upsertMember(db, {
+      email: person.email,
+      first_name: person.first_name,
+      last_name: person.last_name,
+      nickname: person.nickname,
+      phone: person.phone,
+      date_of_birth: person.date_of_birth,
+      gender: person.gender,
+      grade: person.grade,
+      t_shirt_size: person.t_shirt_size,
+      age_bracket: person.age_bracket,
+      event_role: person.event_role,
+      health_conditions: person.health_conditions,
+      ec_first_name: person.ec_first_name,
+      ec_last_name: person.ec_last_name,
+      ec_email: person.ec_email,
+      ec_phone: person.ec_phone,
+      ec_relationship: person.ec_relationship,
+    })
 
-    if (memberErr || !memberRow) {
-      console.error('Group join member upsert error:', memberErr)
+    if (!resolvedMemberId) {
+      console.error('Group join member upsert failed for', person.email)
       return NextResponse.json({ error: 'Failed to create your member account. Please try again.' }, { status: 500 })
     }
-    memberId = memberRow.id
-    await syncMemberClassificationRole(db, memberId, person.event_role)
+    memberId = resolvedMemberId
 
     // Provision a passwordless Clerk account + sign-in token so the participant
     // is silently signed in on success (non-fatal — they can still sign in later

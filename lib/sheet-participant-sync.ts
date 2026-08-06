@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { readSheetParticipants } from '@/lib/google-sheets'
 import { upsertMember } from '@/lib/member-sync'
+import { normalizeEmail } from '@/lib/member-enums'
 import { linkMembersToRegistrationSchool } from '@/lib/school-link'
 import { recordEventParticipationForRegistration } from '@/lib/event-participation-sync'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
@@ -53,24 +54,33 @@ export async function syncParticipantsFromSheet(
   for (const row of sheetRows) {
     if (!row.first_name && !row.email) continue
 
+    // Email is the cross-reference key for both the participant row and the
+    // member record, so normalise it once here. Matching on the raw sheet value
+    // was case-sensitive: "Jane@x.com" typed over an existing "jane@x.com" row
+    // missed the match and added a duplicate participant.
+    const email = normalizeEmail(row.email)
+
     const { data: existing } = await db
       .from('participants')
       .select('id')
       .eq('registration_id', registration.id)
       .or(
         row.membership_id
-          ? `membership_id.eq.${row.membership_id},email.eq.${row.email}`
-          : `email.eq.${row.email}`
+          ? `membership_id.eq.${row.membership_id},email.eq.${email}`
+          : `email.eq.${email}`
       )
       .maybeSingle()
 
     const dob = row.date_of_birth || null
     const { eventRole, ageBracket } = roleFromType(row.type, dob)
 
-    // Upsert a member row (non-fatal) so sheet-entered people get a member
-    // account, a school link, and visibility on admin member pages.
+    // Match against the existing membership database by email — an established
+    // member is updated from this sheet row rather than duplicated — and create
+    // one otherwise, so sheet-entered people get a member account, a school link,
+    // and visibility on admin member pages. Blank cells never overwrite what's
+    // already on file (see upsertMember). Non-fatal.
     const memberId = await upsertMember(db, {
-      email: row.email,
+      email,
       first_name: row.first_name,
       last_name: row.last_name,
       phone: row.phone,
@@ -80,13 +90,19 @@ export async function syncParticipantsFromSheet(
       t_shirt_size: row.t_shirt_size,
       age_bracket: ageBracket,
       event_role: eventRole,
+      health_conditions: row.health_conditions || null,
+      ec_first_name: row.ec_first_name || null,
+      ec_last_name: row.ec_last_name || null,
+      ec_email: row.ec_email || null,
+      ec_phone: row.ec_phone || null,
+      ec_relationship: row.ec_relationship || null,
     })
     if (memberId) syncedMemberIds.push(memberId)
 
     const payload = {
       first_name: row.first_name,
       last_name: row.last_name,
-      email: row.email,
+      email,
       phone: row.phone,
       date_of_birth: dob,
       gender: row.gender,
@@ -138,7 +154,7 @@ export async function syncParticipantsFromSheet(
           eventTitle:        registration.event_title,
           firstName:         row.first_name,
           lastName:          row.last_name,
-          email:             row.email,
+          email,
           phone:             row.phone,
           dateOfBirth:       dob,
           eventRole,

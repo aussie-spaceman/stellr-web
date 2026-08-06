@@ -286,12 +286,31 @@ export default function GroupJoinClient({
   // ── New participant: collect details, provision + auto-login on submit ─────
   return (
     <form onSubmit={handleJoinNew} className="space-y-6">
+      {/* Sign-in first. Anyone already in the membership database should join with
+          their existing record rather than re-typing details — the server matches
+          on email either way, but signing in also means no re-keying and no
+          second passwordless account. Deliberately above the form, not buried
+          beside the submit button. */}
+      <div className="bg-white rounded-xl border-2 border-brand-blue/40 p-5 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
+          <div>
+            <p className="font-semibold text-brand-blue-dark">Already have a Stellr account?</p>
+            <p className="text-sm text-content-muted mt-0.5">
+              Log in and we&apos;ll use your existing member details — no need to fill this in again.
+            </p>
+          </div>
+          <Link href={signInUrl} className="btn-primary whitespace-nowrap py-3 px-6 text-center">
+            Log in to register →
+          </Link>
+        </div>
+      </div>
+
       <div className="bg-white rounded-xl border border-line p-8 space-y-6">
         <div>
           <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Join {organiserName}&apos;s group</h2>
           <p className="text-sm text-content-muted">
-            Registering for <strong>{eventTitle}</strong> · {schoolName}. Enter your details below — we&apos;ll create your
-            Stellr account and sign you in automatically.
+            Registering for <strong>{eventTitle}</strong> · {schoolName}. New to Stellr? Enter your details below —
+            we&apos;ll create your account and sign you in automatically.
           </p>
         </div>
 

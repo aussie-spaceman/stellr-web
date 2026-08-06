@@ -705,11 +705,13 @@ export async function POST(req: NextRequest) {
       : 0
 
     // ── Group join token ──────────────────────────────────────────────────────
-    // A forwardable completion link is created for the spreadsheet / email-link
-    // methods, and also for an add_now registration that was only partially filled
-    // — so the organiser (or each member) can finish the remaining people later.
+    // EVERY group gets a forwardable completion link, so the confirmation email can
+    // always carry both ways of providing member details (sheet + link) whichever
+    // method was chosen on the form. Handing one out for an already-complete roster
+    // is safe: the join page enforces the declared seat cap and shows "this group is
+    // full" instead of admitting an extra person.
     let joinUrl: string | null = null
-    if (details_method === 'spreadsheet' || details_method === 'email_link' || incompleteAddNow) {
+    {
       const token = randomBytes(32).toString('hex')
       const { error: tokenError } = await db.from('group_join_tokens').insert({
         token,
@@ -725,9 +727,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // The sheet is created for every group, but it's only an *action item* (and so
-    // surfaced in the confirmation email / page) when members still need entering —
-    // the spreadsheet / email-link methods, or a partially-filled add_now.
+    // The sheet is created for every group, but it's only an *action item* — and so
+    // surfaced on the confirmation PAGE / Stripe return — when members still need
+    // entering. The email always shows both links regardless (see below).
     const promptSpreadsheetUrl = details_method !== 'add_now' || incompleteAddNow ? spreadsheetUrl : null
 
     // ── Look up Stripe Price ID ───────────────────────────────────────────────
@@ -915,7 +917,9 @@ export async function POST(req: NextRequest) {
         registrationId: regId,
         paymentMethod: payment_method,
         detailsMethod: details_method,
-        spreadsheetUrl: promptSpreadsheetUrl ?? undefined,
+        // Both links go in every group email — including a complete add_now, where
+        // they're framed as "keep these for later" rather than an action item.
+        spreadsheetUrl: spreadsheetUrl ?? undefined,
         joinUrl: joinUrl ?? undefined,
         remainingCount,
       })

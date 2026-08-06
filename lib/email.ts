@@ -142,10 +142,17 @@ export function groupConfirmationEmail({
       ? `<li style="margin-bottom:8px"><strong>Member details:</strong> You added most of your group, with <strong>${remainingCount}</strong> still to provide. Finish the remaining ${remainingCount === 1 ? 'person' : 'people'} using <strong>either</strong> option above — the pre-filled Google Sheet <strong>or</strong> the registration link.</li>`
       : '<li style="margin-bottom:8px"><strong>Member details:</strong> Complete your group\'s details using <strong>either</strong> option above — the pre-populated Google Sheet <strong>or</strong> the registration link. We\'ll finalise each member\'s registration as their details come in.</li>'
 
+  // Both links go out on every group registration. When the roster was already
+  // completed on the form they're reference links (add or update someone later)
+  // rather than an action item, so the copy is reworded — never dropped.
+  const rosterComplete = detailsMethod === 'add_now' && !partialAddNow
+
   const sheetSection = spreadsheetUrl ? `
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0">
       <p style="margin:0 0 8px;font-weight:600;color:#1e3a5f">📄 Option 1 — Pre-Populated Spreadsheet</p>
-      <p style="margin:0 0 12px;font-size:14px;color:#374151">Fill in your group members' details using this pre-formatted Google Sheet, then return it to Stellr.</p>
+      <p style="margin:0 0 12px;font-size:14px;color:#374151">${rosterComplete
+        ? 'Your group\'s Google Sheet, pre-filled with everyone you entered. Edit it here if any details change and we\'ll pick up the update.'
+        : 'Fill in your group members\' details using this pre-formatted Google Sheet, then return it to Stellr.'}</p>
       <a href="${spreadsheetUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:600">Open Google Sheet →</a>
     </div>
   ` : ''
@@ -153,15 +160,17 @@ export function groupConfirmationEmail({
   const joinSection = joinUrl ? `
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0">
       <p style="margin:0 0 8px;font-weight:600;color:#14532d">🔗 Option 2 — Email Registration Link</p>
-      <p style="margin:0 0 12px;font-size:14px;color:#374151">Forward this link to your group members. Each member clicks it, signs in or creates a free Stellr account, and confirms their participation. You'll be notified as each member completes their registration.</p>
+      <p style="margin:0 0 12px;font-size:14px;color:#374151">Forward this link to your group members. Each member clicks it, signs in or creates a free Stellr account, and confirms their participation. You'll be notified as each member completes their registration.${rosterComplete ? ' Your roster is already full, so this only accepts someone new if a place opens up.' : ''}</p>
       <a href="${joinUrl}" style="display:inline-block;background:#166534;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:600">Copy Registration Link →</a>
       <p style="margin:10px 0 0;font-size:11px;color:#6b7280;word-break:break-all">${joinUrl}</p>
     </div>
   ` : ''
 
   const bothOptions = (sheetSection || joinSection) ? `
-    <p style="font-weight:600;color:#374151;margin-bottom:4px">Group member details — two options:</p>
-    <p style="font-size:13px;color:#6b7280;margin-top:0 0 12px">Use whichever works best for you, or both.</p>
+    <p style="font-weight:600;color:#374151;margin-bottom:4px">${rosterComplete ? 'Your group\'s links — keep these handy:' : 'Group member details — two options:'}</p>
+    <p style="font-size:13px;color:#6b7280;margin-top:0 0 12px">${rosterComplete
+      ? 'Your roster is complete. Use either of these if you need to add or update a group member later.'
+      : 'Use whichever works best for you, or both.'}</p>
     ${sheetSection}
     ${joinSection}
   ` : ''
@@ -198,8 +207,10 @@ export function groupConfirmationEmail({
       ? 'Payment: each group member will receive their own payment link by email; each spot is confirmed once that member pays.'
       : `Payment: an invoice for all ${participantCount} participant${participantCount !== 1 ? 's' : ''} will be emailed within 1–2 business days; registration is confirmed once paid.`
   const registrationText =
-    detailsMethod === 'add_now'
-      ? 'Member details: all details submitted — nothing further to add.'
+    rosterComplete
+      ? 'Member details: all details submitted — nothing further to add. Keep the links below in case you need to add or update a member later.'
+    : partialAddNow
+      ? `Member details: ${remainingCount} still to provide — finish them using either the Google Sheet or the registration link below.`
       : 'Member details: complete your group\'s details using either the Google Sheet or the registration link below (whichever you prefer).'
   const text = `Hi ${teacherFirstName},\n\nGroup registration received for ${eventTitle}.\n\nSchool: ${schoolName}\nParticipants: ${participantCount}\nReference #: ${registrationId}\n\n${paymentText}\n${registrationText}${sheetText}${joinText}\n\n— Stellr Education`
   return { subject, html, text }

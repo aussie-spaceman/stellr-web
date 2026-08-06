@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { randomBytes } from 'crypto'
 import { supabaseServer } from '@/lib/supabase'
 import { ownsTeam, teamViewerRole, type TeamViewerRegistration } from '@/lib/team-access'
 import { resolveRequestMember } from '@/lib/impersonation'
@@ -19,6 +20,10 @@ export async function GET(
   )
   if (unauthorised) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+
+  // Admin view-as (?memberId=) is a read-only lens over someone else's portal —
+  // it must never write, so it skips the on-demand join-token mint below.
+  const isViewAs = new URL(req.url).searchParams.has('memberId')
 
   const { data: registration, error } = await db
     .from('registrations')
@@ -62,14 +67,14 @@ export async function GET(
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
-    regAny.details_method === 'email_link'
-      ? db.from('group_join_tokens')
-          .select('token, expires_at')
-          .eq('registration_id', id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+    // Looked up for every group, not just the email-link method — the organiser can
+    // hand the link to a member regardless of how they first supplied details.
+    db.from('group_join_tokens')
+      .select('token, expires_at')
+      .eq('registration_id', id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
     participantIds.length > 0
       ? db.from('docusign_envelopes')
           .select('id, participant_id, status, envelope_type, signer_name, signer_email, sent_at, completed_at, reminder_sent_at')
@@ -81,10 +86,28 @@ export async function GET(
     ? new Date(watchChannel.expiration) > new Date()
     : false
 
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
   let joinUrl: string | null = null
   if (token && new Date((token as { expires_at: string }).expires_at) > new Date()) {
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
     joinUrl = `${siteUrl}/register/${regAny.event_slug}/join/${(token as { token: string }).token}`
+  } else if (owns && !isViewAs) {
+    // Groups registered before every method got a token — and groups whose 30-day
+    // token has lapsed — mint one on open, mirroring the on-demand spreadsheet
+    // endpoint. Only for the real organiser: admin view-as is read-only, so it
+    // never writes (a stale-token view-as simply shows no link).
+    const freshToken = randomBytes(32).toString('hex')
+    const { error: mintError } = await db.from('group_join_tokens').insert({
+      token: freshToken,
+      registration_id: id,
+      event_slug: regAny.event_slug,
+      event_title: regAny.event_title,
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    })
+    if (mintError) {
+      console.error('[teams/id] Join token mint error (non-fatal):', mintError)
+    } else {
+      joinUrl = `${siteUrl}/register/${regAny.event_slug}/join/${freshToken}`
+    }
   }
 
   const docusignEnvelopes: Record<string, {

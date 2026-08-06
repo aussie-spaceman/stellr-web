@@ -485,8 +485,11 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
                   </div>
                 )}
 
-                {/* Join link for email_link registrations */}
-                {fullTeam.registration.details_method === 'email_link' && fullTeam.registration.joinUrl && (
+                {/* Join link — shown for every group, not just the email-link
+                    method, so the organiser can always hand it to a member. The
+                    join page caps it at the declared seat count, so an already
+                    complete group reads as full rather than admitting an extra. */}
+                {fullTeam.registration.joinUrl && (
                   <div className="bg-brand-blue/5 border border-brand-blue/30 rounded-lg px-4 py-3 space-y-2">
                     <p className="text-xs font-medium text-brand-blue-dark">Group Registration Link</p>
                     <p className="text-xs text-brand-muted-soft break-all">{fullTeam.registration.joinUrl}</p>

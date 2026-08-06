@@ -381,8 +381,10 @@ export async function createGroupRegistrationSheet({
         protectedRange: {
           range: { sheetId, startRowIndex: 1, endRowIndex: 1 + enteredCount },
           description: 'Already added via the web form — these participants are registered. Edit them on Stellr, not here.',
+          // No `editors` here: the Sheets API rejects editors on a warningOnly
+          // range ("ProtectedRange is warningOnly. Editors cannot be set on it"),
+          // and one bad request fails the whole batchUpdate.
           warningOnly: true,
-          editors: { users: [process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!, OWNER_EMAIL] },
         },
       },
     })
@@ -411,8 +413,8 @@ export async function createGroupRegistrationSheet({
       protectedRange: {
         range: { sheetId, startRowIndex: 1, endRowIndex: totalRows, startColumnIndex: 0, endColumnIndex: 1 },
         description: 'Membership IDs — assigned by Stellr (leave blank for new people)',
+        // warningOnly ranges must not carry editors — see the note above.
         warningOnly: true,
-        editors: { users: [process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!, OWNER_EMAIL] },
       },
     },
   })
@@ -455,7 +457,15 @@ export async function createGroupRegistrationSheet({
     })
   })
 
-  await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } })
+  // Formatting is cosmetic — the sheet already has its headers and rows. A single
+  // rejected request used to fail the whole batch and throw away an otherwise
+  // usable sheet, which silently dropped the spreadsheet link from the group
+  // confirmation email. Log and carry on instead.
+  try {
+    await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } })
+  } catch (formatErr) {
+    console.error('[google-sheets] Formatting batchUpdate failed (non-fatal) for', spreadsheetId, formatErr)
+  }
 
   // ── Share ───────────────────────────────────────────────────────────────────
   // Anyone with the link can edit: the registrant opens it immediately without a

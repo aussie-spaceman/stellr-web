@@ -17,14 +17,19 @@ export default async function GroupJoinPage({ params }: PageProps) {
   // Signed-in members still get the one-click confirm path below.
   const { userId } = await auth()
 
-  // Validate the token
+  // Validate the token. The registration is fetched separately rather than
+  // embedded: a bad column in an embedded select fails the WHOLE query, which
+  // rendered every valid link as "Invalid Link" (registrations has no school_id —
+  // it's a payload-only field used for school linking, never a column).
   const db = supabaseServer()
   const { data: tokenRow, error } = await db
     .from('group_join_tokens')
-    .select('*, registrations(teacher_first_name, teacher_last_name, school_name, school_id, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count)')
+    .select('*')
     .eq('token', token)
     .eq('event_slug', slug)
     .maybeSingle()
+
+  if (error) console.error('[group-join] token lookup error:', error)
 
   if (error || !tokenRow) {
     return (
@@ -52,20 +57,47 @@ export default async function GroupJoinPage({ params }: PageProps) {
     )
   }
 
-  const reg = tokenRow.registrations as {
+  const { data: regRow, error: regError } = await db
+    .from('registrations')
+    .select('teacher_first_name, teacher_last_name, school_name, school_address_state, registrant_role, status, member_pays_individually, adult_count, student_count')
+    .eq('id', tokenRow.registration_id)
+    .maybeSingle()
+
+  if (regError || !regRow) {
+    console.error('[group-join] registration lookup error:', regError, tokenRow.registration_id)
+    return (
+      <div className="min-h-screen bg-surface flex items-center justify-center px-4">
+        <div className="max-w-md text-center">
+          <div className="text-5xl mb-4">⚠️</div>
+          <h1 className="text-xl font-bold text-ink mb-2">Something went wrong</h1>
+          <p className="text-content-body mb-6">We couldn&apos;t load this group registration. Please try again shortly, or contact your group organiser.</p>
+          <Link href="/events" className="btn-primary">Browse Events</Link>
+        </div>
+      </div>
+    )
+  }
+
+  const reg = regRow as {
     teacher_first_name: string; teacher_last_name: string
-    school_name: string; school_id: string | null; school_address_state: string | null
+    school_name: string; school_address_state: string | null
     registrant_role: string; status: string
     member_pays_individually: boolean
     adult_count: number | null; student_count: number | null
   }
 
   // Resolve the group school's State so the join form can pre-fill Grade from DOB,
-  // mirroring the individual/group forms. Existing-school picks store school_id with
-  // a null address_state, so fall back to the linked schools row.
+  // mirroring the individual/group forms. An existing-school pick stores only the
+  // name on the registration (address columns stay null), so fall back to matching
+  // the schools row by name — the same normalised, case-insensitive match the
+  // school-linking helper uses.
   let schoolState: string | null = reg.school_address_state ?? null
-  if (!schoolState && reg.school_id) {
-    const { data: school } = await db.from('schools').select('state').eq('id', reg.school_id).maybeSingle()
+  if (!schoolState && reg.school_name?.trim()) {
+    const { data: school } = await db
+      .from('schools')
+      .select('state')
+      .ilike('name', reg.school_name.trim().replace(/\s+/g, ' '))
+      .limit(1)
+      .maybeSingle()
     schoolState = school?.state ?? null
   }
 

@@ -50,18 +50,20 @@ export async function GET(req: Request) {
 
   if ((registrations ?? []).length > 0) {
 
-    // Attach join URLs for email_link registrations
-    const emailLinkIds = (registrations ?? [])
-      .filter((r: { details_method: string }) => r.details_method === 'email_link')
-      .map((r: { id: string }) => r.id)
+    // Attach join URLs. EVERY group gets one, not just the email-link method — the
+    // organiser can hand the link to a member whatever they picked on the form. The
+    // join page enforces the declared seat cap, so a complete roster reads as full
+    // rather than admitting an extra person. Groups with no token yet (older
+    // registrations) stay null here; the detail route mints one on open.
+    const groupIds = (registrations ?? []).map((r: { id: string }) => r.id)
 
-    let joinUrlMap: Record<string, string> = {}
-    if (emailLinkIds.length > 0) {
+    const joinUrlMap: Record<string, string> = {}
+    if (groupIds.length > 0) {
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
       const { data: tokens } = await db
         .from('group_join_tokens')
         .select('registration_id, token, expires_at, event_slug')
-        .in('registration_id', emailLinkIds)
+        .in('registration_id', groupIds)
       if (tokens) {
         for (const t of tokens as { registration_id: string; token: string; expires_at: string; event_slug: string }[]) {
           if (new Date(t.expires_at) > new Date()) {

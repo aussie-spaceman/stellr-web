@@ -164,6 +164,9 @@ function JoinedTeamsView({
   function paymentInfo(entry: StudentTeam, reg: StudentTeam['registrations']): { label: string; style: string } {
     if (reg.member_pays_individually) {
       if (entry.individual_payment_status === 'paid') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
+      // Free event — nothing was ever owed. Kept distinct from 'Paid' so the
+      // member isn't told they paid for something that had no fee.
+      if (entry.individual_payment_status === 'waived') return { label: 'No payment required', style: 'bg-green-100 text-green-700' }
       if (entry.individual_payment_status === 'pending') return { label: 'Payment Required', style: 'bg-brand-orange/10 text-brand-gold-ink' }
     }
     if (reg.invoice_requested) {
@@ -699,12 +702,14 @@ function TeacherTeamsView({ memberQuery, readOnly }: { memberQuery: string; read
                                 <td className="py-2.5 pr-4">
                                   <span
                                     className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                                      p.individual_payment_status === 'paid'
+                                      p.individual_payment_status === 'paid' || p.individual_payment_status === 'waived'
                                         ? 'bg-green-100 text-green-700'
                                         : 'bg-brand-orange/10 text-brand-gold-ink'
                                     }`}
                                   >
-                                    {p.individual_payment_status === 'paid' ? 'Paid' : 'Not Yet Paid'}
+                                    {p.individual_payment_status === 'paid' ? 'Paid'
+                                      : p.individual_payment_status === 'waived' ? 'No payment required'
+                                      : 'Not Yet Paid'}
                                   </span>
                                 </td>
                               )}

@@ -74,6 +74,9 @@ function paymentLabel(p: Participation, reg: ParticipationReg): { label: string;
   }
   if (reg.member_pays_individually) {
     if (p.individual_payment_status === 'paid') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
+    // Free event — nothing was ever charged, so no receipt is offered either
+    // (see receiptAvailable below).
+    if (p.individual_payment_status === 'waived') return { label: 'No payment required', style: 'bg-green-100 text-green-700' }
     if (p.individual_payment_status === 'pending') return { label: 'Payment Pending', style: 'bg-brand-orange/10 text-brand-gold-ink' }
   }
   if (reg.invoice_requested) {

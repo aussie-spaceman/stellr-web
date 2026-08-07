@@ -48,9 +48,11 @@ export async function POST(
     return NextResponse.json({ error: 'Google Sheets not configured' }, { status: 503 })
   }
 
-  // Upsert members + participants and issue DocuSign for anyone missing it
-  // (shared with the Google-Drive webhook so the two paths never drift).
-  const { created, updated } = await syncParticipantsFromSheet(db, {
+  // Upsert members + participants, issue DocuSign for anyone missing it, and —
+  // for an individually-paid group — send each new person their payment link or
+  // free-event notice (shared with the Google-Drive webhook so the two paths
+  // never drift).
+  const { created, updated, paymentLinksSent } = await syncParticipantsFromSheet(db, {
     id: registration.id,
     spreadsheet_id: registration.spreadsheet_id,
     school_name: registration.school_name,
@@ -87,5 +89,5 @@ export async function POST(
     watchActive = true
   }
 
-  return NextResponse.json({ updated, created, watchActive })
+  return NextResponse.json({ updated, created, watchActive, paymentLinksSent })
 }

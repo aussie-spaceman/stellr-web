@@ -238,6 +238,33 @@ export function groupMemberIndividualPaymentEmail({
   return { subject, html, text }
 }
 
+// Free-event counterpart to the payment email above. When the group is set to
+// "members pay individually" but the event has no fee, there is no checkout to
+// send — but silence reads as "my registration didn't go through", so confirm
+// the place explicitly and say plainly that nothing is owed.
+export function groupRegisteredNoPaymentEmail({
+  memberFirstName, memberLastName, eventTitle, registrationId,
+}: {
+  memberFirstName: string; memberLastName: string
+  eventTitle: string; registrationId: string
+}) {
+  const subject = `You're registered — ${eventTitle}`
+  const html = emailLayout({
+    heading: "You're Registered",
+    bodyHtml: `
+        <p>Hi ${memberFirstName},</p>
+        <p>You've been registered for <strong>${eventTitle}</strong> as part of a group.</p>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
+          <p style="margin:0;font-weight:600;color:#166534">No payment is required — this event is free of charge.</p>
+        </div>
+        <p>There's nothing more to do to hold your place. If any paperwork is needed, you'll receive it separately by email from DocuSign.</p>
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
+        <p style="color:#6b7280;font-size:12px">Reference: <span style="font-family:monospace">${registrationId}</span></p>`,
+  })
+  const text = `Hi ${memberFirstName} ${memberLastName},\n\nYou've been registered for ${eventTitle} as part of a group.\n\nNo payment is required — this event is free of charge.\n\nIf any paperwork is needed, you'll receive it separately by email from DocuSign.\n\nReference: ${registrationId}\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
 export function groupJoinLinkEmail({
   registrantFirstName, registrantLastName, eventTitle, joinUrl,
 }: {

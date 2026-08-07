@@ -18,5 +18,12 @@ export interface RegistrationPaymentFacts {
 
 export function registrationPaid(facts: RegistrationPaymentFacts): boolean {
   if (facts.invoiceRequested) return facts.invoicePaidAt != null
-  return facts.status === 'confirmed' || facts.individualPaymentStatus === 'paid'
+  return (
+    facts.status === 'confirmed' ||
+    facts.individualPaymentStatus === 'paid' ||
+    // 'waived' = free event under "members pay individually": nothing was ever
+    // owed, so nothing is outstanding. Without this the admin roster pill and
+    // the access gate read a free participant as unpaid forever.
+    facts.individualPaymentStatus === 'waived'
+  )
 }

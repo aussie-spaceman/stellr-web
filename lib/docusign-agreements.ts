@@ -67,13 +67,38 @@ export async function dispatchAgreement(
   if (!type) return
 
   try {
-    // Paperwork on the member's profile is valid for 3 years across events:
-    // if an unexpired signed agreement of the required type is on record, link
-    // this participant to it instead of issuing a fresh envelope.
-    if (ctx.memberId) {
-      const onFile = await findValidAgreement(db, ctx.memberId, type)
+    // ── Never issue a second envelope for paperwork already in the system ─────
+    // Three checks, cheapest first. These used to be partly duplicated in the
+    // sheet sync and absent everywhere else, so the join link, the organiser's
+    // manual add and a re-run of any of them could each stack a duplicate
+    // envelope on the same person. Every caller now gets all three.
+
+    // 1. This participant already has an envelope — re-running the caller (a
+    //    sheet re-sync, a replayed Drive webhook) must never re-send.
+    if (ctx.participantId) {
+      const { data: existing } = await db
+        .from('docusign_envelopes')
+        .select('id')
+        .eq('participant_id', ctx.participantId)
+        .limit(1)
+        .maybeSingle()
+      if (existing) return
+    }
+
+    // 2. An envelope for this person is already out for THIS event, issued
+    //    against a different participant row (re-added after removal, a second
+    //    registration for the same event). Chasing them twice for one signature
+    //    reads as a system error; an outstanding envelope is still live.
+    if (await hasOpenEnvelopeForEvent(db, ctx, type)) return
+
+    // 3. Paperwork on the member's profile is valid for 3 years across events:
+    //    if an unexpired signed agreement of the required type is on record,
+    //    link this participant to it instead of issuing a fresh envelope.
+    const coverageMemberId = ctx.memberId ?? (await memberIdByEmail(db, ctx.email))
+    if (coverageMemberId) {
+      const onFile = await findValidAgreement(db, coverageMemberId, type)
       if (onFile) {
-        await recordCoverage(db, ctx, type, onFile)
+        await recordCoverage(db, { ...ctx, memberId: coverageMemberId }, type, onFile)
         await safeEmail(ctx.email, docusignOnFileEmail({
           firstName:      ctx.firstName,
           eventTitle:     ctx.eventTitle,
@@ -149,6 +174,67 @@ export async function dispatchAgreement(
   } catch (err) {
     console.error(`[docusign] dispatchAgreement (${type}) failed (non-fatal):`, err)
   }
+}
+
+// Envelope states that mean "this person has live paperwork in flight" (see the
+// status CHECK in migration 010). A declined or voided envelope is dead and must
+// be re-issued; a completed one is caught by findValidAgreement — which carries
+// coverage across all events, not just this one — so neither is listed here.
+const OPEN_ENVELOPE_STATUSES = ['created', 'sent', 'delivered']
+
+// Is an agreement of this type already out for this person and this event? The
+// participant-id check can't see it when the person was re-added under a new
+// participant row, or registered for the same event through two routes — and
+// findValidAgreement only matches COMPLETED paperwork, so an unsigned envelope
+// was invisible to both and a duplicate went out. Matched on member id when we
+// have one, otherwise on the signer's email.
+async function hasOpenEnvelopeForEvent(
+  db: SupabaseClient,
+  ctx: ParticipantContext,
+  type: AgreementType,
+): Promise<boolean> {
+  let q = db
+    .from('docusign_envelopes')
+    .select('id')
+    .eq('event_slug', ctx.eventSlug)
+    .eq('envelope_type', type)
+    .in('status', OPEN_ENVELOPE_STATUSES)
+    .limit(1)
+
+  // For a minor the signer is the guardian, so signer_email won't match the
+  // participant — fall back to the minor's name only when there's no member id.
+  q = ctx.memberId
+    ? q.eq('member_id', ctx.memberId)
+    : q.eq('signer_email', ctx.email)
+
+  const { data, error } = await q.maybeSingle()
+  if (error) {
+    // Don't let a lookup blip suppress required paperwork — issuing a possible
+    // duplicate is the safer failure here than silently leaving someone unpapered.
+    console.error('[docusign] open-envelope check failed (issuing anyway):', error)
+    return false
+  }
+  return !!data
+}
+
+// Resolve a member by email when the caller had no member id — a failed or
+// skipped member upsert (blank sheet rows, a transient error) otherwise bypassed
+// the 3-year on-file check entirely and re-sent paperwork the person had already
+// signed.
+async function memberIdByEmail(db: SupabaseClient, email: string): Promise<string | null> {
+  if (!email) return null
+  const { data, error } = await db
+    .from('members')
+    .select('id')
+    .eq('email', email)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle()
+  if (error) {
+    console.error('[docusign] member-by-email lookup failed (non-fatal):', error)
+    return null
+  }
+  return (data?.id as string | undefined) ?? null
 }
 
 interface ValidAgreement {

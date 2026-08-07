@@ -47,8 +47,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Same upsert + DocuSign dispatch as the manual "Sync From Sheet" button.
-    const { created, updated } = await syncParticipantsFromSheet(db, {
+    // Same upsert + DocuSign dispatch + individual-payment notices as the manual
+    // "Sync From Sheet" button.
+    const { created, updated, paymentLinksSent } = await syncParticipantsFromSheet(db, {
       id: registration.id,
       spreadsheet_id: registration.spreadsheet_id,
       school_name: registration.school_name,
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
       event_title: registration.event_title,
       school_address_state: registration.school_address_state,
     })
-    console.log(`[webhook/google-sheets] Synced registration ${registration.id} (${created} created, ${updated} updated)`)
+    console.log(`[webhook/google-sheets] Synced registration ${registration.id} (${created} created, ${updated} updated, ${paymentLinksSent} payment notices sent)`)
   } catch (err) {
     console.error('[webhook/google-sheets] Sync error:', err)
   }

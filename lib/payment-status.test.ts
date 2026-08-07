@@ -31,4 +31,14 @@ describe('registrationPaid', () => {
     // individual status.
     expect(registrationPaid({ invoiceRequested: true, invoicePaidAt: null, individualPaymentStatus: 'paid' })).toBe(false)
   })
+
+  it('waived (free event, members pay individually) is settled, not outstanding', () => {
+    // Nothing was ever owed, so the roster pill and access gate must not read
+    // this participant as unpaid forever.
+    expect(registrationPaid({ status: 'pending', individualPaymentStatus: 'waived' })).toBe(true)
+  })
+
+  it('waived does not mark an invoiced reg paid either', () => {
+    expect(registrationPaid({ invoiceRequested: true, invoicePaidAt: null, individualPaymentStatus: 'waived' })).toBe(false)
+  })
 })

@@ -16,6 +16,10 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
 
   const prefill = await getRegistrationPrefill().catch(() => null)
   const isCampaign = event.activityType === 'campaign'
+  // No Stripe price on the event = no registration fee, so the form skips the
+  // "how will the group pay?" question entirely rather than offering three
+  // methods that all have nothing to charge.
+  const isFree = !event.stripePriceId
 
   return (
     <div className="min-h-screen bg-surface">
@@ -49,6 +53,7 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
           eventTitle={event.title}
           prefill={prefill}
           isCampaign={isCampaign}
+          isFree={isFree}
         />
       </div>
     </div>

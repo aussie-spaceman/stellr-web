@@ -6,6 +6,7 @@ import { linkMembersToRegistrationSchool } from '@/lib/school-link'
 import { recordEventParticipationForRegistration } from '@/lib/event-participation-sync'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { isMinor } from '@/lib/docusign'
+import { ensureIndividualPayments, type IndividualPaymentPerson } from '@/lib/individual-payment'
 
 export interface SheetSyncRegistration {
   id: string
@@ -20,6 +21,8 @@ export interface SheetSyncResult {
   created: number
   updated: number
   syncedMemberIds: string[]
+  /** Individual payment links / free-event notices sent by this run. */
+  paymentLinksSent: number
 }
 
 // Map the sheet's "Type" column to the members/participants enum role + bracket.
@@ -38,9 +41,13 @@ function roleFromType(type: string, dateOfBirth: string | null): { eventRole: st
 
 // Reads the linked Google Sheet and upserts members + participants, then issues
 // the correct DocuSign agreement for anyone who doesn't already have an envelope
-// — so a person added via the sheet gets exactly the same paperwork flow as one
-// added through the join link. Shared by the manual "Sync From Sheet" button and
-// the Google-Drive change webhook so the two never drift. Non-fatal throughout.
+// and — when the group pays individually — the payment link (or free-event "no
+// payment required" notice) for anyone not yet told. So a person added via the
+// sheet gets exactly the same paperwork AND billing flow as one added through
+// the join link; previously they got the paperwork and nothing else, which left
+// them unbilled and invisible to the webhook's "is the group paid?" check.
+// Shared by the manual "Sync From Sheet" button and the Google-Drive change
+// webhook so the two never drift. Non-fatal throughout.
 export async function syncParticipantsFromSheet(
   db: SupabaseClient,
   registration: SheetSyncRegistration,
@@ -50,6 +57,7 @@ export async function syncParticipantsFromSheet(
   let created = 0
   let updated = 0
   const syncedMemberIds: string[] = []
+  const paymentPeople: IndividualPaymentPerson[] = []
 
   for (const row of sheetRows) {
     if (!row.first_name && !row.email) continue
@@ -136,37 +144,39 @@ export async function syncParticipantsFromSheet(
       created++
     }
 
-    // Issue the agreement only when this participant doesn't already have an
-    // envelope — so re-syncing the sheet never re-sends, but anyone still
-    // missing paperwork (incl. rows added before this existed) gets it now.
+    // Paperwork, then billing. dispatchAgreement is a no-op for anyone who
+    // already has an envelope for this participant or valid signed paperwork on
+    // file, so a re-sync never re-sends — that dedupe used to be duplicated here
+    // and now lives inside dispatchAgreement, where every caller gets it.
     if (participantId) {
-      const { data: env } = await db
-        .from('docusign_envelopes')
-        .select('id')
-        .eq('participant_id', participantId)
-        .limit(1)
-        .maybeSingle()
-      if (!env) {
-        await dispatchAgreement(db, {
-          participantId,
-          memberId,
-          eventSlug:         registration.event_slug,
-          eventTitle:        registration.event_title,
-          firstName:         row.first_name,
-          lastName:          row.last_name,
-          email,
-          phone:             row.phone,
-          dateOfBirth:       dob,
-          eventRole,
-          schoolName:        registration.school_name ?? undefined,
-          schoolState:       registration.school_address_state ?? undefined,
-          guardianFirstName: row.ec_first_name || undefined,
-          guardianLastName:  row.ec_last_name || undefined,
-          guardianEmail:     row.ec_email || undefined,
-          guardianPhone:     row.ec_phone || undefined,
-          relationship:      row.ec_relationship || undefined,
-        })
-      }
+      await dispatchAgreement(db, {
+        participantId,
+        memberId,
+        eventSlug:         registration.event_slug,
+        eventTitle:        registration.event_title,
+        firstName:         row.first_name,
+        lastName:          row.last_name,
+        email,
+        phone:             row.phone,
+        dateOfBirth:       dob,
+        eventRole,
+        schoolName:        registration.school_name ?? undefined,
+        schoolState:       registration.school_address_state ?? undefined,
+        guardianFirstName: row.ec_first_name || undefined,
+        guardianLastName:  row.ec_last_name || undefined,
+        guardianEmail:     row.ec_email || undefined,
+        guardianPhone:     row.ec_phone || undefined,
+        relationship:      row.ec_relationship || undefined,
+      })
+      // Everyone on the sheet, not just this run's new rows: the helper skips
+      // anyone already emailed, so people entered before this existed are picked
+      // up on the next sync instead of staying permanently unbilled.
+      paymentPeople.push({
+        participantId,
+        email,
+        firstName: row.first_name,
+        lastName:  row.last_name,
+      })
     }
   }
 
@@ -175,5 +185,10 @@ export async function syncParticipantsFromSheet(
   await linkMembersToRegistrationSchool(db, registration.id, syncedMemberIds)
   await recordEventParticipationForRegistration(db, registration.id, syncedMemberIds)
 
-  return { created, updated, syncedMemberIds }
+  // Individual payment links (or free-event notices) for a group whose members
+  // pay their own way. No-op for any other payment method, and for anyone
+  // already notified on an earlier sync.
+  const { charged, waived } = await ensureIndividualPayments(db, registration.id, paymentPeople)
+
+  return { created, updated, syncedMemberIds, paymentLinksSent: charged + waived }
 }

@@ -417,7 +417,7 @@ function StudentManagerCard({ data, onEdit }: { data: StudentManagerFormData; on
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, isCampaign = false }: { eventSlug: string; eventTitle: string; prefill?: RegistrationPrefill | null; isCampaign?: boolean }) {
+export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, isCampaign = false, isFree = false }: { eventSlug: string; eventTitle: string; prefill?: RegistrationPrefill | null; isCampaign?: boolean; isFree?: boolean }) {
   const router = useRouter()
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn()
   const { isSignedIn } = useAuth()
@@ -728,9 +728,20 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
           details_method: detailsMethod,
           // Campaigns are always free — never send a paid payment method, and flag
           // the registration so the API skips payment and marks it confirmed.
-          payment_method: isCampaign ? 'none' : paymentMethod,
+          // An event with no fee configured is the same story: the payment
+          // question isn't asked, so don't send a method the API would have to
+          // reject (invoice previously slipped through and recorded a phantom
+          // "invoice sent" against an invoice that was never created).
+          payment_method: isCampaign || isFree ? 'none' : paymentMethod,
           is_campaign: isCampaign,
-          member_pays_individually: !isCampaign && paymentMethod === 'individual',
+          // On a free event there is no group-vs-individual choice to make — each
+          // member individually owes nothing — so settle everyone individually.
+          // That's what gets each participant the "you're registered, no payment
+          // required" email; a group-paid flag would leave them silent, which is
+          // the gap this fixes. Campaigns keep their own confirmation email.
+          member_pays_individually: isCampaign
+            ? false
+            : isFree || paymentMethod === 'individual',
           // For SM: all additional_adults entries are genuinely additional (PoC is adults[0])
           // For teacher: additional_adults excludes teacher themselves. Map with the
           // ORIGINAL index (so PoC role detection holds), then drop blank/deferred
@@ -1090,9 +1101,18 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         </>
       )}
 
-      {isCampaign ? (
+      {isCampaign || isFree ? (
         <div className="bg-enviro-green-bg border border-enviro-green-chip rounded-xl p-6">
-          <p className="font-semibold text-enviro-green-text">No Payment Required For Campaigns — Good Luck!</p>
+          <p className="font-semibold text-enviro-green-text">
+            {isCampaign
+              ? 'No Payment Required For Campaigns — Good Luck!'
+              : 'No Payment Required — This Event Is Free Of Charge'}
+          </p>
+          {!isCampaign && (
+            <p className="text-sm text-enviro-green-text/80 mt-1">
+              Each group member will be emailed to confirm they&apos;re registered and that nothing is owed.
+            </p>
+          )}
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-line p-6 space-y-4">
@@ -1159,7 +1179,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         <button type="button" onClick={() => setStep(1)} className="btn-outline flex-1 py-3">← Back</button>
         <button type="button" onClick={handleFinalSubmit} disabled={submitting}
           className="btn-primary flex-1 py-3 disabled:opacity-60">
-          {submitting ? 'Submitting…' : !isCampaign && paymentMethod === 'card' ? 'Continue to Payment →' : 'Submit Registration'}
+          {submitting ? 'Submitting…' : !isCampaign && !isFree && paymentMethod === 'card' ? 'Continue to Payment →' : 'Submit Registration'}
         </button>
       </div>
 

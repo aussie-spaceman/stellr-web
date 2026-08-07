@@ -133,14 +133,19 @@ async function markIndividualPayment(registrationId: string, participantEmail: s
     await sendEmail({ to: p.email, ...emailContent })
   }
 
-  // If all participants in this registration have now paid, confirm the registration
-  const { data: stillPending } = await db
+  // If all participants in this registration have now settled, confirm the
+  // registration. "Settled" is paid OR waived (free event) — anything else,
+  // INCLUDING a null status, is outstanding. Matching only 'pending' meant a
+  // participant whose row never got a status (added via the Google Sheet or the
+  // organiser's manual add, both of which skipped the payment step entirely) was
+  // counted as settled, and the group was confirmed while they still owed.
+  const { data: unsettled } = await db
     .from('participants')
     .select('id')
     .eq('registration_id', registrationId)
-    .eq('individual_payment_status', 'pending')
+    .or('individual_payment_status.is.null,individual_payment_status.eq.pending')
 
-  if (!stillPending || stillPending.length === 0) {
+  if (!unsettled || unsettled.length === 0) {
     await db
       .from('registrations')
       .update({ status: 'confirmed' })

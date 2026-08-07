@@ -8,6 +8,7 @@ import { normalizeEventRole } from '@/lib/member-enums'
 import { ownsTeam } from '@/lib/team-access'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { getMemberOnFileByMembershipId } from '@/lib/member-onfile'
+import { ensureIndividualPayments } from '@/lib/individual-payment'
 
 // POST /api/members/teams/[id]/participants — group organiser adds a participant
 export async function POST(
@@ -162,6 +163,17 @@ export async function POST(
     guardianPhone:     participant.emergency_contact_phone ?? undefined,
     relationship:      participant.emergency_contact_relationship ?? undefined,
   })
+
+  // Individual payment link (or free-event "no payment required" notice), same
+  // as every other way into the group. No-op unless the group pays individually.
+  // Without this an organiser-added participant was never billed and stayed
+  // invisible to the webhook's "has the whole group paid?" check.
+  await ensureIndividualPayments(db, registrationId, [{
+    participantId: participant.id,
+    email:         participant.email,
+    firstName:     participant.first_name,
+    lastName:      participant.last_name,
+  }])
 
   return NextResponse.json({ participant }, { status: 201 })
 }

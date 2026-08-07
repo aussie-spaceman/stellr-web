@@ -7,8 +7,8 @@ import { registrationStatus, ageFromDob } from '@/lib/utils'
 import {
   sendEmail,
   groupConfirmationEmail,
-  groupMemberIndividualPaymentEmail,
 } from '@/lib/email'
+import { ensureIndividualPayments } from '@/lib/individual-payment'
 import { createGroupRegistrationSheet, isGoogleSheetsConfigured, type SheetSeedRow } from '@/lib/google-sheets'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
@@ -316,6 +316,27 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // The guard above only fires on a price that positively resolved to zero. An
+    // event with NO Stripe price at all (free, or a Price ID never pasted into
+    // Sanity) left feeUnitAmount null and slipped straight through it: the
+    // registration was created with invoice_requested=true, the invoice block
+    // below skipped on `stripePriceId &&`, and every member surface then reported
+    // "Invoice sent to organiser" for an invoice that was never created. Same
+    // up-front rejection as the card path, which already covers this case.
+    // A genuinely free event never reaches here — the form hides the payment
+    // question and sends 'none'.
+    if (payment_method === 'invoice' && (!feePriceId || !feeStripe)) {
+      console.error('[register/group] invoice selected but no Stripe price/config for event', {
+        event_slug, hasPrice: !!feePriceId, hasStripe: !!feeStripe,
+      })
+      return NextResponse.json(
+        {
+          error: 'This event has no registration fee configured, so no invoice can be issued. Please refresh the page — if the event is meant to be paid, contact Stellr.',
+        },
+        { status: 400 },
+      )
+    }
+
     // Create registration record
     const { data: registration, error: regError } = await db.from('registrations').insert({
       event_slug, event_title,
@@ -539,7 +560,7 @@ export async function POST(req: NextRequest) {
     // Build participant rows. event_role is normalised to the enum values the
     // admin roster, Companies auto-assign, and check-in filter on — same
     // under-18 override as the members upsert above.
-    const buildParticipant = (p: ParticipantPayload, paymentStatus?: 'pending' | null) => ({
+    const buildParticipant = (p: ParticipantPayload, paymentStatus?: 'pending' | 'waived' | null) => ({
       registration_id: regId,
       member_id: memberIdMap[p.email] ?? null,
       first_name: p.first_name, last_name: p.last_name,
@@ -563,8 +584,16 @@ export async function POST(req: NextRequest) {
       individual_payment_status: paymentStatus ?? null,
     })
 
-    const registrantPayStatus: 'pending' | null =
-      member_pays_individually && details_method === 'add_now' ? 'pending' : null
+    // Stamped at insert, independent of whether the notification email later
+    // succeeds, so the row carries the right state from the moment it exists:
+    // 'pending' is what makes it visible to the Stripe webhook's "has the whole
+    // group paid?" check, and 'waived' (free event — no price on the event) is
+    // what stops it sitting there owing a payment that can never be made.
+    // Previously gated on add_now, which left spreadsheet-method registrants
+    // unbilled and silently outside that check.
+    const seatPayStatus: 'pending' | 'waived' | null = member_pays_individually
+      ? (feePriceId && feeStripe ? 'pending' : 'waived')
+      : null
     const registrantRow = buildParticipant({
       first_name: teacher.first_name, last_name: teacher.last_name,
       nickname: teacher.nickname,
@@ -581,14 +610,13 @@ export async function POST(req: NextRequest) {
       emergency_contact_email: teacher.emergency_contact_email,
       emergency_contact_phone: teacher.emergency_contact_phone,
       emergency_contact_relationship: teacher.emergency_contact_relationship,
-    }, registrantPayStatus)
+    }, seatPayStatus)
 
     const participantRows = [registrantRow]
 
     if (details_method === 'add_now') {
-      const payStatus = member_pays_individually ? 'pending' : null
-      for (const a of (additional_adults ?? [])) participantRows.push(buildParticipant(a, payStatus))
-      for (const s of (students ?? [])) participantRows.push(buildParticipant(s, payStatus))
+      for (const a of (additional_adults ?? [])) participantRows.push(buildParticipant(a, seatPayStatus))
+      for (const s of (students ?? [])) participantRows.push(buildParticipant(s, seatPayStatus))
     }
 
     const { data: insertedParts, error: partError } = await db
@@ -863,43 +891,30 @@ export async function POST(req: NextRequest) {
           { status: 502 },
         )
       }
-    } else if (member_pays_individually && details_method === 'add_now' && stripePriceId && stripe) {
-      // Create individual checkout sessions for every participant, including the
-      // registrant — their own seat must be billed too when members pay individually.
-      const memberParticipants: ParticipantPayload[] = [
-        teacher as ParticipantPayload,
-        ...(additional_adults ?? []),
-        ...(students ?? []),
-      ]
-      await Promise.all(memberParticipants.map(async (p) => {
-        try {
-          const session = await stripe.checkout.sessions.create({
-            mode: 'payment',
-            line_items: [{ price: stripePriceId, quantity: 1 }],
-            customer_email: p.email,
-            metadata: {
-              registrationId: regId,
-              eventSlug: event_slug,
-              participantEmail: p.email,
-              isIndividualGroupPayment: 'true',
-            },
-            success_url: `${SITE_URL}/register/${event_slug}/confirmation?id=${regId}&type=group&payment=success`,
-            cancel_url: `${SITE_URL}/register/${event_slug}/group?cancelled=true`,
+    } else if (member_pays_individually) {
+      // Everyone entered now, including the registrant — their own seat is billed
+      // too when members pay individually. Anyone still to come (sheet rows, join
+      // link, organiser manual add) is handled by those paths, which call the same
+      // helper. This branch used to be gated on `details_method === 'add_now' &&
+      // stripePriceId && stripe`, so picking the spreadsheet method — or a free
+      // event — silently billed and emailed nobody at all.
+      await ensureIndividualPayments(
+        db,
+        regId,
+        participantRows
+          .map((row) => {
+            const participantId = partIdByEmail.get(row.email)
+            return participantId
+              ? {
+                  participantId,
+                  email:     row.email,
+                  firstName: row.first_name,
+                  lastName:  row.last_name,
+                }
+              : null
           })
-          if (session.url) {
-            const emailContent = groupMemberIndividualPaymentEmail({
-              memberFirstName: p.first_name,
-              memberLastName: p.last_name,
-              eventTitle: event_title,
-              registrationId: regId,
-              paymentUrl: session.url,
-            })
-            await sendEmail({ to: p.email, ...emailContent })
-          }
-        } catch (indErr) {
-          console.error(`Individual payment session error for ${p.email} (non-fatal):`, indErr)
-        }
-      }))
+          .filter((p): p is NonNullable<typeof p> => p !== null),
+      )
     }
 
     // ── CC list for confirmation emails ───────────────────────────────────────

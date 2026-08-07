@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
-import { sendEmail, groupMemberJoinedEmail, groupMemberIndividualPaymentEmail } from '@/lib/email'
+import { sendEmail, groupMemberJoinedEmail } from '@/lib/email'
+import { ensureIndividualPayments } from '@/lib/individual-payment'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
 import { recordEventParticipation } from '@/lib/event-participation-sync'
@@ -14,14 +14,6 @@ import {
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { upsertMember } from '@/lib/member-sync'
 import { ageFromDob, registrationStatus } from '@/lib/utils'
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
 
 // A participant, normalised to the enum/shape the participants + members tables
 // and DocuSign expect — built either from the signed-in member's profile, or
@@ -374,43 +366,17 @@ export async function POST(req: NextRequest) {
     console.error('Join notification email error (non-fatal):', emailErr)
   }
 
-  // If individual payment, create Stripe checkout and send to member
-  if (memberPaysIndividually) {
-    const stripe = getStripe()
-    const event = await getEventBySlug(eventSlug)
-    const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId
-
-    if (stripe && stripePriceId) {
-      try {
-        const session = await stripe.checkout.sessions.create({
-          mode: 'payment',
-          line_items: [{ price: stripePriceId, quantity: 1 }],
-          customer_email: person.email,
-          metadata: {
-            registrationId,
-            eventSlug,
-            participantEmail: person.email,
-            isIndividualGroupPayment: 'true',
-          },
-          success_url: `${SITE_URL}/register/${eventSlug}/confirmation?id=${registrationId}&type=group&payment=success`,
-          cancel_url: `${SITE_URL}/register/${eventSlug}/join/${token}?cancelled=true`,
-        })
-
-        if (session.url) {
-          const payContent = groupMemberIndividualPaymentEmail({
-            memberFirstName: person.first_name,
-            memberLastName: person.last_name,
-            eventTitle,
-            registrationId,
-            paymentUrl: session.url,
-          })
-          await sendEmail({ to: person.email, ...payContent })
-        }
-      } catch (stripeErr) {
-        console.error('Individual payment session error (non-fatal):', stripeErr)
-      }
-    }
-  }
+  // Individual payment link — or, on a free event, the "you're registered, no
+  // payment required" notice. Shared with the group-registration form, the sheet
+  // sync and the organiser's manual add, so every route into an individually-paid
+  // group tells the person the same thing. (Inline here previously, which meant a
+  // free event silently sent nothing and left them stuck at 'pending'.)
+  await ensureIndividualPayments(db, registrationId, [{
+    participantId: partRow.id,
+    email:         person.email,
+    firstName:     person.first_name,
+    lastName:      person.last_name,
+  }])
 
   return NextResponse.json({ success: true, eventSlug, eventTitle, signInToken }, { status: 201 })
 }

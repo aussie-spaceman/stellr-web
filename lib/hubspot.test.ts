@@ -5,7 +5,43 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('@/lib/email', () => ({ sendEmail: vi.fn(async () => {}) }))
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => ({ from: () => ({ insert: async () => ({ error: null }) }) }) }))
 
-const { appendLogEntry, logLine } = await import('./hubspot')
+const { appendLogEntry, logLine, rejectedPropertyNames } = await import('./hubspot')
+
+/**
+ * Regression guard for the first post-deploy failure. The six Stellr
+ * properties did not yet exist in the portal, HubSpot 400'd the whole patch,
+ * and the retry fell all the way back to identity fields — so contacts landed
+ * with a name and email and none of the segmentation, looking indistinguishable
+ * from a healthy capture. Parsing the rejected names lets us drop only those.
+ */
+describe('rejectedPropertyNames', () => {
+  it('extracts names from the escaped-JSON message HubSpot actually returns', () => {
+    const body = JSON.stringify({
+      status: 'error',
+      message:
+        'Property values were not valid: [{"isValid":false,"message":"Property \\"event_slug\\" does not exist","error":"PROPERTY_DOESNT_EXIST","name":"event_slug"}]',
+      correlationId: 'abc',
+    })
+    expect(rejectedPropertyNames(body)).toEqual(['event_slug'])
+  })
+
+  it('collects every rejected property, not just the first', () => {
+    const body =
+      '{"message":"Property values were not valid: [' +
+      '{\\"error\\":\\"PROPERTY_DOESNT_EXIST\\",\\"name\\":\\"event_slug\\"},' +
+      '{\\"error\\":\\"PROPERTY_DOESNT_EXIST\\",\\"name\\":\\"stellr_lead_source\\"}]"}'
+    expect(rejectedPropertyNames(body).sort()).toEqual(['event_slug', 'stellr_lead_source'])
+  })
+
+  it('deduplicates repeated names', () => {
+    const body = '"name":"event_slug" ... "name":"event_slug"'
+    expect(rejectedPropertyNames(body)).toEqual(['event_slug'])
+  })
+
+  it('returns nothing for an unrelated error body', () => {
+    expect(rejectedPropertyNames('{"status":"error","message":"rate limited"}')).toEqual([])
+  })
+})
 
 /**
  * The activity log is the fix for the failure that started this work: five

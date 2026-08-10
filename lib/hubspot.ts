@@ -119,14 +119,37 @@ export interface UpsertContactInput {
 }
 
 /**
+ * Pull the offending property names out of a HubSpot 400. The body carries a
+ * `message` whose value is itself escaped JSON, e.g.
+ *
+ *   "Property values were not valid: [{\"isValid\":false,
+ *    \"message\":\"Property \\\"event_slug\\\" does not exist\",
+ *    \"error\":\"PROPERTY_DOESNT_EXIST\",\"name\":\"event_slug\"}]"
+ *
+ * so we match `name` tolerantly of the escaping rather than parsing twice.
+ */
+export function rejectedPropertyNames(body: string): string[] {
+  const names = new Set<string>()
+  for (const match of body.matchAll(/\\?"name\\?"\s*:\s*\\?"([a-zA-Z0-9_]+)\\?"/g)) {
+    names.add(match[1])
+  }
+  return [...names]
+}
+
+/**
  * Create or update a contact, keyed on email. Best-effort: returns `{ ok }` and
- * never throws. If HubSpot rejects the payload because an optional property
- * isn't defined in the portal, it retries with identity fields only so the lead
- * still lands rather than being lost to a schema mismatch.
+ * never throws.
+ *
+ * On a 400 it drops **only** the properties HubSpot actually named and retries,
+ * rather than falling all the way back to identity fields. That distinction
+ * matters: one property missing from the portal previously wiped the entire
+ * patch, so a contact landed with a name and an email and none of the
+ * segmentation the capture existed to record — silently, because the lead still
+ * looked like it had been saved.
  */
 export async function upsertContact(
   input: UpsertContactInput,
-): Promise<{ ok: boolean; id?: string; status?: number }> {
+): Promise<{ ok: boolean; id?: string; status?: number; dropped?: string[] }> {
   if (!HUBSPOT_ACCESS_TOKEN) {
     console.log('[hubspot] No HUBSPOT_ACCESS_TOKEN — would have upserted contact:', input.email)
     return { ok: false }
@@ -154,18 +177,41 @@ export async function upsertContact(
     return hubspot('/crm/v3/objects/contacts', 'POST', { properties: props })
   }
 
+  const dropped: string[] = []
+
   try {
     let res = await write(full)
+
+    // Retry without exactly what HubSpot objected to, keeping the rest.
     if (res.status === 400) {
-      console.error('[hubspot] Property write rejected, retrying with identity only:', await res.text())
-      res = await write(core)
+      const body = await res.text()
+      const rejected = rejectedPropertyNames(body).filter((name) => name in full && name !== HS.email)
+
+      if (rejected.length) {
+        const pruned = { ...full }
+        for (const name of rejected) delete pruned[name]
+        dropped.push(...rejected)
+        console.error(
+          `[hubspot] Properties rejected by the portal — retrying without them: ${rejected.join(', ')}. ` +
+            'If these are the Stellr fields, run: npx tsx scripts/hubspot-setup.ts',
+        )
+        res = await write(pruned)
+      }
+
+      // Only now give up on the extras entirely.
+      if (res.status === 400) {
+        console.error('[hubspot] Still rejected — falling back to identity fields:', await res.text())
+        dropped.push(...Object.keys(full).filter((k) => !(k in core)))
+        res = await write(core)
+      }
     }
+
     if (!res.ok) {
       console.error('[hubspot] Contact upsert failed', res.status, await res.text())
       return { ok: false, status: res.status }
     }
     const json = (await res.json().catch(() => null)) as { id?: string } | null
-    return { ok: true, id: json?.id }
+    return { ok: true, id: json?.id, dropped: dropped.length ? [...new Set(dropped)] : undefined }
   } catch (err) {
     console.error('[hubspot] Contact upsert error:', err)
     return { ok: false }
@@ -494,6 +540,9 @@ export async function captureLead(input: LeadCaptureInput): Promise<LeadCaptureR
     if (upsert.ok) {
       via = 'contacts-api'
       contactId = contactId ?? upsert.id
+      // The lead landed, but not the segmentation — worth naming explicitly,
+      // since a partially-written contact looks identical to a healthy one.
+      if (upsert.dropped?.length) warnings.push(`properties-dropped:${upsert.dropped.join('|')}`)
     }
   }
 

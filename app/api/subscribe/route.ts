@@ -30,7 +30,17 @@ export async function POST(req: Request) {
   if (limited) return limited
 
   try {
-    const { email, name, source, eventSlug, interest } = await req.json()
+    const body = await req.json()
+    const { email, name, source, interest } = body
+
+    // `event` is the pre-August-2026 field name for the same value. A deploy
+    // does not reload tabs that are already open, so for a while after any
+    // release the browser is running the previous bundle against the current
+    // route. Accepting both keys is what stops that skew from silently
+    // downgrading an event signup to a generic newsletter capture — which is
+    // exactly what happened to the first post-deploy test.
+    const eventSlug: unknown = body.eventSlug ?? body.event
+
     if (!email || typeof email !== 'string' || !email.includes('@')) {
       return NextResponse.json({ error: 'Invalid email' }, { status: 400 })
     }
@@ -39,8 +49,11 @@ export async function POST(req: Request) {
     const trimmedName = typeof name === 'string' ? name.trim() : ''
     const [firstName, ...rest] = trimmedName.split(/\s+/)
 
-    const isEventNotify = source === 'event-notify' && typeof eventSlug === 'string' && eventSlug
-    const leadSource: LeadSource = isEventNotify ? 'event_notify' : 'newsletter'
+    const slug =
+      source === 'event-notify' && typeof eventSlug === 'string' && eventSlug.trim()
+        ? eventSlug.trim()
+        : null
+    const leadSource: LeadSource = slug ? 'event_notify' : 'newsletter'
 
     const properties: Record<string, string> = {}
     let activity = 'Subscribed to Stellr updates via the website footer.'
@@ -48,11 +61,11 @@ export async function POST(req: Request) {
     let pageName = 'Newsletter subscribe'
     let pageUri = SITE_URL
 
-    if (isEventNotify) {
+    if (slug) {
       // Resolve the event server-side. A slug we can't resolve is still worth
       // capturing — we just record the raw slug and skip the taxonomy rather
       // than inventing values for it.
-      const event = await getEventBySlug(eventSlug).catch(() => null)
+      const event = await getEventBySlug(slug).catch(() => null)
 
       const chosen: RegistrationInterest =
         interest === 'individual' || interest === 'group' ? interest : 'unspecified'
@@ -62,31 +75,31 @@ export async function POST(req: Request) {
       properties[HS.registrationInterest] = REGISTRATION_INTEREST[chosen]
 
       if (event) {
-        const mapped = eventProperties(event, eventSlug)
+        const mapped = eventProperties(event, slug)
         Object.assign(properties, mapped.properties)
         if (mapped.unmapped.length) {
           // A missing portal option is a data-quality problem someone has to
           // fix; make it loud rather than shipping a half-tagged contact.
           console.warn(
-            `[subscribe] Unmapped event fields for "${eventSlug}": ${mapped.unmapped.join(', ')}`,
+            `[subscribe] Unmapped event fields for "${slug}": ${mapped.unmapped.join(', ')}`,
           )
         }
       } else {
-        properties[HS.eventSlug] = eventSlug
-        console.warn(`[subscribe] Event not found in Sanity for slug "${eventSlug}"`)
+        properties[HS.eventSlug] = slug
+        console.warn(`[subscribe] Event not found in Sanity for slug "${slug}"`)
       }
 
-      const eventName = event?.title ?? eventSlug
+      const eventName = event?.title ?? slug
       const interestLabel = REGISTRATION_INTEREST[chosen].toLowerCase()
       activity =
         `Requested registration updates for ${eventName}` +
         (chosen === 'unspecified' ? '.' : ` (${interestLabel} registration).`)
       logEntry = logLine(
         leadSource,
-        `${eventSlug} · ${REGISTRATION_INTEREST[chosen]}`,
+        `${slug} · ${REGISTRATION_INTEREST[chosen]}`,
       )
       pageName = `Event notify — ${eventName}`
-      pageUri = `${SITE_URL}/events/${eventSlug}`
+      pageUri = `${SITE_URL}/events/${slug}`
     }
 
     const result = await captureLead({

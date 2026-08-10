@@ -515,7 +515,11 @@ export async function captureLead(input: LeadCaptureInput): Promise<LeadCaptureR
         ...(input.firstName ? { [HS.firstName]: input.firstName } : {}),
         ...(input.lastName ? { [HS.lastName]: input.lastName } : {}),
         ...properties,
-        ...(lifecycleStage ? { [HS.lifecycleStage]: lifecycleStage } : {}),
+        // Deliberately no lifecyclestage. HubSpot owns lifecycle transitions
+        // and won't let an API-created form declare that field at all, and a
+        // submission naming a field the form doesn't have is a 400 — which
+        // would cost us the conversion on exactly the first-touch capture that
+        // needs it most. It is stamped separately in step 3b.
       },
       input.context,
     )
@@ -562,6 +566,19 @@ export async function captureLead(input: LeadCaptureInput): Promise<LeadCaptureR
       contactId = (await getContactByEmail(input.email))?.id
       if (contactId) break
     }
+  }
+
+  // ── 3b. Lifecycle stage ───────────────────────────────────────────────────
+  // The form path could not carry this (see step 2), so stamp it here. Only
+  // when the form actually handled the capture — the property-write fallback
+  // in step 3 already included it — and only for a contact that did not exist
+  // before, so an established member is never pushed back to "subscriber".
+  // Runs after the read-retry above so the freshly created contact is
+  // addressable; a failure costs the stage, not the lead.
+  if (via === 'form' && lifecycleStage && HUBSPOT_ACCESS_TOKEN) {
+    const stamped = await upsertContact({ email: input.email, lifecycleStage })
+    if (stamped.ok) contactId = contactId ?? stamped.id
+    else warnings.push('lifecycle-stage-not-set')
   }
 
   let noteLogged = false

@@ -7,6 +7,12 @@
  * Idempotent: re-running skips anything that already exists, so it is safe to
  * run again after adding a route or an event year.
  *
+ * Put the Service Key in .env.local (gitignored) as:
+ *
+ *   HUBSPOT_ACCESS_TOKEN=pat-na1-…
+ *
+ * then:
+ *
  *   npx tsx scripts/hubspot-setup.ts --dry-run   # print the plan, change nothing
  *   npx tsx scripts/hubspot-setup.ts             # apply
  *
@@ -34,7 +40,16 @@
  * with no conversion attribution.
  */
 
+import * as dotenv from 'dotenv'
+import * as path from 'path'
+import * as fs from 'fs'
 import { LEAD_SOURCES, NOTIFY_STATUS, REGISTRATION_INTEREST, HS } from '../lib/hubspot-fields'
+
+// Same convention as the other operational scripts: read .env.local so the
+// Service Key lives in a gitignored file rather than in shell history.
+const envPath = path.resolve(process.cwd(), '.env.local')
+if (fs.existsSync(envPath)) dotenv.config({ path: envPath })
+else dotenv.config()
 
 const TOKEN = process.env.HUBSPOT_ACCESS_TOKEN
 const PORTAL_ID = process.env.HUBSPOT_PORTAL_ID ?? process.env.NEXT_PUBLIC_HUBSPOT_PORTAL_ID
@@ -44,7 +59,20 @@ const BASE = 'https://api.hubapi.com'
 const GROUP_NAME = 'stellr_web'
 
 if (!TOKEN) {
-  console.error('HUBSPOT_ACCESS_TOKEN is not set. Export it and re-run.')
+  console.error(
+    'HUBSPOT_ACCESS_TOKEN is not set.\n' +
+      `Add it to ${envPath} as HUBSPOT_ACCESS_TOKEN=<your Service Key>, then re-run.`,
+  )
+  process.exit(1)
+}
+
+// Catch the copy-paste-the-placeholder case before spending a round trip on a
+// 401 that looks like a credential problem but isn't one.
+if (/^(YOUR_SERVICE_KEY|<.*>|your_.*|xxx+)$/i.test(TOKEN)) {
+  console.error(
+    `HUBSPOT_ACCESS_TOKEN is still the placeholder "${TOKEN}".\n` +
+      'Replace it with the real Service Key value from HubSpot → Settings → Integrations → Service Keys.',
+  )
   process.exit(1)
 }
 
@@ -140,14 +168,22 @@ const PROPERTIES: PropertyDef[] = [
   },
 ]
 
-/** Fields every lead form carries, so any route can write the full picture. */
+/**
+ * Fields every lead form carries, so any route can write the full picture.
+ *
+ * `lifecyclestage` is deliberately absent. HubSpot owns lifecycle transitions
+ * and refuses to create a form that declares it as a field — the Forms API
+ * rejects the whole definition with an opaque `"internal error"` (verified
+ * field-by-field against portal 24379847: every other field here is accepted,
+ * that one alone fails). `captureLead()` therefore stamps the stage with a
+ * separate contact write; see the note in lib/hubspot.ts.
+ */
 const COMMON_FIELDS = [
   HS.email,
   HS.firstName,
   HS.lastName,
   HS.leadSource,
   HS.notifyLog,
-  HS.lifecycleStage,
 ]
 
 const EVENT_FIELDS = [
@@ -181,59 +217,77 @@ const FORMS: { key: keyof typeof LEAD_SOURCES; name: string; fields: string[] }[
  * that scope. Everything else (including 404) means the call got through.
  */
 async function preflight(): Promise<boolean> {
-  const checks: { scope: string; path: string }[] = [
-    { scope: 'crm.objects.contacts.read', path: '/crm/v3/objects/contacts?limit=1' },
-    { scope: 'crm.schemas.contacts.write', path: '/crm/v3/properties/contacts' },
-    { scope: 'forms', path: '/marketing/v3/forms/?limit=1' },
+  // These are READ probes. A read succeeding does not prove the matching write
+  // is granted, and a read being denied does not prove the write is missing —
+  // so this reports, it does not gate. Blocking on an unprovable inference is
+  // worse than attempting the work: every step below is idempotent and
+  // reports its own outcome, so a genuine scope failure surfaces there with
+  // HubSpot's own error text attached.
+  const checks: { label: string; path: string }[] = [
+    { label: 'contacts (read)', path: '/crm/v3/objects/contacts?limit=1' },
+    { label: 'properties (schema read)', path: '/crm/v3/properties/contacts' },
+    { label: 'forms', path: '/marketing/v3/forms/?limit=1' },
   ]
 
-  const missing: string[] = []
   let unauthorized = false
 
   for (const check of checks) {
     const res = await api(check.path, 'GET')
-    if (res.status === 401) unauthorized = true
-    else if (res.status === 403) missing.push(check.scope)
-    else console.log(`  ✓ ${check.scope}`)
+    if (res.status === 401) {
+      unauthorized = true
+      console.error(`  ✗ ${check.label}: 401 rejected`)
+    } else if (res.status === 403) {
+      console.warn(`  ! ${check.label}: 403 — scope likely missing, will attempt anyway`)
+    } else {
+      console.log(`  ✓ ${check.label}`)
+    }
   }
 
+  // A 401 is the one unambiguous stop: the credential itself is not valid, so
+  // nothing downstream can succeed.
   if (unauthorized) {
-    console.error('\n  ✗ The credential was rejected (401). Check HUBSPOT_ACCESS_TOKEN.')
+    console.error('\n  The credential was rejected. Check HUBSPOT_ACCESS_TOKEN is a current Service Key.')
     return false
   }
-  if (missing.length) {
-    console.error(`\n  ✗ Missing scopes: ${missing.join(', ')}`)
-    console.error('    Add them to the Service Key (or create a new one as a Super Admin) and re-run.')
-    return false
-  }
-
-  // contacts.write can't be probed without writing, so it's only asserted.
-  // It also covers note creation — there is no separate notes scope to add.
-  console.log('  · contacts.write assumed — failures will surface per call')
   return true
 }
 
 /* ── Steps ───────────────────────────────────────────────────────────────── */
 
-async function ensureGroup() {
+/** Stock group that exists in every portal — the fallback if ours can't be made. */
+const FALLBACK_GROUP = 'contactinformation'
+
+const failures: string[] = []
+
+/**
+ * Returns the group name properties should be filed under. A grouping problem
+ * must not cost us the properties themselves: which tab a field appears on is
+ * cosmetic, whereas the field not existing is the outage.
+ */
+async function ensureGroup(): Promise<string> {
   const existing = await api(`/crm/v3/properties/contacts/groups/${GROUP_NAME}`, 'GET')
   if (existing.ok) {
     console.log(`  ✓ property group "${GROUP_NAME}" already exists`)
-    return
+    return GROUP_NAME
   }
   if (DRY_RUN) {
     console.log(`  + would create property group "${GROUP_NAME}"`)
-    return
+    return GROUP_NAME
   }
   const res = await api('/crm/v3/properties/contacts/groups', 'POST', {
     name: GROUP_NAME,
     label: 'Stellr Website',
-    displayOrder: -1,
   })
-  console.log(res.ok ? `  + created property group "${GROUP_NAME}"` : `  ✗ group failed: ${res.text}`)
+  if (res.ok) {
+    console.log(`  + created property group "${GROUP_NAME}"`)
+    return GROUP_NAME
+  }
+  console.warn(`  ! group create failed (${res.status}) — filing under "${FALLBACK_GROUP}" instead`)
+  console.warn(`    ${res.text}`)
+  return FALLBACK_GROUP
 }
 
-async function ensureProperties() {
+async function ensureProperties(groupName: string) {
   for (const def of PROPERTIES) {
     const existing = await api(`/crm/v3/properties/contacts/${def.name}`, 'GET')
     if (existing.ok) {
@@ -244,11 +298,13 @@ async function ensureProperties() {
       console.log(`  + would create ${def.name} (${def.fieldType})`)
       continue
     }
-    const res = await api('/crm/v3/properties/contacts', 'POST', {
-      ...def,
-      groupName: GROUP_NAME,
-    })
-    console.log(res.ok ? `  + created ${def.name}` : `  ✗ ${def.name} failed: ${res.text}`)
+    const res = await api('/crm/v3/properties/contacts', 'POST', { ...def, groupName })
+    if (res.ok) {
+      console.log(`  + created ${def.name}`)
+    } else {
+      console.error(`  ✗ ${def.name} failed (${res.status}): ${res.text}`)
+      failures.push(`property ${def.name} (${res.status})`)
+    }
   }
 }
 
@@ -309,8 +365,143 @@ async function convertDemographicToMultiSelect() {
   )
 }
 
+/**
+ * The Forms API and the Properties API use *different* vocabularies for field
+ * types — a property is `textarea`, the same field on a form is
+ * `multi_line_text`. Rather than maintain a hand-written table that silently
+ * rots when a property's type changes, derive the form type from whatever the
+ * portal currently says the property is.
+ */
+/**
+ * The exact set the Forms API accepts, as enumerated by HubSpot's own
+ * validation error. Checked locally so a bad mapping fails here with a useful
+ * message instead of as a 400 six times over.
+ */
+const VALID_FORM_FIELD_TYPES = new Set([
+  'datepicker',
+  'dropdown',
+  'email',
+  'file',
+  'mobile_phone',
+  'multi_line_text',
+  'multiple_checkboxes',
+  'number',
+  'payment_link_radio',
+  'phone',
+  'radio',
+  'single_checkbox',
+  'single_line_text',
+])
+
+const FORM_FIELD_TYPE: Record<string, string> = {
+  text: 'single_line_text',
+  textarea: 'multi_line_text',
+  select: 'dropdown',
+  radio: 'radio',
+  checkbox: 'multiple_checkboxes',
+  booleancheckbox: 'single_checkbox',
+  date: 'datepicker',
+  number: 'number',
+  file: 'file',
+  phonenumber: 'phone',
+}
+
+interface PropertyMeta {
+  fieldType: string
+  options?: { label: string; value: string; displayOrder?: number }[]
+}
+
+/** name → its current definition, for deriving form fields. */
+async function loadPropertyMeta(): Promise<Map<string, PropertyMeta>> {
+  const res = await api('/crm/v3/properties/contacts', 'GET')
+  const map = new Map<string, PropertyMeta>()
+  if (!res.ok) {
+    console.warn(`  ! could not read property definitions (${res.status}) — falling back to text fields`)
+    return map
+  }
+  for (const p of res.json?.results ?? []) {
+    map.set(p.name, { fieldType: p.fieldType, options: p.options })
+  }
+  return map
+}
+
+/**
+ * `validation` is a required member of every form field — the API rejects the
+ * whole request without it, naming only `[validation]`. The model is shared
+ * across field types, so the email-oriented keys are simply inert on the
+ * others.
+ */
+const NO_VALIDATION = { blockedEmailDomains: [], useDefaultBlockList: false }
+
+function formFieldFor(name: string, meta: Map<string, PropertyMeta>) {
+  // `email` has a dedicated form type with its own validation.
+  if (name === HS.email) {
+    return {
+      objectTypeId: '0-1',
+      name,
+      fieldType: 'email',
+      label: 'Email',
+      required: true,
+      hidden: false,
+      validation: NO_VALIDATION,
+    }
+  }
+
+  const property = meta.get(name)
+  let fieldType = FORM_FIELD_TYPE[property?.fieldType ?? 'text'] ?? 'single_line_text'
+
+  if (!VALID_FORM_FIELD_TYPES.has(fieldType)) {
+    console.warn(
+      `  ! "${name}" mapped to unsupported form type "${fieldType}" ` +
+        `(property type "${property?.fieldType}") — using single_line_text`,
+    )
+    fieldType = 'single_line_text'
+  }
+
+  return {
+    objectTypeId: '0-1',
+    name,
+    fieldType,
+    label: name,
+    required: false,
+    hidden: true,
+    validation: NO_VALIDATION,
+    // Enumerated fields carry their choices; harmless elsewhere.
+    ...(property?.options?.length
+      ? {
+          options: property.options.map((o, i) => ({
+            label: o.label,
+            value: o.value,
+            displayOrder: o.displayOrder ?? i,
+          })),
+        }
+      : {}),
+  }
+}
+
+/**
+ * Print the field shape of a form the portal already holds. HubSpot's create
+ * schema for this endpoint is not publicly retrievable, so an existing form is
+ * the only authoritative reference for what it will accept.
+ */
+async function dumpExampleFormShape() {
+  const res = await api('/marketing/v3/forms/?limit=20', 'GET')
+  const forms: any[] = res.json?.results ?? []
+  const sample = forms.find((f) => f?.fieldGroups?.[0]?.fields?.[0])
+  if (!sample) {
+    console.error('    (no existing form available to compare against)')
+    return
+  }
+  console.error(`\n    ── Field shape from existing form "${sample.name}" ──`)
+  console.error(
+    '    ' + JSON.stringify(sample.fieldGroups[0].fields[0], null, 2).split('\n').join('\n    '),
+  )
+  console.error('    ────────────────────────────────────────────────\n')
+}
+
 async function ensureForms(): Promise<Record<string, string>> {
   const guids: Record<string, string> = {}
+  const meta = await loadPropertyMeta()
 
   const list = await api('/marketing/v3/forms/?limit=100', 'GET')
   if (!list.ok) {
@@ -335,23 +526,26 @@ async function ensureForms(): Promise<Record<string, string>> {
 
     // Non-marketable, API-only capture form: no styling, no follow-up email —
     // it exists so submissions register as conversions on the timeline.
+    //
+    // `createdAt`/`updatedAt` are documented as read-only response fields, but
+    // this endpoint rejects a create without them ("Some required fields were
+    // not set: [createdAt]"). Every form the portal returns carries both, so
+    // send them rather than fight the validator; HubSpot overwrites the values
+    // with its own server timestamps.
+    const now = new Date().toISOString()
     const res = await api('/marketing/v3/forms/', 'POST', {
       name: form.name,
       formType: 'hubspot',
-      fieldGroups: form.fields.map((name) => ({
-        groupType: 'default_group',
-        richTextType: 'text',
-        fields: [
-          {
-            objectTypeId: '0-1',
-            name,
-            fieldType: name === HS.notifyLog ? 'textarea' : 'single_line_text',
-            label: name,
-            required: name === HS.email,
-            hidden: name !== HS.email,
-          },
-        ],
-      })),
+      createdAt: now,
+      updatedAt: now,
+      fieldGroups: form.fields
+        // A field whose property doesn't exist would fail the whole form.
+        .filter((name) => name === HS.email || meta.size === 0 || meta.has(name))
+        .map((name) => ({
+          groupType: 'default_group',
+          richTextType: 'text',
+          fields: [formFieldFor(name, meta)],
+        })),
       configuration: {
         language: 'en',
         createNewContactForNewEmail: true,
@@ -366,7 +560,13 @@ async function ensureForms(): Promise<Record<string, string>> {
       guids[form.key] = res.json.id
       console.log(`  + created "${form.name}" → ${res.json.id}`)
     } else {
-      console.log(`  ✗ "${form.name}" failed (${res.status}): ${res.text}`)
+      console.error(`  ✗ "${form.name}" failed (${res.status}): ${res.text}`)
+      failures.push(`form ${form.name} (${res.status})`)
+      // The published schema for this endpoint isn't retrievable, so on the
+      // first failure show what a form the portal already accepts actually
+      // looks like. That turns the next attempt into a correction rather than
+      // another guess.
+      if (failures.length === 1) await dumpExampleFormShape()
     }
   }
   return guids
@@ -379,17 +579,17 @@ async function main() {
     `\nHubSpot setup — portal ${PORTAL_ID ?? '(unknown)'}${DRY_RUN ? '  [DRY RUN]' : ''}\n`,
   )
 
-  console.log('Preflight — credential and scopes:')
+  console.log('Preflight — credential and reachability:')
   if (!(await preflight())) {
     console.error('\nAborted before making any changes.\n')
     process.exit(1)
   }
 
   console.log('\nProperty group:')
-  await ensureGroup()
+  const groupName = await ensureGroup()
 
   console.log('\nNew properties:')
-  await ensureProperties()
+  await ensureProperties(groupName)
 
   console.log('\nExisting taxonomy repairs:')
   await extendEventYears()
@@ -411,7 +611,45 @@ async function main() {
   console.log('\nAlso ensure these are set:')
   console.log(`  HUBSPOT_PORTAL_ID=${PORTAL_ID ?? '24379847'}`)
   console.log(`  NEXT_PUBLIC_HUBSPOT_PORTAL_ID=${PORTAL_ID ?? '24379847'}   (tracking script)`)
-  console.log('')
+
+  // Read the portal back rather than trusting our own write results. The whole
+  // failure this script exists to end was a property that silently wasn't
+  // there, so "did it work?" is answered by asking HubSpot, not by counting
+  // 200s.
+  if (!DRY_RUN) {
+    console.log('\nVerification — reading the portal back:')
+    const stillMissing: string[] = []
+    for (const def of PROPERTIES) {
+      const res = await api(`/crm/v3/properties/contacts/${def.name}`, 'GET')
+      if (res.ok) console.log(`  ✓ ${def.name}`)
+      else {
+        console.error(`  ✗ ${def.name} is NOT in the portal`)
+        stillMissing.push(def.name)
+      }
+    }
+    if (stillMissing.length) failures.push(`properties still missing: ${stillMissing.join(', ')}`)
+
+    const formList = await api('/marketing/v3/forms/?limit=100', 'GET')
+    if (formList.ok) {
+      const names = new Set<string>((formList.json?.results ?? []).map((f: any) => f.name))
+      for (const form of FORMS) {
+        if (names.has(form.name)) console.log(`  ✓ ${form.name}`)
+        else console.error(`  ✗ ${form.name} is NOT in the portal`)
+      }
+    }
+  }
+
+  if (failures.length) {
+    console.error('\n─── INCOMPLETE ───')
+    for (const f of failures) console.error(`  ✗ ${f}`)
+    console.error(
+      '\nThe site will keep capturing leads, but anything above is dropped from the\n' +
+        'contact record until it exists. Fix and re-run — this script is idempotent.\n',
+    )
+    process.exit(1)
+  }
+
+  console.log(DRY_RUN ? '\nDry run complete — nothing was changed.\n' : '\nAll steps completed.\n')
 }
 
 main().catch((err) => {

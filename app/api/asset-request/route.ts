@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sendEmail, MARKETING_FROM } from '@/lib/email'
-import { upsertContact } from '@/lib/hubspot'
+import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
@@ -81,12 +81,22 @@ export async function POST(req: Request) {
     const downloadUrl = `${MEDIA_BASE || SITE_URL}${config.file}`
 
     // ── 1. Capture the lead in HubSpot as a subscriber (best-effort) ──────
-    const crm = await upsertContact({
+    // Form submission + note engagement, so the request is visible under
+    // Recent Conversion and Last Activity rather than only as a mutated
+    // property that the next lead route would overwrite.
+    const crm = await captureLead({
       email: cleanEmail,
       firstName,
       lastName,
-      note: config.note,
+      source: 'asset_request',
       lifecycleStage: 'subscriber',
+      activity: `${config.note}.`,
+      logEntry: logLine('asset_request', config.title),
+      context: {
+        hutk: readHubspotCookie(req),
+        pageUri: `${SITE_URL}${config.file}`,
+        pageName: `Asset request — ${config.title}`,
+      },
     })
 
     // ── 2. Email the asset to the requester (best-effort, link-only) ──────

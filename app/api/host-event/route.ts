@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email'
-import { upsertContact } from '@/lib/hubspot'
+import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
 export async function POST(req: Request) {
   const limited = rateLimitGuard(req, 'host-event', { limit: 3, windowMs: HOUR_MS })
@@ -55,13 +56,21 @@ export async function POST(req: Request) {
     await sendEmail({ to: CONTACT_EMAIL, replyTo: email, subject, html, text })
 
     // Capture the host enquiry as a marketing lead in HubSpot (best-effort —
-    // never blocks the submission if the CRM is unreachable).
-    await upsertContact({
+    // never blocks the submission if the CRM is unreachable; a failed capture
+    // is dead-lettered and alerted rather than lost).
+    await captureLead({
       email,
       firstName,
       lastName,
-      note: `Host An Event enquiry — ${companySchool}`,
+      source: 'host_event',
       lifecycleStage: 'lead',
+      activity: `Host An Event enquiry — ${companySchool}.`,
+      logEntry: logLine('host_event', companySchool),
+      context: {
+        hutk: readHubspotCookie(req),
+        pageUri: `${SITE_URL}/host-an-event`,
+        pageName: 'Host An Event enquiry',
+      },
     })
 
     return NextResponse.json({ ok: true })

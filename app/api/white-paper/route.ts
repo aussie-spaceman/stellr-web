@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sendEmail, MARKETING_FROM } from '@/lib/email'
-import { upsertContact } from '@/lib/hubspot'
+import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
 const PDF_FILE = 'Stellr-STEM-Power-Skills-White-Paper.pdf'
@@ -27,11 +27,21 @@ export async function POST(req: Request) {
     const downloadUrl = `${SITE_URL}${PDF_PUBLIC_PATH}`
 
     // ── 1. Capture the lead in HubSpot (best-effort) ──────────────────────
-    const crm = await upsertContact({
+    // Form submission + note engagement, so this shows up under Recent
+    // Conversion and Last Activity rather than only as a mutated property.
+    const crm = await captureLead({
       email: cleanEmail,
       firstName,
       lastName,
-      note: `Requested white paper: ${PAPER_TITLE} (impact page)`,
+      source: 'white_paper',
+      lifecycleStage: 'subscriber',
+      activity: `Requested white paper: ${PAPER_TITLE} (impact page).`,
+      logEntry: logLine('white_paper', PAPER_TITLE),
+      context: {
+        hutk: readHubspotCookie(req),
+        pageUri: `${SITE_URL}/impact`,
+        pageName: 'White paper — STEM Power Skills',
+      },
     })
 
     // ── 2. Email the paper to the requester (best-effort, link-only) ──────

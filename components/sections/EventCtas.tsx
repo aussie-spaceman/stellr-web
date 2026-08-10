@@ -5,22 +5,30 @@ import { Bell, Check, X } from 'lucide-react'
 
 type RegStatus = 'open' | 'coming-soon' | 'closed'
 
+/** Which registration the visitor reached for before registration was open. */
+type Interest = 'individual' | 'group' | 'unspecified'
+
 /* ── Subscriber modal ─────────────────────────────────────────────────────────
  * Name + email capture for event updates, posting to /api/subscribe. Same
  * modal pattern as the AssetGate / WhitePaperGate lead-capture flows (focus
- * trap, Esc to close, body-scroll lock, success state). */
+ * trap, Esc to close, body-scroll lock, success state).
+ *
+ * Only the slug and the intent go over the wire — the route resolves every CRM
+ * field from Sanity server-side. */
 function EventNotifyModal({
   open,
   onClose,
   eventTitle,
   eventSlug,
   status,
+  interest,
 }: {
   open: boolean
   onClose: () => void
   eventTitle: string
   eventSlug: string
   status: RegStatus
+  interest: Interest
 }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -88,7 +96,8 @@ function EventNotifyModal({
           name: name.trim(),
           email: email.trim(),
           source: 'event-notify',
-          event: eventSlug,
+          eventSlug,
+          interest,
         }),
       })
       if (!res.ok) throw new Error('Request failed')
@@ -239,7 +248,9 @@ export function EventHeroCtas({
   status: RegStatus
   opensLabel?: string | null
 }) {
-  const [modalOpen, setModalOpen] = useState(false)
+  // null = closed. Otherwise it records which button opened it, so the CRM
+  // captures whether they wanted to enter alone or bring a team.
+  const [intent, setIntent] = useState<Interest | null>(null)
   const isOpen = status === 'open'
 
   return (
@@ -264,14 +275,14 @@ export function EventHeroCtas({
           <>
             <button
               type="button"
-              onClick={() => setModalOpen(true)}
+              onClick={() => setIntent('individual')}
               className="btn-outline-white text-base px-8 py-4 inline-flex items-center gap-2"
             >
               <Bell size={16} /> Individual Registration
             </button>
             <button
               type="button"
-              onClick={() => setModalOpen(true)}
+              onClick={() => setIntent('group')}
               className="btn-outline-white text-base px-8 py-4 inline-flex items-center gap-2"
             >
               <Bell size={16} /> Group Registration
@@ -287,11 +298,12 @@ export function EventHeroCtas({
         </p>
       )}
       <EventNotifyModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        open={intent !== null}
+        onClose={() => setIntent(null)}
         eventTitle={title}
         eventSlug={slug}
         status={status}
+        interest={intent ?? 'unspecified'}
       />
     </div>
   )
@@ -326,6 +338,7 @@ export function EventNotifyButton({
         eventTitle={title}
         eventSlug={slug}
         status={status}
+        interest="unspecified"
       />
     </>
   )

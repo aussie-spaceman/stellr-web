@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { ClerkProvider } from '@clerk/nextjs'
 import { Analytics } from '@vercel/analytics/react'
 import { GoogleTagManager } from '@/components/analytics/GoogleTagManager'
+import { HubSpotTracking } from '@/components/analytics/HubSpotTracking'
 import '../styles/globals.css'
 
 export const metadata: Metadata = {
@@ -67,6 +68,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           )}
           {children}
           <Analytics />
+          {/* Sets the hubspotutk cookie the lead routes pass to the Forms API
+              for source attribution (see lib/hubspot.ts). */}
+          <HubSpotTracking />
         </body>
       </html>
     </ClerkProvider>

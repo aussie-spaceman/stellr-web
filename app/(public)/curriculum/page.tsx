@@ -13,6 +13,7 @@ import { getAllCampaigns } from '@/lib/sanity'
 import { getCampaignDates, campaignStatusFromDates, type CampaignSeason } from '@/lib/campaigns'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/curriculum' },
   title: 'Curriculum',
   description:
     'Download real engineering challenge material and run it in your classroom any time, for free. Optionally enter a seasonal Campaign for a path to the national championships.',

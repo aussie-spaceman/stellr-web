@@ -17,6 +17,7 @@ import { WorkCard } from '@/components/sections/WorkCard'
 import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/educators' },
   title: 'For Educators & Schools',
   description:
     'Stellr supports the educators and schools who bring real-world STEM challenges to their students — with curriculum material, CTE pathways, and classroom support.',

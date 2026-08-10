@@ -7,6 +7,17 @@ export const newsPost = {
     { name: 'slug', type: 'slug', title: 'Slug', options: { source: 'title' } },
     { name: 'publishedAt', type: 'datetime', title: 'Published At' },
     {
+      // Feeds the NewsArticle JSON-LD's `author` (lib/structured-data.ts).
+      // Named authorship is one of the stronger signals answer engines use when
+      // deciding whether to cite editorial content; posts left blank fall back
+      // to Stellr Education as the author.
+      name: 'author',
+      type: 'string',
+      title: 'Author',
+      description:
+        'Person credited for this post, e.g. "Bill Allen". Leave blank to credit Stellr Education.',
+    },
+    {
       name: 'category',
       type: 'string',
       title: 'Category',

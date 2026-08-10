@@ -5,6 +5,7 @@ import { Hero, Eyebrow, Button, CtaBand } from '@stellr/web-ui'
 import { OBJECTIVES, NGSS, TUTORIAL_META } from '@/components/interactive/atmospheric-requirements/tutorial-data'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/curriculum/atmospheric-requirements/teachers' },
   title: 'Atmospheric Requirements — Teacher Companion',
   description:
     'Facilitation guide for the Atmospheric Requirements tutorial: answer key, timing, common misconceptions, discussion prompts and NGSS alignment.',

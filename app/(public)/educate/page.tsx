@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { BookOpen, Users, Network, GraduationCap, ArrowRight } from 'lucide-react'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/educate' },
   title: 'Educate',
   description:
     'Stellr educates the next generation of STEM professionals through competitions, curriculum activities, live events, and a global community.',

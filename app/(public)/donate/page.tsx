@@ -4,6 +4,7 @@ import { Heart, Users, Rocket, ArrowRight } from 'lucide-react'
 import { getFeaturedTestimonials } from '@/lib/sanity'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/donate' },
   title: 'Donate',
   description: 'Support the next generation of STEM leaders. Your contribution funds scholarships, resources, and access for students who would otherwise miss out.',
 }

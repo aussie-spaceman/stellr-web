@@ -191,8 +191,9 @@ export async function getAllNewsPosts() {
 export async function getNewsPostBySlug(slug: string) {
   if (!client) return null
   return client.fetch(
+    // _updatedAt and author feed the NewsArticle JSON-LD (dateModified/author).
     `*[_type == "newsPost" && slug.current == $slug][0] {
-      _id, title, slug, publishedAt, category, excerpt, body, coverImage
+      _id, _updatedAt, title, slug, publishedAt, author, category, excerpt, body, coverImage
     }`,
     { slug }
   )

@@ -7,6 +7,7 @@ import { formatDate } from '@/lib/utils'
 import { categoryColors } from '@/lib/news-utils'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/news' },
   title: 'News & Announcements',
   description: 'The latest news, event results, and STEM updates from Stellr Education.',
 }

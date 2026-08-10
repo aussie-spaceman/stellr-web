@@ -10,6 +10,7 @@ import { EventsFilterBar } from '@/components/sections/EventsFilterBar'
 import { getMemberCampaignContext } from '@/lib/campaign-registrations'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/events' },
   title: 'Events & Campaigns',
   description:
     'Live, in-person design competitions and asynchronous Campaigns your school runs on its own schedule — for middle and high school students.',

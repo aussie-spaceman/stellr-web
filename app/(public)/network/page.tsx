@@ -10,6 +10,7 @@ import { PageMedia } from '@/components/sections/PageMedia'
 import { PHOTOS, COMPETITION } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/network' },
   title: 'Network',
   description:
     'The Stellr Network is the providers, universities, and employers who make premier STEM education happen — and who grow alongside it. Join industry, university, and corporate partners.',

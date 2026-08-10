@@ -7,6 +7,7 @@ import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { VIDEOS } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/scholarship' },
   title: 'Scholarships',
   description:
     "Cost should never be the reason you don't compete. Apply for a Stellr scholarship and we'll cover the participation fee for the competition or workshop you're applying to.",

@@ -21,6 +21,7 @@ import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
 import { PHOTOS, VIDEOS, QUOTES } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/students' },
   title: 'For Students',
   description:
     'Students are the core of the Stellr Community. Discover why high school and college students join Stellr — and what a Stellr membership means for your future.',

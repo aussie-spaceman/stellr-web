@@ -21,7 +21,10 @@ async function load(slug: string): Promise<StoreProductWithVariants | null> {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const product = await load(slug)
-  return { title: product ? `${product.name} — Stellr Store` : 'Store — Stellr Education' }
+  return {
+    title: product ? `${product.name} — Stellr Store` : 'Store — Stellr Education',
+    alternates: { canonical: `/store/${slug}` },
+  }
 }
 
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {

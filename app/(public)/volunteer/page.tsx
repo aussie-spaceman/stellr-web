@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { UserPlus, FileCheck, GraduationCap, CalendarCheck, Users, Megaphone, ShieldCheck } from 'lucide-react'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/volunteer' },
   title: 'Volunteer with Stellr',
   description:
     'Support Stellr events and campaigns as a volunteer. Create a free account, complete volunteer training, and tell us which events you can help with.',

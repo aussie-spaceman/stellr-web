@@ -6,6 +6,7 @@ import { AtmosphericRequirements } from '@/components/interactive/atmospheric-re
 import { TUTORIAL_META } from '@/components/interactive/atmospheric-requirements/tutorial-data'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/curriculum/atmospheric-requirements' },
   title: 'Atmospheric Requirements for Space Settlements — Tutorial',
   description:
     'Work out the air a space settlement needs: convert between total pressure, oxygen partial pressure and percent oxygen, weigh comfort against fire risk, and size the gas required — with interactive calculators.',

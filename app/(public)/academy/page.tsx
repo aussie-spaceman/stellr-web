@@ -20,6 +20,7 @@ import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
 import { PHOTOS, VIDEOS } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/academy' },
   title: 'Academy',
   description:
     'The Stellr Academy is where high-school and college students build career-ready ability — through Competition training, hands-on career preparation, and the STEM Power Skills schools rarely teach.',

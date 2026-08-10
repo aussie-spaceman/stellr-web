@@ -3,7 +3,9 @@ import { getEventBySlug, type StellarEvent } from '@/lib/sanity'
 import { formatDate } from '@/lib/utils'
 import CheckInForm from '@/components/forms/CheckInForm'
 
-export const metadata = { title: 'Event Check-In' }
+// Token-gated and per-attendee — nothing here belongs in a search or answer
+// engine index.
+export const metadata = { title: 'Event Check-In', robots: { index: false, follow: false } }
 export const dynamic = 'force-dynamic'
 
 // Public, token-gated check-in page reached by scanning the event QR code

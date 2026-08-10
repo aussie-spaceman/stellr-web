@@ -8,6 +8,7 @@ import { WorkCard } from '@/components/sections/WorkCard'
 import { VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/why-stellr' },
   title: 'Why Stellr?',
   description:
     'Stellr connects high school, college and professional life into a single community. Here is what that means for students, teachers, parents, mentors and donors.',

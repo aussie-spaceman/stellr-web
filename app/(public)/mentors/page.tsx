@@ -6,6 +6,7 @@ import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { PHOTOS, VIDEOS } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/mentors' },
   title: 'For Volunteers & Mentors',
   description:
     'Share your STEM experience with the next generation. Become a Stellr volunteer or mentor and help shape the career trajectories of students worldwide.',

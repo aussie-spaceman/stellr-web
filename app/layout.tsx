@@ -3,6 +3,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import { Analytics } from '@vercel/analytics/react'
 import { GoogleTagManager } from '@/components/analytics/GoogleTagManager'
 import { HubSpotTracking } from '@/components/analytics/HubSpotTracking'
+import { buildOrganizationJsonLd, buildWebSiteJsonLd } from '@/lib/structured-data'
 import '../styles/globals.css'
 
 export const metadata: Metadata = {
@@ -23,22 +24,10 @@ export const metadata: Metadata = {
   },
 }
 
-// Organization JSON-LD for root layout
-const orgSchema = {
-  '@context': 'https://schema.org',
-  '@type': 'Organization',
-  name: 'Stellr Education',
-  url: 'https://www.stellreducation.org',
-  logo: 'https://www.stellreducation.org/images/stellr-logo.png',
-  contactPoint: {
-    '@type': 'ContactPoint',
-    email: 'hello@stellreducation.org',
-    contactType: 'customer service',
-  },
-  sameAs: [
-    'https://www.linkedin.com/company/stellreducation',
-  ],
-}
+// Organization + WebSite JSON-LD, emitted on every page so the entity is
+// declared once and referenced by @id from the Event/Article graphs.
+// See lib/structured-data.ts.
+const siteSchema = [buildOrganizationJsonLd(), buildWebSiteJsonLd()]
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -49,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <GoogleTagManager />
           <script
             type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(orgSchema) }}
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(siteSchema) }}
           />
         </head>
         <body>

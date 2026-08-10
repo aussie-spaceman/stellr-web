@@ -5,6 +5,7 @@ import { Eyebrow } from '@stellr/web-ui'
 import { CoachingRequestForm } from '@/components/academy/CoachingRequestForm'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/academy/coaching/request' },
   title: 'Request a coaching session',
   description:
     'Tell us what you want to work on and we’ll match you with a Stellr coach for private 1:1 support — included with top tiers, earned by competing, or available to purchase.',

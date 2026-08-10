@@ -13,7 +13,7 @@ import { getMemberCampaignContext } from '@/lib/campaign-registrations'
 import { CardPills } from '@/components/ui/CardPills'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { participationTypeFor } from '@/lib/analytics'
-import { buildEventJsonLd, buildCampaignJsonLd } from '@/lib/structured-data'
+import { buildEventJsonLd, buildCampaignJsonLd, buildFaqJsonLd } from '@/lib/structured-data'
 
 export const revalidate = 3600
 
@@ -58,14 +58,20 @@ const statusConfig = {
   closed: { label: 'Registration Closed', className: 'bg-red-50 text-red-700 border-red-200' },
 }
 
-const FAQS: { q: string; a: React.ReactNode }[] = [
+// `a` renders on the page; `text` is the plain-text equivalent serialised into
+// the FAQPage JSON-LD (schema.org answers can't carry React nodes). Keep the
+// two in step — FAQ markup that doesn't match the visible copy is treated as
+// spam by search and answer engines.
+const FAQS: { q: string; a: React.ReactNode; text: string }[] = [
   {
     q: 'What should my team bring on the day?',
     a: 'All competition material is provided, along with snacks and meals. Bring pens, notebooks, and general school work material. We recommend bringing a laptop or tablet if you have access to one — you will not be disadvantaged if you don’t.',
+    text: 'All competition material is provided, along with snacks and meals. Bring pens, notebooks, and general school work material. We recommend bringing a laptop or tablet if you have access to one — you will not be disadvantaged if you don’t.',
   },
   {
     q: 'How many students can be on a team?',
     a: 'This varies by competition, and by the final number of participants. Both individuals and groups can register.',
+    text: 'This varies by competition, and by the final number of participants. Both individuals and groups can register.',
   },
   {
     q: 'Is there a cost to participate?',
@@ -78,6 +84,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
         .
       </>
     ),
+    text: 'Registration fees vary by event. If you wish to attend but can’t afford the fees, please look at our scholarship page at https://www.stellreducation.org/scholarship.',
   },
   {
     q: 'What happens if I can’t attend after registering?',
@@ -90,6 +97,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
         for specifics.
       </>
     ),
+    text: 'Please notify us as soon as possible. Review our Terms of Service at https://www.stellreducation.org/terms#refunds for specifics.',
   },
 ]
 
@@ -127,8 +135,9 @@ export default async function EventDetailPage({ params }: PageProps) {
   const status = registrationStatus(event.registrationOpenDate, event.registrationCloseDate)
   const { label: statusLabel, className: statusClass } = statusConfig[status]
 
-  // JSON-LD for this event (Offline/Online Event + superEvent + offer).
-  const jsonLd = buildEventJsonLd(event, slug)
+  // JSON-LD for this event (Offline/Online Event + superEvent + offer) plus the
+  // FAQ accordion rendered further down the page.
+  const jsonLd = [buildEventJsonLd(event, slug), buildFaqJsonLd(FAQS)]
 
   return (
     <>

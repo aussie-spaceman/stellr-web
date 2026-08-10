@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowRight, CheckCircle, Users, Lightbulb, Briefcase, Award } from 'lucide-react'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/events/why-design-competitions' },
   title: 'Why Design Competitions',
   description:
     'Design competitions bridge the gap between traditional education and real workplace readiness — developing the skills, relationships, and career insights students need.',

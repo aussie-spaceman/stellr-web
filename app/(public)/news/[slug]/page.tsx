@@ -7,6 +7,7 @@ import { PortableText } from 'next-sanity'
 import { getNewsPostBySlug, getRelatedNewsPosts, urlFor, wmSrc } from '@/lib/sanity'
 import { formatDate } from '@/lib/utils'
 import { categoryColors } from '@/lib/news-utils'
+import { buildArticleJsonLd } from '@/lib/structured-data'
 import { SubscribeForm } from '@/components/forms/SubscribeForm'
 
 export const revalidate = 3600
@@ -23,9 +24,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title: post.title,
     description: post.excerpt,
-    openGraph: post.coverImage
-      ? { images: [{ url: urlFor(post.coverImage).width(1200).height(630).url() }] }
-      : undefined,
+    alternates: { canonical: `/news/${slug}` },
+    openGraph: {
+      type: 'article',
+      publishedTime: post.publishedAt,
+      modifiedTime: post._updatedAt ?? post.publishedAt,
+      authors: post.author ? [post.author] : undefined,
+      images: post.coverImage
+        ? [{ url: urlFor(post.coverImage).width(1200).height(630).url() }]
+        : undefined,
+    },
   }
 }
 
@@ -40,6 +48,10 @@ export default async function NewsArticlePage({ params }: PageProps) {
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildArticleJsonLd(post, slug)) }}
+      />
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <section className="bg-brand-blue-dark text-white">
         {post.coverImage && (

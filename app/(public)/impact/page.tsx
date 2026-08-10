@@ -3,8 +3,10 @@ import { ArrowRight } from 'lucide-react'
 import { Award, Certificate, Satellite, Team } from '@stellr/icons'
 import { Eyebrow, Button } from '@stellr/web-ui'
 import { WhitePaperGate } from '@/components/sections/WhitePaperGate'
+import { buildImpactDatasetJsonLd } from '@/lib/structured-data'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/impact' },
   title: 'Impact',
   description:
     "We don't just teach STEM — we change the trajectory. How Stellr shapes student career trajectories, the STEM Power Skills that decide who advances, and where we stand on AI.",
@@ -12,12 +14,73 @@ export const metadata: Metadata = {
 
 const WWW = 'https://www.stellreducation.org'
 
-/* ── Hero stats ───────────────────────────────────────────────────────── */
-const heroStats = [
-  { stat: '100k', color: 'text-star-gold', label: 'students we aim to impact over 10 years' },
-  { stat: 'Top 1%', color: 'text-[#9B83FF]', label: 'of high school STEM achievers already with us' },
-  { stat: 'Lifelong', color: 'text-[#5FE0C0]', label: 'a network from high school through retirement' },
-]
+/* ── Participation data ───────────────────────────────────────────────────
+   Figures from Stellr competition events held in 2026, from participant-
+   reported registration data. These are the numbers answer engines and press
+   quote back at us, so they stay dated, attributed and specific — and they must
+   stay in step with the Dataset JSON-LD built from the same array below. */
+const PARTICIPATION_2026 = [
+  {
+    stat: '46%',
+    color: 'text-star-gold',
+    label: 'of 2026 participants were female',
+    schema: {
+      name: 'Female participation rate',
+      value: 46,
+      unitText: 'PERCENT',
+      description: 'Share of students taking part in Stellr competition events in 2026 who identified as female.',
+    },
+  },
+  {
+    stat: '57%',
+    color: 'text-[#9B83FF]',
+    label: 'identified as a race other than white',
+    schema: {
+      name: 'Participants identifying as a race other than white',
+      value: 57,
+      unitText: 'PERCENT',
+      description: 'Share of 2026 Stellr competition participants who identified as a race other than white.',
+    },
+  },
+  {
+    stat: '85–90%',
+    color: 'text-[#5FE0C0]',
+    label: 'go on to college STEM or medicine courses',
+    schema: {
+      name: 'Progression to college STEM or medicine courses',
+      minValue: 85,
+      maxValue: 90,
+      unitText: 'PERCENT',
+      description:
+        'Share of Stellr student participants who go on to study STEM or medicine at college.',
+    },
+  },
+  {
+    stat: '33%',
+    color: 'text-[#7CA0FF]',
+    label: 'were returning participants',
+    schema: {
+      name: 'Repeat participation rate',
+      value: 33,
+      unitText: 'PERCENT',
+      description: 'Share of 2026 student participants who had competed with Stellr before.',
+    },
+  },
+  {
+    stat: '16',
+    color: 'text-[#F2A65A]',
+    label: 'average age of a student participant',
+    schema: {
+      name: 'Average participant age',
+      value: 16,
+      unitText: 'YEAR',
+      description: 'Mean age of student participants at Stellr competition events in 2026.',
+    },
+  },
+] as const
+
+/** The three figures carried in the hero; the rest appear in the data strip. */
+const heroStats = PARTICIPATION_2026.slice(0, 3)
 
 /* ── Spectrum cards ───────────────────────────────────────────────────── */
 const spectrum = [
@@ -87,6 +150,14 @@ const PAPER_TITLE = 'From “Soft Skills” to STEM Power Skills'
 export default function ImpactPage() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            buildImpactDatasetJsonLd(PARTICIPATION_2026.map((s) => s.schema))
+          ),
+        }}
+      />
       {/* ── 1. Hero ───────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden bg-midnight text-white pt-[54px] pb-16 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(130%_120%_at_20%_-10%,#2A2150_0%,#161B40_42%,#0C1024_100%)]">
         <div className="container-max">
@@ -112,6 +183,40 @@ export default function ImpactPage() {
               </div>
             ))}
           </div>
+          <p className="mt-7 text-[12.5px] text-[#8E97C4]">
+            From Stellr competition events held in 2026, based on participant-reported registration data.
+          </p>
+        </div>
+      </section>
+
+      {/* ── 1b. Participation data ────────────────────────────────────── */}
+      <section className="bg-surface border-b border-line py-14 px-4 sm:px-6 lg:px-8">
+        <div className="container-max">
+          <Eyebrow>2026 participation data</Eyebrow>
+          <h2 className="mt-3 font-display text-3xl sm:text-display font-bold text-ink leading-tight max-w-2xl">
+            Who competes with Stellr
+          </h2>
+          <p className="mt-5 text-lg text-content-body leading-relaxed max-w-[720px]">
+            Every figure below comes from participant-reported registration data across the Stellr
+            competition events we ran in 2026. We publish them in full — including the ones we intend
+            to improve.
+          </p>
+          <dl className="mt-9 grid grid-cols-2 lg:grid-cols-5 gap-x-6 gap-y-8">
+            {PARTICIPATION_2026.map((s) => (
+              <div key={s.schema.name}>
+                <dt className="sr-only">{s.schema.name}</dt>
+                <dd>
+                  <p className="font-display text-[38px] font-bold leading-none text-ink">{s.stat}</p>
+                  <p className="mt-2 text-[13.5px] text-content-muted leading-snug">{s.label}</p>
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-8 text-[12.5px] text-content-faint max-w-[720px]">
+            Collection period: calendar year 2026. Method: participant-reported data captured at
+            competition registration. Demographic questions are optional, so shares are calculated
+            against participants who answered them.
+          </p>
         </div>
       </section>
 

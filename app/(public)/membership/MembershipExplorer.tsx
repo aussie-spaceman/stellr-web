@@ -270,12 +270,24 @@ export default function MembershipExplorer({
                     type="button"
                     onClick={() => setOpenFaq(open ? -1 : i)}
                     aria-expanded={open}
+                    aria-controls={`faq-answer-${i}`}
                     className="w-full text-left cursor-pointer flex items-center justify-between gap-4 px-[22px] py-[18px]"
                   >
                     <span className="text-[16px] font-semibold text-ink">{f.q}</span>
                     <span className={`shrink-0 text-[20px] leading-none ${open ? 'text-space-violet' : 'text-content-faint'}`}>{open ? '–' : '+'}</span>
                   </button>
-                  {open && <div className="px-[22px] pb-5 text-[14.5px] leading-[1.6] text-content-body">{f.a}</div>}
+                  {/* Always rendered, collapsed with `hidden` rather than removed
+                      from the tree: answers that only exist after a click are
+                      invisible to crawlers, and the FAQPage JSON-LD emitted by
+                      the parent page has to match copy that's actually served. */}
+                  <div
+                    id={`faq-answer-${i}`}
+                    role="region"
+                    hidden={!open}
+                    className="px-[22px] pb-5 text-[14.5px] leading-[1.6] text-content-body"
+                  >
+                    {f.a}
+                  </div>
                 </div>
               )
             })}

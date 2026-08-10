@@ -7,6 +7,7 @@ import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
 import { VIDEOS, QUOTES } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/about' },
   title: 'About Stellr',
   description:
     'Stellr is building a self-reinforcing global network of STEM professionals — from high school through retirement. Read our mission, vision, values, and meet the team.',

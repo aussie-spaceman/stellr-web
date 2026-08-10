@@ -3,6 +3,7 @@ import { ProductCard } from '@/components/ui/ProductCard'
 import type { StoreProductWithVariants } from '@/lib/store/types'
 
 export const metadata = {
+  alternates: { canonical: '/store' },
   title: 'Store — Stellr Education',
   description: 'Official Stellr merchandise — apparel, stickers and more.',
 }

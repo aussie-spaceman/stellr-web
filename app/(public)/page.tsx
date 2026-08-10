@@ -9,6 +9,7 @@ import { PHOTOS } from '@/lib/media-manifest'
 import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/' },
   // Title intentionally omitted: the homepage inherits the root layout's
   // non-templated `title.default` ("Stellr Education — Real-World STEM Competitions"),
   // avoiding the doubled "| Stellr Education" the title template would add.

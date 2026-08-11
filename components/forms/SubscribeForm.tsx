@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { trackLeadSubmitted } from '@/lib/analytics'
 
 export function SubscribeForm() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -15,6 +16,7 @@ export function SubscribeForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       })
+      if (res.ok) trackLeadSubmitted('newsletter')
       setStatus(res.ok ? 'success' : 'error')
     } catch {
       setStatus('error')

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Check, FileText, X } from 'lucide-react'
+import { trackLeadSubmitted } from '@/lib/analytics'
 
 type AssetGateProps = {
   /** Asset key registered in /api/asset-request. */
@@ -121,6 +122,7 @@ export function AssetGate({
       } catch {
         /* storage unavailable (private mode) — gate just asks again next time */
       }
+      trackLeadSubmitted('asset_request', { asset })
       setSubmitted(true)
     } catch {
       setError(true)

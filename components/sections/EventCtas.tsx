@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Bell, Check, X } from 'lucide-react'
+import { trackLeadSubmitted } from '@/lib/analytics'
 
 type RegStatus = 'open' | 'coming-soon' | 'closed'
 
@@ -101,6 +102,10 @@ function EventNotifyModal({
         }),
       })
       if (!res.ok) throw new Error('Request failed')
+      trackLeadSubmitted('event_notify', {
+        competition_id: eventSlug,
+        registration_interest: interest,
+      })
       setSubmitted(true)
     } catch {
       setError(true)

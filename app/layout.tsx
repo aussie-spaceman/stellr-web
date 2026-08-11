@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { ClerkProvider } from '@clerk/nextjs'
 import { Analytics } from '@vercel/analytics/react'
+import { ConsentMode } from '@/components/analytics/ConsentMode'
+import { CookieConsent } from '@/components/analytics/CookieConsent'
 import { GoogleTagManager } from '@/components/analytics/GoogleTagManager'
 import { HubSpotTracking } from '@/components/analytics/HubSpotTracking'
 import { buildOrganizationJsonLd, buildWebSiteJsonLd } from '@/lib/structured-data'
@@ -34,7 +36,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <ClerkProvider>
       <html lang="en">
         <head>
-          {/* Google Tag Manager — analytics only, GTM-only (see GoogleTagManager.tsx) */}
+          {/* Consent Mode v2 defaults — MUST stay above GTM so advertising tags
+              never fire before the denied-by-default state lands. */}
+          <ConsentMode />
+          {/* Google Tag Manager — the single tag container (see GoogleTagManager.tsx) */}
           <GoogleTagManager />
           <script
             type="application/ld+json"
@@ -56,6 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </noscript>
           )}
           {children}
+          <CookieConsent />
           <Analytics />
           {/* Sets the hubspotutk cookie the lead routes pass to the Forms API
               for source attribution (see lib/hubspot.ts). */}

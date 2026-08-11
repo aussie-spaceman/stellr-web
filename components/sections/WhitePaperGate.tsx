@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Check, X } from 'lucide-react'
+import { trackLeadSubmitted } from '@/lib/analytics'
 
 const PDF_URL = '/files/Stellr-STEM-Power-Skills-White-Paper.pdf'
 const PAPER_TITLE = 'From “Soft Skills” to STEM Power Skills'
@@ -50,6 +51,7 @@ export function WhitePaperGate() {
         body: JSON.stringify({ name: name.trim(), email: email.trim() }),
       })
       if (!res.ok) throw new Error('Request failed')
+      trackLeadSubmitted('white_paper')
       setSubmitted(true)
     } catch {
       setError(true)

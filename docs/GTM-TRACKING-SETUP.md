@@ -70,37 +70,109 @@ Pushed by `lib/analytics.ts`. All values are non-identifying by construction —
 
 ### Variables to create
 
-Data Layer Variables (Variables → New → Data Layer Variable), name them to match:
+**Variables → User-Defined Variables → New → Data Layer Variable.** Name each
+variable exactly as below; the "Data Layer Variable Name" is the key the site
+pushes, and Version must stay **Version 2**.
 
-`dlv_lead_source`, `dlv_audience`, `dlv_competition_id`, `dlv_participation_type`
+| Variable name | Data Layer Variable Name |
+|---|---|
+| `dlv_lead_source` | `lead_source` |
+| `dlv_audience` | `audience` |
+| `dlv_competition_id` | `competition_id` |
+| `dlv_participation_type` | `participation_type` |
+
+While you are here, turn on the built-in **Page Path** variable
+(Variables → Configure → tick *Page Path*) — the LinkedIn scoping needs it.
 
 ### Triggers to create
 
-| Trigger name | Type | Condition |
+**Triggers → New → Trigger Configuration → Custom Event.**
+
+| Trigger name | Event name | Extra condition |
 |---|---|---|
-| `CE — lead_submitted` | Custom Event | Event name `lead_submitted` |
-| `CE — lead_submitted (b2b)` | Custom Event | `lead_submitted` **and** `dlv_audience` equals `b2b` |
-| `CE — registration_started` | Custom Event | Event name `registration_started` |
-| `CE — registration_submitted` | Custom Event | Event name `registration_submitted` |
-| `CE — competition_page_view` | Custom Event | Event name `competition_page_view` |
+| `CE — lead_submitted` | `lead_submitted` | All Custom Events |
+| `CE — lead_submitted (b2b)` | `lead_submitted` | Some Custom Events → `dlv_audience` **equals** `b2b` |
+| `CE — registration_started` | `registration_started` | All Custom Events |
+| `CE — registration_submitted` | `registration_submitted` | All Custom Events |
+| `CE — competition_page_view` | `competition_page_view` | All Custom Events |
+
+One more, for LinkedIn's base tag — **Trigger type: Page View**, name
+`PV — b2b pages`, fire on *Some Page Views* where **Page Path** *matches RegEx*:
+
+```
+^/(educators|host-an-event|mentors|network|why-stellr|impact|volunteer)
+```
 
 ---
 
 ## 2. Meta Pixel
 
-Tag → New → **Meta Pixel** (community template, by facebookarchive) or Custom
-HTML. Pixel ID from Events Manager.
+Use **Custom HTML** rather than a gallery template. The most-installed Meta
+template is published by `facebookarchive` and is no longer maintained; Custom
+HTML is stable, and it makes the consent setting and the exact event payload
+visible in one place.
 
-| Meta event | Trigger |
-|---|---|
-| `PageView` | All Pages |
-| `ViewContent` | `CE — competition_page_view` |
-| `InitiateCheckout` | `CE — registration_started` |
-| `Lead` | `CE — lead_submitted` |
+### 2a. Turn off Automatic Advanced Matching first
 
-**Turn Advanced Matching OFF.** It hashes email and phone into the pixel. The
-dataLayer carries no PII precisely so this can't happen by accident, and
-enabling it would reintroduce the exposure through the back door.
+This is a **Meta-side** setting, not a GTM one, and it is on by default:
+
+> Events Manager → your pixel → **Settings** → *Automatic Advanced Matching* →
+> **off**.
+
+Left on, Meta scrapes email and phone values out of form fields in the page and
+hashes them into the pixel. The dataLayer deliberately carries no PII; this
+setting would reintroduce it by reading the DOM directly, bypassing everything.
+
+### 2b. Base tag
+
+**Tags → New → Custom HTML**, name it `Meta — Base Pixel`. Replace
+`YOUR_PIXEL_ID`:
+
+```html
+<script>
+!function(f,b,e,v,n,t,s)
+{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}(window,document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', 'YOUR_PIXEL_ID');
+fbq('track', 'PageView');
+</script>
+```
+
+- **Triggering:** All Pages
+- **Advanced Settings → Tag firing options:** *Once per page*
+- **Advanced Settings → Consent Settings:** see 2d — required
+
+### 2c. Event tags
+
+One Custom HTML tag per event. Each needs `Meta — Base Pixel` as a **setup tag**
+so ordering is guaranteed rather than assumed:
+
+> Advanced Settings → **Tag Sequencing** → tick *Fire a tag before…* → choose
+> `Meta — Base Pixel`.
+
+| Tag name | Code | Trigger |
+|---|---|---|
+| `Meta — ViewContent` | `<script>fbq('track','ViewContent',{content_type:'product',content_ids:['{{dlv_competition_id}}']});</script>` | `CE — competition_page_view` |
+| `Meta — InitiateCheckout` | `<script>fbq('track','InitiateCheckout',{content_ids:['{{dlv_competition_id}}']});</script>` | `CE — registration_started` |
+| `Meta — Lead` | `<script>fbq('track','Lead',{content_category:'{{dlv_lead_source}}'});</script>` | `CE — lead_submitted` |
+
+`content_category` carries the route name (`newsletter`, `host_event`, …), which
+is what makes the Meta reporting useful — without it every lead looks identical.
+
+### 2d. Consent — required on every Meta tag
+
+For **each** of the four tags above:
+
+> Advanced Settings → **Consent Settings** → *Require additional consent for tag
+> to fire* → **+ Add required consent** → `ad_storage`.
+
+Unlike Google's tags, Meta's fire regardless of Consent Mode unless you do this.
+Miss it and the banner is decorative.
 
 **On `CompleteRegistration`:** the obvious mapping is
 `registration_submitted`, but that page is the end of a flow used by
@@ -114,26 +186,88 @@ one line either way.
 
 ## 3. LinkedIn Insight Tag
 
-Tag → New → **LinkedIn Insight Tag** template. Partner ID from Campaign Manager.
+Partner ID: Campaign Manager → **Analytics → Insight Tag → Manage Insight Tag →
+See tag code**. The Partner ID is the number in `_linkedin_partner_id`.
 
-LinkedIn's audience is adults and professionals, so scope it rather than firing
-site-wide. Two changes from the Meta setup:
+LinkedIn is a professional network, so this is scoped rather than site-wide —
+firing it on a student scholarship application spends budget reaching an
+audience that is not on the platform.
 
-1. **Base tag trigger:** not All Pages. Create a Page View trigger limited to
-   Page Path matching RegEx:
-   `^/(educators|host-an-event|mentors|network|why-stellr|impact|volunteer)`
-2. **Conversion trigger:** `CE — lead_submitted (b2b)` — the audience variable
-   exists for exactly this. It keeps LinkedIn off scholarship and event-notify
-   submissions, which are students and parents.
+### 3a. Base tag
 
-Conversions themselves are defined in Campaign Manager. For event-based rather
-than URL-based conversions, add a Custom HTML tag on the b2b trigger:
+**Tags → New → Custom HTML**, name it `LinkedIn — Insight Base`. Replace
+`YOUR_PARTNER_ID`:
+
+```html
+<script type="text/javascript">
+_linkedin_partner_id = "YOUR_PARTNER_ID";
+window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];
+window._linkedin_data_partner_ids.push(_linkedin_partner_id);
+</script>
+<script type="text/javascript">
+(function(l) {
+if (!l){window.lintrk = function(a,b){window.lintrk.q.push([a,b])};
+window.lintrk.q=[]}
+var s = document.getElementsByTagName("script")[0];
+var b = document.createElement("script");
+b.type = "text/javascript";b.async = true;
+b.src = "https://snap.licdn.com/li.lms-analytics/insight.min.js";
+s.parentNode.insertBefore(b, s);})(window.lintrk);
+</script>
+```
+
+- **Triggering:** `PV — b2b pages` — **not** All Pages
+- **Tag firing options:** *Once per page*
+- **Consent Settings:** require `ad_storage`, exactly as for Meta
+
+There is an official *LinkedIn Insight Tag* template in the Community Gallery if
+you prefer it; it is well maintained. Custom HTML is used here only so both
+platforms are configured the same way.
+
+### 3b. Conversion tag
+
+Conversions are *defined* in Campaign Manager (Analytics → Conversions → Create).
+Choose **event-specific** rather than URL-based, since a lead submission does not
+change the URL. Campaign Manager gives you a numeric conversion ID.
+
+Then **Tags → New → Custom HTML**, name it `LinkedIn — Lead (b2b)`:
 
 ```html
 <script>
   window.lintrk && window.lintrk('track', { conversion_id: YOUR_CONVERSION_ID });
 </script>
 ```
+
+- **Triggering:** `CE — lead_submitted (b2b)`
+- **Tag Sequencing:** fire `LinkedIn — Insight Base` before this tag
+- **Consent Settings:** require `ad_storage`
+
+The b2b trigger is what keeps LinkedIn off scholarship and event-notify
+submissions — students and parents. If a b2b lead lands on a page outside the
+`PV — b2b pages` list, the sequencing setup tag loads the base pixel on demand,
+so the conversion still registers.
+
+---
+
+## 3c. Client-side navigation — read this before testing
+
+The site is a Next.js App Router application, so moving between pages is a
+**client-side** navigation: the browser does not reload and GTM's *All Pages*
+trigger does **not** fire again. Consequences:
+
+- `Meta — Base Pixel` sends `PageView` on the first page only. Subsequent
+  in-site navigations send nothing.
+- The custom events (`lead_submitted`, `competition_page_view`, …) are unaffected
+  — they are explicit dataLayer pushes and fire correctly either way.
+
+If you want a Meta `PageView` per virtual page, add a **History Change** trigger
+(Triggers → New → Page View → *History Change*) and a second tag firing
+`fbq('track','PageView')` on it, sequenced after the base tag. Do not add
+History Change to the base tag itself, or `fbq('init')` runs repeatedly.
+
+Worth checking the same question for the existing GA4 tag while you are in
+there — if it was configured without *Send a page view event on history change*,
+GA4 has been under-counting in-site navigation all along.
 
 ---
 

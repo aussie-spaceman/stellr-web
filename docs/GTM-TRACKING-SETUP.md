@@ -97,11 +97,21 @@ While you are here, turn on the built-in **Page Path** variable
 | `CE — competition_page_view` | `competition_page_view` | All Custom Events |
 
 One more, for LinkedIn's base tag — **Trigger type: Page View**, name
-`PV — b2b pages`, fire on *Some Page Views* where **Page Path** *matches RegEx*:
+`PV — b2b pages`, fire on *Some Page Views* with **both** of these conditions:
 
-```
-^/(educators|host-an-event|mentors|network|why-stellr|impact|volunteer)
-```
+| Variable | Operator | Value |
+|---|---|---|
+| `Page Hostname` | equals | `www.stellreducation.org` |
+| `Page Path` | matches RegEx | `^/(educators\|host-an-event\|mentors\|network\|why-stellr\|impact\|volunteer)` |
+
+**The hostname condition is not optional.** This container is loaded from a
+single root layout that serves *both* `www` and `app.stellreducation.org`, so a
+path-only rule would also match inside the logged-in member app and fire the
+LinkedIn pixel at existing members. The pre-existing Group/Individual Sign Up
+triggers in this container already split on hostname for the same reason.
+
+Both `Page Path` and `Page Hostname` are built-in variables — if they are absent
+from the dropdown, enable them under Variables → Configure.
 
 ---
 
@@ -123,6 +133,15 @@ does, and what to set it to here.
 |---|---|---|---|
 | **Tag firing priority** | `10` | leave `0` | Higher numbers start first within the same event. A safety net only — sequencing is the real guarantee. |
 | **Tag firing options** | **Once per page** | **Unlimited** (default) | See the warning below — this one is easy to get wrong in a way that silently drops conversions. |
+
+`Tag firing options` lives in the collapsed **Advanced Settings** panel on the
+tag edit screen, below Triggering — not in the trigger picker dialog, which is
+where people go looking for it first.
+
+On a base tag it looks redundant, because its Page View trigger already fires
+once per load. The reason it is needed is **sequencing**: when several event tags
+name the same base tag as their setup tag, GTM runs that setup tag ahead of each
+one. Without *Once per page* the pixel re-initialises every time.
 | **Tag Sequencing** | none | *Fire a tag before* → the matching base tag | Guarantees `fbq` / `lintrk` exists before the event tag calls it. |
 | **Consent Settings** | Require `ad_storage` | Require `ad_storage` | Meta and LinkedIn ignore Consent Mode otherwise. |
 | **Tag firing schedule** | leave empty | leave empty | Only for time-boxed campaigns. |

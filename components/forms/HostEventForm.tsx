@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { SchoolSearchInput, type SchoolSelection } from '@/components/member/SchoolSearchInput'
 import FieldError from '@/components/forms/FieldError'
+import { trackLeadSubmitted } from '@/lib/analytics'
 
 const schema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -63,6 +64,7 @@ export function HostEventForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...data, companySchool, address }),
       })
+      if (res.ok) trackLeadSubmitted('host_event')
       setStatus(res.ok ? 'success' : 'error')
     } catch {
       setStatus('error')

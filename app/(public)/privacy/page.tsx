@@ -12,7 +12,7 @@ export default function PrivacyPage() {
       <h1 className="text-4xl font-bold text-brand-blue-dark mb-8">Privacy Policy</h1>
       <div className="prose prose-slate max-w-none space-y-6 text-brand-grey-dark">
         <p className="text-sm text-brand-grey-mid italic">
-          Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 09-Jun-2026
+          Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 10-Aug-2026
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
           <strong>Recent update:</strong> This policy has been updated to reflect our use of
@@ -232,9 +232,15 @@ export default function PrivacyPage() {
           </table>
         </div>
         <p>
-          We do <strong>not</strong> use your information for targeted advertising, sell it to third
-          parties, or use it in automated decision-making that produces legal or similarly significant
-          effects.
+          We do <strong>not</strong> sell your information to third parties, and we do not use it in
+          automated decision-making that produces legal or similarly significant effects.
+        </p>
+        <p>
+          We do <strong>not</strong> use the information you give us — your name, email, registration
+          details, or anything in your account — for targeted advertising. Where you have accepted
+          advertising cookies, we measure our advertising using cookie identifiers only, in aggregate,
+          to understand which campaigns bring people to our programmes. Registration and education
+          records are never used for this purpose (see Sections 7.7 and 9).
         </p>
 
         {/* 6. Legal Basis */}
@@ -271,6 +277,8 @@ export default function PrivacyPage() {
                 ['DocuSign', 'Electronic parental consent forms (minor participants only)', 'Minor name, event title, parent/guardian name and email; FERPA-compliant DPA in place'],
                 ['Vercel', 'Website hosting and delivery', 'Usage/technical data'],
                 ['Sanity', 'Content management', 'No personal data'],
+                ['HubSpot', 'Marketing contact management and enquiry handling', 'Name, email, and the enquiry you submitted'],
+                ['Google (Analytics, Tag Manager, Ads)', 'Aggregate website analytics; advertising measurement where you have accepted advertising cookies', 'Usage/technical data and cookie identifiers — no name, email, or registration data'],
               ].map(([provider, purpose, data]) => (
                 <tr key={provider} className="even:bg-surface">
                   <td className="border border-line px-4 py-2 font-medium">{provider}</td>
@@ -373,11 +381,52 @@ export default function PrivacyPage() {
           <li>Keep you logged in to your account</li>
           <li>Remember your preferences</li>
           <li>Collect aggregate analytics on how our platform is used</li>
+          <li>
+            Measure whether our advertising reaches the students, families and educators it is
+            meant to reach — <strong>only if you accept advertising cookies</strong>
+          </li>
         </ul>
+
+        <h3 className="text-lg font-semibold text-brand-blue-dark">9.1 Categories We Use</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse border border-line">
+            <thead>
+              <tr className="bg-surface">
+                <th className="border border-line px-4 py-2 text-left font-semibold">Category</th>
+                <th className="border border-line px-4 py-2 text-left font-semibold">Purpose</th>
+                <th className="border border-line px-4 py-2 text-left font-semibold">Consent</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ['Essential', 'Login sessions, security, and core site function', 'Always on — the site cannot work without these'],
+                ['Analytics', 'Aggregate usage measurement (Google Analytics, HubSpot)', 'On by default; denied until you accept in the UK, EEA and Switzerland'],
+                ['Advertising', 'Campaign measurement and remarketing (Google Ads)', 'Off until you accept'],
+              ].map(([category, purpose, consent]) => (
+                <tr key={category} className="even:bg-surface">
+                  <td className="border border-line px-4 py-2 font-medium">{category}</td>
+                  <td className="border border-line px-4 py-2">{purpose}</td>
+                  <td className="border border-line px-4 py-2 text-xs text-brand-grey-mid">{consent}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <h3 className="text-lg font-semibold text-brand-blue-dark">9.2 Your Choices</h3>
         <p>
-          We do <strong>not</strong> use advertising cookies or cross-site tracking cookies. You may
-          control cookie settings through your browser. Disabling certain cookies may affect platform
-          functionality.
+          When you first visit, we ask whether to enable advertising cookies. Until you accept,
+          advertising and remarketing tags are disabled — we use Google Consent Mode, so the choice
+          is enforced on the tags themselves rather than only recorded. You can change your mind at
+          any time by clearing this site&rsquo;s data in your browser, which makes the banner appear
+          again.
+        </p>
+        <p>
+          We do <strong>not</strong> sell your personal information, and we do not use advertising
+          cookies to build profiles of individual students. Advertising measurement is used to
+          understand which campaigns bring people to our programmes in aggregate. Disabling
+          non-essential cookies does not affect your ability to register for or take part in any
+          Stellr event.
         </p>
 
         {/* 10. Data Retention */}

@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import FieldError from '@/components/forms/FieldError'
+import { trackLeadSubmitted } from '@/lib/analytics'
 
 const PARTNER_TYPES = [
   'Fellow Education Provider [Industry]',
@@ -54,6 +55,7 @@ export function JoinNetworkForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
+      if (res.ok) trackLeadSubmitted('join_network')
       setStatus(res.ok ? 'success' : 'error')
     } catch {
       setStatus('error')

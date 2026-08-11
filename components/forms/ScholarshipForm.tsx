@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Check } from 'lucide-react'
 import FieldError from '@/components/forms/FieldError'
+import { trackLeadSubmitted } from '@/lib/analytics'
 
 const schema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -51,6 +52,7 @@ export function ScholarshipForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
+      if (res.ok) trackLeadSubmitted('scholarship')
       setStatus(res.ok ? 'success' : 'error')
     } catch {
       setStatus('error')

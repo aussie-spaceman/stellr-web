@@ -5,13 +5,18 @@ import Script from 'next/script'
 const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID
 
 /**
- * Google Tag Manager — the ONLY analytics tag loaded in code.
+ * Google Tag Manager — the ONLY tag loaded in code.
  *
- * GA4 and every event/measurement tag are configured by the site owner inside
- * the GTM UI, keeping this container the single control point. Per the Stellr
- * privacy policy there are NO advertising, remarketing, or cross-site tracking
- * tags here (no Meta Pixel, no LinkedIn Insight, no Google Ads/Signals) — do not
- * add any. Analytics only, first-party, privacy-safe.
+ * Every measurement and advertising tag (GA4, Google Ads, and Meta/LinkedIn as
+ * they are added) is configured by the site owner inside the GTM UI, keeping
+ * this container the single control point. Do not hardcode a pixel here: a tag
+ * added in code bypasses the consent gating below and cannot be switched off
+ * without a deploy.
+ *
+ * Consent: advertising tags MUST be set to require `ad_storage` in GTM.
+ * components/analytics/ConsentMode.tsx denies that by default until the visitor
+ * accepts, but Consent Mode only withholds what the tags themselves are
+ * configured to check — the default is enforced in the container, not here.
  *
  * The matching <noscript> iframe lives in app/layout.tsx (it must be the first
  * child of <body>). Renders nothing until NEXT_PUBLIC_GTM_ID is set, so the tag

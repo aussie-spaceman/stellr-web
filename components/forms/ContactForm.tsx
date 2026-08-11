@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import FieldError from '@/components/forms/FieldError'
+import { trackLeadSubmitted } from '@/lib/analytics'
 
 const inputClass = (hasError: boolean) =>
   `w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue ${hasError ? 'border-red-400' : 'border-line'}`
@@ -49,6 +50,7 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
+      if (res.ok) trackLeadSubmitted('contact')
       setStatus(res.ok ? 'success' : 'error')
     } catch {
       setStatus('error')

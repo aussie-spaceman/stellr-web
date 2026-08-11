@@ -77,6 +77,21 @@ describe('appendLogEntry', () => {
     expect(appendLogEntry('a\n\n   \nb', 'c')).toBe('a\nb\nc')
   })
 
+  it('collapses an entry identical to the previous one', () => {
+    // A double-clicked button, or a resubmit that read a stale log because of
+    // read-after-write lag. Both should be a no-op rather than a duplicate.
+    const once = appendLogEntry(undefined, '2026-08-11 · Event Notify · nevada · Group')
+    const twice = appendLogEntry(once, '2026-08-11 · Event Notify · nevada · Group')
+    expect(twice).toBe(once)
+  })
+
+  it('still records a repeat that differs from the previous entry', () => {
+    let log = appendLogEntry(undefined, 'a')
+    log = appendLogEntry(log, 'b')
+    log = appendLogEntry(log, 'a')
+    expect(log.split('\n')).toEqual(['a', 'b', 'a'])
+  })
+
   it('bounds the log so a repeat visitor cannot overflow the property', () => {
     let log = ''
     for (let i = 0; i < 80; i++) log = appendLogEntry(log, `entry ${i}`)

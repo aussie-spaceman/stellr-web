@@ -37,6 +37,7 @@
 // crm.objects.contacts.write. (A granular crm.objects.notes.write exists for
 // OAuth apps but is not offered to Service Keys, and is not needed here.)
 
+import { after } from 'next/server'
 import { sendEmail } from '@/lib/email'
 import { supabaseServer } from '@/lib/supabase'
 import {
@@ -365,6 +366,15 @@ export function appendLogEntry(existing: string | undefined, entry: string): str
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
+
+  // Skip an entry identical to the one already at the end. Two things make
+  // this worth doing: a double-clicked button shouldn't write the same fact
+  // twice, and the append is a read-modify-write against a store with
+  // read-after-write lag — so a rapid resubmit can read a stale log and drop
+  // an entry. Collapsing consecutive duplicates makes that race a no-op
+  // instead of silent data loss.
+  if (lines[lines.length - 1] === entry) return lines.slice(-MAX_LOG_ENTRIES).join('\n')
+
   lines.push(entry)
   return lines.slice(-MAX_LOG_ENTRIES).join('\n')
 }
@@ -373,6 +383,58 @@ export function appendLogEntry(existing: string | undefined, entry: string): str
 export function logLine(source: LeadSource, detail: string): string {
   const date = new Date().toISOString().slice(0, 10)
   return `${date} · ${LEAD_SOURCES[source]} · ${detail}`
+}
+
+/**
+ * Repair the activity log if our entry didn't survive a concurrent write.
+ *
+ * Appending is inherently read-modify-write, and HubSpot is read-after-write
+ * lagged: two submissions close together can both read the same log, and the
+ * second write then erases the first one's entry. Collapsing duplicates makes
+ * that harmless when the entries match, but two *different* entries — someone
+ * asking about Individual then Group, or two events in quick succession —
+ * would still silently lose one.
+ *
+ * So verify rather than assume: re-read after the dust settles and, if our line
+ * is missing, append it onto whatever is actually there now. This is
+ * last-writer-wins with a repair pass, not a lock — it cannot make concurrent
+ * appends atomic, but it recovers the entry that would otherwise vanish.
+ *
+ * Runs after the response (see `runAfterResponse`), so it costs the visitor
+ * nothing.
+ */
+export async function reconcileLogEntry(email: string, entry: string): Promise<boolean> {
+  if (!HUBSPOT_ACCESS_TOKEN) return false
+
+  for (const delayMs of [500, 1500]) {
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+
+    const current = await getContactByEmail(email, [HS.notifyLog])
+    if (!current) continue
+
+    const log = current.properties?.[HS.notifyLog] ?? ''
+    if (log.split('\n').some((line) => line.trim() === entry)) return true
+
+    console.warn(`[hubspot] Activity log entry lost to a concurrent write — restoring: ${entry}`)
+    await upsertContact({ email, properties: { [HS.notifyLog]: appendLogEntry(log, entry) } })
+  }
+
+  return false
+}
+
+/**
+ * Schedule work to run once the response has been sent. Falls back to running
+ * detached when there's no request context (scripts, tests), where `after`
+ * throws.
+ */
+function runAfterResponse(task: () => Promise<unknown>): void {
+  const safe = () =>
+    task().catch((err) => console.error('[hubspot] Post-response task failed:', err))
+  try {
+    after(safe)
+  } catch {
+    void safe()
+  }
 }
 
 /* ── Dead letter ─────────────────────────────────────────────────────────── */
@@ -591,6 +653,13 @@ export async function captureLead(input: LeadCaptureInput): Promise<LeadCaptureR
     if (!noteLogged) warnings.push('note-failed')
   } else {
     warnings.push('contact-id-unavailable')
+  }
+
+  // Verify the append survived. Only meaningful when we actually wrote one —
+  // a form-only setup skips the log entirely because it cannot read first.
+  if (input.logEntry && canRead) {
+    const entry = input.logEntry
+    runAfterResponse(() => reconcileLogEntry(input.email, entry))
   }
 
   return { ok: true, via, contactId, noteLogged, warnings }

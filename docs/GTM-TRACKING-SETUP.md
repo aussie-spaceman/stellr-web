@@ -186,8 +186,8 @@ one line either way.
 
 ## 3. LinkedIn Insight Tag
 
-Partner ID: Campaign Manager → **Analytics → Insight Tag → Manage Insight Tag →
-See tag code**. The Partner ID is the number in `_linkedin_partner_id`.
+**Partner ID: `9494738`** (from Campaign Manager → Analytics → Insight Tag →
+Manage Insight Tag → See tag code).
 
 LinkedIn is a professional network, so this is scoped rather than site-wide —
 firing it on a student scholarship application spends budget reaching an
@@ -195,12 +195,13 @@ audience that is not on the platform.
 
 ### 3a. Base tag
 
-**Tags → New → Custom HTML**, name it `LinkedIn — Insight Base`. Replace
-`YOUR_PARTNER_ID`:
+**Tags → New → Custom HTML**, name it `LinkedIn — Insight Base`. Paste exactly
+this — it is LinkedIn's snippet with the Partner ID filled in and the `<noscript>`
+block removed (see below for why):
 
 ```html
 <script type="text/javascript">
-_linkedin_partner_id = "YOUR_PARTNER_ID";
+_linkedin_partner_id = "9494738";
 window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];
 window._linkedin_data_partner_ids.push(_linkedin_partner_id);
 </script>
@@ -219,6 +220,32 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
 - **Triggering:** `PV — b2b pages` — **not** All Pages
 - **Tag firing options:** *Once per page*
 - **Consent Settings:** require `ad_storage`, exactly as for Meta
+
+### Drop the `<noscript>` block
+
+LinkedIn's copy-paste snippet ends with:
+
+```html
+<noscript>
+<img height="1" width="1" style="display:none;" alt=""
+     src="https://px.ads.linkedin.com/collect/?pid=9494738&fmt=gif" />
+</noscript>
+```
+
+Leave it out. Two reasons, and the second is the important one:
+
+1. **It cannot work from GTM.** `<noscript>` renders only when JavaScript is
+   disabled, and GTM is itself JavaScript — if a visitor has JS off, the
+   container never runs and the tag is never injected. It is dead code here.
+2. **It cannot be consent-gated.** A plain `<img>` fires the moment the browser
+   parses it. Consent Mode governs JavaScript tags; it has no say over an image
+   request. Hard-coding this into the page — the only place it *would* execute —
+   would send a request to `px.ads.linkedin.com` for every visitor before anyone
+   has accepted anything, which is precisely the behaviour the banner exists to
+   prevent.
+
+The cost is losing LinkedIn attribution for JS-disabled visitors, which is a
+rounding error and would be unconsented data anyway.
 
 There is an official *LinkedIn Insight Tag* template in the Community Gallery if
 you prefer it; it is well maintained. Custom HTML is used here only so both

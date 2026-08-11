@@ -105,6 +105,82 @@ One more, for LinkedIn's base tag — **Trigger type: Page View**, name
 
 ---
 
+## 1b. Tag settings reference
+
+Every tag below is **Custom HTML**. The settings live in two collapsed panels on
+the tag edit screen — *Advanced Settings* and *Triggering*. What each control
+does, and what to set it to here.
+
+### Tag Configuration
+
+| Control | Set to | Why |
+|---|---|---|
+| **Support document.write** | **unchecked** | Only for legacy tags that call `document.write`. Ticking it makes GTM rewrite the document and can blank the page on an async load. Neither snippet needs it. |
+
+### Advanced Settings
+
+| Control | Base tags | Event tags | Why |
+|---|---|---|---|
+| **Tag firing priority** | `10` | leave `0` | Higher numbers start first within the same event. A safety net only — sequencing is the real guarantee. |
+| **Tag firing options** | **Once per page** | **Unlimited** (default) | See the warning below — this one is easy to get wrong in a way that silently drops conversions. |
+| **Tag Sequencing** | none | *Fire a tag before* → the matching base tag | Guarantees `fbq` / `lintrk` exists before the event tag calls it. |
+| **Consent Settings** | Require `ad_storage` | Require `ad_storage` | Meta and LinkedIn ignore Consent Mode otherwise. |
+| **Tag firing schedule** | leave empty | leave empty | Only for time-boxed campaigns. |
+
+> **Do not set event tags to "Once per page".**
+>
+> It sounds tidier and it quietly loses data. Several pages carry more than one
+> lead form — an asset gate plus the newsletter block, for instance — and a
+> visitor can legitimately submit two. "Once per page" fires `Lead` for the
+> first and silently discards the second. The base pixel is the opposite case:
+> it must be *Once per page*, because a second `fbq('init')` re-initialises the
+> pixel and can double-count `PageView`.
+
+### Tag Sequencing, in full
+
+On each **event** tag: *Advanced Settings → Tag Sequencing → tick* **Fire a tag
+before [this tag] fires**, then:
+
+- **Setup Tag:** the matching base tag (`Meta — Base Pixel` or
+  `LinkedIn — Insight Base`)
+- **Tick** *Don't fire [this tag] if [setup tag] fails or is paused*
+
+That second checkbox matters. Without it, if the base tag is paused or blocked —
+including **blocked by consent** — the event tag still runs and calls `fbq(...)`
+on an undefined `fbq`, throwing a console error on every submission. With it
+ticked, the event tag simply doesn't fire, which is the correct behaviour when
+consent has been declined.
+
+Sequencing coexists with *Once per page* on the base tag: if the base has
+already fired this page, GTM treats the prerequisite as met and does not re-run
+it.
+
+### Consent Settings, in full
+
+*Advanced Settings → Consent Settings* offers two radio options:
+
+- **No additional consent required** (default) — the tag fires whenever its
+  trigger fires. This is correct for Google's own tags, which read Consent Mode
+  natively, and **wrong for every tag in this document**.
+- **Require additional consent for tag to fire** — choose this, then
+  **+ Add required consent** → type or select **`ad_storage`**.
+
+Add only `ad_storage`. Adding `ad_user_data` and `ad_personalization` as well is
+harmless but redundant — the banner sets all three together, so any one of them
+is a sufficient gate, and a shorter list is easier to audit.
+
+Once set, the tag shows a small shield icon in the tag list. Use that icon as
+your checklist: **all six tags in this document must show it.**
+
+### Triggering
+
+| Control | Use |
+|---|---|
+| **Firing Triggers** | The trigger from §1. One per tag. |
+| **Exceptions** | Leave empty, unless you take the "keep Meta off the registration path" option — then add a Page View trigger matching `^/register/` as an *exception* on the Meta tags. An exception beats a firing trigger, so this reliably suppresses them there. |
+
+---
+
 ## 2. Meta Pixel
 
 Use **Custom HTML** rather than a gallery template. The most-installed Meta
@@ -143,9 +219,14 @@ fbq('track', 'PageView');
 </script>
 ```
 
-- **Triggering:** All Pages
-- **Advanced Settings → Tag firing options:** *Once per page*
-- **Advanced Settings → Consent Settings:** see 2d — required
+| Setting | Value |
+|---|---|
+| Triggering | **All Pages** |
+| Tag firing options | **Once per page** |
+| Tag firing priority | `10` |
+| Tag Sequencing | none |
+| Consent Settings | Require `ad_storage` |
+| Support document.write | unchecked |
 
 ### 2c. Event tags
 
@@ -217,9 +298,14 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
 </script>
 ```
 
-- **Triggering:** `PV — b2b pages` — **not** All Pages
-- **Tag firing options:** *Once per page*
-- **Consent Settings:** require `ad_storage`, exactly as for Meta
+| Setting | Value |
+|---|---|
+| Triggering | **`PV — b2b pages`** — not All Pages |
+| Tag firing options | **Once per page** |
+| Tag firing priority | `10` |
+| Tag Sequencing | none |
+| Consent Settings | Require `ad_storage` |
+| Support document.write | unchecked |
 
 ### Drop the `<noscript>` block
 
@@ -265,9 +351,12 @@ Then **Tags → New → Custom HTML**, name it `LinkedIn — Lead (b2b)`:
 </script>
 ```
 
-- **Triggering:** `CE — lead_submitted (b2b)`
-- **Tag Sequencing:** fire `LinkedIn — Insight Base` before this tag
-- **Consent Settings:** require `ad_storage`
+| Setting | Value |
+|---|---|
+| Triggering | **`CE — lead_submitted (b2b)`** |
+| Tag firing options | **Unlimited** (default) |
+| Tag Sequencing | Fire `LinkedIn — Insight Base` before; tick *Don't fire if it fails or is paused* |
+| Consent Settings | Require `ad_storage` |
 
 The b2b trigger is what keeps LinkedIn off scholarship and event-notify
 submissions — students and parents. If a b2b lead lands on a page outside the

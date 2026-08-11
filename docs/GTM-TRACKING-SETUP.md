@@ -27,17 +27,24 @@ loads:
 | `ad_storage`, `ad_user_data`, `ad_personalization` | **denied** | denied |
 | `analytics_storage` | granted | **denied** |
 
-The banner flips these to granted on "Accept all". **Consent Mode only withholds
-what a tag is configured to check** — so this is load-bearing:
+The banner flips these to granted on "Accept all".
 
-> In GTM, every advertising tag below must have
+**Google's own tags are consent-aware natively.** GA4 and Google Ads read the
+signals without any per-tag configuration. Verified on production: with ads
+denied, the Google Ads tag produced no `viewthroughconversion`, no
+`rmkt/collect`, and no `_gcl_au` cookie, while GA4 kept collecting normally; on
+"Accept all", all four Ads endpoints fired and `_gcl_au` returned. So the
+existing `AW-10893614207` tag needs **no change** — it is already gated.
+
+**Third-party tags are not.** Meta and LinkedIn templates fire regardless of
+Consent Mode unless you tell them not to, so for each tag added below:
+
 > **Consent Settings → Require additional consent for tag to fire →
-> `ad_storage`**.
+> add `ad_storage`.**
 
-Without that checkbox the tag fires regardless of the banner, and the privacy
-policy becomes untrue again. Also confirm the existing **Google Ads tag
-`AW-10893614207`** gets the same treatment — it is currently firing
-unconditionally.
+Miss that checkbox and the banner is decorative for that tag, and the privacy
+policy becomes untrue again. This is the single easiest thing to get wrong in
+the whole setup.
 
 ---
 

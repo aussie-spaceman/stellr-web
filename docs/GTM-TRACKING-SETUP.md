@@ -96,6 +96,34 @@ While you are here, turn on the built-in **Page Path** variable
 | `CE — registration_submitted` | `registration_submitted` | All Custom Events |
 | `CE — competition_page_view` | `competition_page_view` | All Custom Events |
 
+### Consent-granted triggers — every base tag needs one
+
+A Consent Mode update does **not** start a third-party tag that was already
+blocked. Google's own tags re-fire on the update; a Custom HTML tag hangs off a
+Page View trigger that has already passed and stays dormant. Verified in
+production: accepting on `/educators` brought Google Ads back immediately while
+the LinkedIn Insight Tag did not load at all.
+
+Because in-site navigation is client-side and fires no further Page View
+triggers, a visitor who accepts on their first page can go a whole session
+untracked. The site therefore pushes `consent_granted` at the moment consent is
+given (`components/analytics/CookieConsent.tsx`), and each base tag takes it as
+a **second** firing trigger alongside its Page View one.
+
+| Trigger name | Event name | Condition | Used by |
+|---|---|---|---|
+| `CE — consent_granted` | `consent_granted` | All Custom Events | `Meta — Base Pixel` |
+| `CE — consent_granted (b2b)` | `consent_granted` | Some Custom Events → same Page Hostname + Page Path conditions as `PV — b2b pages` | `LinkedIn — Insight Base` |
+
+The b2b variant must repeat the page conditions. A trigger carries its own —
+without them, accepting the banner on `/scholarship` would load LinkedIn on a
+student-facing page and undo the scoping.
+
+*Once per page* on the base tags is what stops a double init when a returning
+visitor's page load matches both triggers.
+
+---
+
 One more, for LinkedIn's base tag — **Trigger type: Page View**, name
 `PV — b2b pages`, fire on *Some Page Views* with **both** of these conditions:
 

@@ -67,7 +67,7 @@ const navLinks = [
       { label: 'Impact', href: '/impact' },
       { label: 'A Note On AI', href: '/impact#AI' },
       { label: 'Mission', href: '/about#mission' },
-      { label: 'Our Team', href: '/about#team' },
+      { label: 'Team and Board', href: '/about#team' },
       { label: 'Contact Us', href: '/contact' },
     ],
   },

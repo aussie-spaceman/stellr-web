@@ -78,7 +78,7 @@ const founder = {
 const advisoryBoard = [
   {
     name: 'Jim Christensen',
-    location: 'Ames, Iowa',
+    location: 'Central Iowa',
     linkedIn: 'https://www.linkedin.com/in/jim-christensen-7b3708122/',
     photo: '/team/jim-christensen.jpeg',
     bio: `Jim brings a career in space education to Stellr, having led K-12 programs at the Aldrin Family Foundation's ShareSpace Education. He knows first-hand how a single hands-on experience can change a student's trajectory, and he's a firm believer that giving young people real exposure to STEM careers is the surest way to inspire the next generation of explorers and engineers.`,
@@ -92,7 +92,7 @@ const advisoryBoard = [
   },
   {
     name: 'Bill Allen',
-    location: 'George, Iowa',
+    location: 'North-Western Iowa',
     linkedIn: 'https://www.linkedin.com/in/bill-allen-b7006b114/',
     photo: '/team/bill-allen.jpeg',
     bio: 'Bill remains a believer in and advocate for ISD competitions based on the positive results he has seen with former students continuing their studies and careers in engineering and STEM. By attending these competitions, students from the Midwest truly begin to see a pathway to the careers they are interested in, and begin to understand their dreams can become reality.',
@@ -155,7 +155,7 @@ export default function AboutPage() {
         <div className="container-max flex gap-2 sm:gap-6 px-4 sm:px-6 lg:px-8 overflow-x-auto">
           {[
             { id: 'mission', label: 'Mission' },
-            { id: 'team', label: 'Our Team' },
+            { id: 'team', label: 'Team and Board' },
           ].map((s) => (
             <a
               key={s.id}
@@ -276,7 +276,7 @@ export default function AboutPage() {
       {/* ── #team ────────────────────────────────────────────────────── */}
       <section id="team" className="section-padding bg-brand-grey-light scroll-mt-36">
         <div className="container-max text-center">
-          <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">Our Team</p>
+          <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">Team and Board</p>
           <h2 className="text-3xl font-bold text-brand-blue-dark mb-10">The people behind Stellr</h2>
 
           {/* Founder */}
@@ -306,8 +306,8 @@ export default function AboutPage() {
           </div>
 
           {/* Advisory Board */}
-          <h3 className="text-xl font-bold text-brand-blue-dark mb-6">Advisory Board</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <h3 className="text-xl font-bold text-brand-blue-dark mb-6">Advisory Board Members</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl mx-auto justify-center">
             {advisoryBoard.map((member) => (
               <div key={member.name} className="bg-white rounded-xl p-6 text-center shadow-sm">
                 <Avatar

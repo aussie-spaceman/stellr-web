@@ -118,10 +118,15 @@ export default async function HomePage() {
           aria-hidden="true"
         />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-36">
-          <div className="max-w-3xl">
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight">
-              Real-World STEM Competitions.{' '}
-              <span className="text-brand-blue">Real Careers Begin Here.</span>
+          <div className="max-w-5xl">
+            <h1 className="text-4xl sm:text-5xl xl:text-6xl font-bold leading-tight">
+              <span className="block">Real-World STEM</span>
+              {/* Line 2 is 33 characters — it needs its own size ramp so it stays
+                  on one line at every width. Lines 1 and 3 keep the h1 sizes. */}
+              <span className="block text-brand-blue text-lg sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl">
+                Competitions | Community | Careers
+              </span>
+              <span className="block">Begin Here</span>
             </h1>
             <p className="mt-6 text-lg sm:text-xl text-content-faint max-w-2xl">
               A community bringing students and professionals together, building careers and preparing the next generation through industry simulation competitions and mentorship.

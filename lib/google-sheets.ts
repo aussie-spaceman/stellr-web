@@ -1,5 +1,9 @@
 import { google } from 'googleapis'
 
+// A Google account identity for Drive file ownership/sharing — NOT a mail
+// sender, so it is intentionally exempt from the stellreducation.org email
+// consolidation. Repointing it at an account that doesn't own these Sheets
+// breaks group-registration spreadsheets. See docs/PLAN-single-email-domain.md.
 const OWNER_EMAIL = process.env.GOOGLE_SHEET_OWNER_EMAIL ?? 'david.shaw@insimeducation.com'
 
 function getAuth() {

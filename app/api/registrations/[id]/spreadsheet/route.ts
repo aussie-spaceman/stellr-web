@@ -21,6 +21,7 @@ function getAuth() {
   })
 }
 
+// Google Drive ownership identity, not a mail sender — see lib/google-sheets.ts.
 const OWNER_EMAIL = process.env.GOOGLE_SHEET_OWNER_EMAIL ?? 'david.shaw@insimeducation.com'
 
 const HEADERS = [

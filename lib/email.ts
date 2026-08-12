@@ -10,15 +10,18 @@ const FROM =
   process.env.TRANSACTIONAL_FROM ?? 'Stellr Education <no-reply@mail.stellreducation.org>'
 
 // Templates invite members to "reply to this email" — route those replies to a
-// monitored mailbox, since no-reply@ can't receive.
-const DEFAULT_REPLY_TO =
-  process.env.TRANSACTIONAL_REPLY_TO ?? 'david.shaw@insimeducation.com'
+// monitored mailbox, since no-reply@ can't receive. Reply-To needs no domain
+// verification, but keep it on stellreducation.org so replies never surface an
+// unrelated brand. Exported: it doubles as the org's staff-facing contact
+// address for ICS organizers and internal notifications.
+export const DEFAULT_REPLY_TO =
+  process.env.TRANSACTIONAL_REPLY_TO ?? 'hello@stellreducation.org'
 
-// Marketing/campaign sender. Currently shares the mail. subdomain with the
-// transactional default above; once the stellreducation.org apex (or a
-// dedicated transactional subdomain) is verified in Resend, point
-// TRANSACTIONAL_FROM there so bulk sends build (or burn) reputation
-// independently of transactional mail.
+// Marketing/campaign sender. Shares the mail. subdomain with the transactional
+// default above, and must keep sharing it: the Resend Free plan allows exactly
+// ONE verified domain, so there is no second domain to split bulk reputation
+// onto. Both senders must stay on mail.stellreducation.org unless the account
+// is upgraded again — see docs/PLAN-single-email-domain.md.
 export const MARKETING_FROM =
   process.env.MARKETING_FROM ?? 'Stellr Education <hello@mail.stellreducation.org>'
 

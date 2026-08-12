@@ -17,15 +17,14 @@ import { bookCoaching, type BookResult } from '@/lib/sessions'
 import { getCoachingAllowance } from '@/lib/coaching'
 import { grantAdhocEntitlement, ensureMemberGrants, getKindBalanceSplit } from '@/lib/entitlements'
 import { notifyMember } from '@/lib/notify'
-import { sendEmail } from '@/lib/email'
+import { sendEmail, DEFAULT_REPLY_TO } from '@/lib/email'
 
 export type CoachingEligibility = 'included' | 'award' | 'paid'
 export type CoachingRequestStatus = 'pending' | 'matched' | 'scheduled' | 'declined'
 
 const LIVE_STATUSES: CoachingRequestStatus[] = ['pending', 'matched', 'scheduled']
 
-const COACHING_TEAM_EMAIL =
-  process.env.COACHING_TEAM_EMAIL ?? process.env.TRANSACTIONAL_REPLY_TO ?? 'david.shaw@insimeducation.com'
+const COACHING_TEAM_EMAIL = process.env.COACHING_TEAM_EMAIL ?? DEFAULT_REPLY_TO
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
 const fullName = (m: { first_name?: string | null; last_name?: string | null } | null) =>

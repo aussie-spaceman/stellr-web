@@ -6,7 +6,7 @@ import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 import { ensureMemberGrants, bookCoachingSessionFromAllocation, releaseCoachingBooking } from '@/lib/entitlements'
 import { getVideoProvider } from '@/lib/video-provider'
 import { notifyMember, notifyMembers } from '@/lib/notify'
-import { sendEmail } from '@/lib/email'
+import { sendEmail, DEFAULT_REPLY_TO } from '@/lib/email'
 import { buildIcsAttachment } from '@/lib/ics'
 import { listModules } from '@/lib/training'
 import { logActivity } from '@/lib/activity-log'
@@ -261,7 +261,7 @@ async function sendSessionInvites(sessionId: string): Promise<void> {
       start,
       end,
       url: s.join_url ?? undefined,
-      organizerEmail: 'david.shaw@insimeducation.com',
+      organizerEmail: DEFAULT_REPLY_TO,
       attendeeEmails,
     })
     try {

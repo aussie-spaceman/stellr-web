@@ -248,8 +248,15 @@ setting would reintroduce it by reading the DOM directly, bypassing everything.
 
 ### 2b. Base tag
 
-**Tags → New → Custom HTML**, name it `Meta — Base Pixel`. Replace
-`YOUR_PIXEL_ID`:
+**Pixel ID: `974871662341253`.**
+
+Meta's copy-paste block ends with a `<noscript>` image pointing at
+`facebook.com/tr`. Drop it, for the same two reasons as LinkedIn's: it cannot
+run from GTM (noscript renders only when JS is off, and GTM is JS), and
+hard-coded into the page — the only place it would execute — an `<img>` cannot
+be consent-gated, so it would fire for every visitor before anyone accepts.
+
+**Tags → New → Custom HTML**, name it `Meta — Base Pixel`:
 
 ```html
 <script>
@@ -261,7 +268,7 @@ n.queue=[];t=b.createElement(e);t.async=!0;
 t.src=v;s=b.getElementsByTagName(e)[0];
 s.parentNode.insertBefore(t,s)}(window,document,'script',
 'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init', 'YOUR_PIXEL_ID');
+fbq('init', '974871662341253');
 fbq('track', 'PageView');
 </script>
 ```

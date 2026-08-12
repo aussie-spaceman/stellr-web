@@ -358,17 +358,29 @@ platforms are configured the same way.
 
 ### 3b. Conversion tag
 
-Conversions are *defined* in Campaign Manager (Analytics → Conversions → Create).
-Choose **event-specific** rather than URL-based, since a lead submission does not
-change the URL. Campaign Manager gives you a numeric conversion ID.
+Conversions are *defined* in Campaign Manager → **Create Insight Tag conversion**,
+a three-step wizard (Settings → Sources → Review). At the Sources step choose
+**Manual conversions setup**, then **Event-specific** — not *Page load*, since a
+lead submission never changes the URL, and not *Website actions*, which
+auto-detects every form on the site including the student-facing ones the `b2b`
+split exists to avoid.
+
+**Conversion created 11 Aug 2026: `Website lead — b2b`, conversion ID `29290274`.**
+
+Ignore the wizard's "paste into your global footer above `</body>`" instruction —
+the Insight Tag is already installed via GTM, and adding it again double-fires.
 
 Then **Tags → New → Custom HTML**, name it `LinkedIn — Lead (b2b)`:
 
 ```html
 <script>
-  window.lintrk && window.lintrk('track', { conversion_id: YOUR_CONVERSION_ID });
+  window.lintrk && window.lintrk('track', { conversion_id: 29290274 });
 </script>
 ```
+
+LinkedIn supplies this as a bare JavaScript line with no `<script>` wrapper.
+**GTM Custom HTML requires the wrapper** — pasted raw, the line renders as
+visible text on the page instead of executing.
 
 | Setting | Value |
 |---|---|

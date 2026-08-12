@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { pushDataLayer } from '@/lib/analytics'
 import { applyConsent, readConsent, writeConsent } from '@/lib/consent'
 
 /**
@@ -35,6 +36,23 @@ export function CookieConsent() {
   function decide(ads: boolean) {
     writeConsent(ads)
     applyConsent(ads)
+
+    // A Consent Mode update alone does not start a third-party tag that was
+    // already blocked. Google's own tags re-fire on the update; a GTM Custom
+    // HTML tag hangs off a Page View trigger that has already passed, so it
+    // stays dormant. Verified in production: accepting on /educators granted
+    // ad_storage and brought Google Ads back immediately, while the LinkedIn
+    // Insight Tag did not load at all.
+    //
+    // That is worse than one missed page here, because in-site navigation is
+    // client-side and fires no further Page View triggers — so a visitor who
+    // accepts on their first page can go a whole session untracked. This event
+    // gives those tags a trigger to attach to at the moment consent arrives.
+    //
+    // Pushed after applyConsent so GTM has already processed the consent update
+    // by the time the tag is evaluated; the reverse order would re-block it.
+    if (ads) pushDataLayer({ event: 'consent_granted' })
+
     setVisible(false)
   }
 

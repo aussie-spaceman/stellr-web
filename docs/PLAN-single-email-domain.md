@@ -2,7 +2,9 @@
 
 **Date:** 12 Aug 2026
 **Driver:** Cancelling the paid Resend subscription. The paid plan was bought for multi-domain sending; the Free plan allows **1 domain, 3,000 emails/month, 100 emails/day**.
-**Status (12 Aug 2026):** Downgrade to Resend **Free** is DONE; `insimeducation.com` removed from the Resend account by the owner. **Tier 2 code cleanup is APPLIED** (uncommitted on `main` — typecheck clean, 151/151 tests pass, `lint:tokens` clean). Tier 1 verification items and the deploy remain — see "Manual steps still outstanding" at the foot of this doc.
+**Status (12 Aug 2026): SHIPPED.** Downgrade to Resend **Free** done; `insimeducation.com` and the unused `Onboarding` API key removed from the Resend account; `hello@stellreducation.org` confirmed functioning. Code cleanup merged as `19e3c14` and **deployed to production** (typecheck clean, 151/151 tests, `lint:tokens` clean, `check:deploy-ready` clean).
+
+**Still open — see [HANDOVER-email-domain-2026-08-12.md](handovers/HANDOVER-email-domain-2026-08-12.md):** DocuSign counter-signer env vars are unconfirmed in Vercel; the second active Resend API key is unidentified; the Free-tier 100/day cap is unmitigated against three un-throttled bulk send loops.
 
 ---
 

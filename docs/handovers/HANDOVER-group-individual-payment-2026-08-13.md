@@ -221,28 +221,25 @@ lib/payment-status.test.ts                         + 2 tests
 See the tabulated tracker (Google Doc, *Session Close-Out — Group Individual
 Payment*). Summary, highest first:
 
-1. **UNCOMMITTED follow-up work exists on the working tree** — the free-event
-   `status='confirmed'` fix (plus `finalizeRegistrationMerch` on that path), the
-   `waived` roster pill, and the `paymentPill()` extraction into
-   `lib/payment-status.ts` with tests. Written and green (tsc, 197 tests, ds-lint)
-   but **not committed**, because the checkout sat on `feat/teacher-onboarding-2026-08-13`
-   — a parallel session's unpushed branch carrying 25 lines in
-   `app/api/register/group/route.ts` that are not on `origin/main`. Branching from
-   `origin/main` and carrying the tree over would drop those lines. Land it either
-   on that branch, or on a fresh branch applying only these hunks.
-2. **Runtime-verify the sheet-sync → payment-link path.** It's a money path and has
+1. **Runtime-verify the sheet-sync → payment-link path.** It's a money path and has
    only ever been exercised against stubs — no real Stripe, Resend, or Sheets call.
    Now doubly worth doing, since it ran against a broken schema in prod for a window.
-3. **15 prod participants sit at `NULL` status.** Deliberately not backfilled (demo
+2. **15 prod participants sit at `NULL` status.** Deliberately not backfilled (demo
    data). Decide whether to clear them or leave them. Note the webhook now counts
    `NULL` as outstanding.
-4. **`groupRegisteredNoPaymentEmail`** — rendered and diffed against the shipped
+3. **`groupRegisteredNoPaymentEmail`** — rendered and diffed against the shipped
    payment email (chrome byte-identical); never seen in a real mail client.
 
 ### Resolved since this doc was first written
 
-- Free-event `status='pending'` and the admin "Paid" pill — fixed in the uncommitted
-  work under item 1.
+- **Free-event `status='pending'`** — free registrations now confirm at creation,
+  keyed on `!feePriceId` (NOT `amountDueCents <= 0`: a transient price-lookup
+  failure also reads zero and must stay pending). `finalizeRegistrationMerch` runs
+  on that path too — it had only ever been called from the Stripe webhook, so free
+  events never allocated included shirts.
+- **Admin roster showed "Paid" for a waived seat** — now a grey "No Fee" pill. The
+  mapping moved out of `lib/event-admin.ts` into a pure `paymentPill()` in
+  `lib/payment-status.ts`, where it can be tested without a database.
 - The email render — done.
 - **`notifyCommunityAdmins` reached nobody.** `staff_roles` held one row scoped
   `['events']` on a test account, which silenced the new waive alert *and* the

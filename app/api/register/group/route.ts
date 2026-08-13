@@ -9,6 +9,7 @@ import {
   groupConfirmationEmail,
 } from '@/lib/email'
 import { ensureIndividualPayments } from '@/lib/individual-payment'
+import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
 import { createGroupRegistrationSheet, isGoogleSheetsConfigured, type SheetSeedRow } from '@/lib/google-sheets'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
@@ -258,6 +259,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // A free event collects nothing, ever: no Stripe webhook will fire, so a
+    // registration left 'pending' would sit there forever with no path to
+    // 'confirmed' (campaigns already dodge this by confirming at creation).
+    // Keyed strictly on the event having NO price configured in Sanity — that is
+    // the unambiguous "free" signal. A price that exists but failed to resolve
+    // also leaves amountDueCents at 0, and that is a transient error, not a free
+    // event, so it must stay pending rather than be silently confirmed unpaid.
+    const nothingToCollect = !feePriceId
+
     // Stripe rejects any charge below its per-currency minimum (~$0.50 USD). If a
     // card registration's price × seats lands below that, the checkout session can
     // never be created — so reject up front with a clear, actionable message
@@ -345,9 +355,10 @@ export async function POST(req: NextRequest) {
       // surface in the member's campaign context + workspace (which filter on
       // type='campaign'); regular group event registrations stay type 'group'.
       type: is_campaign ? 'campaign' : 'group',
-      // Campaigns are free — confirmed immediately. Paid events stay pending
-      // until the Stripe webhook confirms payment.
-      status: is_campaign ? 'confirmed' : 'pending',
+      // Campaigns and free events are confirmed immediately — nothing will ever
+      // be collected, so no webhook will arrive to move them off 'pending'.
+      // Paid events stay pending until the Stripe webhook confirms payment.
+      status: is_campaign || nothingToCollect ? 'confirmed' : 'pending',
       amount_due_cents: amountDueCents,
       adult_count: declaredAdultCount,
       student_count: declaredStudentCount,
@@ -940,6 +951,16 @@ export async function POST(req: NextRequest) {
           })
           .filter((p): p is NonNullable<typeof p> => p !== null),
       )
+    }
+
+    // Free events are confirmed above without ever passing through the Stripe
+    // webhook, which is the only other place merch is finalised — so included
+    // shirts were never allocated and add-ons never left 'pending' for them.
+    // Do it here so 'confirmed' means the same thing on both paths. Runs after
+    // the participant insert because allocation is per participant. Idempotent
+    // and non-fatal by contract.
+    if (nothingToCollect && !is_campaign) {
+      await finalizeRegistrationMerch(db, regId)
     }
 
     // ── CC list for confirmation emails ───────────────────────────────────────

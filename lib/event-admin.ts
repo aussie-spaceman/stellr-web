@@ -1,6 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { deriveCompliance, loadComplianceRecordsByEmails, type ComplianceState } from '@/lib/compliance'
-import { registrationPaid } from '@/lib/payment-status'
+import { registrationPaid, paymentPill, type PaymentPillState } from '@/lib/payment-status'
 
 // Data assembly for the admin/event-manager event detail view (PRD 6.7).
 // Per-participant pill logic (user-confirmed 11-Jun-2026, supersedes the
@@ -16,7 +16,8 @@ import { registrationPaid } from '@/lib/payment-status'
 //   Check-in — green "Checked In" / orange "Registered" (kept alongside the
 //              two pills above so event-day arrival state stays visible).
 
-export type PaymentPill = 'invoice_issued' | 'invoice_paid' | 'link_unpaid' | 'link_paid'
+/** Re-exported from lib/payment-status, where the mapping itself lives. */
+export type PaymentPill = PaymentPillState
 export type DocusignPill = 'not_required' | 'not_issued' | 'issued' | 'partial' | 'declined' | 'complete'
 
 export interface RosterParticipant {
@@ -142,9 +143,12 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
         individualPaymentStatus: p.individual_payment_status as string | null,
       })
 
-      const payment_pill: PaymentPill = reg.invoice_requested
-        ? paid ? 'invoice_paid' : 'invoice_issued'
-        : paid ? 'link_paid' : 'link_unpaid'
+      const payment_pill: PaymentPill = paymentPill({
+        invoiceRequested: reg.invoice_requested,
+        invoicePaidAt: reg.invoice_paid_at as string | null,
+        status: reg.status,
+        individualPaymentStatus: p.individual_payment_status as string | null,
+      })
 
       const minor = isMinor(p.date_of_birth as string | null, eventDate)
       const env = envelopeByParticipant.get(p.id as string)

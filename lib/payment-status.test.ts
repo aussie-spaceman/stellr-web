@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { registrationPaid } from './payment-status'
+import { registrationPaid, paymentPill } from './payment-status'
 
 describe('registrationPaid', () => {
   it('invoiced reg is unpaid until invoice_paid_at is set — even when confirmed', () => {
@@ -40,5 +40,25 @@ describe('registrationPaid', () => {
 
   it('waived does not mark an invoiced reg paid either', () => {
     expect(registrationPaid({ invoiceRequested: true, invoicePaidAt: null, individualPaymentStatus: 'waived' })).toBe(false)
+  })
+})
+
+describe('paymentPill — admin roster', () => {
+  it('separates a waived (free) seat from a genuinely paid one', () => {
+    // The bug this guards: registrationPaid() counts 'waived' as paid, so the
+    // roster showed "Pmt Link Paid" for a seat that was never charged.
+    expect(paymentPill({ status: 'confirmed', individualPaymentStatus: 'waived' })).toBe('waived')
+    expect(paymentPill({ status: 'pending', individualPaymentStatus: 'paid' })).toBe('link_paid')
+    expect(paymentPill({ status: 'pending', individualPaymentStatus: 'pending' })).toBe('link_unpaid')
+  })
+
+  it('invoice state wins over any individual status', () => {
+    expect(paymentPill({ invoiceRequested: true, invoicePaidAt: null })).toBe('invoice_issued')
+    expect(paymentPill({ invoiceRequested: true, invoicePaidAt: '2026-08-01T00:00:00Z' })).toBe('invoice_paid')
+    expect(paymentPill({ invoiceRequested: true, invoicePaidAt: null, individualPaymentStatus: 'waived' })).toBe('invoice_issued')
+  })
+
+  it('a group-paid confirmed registration reads as paid', () => {
+    expect(paymentPill({ status: 'confirmed' })).toBe('link_paid')
   })
 })

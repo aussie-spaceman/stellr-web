@@ -10,6 +10,35 @@
 // the EEA/UK/CH — see CONSENT_DEFAULT below for why that distinction is drawn
 // where it is.
 
+/**
+ * EEA + UK + Switzerland: prior consent required for analytics too, not just
+ * advertising.
+ *
+ * Google's tags receive this list through Consent Mode's `region` parameter and
+ * enforce it themselves. Anything that is not a Google tag — the HubSpot
+ * tracking script — has no such mechanism, so it must be gated by us against
+ * the same list. Shared from here so the two cannot drift: a country added for
+ * Google but missed for HubSpot would be a silent compliance gap.
+ */
+export const STRICT_REGIONS = [
+  'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR',
+  'HU', 'IS', 'IE', 'IT', 'LV', 'LI', 'LT', 'LU', 'MT', 'NL', 'NO', 'PL',
+  'PT', 'RO', 'SK', 'SI', 'ES', 'SE', 'GB', 'CH',
+]
+
+/**
+ * Whether a visitor's country requires prior consent for analytics.
+ *
+ * An unknown country returns false, matching the Consent Mode defaults above:
+ * the non-strict default is the one that applies when no region matches. Geo
+ * is absent in local dev and on non-Vercel hosts, so failing the other way
+ * would silently disable tracking everywhere it cannot be determined.
+ */
+export function isStrictRegion(country: string | null | undefined): boolean {
+  if (!country) return false
+  return STRICT_REGIONS.includes(country.toUpperCase())
+}
+
 /** Bump when the meaning of a stored decision changes, to re-ask everyone. */
 export const CONSENT_VERSION = 1
 

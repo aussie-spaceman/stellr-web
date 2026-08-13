@@ -1,4 +1,4 @@
-import { CONSENT_STORAGE_KEY } from '@/lib/consent'
+import { CONSENT_STORAGE_KEY, STRICT_REGIONS } from '@/lib/consent'
 
 /**
  * Google Consent Mode v2 defaults.
@@ -26,12 +26,8 @@ import { CONSENT_STORAGE_KEY } from '@/lib/consent'
  * enough for tags to fire with the wrong state.
  */
 
-/** EEA + UK + Switzerland: prior consent required for analytics too. */
-const STRICT_REGIONS = [
-  'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR',
-  'HU', 'IS', 'IE', 'IT', 'LV', 'LI', 'LT', 'LU', 'MT', 'NL', 'NO', 'PL',
-  'PT', 'RO', 'SK', 'SI', 'ES', 'SE', 'GB', 'CH',
-]
+// STRICT_REGIONS moved to lib/consent.ts: the HubSpot tracking script has to
+// gate against the same list, and two copies would drift.
 
 export function ConsentMode() {
   const script = `

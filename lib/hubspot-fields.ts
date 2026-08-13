@@ -111,6 +111,13 @@ export const NOTIFY_STATUS = {
   notified: 'Notified',
   registered: 'Registered',
   lapsed: 'Lapsed',
+  /**
+   * Opted out of waitlist mail. Distinct from `lapsed`, which means "never
+   * converted" — conflating the two would let an unsubscribe be re-mailed by
+   * anything that treats Lapsed as re-engageable. The send only ever targets
+   * `Requested`, so this suppresses by construction.
+   */
+  unsubscribed: 'Unsubscribed',
 } as const
 
 export const REGISTRATION_INTEREST = {
@@ -242,13 +249,49 @@ export function mapEventDemographic(gradeLevel?: string | null): string | undefi
 const YEAR_MIN = 2023
 const YEAR_MAX = 2030
 
+/**
+ * The school year an event belongs to — which is NOT its calendar year.
+ *
+ * Stellr's programme runs on a US school year, roughly August through May, and
+ * everything in it is named for the year it *ends*: the Nevada Space Design
+ * Challenge takes place in November 2026 but is a 2027 event, and its slug says
+ * so. Deriving the calendar year instead tagged it `2026`, which meant
+ * filtering `event_year = 2027` — the way anyone at Stellr would think to look
+ * for it — returned nothing. That is precisely the segmentation failure this
+ * mapping exists to prevent.
+ *
+ * August is the cutover. June and July fall outside the teaching year and are
+ * treated as belonging to the year that just ended, rather than inventing a
+ * boundary the business does not use.
+ */
+const SCHOOL_YEAR_START_MONTH = 7 // August, zero-indexed
+
+export function schoolYearFor(date: Date): number {
+  return date.getUTCMonth() >= SCHOOL_YEAR_START_MONTH
+    ? date.getUTCFullYear() + 1
+    : date.getUTCFullYear()
+}
+
 export function mapEventYear(input: {
   campaignYear?: number | null
+  season?: string | null
   date?: string | null
 }): string | undefined {
-  const year =
-    input.campaignYear ??
-    (input.date && /^\d{4}/.test(input.date) ? Number(input.date.slice(0, 4)) : undefined)
+  let year: number | undefined
+
+  // Campaigns carry `campaignYear`, which Sanity documents as the *calendar*
+  // year ("2026 for Fall 2026, 2027 for Spring 2027"). `season` is what turns
+  // that back into a school year without needing a date.
+  if (input.campaignYear) {
+    if (input.season === 'fall') year = input.campaignYear + 1
+    else if (input.season === 'spring') year = input.campaignYear
+    // Season missing: the calendar year alone cannot say which school year it
+    // belongs to, so fall through to the date rather than guess.
+  }
+
+  if (year === undefined && input.date && /^\d{4}-\d{2}-\d{2}/.test(input.date)) {
+    year = schoolYearFor(new Date(`${input.date.slice(0, 10)}T00:00:00Z`))
+  }
 
   if (!year || year < YEAR_MIN || year > YEAR_MAX) return undefined
   return String(year)
@@ -265,6 +308,8 @@ export interface EventLike {
   state?: string | null
   date?: string | null
   campaignYear?: number | null
+  /** 'fall' | 'spring' — needed to turn a campaign's calendar year into a school year. */
+  season?: string | null
 }
 
 /**

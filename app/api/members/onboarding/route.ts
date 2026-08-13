@@ -6,6 +6,8 @@ import { applyGrantTrigger } from '@/lib/membership-grants'
 import { normalizeEmail } from '@/lib/member-enums'
 import { logActivity } from '@/lib/activity-log'
 import { grantVolunteerRole, dispatchVolunteerAgreement } from '@/lib/volunteer'
+import { syncMemberClassificationRole } from '@/lib/member-roles'
+import { sendAccountConfirmation, notifyStaffOfRegistration } from '@/lib/registration-notify'
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
@@ -172,6 +174,15 @@ export async function POST(req: Request) {
       actorType: 'member',
       actorMemberId: memberId,
     }, db)
+
+    // Seed the canonical web-app roles from the role the member just declared.
+    // This is the ONLY place that knows it: the Clerk webhook fires before the
+    // wizard and can only assume 'subscriber', and when a member row already
+    // exists it takes its link branch and never syncs at all. Without this a
+    // self-serve teacher never holds the 'teacher' role, so role-granted Spaces
+    // (Teachers' Room) and every MANAGE_ROLES gate stay shut. Idempotent
+    // insert-or-ignore, so re-saving the profile is harmless.
+    await syncMemberClassificationRole(db, memberId, resolvedRole)
   }
 
   // Volunteer program signup: grant the additive volunteer role (which also adds
@@ -188,6 +199,7 @@ export async function POST(req: Request) {
   }
 
   // Link to school if provided
+  let schoolName: string | null = null
   if (resolvedSchoolId) {
     // Close any previous current school links
     await db
@@ -204,6 +216,7 @@ export async function POST(req: Request) {
       }, { onConflict: 'member_id,school_id' })
 
       const { data: school } = await db.from('schools').select('name').eq('id', resolvedSchoolId).maybeSingle()
+      schoolName = school?.name ?? null
       await logActivity({
         memberId,
         category: 'school',
@@ -234,6 +247,23 @@ export async function POST(req: Request) {
       } catch (e) {
         console.error('[onboarding] signup grant failed:', e)
       }
+    }
+  }
+
+  // Confirm the account to the member, and tell staff someone joined. Both are
+  // transactional: they bypass the campaign engine so marketing consent can't
+  // suppress "your account exists". Both swallow their own errors. Sent after
+  // the tier grant above so the email can name the tier the member actually got.
+  if (memberId) {
+    const { data: confirmed } = await db
+      .from('members')
+      .select('id, first_name, last_name, email, event_role, age_bracket')
+      .eq('id', memberId)
+      .maybeSingle()
+
+    if (confirmed) {
+      await sendAccountConfirmation(db, confirmed)
+      await notifyStaffOfRegistration(db, confirmed, { schoolName })
     }
   }
 

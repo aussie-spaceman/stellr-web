@@ -13,6 +13,9 @@ const PAYMENT_PILLS: Record<PaymentPill, { label: string; className: string }> =
   invoice_paid:   { label: 'Invoice Paid',   className: 'bg-green-100 text-green-700' },
   link_unpaid:    { label: 'Pmt Link Unpaid', className: 'bg-red-100 text-red-700' },
   link_paid:      { label: 'Pmt Link Paid',   className: 'bg-green-100 text-green-700' },
+  // Free event — settled, but nothing was ever charged. Deliberately not green:
+  // staff reconciling payments need to tell this apart from money received.
+  waived:         { label: 'No Fee',           className: 'bg-brand-hairline text-brand-muted-soft' },
 }
 
 const DOCUSIGN_PILLS: Record<DocusignPill, { label: string; className: string }> = {

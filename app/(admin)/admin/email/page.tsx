@@ -13,7 +13,7 @@ export default async function AdminEmailPage() {
       .order('updated_at', { ascending: false }),
     db
       .from('email_campaigns')
-      .select('id, name, trigger_type, scheduled_at, event_key, status, audience, sent_at, created_at, email_templates(name)')
+      .select('id, name, trigger_type, scheduled_at, event_key, delay_days, sequence_key, status, audience, sent_at, created_at, email_templates(name)')
       .neq('status', 'archived')
       .order('created_at', { ascending: false }),
     db

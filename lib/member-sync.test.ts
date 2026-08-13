@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { upsertMember } from '@/lib/member-sync'
+import { upsertMember, fillBlanksFromStored } from '@/lib/member-sync'
 
 vi.mock('@/lib/member-roles', () => ({ syncMemberClassificationRole: vi.fn() }))
 
@@ -96,5 +96,45 @@ describe('upsertMember — email cross-reference against existing members', () =
     expect(await upsertMember(db, { email: '  ', first_name: 'X', last_name: 'Y' })).toBeNull()
     expect(calls.inserts).toHaveLength(0)
     expect(calls.updates).toHaveLength(0)
+  })
+})
+
+// The organiser group form must batch its roster into one upsert, and
+// ON CONFLICT DO UPDATE overwrites every column in the payload — so blanks are
+// pre-filled from the stored row before the batch runs.
+describe('fillBlanksFromStored — batched upsert keeps its merge guarantee', () => {
+  it('fills blanks from the stored row without touching submitted values', () => {
+    const payload: Record<string, unknown> = {
+      email: 'jane@example.com',
+      first_name: 'Jane',
+      phone: null,              // organiser left it blank
+      date_of_birth: '',        // blank
+      ec_phone: '   ',          // whitespace only
+      tshirt_size: 'L',         // submitted — must win
+      grade: null,
+    }
+    fillBlanksFromStored(payload, {
+      email: 'SHOULD-NOT-BE-COPIED@example.com',
+      first_name: 'Janet',
+      phone: '555-0100',
+      date_of_birth: '2010-04-10',
+      ec_phone: '555-0199',
+      tshirt_size: 'S',
+      grade: null,              // nothing on file either — stays null
+    })
+
+    expect(payload.phone).toBe('555-0100')
+    expect(payload.date_of_birth).toBe('2010-04-10')
+    expect(payload.ec_phone).toBe('555-0199')
+    expect(payload.first_name).toBe('Jane')          // submitted wins
+    expect(payload.tshirt_size).toBe('L')            // submitted wins
+    expect(payload.grade).toBeNull()                 // nothing to fill from
+    expect(payload.email).toBe('jane@example.com')   // match key never overwritten
+  })
+
+  it('leaves a payload untouched when nothing is on file', () => {
+    const payload: Record<string, unknown> = { email: 'new@example.com', phone: null }
+    fillBlanksFromStored(payload, { email: 'new@example.com', phone: null })
+    expect(payload.phone).toBeNull()
   })
 })

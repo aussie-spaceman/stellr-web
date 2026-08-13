@@ -73,7 +73,7 @@ export async function POST(req: Request) {
     // Check if a member record already exists for this email (created via event registration)
     const { data: existing } = await db
       .from('members')
-      .select('id')
+      .select('id, event_role')
       .eq('email', primaryEmail)
       .maybeSingle()
 
@@ -85,6 +85,17 @@ export async function POST(req: Request) {
         .update({ clerk_user_id: data.id, profile_photo_url: data.image_url })
         .eq('id', existing.id)
       memberId = (existing as { id: string }).id
+
+      // Seed roles on this branch too. It is the COMMON path for self-serve
+      // signup — the onboarding POST usually creates the member row before this
+      // webhook lands — and skipping it left every such member with no
+      // member_roles row at all. Sync from the row's own event_role, not a
+      // hardcoded default, since an existing row may already be classified.
+      await syncMemberClassificationRole(
+        db,
+        memberId,
+        ((existing as { event_role: string | null }).event_role) ?? 'subscriber',
+      )
     } else {
       // Create a minimal member record; they complete their profile on /account
       const { data: created } = await db.from('members').insert({

@@ -1,5 +1,12 @@
--- Migration 134: individual-payment coverage for participants added after the
+-- Migration 137: individual-payment coverage for participants added after the
 -- registration form (Google Sheet sync, organiser manual add) and for free events.
+--
+-- NUMBERING: authored as 134, renumbered to 137 — 135 and 136 were authored and
+-- applied ahead of it, so the old number implied an order that never happened.
+-- It was already applied to prod when renumbered, recorded as version
+-- 20260813213834 under the name `individual_payment_waived` (without the number
+-- prefix that 135_lead_capture_failures and friends carry). The applied record
+-- was deliberately left alone rather than rewritten; this note reconciles the two.
 --
 -- Two problems this supports fixing in code:
 --

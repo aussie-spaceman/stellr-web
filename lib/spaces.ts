@@ -144,6 +144,14 @@ export async function getSpacesDirectory(member: CommunityMember): Promise<Space
       db.from('community_channels').select('space_id').eq('is_archived', false),
     ])
 
+  // Role grants, so the directory reaches the same verdict as the space page
+  // (getSpaceForMember) does. Omitting these bucketed role-granted spaces into
+  // Restricted even though opening them directly let the member straight in.
+  const { data: roleRows } = await db.from('community_space_roles').select('space_id, role')
+  const rolesBySpace = groupValues(roleRows ?? [], 'space_id', 'role') as Map<string, MemberRole[]>
+  // Only worth loading the member's own roles when some space actually grants one.
+  const memberRoles = rolesBySpace.size > 0 ? await getGlobalRoleNames(member.id) : []
+
   // Active member counts per space (one query, counted in JS — directory scale).
   const { data: activeRows } = await db
     .from('community_space_members')
@@ -168,7 +176,8 @@ export async function getSpacesDirectory(member: CommunityMember): Promise<Space
   }>) {
     const assignedTierIds = tiersBySpace.get(s.id) ?? []
     const membership = myRoster.get(s.id) ?? null
-    const access = resolveSpaceAccess(member, s, assignedTierIds, membership)
+    const assignedRoles = rolesBySpace.get(s.id) ?? []
+    const access = resolveSpaceAccess(member, s, assignedTierIds, membership, assignedRoles, memberRoles)
     if (!access.visible) continue
 
     const summary: SpaceSummary = {

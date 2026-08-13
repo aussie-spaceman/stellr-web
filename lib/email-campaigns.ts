@@ -235,13 +235,32 @@ export async function fireCampaignEvent(eventKey: string, memberId: string, dedu
   const db = supabaseServer()
   const { data: campaigns } = await db
     .from('email_campaigns')
-    .select('id, template_id, audience')
+    .select('id, template_id, audience, delay_days')
     .eq('trigger_type', 'event')
     .eq('event_key', eventKey)
     .eq('status', 'scheduled')
   if (!campaigns?.length) return
 
   for (const c of campaigns) {
+    const delayDays = (c as { delay_days?: number | null }).delay_days ?? 0
+
+    // Delayed step of a drip: park it for the cron to drain. Deliberately does
+    // NOT resolve the audience now — consent and eligibility are re-checked at
+    // send time, so a member who unsubscribes in week two of a five-week
+    // sequence stops receiving it.
+    if (delayDays > 0) {
+      const dueAt = new Date(Date.now() + delayDays * 86_400_000).toISOString()
+      const { error } = await db
+        .from('email_campaign_queue')
+        .insert({ campaign_id: c.id, member_id: memberId, due_at: dueAt, dedup_key: dedupKey })
+      // The UNIQUE index is the idempotency guard; a duplicate means this
+      // occurrence is already queued, which is success, not failure.
+      if (error && !error.message.toLowerCase().includes('duplicate')) {
+        console.error('[email-campaigns] drip enqueue error:', error.message)
+      }
+      continue
+    }
+
     const template = await loadTemplate(c.template_id)
     if (!template) continue
     // Resolve just this member through the campaign's audience so consent/minor/
@@ -250,6 +269,105 @@ export async function fireCampaignEvent(eventKey: string, memberId: string, dedu
     if (!target) continue
     await sendToMembers(c.id, template, [target], dedupKey)
   }
+}
+
+// ─── Drip dispatch (cron) ───────────────────────────────────────────────────
+
+export interface DripResult {
+  due: number
+  sent: number
+  skipped: number
+  failed: number
+}
+
+/**
+ * Drain queued drip steps whose due date has arrived. Called by
+ * /api/cron/campaign-drip.
+ *
+ * Eligibility is re-evaluated here rather than at enqueue time: a member who
+ * unsubscribed, went inactive, or dropped out of the campaign's tier filter
+ * between the trigger and the due date is skipped, not sent. sendToMembers
+ * still writes the send ledger, so the two idempotency layers agree.
+ */
+export async function dispatchDueDrips(limit = 200): Promise<DripResult> {
+  const db = supabaseServer()
+  const result: DripResult = { due: 0, sent: 0, skipped: 0, failed: 0 }
+
+  const { data: due } = await db
+    .from('email_campaign_queue')
+    .select('id, campaign_id, member_id, dedup_key')
+    .eq('status', 'pending')
+    .lte('due_at', new Date().toISOString())
+    .order('due_at', { ascending: true })
+    .limit(limit)
+
+  if (!due?.length) return result
+  result.due = due.length
+
+  // Campaigns are few relative to queued rows — load each at most once.
+  const campaignCache = new Map<string, { template_id: string; audience: unknown; status: string } | null>()
+
+  for (const row of due) {
+    // Claim the row before doing any work, so two overlapping cron ticks can't
+    // both send it. Only the tick that flips pending→sent proceeds.
+    const { data: claimed } = await db
+      .from('email_campaign_queue')
+      .update({ status: 'sent', processed_at: new Date().toISOString() })
+      .eq('id', row.id)
+      .eq('status', 'pending')
+      .select('id')
+      .maybeSingle()
+    if (!claimed) continue
+
+    // Claiming optimistically marked the row 'sent'; correct it when the step
+    // turns out not to have sent.
+    const finish = async (status: 'skipped' | 'failed', note: string) => {
+      await db.from('email_campaign_queue').update({ status, note }).eq('id', row.id)
+      result[status]++
+    }
+
+    try {
+      if (!campaignCache.has(row.campaign_id)) {
+        const { data } = await db
+          .from('email_campaigns')
+          .select('template_id, audience, status')
+          .eq('id', row.campaign_id)
+          .maybeSingle()
+        campaignCache.set(row.campaign_id, data ?? null)
+      }
+      const campaign = campaignCache.get(row.campaign_id)
+
+      // A campaign paused or archived mid-drip stops sending its queued steps.
+      if (!campaign || campaign.status !== 'scheduled') {
+        await finish('skipped', `campaign ${campaign?.status ?? 'missing'}`)
+        continue
+      }
+
+      const template = await loadTemplate(campaign.template_id)
+      if (!template) {
+        await finish('skipped', 'template missing or archived')
+        continue
+      }
+
+      const [target] = await resolveAudience((campaign.audience ?? {}) as Audience, {
+        memberIds: [row.member_id],
+      })
+      if (!target) {
+        await finish('skipped', 'no longer in audience')
+        continue
+      }
+
+      const sendResult = await sendToMembers(row.campaign_id, template, [target], row.dedup_key ?? '')
+      if (sendResult.failed > 0) await finish('failed', 'send failed')
+      else result.sent++
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('[email-campaigns] drip row failed:', row.id, msg)
+      await finish('failed', msg.slice(0, 300))
+    }
+  }
+
+  return result
 }
 
 export async function loadTemplate(templateId: string): Promise<Template | null> {

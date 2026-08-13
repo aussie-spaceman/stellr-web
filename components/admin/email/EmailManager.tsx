@@ -90,7 +90,9 @@ export function EmailManager({
                       {c.templateName} ·{' '}
                       {c.trigger_type === 'scheduled'
                         ? `Scheduled ${c.scheduled_at ? formatDateTime(c.scheduled_at) : '—'}`
-                        : `Event: ${c.event_key}`}
+                        : `Event: ${c.event_key}${
+                            c.delay_days > 0 ? ` +${c.delay_days}d` : ''
+                          }${c.sequence_key ? ` · ${c.sequence_key}` : ''}`}
                       {c.sent_at && ` · sent ${formatDateShort(c.sent_at)}`}
                     </p>
                   </div>

@@ -13,6 +13,7 @@ import { createGroupRegistrationSheet, isGoogleSheetsConfigured, type SheetSeedR
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt, normalizeEmail } from '@/lib/member-enums'
+import { fillBlanksFromStored } from '@/lib/member-sync'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
 import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { syncObjectSpaceRoster, reconcileEventSpaceRoster } from '@/lib/space-inheritance'
@@ -429,6 +430,30 @@ export async function POST(req: NextRequest) {
         ec_phone: p.emergency_contact_phone || null,
         ec_relationship: p.emergency_contact_relationship || null,
       })
+    }
+
+    // ── Merge, don't replace ──────────────────────────────────────────────────
+    // ON CONFLICT DO UPDATE overwrites every column in the payload, so a field
+    // the organiser left blank would wipe what an existing member already has on
+    // file (phone, DOB, emergency contact). Pre-load the stored rows for these
+    // emails and fill each blank from them, so the batch below still writes in
+    // one round-trip but only *adds* information. Mirrors the same guarantee
+    // lib/member-sync.ts gives the join-link and spreadsheet paths.
+    const upsertEmails = [...memberUpsertByEmail.keys()]
+    if (upsertEmails.length > 0) {
+      const { data: storedMembers, error: storedError } = await db
+        .from('members')
+        .select('email, first_name, last_name, nickname, phone, date_of_birth, gender, grade, tshirt_size, age_bracket, event_role, health_conditions, ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship')
+        .in('email', upsertEmails)
+      if (storedError) {
+        // Non-fatal: fall through to the plain upsert rather than blocking the
+        // registration. Worst case is the pre-merge behaviour.
+        console.error('Existing-member preload error (non-fatal):', storedError)
+      }
+      for (const stored of storedMembers ?? []) {
+        const payload = memberUpsertByEmail.get(stored.email as string)
+        if (payload) fillBlanksFromStored(payload, stored)
+      }
     }
 
     const memberIdMap: Record<string, string | null> = {}

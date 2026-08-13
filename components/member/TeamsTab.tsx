@@ -76,7 +76,6 @@ interface TeamRegistration {
   member_pays_individually: boolean
   invoice_requested: boolean
   invoice_paid_at: string | null
-  details_method: string | null
   // Declared group size (migration 037). Null on older registrations.
   adult_count: number | null
   student_count: number | null

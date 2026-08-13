@@ -43,6 +43,25 @@ function compact<T extends Record<string, unknown>>(patch: T): Partial<T> {
   return Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) as Partial<T>
 }
 
+// Fill every blank field in an outgoing members payload from the row already on
+// file, mutating the payload in place.
+//
+// For callers that must use a batched `upsert(..., { onConflict: 'email' })` —
+// ON CONFLICT DO UPDATE overwrites every column in the payload, so a blank
+// optional field wipes what the member already had. Pre-loading the stored rows
+// and running them through this gives the batch the same merge guarantee
+// upsertMember gives the single-person paths, without giving up the one
+// round-trip. `email` is the match key and is never overwritten.
+export function fillBlanksFromStored(
+  payload: Record<string, unknown>,
+  stored: Record<string, unknown>,
+): void {
+  for (const [column, storedValue] of Object.entries(stored)) {
+    if (column === 'email' || storedValue == null) continue
+    if (!submitted(payload[column])) payload[column] = storedValue
+  }
+}
+
 // Create or update a `members` row from participant-shaped data, running the
 // display strings through the enum normalisers (see lib/member-enums).
 //

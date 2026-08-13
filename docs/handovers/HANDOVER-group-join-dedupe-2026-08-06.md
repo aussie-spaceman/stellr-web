@@ -108,41 +108,44 @@ match and inserted a duplicate. Prod data was already all-lowercase, so no backf
 
 ---
 
-## 3. Open items for a future session
+## 3. Follow-up pass — all four open items closed
 
-Ordered by value. None are blocking; all are small.
+Originally logged as open at close-out; all four were fixed in a follow-up pass. Recorded here with what was done, so
+the reasoning survives.
 
-### 3.1 Organiser group form still replaces rather than merges (medium)
-`app/api/register/group/route.ts` (~line 391–462) uses a **batched** `upsert(..., { onConflict: 'email' })` for the
-whole roster. It dedupes correctly — an existing member is matched by email, so the stated requirement is met — but it
-still writes blanks over stored values, the same data-loss shape fixed elsewhere in 1f. It was deliberately left alone:
-the batch is one round-trip for bulk registration, and it already skips members linked by `_linked_member_id`.
+### 3.1 Organiser group form now merges instead of replacing — FIXED
+`app/api/register/group/route.ts` used a **batched** `upsert(..., { onConflict: 'email' })` for the whole roster. It
+deduped correctly, but `ON CONFLICT DO UPDATE` overwrites every column in the payload, so a field the organiser left
+blank wiped what an existing member had on file — the same data-loss shape fixed elsewhere in 1f.
 
-**Next step:** either route it through `upsertMember` serially (simpler, slower for large groups), or add merge
-semantics to the batch by pre-loading the existing rows for those emails and filling blanks from them before the
-upsert. The second keeps the single round-trip.
+Fixed **without** giving up the single round-trip: the stored rows for those emails are pre-loaded in one `SELECT`,
+and each payload's blanks are filled from them before the batch runs. The blank-fill is
+`fillBlanksFromStored()`, exported from `lib/member-sync.ts` so the batched path and `upsertMember` share one
+definition of "blank" (null/undefined/whitespace) rather than drifting apart. Covered by two tests.
 
-### 3.2 Dedupe merge not yet exercised in prod against a pre-existing member (medium)
-Unit tests cover the merge, and prod shows zero duplicate members — but no confirmed production join has occurred
-where the submitting email *already had* a member record with data that blanks could have wiped. The one real
-post-deploy join (`4efaf16e`, 2026-08-06 18:53) predates `512d8a1`.
+A preload failure is non-fatal and falls through to the plain upsert — worst case is the previous behaviour, not a
+blocked registration.
 
-**Next step:** one deliberate test — take an existing member with a phone/DOB/EC on file, join a group via the link
-leaving those fields blank, and confirm the stored values survive and no second member row appears. Note `fdad774`
-later reworked `group-join/route.ts` for individual payments, which is extra reason to re-confirm.
+### 3.2 Merge verified against the real database — DONE
+A throwaway member was seeded in the production database with a full profile (phone, DOB, gender, grade, health,
+all five `ec_*` fields, `event_role = teacher`), then re-resolved through `upsertMember` with every one of those
+blank and the email deliberately re-cased and padded. **All 13 assertions passed:** matched the existing row, exactly
+one row for the email, every stored field preserved, `teacher` not demoted, and the one genuinely submitted change
+(t-shirt S → L) applied. The test member was deleted afterwards; a follow-up query confirmed zero residue and zero
+orphaned `member_roles`.
 
-### 3.3 Orphaned Google Sheet from the original failed registration (low)
-Registration `a24fd7f3-7497-4bf7-863e-d683ea72fdb0` still has `spreadsheet_id = null`. Its abandoned sheet
-`1OXMvEPzs4rVhgR24p5jZk9lYX5bN-7mCSJ-arYai_18` sits in Drive unshared and unlinked (the sharing step never ran).
+This exercises member resolution only — deliberately *not* a full end-to-end join, which would have sent real emails
+and DocuSign envelopes from a test. The membership_id sequence advanced by one (`0000130`), which is harmless.
 
-**Next step:** it is test data — trash the orphan sheet in Drive. Do not try to relink it; it was never shared, so it
-is unusable. Nothing to repair for a real customer.
+### 3.3 Orphaned Google Sheet — TRASHED
+Identity confirmed before acting (`Uruguay Environmental Design Challenge — brighton high school utah — Group
+Registration`, created 2026-08-06T17:23:25Z, six seconds after registration `a24fd7f3`), and zero registrations
+referenced its id. **Trashed, not permanently deleted** — recoverable from Drive trash if ever needed.
+`a24fd7f3.spreadsheet_id` is still null by design: that sheet was never shared, so it was never usable.
 
-### 3.4 `details_method` is now a dead field in TeamsTab (trivial)
-`components/member/TeamsTab.tsx:79` still declares `details_method: string | null` in the registration interface, but
-nothing in the component body reads it since the join-link condition was removed.
-
-**Next step:** drop the field from the interface, or leave it — it is inert.
+### 3.4 `details_method` dead field — REMOVED
+Dropped from the registration interface in `components/member/TeamsTab.tsx`. Both teams API routes still select the
+column for their own use; only the unused client-side declaration went.
 
 ### 3.5 `/api/members/exists` only reports accounts that have a Clerk login (by design — no action)
 Someone in the members table *without* a login isn't told "we found your record"; they fill the form and the server
@@ -166,5 +169,14 @@ lib/google-sheets.ts                                       drop editors on warni
 lib/email.ts                                               both links always; roster-complete wording
 lib/member-sync.ts                                         merge-not-replace upsert (the core change)
 lib/sheet-participant-sync.ts                              normalised email, EC/health to member record
-lib/member-sync.test.ts                                    new — 4 tests locking the merge contract
+lib/member-sync.test.ts                                    new — tests locking the merge contract
+```
+
+Follow-up pass (section 3):
+
+```
+app/api/register/group/route.ts    preload stored rows, fill blanks before the batched upsert
+lib/member-sync.ts                 export fillBlanksFromStored — one shared definition of "blank"
+lib/member-sync.test.ts            +2 tests for the batched path (6 total)
+components/member/TeamsTab.tsx     drop the dead details_method field
 ```

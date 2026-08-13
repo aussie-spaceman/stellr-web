@@ -1,5 +1,15 @@
 # Teacher onboarding — gap review & plan
 
+> **Status, 13 Aug 2026.** Phases 1 and 2 are **built and committed** on branch
+> `feat/teacher-onboarding-2026-08-13` (`aefee2a`) — not merged, not deployed.
+> 192 tests pass; migration 136 dry-run applied and rolled back cleanly on prod.
+> Phase 3 copy is drafted in `docs/teacher-drip-copy-2026-08-13.md`.
+> **Outstanding and needing you:** run the role backfill
+> (`docs/backfill-member-roles-2026-08-13.sql` — my prod write was blocked), add the
+> `campaign-drip` cron to `vercel.json`, create the templates/campaigns in
+> `/admin/email`, and email the two existing teachers personally.
+> See §8 for the exact hand-off list.
+
 **Date:** 13 Aug 2026
 **Trigger:** first real teacher registration — `mmmatlock@wcpss.net` (Wake STEM ECHS), 10 Aug 2026.
 **Scope:** the teacher self-serve signup journey, reviewed against the four user-story requirements.
@@ -295,7 +305,53 @@ the first large send.
 
 ---
 
-## 7. Open questions for David
+## 7. Hand-off — what is built, what needs you
+
+### Built and committed (`aefee2a`, branch `feat/teacher-onboarding-2026-08-13`)
+
+| Change | Files |
+|---|---|
+| Transactional account confirmation (bypasses the consent filter) | `lib/registration-notify.ts` |
+| Staff alert on every registration | `lib/registration-notify.ts`, onboarding route |
+| `member_roles` seeded from the declared role | `app/api/members/onboarding/route.ts` |
+| Same sync on the Clerk webhook's link branch | `app/api/webhooks/clerk/route.ts` |
+| Drip: `delay_days` + queue + claim-before-send | migration 136, `lib/email-campaigns.ts` |
+| Drip cron | `app/api/cron/campaign-drip/route.ts` |
+| Admin: delay + sequence fields, shown in the list | `CampaignForm`, `EmailManager`, types, admin API |
+| Directory/space-page access agreement | `lib/spaces.ts` |
+| Tests for delay routing and re-checked eligibility | `lib/email-campaigns.test.ts` (6 tests) |
+
+Verification: 192/192 tests pass; `tsc --noEmit` clean; migration 136 applied and
+rolled back against prod inside a transaction. The delay-routing test was
+mutation-checked — inverting the delay branch fails it.
+
+### Needs you
+
+1. **Run the role backfill** — `docs/backfill-member-roles-2026-08-13.sql`.
+   13 rows, 7 members, dry-run verified. My write to prod was blocked by a
+   guardrail, so this one is yours. Reversible via the `source` marker.
+2. **Add the cron to `vercel.json`** — the entry is written but *not committed*:
+   ```json
+   { "path": "/api/cron/campaign-drip", "schedule": "30 7 * * *" }
+   ```
+   The file also carries another session's `lead-capture-failures` entry whose
+   route is still untracked, so committing the file as-is would point a prod cron
+   at a 404. Land the two together, or add mine when that branch merges.
+   **Until this is added, delayed campaigns queue but never send.**
+3. **Create the templates and campaigns** in `/admin/email` — copy is in
+   `docs/teacher-drip-copy-2026-08-13.md`, with a pre-activation checklist.
+4. **Email the two existing teachers personally.** Activating the drip will not
+   reach them: `member.created` already fired.
+5. **Apply migration 136 to prod** as part of the deploy.
+
+### Deploy order
+
+Migration 136 first (the code reads `delay_days`), then the app, then the cron
+entry, then activate the campaigns. Steps 1 and 4 can happen any time.
+
+---
+
+## 8. Open questions for David
 
 1. **Confirmation email — transactional direct send, or consent-bypass flag on the campaign
    engine?** Recommendation above is the direct send.

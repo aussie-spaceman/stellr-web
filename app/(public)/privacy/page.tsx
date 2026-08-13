@@ -15,9 +15,11 @@ export default function PrivacyPage() {
           Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 10-Aug-2026
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
-          <strong>Recent update:</strong> This policy has been updated to reflect our use of
-          DocuSign for electronic parental consent for minor participants, and to provide additional
-          disclosures regarding FERPA and our electronic consent record practices.
+          <strong>Recent update (10 Aug 2026):</strong> We have updated Sections 5, 7 and 9 to
+          describe our use of cookies and advertising measurement, including the cookie categories
+          we use, the providers involved, and how to give or withdraw consent at any time via{' '}
+          <strong>Cookie settings</strong> at the bottom of any page. Earlier updates covered our use
+          of DocuSign for electronic parental consent and additional FERPA disclosures.
         </p>
 
         {/* 1. Introduction */}

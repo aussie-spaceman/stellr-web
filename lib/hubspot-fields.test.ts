@@ -71,19 +71,52 @@ describe('mapEventDemographic', () => {
   })
 })
 
+/**
+ * Stellr names events for the school year they end in, not the calendar year
+ * they occur in — the Nevada challenge runs in November 2026 and is a 2027
+ * event. Tagging it 2026 made `event_year = 2027` return nothing, which is the
+ * exact segmentation failure this mapping exists to prevent.
+ */
 describe('mapEventYear', () => {
-  it('prefers campaignYear over the event date', () => {
-    expect(mapEventYear({ campaignYear: 2027, date: '2026-11-06' })).toBe('2027')
+  it('maps an autumn event to the school year it ends in', () => {
+    // November 2026 → the 2026–27 school year → 2027, matching the slug.
+    expect(mapEventYear({ date: '2026-11-06' })).toBe('2027')
   })
 
-  it('falls back to the year of the event date', () => {
-    expect(mapEventYear({ date: '2026-11-06' })).toBe('2026')
+  it('maps a spring event to the same school year', () => {
+    expect(mapEventYear({ date: '2027-03-14' })).toBe('2027')
+  })
+
+  it('puts August on the new school year and May on the old one', () => {
+    expect(mapEventYear({ date: '2026-08-01' })).toBe('2027')
+    expect(mapEventYear({ date: '2026-05-31' })).toBe('2026')
+  })
+
+  it('treats the summer gap as the year that just ended', () => {
+    // June/July sit outside the teaching year; no boundary is invented.
+    expect(mapEventYear({ date: '2026-06-15' })).toBe('2026')
+    expect(mapEventYear({ date: '2026-07-31' })).toBe('2026')
+  })
+
+  it('converts a campaign calendar year using its season', () => {
+    // Sanity documents campaignYear as the calendar year.
+    expect(mapEventYear({ campaignYear: 2026, season: 'fall' })).toBe('2027')
+    expect(mapEventYear({ campaignYear: 2027, season: 'spring' })).toBe('2027')
+  })
+
+  it('falls back to the date when a campaign has no season', () => {
+    expect(mapEventYear({ campaignYear: 2026, date: '2026-11-06' })).toBe('2027')
   })
 
   it('rejects years outside the portal enumeration', () => {
-    expect(mapEventYear({ campaignYear: 2019 })).toBeUndefined()
-    expect(mapEventYear({ campaignYear: 2031 })).toBeUndefined()
+    expect(mapEventYear({ campaignYear: 2018, season: 'spring' })).toBeUndefined()
+    expect(mapEventYear({ campaignYear: 2031, season: 'spring' })).toBeUndefined()
     expect(mapEventYear({})).toBeUndefined()
+  })
+
+  it('ignores a malformed date rather than guessing', () => {
+    expect(mapEventYear({ date: '2026' })).toBeUndefined()
+    expect(mapEventYear({ date: 'not-a-date' })).toBeUndefined()
   })
 })
 
@@ -99,16 +132,22 @@ describe('eventProperties', () => {
   }
 
   it('builds the full property patch for a well-formed event', () => {
-    const { properties, unmapped } = eventProperties(nevada, 'nevada-space-design-challenge-2026')
+    const { properties, unmapped } = eventProperties(nevada, 'nevada-space-design-challenge-2027')
 
     expect(properties).toEqual({
-      [HS.eventSlug]: 'nevada-space-design-challenge-2026',
+      [HS.eventSlug]: 'nevada-space-design-challenge-2027',
       [HS.eventLocation]: 'Nevada [Las Vegas]',
-      [HS.eventYear]: '2026',
+      // November 2026 is the 2027 school year — the year in the slug.
+      [HS.eventYear]: '2027',
       [HS.eventTheme]: 'Space',
       [HS.eventDemographic]: 'High School',
     })
     expect(unmapped).toEqual([])
+  })
+
+  it('derives a year that agrees with the year in the slug', () => {
+    const { properties } = eventProperties(nevada, 'nevada-space-design-challenge-2027')
+    expect(properties[HS.eventSlug]).toContain(properties[HS.eventYear])
   })
 
   it('always records the slug, which is the join key back to the website', () => {
@@ -125,7 +164,7 @@ describe('eventProperties', () => {
     expect(properties[HS.eventLocation]).toBeUndefined()
     expect(properties[HS.eventTheme]).toBeUndefined()
     // The mappable fields still land.
-    expect(properties[HS.eventYear]).toBe('2026')
+    expect(properties[HS.eventYear]).toBe('2027')
     expect(unmapped).toHaveLength(2)
     expect(unmapped.join(' ')).toMatch(/location/)
     expect(unmapped.join(' ')).toMatch(/theme/)

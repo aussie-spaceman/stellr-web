@@ -111,6 +111,13 @@ export const NOTIFY_STATUS = {
   notified: 'Notified',
   registered: 'Registered',
   lapsed: 'Lapsed',
+  /**
+   * Opted out of waitlist mail. Distinct from `lapsed`, which means "never
+   * converted" — conflating the two would let an unsubscribe be re-mailed by
+   * anything that treats Lapsed as re-engageable. The send only ever targets
+   * `Requested`, so this suppresses by construction.
+   */
+  unsubscribed: 'Unsubscribed',
 } as const
 
 export const REGISTRATION_INTEREST = {

@@ -29,6 +29,14 @@ export async function deletionPreflight(entity: string, id: string): Promise<Pre
         query = query.eq(dep.activeFilter.column, dep.activeFilter.value as never)
       }
 
+      if (dep.inactiveValues) {
+        const { column, values } = dep.inactiveValues
+        // A bare NOT IN evaluates to NULL for a NULL column and would silently
+        // drop those rows from the count, so match null explicitly — an unset
+        // status means "still live", not "already deleted".
+        query = query.or(`${column}.is.null,${column}.not.in.(${values.join(',')})`)
+      }
+
       if (dep.activeJoin) {
         const { embed, column, removedValue } = dep.activeJoin
         // Count the link unless the parent is explicitly soft-deleted; null/any

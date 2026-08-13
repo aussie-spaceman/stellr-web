@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { ROLES_FOR_BRACKET, DEFAULT_ROLE_FOR_BRACKET, getEligibleTierNames } from '@/lib/membership-rules'
 import { EventHistory } from '@/components/member/EventHistory'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
+import { TERMINAL_SESSION_STATUSES } from '@/lib/deletion/registry'
 import { MemberMembershipManager } from '@/components/admin/MemberMembershipManager'
 import { MemberCompliancePanel, type MemberCompliance } from '@/components/admin/MemberCompliancePanel'
 import { MemberAccessPanel } from '@/components/admin/MemberAccessPanel'
@@ -63,6 +64,17 @@ interface Registration {
   type: string | null
 }
 
+interface HostedSession {
+  id: string
+  title: string | null
+  session_type: string | null
+  status: string | null
+  scheduled_start: string | null
+  cohort_name: string | null
+  /** Mentoring session whose cohort was deleted — invisible everywhere else. */
+  orphaned: boolean
+}
+
 interface Props {
   member: Member
   tiers: Tier[]
@@ -70,6 +82,8 @@ interface Props {
   ethnicityOptions: Option[]
   allergyOptions: Option[]
   registrations: Registration[]
+  /** Coaching/mentoring sessions this member hosts (newest first). */
+  sessions: HostedSession[]
   /** The member's 7-digit Membership ID (from participants.membership_id). */
   membershipId: string | null
   /** First page of the member's activity log (newest first). */
@@ -107,7 +121,7 @@ function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, membershipId, activity, compliance }: Props) {
+export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, sessions, membershipId, activity, compliance }: Props) {
   const router = useRouter()
   const [form, setForm] = useState({
     first_name: member.first_name,
@@ -490,6 +504,58 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Coaching/mentoring sessions hosted by this member. Live ones block a
+              member delete, and this is the only admin surface that lists them —
+              the mentoring calendar hides any session whose cohort is gone. */}
+          {sessions.length > 0 && (
+            <div className="bg-white rounded-xl border border-brand-border p-6">
+              <h2 className="text-base font-semibold text-brand-blue-dark mb-1">Coaching &amp; Mentoring (as host)</h2>
+              <p className="text-xs text-brand-muted-soft mb-4">
+                Sessions still scheduled or requested block deleting this member. Cancelled and
+                completed sessions are history and don&apos;t.
+              </p>
+              <div className="space-y-3">
+                {sessions.map((s) => {
+                  const blocking = !TERMINAL_SESSION_STATUSES.includes(s.status ?? '')
+                  return (
+                    <div key={s.id} className="flex items-start justify-between gap-3 py-3 border-b border-brand-hairline last:border-0">
+                      <div>
+                        <p className="text-sm font-medium text-brand-blue-dark">{s.title ?? 'Session'}</p>
+                        <p className="text-xs text-brand-muted-soft mt-0.5 capitalize">
+                          {s.session_type ?? 'session'}
+                          {s.cohort_name ? ` · ${s.cohort_name}` : ''}
+                          {s.scheduled_start ? ` · ${formatDateShort(s.scheduled_start)}` : ''}
+                        </p>
+                        {s.orphaned && (
+                          <p className="text-xs text-amber-700 mt-0.5">
+                            Orphaned — its cohort was deleted, so it doesn&apos;t appear in the mentoring calendar.
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span
+                          className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
+                            blocking ? 'bg-yellow-100 text-yellow-700' : 'bg-brand-canvas text-brand-muted-soft'
+                          }`}
+                          title={blocking ? 'Blocks deleting this member' : 'Does not block deletion'}
+                        >
+                          {s.status ?? 'scheduled'}
+                        </span>
+                        <DeleteEntityButton
+                          entity="session"
+                          id={s.id}
+                          name={s.title ?? 'this session'}
+                          label="Delete"
+                          className="text-xs font-medium text-red-600 hover:text-red-800 border border-red-200 px-2.5 py-1 rounded-lg"
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}

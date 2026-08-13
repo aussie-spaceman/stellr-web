@@ -161,8 +161,12 @@ export async function addGlobalRole(
   return { ok: true }
 }
 
-/** event_role classification → the global canonical role(s) it implies. */
-function classificationRolesFor(eventRole: string): MemberRole[] {
+/**
+ * event_role classification → the global canonical role(s) it implies.
+ * Exported so a backfill can preview what the sync would write without
+ * re-deriving the mapping and drifting from it.
+ */
+export function classificationRolesFor(eventRole: string): MemberRole[] {
   switch (eventRole) {
     case 'teacher': return ['teacher']
     case 'participant': return ['participant']

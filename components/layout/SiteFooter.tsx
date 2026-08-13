@@ -60,7 +60,7 @@ const socialLinks = [
 function CopyrightBar() {
   return (
     <div className="border-t border-white/[0.08]">
-      <div className="mx-auto max-w-chrome px-8 py-5 flex flex-col sm:flex-row items-center justify-between flex-wrap gap-2.5 text-[13px] text-[#5A6490] font-sans">
+      <div className="mx-auto max-w-chrome px-5 sm:px-8 py-5 flex flex-col sm:flex-row items-center justify-between flex-wrap gap-2.5 text-[13px] text-[#5A6490] font-sans">
         <span>
           2026 © Stellr Education&nbsp;&nbsp;|&nbsp;&nbsp;Registered 501(c)(3)&nbsp;&nbsp;|&nbsp;&nbsp;Built In Utah, Educating The Globe
         </span>
@@ -95,20 +95,22 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
       {/* Blue accent bar */}
       <div className="h-[5px] bg-primary" />
 
-      {/* Main grid */}
-      <div
-        className="mx-auto max-w-chrome px-8"
-        style={{ padding: '56px 32px 48px' }}
-      >
+      {/* Main grid.
+          The column template was previously a hard-coded six columns with the
+          brand column pinned at a 200px minimum, which works out to roughly
+          770px of minimum width — about double a phone screen. On mobile that
+          pushed three of the five link columns off the right edge and made
+          every page scroll sideways. Found on a real iPhone; a 685px viewport
+          is wide enough to hide it entirely, which is why tooling missed it.
+
+          Collapses to two columns on phones and three on tablets. The desktop
+          template is preserved exactly, so nothing above 1024px changes. */}
+      <div className="mx-auto max-w-chrome px-5 pt-12 pb-10 sm:px-8 sm:pt-14 sm:pb-12">
         <div
-          className="grid items-start"
-          style={{
-            gridTemplateColumns: 'minmax(200px,1.1fr) repeat(5,1fr)',
-            gap: '32px 24px',
-          }}
+          className="grid grid-cols-2 items-start gap-x-6 gap-y-10 sm:grid-cols-3 lg:gap-x-6 lg:gap-y-8 lg:[grid-template-columns:minmax(200px,1.1fr)_repeat(5,1fr)]"
         >
-          {/* Brand column */}
-          <div>
+          {/* Brand column — full width until the link columns have room. */}
+          <div className="col-span-2 sm:col-span-3 lg:col-span-1">
             <div className="inline-block mb-5 bg-white rounded-[14px] p-[18px_22px]">
               <Image
                 src="/images/logo-horiz-tight.svg"

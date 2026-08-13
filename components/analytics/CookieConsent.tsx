@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { pushDataLayer } from '@/lib/analytics'
-import { applyConsent, readConsent, writeConsent } from '@/lib/consent'
+import { CONSENT_OPEN_EVENT, applyConsent, readConsent, writeConsent } from '@/lib/consent'
 
 /**
  * Cookie consent banner, gating advertising tags only.
@@ -20,6 +20,8 @@ import { applyConsent, readConsent, writeConsent } from '@/lib/consent'
  */
 export function CookieConsent() {
   const [visible, setVisible] = useState(false)
+  /** The stored choice, when the banner was reopened rather than shown cold. */
+  const [current, setCurrent] = useState<boolean | null>(null)
 
   useEffect(() => {
     const stored = readConsent()
@@ -28,9 +30,18 @@ export function CookieConsent() {
       // ConsentMode.tsx already did this inline for the accept case; repeating
       // it is idempotent and also covers a decline written by an older version.
       applyConsent(stored.ads)
-      return
+    } else {
+      setVisible(true)
     }
-    setVisible(true)
+
+    // The footer link reopens the banner at any time. Withdrawing has to be as
+    // easy as giving — telling people to clear their browser data is not that.
+    function reopen() {
+      setCurrent(readConsent()?.ads ?? null)
+      setVisible(true)
+    }
+    window.addEventListener(CONSENT_OPEN_EVENT, reopen)
+    return () => window.removeEventListener(CONSENT_OPEN_EVENT, reopen)
   }, [])
 
   function decide(ads: boolean) {
@@ -73,6 +84,13 @@ export function CookieConsent() {
             Read our privacy policy
           </Link>
           .
+          {current !== null && (
+            // Reopened from the footer: say what is currently set, so the
+            // choice on offer is a change rather than a guess.
+            <span className="mt-1 block font-semibold text-brand-blue-dark">
+              Advertising cookies are currently {current ? 'on' : 'off'}.
+            </span>
+          )}
         </p>
         <div className="flex shrink-0 gap-3">
           <button

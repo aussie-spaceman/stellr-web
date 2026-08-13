@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CookieConsent } from '@/components/analytics/CookieConsent'
-import { CONSENT_STORAGE_KEY } from '@/lib/consent'
+import { CONSENT_STORAGE_KEY, openConsentSettings } from '@/lib/consent'
 
 /**
  * The behaviour under test is the part that is not obvious from reading the
@@ -101,5 +101,74 @@ describe('CookieConsent', () => {
     const buttons = Array.from(region.querySelectorAll('button')).map((b) => b.textContent?.trim())
     expect(buttons).toHaveLength(2)
     expect(buttons.some((b) => /essential only/i.test(b ?? ''))).toBe(true)
+  })
+
+  /**
+   * Reopening is the withdrawal route. If these break, the only way back is
+   * "clear your browser data", which is the state the privacy policy no longer
+   * describes.
+   */
+  describe('reopening from the footer', () => {
+    it('reopens for someone who already decided', async () => {
+      window.localStorage.setItem(
+        CONSENT_STORAGE_KEY,
+        JSON.stringify({ ads: true, decidedAt: '2026-08-12T00:00:00.000Z' }),
+      )
+      render(<CookieConsent />)
+      await waitFor(() => expect(consentCalls().length).toBeGreaterThan(0))
+      expect(screen.queryByRole('region', { name: /cookie consent/i })).toBeNull()
+
+      openConsentSettings()
+
+      expect(await screen.findByRole('region', { name: /cookie consent/i })).toBeTruthy()
+    })
+
+    it('states the current setting so the choice is a change, not a guess', async () => {
+      window.localStorage.setItem(
+        CONSENT_STORAGE_KEY,
+        JSON.stringify({ ads: true, decidedAt: '2026-08-12T00:00:00.000Z' }),
+      )
+      render(<CookieConsent />)
+      await waitFor(() => expect(consentCalls().length).toBeGreaterThan(0))
+
+      openConsentSettings()
+      expect(await screen.findByText(/advertising cookies are currently on/i)).toBeTruthy()
+    })
+
+    it('shows "off" when advertising was previously declined', async () => {
+      window.localStorage.setItem(
+        CONSENT_STORAGE_KEY,
+        JSON.stringify({ ads: false, decidedAt: '2026-08-12T00:00:00.000Z' }),
+      )
+      render(<CookieConsent />)
+      await waitFor(() => expect(consentCalls().length).toBeGreaterThan(0))
+
+      openConsentSettings()
+      expect(await screen.findByText(/advertising cookies are currently off/i)).toBeTruthy()
+    })
+
+    it('withdrawing consent denies ad_storage and persists the change', async () => {
+      const user = userEvent.setup()
+      window.localStorage.setItem(
+        CONSENT_STORAGE_KEY,
+        JSON.stringify({ ads: true, decidedAt: '2026-08-12T00:00:00.000Z' }),
+      )
+      render(<CookieConsent />)
+      await waitFor(() => expect(consentCalls().length).toBeGreaterThan(0))
+
+      openConsentSettings()
+      await user.click(await screen.findByRole('button', { name: /essential only/i }))
+
+      const last = consentCalls().filter((c) => c[1] === 'update').pop()
+      expect(last?.[2]?.ad_storage).toBe('denied')
+      expect(JSON.parse(window.localStorage.getItem(CONSENT_STORAGE_KEY)!).ads).toBe(false)
+      expect(screen.queryByRole('region', { name: /cookie consent/i })).toBeNull()
+    })
+
+    it('does not show the current-setting line on a first, cold visit', async () => {
+      render(<CookieConsent />)
+      await screen.findByRole('region', { name: /cookie consent/i })
+      expect(screen.queryByText(/advertising cookies are currently/i)).toBeNull()
+    })
   })
 })

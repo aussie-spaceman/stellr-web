@@ -21,6 +21,7 @@ export default async function AdminMemberPage({
     { data: ethnicityOptions },
     { data: allergyOptions },
     { data: registrations },
+    { data: sessions },
     { data: activity },
   ] = await Promise.all([
     db
@@ -44,6 +45,15 @@ export default async function AdminMemberPage({
       .select('id, event_title, event_slug, school_name, status, created_at, registrant_role, type')
       .eq('teacher_member_id', id)
       .order('created_at', { ascending: false }),
+    // Sessions this member hosts. These block a member delete while still live,
+    // and the mentoring calendar only lists sessions that still have a cohort
+    // (mentoring_cohorts!inner) — so this is the one place an orphaned session
+    // is visible and removable.
+    db
+      .from('sessions')
+      .select('id, title, session_type, status, scheduled_start, cohort_id, mentoring_cohorts(name)')
+      .eq('host_member_id', id)
+      .order('scheduled_start', { ascending: false }),
     db
       .from('member_activity_log')
       .select('id, actor_type, actor_label, category, action, summary, metadata, created_at')
@@ -53,6 +63,28 @@ export default async function AdminMemberPage({
   ])
 
   if (!member) notFound()
+
+  // Flatten the cohort embed (PostgREST returns it as an object or a one-element
+  // array depending on the relationship it infers). A mentoring session with no
+  // cohort was orphaned when its cohort was purged (FK is ON DELETE SET NULL);
+  // coaching sessions are 1:1 and never have one.
+  type SessionRow = {
+    id: string; title: string | null; session_type: string | null; status: string | null
+    scheduled_start: string | null; cohort_id: string | null
+    mentoring_cohorts: { name: string } | { name: string }[] | null
+  }
+  const hostedSessions = ((sessions ?? []) as unknown as SessionRow[]).map((s) => {
+    const c = Array.isArray(s.mentoring_cohorts) ? s.mentoring_cohorts[0] : s.mentoring_cohorts
+    return {
+      id: s.id,
+      title: s.title,
+      session_type: s.session_type,
+      status: s.status,
+      scheduled_start: s.scheduled_start,
+      cohort_name: s.cohort_id ? c?.name ?? null : null,
+      orphaned: s.session_type === 'mentoring' && !s.cohort_id,
+    }
+  })
 
   // Background-check / license compliance (PRD §13) — null when not required.
   const summary = await loadComplianceForMember(db, id)
@@ -95,6 +127,7 @@ export default async function AdminMemberPage({
       ethnicityOptions={ethnicityOptions ?? []}
       allergyOptions={allergyOptions ?? []}
       registrations={registrations ?? []}
+      sessions={hostedSessions}
       membershipId={canonicalId ?? (firstParticipant as { membership_id?: string } | null)?.membership_id ?? null}
       activity={activity ?? []}
       compliance={compliance}

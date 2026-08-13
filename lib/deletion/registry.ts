@@ -14,6 +14,11 @@ import type { EntityDef } from './types'
 
 const ISO = () => new Date().toISOString()
 
+// Session statuses that mean the session is already cancelled or finished, so
+// it can never block a delete. Exported so the admin UI's "blocks deletion"
+// hint can't drift from what preflight actually counts.
+export const TERMINAL_SESSION_STATUSES = ['cancelled', 'declined', 'completed']
+
 export const ENTITIES: Record<string, EntityDef> = {
   // ---- Members -----------------------------------------------------------
   member: {
@@ -27,9 +32,16 @@ export const ENTITIES: Record<string, EntityDef> = {
     // Most member-linked tables are ON DELETE CASCADE / SET NULL in the DB, so
     // a member can generally be removed. We still surface heavy linkages so an
     // admin understands the blast radius before a hard purge.
+    // Only LIVE links block. Both FKs are ON DELETE SET NULL in the DB, so a
+    // withdrawn registration or a cancelled/completed session is history the
+    // member delete can safely leave behind — counting those made the member
+    // permanently undeletable, because soft-deleting the child (the only delete
+    // the admin has) leaves the row in place.
     dependents: [
-      { table: 'registrations', fkColumn: 'teacher_member_id', label: 'event registrations (as teacher)' },
-      { table: 'sessions', fkColumn: 'host_member_id', label: 'coaching/mentoring sessions (as host)' },
+      { table: 'registrations', fkColumn: 'teacher_member_id', label: 'event registrations (as teacher)',
+        inactiveValues: { column: 'status', values: ['withdrawn', 'cancelled'] } },
+      { table: 'sessions', fkColumn: 'host_member_id', label: 'coaching/mentoring sessions (as host)',
+        inactiveValues: { column: 'status', values: TERMINAL_SESSION_STATUSES } },
     ],
   },
 
@@ -145,8 +157,10 @@ export const ENTITIES: Record<string, EntityDef> = {
     keyType: 'uuid',
     softDelete: { set: { is_active: false } },
     // cohort_members cascade; sessions referencing the cohort are SET NULL.
+    // Only still-live sessions block (see the member entity above).
     dependents: [
-      { table: 'sessions', fkColumn: 'cohort_id', label: 'scheduled sessions' },
+      { table: 'sessions', fkColumn: 'cohort_id', label: 'scheduled sessions',
+        inactiveValues: { column: 'status', values: TERMINAL_SESSION_STATUSES } },
     ],
   },
 

@@ -24,6 +24,13 @@ export interface Dependent {
   label: string
   // Optional filter so already-soft-deleted children don't count as blockers.
   activeFilter?: { column: string; value: unknown }
+  // Optional inverse of activeFilter: values of `column` that mean the child is
+  // ALREADY deleted (a soft-delete state, e.g. sessions → 'cancelled') or is
+  // finished history (e.g. 'completed'). Those rows must not block — there is
+  // nothing left for the admin to "delete first", and soft-deleting a child
+  // would otherwise leave the parent permanently undeletable. A NULL in the
+  // column counts as active (matching activeJoin's `is_active !== false` rule).
+  inactiveValues?: { column: string; values: string[] }
   // Optional: when the "active" flag lives on a JOINED parent rather than on the
   // dependent row itself (e.g. member_schools links → members.is_active), count a
   // link only if its parent still exists AND isn't soft-deleted. Applied as an

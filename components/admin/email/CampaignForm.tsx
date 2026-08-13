@@ -18,6 +18,8 @@ export function CampaignForm({ templates, tiers }: { templates: EmailTemplate[];
   const [triggerType, setTriggerType] = useState<'scheduled' | 'event'>('scheduled')
   const [scheduledAt, setScheduledAt] = useState('')
   const [eventKey, setEventKey] = useState(EVENT_KEYS[0].key)
+  const [delayDays, setDelayDays] = useState(0)
+  const [sequenceKey, setSequenceKey] = useState('')
   const [activeOnly, setActiveOnly] = useState(true)
   const [excludeMinors, setExcludeMinors] = useState(true)
   const [tierIds, setTierIds] = useState<string[]>([])
@@ -60,6 +62,8 @@ export function CampaignForm({ templates, tiers }: { templates: EmailTemplate[];
           triggerType,
           scheduledAt: triggerType === 'scheduled' ? new Date(scheduledAt).toISOString() : undefined,
           eventKey: triggerType === 'event' ? eventKey : undefined,
+          delayDays: triggerType === 'event' ? delayDays : undefined,
+          sequenceKey: triggerType === 'event' && sequenceKey.trim() ? sequenceKey.trim() : undefined,
           audience: audience(),
         }),
       })
@@ -124,6 +128,33 @@ export function CampaignForm({ templates, tiers }: { templates: EmailTemplate[];
             {EVENT_KEYS.map((k) => <option key={k.key} value={k.key}>{k.label} — {k.key}</option>)}
           </select>
           <p className="mt-1 text-xs text-brand-muted-soft">Sends to a member when app code fires this event (still filtered by the audience below).</p>
+
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-brand-muted mb-1">Send after</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" min={0} max={365} value={delayDays}
+                  onChange={(e) => setDelayDays(Math.max(0, Math.min(365, Number(e.target.value) || 0)))}
+                  className={`${input} w-24`}
+                />
+                <span className="text-sm text-brand-muted">days</span>
+              </div>
+              <p className="mt-1 text-xs text-brand-muted-soft">
+                {delayDays === 0
+                  ? 'Sends immediately when the event fires.'
+                  : `Queued and sent ${delayDays} day${delayDays === 1 ? '' : 's'} later. Consent is re-checked at send time.`}
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-brand-muted mb-1">Sequence <span className="font-normal text-brand-muted-soft">(optional)</span></label>
+              <input
+                value={sequenceKey} onChange={(e) => setSequenceKey(e.target.value)}
+                maxLength={100} placeholder="teacher-welcome" className={input}
+              />
+              <p className="mt-1 text-xs text-brand-muted-soft">Groups the emails of one drip together in the list.</p>
+            </div>
+          </div>
         </div>
       )}
 

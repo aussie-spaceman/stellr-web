@@ -18,6 +18,9 @@ const createSchema = z
     triggerType: z.enum(['scheduled', 'event']),
     scheduledAt: z.string().datetime().optional(),
     eventKey: z.string().trim().min(1).max(100).optional(),
+    // Drip step: days after the event fires before this campaign sends. 0 = inline.
+    delayDays: z.number().int().min(0).max(365).optional(),
+    sequenceKey: z.string().trim().min(1).max(100).optional(),
     audience: audienceSchema.optional(),
   })
   .refine((d) => d.triggerType !== 'scheduled' || !!d.scheduledAt, { message: 'scheduledAt required for scheduled campaigns', path: ['scheduledAt'] })
@@ -31,7 +34,7 @@ export async function GET() {
   const db = supabaseServer()
   const { data: campaigns } = await db
     .from('email_campaigns')
-    .select('id, name, trigger_type, scheduled_at, event_key, status, audience, sent_at, created_at, email_templates(name)')
+    .select('id, name, trigger_type, scheduled_at, event_key, delay_days, sequence_key, status, audience, sent_at, created_at, email_templates(name)')
     .neq('status', 'archived')
     .order('created_at', { ascending: false })
 
@@ -60,7 +63,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid request' }, { status: 400 })
   }
-  const { name, templateId, triggerType, scheduledAt, eventKey, audience } = parsed.data
+  const { name, templateId, triggerType, scheduledAt, eventKey, delayDays, sequenceKey, audience } = parsed.data
 
   const db = supabaseServer()
   const admin = await getCurrentMember()
@@ -72,6 +75,10 @@ export async function POST(req: Request) {
       trigger_type: triggerType,
       scheduled_at: scheduledAt ?? null,
       event_key: triggerType === 'event' ? eventKey : null,
+      // A delay only means anything for event campaigns; a scheduled one already
+      // carries its own send time.
+      delay_days: triggerType === 'event' ? (delayDays ?? 0) : 0,
+      sequence_key: triggerType === 'event' ? (sequenceKey ?? null) : null,
       audience: audience ?? {},
       status: 'draft',
       created_by: admin?.id ?? null,

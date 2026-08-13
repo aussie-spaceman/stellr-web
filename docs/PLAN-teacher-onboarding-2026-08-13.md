@@ -5,10 +5,9 @@
 > 192 tests pass; migration 136 dry-run applied and rolled back cleanly on prod.
 > Phase 3 copy is drafted in `docs/teacher-drip-copy-2026-08-13.md`.
 > **Outstanding and needing you:** run the role backfill
-> (`docs/backfill-member-roles-2026-08-13.sql` — my prod write was blocked), add the
-> `campaign-drip` cron to `vercel.json`, create the templates/campaigns in
-> `/admin/email`, and email the two existing teachers personally.
-> See §8 for the exact hand-off list.
+> (`docs/backfill-member-roles-2026-08-13.sql` — my prod write was blocked), create
+> the templates/campaigns in `/admin/email`, and email the two existing teachers
+> personally. See §7 for the exact hand-off list.
 
 **Date:** 13 Aug 2026
 **Trigger:** first real teacher registration — `mmmatlock@wcpss.net` (Wake STEM ECHS), 10 Aug 2026.
@@ -330,14 +329,11 @@ mutation-checked — inverting the delay branch fails it.
 1. **Run the role backfill** — `docs/backfill-member-roles-2026-08-13.sql`.
    13 rows, 7 members, dry-run verified. My write to prod was blocked by a
    guardrail, so this one is yours. Reversible via the `source` marker.
-2. **Add the cron to `vercel.json`** — the entry is written but *not committed*:
-   ```json
-   { "path": "/api/cron/campaign-drip", "schedule": "30 7 * * *" }
-   ```
-   The file also carries another session's `lead-capture-failures` entry whose
-   route is still untracked, so committing the file as-is would point a prod cron
-   at a 404. Land the two together, or add mine when that branch merges.
-   **Until this is added, delayed campaigns queue but never send.**
+2. ~~**Add the cron to `vercel.json`**~~ — **done.** A parallel session's commit
+   `9297b86` landed on this branch and swept up the `campaign-drip` entry along
+   with its own `lead-capture-failures` one. Both routes exist in the tree, so
+   every cron path now resolves. Re-verified after that commit: `tsc` clean,
+   192/192 tests pass.
 3. **Create the templates and campaigns** in `/admin/email` — copy is in
    `docs/teacher-drip-copy-2026-08-13.md`, with a pre-activation checklist.
 4. **Email the two existing teachers personally.** Activating the drip will not

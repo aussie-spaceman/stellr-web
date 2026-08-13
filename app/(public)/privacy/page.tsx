@@ -417,9 +417,14 @@ export default function PrivacyPage() {
         <p>
           When you first visit, we ask whether to enable advertising cookies. Until you accept,
           advertising and remarketing tags are disabled — we use Google Consent Mode, so the choice
-          is enforced on the tags themselves rather than only recorded. You can change your mind at
-          any time by clearing this site&rsquo;s data in your browser, which makes the banner appear
-          again.
+          is enforced on the tags themselves rather than only recorded.
+        </p>
+        <p>
+          <strong>You can change your mind at any time.</strong> Select{' '}
+          <strong>Cookie settings</strong> at the bottom of any page to reopen the banner and turn
+          advertising cookies on or off. Withdrawing takes exactly as many clicks as giving, and
+          takes effect immediately — no further advertising data is sent from that point, and on
+          your next visit those tags do not load at all.
         </p>
         <p>
           We do <strong>not</strong> sell your personal information, and we do not use advertising

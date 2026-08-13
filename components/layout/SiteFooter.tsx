@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Linkedin, Instagram, Facebook, Twitter } from 'lucide-react'
+import { CookieSettingsLink } from '@/components/analytics/CookieSettingsLink'
 
 const FOOTER_COLS = [
   {
@@ -66,6 +67,7 @@ function CopyrightBar() {
         <span className="flex items-center gap-5">
           <Link href="/privacy" className="hover:text-hero-lead transition-colors">Privacy Policy</Link>
           <Link href="/terms" className="hover:text-hero-lead transition-colors">Terms of Use</Link>
+          <CookieSettingsLink className="hover:text-hero-lead transition-colors" />
           <a href="mailto:hello@stellreducation.org" className="hover:text-hero-lead transition-colors">
             hello@stellreducation.org
           </a>

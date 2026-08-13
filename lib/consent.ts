@@ -15,6 +15,25 @@ export const CONSENT_VERSION = 1
 
 export const CONSENT_STORAGE_KEY = `stellr_consent_v${CONSENT_VERSION}`
 
+/**
+ * Dispatched by the footer link to reopen the banner. A DOM event rather than
+ * shared React state because the two components sit in different trees — the
+ * footer is rendered server-side inside the page, the banner lives in the root
+ * layout — and threading a context provider around the whole app to carry one
+ * boolean would be the larger change.
+ */
+export const CONSENT_OPEN_EVENT = 'stellr:open-consent'
+
+/**
+ * Reopen the consent banner. Exists so withdrawing consent is as easy as
+ * giving it: the UK/EEA expectation is that the two take comparable effort, and
+ * "clear your browser data" does not meet that.
+ */
+export function openConsentSettings(): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(CONSENT_OPEN_EVENT))
+}
+
 export interface ConsentDecision {
   /** Advertising / remarketing tags. */
   ads: boolean

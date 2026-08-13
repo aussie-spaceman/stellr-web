@@ -337,6 +337,42 @@ async function extendEventYears() {
 }
 
 /**
+ * `ensureProperties` skips anything that already exists, so a *new option* on
+ * an existing enumeration would never be applied. `Unsubscribed` was added to
+ * NOTIFY_STATUS after the property was created, and the waitlist opt-out writes
+ * it — without this the write is rejected and someone stays subscribed.
+ */
+async function ensureNotifyStatusOptions() {
+  const current = await api(`/crm/v3/properties/contacts/${HS.notifyStatus}`, 'GET')
+  if (!current.ok) {
+    console.log(`  ! ${HS.notifyStatus} not found — skipping`)
+    return
+  }
+
+  const have = new Set<string>((current.json?.options ?? []).map((o: any) => o.value))
+  const wanted = Object.values(NOTIFY_STATUS)
+  const missing = wanted.filter((v) => !have.has(v))
+
+  if (!missing.length) {
+    console.log(`  ✓ ${HS.notifyStatus} has all ${wanted.length} options`)
+    return
+  }
+  if (DRY_RUN) {
+    console.log(`  + would add notify statuses: ${missing.join(', ')}`)
+    return
+  }
+
+  const res = await api(`/crm/v3/properties/contacts/${HS.notifyStatus}`, 'PATCH', {
+    options: opts([...wanted]),
+  })
+  if (res.ok) console.log(`  + added notify statuses: ${missing.join(', ')}`)
+  else {
+    console.error(`  ✗ notify status options failed (${res.status}): ${res.text}`)
+    failures.push(`notify status options (${res.status})`)
+  }
+}
+
+/**
  * Sanity's grade level can be "Both", which a single-select cannot express
  * without discarding half the answer. Converting to a multi-checkbox keeps
  * existing single values intact and lets us write "Middle School;High School".
@@ -594,6 +630,7 @@ async function main() {
   console.log('\nExisting taxonomy repairs:')
   await extendEventYears()
   await convertDemographicToMultiSelect()
+  await ensureNotifyStatusOptions()
 
   console.log('\nForms:')
   const guids = await ensureForms()

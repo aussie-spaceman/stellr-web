@@ -1,10 +1,22 @@
 import { NextRequest } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { upsertContact } from '@/lib/hubspot'
+import { HS, NOTIFY_STATUS } from '@/lib/hubspot-fields'
+import { verifyOptOutToken } from '@/lib/waitlist-optout'
 
-// GET /api/email/unsubscribe?token=… — one-click marketing opt-out (no auth, per
+// GET /api/email/unsubscribe — one-click marketing opt-out (no auth, per
 // CAN-SPAM/CASL). Flips marketing_consent=false; transactional mail (DocuSign,
 // registration, notifications) is governed separately and is unaffected.
+//
+// Two audiences, told apart by query key:
+//   ?token=…      members (Supabase) — the original campaign flow
+//   ?wl=…&e=…     event-waitlist contacts, who exist only in HubSpot and so
+//                 have no member row to hold a stored token
 export async function GET(req: NextRequest) {
+  const waitlistToken = req.nextUrl.searchParams.get('wl')
+  const waitlistEmail = req.nextUrl.searchParams.get('e')
+  if (waitlistToken && waitlistEmail) return unsubscribeWaitlist(waitlistEmail, waitlistToken)
+
   const token = req.nextUrl.searchParams.get('token')
   if (!token) return htmlResponse('Invalid unsubscribe link.', 400)
 
@@ -26,6 +38,41 @@ export async function GET(req: NextRequest) {
     .eq('id', member.id)
 
   return htmlResponse(`${member.email ?? 'You'} will no longer receive marketing emails from Stellr Education.`)
+}
+
+/**
+ * Opt a waitlist contact out in HubSpot, the source of truth for these leads.
+ *
+ * The link is public and carries the address it refers to, so the signature
+ * must be checked before anything is written — otherwise the endpoint is a way
+ * to unsubscribe anyone whose address you can guess. A bad signature gets the
+ * same neutral confirmation as a good one: telling the caller which addresses
+ * are on the list is itself a disclosure.
+ */
+async function unsubscribeWaitlist(email: string, token: string): Promise<Response> {
+  const confirmation = 'You will no longer receive event registration updates from Stellr Education.'
+
+  if (!verifyOptOutToken(email, token)) return htmlResponse(confirmation)
+
+  // `Unsubscribed` rather than `Lapsed`: the send targets `Requested` only, so
+  // this suppresses future mail by construction, and it stays distinguishable
+  // from someone who simply never converted.
+  const result = await upsertContact({
+    email: email.trim().toLowerCase(),
+    properties: { [HS.notifyStatus]: NOTIFY_STATUS.unsubscribed },
+  })
+
+  if (!result.ok) {
+    // Never tell someone they're unsubscribed when they aren't — that turns a
+    // failed write into continued unwanted mail with no way out.
+    console.error('[unsubscribe] Waitlist opt-out failed to write to HubSpot:', email)
+    return htmlResponse(
+      'We could not complete your request just now. Please email hello@stellreducation.org and we will remove you.',
+      502,
+    )
+  }
+
+  return htmlResponse(confirmation)
 }
 
 function htmlResponse(message: string, status = 200): Response {

@@ -178,10 +178,60 @@ async function checkDocuSign() {
   }
 }
 
+// ── Analytics (GTM) ───────────────────────────────────────────────────────────
+// Confirms the Google Tag Manager container is deployed on BOTH subdomains.
+//
+// What this checks and why: the GTM loader is a next/script `afterInteractive`
+// tag that Next injects CLIENT-SIDE after hydration, so it is NOT in server HTML
+// and cannot be seen by fetch/curl — a "no gtm.js in the HTML" result is a false
+// negative. The reliable server-visible proof that NEXT_PUBLIC_GTM_ID was baked
+// into the build is the <noscript> fallback iframe, which the root layout (a
+// server component) renders only when the env var is set. That's what we assert.
+// Full runtime confirmation (dataLayer + google_tag_manager[ID]) needs a browser
+// — the console snippet below does it in one paste.
+async function checkAnalytics() {
+  console.log('\n══════════ ANALYTICS (GTM) ══════════')
+  const gtmId = process.env.NEXT_PUBLIC_GTM_ID || 'GTM-WXBRWSH'
+  console.log(`expected container: ${gtmId}`)
+  console.log(warn('loader is afterInteractive (client-injected) — HTML checks the <noscript> proxy only'))
+
+  // Same container serves www + app (subdomain-shared layout). Deep-link to a
+  // stable, always-rendered page on each so we get real HTML, not a redirect.
+  const targets = [
+    { label: 'www', url: 'https://www.stellreducation.org/' },
+    { label: 'app', url: 'https://app.stellreducation.org/sign-in' },
+  ]
+
+  let allGood = true
+  for (const t of targets) {
+    try {
+      const res = await fetch(t.url, { redirect: 'follow' })
+      const html = await res.text()
+      const hasNoscript = new RegExp(`ns\\.html\\?id=${gtmId}`, 'i').test(html)
+      if (hasNoscript) {
+        console.log(`  ${ok('')}${t.label} (${t.url}): <noscript id=${gtmId}> present → env var baked into build`)
+      } else {
+        allGood = false
+        console.log(`  ${bad('')}${t.label} (${t.url}): no <noscript id=${gtmId}> → NEXT_PUBLIC_GTM_ID unset at build, or not redeployed since it was set`)
+      }
+    } catch (e: any) {
+      allGood = false
+      console.log(`  ${bad('')}${t.label} (${t.url}): fetch failed — ${e.message}`)
+    }
+  }
+
+  console.log(allGood
+    ? ok(`GTM ${gtmId} is deployed on both subdomains.`)
+    : bad(`GTM not confirmed on one or more subdomains — see above.`))
+  console.log('  Runtime check (paste in the browser console on each domain):')
+  console.log(`    JSON.stringify({dl:typeof dataLayer!=='undefined',gtm:!!(window.google_tag_manager&&google_tag_manager['${gtmId}']),src:(document.querySelector('script[src*="gtm.js"]')||{}).src})`)
+}
+
 async function main() {
   console.log('READ-ONLY production verification (no writes / no charges / no envelopes)')
   await checkStripe()
   await checkDocuSign()
+  await checkAnalytics()
   console.log('\nDone.')
 }
 

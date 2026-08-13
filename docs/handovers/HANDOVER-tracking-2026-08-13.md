@@ -137,21 +137,47 @@ Full table with a completion column is in the Google Doc:
 
 **Highest value first:**
 
-1. **SPA page views** — in-site navigation fires no Page View trigger, so Meta
-   sends `PageView` for the landing page only. Add a History Change trigger and a
-   second `fbq('track','PageView')` tag sequenced after the base. Not on the base
-   tag itself, or `fbq('init')` re-runs. Check GA4 for the same issue.
-2. **Privacy policy "Recent update" banner** still describes the DocuSign/FERPA
-   update while Last Updated reads 10-Aug-2026 for the cookie changes.
-3. **Consent banner below 640px** never verified — the browser pane would not go
-   under ~685px. Fine at 685px; the stacked layout is untested.
-4. **Stray `CE — consent_granted (b2b)` trigger** on `Meta — Base Pixel`.
-5. **HubSpot chat widget** — the tracking script activates any published
-   chatflow; never confirmed whether one exists.
-6. **First cron run** unobserved — check the 04:00 UTC log once.
-7. `NEXT_PUBLIC_HUBSPOT_PORTAL_ID` is a Vercel *Sensitive* var and cannot be read
+1. **LinkedIn misses b2b pages reached by client-side navigation.** Measured on
+   production: land on `/` (non-b2b), click through to `/educators`, and `lintrk`
+   is still undefined with zero LinkedIn requests. `PV — b2b pages` is a Page
+   View trigger, so it only fires on a full page load — anyone arriving via the
+   homepage and clicking through is invisible to LinkedIn.
+   **Fix:** add a **History Change** trigger (Triggers → New → Page View →
+   *History Change*) with the same Page Hostname + Page Path conditions as
+   `PV — b2b pages`, as a *third* trigger on `LinkedIn — Insight Base`. Safe now
+   the tag is Unlimited + internally guarded.
+2. **Consent banner below 640px** never verified — the browser pane would not go
+   under ~685px, tried twice. Fine at 685px (44px tap targets, no horizontal
+   scroll, 9% of viewport); the stacked layout is untested.
+3. `NEXT_PUBLIC_HUBSPOT_PORTAL_ID` is a Vercel *Sensitive* var and cannot be read
    back, despite being public in page source.
-8. Pre-existing GTM tags (Sign Up Conversion tags, Linker, GA4) never audited.
+4. Pre-existing GTM tags (Sign Up Conversion tags, Linker, GA4) never audited.
+5. **Watch:** `js.hs-banner.com` loads from HubSpot's tracking script — that is
+   HubSpot's own cookie-banner loader. Nothing renders today, but enabling a
+   banner in HubSpot portal settings would put a *second* cookie banner on the
+   site alongside ours.
+
+### Corrected — claimed as a gap during the session, then measured and disproved
+
+**Meta and GA4 both track client-side navigation correctly.** This was written up
+as the single biggest open item and it was wrong. It came from reasoning that
+GTM's Page View triggers do not fire on history change — true — without checking
+what happens downstream. Measured across two navigations on production: three
+GA4 `page_view` hits and three Meta `PageView` hits for three pages, on one page
+load. GA4's Google Tag sends page views on history change by default, and
+`fbevents.js` does its own SPA detection. Neither needs a History Change trigger.
+
+A first measurement did appear to show GA4 missing it — that was a 6-second
+window closing before the request landed. **Measure with a generous window, and
+twice, before asserting anything here.**
+
+**Closed during close-out:** stray `CE — consent_granted (b2b)` trigger removed
+from `Meta — Base Pixel`; no HubSpot chat widget is published
+(`HubSpotConversations` undefined, no iframe); the privacy policy "Recent update"
+banner now describes the cookie changes; and the deployed cron endpoint was
+invoked against production, returning `{"scanned":0,"corrected":0,"failed":0}` —
+so it runs correctly in the Vercel runtime with prod env vars. Only the scheduled
+04:00 UTC trigger is unobserved.
 
 **Deliberately not done:** Meta CAPI (defer until iOS signal loss bites);
 `CompleteRegistration` not mapped (keeps an ad pixel off a minor's completed

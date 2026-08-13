@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email'
+import { LEAD_SOURCE_LIFECYCLE } from '@/lib/hubspot-fields'
 import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
       firstName,
       lastName,
       source: 'host_event',
-      lifecycleStage: 'lead',
+      lifecycleStage: LEAD_SOURCE_LIFECYCLE.host_event,
       activity: `Host An Event enquiry — ${companySchool}.`,
       logEntry: logLine('host_event', companySchool),
       context: {

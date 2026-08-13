@@ -71,6 +71,39 @@ export function formIdFor(source: LeadSource): string | undefined {
   return process.env[FORM_ENV_VARS[source]] || undefined
 }
 
+/* ── Lifecycle stage intent ──────────────────────────────────────────────── */
+
+/**
+ * The lifecycle stage each route means a brand-new contact to land on.
+ *
+ * This cannot simply be written at capture time. A HubSpot form submission
+ * stamps new contacts as **Lead**, and it does so *asynchronously* — seconds
+ * after the submission returns — so a stage written inline is overwritten a
+ * moment later. HubSpot then silently discards any write that moves a stage
+ * backwards (verified against the portal: the PATCH returns 200 and nothing
+ * changes), so it cannot be corrected by simply writing it again.
+ *
+ * The routes still pass these values, which is right for the property-write
+ * fallback path where no form is involved. Where the form path is used, the
+ * cron in app/api/cron/hubspot-lifecycle reconciles afterwards. Keeping the
+ * intent here rather than inline in six routes is what lets the two agree.
+ */
+export const LEAD_SOURCE_LIFECYCLE: Record<LeadSource, 'subscriber' | 'lead'> = {
+  // Signed up for information — not yet a lead.
+  event_notify: 'subscriber',
+  newsletter: 'subscriber',
+  white_paper: 'subscriber',
+  asset_request: 'subscriber',
+  // Asked us for something that needs a person to respond.
+  scholarship: 'lead',
+  host_event: 'lead',
+}
+
+/** Routes whose contacts HubSpot will wrongly leave at Lead. */
+export const SUBSCRIBER_LEAD_SOURCES = (
+  Object.keys(LEAD_SOURCE_LIFECYCLE) as LeadSource[]
+).filter((source) => LEAD_SOURCE_LIFECYCLE[source] === 'subscriber')
+
 /* ── Notify status ───────────────────────────────────────────────────────── */
 
 export const NOTIFY_STATUS = {

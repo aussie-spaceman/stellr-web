@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sendEmail, MARKETING_FROM } from '@/lib/email'
+import { LEAD_SOURCE_LIFECYCLE } from '@/lib/hubspot-fields'
 import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
       firstName,
       lastName,
       source: 'white_paper',
-      lifecycleStage: 'subscriber',
+      lifecycleStage: LEAD_SOURCE_LIFECYCLE.white_paper,
       activity: `Requested white paper: ${PAPER_TITLE} (impact page).`,
       logEntry: logLine('white_paper', PAPER_TITLE),
       context: {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sendEmail, MARKETING_FROM } from '@/lib/email'
+import { LEAD_SOURCE_LIFECYCLE } from '@/lib/hubspot-fields'
 import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
@@ -89,7 +90,7 @@ export async function POST(req: Request) {
       firstName,
       lastName,
       source: 'asset_request',
-      lifecycleStage: 'subscriber',
+      lifecycleStage: LEAD_SOURCE_LIFECYCLE.asset_request,
       activity: `${config.note}.`,
       logEntry: logLine('asset_request', config.title),
       context: {

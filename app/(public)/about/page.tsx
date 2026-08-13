@@ -75,7 +75,13 @@ const founder = {
   bio: `David is a mechanical engineer and the founder of Stellr, driven by a belief that a community of STEM professionals can be both a positive feedback loop for future generations and a way to improve career outcomes. Having built his own path — from engineering to tech, from Australia to the USA, from the military into growing the Stellr Community — he's passionate about giving young people the mentors, the soft skills, and the visibility into STEM careers that he wishes he'd had — and that industry urgently needs.`,
 }
 
-const advisoryBoard = [
+const advisoryBoard: {
+  name: string
+  location: string
+  linkedIn: string
+  photo?: string
+  bio?: string
+}[] = [
   {
     name: 'Jim Christensen',
     location: 'Central Iowa',
@@ -96,6 +102,13 @@ const advisoryBoard = [
     linkedIn: 'https://www.linkedin.com/in/bill-allen-b7006b114/',
     photo: '/team/bill-allen.jpeg',
     bio: 'Bill remains a believer in and advocate for ISD competitions based on the positive results he has seen with former students continuing their studies and careers in engineering and STEM. By attending these competitions, students from the Midwest truly begin to see a pathway to the careers they are interested in, and begin to understand their dreams can become reality.',
+  },
+  {
+    name: 'Janet Ivey-Duensing',
+    location: 'Nashville region, Tennessee',
+    linkedIn: 'https://www.linkedin.com/in/janetsplanet/',
+    photo: '/team/janet-ivey-duensing.jpeg',
+    bio: `Janet brings 30+ years of children's space and science education to Stellr, creating the Emmy-winning series Janet's Planet, now seen on 140+ public television stations nationwide. She knows that curiosity, sparked early, is what sets a young person on a STEM path — and she champions Stellr's mission because it carries that spark forward into real careers.`,
   },
 ]
 
@@ -307,9 +320,12 @@ export default function AboutPage() {
 
           {/* Advisory Board */}
           <h3 className="text-xl font-bold text-brand-blue-dark mb-6">Advisory Board Members</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl mx-auto justify-center">
+          <div className="flex flex-wrap justify-center gap-8 max-w-5xl mx-auto">
             {advisoryBoard.map((member) => (
-              <div key={member.name} className="bg-white rounded-xl p-6 text-center shadow-sm">
+              <div
+                key={member.name}
+                className="bg-white rounded-xl p-6 text-center shadow-sm w-full sm:w-[calc(50%-1rem)] lg:w-[calc(33.333%-1.334rem)]"
+              >
                 <Avatar
                   name={member.name}
                   photo={member.photo}

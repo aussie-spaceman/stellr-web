@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email'
+import { LEAD_SOURCE_LIFECYCLE } from '@/lib/hubspot-fields'
 import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
       firstName,
       lastName,
       source: 'scholarship',
-      lifecycleStage: 'lead',
+      lifecycleStage: LEAD_SOURCE_LIFECYCLE.scholarship,
       activity: `Scholarship application — ${activity}${school ? ` (${school})` : ''}.`,
       logEntry: logLine('scholarship', `${activity}${school ? ` · ${school}` : ''}`),
       context: {

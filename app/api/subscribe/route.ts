@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import {
   HS,
+  LEAD_SOURCE_LIFECYCLE,
   NOTIFY_STATUS,
   REGISTRATION_INTEREST,
   eventProperties,
@@ -107,7 +108,7 @@ export async function POST(req: Request) {
       firstName: firstName || undefined,
       lastName: rest.join(' ') || undefined,
       source: leadSource,
-      lifecycleStage: 'subscriber',
+      lifecycleStage: LEAD_SOURCE_LIFECYCLE[leadSource],
       activity,
       properties,
       logEntry,

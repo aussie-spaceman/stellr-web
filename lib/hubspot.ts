@@ -107,6 +107,90 @@ export async function getContactByEmail(
   }
 }
 
+/* ── Contact search ──────────────────────────────────────────────────────── */
+
+export interface SearchedContact {
+  id: string
+  properties: Props
+}
+
+/**
+ * Search contacts. Thin wrapper over the CRM search endpoint; callers build
+ * their own filter groups so this stays general.
+ *
+ * Note the search index lags writes by a few seconds — a contact created or
+ * deleted moments ago may not be reflected yet. Anything that must be exact
+ * should read by id instead.
+ */
+export async function searchContacts(
+  filterGroups: unknown[],
+  properties: string[],
+  limit = 100,
+): Promise<SearchedContact[]> {
+  if (!HUBSPOT_ACCESS_TOKEN) return []
+  try {
+    const res = await hubspot('/crm/v3/objects/contacts/search', 'POST', {
+      filterGroups,
+      properties,
+      limit,
+    })
+    if (!res.ok) {
+      console.error('[hubspot] Contact search failed', res.status, await res.text())
+      return []
+    }
+    const json = (await res.json()) as { results?: SearchedContact[] }
+    return json.results ?? []
+  } catch (err) {
+    console.error('[hubspot] Contact search error:', err)
+    return []
+  }
+}
+
+/* ── Lifecycle stage ─────────────────────────────────────────────────────── */
+
+/**
+ * Move a contact's lifecycle stage, including *backwards*.
+ *
+ * HubSpot silently refuses a backwards move: the PATCH returns 200 and the
+ * value does not change. Verified against portal 24379847 — a contact at Lead
+ * patched to `subscriber` stayed at Lead with no error anywhere. The documented
+ * way round it is to clear the property first, then set it, which does stick.
+ *
+ * Two writes, so it is not free; call it only when the stage is actually wrong.
+ * Returns false if either step fails, leaving the contact at whatever stage it
+ * had — a wrong stage is recoverable, a blank one is worse.
+ */
+export async function setLifecycleStage(
+  contactId: string,
+  stage: string,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!HUBSPOT_ACCESS_TOKEN) return { ok: false, error: 'no-token' }
+  try {
+    const clear = await hubspot(`/crm/v3/objects/contacts/${contactId}`, 'PATCH', {
+      properties: { [HS.lifecycleStage]: '' },
+    })
+    if (!clear.ok) {
+      return { ok: false, error: `clear-failed:${clear.status}` }
+    }
+
+    const set = await hubspot(`/crm/v3/objects/contacts/${contactId}`, 'PATCH', {
+      properties: { [HS.lifecycleStage]: stage },
+    })
+    if (!set.ok) {
+      // The clear succeeded, so the contact is now blank. Say so loudly —
+      // this is the one path that leaves a record worse than it started.
+      console.error(
+        `[hubspot] Lifecycle set failed after clear — contact ${contactId} left with no stage`,
+        set.status,
+      )
+      return { ok: false, error: `set-failed:${set.status}` }
+    }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: String(err) }
+  }
+}
+
 /* ── Contact write (fallback path) ───────────────────────────────────────── */
 
 export interface UpsertContactInput {

@@ -11,7 +11,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail, DEFAULT_REPLY_TO } from '@/lib/email'
-import { emailLayout, escapeHtml } from '@/lib/email-layout'
+import { emailLayout, escapeHtml, BRAND_NAVY, SIGN_OFF_HTML, SIGN_OFF_TEXT } from '@/lib/email-layout'
 import { appUrl } from '@/lib/email-campaigns'
 
 /** Where new-registration alerts land. Env-overridable so it can move without a deploy. */
@@ -84,6 +84,72 @@ async function tierContext(
   return { tierName, spaceNames }
 }
 
+export interface RenderedConfirmation {
+  subject: string
+  html: string
+  text: string
+}
+
+/**
+ * Build the account-confirmation email without sending it. Split out from the
+ * send so a preview is provably the same bytes that ship — a hand-copied preview
+ * drifts from the real template the moment either is edited.
+ */
+export function renderAccountConfirmation(
+  member: Pick<RegisteredMember, 'first_name'>,
+  ctx: { tierName: string | null; spaceNames: string[] },
+): RenderedConfirmation {
+  const { tierName, spaceNames } = ctx
+  const first = member.first_name?.trim() || 'there'
+  const signIn = `${appUrl()}/sign-in`
+
+  // "your Educator membership" when the tier resolved; a neutral "membership"
+  // when it didn't, so the sentence never reads "Your is now active".
+  const tierPhrase = tierName ? `${escapeHtml(tierName)} membership` : 'membership'
+  // Prefer the Space's real name ("Educator Tier Space") over a constructed one.
+  const spacePhrase = spaceNames.length
+    ? spaceNames.map((n) => escapeHtml(n)).join(' and ')
+    : tierName
+      ? `${escapeHtml(tierName)} Space`
+      : 'membership Space'
+
+  const bodyHtml = `
+      <p style="margin:0 0 16px">Hi ${escapeHtml(first)},</p>
+      <p style="margin:0 0 16px">Your <strong>${tierPhrase}</strong> is now active, and you can now access your Stellr resources from our membership portal. We recommend bookmarking this log-in link: <a href="${signIn}" style="color:${BRAND_NAVY}">${escapeHtml(signIn)}</a></p>
+      <p style="margin:0 0 16px">Once in our portal, you'll see the dedicated <strong>${spacePhrase}</strong>, with classroom ready content: lesson plans, student worksheets, and the narrative material we use at our in-person events.</p>
+      <p style="margin:0 0 16px">You'll also see some Community components &ndash; chat, directory etc &ndash; and we encourage you to introduce yourself and join the conversation.</p>
+      <p style="margin:0 0 16px">If something you expected to see isn't there, reply and tell us. We'd rather hear it early.</p>
+      <p style="margin:0 0 24px">Welcome to the Stellr Community!</p>
+      ${SIGN_OFF_HTML}
+    `
+
+  const text = [
+    `Hi ${first},`,
+    '',
+    `Your ${tierName ? `${tierName} membership` : 'membership'} is now active, and you can now access your Stellr resources from our membership portal. We recommend bookmarking this log-in link: ${signIn}`,
+    '',
+    `Once in our portal, you'll see the dedicated ${spaceNames.length ? spaceNames.join(' and ') : `${tierName ?? 'membership'} Space`}, with classroom ready content: lesson plans, student worksheets, and the narrative material we use at our in-person events.`,
+    '',
+    "You'll also see some Community components - chat, directory etc - and we encourage you to introduce yourself and join the conversation.",
+    '',
+    "If something you expected to see isn't there, reply and tell us. We'd rather hear it early.",
+    '',
+    'Welcome to the Stellr Community!',
+    '',
+    SIGN_OFF_TEXT,
+  ].join('\n')
+
+  return {
+    subject: 'Welcome to the Stellr Community',
+    html: emailLayout({
+      heading: 'Welcome to the Stellr Community',
+      preheader: 'Your membership is active — here is how to get into the portal.',
+      bodyHtml,
+    }),
+    text,
+  }
+}
+
 /**
  * Confirm the account to the member who just completed onboarding. Sent to
  * everyone regardless of marketing consent — see the module header.
@@ -93,58 +159,9 @@ export async function sendAccountConfirmation(db: SupabaseClient, member: Regist
 
   try {
     const { tierName, spaceNames } = await tierContext(db, member.id)
-    const first = member.first_name?.trim() || 'there'
-    const home = `${appUrl()}/home`
-    const spaces = `${appUrl()}/spaces`
+    const { subject, html, text } = renderAccountConfirmation(member, { tierName, spaceNames })
 
-    // Only claim tier/space access when we actually resolved it — a vague
-    // "explore your resources" beats naming a tier the member doesn't hold.
-    const tierLine = tierName
-      ? `<p>Your membership is <strong>${escapeHtml(tierName)}</strong>${
-          spaceNames.length
-            ? `, which opens ${spaceNames.map((n) => `<strong>${escapeHtml(n)}</strong>`).join(' and ')}`
-            : ''
-        }. Everything included is already unlocked — nothing else to activate.</p>`
-      : '<p>Your membership is active and your resources are unlocked.</p>'
-
-    const bodyHtml = `
-      <p>Hi ${escapeHtml(first)},</p>
-      <p>Your Stellr Education account is live. Welcome to the community.</p>
-      ${tierLine}
-      <p style="margin:24px 0">
-        <a href="${spaces}" style="background:#1e3a5f;color:#ffffff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;font-weight:600">Open your Spaces</a>
-      </p>
-      <p>You can see your membership and update your details any time at
-        <a href="${home}">${escapeHtml(home)}</a>.</p>
-      <p>Questions, or something not working as you'd expect? Reply to this email — it reaches a person.</p>
-    `
-
-    const text = [
-      `Hi ${first},`,
-      '',
-      'Your Stellr Education account is live. Welcome to the community.',
-      '',
-      tierName
-        ? `Your membership is ${tierName}${spaceNames.length ? `, which opens ${spaceNames.join(' and ')}` : ''}. Everything included is already unlocked.`
-        : 'Your membership is active and your resources are unlocked.',
-      '',
-      `Open your Spaces: ${spaces}`,
-      `Your account: ${home}`,
-      '',
-      "Questions, or something not working as you'd expect? Reply to this email — it reaches a person.",
-    ].join('\n')
-
-    await sendEmail({
-      to: member.email,
-      replyTo: DEFAULT_REPLY_TO,
-      subject: 'Welcome to Stellr Education — your account is live',
-      html: emailLayout({
-        heading: 'Welcome to Stellr Education',
-        preheader: 'Your account is live and your membership resources are unlocked.',
-        bodyHtml,
-      }),
-      text,
-    })
+    await sendEmail({ to: member.email, replyTo: DEFAULT_REPLY_TO, subject, html, text })
   } catch (e) {
     console.error('[registration-notify] account confirmation failed (non-fatal):', e)
   }

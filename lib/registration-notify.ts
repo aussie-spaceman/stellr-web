@@ -1,6 +1,11 @@
 // Registration-time email: the member's account confirmation, and the staff
 // alert that someone joined.
 //
+// The confirmation is email 1 of the four-email welcome every member gets. Its
+// body varies by tier FAMILY (teacher / high school / college) — see FAMILY_COPY
+// below. Emails 2-4 are the marketing drip, seeded by
+// scripts/seed-welcome-drips.ts, which keys off the same TIER_GROUPS.
+//
 // Both are TRANSACTIONAL and deliberately do NOT go through the campaign engine
 // (lib/email-campaigns.ts). That engine always suppresses on marketing_consent,
 // which is correct for marketing but wrong here: a member who opts out of
@@ -13,6 +18,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail, DEFAULT_REPLY_TO } from '@/lib/email'
 import { emailLayout, escapeHtml, BRAND_NAVY, SIGN_OFF_HTML, SIGN_OFF_TEXT } from '@/lib/email-layout'
 import { appUrl } from '@/lib/email-campaigns'
+import { tierGroupOf, type TierGroupKey } from '@/lib/tiers'
 
 /** Where new-registration alerts land. Env-overridable so it can move without a deploy. */
 function staffAlertEmail(): string {
@@ -90,6 +96,57 @@ export interface RenderedConfirmation {
   text: string
 }
 
+// ─── Per-family confirmation copy ────────────────────────────────────────────
+//
+// Email 1 of the four-email welcome is one template for everybody, varied by
+// tier FAMILY (lib/tiers.ts TIER_GROUPS) rather than by individual tier. Only the
+// two middle paragraphs change: what the member finds in their Space, and what
+// the Community means for them. Everything else — the tier-active line, the
+// portal link, the "tell us what's missing" invitation, the sign-off — is shared,
+// so a change to the house welcome lands once.
+//
+// Sentences are plain text with no HTML metacharacters, so the same string
+// serves both the HTML and the text part. Keep it that way.
+
+interface FamilyCopy {
+  /** Continues "…you'll see the dedicated <Space>, " — so it starts lowercase. */
+  spaceContents: string
+  /** A whole paragraph about the Community, in that family's register. */
+  community: string
+}
+
+const NEUTRAL_COPY: FamilyCopy = {
+  spaceContents: 'with the resources, reference material and training your membership opens up.',
+  community:
+    "You'll also see some Community components - chat, directory etc - and we encourage you to introduce yourself and join the conversation.",
+}
+
+const FAMILY_COPY: Record<TierGroupKey, FamilyCopy> = {
+  teacher: {
+    spaceContents:
+      'with classroom ready content: lesson plans, student worksheets, and the narrative material we use at our in-person events.',
+    community: NEUTRAL_COPY.community,
+  },
+  high_school: {
+    spaceContents:
+      'with everything you need to enter a Stellr Competition and do well in it: the Competition briefs, self-paced training courses, and reference material.',
+    community:
+      "You'll also see the Community - chat, the member directory, and mentors who do this work for a living. Introduce yourself. Asking questions is the point, and nobody there thinks a beginner question is a bad one.",
+  },
+  college: {
+    spaceContents:
+      'with Competition material, hands-on career preparation, and the STEM Power Skills training that employers keep asking about.',
+    community:
+      "You'll also see the Community - chat, the member directory, and the Stellr Network of universities, providers and employers we work with. Introduce yourself and tell us what you're working toward.",
+  },
+}
+
+/** Which body copy a tier gets. Unknown or family-less tiers get neutral copy. */
+export function confirmationCopyFor(tierName: string | null): FamilyCopy {
+  const group = tierName ? tierGroupOf(tierName) : null
+  return group ? FAMILY_COPY[group] : NEUTRAL_COPY
+}
+
 /**
  * Build the account-confirmation email without sending it. Split out from the
  * send so a preview is provably the same bytes that ship — a hand-copied preview
@@ -112,12 +169,17 @@ export function renderAccountConfirmation(
     : tierName
       ? `${escapeHtml(tierName)} Space`
       : 'membership Space'
+  const spacePhraseText = spaceNames.length
+    ? spaceNames.join(' and ')
+    : `${tierName ?? 'membership'} Space`
+
+  const copy = confirmationCopyFor(tierName)
 
   const bodyHtml = `
       <p style="margin:0 0 16px">Hi ${escapeHtml(first)},</p>
       <p style="margin:0 0 16px">Your <strong>${tierPhrase}</strong> is now active, and you can now access your Stellr resources from our membership portal. We recommend bookmarking this log-in link: <a href="${signIn}" style="color:${BRAND_NAVY}">${escapeHtml(signIn)}</a></p>
-      <p style="margin:0 0 16px">Once in our portal, you'll see the dedicated <strong>${spacePhrase}</strong>, with classroom ready content: lesson plans, student worksheets, and the narrative material we use at our in-person events.</p>
-      <p style="margin:0 0 16px">You'll also see some Community components &ndash; chat, directory etc &ndash; and we encourage you to introduce yourself and join the conversation.</p>
+      <p style="margin:0 0 16px">Once in our portal, you'll see the dedicated <strong>${spacePhrase}</strong>, ${copy.spaceContents}</p>
+      <p style="margin:0 0 16px">${copy.community}</p>
       <p style="margin:0 0 16px">If something you expected to see isn't there, reply and tell us. We'd rather hear it early.</p>
       <p style="margin:0 0 24px">Welcome to the Stellr Community!</p>
       ${SIGN_OFF_HTML}
@@ -128,9 +190,9 @@ export function renderAccountConfirmation(
     '',
     `Your ${tierName ? `${tierName} membership` : 'membership'} is now active, and you can now access your Stellr resources from our membership portal. We recommend bookmarking this log-in link: ${signIn}`,
     '',
-    `Once in our portal, you'll see the dedicated ${spaceNames.length ? spaceNames.join(' and ') : `${tierName ?? 'membership'} Space`}, with classroom ready content: lesson plans, student worksheets, and the narrative material we use at our in-person events.`,
+    `Once in our portal, you'll see the dedicated ${spacePhraseText}, ${copy.spaceContents}`,
     '',
-    "You'll also see some Community components - chat, directory etc - and we encourage you to introduce yourself and join the conversation.",
+    copy.community,
     '',
     "If something you expected to see isn't there, reply and tell us. We'd rather hear it early.",
     '',

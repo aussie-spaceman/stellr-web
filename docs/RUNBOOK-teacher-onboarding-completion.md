@@ -1,224 +1,168 @@
 # Runbook — finishing teacher onboarding
 
-**As at 13 Aug 2026.** Migration 136 is applied, PR #20 is merged, and deployment
-`dpl_BGvaMotdDoEc5EWmuuJY8zPqQhW1` (commit `634c2af`) is live in production.
+**As at 13 Aug 2026.** Migration 136 applied, PR #20 merged, commit `634c2af` live
+in production.
 
-Three tasks remain, all outside the repo. Roughly 45 minutes total.
+Tasks 1 and 2 are now **done** — both were turned into repo scripts and run
+against production. What remains is a review-and-arm step and the two personal
+emails.
 
-## Already verified — no action needed
-
-| Check | State |
-|---|---|
-| `email_campaigns.delay_days`, `.sequence_key` | present |
-| `email_campaign_queue` table | present, 0 rows |
-| Production deploy of `634c2af` | READY |
-| `CRON_SECRET` | set — `campaign-drip` will authenticate |
-| `CONTACT_EMAIL` | set — staff alerts land here |
-| `RESEND_API_KEY` | set |
-| `NEXT_PUBLIC_APP_URL` | unset → falls back to `https://app.stellreducation.org` (correct) |
-| `REGISTRATION_ALERT_EMAIL` | unset → falls back to `CONTACT_EMAIL` (fine; set it only if alerts should go elsewhere) |
-
-**From now on, every new teacher who registers automatically gets** the account
-confirmation, the `teacher` role (so the Teachers' Room opens), the Educator
-tier, and a staff alert to `CONTACT_EMAIL`. The three tasks below repair the
-members who registered *before* the deploy, and switch on the drip.
+| | Task | State |
+|---|---|---|
+| 1 | Backfill `member_roles` | **Done** — 10 rows, 5 members, verified |
+| 2 | Create the drip templates + campaigns | **Done** — 4 + 4 created as **drafts** |
+| 2b | Test and activate the four campaigns | **You** — 10 min |
+| 3 | Email Michelle and Janet | **You** |
 
 ---
 
-## Task 1 — backfill `member_roles` (5 min)
+## Why these became scripts
 
-Seven members registered before the fix and hold no role rows, so the Teachers'
-Room is currently shut to them. Source: `docs/backfill-member-roles-2026-08-13.sql`.
+Two problems with the earlier hand-run instructions, both real:
 
-**Where:** Supabase dashboard → project **Stellr Registrations**
-(`hwtzpfrnksksxlwwabqz`) → SQL Editor → New query.
+- **The SQL-editor transaction didn't work.** Supabase's SQL Editor does not hold
+  a transaction across separate runs, so a `BEGIN` in one execution and a
+  `COMMIT` in another would not have done what the runbook claimed.
+- **The row count was already stale.** The instructions said "expect 13 rows / 7
+  members". By the time it ran, two of those members (`mark.shaw@neoshr.com.au`
+  and `david.michael.shaw+rudi@gmail.com`) had been hard-deleted, so the correct
+  answer was 10 rows / 5 members — and following the runbook would have meant
+  rolling back a correct result.
 
-Paste and run this as one block. It commits only if the count is right.
+Both are fixed by reading live state instead of freezing it, and by calling the
+application's own code rather than reimplementing it in SQL.
 
-```sql
-BEGIN;
-
-WITH implied AS (
-  SELECT m.id AS member_id, m.age_bracket, r.role
-  FROM members m
-  CROSS JOIN LATERAL (
-    SELECT unnest(
-      ARRAY['member']::text[] || CASE m.event_role::text
-        WHEN 'teacher'                THEN ARRAY['teacher']
-        WHEN 'participant'            THEN ARRAY['participant']
-        WHEN 'school_student_manager' THEN ARRAY['student_manager','participant']
-        WHEN 'mentor'                 THEN ARRAY['mentor']
-        WHEN 'parent'                 THEN ARRAY['parent']
-        WHEN 'volunteer'              THEN ARRAY['volunteer']
-        WHEN 'donor'                  THEN ARRAY['donor_sponsor']
-        ELSE ARRAY[]::text[]
-      END
-    ) AS role
-  ) r
-  WHERE m.deleted_at IS NULL
-    AND NOT EXISTS (SELECT 1 FROM member_roles mr WHERE mr.member_id = m.id)
-),
-allowed AS (
-  SELECT DISTINCT member_id, role FROM implied
-  WHERE role = ANY(CASE age_bracket::text
-    WHEN 'high_school' THEN ARRAY['member','participant','student_manager']
-    WHEN 'college'     THEN ARRAY['member','participant','volunteer','student_manager','mentor']
-    WHEN 'adult'       THEN ARRAY['staff','coach','mentor','moderator','teacher','volunteer','donor_sponsor','parent','member']
-    ELSE ARRAY['member']
-  END)
-)
-INSERT INTO member_roles (member_id, role, scope, source)
-SELECT member_id, role::member_role_type, 'global', 'backfill-2026-08-13'
-FROM allowed;
-
-SELECT count(*) AS rows_inserted, count(DISTINCT member_id) AS members
-FROM member_roles WHERE source = 'backfill-2026-08-13';
-```
-
-**Expected: `rows_inserted = 13`, `members = 7`.**
-
-- Correct → run `COMMIT;`
-- Anything else → run `ROLLBACK;` and stop
-
-Then confirm the two teachers:
-
-```sql
-SELECT m.email, string_agg(r.role::text, ', ' ORDER BY r.role::text) AS roles
-FROM members m JOIN member_roles r ON r.member_id = m.id
-WHERE m.email IN ('mmmatlock@wcpss.net', 'janetsplanetofficial@gmail.com')
-GROUP BY m.email;
-```
-
-Both should read `member, teacher`.
-
-**To undo:** `DELETE FROM member_roles WHERE source = 'backfill-2026-08-13';`
+`docs/backfill-member-roles-2026-08-13.sql` has been **deleted** — it carried the
+stale count and duplicated the mapping. `scripts/backfill-member-roles.ts`
+replaces it.
 
 ---
 
-## Task 2 — build the drip in `/admin/email` (30 min)
+## Task 1 — backfill `member_roles` ✅ done
 
-Copy for all four emails is in `docs/teacher-drip-copy-2026-08-13.md`.
-Go to **https://app.stellreducation.org/admin/email**.
+```bash
+npm run backfill:member-roles            # dry run — prints, writes nothing
+npm run backfill:member-roles -- --apply # writes
+```
 
-### 2a. Create four templates
+Calls the app's own `syncMemberClassificationRole`, so the rows written are
+exactly the rows signup would have written, including the age-bracket filter.
+Only members with **zero** role rows are touched, and the write is
+insert-or-ignore, so re-running is safe.
 
-For each of days 2, 7, 14 and 30, use **New template**:
+**Result (applied 13 Aug):**
 
-| Field | What to enter |
-|---|---|
-| **Name** | `Teacher welcome — day 2` (etc). The URL key auto-slugs from this |
-| **Subject** | the subject line from the copy doc |
-| **Body** | the body, in the rich-text editor |
+```
+janetsplanetofficial@gmail.com         teacher      adult        → member, teacher
+mmmatlock@wcpss.net                    teacher      adult        → member, teacher
+bill.allen@stellreducation.org         teacher      adult        → member, teacher
+david.michael.shaw+em@gmail.com        teacher      adult        → member, teacher
+david.michael.shaw+william@gmail.com   participant  high_school  → member, participant
+```
 
-Two things to get right in the body:
+Independently verified: **0 active members now hold no roles**, and all three
+real teachers read `member, teacher`. The Teachers' Room is open to them.
 
-- `{{firstName}}` is a real merge field and resolves per recipient. It falls back
-  to "there", so a member with no stored first name still reads correctly.
-- **`{{appUrl}}` in the copy doc is NOT a merge field** — the engine will not
-  resolve it and it would send literally. Replace each one with the real link:
-  - `{{appUrl}}/spaces` → `https://app.stellreducation.org/spaces`
-  - `{{appUrl}}/events` → `https://app.stellreducation.org/events`
+**To undo** (note: the sync writes `source = 'registration'`, not a backfill
+marker, so target the members rather than the source):
 
-### 2b. Create four campaigns
+```sql
+DELETE FROM member_roles WHERE member_id IN (
+  SELECT id FROM members WHERE email IN (
+    'janetsplanetofficial@gmail.com', 'mmmatlock@wcpss.net',
+    'bill.allen@stellreducation.org', 'david.michael.shaw+em@gmail.com',
+    'david.michael.shaw+william@gmail.com'
+  )
+);
+```
 
-For each template, use **New campaign**:
+---
 
-| Field | Value |
-|---|---|
-| **Name** | `Teacher welcome — day 2` (etc) |
-| **Template** | the matching template |
-| **Trigger** | **Event-triggered** |
-| **Event** | **New member joins** — `member.created` |
-| **Send after** | `2`, `7`, `14`, `30` respectively |
-| **Sequence** | `teacher-welcome` (same on all four) |
-| **Audience** | tick **Active members only** and **Exclude minors**; select the **Educator** tier chip |
+## Task 2 — create the drip ✅ done (as drafts)
 
-Selecting the Educator tier is what keeps the sequence off students and parents.
-Leaving no tier selected sends to *everyone* who triggers `member.created`.
+```bash
+npm run seed:teacher-drip                        # dry run — prints the plan
+npm run seed:teacher-drip -- --apply             # create as drafts
+npm run seed:teacher-drip -- --apply --activate  # create AND arm
+```
 
-Before saving each, click **Preview recipients** — it shows the count after
-consent suppression, so an unexpectedly large number means the tier filter did
-not take.
+Creates four templates and four campaigns on `member.created` at +2/+7/+14/+30
+days, sequence `teacher-welcome`, audience scoped to the **Educator** tier
+(active only, minors excluded). Idempotent — templates match by key, campaigns by
+name, so re-running skips what exists.
 
-### 2c. Test, then activate
+Doing this in a script rather than the UI matters more than it looks:
+`substituteTokens` **throws** on an unknown `{{token}}`, and it throws at *render*
+time, not at save time. A single stray token typed into the editor would save
+happily and then break every send for that campaign. In the script the bodies are
+literal and the only token used is `{{firstName}}`.
 
-Campaigns are created as **draft** and drafts never fire.
+**Result (applied 13 Aug):** all four created as **draft**. Drafts never fire —
+`fireCampaignEvent` only matches `status = 'scheduled'`.
 
-1. Click **Test** on each of the four and send to your own address. It arrives
-   with a `[TEST]` subject prefix. Check the merge fields resolved and no
-   `{{appUrl}}` survived.
-2. Once all four look right, click **Activate** on all four **together**. The
-   status flips draft → **scheduled**, which for an event campaign means *armed*,
-   not *queued to send now*.
+I also rendered all four through the real pipeline as a nameless member:
+
+```
+Teacher welcome — day 2    greeting "Hi there,"   link .../spaces   unresolved: none
+Teacher welcome — day 7    greeting "Hi there,"   link .../events   unresolved: none
+Teacher welcome — day 14   greeting "Hi there,"   link .../events   unresolved: none
+Teacher welcome — day 30   greeting "Hi there,"   link .../spaces   unresolved: none
+```
+
+No unresolved tokens, real URLs, and the "there" fallback works for a member with
+no stored first name.
+
+### 2b — what you need to do (10 min)
+
+At **app.stellreducation.org/admin/email**:
+
+1. The four campaigns are listed as `Event: member.created +2d · teacher-welcome`
+   (etc), status **draft**.
+2. Click **Test** on each, send to yourself. It arrives with a `[TEST]` subject
+   prefix. Read them — the copy is a starting point and is yours to change; edit
+   the template in the UI if you want different wording.
+3. When happy, click **Activate** on all four **together**. Status flips
+   draft → **scheduled**, which for an event campaign means *armed*, not
+   *sending now*.
 
 Activating them at different times means a teacher registering in between gets a
 partial sequence.
 
-### What then happens
-
-A teacher completing onboarding gets the confirmation immediately, and their four
-drip steps are written to `email_campaign_queue`. The `campaign-drip` cron runs
-**daily at 07:30 UTC**, so each step lands at the first 07:30 UTC after its delay
-elapses — a day-2 email arrives 2–3 days later, not exactly 48 hours.
-
-Eligibility is re-checked at send time, so someone who unsubscribes in week one
-stops receiving the rest.
+**After activation:** a teacher completing onboarding gets the confirmation
+immediately and four queue rows in `email_campaign_queue`. The `campaign-drip`
+cron runs **daily at 07:30 UTC**, so a "day 2" email lands 2–3 days out, not at
+exactly 48 hours. Eligibility is re-checked at send time, so an unsubscribe in
+week one stops the rest.
 
 ---
 
-## Task 3 — email the two existing teachers (10 min)
+## Task 3 — email the two existing teachers
 
 Activating the drip will **not** reach them: `member.created` fired at their
-registration and the send ledger has no record to replay. There is no retro-send.
+registration and there is no retro-send.
 
 - **Michelle Matlock** — `mmmatlock@wcpss.net`, Wake STEM ECHS, registered 10 Aug
 - **Janet Ivey-Duensing** — `janetsplanetofficial@gmail.com`, registered 13 Aug
 
-Send these from your own mailbox, not the admin console. A first-teacher welcome
-that is visibly a broadcast is worse than a late one. Suggested:
-
-> Subject: Welcome to Stellr — and a question
->
-> Hi Michelle,
->
-> You're our first teacher to register through the new member site, which we're
-> quietly pleased about. Your Educator membership is active, so the Educator Tier
-> Space and the Teachers' Room are both open to you —
-> https://app.stellreducation.org/spaces has the lesson plans, student worksheets
-> and slide decks.
->
-> One thing I should own: a gap on our side meant you never got a confirmation
-> email when you signed up. That's fixed now, but you were owed one and it didn't
-> arrive.
->
-> If you have ten minutes, I'd genuinely like to know how the signup felt and
-> what you were hoping to find. You're the first person through it, so anything
-> that was confusing is worth more to us from you than from anyone else.
->
-> David
-
-**Also worth knowing:** Michelle's member record has an empty first and last name
-— Clerk didn't capture one at signup. Ask for it in the reply, or set it on her
-Person 360 at `/admin/members/2561d6c5-8d83-4379-bd16-87c059efc437`. Until then
-her drip emails will open "Hi there," rather than "Hi Michelle,".
+> Michelle's member record has an **empty first and last name** — Clerk captured
+> none at signup. Until it's set, her drip emails open "Hi there,". Set it on her
+> Person 360: `/admin/members/2561d6c5-8d83-4379-bd16-87c059efc437`.
 
 ---
 
-## Verification — prove it end to end (15 min, optional but recommended)
+## Optional — verify end to end (15 min)
 
 Register a throwaway teacher account in production, then check:
 
-1. **Confirmation email** arrives within a minute, naming the Educator tier
-2. **Staff alert** arrives at `CONTACT_EMAIL` with name, school, role and tier
-3. **Roles** — `SELECT role FROM member_roles WHERE member_id = '<new id>';`
-   returns `member` and `teacher`
-4. **Spaces** — signed in as that account, `/spaces` lists **Educator Tier Space**
-   and **Teachers' Room** under *Your spaces*, not *Restricted*
-5. **Drip queued** — `SELECT campaign_id, due_at FROM email_campaign_queue WHERE
-   member_id = '<new id>';` returns four rows with staggered dates
+- Confirmation email arrives within a minute, naming the Educator tier
+- Staff alert arrives at `CONTACT_EMAIL`
+- `SELECT role FROM member_roles WHERE member_id = '<new id>';` → `member`, `teacher`
+- `/spaces` as that account lists **Educator Tier Space** and **Teachers' Room**
+  under *Your spaces*, not *Restricted*
+- `email_campaign_queue` holds four rows with staggered `due_at` (only once the
+  campaigns are activated)
 
-To test the cron without waiting a day, pull a queued row's `due_at` into the past
-and invoke it:
+To exercise the cron without waiting a day:
 
 ```sql
 UPDATE email_campaign_queue SET due_at = now() - interval '1 hour'
@@ -231,28 +175,26 @@ WHERE member_id = '<new id>' AND due_at = (
 curl -H "Authorization: Bearer $CRON_SECRET" https://app.stellreducation.org/api/cron/campaign-drip
 ```
 
-Expect `{"due":1,"sent":1,"skipped":0,"failed":0}` and the email to arrive.
-
-Delete the throwaway member afterwards, or the drip keeps mailing it for a month.
+Expect `{"due":1,"sent":1,"skipped":0,"failed":0}`. Delete the throwaway member
+afterwards, or the drip keeps mailing it for a month.
 
 ---
 
 ## Watch-outs
 
-- **Resend free plan: 100 emails/day**, shared across transactional and marketing.
-  Four drip steps per teacher plus a confirmation plus a staff alert is ~6 emails
-  per registration. Fine at current volume; worth revisiting before any push that
-  could bring in dozens of teachers in a day.
+- **Resend free plan: 100 emails/day**, shared across transactional and
+  marketing. ~6 emails per registration once the drip is armed. Fine now; revisit
+  before any push that could bring dozens of teachers in a day.
 - **`CONTACT_EMAIL` was changed a day ago.** Staff alerts follow it — confirm it
-  still points where you want, or set `REGISTRATION_ALERT_EMAIL` to pin them.
+  points where you want, or set `REGISTRATION_ALERT_EMAIL` to pin them.
 - **Deleting a template** a live campaign depends on makes the drip skip queued
   steps with `note = 'template missing or archived'` rather than fail loudly.
   Check `email_campaign_queue` for skipped rows if a sequence goes quiet.
 
-## Still open (deferred, from the plan doc §3)
+## Still open — deferred
 
 Tier-entitled members are not written to `community_space_members`, so the
 Educator Tier Space shows `roster_active = 0` and its members are invisible to
 admins and to each other. Access works; visibility doesn't. Decide whether to
-materialise roster rows on tier grant or to change the member count to include
+materialise roster rows on tier grant, or to change the member count to include
 tier-entitled members.

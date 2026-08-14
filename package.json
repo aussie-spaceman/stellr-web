@@ -21,6 +21,8 @@
     "watermark:worker": "tsx scripts/watermark-worker.ts",
     "seed": "tsx scripts/seed-events.ts",
     "backfill:members": "tsx scripts/backfill-members.ts",
+    "backfill:member-roles": "tsx scripts/backfill-member-roles.ts",
+    "seed:teacher-drip": "tsx scripts/seed-teacher-drip.ts",
     "set-admin": "tsx scripts/set-admin.ts",
     "verify:prod": "tsx scripts/verify-prod-services.ts",
     "test": "vitest run",

@@ -9,6 +9,7 @@ import {
   groupConfirmationEmail,
 } from '@/lib/email'
 import { ensureIndividualPayments } from '@/lib/individual-payment'
+import { collectsNothing } from '@/lib/event-pricing'
 import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
 import { createGroupRegistrationSheet, isGoogleSheetsConfigured, type SheetSeedRow } from '@/lib/google-sheets'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
@@ -262,11 +263,12 @@ export async function POST(req: NextRequest) {
     // A free event collects nothing, ever: no Stripe webhook will fire, so a
     // registration left 'pending' would sit there forever with no path to
     // 'confirmed' (campaigns already dodge this by confirming at creation).
-    // Keyed strictly on the event having NO price configured in Sanity — that is
-    // the unambiguous "free" signal. A price that exists but failed to resolve
-    // also leaves amountDueCents at 0, and that is a transient error, not a free
-    // event, so it must stay pending rather than be silently confirmed unpaid.
-    const nothingToCollect = !feePriceId
+    // Free is either no price configured at all, or an explicit $0 price object
+    // — the way free events are deliberately set up. A price that exists but
+    // failed to resolve also leaves amountDueCents at 0, but that is a transient
+    // error, not a free event: `feeUnitAmount` stays null there, so the
+    // registration correctly stays pending rather than being confirmed unpaid.
+    const nothingToCollect = collectsNothing(feePriceId, feeUnitAmount)
 
     // Stripe rejects any charge below its per-currency minimum (~$0.50 USD). If a
     // card registration's price × seats lands below that, the checkout session can

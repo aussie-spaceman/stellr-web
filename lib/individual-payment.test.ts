@@ -2,9 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // vi.mock factories are hoisted above the file body, so the spies they close
 // over must be created inside vi.hoisted().
-const { sendEmail, checkoutCreate, getEventBySlug, notifyCommunityAdmins } = vi.hoisted(() => ({
+const { sendEmail, checkoutCreate, priceRetrieve, getEventBySlug, notifyCommunityAdmins } = vi.hoisted(() => ({
   sendEmail: vi.fn(async (_opts: unknown) => {}),
   checkoutCreate: vi.fn(async (_opts: unknown) => ({ url: 'https://checkout.stripe.test/session' })),
+  priceRetrieve: vi.fn(async (_id: string): Promise<{ unit_amount: number | null }> => ({ unit_amount: 13500 })),
   getEventBySlug: vi.fn(async (_slug: string) => ({ stripePriceId: 'price_abc' } as { stripePriceId?: string })),
   notifyCommunityAdmins: vi.fn(async (_input: unknown) => {}),
 }))
@@ -21,6 +22,7 @@ vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins }))
 vi.mock('stripe', () => ({
   default: class {
     checkout = { sessions: { create: checkoutCreate } }
+    prices = { retrieve: priceRetrieve }
   },
 }))
 
@@ -72,6 +74,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   process.env.STRIPE_SECRET_KEY = 'sk_test'
   getEventBySlug.mockResolvedValue({ stripePriceId: 'price_abc' })
+  priceRetrieve.mockResolvedValue({ unit_amount: 13500 })
   checkoutCreate.mockResolvedValue({ url: 'https://checkout.stripe.test/session' })
 })
 
@@ -111,6 +114,39 @@ describe('ensureIndividualPayments', () => {
     expect(updates.some(u => u.individual_payment_status === 'waived')).toBe(true)
     // Free and misconfigured are indistinguishable here, so staff get one alert.
     expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
+  })
+
+  // Free events are configured as an explicit $0 price, which still has a price
+  // ID — so keying "free" on the ID alone would mint checkout links for $0 that
+  // Stripe cannot create.
+  it('waives on an explicit $0 price rather than minting a zero-value checkout', async () => {
+    priceRetrieve.mockResolvedValue({ unit_amount: 0 })
+    const { db, updates } = makeDb(
+      { member_pays_individually: true },
+      [{ id: 'p1', individual_payment_link_sent_at: null }],
+    )
+
+    const result = await ensureIndividualPayments(db, 'reg-1', [PEOPLE[0]])
+
+    expect(result).toEqual({ charged: 0, waived: 1, skipped: 0 })
+    expect(checkoutCreate).not.toHaveBeenCalled()
+    expect(updates.some(u => u.individual_payment_status === 'waived')).toBe(true)
+  })
+
+  // The opposite failure: waiving on a transient Stripe error would tell paying
+  // participants they owe nothing, and no webhook would ever correct it.
+  it('still attempts the charge when the price lookup fails, rather than waiving', async () => {
+    priceRetrieve.mockRejectedValue(new Error('Stripe unreachable'))
+    const { db } = makeDb(
+      { member_pays_individually: true },
+      [{ id: 'p1', individual_payment_link_sent_at: null }],
+    )
+
+    const result = await ensureIndividualPayments(db, 'reg-1', [PEOPLE[0]])
+
+    expect(result).toEqual({ charged: 1, waived: 0, skipped: 0 })
+    expect(checkoutCreate).toHaveBeenCalledTimes(1)
+    expect(notifyCommunityAdmins).not.toHaveBeenCalled()
   })
 
   it('is idempotent — already-notified participants are skipped, not re-emailed', async () => {

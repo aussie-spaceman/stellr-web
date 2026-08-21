@@ -14,6 +14,7 @@
 // It is intentionally NOT part of `prebuild`, so local/dev builds aren't blocked.
 
 import { execSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 
 function git(args) {
   return execSync(`git ${args}`, { encoding: 'utf8' }).trim()
@@ -52,6 +53,22 @@ if (upstream) {
     fail(`Current branch is ${ahead} commit(s) ahead of ${upstream} — push before deploying.`)
     console.error(git(`log --oneline ${upstream}..HEAD`))
   }
+}
+
+// 3) No event data orphaned by a slug rename.
+//
+// Renaming an event's slug in Sanity strands every database row filed under the
+// old value — silently, since Postgres has no foreign key to Sanity. This is
+// the one place the deploy ritual can catch it. Skipped (not failed) when the
+// env isn't available, so this stays runnable offline and in CI.
+if (existsSync('.env.local')) {
+  try {
+    execSync('npx tsx scripts/audit-event-slugs.ts', { stdio: 'inherit' })
+  } catch {
+    fail('Event slugs are orphaned in the database — see the report above.')
+  }
+} else {
+  console.log('• skipping event-slug audit (no .env.local)')
 }
 
 if (failed) {

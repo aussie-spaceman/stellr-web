@@ -116,7 +116,7 @@ export async function getEventBySlug(slug: string) {
       season, campaignYear, deadline, deliverable,
       venue, city, state, tagline, description, image,
       registrationOpen, registrationOpenDate, registrationCloseDate,
-      capacity, eligibility, stripePriceId, schedule[]{ time, label }
+      capacity, stripePriceId, schedule[]{ time, label }
     }`,
     { slug }
   )

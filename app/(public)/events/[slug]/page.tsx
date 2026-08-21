@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { MapPin, Calendar, Users } from 'lucide-react'
+import { MapPin, Calendar, Users, Ticket, Check } from 'lucide-react'
 import { getEventBySlug, urlFor, wmSrc, type StellarEvent } from '@/lib/sanity'
 import { formatDateRange, formatDate, registrationStatus } from '@/lib/utils'
 import { PortableText } from 'next-sanity'
@@ -14,13 +14,13 @@ import { CardPills } from '@/components/ui/CardPills'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { participationTypeFor } from '@/lib/analytics'
 import { buildEventJsonLd, buildCampaignJsonLd, buildFaqJsonLd } from '@/lib/structured-data'
+import { getEventPrice, eventPriceLabel } from '@/lib/event-pricing'
 
 export const revalidate = 3600
 
 interface EventData extends StellarEvent {
   description?: PortableTextBlock[]
   capacity?: number
-  eligibility?: string
   schedule?: { time?: string; label?: string }[]
 }
 
@@ -58,6 +58,52 @@ const statusConfig = {
   closed: { label: 'Registration Closed', className: 'bg-red-50 text-red-700 border-red-200' },
 }
 
+// The competition season these pages describe. The prize trip and the t-shirt
+// are named by year in the copy below — bump this one constant each season
+// rather than hunting the strings.
+const SEASON_YEAR = 2027
+
+// Every live event includes the same package. Kept here (not in Sanity) so the
+// promise is identical on all ten event pages and can't drift per-event.
+const INCLUDED: string[] = [
+  'Annual Stellr Membership for students and teachers',
+  `${SEASON_YEAR} limited edition Stellr Community t-shirt`,
+  'All event materials and facility access',
+  'Meals and snacks',
+  `Opportunity to progress to the ${SEASON_YEAR} International Student Engineering Congress, held at NASA Johnson Space Center (Houston, TX) in summer ${SEASON_YEAR}`,
+]
+
+// The event-day arc, same at every venue.
+const HOW_IT_WORKS: string[] = [
+  'Student participants arrive and are formed into their ‘engineering companies’.',
+  'Each company is briefed on the event engineering challenge and receives a Request For Proposal (RFP) setting out the requirements they need to respond to.',
+  'Participants are then guided through their designs, working under time, communication, and information pressures.',
+  'Each engineering company presents its design before a panel of judges.',
+  `Awards are presented — to the winning company, and to exceptional individuals, who receive an invitation to our culminating event in the summer of ${SEASON_YEAR}.`,
+]
+
+/**
+ * Standard eligibility wording, shown on every event. The audience clause is
+ * derived from the event's grade level so a middle school event never inherits
+ * the high school grade range — everything after it is constant.
+ *
+ * This deliberately ignores the per-event Sanity `eligibility` note, which is
+ * retired: hand-authored copy had already drifted from the current rules (one
+ * event still promised "Teams of 4–6 students").
+ */
+function eligibilityCopy(gradeLevel?: string): string {
+  const audience =
+    gradeLevel === 'Middle School'
+      ? 'middle school students (grades 6–8)'
+      : gradeLevel === 'Both'
+        ? 'middle and high school students (grades 6–12)'
+        : 'high school students (grades 9–12)'
+  return (
+    `Open to all ${audience}. Students can register individually, or register as part of a ` +
+    'group (from 2–12 students). Schools can register multiple teams.'
+  )
+}
+
 // `a` renders on the page; `text` is the plain-text equivalent serialised into
 // the FAQPage JSON-LD (schema.org answers can't carry React nodes). Keep the
 // two in step — FAQ markup that doesn't match the visible copy is treated as
@@ -69,29 +115,69 @@ const FAQS: { q: string; a: React.ReactNode; text: string }[] = [
     text: 'All competition material is provided, along with snacks and meals. Bring pens, notebooks, and general school work material. We recommend bringing a laptop or tablet if you have access to one — you will not be disadvantaged if you don’t.',
   },
   {
-    q: 'How many students can be on a team?',
-    a: 'This varies by competition, and by the final number of participants. Both individuals and groups can register.',
-    text: 'This varies by competition, and by the final number of participants. Both individuals and groups can register.',
+    q: 'How are teams structured?',
+    a: 'Both individual students and groups (from 2–12 students) can register. Student participants are formed into ‘engineering companies’ when they arrive at the event.',
+    text: 'Both individual students and groups (from 2–12 students) can register. Student participants are formed into ‘engineering companies’ when they arrive at the event.',
   },
   {
-    q: 'Is there a cost to participate?',
+    q: 'What if I can’t afford to attend?',
     a: (
       <>
-        Registration fees vary by event. If you wish to attend but can’t afford the fees, please look at our{' '}
-        <Link href="/scholarship" className="text-brand-blue font-medium hover:underline">
+        If you wish to attend but can’t afford the fees, please look at our{' '}
+        <Link href="/scholarship" className="text-primary-deep font-medium hover:underline">
           scholarship page
         </Link>
         .
       </>
     ),
-    text: 'Registration fees vary by event. If you wish to attend but can’t afford the fees, please look at our scholarship page at https://www.stellreducation.org/scholarship.',
+    text: 'If you wish to attend but can’t afford the fees, please look at our scholarship page at https://www.stellreducation.org/scholarship.',
+  },
+  {
+    q: 'This seems like a really challenging activity! What are the preparation expectations?',
+    a: 'Nothing! No, really, nothing! All our challenges are designed for students to arrive and compete with no preparation activities or prior work. Important note: some of our events offer optional pre-work activities for teachers. These are NOT mandatory, and don’t impart any benefit on students who may participate in the pre-work.',
+    text: 'Nothing! No, really, nothing! All our challenges are designed for students to arrive and compete with no preparation activities or prior work. Important note: some of our events offer optional pre-work activities for teachers. These are NOT mandatory, and don’t impart any benefit on students who may participate in the pre-work.',
+  },
+  {
+    q: 'What are the expectations for teachers and chaperones?',
+    a: 'You don’t need to be a specialist engineer or scientist to support students attending our events! If you’re bringing a team, we ask that you stay at the event venue for the duration, and you can participate if you wish. Otherwise you’re free to catch up on marking, do more lesson planning, or sit quietly in a corner!',
+    text: 'You don’t need to be a specialist engineer or scientist to support students attending our events! If you’re bringing a team, we ask that you stay at the event venue for the duration, and you can participate if you wish. Otherwise you’re free to catch up on marking, do more lesson planning, or sit quietly in a corner!',
+  },
+  {
+    q: 'How does transportation and event logistics work?',
+    a: (
+      <>
+        All participants are responsible for making their own way to and from the event venue. We fully
+        understand the tyranny of distance — regardless of whether you’re a regional school or having to
+        travel across a metro area! If you need to arrive late, or depart early, please{' '}
+        <Link href="/contact" className="text-primary-deep font-medium hover:underline">
+          get in touch
+        </Link>{' '}
+        and we’ll make it work.
+      </>
+    ),
+    text: 'All participants are responsible for making their own way to and from the event venue. We fully understand the tyranny of distance — regardless of whether you’re a regional school or having to travel across a metro area! If you need to arrive late, or depart early, please get in touch at https://www.stellreducation.org/contact and we’ll make it work.',
+  },
+  {
+    q: 'How does registration and invoicing work?',
+    a: (
+      <>
+        Register using the Individual or Group buttons above. As you progress through the registration
+        process, there are options for immediate online payment, to be issued a single invoice, or for
+        group members to pay themselves. Any issues,{' '}
+        <Link href="/contact" className="text-primary-deep font-medium hover:underline">
+          let us know
+        </Link>
+        !
+      </>
+    ),
+    text: 'Register using the Individual or Group buttons above. As you progress through the registration process, there are options for immediate online payment, to be issued a single invoice, or for group members to pay themselves. Any issues, let us know at https://www.stellreducation.org/contact.',
   },
   {
     q: 'What happens if I can’t attend after registering?',
     a: (
       <>
         Please notify us as soon as possible. Review our{' '}
-        <Link href="/terms#refunds" className="text-brand-blue font-medium hover:underline">
+        <Link href="/terms#refunds" className="text-primary-deep font-medium hover:underline">
           Terms of Service
         </Link>{' '}
         for specifics.
@@ -135,9 +221,17 @@ export default async function EventDetailPage({ params }: PageProps) {
   const status = registrationStatus(event.registrationOpenDate, event.registrationCloseDate)
   const { label: statusLabel, className: statusClass } = statusConfig[status]
 
+  // Per-participant fee, resolved live from Stripe. `priceLabel` is null when
+  // the event's price ID can't be resolved (missing or inactive in Stripe) —
+  // every price surface below then renders nothing rather than guessing.
+  const price = await getEventPrice(event.stripePriceId)
+  const priceLabel = eventPriceLabel(price)
+
   // JSON-LD for this event (Offline/Online Event + superEvent + offer) plus the
-  // FAQ accordion rendered further down the page.
-  const jsonLd = [buildEventJsonLd(event, slug), buildFaqJsonLd(FAQS)]
+  // FAQ accordion rendered further down the page. The offer carries the same
+  // fee shown on the page — schema that contradicts the visible price is
+  // treated as spam.
+  const jsonLd = [buildEventJsonLd(event, slug, price), buildFaqJsonLd(FAQS)]
 
   return (
     <>
@@ -188,10 +282,12 @@ export default async function EventDetailPage({ params }: PageProps) {
           )}
 
           {(event.venue || event.city) && (
-            <p className="text-blue-300 text-lg">
+            <p className="text-blue-300 text-lg mb-1">
               📍 {[event.venue, event.city && event.state ? `${event.city}, ${event.state}` : event.city].filter(Boolean).join(' · ')}
             </p>
           )}
+
+          {priceLabel && <p className="text-blue-300 text-lg">🎟️ {priceLabel}</p>}
 
           {/* Hero CTAs — Individual + Group registration; when registration
               isn't open both buttons open the subscriber modal instead. */}
@@ -255,6 +351,34 @@ export default async function EventDetailPage({ params }: PageProps) {
                 </div>
               )}
 
+              {/* What's Included — identical package at every event */}
+              <div>
+                <h2 className="text-2xl font-bold text-brand-blue-dark mb-4">What’s Included</h2>
+                <ul className="space-y-3">
+                  {INCLUDED.map((item) => (
+                    <li key={item} className="flex items-start gap-3">
+                      <Check size={18} className="text-brand-blue mt-1 shrink-0" />
+                      <span className="text-brand-grey-dark">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* How the Challenge Works — the event-day arc */}
+              <div>
+                <h2 className="text-2xl font-bold text-brand-blue-dark mb-4">How the Challenge Works</h2>
+                <ol className="space-y-4">
+                  {HOW_IT_WORKS.map((step, i) => (
+                    <li key={step} className="flex items-start gap-4">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-blue text-sm font-bold text-white">
+                        {i + 1}
+                      </span>
+                      <span className="text-brand-grey-dark pt-1">{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
               {/* FAQ accordion */}
               <div>
                 <h2 className="text-2xl font-bold text-brand-blue-dark mb-4">Frequently Asked Questions</h2>
@@ -302,6 +426,26 @@ export default async function EventDetailPage({ params }: PageProps) {
                   </div>
                 )}
 
+                {priceLabel && (
+                  <div className="flex items-start gap-3">
+                    <Ticket size={18} className="text-brand-blue mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-brand-blue-dark">Price</p>
+                      <p className="text-sm text-brand-grey-dark">{priceLabel}</p>
+                      {/* Only meaningful where there's a fee to discount. */}
+                      {price.kind === 'priced' && (
+                        <p className="mt-1 text-sm text-brand-grey-dark">
+                          Large group discounts available —{' '}
+                          <Link href="/contact" className="text-primary-deep font-medium hover:underline">
+                            Contact Stellr
+                          </Link>
+                          .
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {event.registrationOpenDate && (
                   <div className="flex items-start gap-3">
                     <Calendar size={18} className="text-brand-blue mt-0.5 shrink-0" />
@@ -332,15 +476,13 @@ export default async function EventDetailPage({ params }: PageProps) {
                   </div>
                 )}
 
-                {event.eligibility && (
-                  <div className="flex items-start gap-3">
-                    <Users size={18} className="text-brand-blue mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-sm font-semibold text-brand-blue-dark">Eligibility</p>
-                      <p className="text-sm text-brand-grey-dark">{event.eligibility}</p>
-                    </div>
+                <div className="flex items-start gap-3">
+                  <Users size={18} className="text-brand-blue mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-brand-blue-dark">Eligibility</p>
+                    <p className="text-sm text-brand-grey-dark">{eligibilityCopy(event.gradeLevel)}</p>
                   </div>
-                )}
+                </div>
               </div>
 
               {/* Side CTA */}

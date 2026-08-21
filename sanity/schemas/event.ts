@@ -257,7 +257,16 @@ export const event = {
       hidden: ({ document }: { document?: Record<string, unknown> }) =>
         document?.activityType === 'campaign',
     },
-    { name: 'eligibility', type: 'string', title: 'Eligibility Notes' },
+    // Retired Aug 2026. Eligibility is now standard copy rendered from the
+    // event page itself (derived from Grade Level), so every event states the
+    // same rules — hand-authored notes here had drifted out of date. Hidden
+    // rather than deleted so the stored strings survive if we ever want them.
+    {
+      name: 'eligibility',
+      type: 'string',
+      title: 'Eligibility Notes (retired — no longer displayed)',
+      hidden: true,
+    },
 
     // ── Settings ──────────────────────────────────────────────────────────────
     { name: 'featured', type: 'boolean', title: 'Feature on homepage' },
@@ -266,7 +275,11 @@ export const event = {
       type: 'string',
       title: 'Stripe Price ID',
       description:
-        'Live Event individual registration fee — copy the Price ID from Stripe (e.g. price_xxxxx). Leave blank for free events. Not applicable for Campaigns.',
+        'Live Event individual registration fee — copy the Price ID from Stripe (e.g. price_xxxxx). ' +
+        'This amount is DISPLAYED PUBLICLY on the event page, so it must be an active, one-off price ' +
+        'in the live Stripe account: an inactive or unknown price ID hides the fee on the page and is ' +
+        'also rejected at checkout. Leave blank only for genuinely free events — a blank field makes ' +
+        'the page read "Free to enter". Not applicable for Campaigns.',
       hidden: ({ document }: { document?: Record<string, unknown> }) =>
         document?.activityType === 'campaign',
     },

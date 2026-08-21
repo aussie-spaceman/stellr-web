@@ -10,6 +10,7 @@
 // Events/Campaigns link up to their Competition via `superEvent`.
 
 import { urlFor, type StellarEvent } from '@/lib/sanity'
+import type { EventPrice } from '@/lib/event-pricing'
 import { getCampaignDates, type CampaignSeason } from '@/lib/campaigns'
 
 const WWW = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
@@ -172,7 +173,7 @@ type SchemaEvent = StellarEvent & {
 }
 
 /** JSON-LD for a live Event detail page (/events/[slug]). In-person or virtual. */
-export function buildEventJsonLd(event: SchemaEvent, slug: string) {
+export function buildEventJsonLd(event: SchemaEvent, slug: string, price?: EventPrice) {
   const url = `${WWW}/events/${slug}`
   const isVirtual = event.setting === 'virtual'
 
@@ -182,9 +183,15 @@ export function buildEventJsonLd(event: SchemaEvent, slug: string) {
     url: `${WWW}/register/${slug}`,
     validFrom: event.registrationOpenDate,
   }
-  // Fee is stored as a Stripe price ID, not a number. Free events (no price ID)
-  // advertise price 0; paid events omit price rather than inventing one.
-  if (!event.stripePriceId) {
+  // Fee is stored as a Stripe price ID, not a number, so the caller resolves it
+  // against Stripe and passes the result in. Advertise a price only when we know
+  // it — the resolved amount, or 0 for an event with no price ID at all. A price
+  // we couldn't resolve is omitted rather than invented, since schema that
+  // disagrees with the visible page reads as spam.
+  if (price?.kind === 'priced') {
+    offer.price = (price.cents / 100).toFixed(2)
+    offer.priceCurrency = price.currency.toUpperCase()
+  } else if (!event.stripePriceId) {
     offer.price = '0'
     offer.priceCurrency = 'USD'
   }

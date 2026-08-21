@@ -185,13 +185,15 @@ export function buildEventJsonLd(event: SchemaEvent, slug: string, price?: Event
   }
   // Fee is stored as a Stripe price ID, not a number, so the caller resolves it
   // against Stripe and passes the result in. Advertise a price only when we know
-  // it — the resolved amount, or 0 for an event with no price ID at all. A price
-  // we couldn't resolve is omitted rather than invented, since schema that
-  // disagrees with the visible page reads as spam.
+  // it: the resolved amount, or 0 for an event configured with an explicit $0
+  // price. An event whose fee simply isn't set yet, or one whose price we
+  // couldn't resolve, omits the field rather than inventing a number — schema
+  // that disagrees with the visible page reads as spam, and "free" is a claim
+  // we'd have to honour at checkout.
   if (price?.kind === 'priced') {
     offer.price = (price.cents / 100).toFixed(2)
     offer.priceCurrency = price.currency.toUpperCase()
-  } else if (!event.stripePriceId) {
+  } else if (price?.kind === 'free') {
     offer.price = '0'
     offer.priceCurrency = 'USD'
   }

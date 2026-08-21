@@ -9,12 +9,20 @@ import Stripe from 'stripe'
 // number Stripe charges at checkout, exactly as `tier-pricing.ts` does for
 // membership. Never hard-code an event fee.
 //
-// The three-way result matters: a blank price ID genuinely means "free" (the
-// registration form skips payment entirely — see the group/individual routes),
-// whereas a price ID we can't resolve means the event is misconfigured. Those
-// two must never render the same way: claiming "Free" for an event that is
-// meant to be paid is a public pricing error we'd be honouring at checkout.
-// Unresolvable prices render nothing at all and log for the operator.
+// The four-way result matters, and each state is a different public claim:
+//
+//   tbc         no price ID yet — the fee simply hasn't been set. Says so.
+//   free        an explicit $0 Stripe price. Free events are configured this
+//               way deliberately, so "free" is an authored decision we can
+//               show (and honour at checkout) rather than an inference.
+//   priced      an active price above zero.
+//   unavailable a price ID that is missing or inactive in Stripe — the event is
+//               misconfigured. Renders nothing and logs for the operator.
+//
+// Never collapse `tbc` into `free`: advertising a fee-less event as free is a
+// price we'd then have to honour, and an unset fee is not a decision to charge
+// nothing. `free` is also what the registration stack keys on — see
+// `collectsNothing()` below.
 //
 // An INACTIVE Stripe price counts as unresolvable, not as a price. Stripe
 // rejects inactive prices as checkout line items, so an amount we could read
@@ -29,7 +37,9 @@ import Stripe from 'stripe'
 export const EVENT_PRICES_TAG = 'event-prices'
 
 export type EventPrice =
-  /** No Stripe price ID on the event — registration is free. */
+  /** No Stripe price ID on the event — the fee hasn't been set yet. */
+  | { kind: 'tbc' }
+  /** An explicit $0 Stripe price — the event is deliberately free. */
   | { kind: 'free' }
   /** An active, one-off Stripe price resolved to this many cents. */
   | { kind: 'priced'; cents: number; currency: string }
@@ -61,6 +71,10 @@ const resolvePrice = unstable_cache(
         console.warn('[event-pricing] price has no unit_amount, hiding fee —', priceId)
         return { kind: 'unavailable' }
       }
+      // A zero price object is how a free event is configured, and the whole
+      // registration stack keys off it — so it must resolve to `free`, not to a
+      // $0.00 fee nobody can be charged.
+      if (price.unit_amount === 0) return { kind: 'free' }
       return { kind: 'priced', cents: price.unit_amount, currency: price.currency }
     } catch (e) {
       console.warn('[event-pricing] could not retrieve price, hiding fee —', priceId, '—', e)
@@ -73,8 +87,28 @@ const resolvePrice = unstable_cache(
 
 /** The per-participant fee for an event, from its Sanity `stripePriceId`. */
 export async function getEventPrice(stripePriceId?: string | null): Promise<EventPrice> {
-  if (!stripePriceId) return { kind: 'free' }
+  if (!stripePriceId) return { kind: 'tbc' }
   return resolvePrice(stripePriceId)
+}
+
+/**
+ * Does this event collect anything at registration?
+ *
+ * The registration stack (group/individual routes, the group form, per-member
+ * payment links) used to key "free" on a blank price ID alone. Free events are
+ * now configured as an explicit $0 Stripe price, which has a price ID — so the
+ * rule is the resolved AMOUNT, not the presence of an ID.
+ *
+ * `resolvedCents` must be null when the lookup failed, never 0: a transient
+ * Stripe error is not a free event, and treating it as one would confirm
+ * registrations for a fee that was never collected.
+ */
+export function collectsNothing(
+  stripePriceId: string | null | undefined,
+  resolvedCents: number | null,
+): boolean {
+  if (!stripePriceId) return true
+  return resolvedCents === 0
 }
 
 /**
@@ -94,10 +128,12 @@ export function formatEventPrice(cents: number, currency = 'usd'): string {
 }
 
 /**
- * The fee as one display string: "$135 per participant", "Free to enter", or
- * null when it can't be shown. Callers render nothing for null.
+ * The fee as one display string: "$135 per participant", "Free to enter",
+ * "Pricing TBC", or null when the price is misconfigured. Callers render
+ * nothing for null.
  */
 export function eventPriceLabel(price: EventPrice): string | null {
+  if (price.kind === 'tbc') return 'Pricing TBC'
   if (price.kind === 'free') return 'Free to enter'
   if (price.kind === 'priced') return `${formatEventPrice(price.cents, price.currency)} per participant`
   return null

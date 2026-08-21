@@ -97,8 +97,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Amount owed: the per-seat event fee (one seat), or 0 when the event has no
-    // Stripe price (free event). Drives the payment access gate.
+    // Amount owed: the per-seat event fee (one seat), or 0 when the event is
+    // free — either no Stripe price at all, or an explicit $0 price object.
+    // Drives the payment access gate, and the line item further down.
     let amountDueCents = 0
     const feePriceId = (eventForGate as { stripePriceId?: string } | null)?.stripePriceId
     const feeStripe = getStripe()
@@ -297,7 +298,11 @@ export async function POST(req: NextRequest) {
     }
 
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = []
-    if (stripePriceId) lineItems.push({ price: stripePriceId, quantity: 1 })
+    // A $0 price object — how free events are configured — must not become a
+    // line item. Stripe can't create a payment session for a zero total, so the
+    // registrant would be handed a checkout that errors instead of being sent
+    // straight through as free. Add-ons below can still make a session payable.
+    if (stripePriceId && amountDueCents > 0) lineItems.push({ price: stripePriceId, quantity: 1 })
     for (const l of addonLines) {
       lineItems.push({
         quantity: l.qty,

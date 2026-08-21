@@ -65,8 +65,8 @@ async function verdictFor(stripe: Stripe, priceId: string | null): Promise<Verdi
   if (!priceId) {
     return {
       icon: '⚠️ ',
-      display: 'Free to enter',
-      problem: 'no Stripe price ID — the page advertises this event as free',
+      display: 'Pricing TBC',
+      problem: 'no Stripe price ID — the page reads "Pricing TBC". Free events need a $0 price object.',
     }
   }
   try {
@@ -76,6 +76,11 @@ async function verdictFor(stripe: Stripe, priceId: string | null): Promise<Verdi
     }
     if (typeof price.unit_amount !== 'number') {
       return { icon: '❌', display: '(hidden)', problem: `price ${priceId} has no unit amount` }
+    }
+    // Free events are configured as an explicit $0 price — an authored decision,
+    // not a gap, so it needs no follow-up.
+    if (price.unit_amount === 0) {
+      return { icon: '✅', display: 'Free to enter', problem: null }
     }
     const amount = (price.unit_amount / 100).toLocaleString('en-US', {
       style: 'currency',

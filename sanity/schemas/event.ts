@@ -278,8 +278,9 @@ export const event = {
         'Live Event individual registration fee — copy the Price ID from Stripe (e.g. price_xxxxx). ' +
         'This amount is DISPLAYED PUBLICLY on the event page, so it must be an active, one-off price ' +
         'in the live Stripe account: an inactive or unknown price ID hides the fee on the page and is ' +
-        'also rejected at checkout. Leave blank only for genuinely free events — a blank field makes ' +
-        'the page read "Free to enter". Not applicable for Campaigns.',
+        'also rejected at checkout. A FREE event needs its own $0 price object here — do not leave ' +
+        'this blank for one. Blank means the fee simply is not set yet, and the page reads ' +
+        '"Pricing TBC". Not applicable for Campaigns.',
       hidden: ({ document }: { document?: Record<string, unknown> }) =>
         document?.activityType === 'campaign',
     },

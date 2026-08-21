@@ -93,14 +93,28 @@ export async function ensureIndividualPayments(
   const todo = people.filter((p) => unsent.has(p.participantId))
   if (todo.length === 0) return { ...empty, skipped: people.length }
 
-  // A blank stripePriceId in Sanity means the event is free — charge nothing and
-  // say so, rather than leaving everyone stuck at 'pending' for a payment that
-  // can never be made. It can also mean a paid event was misconfigured, and the
-  // two are indistinguishable here, so the waive path alerts admins below.
+  // A free event charges nothing and says so, rather than leaving everyone stuck
+  // at 'pending' for a payment that can never be made. Free is either a blank
+  // stripePriceId in Sanity or an explicit $0 price object — a $0 price would
+  // otherwise mint checkout links Stripe can't create. A blank ID can equally
+  // mean a paid event was misconfigured, and the two are indistinguishable here,
+  // so the waive path alerts admins below.
+  //
+  // A price lookup that FAILS is deliberately not treated as free: unitAmount
+  // stays null, we still attempt the charge, and the per-person failure is
+  // recorded. Waiving on a blip would tell paying participants they owe nothing.
   const event = await getEventBySlug(eventSlug).catch(() => null)
   const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId ?? null
   const stripe = getStripe()
-  const canCharge = Boolean(stripePriceId && stripe)
+  let unitAmount: number | null = null
+  if (stripePriceId && stripe) {
+    try {
+      unitAmount = (await stripe.prices.retrieve(stripePriceId)).unit_amount ?? null
+    } catch (e) {
+      console.error('[individual-payment] price lookup failed for', eventSlug, '—', stripePriceId, e)
+    }
+  }
+  const canCharge = Boolean(stripePriceId && stripe) && unitAmount !== 0
 
   const outcomes = await Promise.all(
     todo.map((person) =>
@@ -120,13 +134,13 @@ export async function ensureIndividualPayments(
   if (waived > 0) {
     await notifyCommunityAdmins({
       type: 'action',
-      body: `${waived} participant${waived === 1 ? '' : 's'} on ${eventTitle} were registered with no payment required — the event has no Stripe price. Confirm this event is intended to be free.`,
+      body: `${waived} participant${waived === 1 ? '' : 's'} on ${eventTitle} were registered with no payment required — the event has no registration fee. Confirm this event is intended to be free.`,
       referenceType: 'registration',
       referenceId: registrationId,
       email: {
         subject: `Check event pricing: ${eventTitle} registered ${waived} participant${waived === 1 ? '' : 's'} free`,
-        html: `<p>A group registration for <strong>${eventTitle}</strong> is set to "members pay individually", but the event has no Stripe price configured in Sanity.</p><p>${waived} participant${waived === 1 ? ' was' : 's were'} told no payment is required.</p><p>If this event is meant to be free, no action is needed. If not, add the Price ID in Sanity and follow up with the group.</p>`,
-        text: `A group registration for ${eventTitle} is set to "members pay individually", but the event has no Stripe price configured in Sanity. ${waived} participant(s) were told no payment is required. If the event is meant to be free, no action is needed — otherwise add the Price ID in Sanity and follow up with the group.`,
+        html: `<p>A group registration for <strong>${eventTitle}</strong> is set to "members pay individually", but the event has no registration fee — either no Stripe Price ID in Sanity, or a $0 price.</p><p>${waived} participant${waived === 1 ? ' was' : 's were'} told no payment is required.</p><p>If this event is meant to be free, no action is needed. If not, set a paid Price ID in Sanity and follow up with the group.</p>`,
+        text: `A group registration for ${eventTitle} is set to "members pay individually", but the event has no registration fee — either no Stripe Price ID in Sanity, or a $0 price. ${waived} participant(s) were told no payment is required. If the event is meant to be free, no action is needed — otherwise set a paid Price ID in Sanity and follow up with the group.`,
       },
     }).catch(() => {})
   }

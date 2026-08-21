@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { getEventBySlug } from '@/lib/sanity'
 import { formatDateRange } from '@/lib/utils'
 import { getRegistrationPrefill } from '@/lib/registration-prefill'
+import { getEventPrice } from '@/lib/event-pricing'
 import GroupRegistrationForm from '@/components/forms/GroupRegistrationForm'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 
@@ -16,10 +17,14 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
 
   const prefill = await getRegistrationPrefill().catch(() => null)
   const isCampaign = event.activityType === 'campaign'
-  // No Stripe price on the event = no registration fee, so the form skips the
-  // "how will the group pay?" question entirely rather than offering three
-  // methods that all have nothing to charge.
-  const isFree = !event.stripePriceId
+  // Nothing to charge = the form skips the "how will the group pay?" question
+  // entirely rather than offering three methods that all collect nothing. That
+  // covers both an event with no price configured and one carrying an explicit
+  // $0 price (how free events are set up). A price that exists but failed to
+  // resolve is NOT free — the form keeps asking, and the API rejects the
+  // registration with an actionable error rather than silently waiving a fee.
+  const price = await getEventPrice(event.stripePriceId)
+  const isFree = price.kind === 'free' || price.kind === 'tbc'
 
   return (
     <div className="min-h-screen bg-surface">

@@ -23,7 +23,7 @@ vi.mock('stripe', () => ({
   },
 }))
 
-import { getEventPrice, formatEventPrice, eventPriceLabel } from '@/lib/event-pricing'
+import { getEventPrice, formatEventPrice, eventPriceLabel, collectsNothing } from '@/lib/event-pricing'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -32,11 +32,18 @@ beforeEach(() => {
 })
 
 describe('getEventPrice', () => {
-  it('treats a blank price ID as free without calling Stripe', async () => {
-    expect(await getEventPrice(undefined)).toEqual({ kind: 'free' })
-    expect(await getEventPrice(null)).toEqual({ kind: 'free' })
-    expect(await getEventPrice('')).toEqual({ kind: 'free' })
+  // An unset fee is not a decision to charge nothing — free events carry an
+  // explicit $0 price object instead.
+  it('treats a blank price ID as "to be confirmed", not free, without calling Stripe', async () => {
+    expect(await getEventPrice(undefined)).toEqual({ kind: 'tbc' })
+    expect(await getEventPrice(null)).toEqual({ kind: 'tbc' })
+    expect(await getEventPrice('')).toEqual({ kind: 'tbc' })
     expect(retrieve).not.toHaveBeenCalled()
+  })
+
+  it('resolves an explicit $0 price to free', async () => {
+    retrieve.mockResolvedValue({ unit_amount: 0, currency: 'usd', active: true })
+    expect(await getEventPrice('price_free')).toEqual({ kind: 'free' })
   })
 
   it('resolves an active price to cents', async () => {
@@ -68,6 +75,28 @@ describe('getEventPrice', () => {
   })
 })
 
+describe('collectsNothing', () => {
+  it('is true for an event with no price configured at all', () => {
+    expect(collectsNothing(null, null)).toBe(true)
+    expect(collectsNothing(undefined, null)).toBe(true)
+    expect(collectsNothing('', null)).toBe(true)
+  })
+
+  it('is true for an explicit $0 price object', () => {
+    expect(collectsNothing('price_free', 0)).toBe(true)
+  })
+
+  it('is false for a real fee', () => {
+    expect(collectsNothing('price_abc', 13500)).toBe(false)
+  })
+
+  // The distinction that matters: a lookup failure leaves the amount null, and
+  // confirming those registrations would waive a fee that was never collected.
+  it('is false when the amount never resolved, so a blip is not read as free', () => {
+    expect(collectsNothing('price_abc', null)).toBe(false)
+  })
+})
+
 describe('formatEventPrice', () => {
   it('drops the decimals on whole-dollar amounts and groups thousands', () => {
     expect(formatEventPrice(13500)).toBe('$135')
@@ -88,6 +117,7 @@ describe('eventPriceLabel', () => {
   it('labels each outcome distinctly, and renders nothing when unresolved', () => {
     expect(eventPriceLabel({ kind: 'priced', cents: 13500, currency: 'usd' })).toBe('$135 per participant')
     expect(eventPriceLabel({ kind: 'free' })).toBe('Free to enter')
+    expect(eventPriceLabel({ kind: 'tbc' })).toBe('Pricing TBC')
     expect(eventPriceLabel({ kind: 'unavailable' })).toBeNull()
   })
 })

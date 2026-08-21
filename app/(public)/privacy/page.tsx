@@ -12,14 +12,17 @@ export default function PrivacyPage() {
       <h1 className="text-4xl font-bold text-brand-blue-dark mb-8">Privacy Policy</h1>
       <div className="prose prose-slate max-w-none space-y-6 text-brand-grey-dark">
         <p className="text-sm text-brand-grey-mid italic">
-          Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 10-Aug-2026
+          Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 17-Aug-2026
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
-          <strong>Recent update (10 Aug 2026):</strong> We have updated Sections 5, 7 and 9 to
-          describe our use of cookies and advertising measurement, including the cookie categories
-          we use, the providers involved, and how to give or withdraw consent at any time via{' '}
-          <strong>Cookie settings</strong> at the bottom of any page. Earlier updates covered our use
-          of DocuSign for electronic parental consent and additional FERPA disclosures.
+          <strong>Recent update (17 Aug 2026):</strong> We have updated Sections 3, 5, 7 and 9 to
+          describe our use of <strong>Apollo.io</strong>, a business-audience tool that identifies
+          the <em>organisation</em> — not the individual — associated with visitors to our educator
+          and partner pages. It runs only on those pages, only where you have accepted advertising
+          cookies, and never on student registration pages or the participant platform. The 10 Aug
+          2026 update covered our cookie categories, the providers involved, and how to give or
+          withdraw consent at any time via <strong>Cookie settings</strong> at the bottom of any
+          page.
         </p>
 
         {/* 1. Introduction */}
@@ -167,6 +170,13 @@ export default function PrivacyPage() {
           <li>IP address, browser type, and device information</li>
           <li>Pages visited and features used within our platform</li>
           <li>Cookies and similar tracking technologies (see Section 9)</li>
+          <li>
+            The <strong>organisation</strong> — for example a school, district, or company —
+            associated with your IP address. This is inferred on our educator and partner pages
+            only, and only where you have accepted advertising cookies. It tells us that
+            &ldquo;someone at this school district read our educators page,&rdquo; not who you are
+            (see Section 9.2)
+          </li>
         </ul>
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">3.10 Parent and Guardian Information (Consent Records)</h3>
@@ -222,6 +232,7 @@ export default function PrivacyPage() {
                 ['Processing registration payments and refunds', 'Billing history'],
                 ['Publishing competition results, photos, and highlights', 'Photos, videos, name'],
                 ['Improving our Services through analytics', 'Technical and usage data'],
+                ['Understanding which schools and organisations are interested in partnering with us', 'Technical data and inferred organisation — educator and partner pages only, with advertising consent'],
                 ['Complying with legal obligations', 'All categories as required'],
                 ['Responding to enquiries and support requests', 'Contact information'],
               ].map(([purpose, data]) => (
@@ -281,6 +292,7 @@ export default function PrivacyPage() {
                 ['Sanity', 'Content management', 'No personal data'],
                 ['HubSpot', 'Marketing contact management and enquiry handling', 'Name, email, and the enquiry you submitted'],
                 ['Google (Analytics, Tag Manager, Ads)', 'Aggregate website analytics; advertising measurement where you have accepted advertising cookies', 'Usage/technical data and cookie identifiers — no name, email, or registration data'],
+                ['Apollo.io', 'Identifying the organisation associated with visitors to our educator and partner pages, where you have accepted advertising cookies', "IP address, cookie identifiers, and the pages visited — no name, email, or registration data; not loaded on student registration pages or the participant platform. Governed by Apollo's standard Data Processing Addendum, linked below"],
               ].map(([provider, purpose, data]) => (
                 <tr key={provider} className="even:bg-surface">
                   <td className="border border-line px-4 py-2 font-medium">{provider}</td>
@@ -294,8 +306,25 @@ export default function PrivacyPage() {
         <p>
           All providers are contractually required to handle your data securely, use it only as
           directed by us, and not disclose it to third parties for their own commercial purposes.
-          Where required by applicable law, we have executed data processing agreements with each
-          provider.
+          Data processing terms apply to each provider in one of two ways: an agreement executed
+          directly between that provider and Stellr, or the provider&rsquo;s own standard data
+          processing addendum, which governs our use of their service. Where the arrangement is
+          specific to Stellr, the table above says so.
+        </p>
+        <p>
+          Two providers are worth naming directly. Our business-audience provider{' '}
+          <strong>Apollo.io</strong> operates under its standard GDPR data processing addendum,
+          published at{' '}
+          <a
+            href="https://www.apollo.io/dpa"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-brand-blue hover:underline"
+          >
+            apollo.io/dpa
+          </a>
+          . Our electronic consent provider <strong>DocuSign</strong> is bound by a
+          FERPA-compliant data processing agreement executed with Stellr, described in Section 7.7.
         </p>
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">7.2 Schools and Educators</h3>
@@ -387,6 +416,11 @@ export default function PrivacyPage() {
             Measure whether our advertising reaches the students, families and educators it is
             meant to reach — <strong>only if you accept advertising cookies</strong>
           </li>
+          <li>
+            Recognise which schools, districts and organisations are reading our educator and
+            partner pages, so we can follow up with those exploring a partnership —{' '}
+            <strong>only if you accept advertising cookies</strong>
+          </li>
         </ul>
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">9.1 Categories We Use</h3>
@@ -403,7 +437,7 @@ export default function PrivacyPage() {
               {[
                 ['Essential', 'Login sessions, security, and core site function', 'Always on — the site cannot work without these'],
                 ['Analytics', 'Aggregate usage measurement (Google Analytics, HubSpot)', 'On by default; denied until you accept in the UK, EEA and Switzerland'],
-                ['Advertising', 'Campaign measurement and remarketing (Google Ads)', 'Off until you accept'],
+                ['Advertising', 'Campaign measurement and remarketing (Google Ads); business-audience identification on educator and partner pages (Apollo.io)', 'Off until you accept'],
               ].map(([category, purpose, consent]) => (
                 <tr key={category} className="even:bg-surface">
                   <td className="border border-line px-4 py-2 font-medium">{category}</td>
@@ -415,7 +449,41 @@ export default function PrivacyPage() {
           </table>
         </div>
 
-        <h3 className="text-lg font-semibold text-brand-blue-dark">9.2 Your Choices</h3>
+        <h3 className="text-lg font-semibold text-brand-blue-dark">9.2 Business-Audience Identification</h3>
+        <p>
+          Stellr works with schools, districts, universities, and sponsoring organisations as well
+          as with students. To understand which of those organisations are interested in partnering
+          with us, we use <strong>Apollo.io</strong> on our educator and partner pages. It matches
+          the IP address a visit comes from against a database of business networks and tells us the
+          organisation that address belongs to.
+        </p>
+        <p>We want to be precise about the limits of this:</p>
+        <ul className="list-disc pl-6 space-y-2">
+          <li>
+            <strong>It identifies organisations, not people.</strong> It tells us that someone at a
+            given school district or company visited a page. It does not tell us your name, your
+            email address, or anything about you as an individual, and we do not attempt to combine
+            it with registration data to work out who you are.
+          </li>
+          <li>
+            <strong>It runs on a limited set of pages only</strong> — our educator, host-an-event,
+            mentor, network, volunteer, impact, and why-Stellr pages. It is{' '}
+            <strong>not</strong> loaded on competition registration pages, on the participant
+            platform, or anywhere a student is signing up or logged in.
+          </li>
+          <li>
+            <strong>It requires your consent.</strong> Apollo.io is an advertising-category cookie
+            and does not load at all until you accept advertising cookies. If you decline, or later
+            withdraw, it is never loaded.
+          </li>
+          <li>
+            <strong>Home and school networks are generally not identifiable</strong> in this way.
+            The matching relies on business network records, so most residential connections return
+            no organisation at all.
+          </li>
+        </ul>
+
+        <h3 className="text-lg font-semibold text-brand-blue-dark">9.3 Your Choices</h3>
         <p>
           When you first visit, we ask whether to enable advertising cookies. Until you accept,
           advertising and remarketing tags are disabled — we use Google Consent Mode, so the choice
@@ -539,7 +607,14 @@ export default function PrivacyPage() {
         <ul className="list-disc pl-6 space-y-2">
           <li>Right to know what personal information is collected, used, shared, or sold</li>
           <li>Right to delete personal information</li>
-          <li>Right to opt out of the sale or sharing of personal information (<strong>we do not sell personal information</strong>)</li>
+          <li>
+            Right to opt out of the sale or sharing of personal information.{' '}
+            <strong>We do not sell personal information.</strong> Where you have accepted
+            advertising cookies, technical identifiers may be disclosed to our advertising and
+            business-audience providers in a way that CPRA treats as &ldquo;sharing&rdquo; for
+            cross-context behavioural advertising. You can opt out at any time by selecting{' '}
+            <strong>Cookie settings</strong> at the bottom of any page
+          </li>
           <li>Right to non-discrimination for exercising your privacy rights</li>
           <li>Right to correct inaccurate personal information</li>
           <li>Right to limit use of sensitive personal information</li>

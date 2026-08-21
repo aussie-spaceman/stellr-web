@@ -1,3 +1,33 @@
+// ── Slug rename guard ────────────────────────────────────────────────────────
+// Validation runs in the Studio (a browser), so it can call the app's own API.
+// Returns `true` on anything unexpected: a guard that can't reach the server
+// must never block editing. scripts/audit-event-slugs.ts is the backstop.
+
+type SlugValidationResult = true | string | Promise<true | string>
+interface SlugValidationContext {
+  document?: { _id?: string }
+}
+
+async function checkSlugRenameIsSafe(
+  proposed: string,
+  context: SlugValidationContext,
+): Promise<true | string> {
+  if (typeof window === 'undefined') return true // not an interactive edit
+  const id = (context?.document?._id ?? '').replace(/^drafts\./, '')
+  if (!id) return true
+  try {
+    const res = await fetch(
+      `/api/admin/events/slug-guard?id=${encodeURIComponent(id)}&slug=${encodeURIComponent(proposed)}`,
+    )
+    if (!res.ok) return true
+    const data = (await res.json()) as { blocked?: boolean; message?: string }
+    if (data.blocked && data.message) return data.message
+  } catch {
+    return true
+  }
+  return true
+}
+
 export const event = {
   name: 'event',
   title: 'Event',
@@ -10,6 +40,11 @@ export const event = {
       type: 'slug',
       title: 'Slug',
       options: { source: 'title' },
+      description:
+        'URL path segment AND the join key to every registration, refund, order and ' +
+        'company record for this event. Changing it on a published event orphans that ' +
+        'data — the rename must be mirrored in the database (see the error you will get ' +
+        'if you try). Click "Generate" rather than typing here.',
       // Slug is the join key to registrations/portal data — publishing without one
       // breaks the admin Events tab and registration links.
       //
@@ -18,20 +53,26 @@ export const event = {
       // Free text with spaces or punctuation (e.g. a tagline pasted into this
       // field) produces a path Next.js can't route, which 404s both links while
       // the card still renders. Always click "Generate" rather than typing here.
+      //
+      // The second check is the one that cost us: Postgres has no foreign key to
+      // Sanity, so renaming a published slug silently strands every row filed
+      // under the old value (30 rows across five tables, 21 Aug 2026). The guard
+      // asks the app whether this document's PUBLISHED slug still has data and
+      // blocks the change if so, naming the script that migrates it.
       validation: (Rule: {
         required: () => {
           custom: (
-            fn: (v: { current?: string } | undefined) => true | string,
+            fn: (v: { current?: string } | undefined, ctx: SlugValidationContext) => SlugValidationResult,
           ) => unknown
         }
       }) =>
-        Rule.required().custom((value) => {
+        Rule.required().custom((value, context) => {
           const current = value?.current
           if (!current) return true // handled by required()
           if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(current)) {
             return 'Use lowercase letters, numbers and hyphens only — no spaces or punctuation. Click "Generate" to build one from the title.'
           }
-          return true
+          return checkSlugRenameIsSafe(current, context)
         }),
     },
 

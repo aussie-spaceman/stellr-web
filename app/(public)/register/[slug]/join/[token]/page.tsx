@@ -2,6 +2,7 @@ import { auth, currentUser } from '@clerk/nextjs/server'
 import { formatDateShort } from '@/lib/utils'
 import Link from 'next/link'
 import { supabaseServer } from '@/lib/supabase'
+import { getRegistrationPrefill } from '@/lib/registration-prefill'
 import GroupJoinClient from './GroupJoinClient'
 
 interface PageProps {
@@ -169,6 +170,7 @@ export default async function GroupJoinPage({ params }: PageProps) {
             schoolState={schoolState}
             memberPaysIndividually={reg.member_pays_individually}
             isAuthenticated={!!userId}
+            prefill={userId ? await getRegistrationPrefill().catch(() => null) : null}
           />
         )}
       </div>

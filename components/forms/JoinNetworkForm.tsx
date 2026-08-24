@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import FieldError from '@/components/forms/FieldError'
+import { usePrefillForm } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 
 const PARTNER_TYPES = [
@@ -44,8 +45,17 @@ export function JoinNetworkForm() {
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors },
   } = useForm<FormData>({ resolver: zodResolver(schema) })
+
+  // Pre-fill from the signed-in member's record; never clobbers typing.
+  usePrefillForm(reset, (p) => ({
+    firstName: p.firstName,
+    lastName: p.lastName,
+    email: p.email,
+    phone: p.phone,
+  }))
 
   async function onSubmit(data: FormData) {
     setStatus('loading')
@@ -55,6 +65,7 @@ export function JoinNetworkForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
+
       if (res.ok) trackLeadSubmitted('join_network')
       setStatus(res.ok ? 'success' : 'error')
     } catch {

@@ -1,11 +1,15 @@
 'use client'
 
 import { useState } from 'react'
+import { usePrefillFields } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 
 export function SubscribeForm() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [email, setEmail] = useState('')
+
+  // Pre-fill from the signed-in member's record; only fills an empty field.
+  usePrefillFields({ email: [email, setEmail] })
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

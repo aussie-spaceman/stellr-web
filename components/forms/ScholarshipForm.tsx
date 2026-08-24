@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Check } from 'lucide-react'
 import FieldError from '@/components/forms/FieldError'
+import { usePrefillForm } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 
 const schema = z.object({
@@ -44,6 +45,15 @@ export function ScholarshipForm({
     formState: { errors },
   } = useForm<FormData>({ resolver: zodResolver(schema) })
 
+  // Pre-fill from the signed-in member's record; never clobbers typing.
+  usePrefillForm(reset, (p) => ({
+    firstName: p.firstName,
+    lastName: p.lastName,
+    email: p.email,
+    phone: p.phone,
+    school: p.schoolName,
+  }))
+
   async function onSubmit(data: FormData) {
     setStatus('loading')
     try {
@@ -52,6 +62,7 @@ export function ScholarshipForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
+
       if (res.ok) trackLeadSubmitted('scholarship')
       setStatus(res.ok ? 'success' : 'error')
     } catch {

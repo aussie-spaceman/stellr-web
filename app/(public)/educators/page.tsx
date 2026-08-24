@@ -5,7 +5,6 @@ import {
   Award,
   Wallet,
   Building2,
-  ClipboardCheck,
   Users,
   ShieldCheck,
   ArrowRight,
@@ -15,6 +14,13 @@ import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { ProofStrip } from '@/components/sections/ProofStrip'
 import { WorkCard } from '@/components/sections/WorkCard'
 import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
+import {
+  STIPEND_AMOUNTS,
+  STIPEND_PD_HOURS,
+  STIPEND_PLACES,
+  STIPEND_PROGRAM_YEAR,
+  stipendAmount,
+} from '@/lib/stipend'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/educators' },
@@ -25,12 +31,14 @@ export const metadata: Metadata = {
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
-/* NOTE: The Educators, Stipend, and Schools sections were left blank in the
-   source doc. The copy below is on-brand draft placeholder content for review. */
+/* NOTE: The Educators and Schools sections were left blank in the source doc;
+   the copy below is on-brand draft placeholder content for review. The Stipend
+   section is NOT placeholder — it is the approved program copy, and its numbers
+   come from lib/stipend.ts so the page, the agreement and the API route agree. */
 
 const sections = [
   { id: 'educators', label: 'For Educators' },
-  { id: 'stipend', label: 'Stipend Plan' },
+  { id: 'stipend', label: 'Teacher Stipend' },
   { id: 'schools', label: 'For Schools' },
 ]
 
@@ -45,7 +53,7 @@ const educatorBenefits = [
     icon: Award,
     title: 'CTE Accreditation',
     description:
-      'Access CTE-aligned material and training so your time delivering Stellr counts toward recognized credits and hours.',
+      'Access CTE-aligned material and training, with documented PD contact hours you can take to your district.',
   },
   {
     icon: Users,
@@ -54,6 +62,9 @@ const educatorBenefits = [
       'Join a global community of educators sharing ideas, resources, and support across the Stellr Network.',
   },
 ]
+
+
+
 
 export default function EducatorsPage() {
   return (
@@ -147,7 +158,7 @@ export default function EducatorsPage() {
         </div>
       </section>
 
-      {/* ── Educator video testimonials (moved above Stipend Plan) ────── */}
+      {/* ── Educator video testimonials (moved above Teacher Stipend) ─── */}
       <section className="section-padding bg-white">
         <div className="container-max">
           <div className="grid gap-6 sm:grid-cols-2 max-w-5xl mx-auto">
@@ -161,7 +172,11 @@ export default function EducatorsPage() {
         </div>
       </section>
 
-      {/* ── #stipend ──────────────────────────────────────────────────── */}
+      {/* ── #stipend ──────────────────────────────────────────────────────
+          Teaser only. The full program — earnings table, FAQ (with its FAQPage
+          schema) and the application form — lives once, at /stipend. Two pages
+          carrying the same copy would compete for the same search terms and
+          double every future edit. */}
       <section id="stipend" className="section-padding bg-brand-grey-light scroll-mt-36">
         <div className="container-max">
           <div className="max-w-3xl">
@@ -170,27 +185,27 @@ export default function EducatorsPage() {
                 <Wallet size={22} className="text-brand-blue" />
               </div>
               <p className="text-sm font-bold uppercase tracking-widest text-brand-blue">
-                Stipend Plan
+                Teacher Stipend
               </p>
             </div>
             <h2 className="text-3xl font-bold text-brand-blue-dark mb-4">
-              We invest in the educators who invest in students
+              We support the teachers who want to offer Stellr activities to their students
             </h2>
-            {/* NOTE: Stipend Plan was marked TBC in source doc — placeholder copy. */}
-            <p className="text-brand-grey-dark leading-relaxed mb-4">
-              We&rsquo;re finalizing a stipend program to recognize and reward the educators who give
-              their time to run Stellr competitions and campaigns. Details are coming soon.
+            <p className="text-brand-grey-dark leading-relaxed mb-6">
+              Taking a team to a live Challenge or running a Campaign at your school takes real
+              time. The Teacher Stipend recognizes that work — {stipendAmount(STIPEND_AMOUNTS.annualMaximum)}{' '}
+              a year at most, plus {STIPEND_PD_HOURS} documented PD contact hours and free Catalyst
+              membership. Open to U.S. high school teachers, {STIPEND_PLACES} places for{' '}
+              {STIPEND_PROGRAM_YEAR}.
             </p>
-            <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-brand-grey-dark border border-line">
-              <ClipboardCheck size={16} className="text-brand-blue" /> Program details coming soon
-            </div>
-            <p className="mt-6 text-sm text-brand-grey-dark">
-              Want to be notified when the stipend plan launches?{' '}
-              <Link href="/contact" className="text-brand-blue font-semibold hover:underline">
-                Get in touch
+            <div className="flex flex-wrap gap-3">
+              <Link href="/stipend" className="btn-primary">
+                See the Teacher Stipend <ArrowRight size={16} />
               </Link>
-              .
-            </p>
+              <Link href="/stipend#apply" className="btn-outline">
+                Apply now
+              </Link>
+            </div>
           </div>
         </div>
       </section>

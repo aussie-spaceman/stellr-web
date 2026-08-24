@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { SchoolSearchInput, type SchoolSelection } from '@/components/member/SchoolSearchInput'
 import FieldError from '@/components/forms/FieldError'
+import { usePrefillForm } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 
 const schema = z.object({
@@ -47,8 +48,17 @@ export function HostEventForm() {
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors },
   } = useForm<FormData>({ resolver: zodResolver(schema) })
+
+  // Pre-fill from the signed-in member's record; never clobbers typing.
+  usePrefillForm(reset, (p) => ({
+    firstName: p.firstName,
+    lastName: p.lastName,
+    email: p.email,
+    phone: p.phone,
+  }))
 
   async function onSubmit(data: FormData) {
     if (!school) {
@@ -64,6 +74,7 @@ export function HostEventForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...data, companySchool, address }),
       })
+
       if (res.ok) trackLeadSubmitted('host_event')
       setStatus(res.ok ? 'success' : 'error')
     } catch {

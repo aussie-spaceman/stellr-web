@@ -43,7 +43,16 @@
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 import * as fs from 'fs'
-import { LEAD_SOURCES, NOTIFY_STATUS, REGISTRATION_INTEREST, HS } from '../lib/hubspot-fields'
+import {
+  LEAD_SOURCES,
+  NOTIFY_STATUS,
+  REGISTRATION_INTEREST,
+  STIPEND_ACTIVITIES,
+  STIPEND_PRIOR,
+  STIPEND_DEMOGRAPHIC,
+  STIPEND_STATUS,
+  HS,
+} from '../lib/hubspot-fields'
 
 // Same convention as the other operational scripts: read .env.local so the
 // Service Key lives in a gitignored file rather than in shell history.
@@ -111,8 +120,8 @@ interface PropertyDef {
   name: string
   label: string
   description: string
-  type: 'string' | 'enumeration' | 'date'
-  fieldType: 'text' | 'textarea' | 'select' | 'checkbox' | 'date'
+  type: 'string' | 'enumeration' | 'date' | 'number'
+  fieldType: 'text' | 'textarea' | 'select' | 'checkbox' | 'date' | 'number'
   options?: { label: string; value: string; displayOrder: number }[]
 }
 
@@ -166,6 +175,91 @@ const PROPERTIES: PropertyDef[] = [
     fieldType: 'select',
     options: opts(Object.values(LEAD_SOURCES)),
   },
+
+  /* ── Teacher Stipend Program ──────────────────────────────────────────
+     Deliberately absent: a `stipend_school_name` field. HubSpot's standard
+     `school` property already exists and holds exactly that, and a second
+     copy is a second thing to keep in step. Likewise no `stipend_applicant`
+     boolean — `stellr_lead_source = Teacher Stipend` and a non-empty
+     `stipend_status` both already say so, and a third flag is a third thing
+     that can disagree with the other two. */
+  {
+    name: HS.stipendProgramYear,
+    label: 'Stipend Program Year',
+    description:
+      'Calendar year of the Teacher Stipend cohort this application is for. Calendar, not school year — the stipend runs Jan–Dec and pays on 31 May.',
+    type: 'string',
+    fieldType: 'text',
+  },
+  {
+    name: HS.stipendStatus,
+    label: 'Stipend Status',
+    description:
+      'Where this applicant sits in the Teacher Stipend intake. The site only ever writes "Applied"; everything after that is set by a human.',
+    type: 'enumeration',
+    fieldType: 'select',
+    options: opts(Object.values(STIPEND_STATUS)),
+  },
+  {
+    name: HS.stipendApplicationDate,
+    label: 'Stipend Application Date',
+    description: 'When this contact applied for the Teacher Stipend.',
+    type: 'date',
+    fieldType: 'date',
+  },
+  {
+    name: HS.stipendPlannedActivities,
+    label: 'Stipend Planned Activities',
+    description:
+      'What the applicant plans to run: a live Challenge, a Campaign at their own school, or both. Both is the only route to the $500 annual maximum.',
+    type: 'enumeration',
+    fieldType: 'select',
+    options: opts(Object.values(STIPEND_ACTIVITIES)),
+  },
+  {
+    name: HS.stipendExpectedStudents,
+    label: 'Stipend Expected Students',
+    description:
+      'How many students the applicant expects to involve. Thresholds are 5 students plus the teacher attending a live Challenge, or 8 registered for a Campaign.',
+    type: 'number',
+    fieldType: 'number',
+  },
+  {
+    name: HS.stipendSubjects,
+    label: 'Stipend Subjects Taught',
+    description: 'What the applicant teaches.',
+    type: 'string',
+    fieldType: 'text',
+  },
+  {
+    name: HS.stipendYearsTeaching,
+    label: 'Stipend Years Teaching',
+    description: 'How long the applicant has been teaching. Free text — some answer in ranges.',
+    type: 'string',
+    fieldType: 'text',
+  },
+  {
+    name: HS.stipendPriorStellr,
+    label: 'Stipend Prior Stellr Experience',
+    description: 'Whether the applicant has run a Stellr Challenge or Campaign before.',
+    type: 'enumeration',
+    fieldType: 'select',
+    options: opts(Object.values(STIPEND_PRIOR)),
+  },
+  {
+    name: HS.stipendMotivation,
+    label: 'Stipend Motivation',
+    description: 'The applicant\u2019s own words on why they want to take part.',
+    type: 'string',
+    fieldType: 'textarea',
+  },
+  {
+    name: HS.stipendReferralSource,
+    label: 'Stipend Referral Source',
+    description: 'How the applicant heard about the Teacher Stipend.',
+    type: 'string',
+    fieldType: 'text',
+  },
 ]
 
 /**
@@ -197,6 +291,33 @@ const EVENT_FIELDS = [
   HS.registrationInterest,
 ]
 
+/**
+ * The stipend application asks far more than any other lead route, and the
+ * Forms API rejects the whole submission if it names a field the form does not
+ * declare — so every property `app/api/teacher-stipend/route.ts` writes has to
+ * appear here or the conversion is lost.
+ */
+const STIPEND_FIELDS = [
+  HS.phone,
+  HS.school,
+  HS.city,
+  HS.state,
+  HS.jobTitle,
+  // Grade levels taught reuse the portal's existing event taxonomy rather than a
+  // parallel stipend_* copy — see the note on STIPEND_DEMOGRAPHIC.
+  HS.eventDemographic,
+  HS.stipendProgramYear,
+  HS.stipendStatus,
+  HS.stipendApplicationDate,
+  HS.stipendPlannedActivities,
+  HS.stipendExpectedStudents,
+  HS.stipendSubjects,
+  HS.stipendYearsTeaching,
+  HS.stipendPriorStellr,
+  HS.stipendMotivation,
+  HS.stipendReferralSource,
+]
+
 const FORMS: { key: keyof typeof LEAD_SOURCES; name: string; fields: string[] }[] = [
   { key: 'event_notify', name: 'Website — Event Notify', fields: [...COMMON_FIELDS, ...EVENT_FIELDS] },
   { key: 'newsletter', name: 'Website — Newsletter Subscribe', fields: COMMON_FIELDS },
@@ -204,6 +325,11 @@ const FORMS: { key: keyof typeof LEAD_SOURCES; name: string; fields: string[] }[
   { key: 'asset_request', name: 'Website — Asset Request', fields: COMMON_FIELDS },
   { key: 'scholarship', name: 'Website — Scholarship Application', fields: COMMON_FIELDS },
   { key: 'host_event', name: 'Website — Host An Event', fields: COMMON_FIELDS },
+  {
+    key: 'teacher_stipend',
+    name: 'Website — Teacher Stipend Application',
+    fields: [...COMMON_FIELDS, ...STIPEND_FIELDS],
+  },
 ]
 
 /* ── Preflight ───────────────────────────────────────────────────────────── */
@@ -338,37 +464,48 @@ async function extendEventYears() {
 
 /**
  * `ensureProperties` skips anything that already exists, so a *new option* on
- * an existing enumeration would never be applied. `Unsubscribed` was added to
- * NOTIFY_STATUS after the property was created, and the waitlist opt-out writes
- * it — without this the write is rejected and someone stays subscribed.
+ * an existing enumeration would never be applied. That has bitten twice, in
+ * both directions this function now covers:
+ *
+ *   • `Unsubscribed` was added to NOTIFY_STATUS after the property was created,
+ *     and the waitlist opt-out writes it — without this the write is rejected
+ *     and someone stays subscribed.
+ *   • `stellr_lead_source` is written by *every* route, so each new lead source
+ *     (Teacher Stipend was the first) needs its option added to a property
+ *     that already exists. Miss it and HubSpot drops the property from the
+ *     write — the lead lands with no source, which is exactly the invisible
+ *     contact this whole module exists to prevent.
  */
-async function ensureNotifyStatusOptions() {
-  const current = await api(`/crm/v3/properties/contacts/${HS.notifyStatus}`, 'GET')
+async function ensureEnumOptions(property: string, wanted: readonly string[], label: string) {
+  const current = await api(`/crm/v3/properties/contacts/${property}`, 'GET')
   if (!current.ok) {
-    console.log(`  ! ${HS.notifyStatus} not found — skipping`)
+    console.log(`  ! ${property} not found — skipping`)
     return
   }
 
   const have = new Set<string>((current.json?.options ?? []).map((o: any) => o.value))
-  const wanted = Object.values(NOTIFY_STATUS)
   const missing = wanted.filter((v) => !have.has(v))
 
   if (!missing.length) {
-    console.log(`  ✓ ${HS.notifyStatus} has all ${wanted.length} options`)
+    console.log(`  ✓ ${property} has all ${wanted.length} options`)
     return
   }
   if (DRY_RUN) {
-    console.log(`  + would add notify statuses: ${missing.join(', ')}`)
+    console.log(`  + would add ${label}: ${missing.join(', ')}`)
     return
   }
 
-  const res = await api(`/crm/v3/properties/contacts/${HS.notifyStatus}`, 'PATCH', {
-    options: opts([...wanted]),
+  // PATCH replaces the option list, so send the union rather than just the
+  // additions — an option in the portal that we don't know about (added by
+  // hand in the UI) would otherwise be deleted along with the values using it.
+  const merged = [...have, ...missing.filter((v) => !have.has(v))]
+  const res = await api(`/crm/v3/properties/contacts/${property}`, 'PATCH', {
+    options: opts(merged),
   })
-  if (res.ok) console.log(`  + added notify statuses: ${missing.join(', ')}`)
+  if (res.ok) console.log(`  + added ${label}: ${missing.join(', ')}`)
   else {
-    console.error(`  ✗ notify status options failed (${res.status}): ${res.text}`)
-    failures.push(`notify status options (${res.status})`)
+    console.error(`  ✗ ${label} failed (${res.status}): ${res.text}`)
+    failures.push(`${label} (${res.status})`)
   }
 }
 
@@ -469,6 +606,18 @@ async function loadPropertyMeta(): Promise<Map<string, PropertyMeta>> {
  */
 const NO_VALIDATION = { blockedEmailDomains: [], useDefaultBlockList: false }
 
+/**
+ * A `number` form field additionally requires digit bounds — omitting them
+ * fails the whole form definition with
+ * `Some required fields were not set: [minAllowedDigits, maxAllowedDigits]`,
+ * and the message names no field, so it looks like a malformed request rather
+ * than one field's missing property. (Hit when `stipend_expected_students`
+ * became the first number field in any Stellr form.)
+ *
+ * Four digits matches the route's own `^\\d{1,4}$` cap on the value.
+ */
+const NUMBER_VALIDATION = { ...NO_VALIDATION, minAllowedDigits: 1, maxAllowedDigits: 4 }
+
 function formFieldFor(name: string, meta: Map<string, PropertyMeta>) {
   // `email` has a dedicated form type with its own validation.
   if (name === HS.email) {
@@ -501,7 +650,7 @@ function formFieldFor(name: string, meta: Map<string, PropertyMeta>) {
     label: name,
     required: false,
     hidden: true,
-    validation: NO_VALIDATION,
+    validation: fieldType === 'number' ? NUMBER_VALIDATION : NO_VALIDATION,
     // Enumerated fields carry their choices; harmless elsewhere.
     ...(property?.options?.length
       ? {
@@ -630,7 +779,13 @@ async function main() {
   console.log('\nExisting taxonomy repairs:')
   await extendEventYears()
   await convertDemographicToMultiSelect()
-  await ensureNotifyStatusOptions()
+  await ensureEnumOptions(HS.notifyStatus, Object.values(NOTIFY_STATUS), 'notify statuses')
+  await ensureEnumOptions(HS.leadSource, Object.values(LEAD_SOURCES), 'lead sources')
+  await ensureEnumOptions(
+    HS.eventDemographic,
+    [STIPEND_DEMOGRAPHIC],
+    'event demographics',
+  )
 
   console.log('\nForms:')
   const guids = await ensureForms()

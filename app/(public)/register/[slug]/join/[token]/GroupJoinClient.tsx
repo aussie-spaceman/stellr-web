@@ -6,6 +6,7 @@ import { useSignIn } from '@clerk/nextjs/legacy'
 import Link from 'next/link'
 import { inferHighSchoolGrade } from '@/lib/grade-logic'
 import { ageFromDob } from '@/lib/utils'
+import type { RegistrationPrefill } from '@/lib/registration-prefill'
 
 interface Props {
   token: string
@@ -17,6 +18,8 @@ interface Props {
   schoolState: string | null
   memberPaysIndividually: boolean
   isAuthenticated: boolean
+  /** Signed-in member's record, resolved server-side. Null when signed out. */
+  prefill?: RegistrationPrefill | null
 }
 
 const GENDERS = ['Male', 'Female', 'Other']
@@ -47,6 +50,34 @@ interface DetailsForm {
   emergency_contact_relationship: string
 }
 
+/** Seed the join form from the signed-in member's record — same source and the
+ *  same "richest row wins" priority the individual and group registration forms
+ *  use, so a member who has registered before types almost nothing. */
+function detailsFromPrefill(p: RegistrationPrefill | null | undefined): DetailsForm {
+  if (!p) return EMPTY_DETAILS
+  return {
+    ...EMPTY_DETAILS,
+    type: p.age_bracket === 'adult' ? 'Adult' : 'Student',
+    first_name: p.first_name ?? '',
+    last_name: p.last_name ?? '',
+    nickname: p.nickname ?? '',
+    email: p.email,
+    phone: p.phone ?? '',
+    date_of_birth: p.date_of_birth ?? '',
+    gender: p.gender ?? '',
+    t_shirt_size: p.t_shirt_size ?? '',
+    grade: p.grade ?? '',
+    ethnicity: p.ethnicity ?? [],
+    dietary_requirements: p.dietary_requirements ?? [],
+    health_conditions: p.health_conditions ?? '',
+    emergency_contact_first_name: p.emergency_contact_first_name ?? '',
+    emergency_contact_last_name: p.emergency_contact_last_name ?? '',
+    emergency_contact_email: p.emergency_contact_email ?? '',
+    emergency_contact_phone: p.emergency_contact_phone ?? '',
+    emergency_contact_relationship: p.emergency_contact_relationship ?? '',
+  }
+}
+
 const EMPTY_DETAILS: DetailsForm = {
   type: 'Student', first_name: '', last_name: '', nickname: '', email: '', phone: '',
   date_of_birth: '', gender: '', t_shirt_size: '', grade: '',
@@ -58,7 +89,7 @@ const EMPTY_DETAILS: DetailsForm = {
 const inputClass = 'w-full border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue'
 
 export default function GroupJoinClient({
-  token, eventTitle, eventSlug, organiserName, organiserRole, schoolName, schoolState, memberPaysIndividually, isAuthenticated,
+  token, eventTitle, eventSlug, organiserName, organiserRole, schoolName, schoolState, memberPaysIndividually, isAuthenticated, prefill,
 }: Props) {
   const { isSignedIn } = useAuth()
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn()
@@ -66,7 +97,7 @@ export default function GroupJoinClient({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
-  const [form, setForm] = useState<DetailsForm>(EMPTY_DETAILS)
+  const [form, setForm] = useState<DetailsForm>(() => detailsFromPrefill(prefill))
   // Invited person who already has an account → prompt them to sign in and
   // connect it, instead of provisioning a second passwordless account.
   const [existingAccount, setExistingAccount] = useState(false)

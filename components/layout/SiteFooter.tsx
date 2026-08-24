@@ -9,6 +9,7 @@ const FOOTER_COLS = [
     links: [
       { label: 'Competitions', href: '/competitions' },
       { label: 'Curriculum', href: '/curriculum' },
+      { label: 'Teacher Stipend', href: '/stipend' },
       { label: 'Events & Campaigns', href: '/events' },
       { label: 'Host An Event', href: '/host-an-event' },
     ],

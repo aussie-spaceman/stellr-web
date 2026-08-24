@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import FieldError from '@/components/forms/FieldError'
+import { usePrefillForm } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 
 const inputClass = (hasError: boolean) =>
@@ -36,11 +37,18 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { type: prefillType ?? '' },
   })
+
+  // Pre-fill from the signed-in member's record; never clobbers typing.
+  usePrefillForm(reset, (p) => ({
+    name: [p.firstName, p.lastName].filter(Boolean).join(' '),
+    email: p.email,
+  }))
 
   async function onSubmit(data: FormData) {
     setStatus('loading')

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Bell, Check, X } from 'lucide-react'
+import { usePrefillNameEmail } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 
 type RegStatus = 'open' | 'coming-soon' | 'closed'
@@ -33,6 +34,10 @@ function EventNotifyModal({
 }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+
+  // Pre-fill from the signed-in member's record; only fills empty fields.
+  usePrefillNameEmail(name, setName, email, setEmail)
+
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)

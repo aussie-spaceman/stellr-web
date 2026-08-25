@@ -60,9 +60,10 @@ export function onboardingRequirements(a: OnboardingAudience): OnboardingRequire
   const isMinor = isMinorDob(a.date_of_birth)
 
   // A minor is stored as a high-school participant whatever they picked (the
-  // route rewrites role and bracket on save), so their grade is asked for even
-  // when the role they chose would not otherwise call for it. Volunteers are
-  // the exception: they are blocked for being under 18 rather than questioned.
+  // route rewrites role and bracket on save), so the participant questions —
+  // grade, and an emergency contact — are asked even when the role they chose
+  // would not otherwise call for them. Volunteers are the exception: they are
+  // blocked for being under 18 rather than questioned.
   const grade: FieldRule =
     !isVolunteerSignup && (isStudent || isMinor) ? 'required' : 'hidden'
 
@@ -76,7 +77,7 @@ export function onboardingRequirements(a: OnboardingAudience): OnboardingRequire
 
   const emergencyContact: FieldRule = isVolunteerSignup
     ? 'optional'
-    : isStudent || isMentor
+    : isStudent || isMentor || isMinor
     ? 'required'
     : 'hidden'
 

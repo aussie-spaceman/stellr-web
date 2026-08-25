@@ -51,9 +51,11 @@ export async function POST(req: Request) {
   if (required.emergencyContact === 'required' && !ec.all) {
     return NextResponse.json({ error: 'Emergency contact details are required' }, { status: 400 })
   }
-  // Where it is optional, blank is fine but half-filled is not — a name with no
-  // phone number is not an emergency contact.
-  if (required.emergencyContact === 'optional' && ec.any && !ec.all) {
+  // Wherever it is not mandatory, blank is fine but half-filled is not — a name
+  // with no phone number is not an emergency contact. This covers 'hidden' too:
+  // editing the date of birth can stop the wizard asking after values were
+  // already typed, and those still ride along in the payload.
+  if (required.emergencyContact !== 'required' && ec.any && !ec.all) {
     return NextResponse.json(
       { error: 'Please complete every emergency contact field, or leave them all blank' },
       { status: 400 },
@@ -62,16 +64,18 @@ export async function POST(req: Request) {
 
   const db = supabaseServer()
 
-  // Auto-override age_bracket if DOB indicates minor
-  const dob = new Date(date_of_birth)
-  const eighteenth = new Date(dob.getFullYear() + 18, dob.getMonth(), dob.getDate())
-  const isMinorDob = new Date() < eighteenth
-  if (isVolunteerSignup && isMinorDob) {
+  // ONE age check for the whole route, exact to the day (required.isMinor, from
+  // the same rule set the wizard asks by). It replaces a second, cruder
+  // `thisYear - dobYear` that used to decide the two lines below: that one
+  // called someone 18 from the January of their eighteenth year, so a
+  // 17-year-old born in December kept whatever adult role they picked instead
+  // of being resolved to a high-school participant — a minor filed as an adult.
+  if (isVolunteerSignup && required.isMinor) {
     return NextResponse.json({ error: 'Stellr volunteers must be 18 or older' }, { status: 400 })
   }
-  const ageAtToday = new Date().getFullYear() - dob.getFullYear()
-  const resolvedBracket = ageAtToday < 18 ? 'high_school' : age_bracket
-  const resolvedRole = ageAtToday < 18 ? 'participant' : event_role
+  // A minor is a high-school participant whatever they selected.
+  const resolvedBracket = required.isMinor ? 'high_school' : age_bracket
+  const resolvedRole = required.isMinor ? 'participant' : event_role
 
   // Resolve school FK
   let resolvedSchoolId: string | null = school_id && school_id !== 'new' ? school_id : null

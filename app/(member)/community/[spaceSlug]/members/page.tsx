@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentMember } from '@/lib/community'
-import { getSpaceForMember, type SpaceRole } from '@/lib/spaces'
+import { getSpaceForMember, resolveSpaceAudiences, type SpaceRole } from '@/lib/spaces'
 import { getActiveTierNames } from '@/lib/tiers-server'
 import { supabaseServer } from '@/lib/supabase'
 import { Avatar } from '@/components/ui/Avatar'
@@ -25,23 +25,31 @@ export default async function SpaceMembersPage({
   if (!space) notFound()
   if (!space.access.canAccess) return <LockedSpaceGate space={space} />
 
-  const db = supabaseServer()
-  const { data } = await db
-    .from('community_space_members')
-    .select('member_id, role, members:member_id(first_name, last_name)')
-    .eq('space_id', space.id)
-    .eq('status', 'active')
+  // Everyone who can enter, not only the roster table — tier and role access is
+  // resolved at read time and writes no roster row, so reading the table alone
+  // showed "No members yet" on every tier and role Space.
+  const audience = (await resolveSpaceAudiences([space.id])).get(space.id) ?? []
 
-  type Rel = { first_name: string | null; last_name: string | null }
-  type Row = { member_id: string; role: SpaceRole; members: Rel | Rel[] | null }
-  const rows = ((data ?? []) as unknown as Row[]).map((r) => {
-    const m = Array.isArray(r.members) ? r.members[0] ?? null : r.members
-    return {
-      id: r.member_id,
-      role: r.role,
-      name: m ? [m.first_name, m.last_name].filter(Boolean).join(' ') || 'Member' : 'Member',
-    }
-  })
+  const db = supabaseServer()
+  const { data } = audience.length
+    ? await db
+        .from('members')
+        .select('id, first_name, last_name')
+        .in('id', audience.map((a) => a.memberId))
+    : { data: [] }
+
+  type Row = { id: string; first_name: string | null; last_name: string | null }
+  const nameById = new Map(
+    ((data ?? []) as Row[]).map((m) => [
+      m.id,
+      [m.first_name, m.last_name].filter(Boolean).join(' ') || 'Member',
+    ]),
+  )
+  const rows = audience.map((a) => ({
+    id: a.memberId,
+    role: a.role,
+    name: nameById.get(a.memberId) ?? 'Member',
+  }))
 
   const tierNames = await getActiveTierNames(rows.map((r) => r.id))
   rows.sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role] || a.name.localeCompare(b.name))

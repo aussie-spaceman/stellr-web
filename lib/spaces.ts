@@ -152,15 +152,13 @@ export async function getSpacesDirectory(member: CommunityMember): Promise<Space
   // Only worth loading the member's own roles when some space actually grants one.
   const memberRoles = rolesBySpace.size > 0 ? await getGlobalRoleNames(member.id) : []
 
-  // Active member counts per space (one query, counted in JS — directory scale).
-  const { data: activeRows } = await db
-    .from('community_space_members')
-    .select('space_id')
-    .eq('status', 'active')
+  // Counts come from the derived audience, never from the roster table alone:
+  // tier and role access is resolved at read time and writes no roster row, so
+  // counting rows reported every tier/role Space as empty.
+  const memberCounts = await resolveSpaceMemberCounts()
 
   const tiersBySpace = groupValues(tierRows ?? [], 'space_id', 'tier_id')
   const channelCounts = countBy(channels ?? [], 'space_id')
-  const memberCounts = countBy(activeRows ?? [], 'space_id')
   const myRoster = new Map<string, SpaceMembership>()
   for (const r of (roster ?? []) as { space_id: string; role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null }[]) {
     myRoster.set(r.space_id, { role: r.role, status: r.status, muted: !!r.muted })
@@ -277,7 +275,7 @@ export async function getSpaceForMember(
     .maybeSingle()
   if (!s || s.is_archived) return null
 
-  const [{ data: tierRows }, { data: roleRows }, { data: mine }, { data: channels }, { data: activeRows }] =
+  const [{ data: tierRows }, { data: roleRows }, { data: mine }, { data: channels }, memberCounts] =
     await Promise.all([
       db.from('community_space_tiers').select('tier_id').eq('space_id', s.id),
       db.from('community_space_roles').select('role').eq('space_id', s.id),
@@ -293,7 +291,7 @@ export async function getSpaceForMember(
         .eq('space_id', s.id)
         .eq('is_archived', false)
         .order('display_order', { ascending: true }),
-      db.from('community_space_members').select('id').eq('space_id', s.id).eq('status', 'active'),
+      resolveSpaceMemberCounts([s.id]),
     ])
 
   const assignedTierIds = (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
@@ -317,7 +315,7 @@ export async function getSpaceForMember(
     theme: s.theme,
     access_type: s.access_type,
     assignedTierIds,
-    memberCount: (activeRows ?? []).length,
+    memberCount: memberCounts.get(s.id) ?? 0,
     channelCount: (channels ?? []).length,
     access,
     myRole: membership?.status === 'active' ? membership.role : null,
@@ -382,62 +380,194 @@ export async function getSpaceAccessById(
   return resolveSpaceAccess(member, s as { access_type: SpaceAccessType }, assignedTierIds, membership, assignedRoles, memberRoles)
 }
 
+// ─── Derived audiences (who is really in a Space) ────────────────────────────
+//
+// Tier- and role-granted access is resolved at READ time and never writes a
+// community_space_members row — only an Object inheritance, an accepted invite
+// or joining an open space does. Counting that table alone therefore reported
+// every tier and role Space as having zero members while the people who could
+// actually enter it were invisible. These helpers derive the real audience the
+// same way resolveSpaceAccess does, so directory counts, the Members tab, the
+// admin list and announcement fan-out all agree with the access model.
+
+export interface SpaceAudienceEntry {
+  memberId: string
+  /** Roster role where one exists, otherwise the implicit 'member'. */
+  role: SpaceRole
+  /** How they got in — mirrors SpaceAccess.reason. */
+  reason: 'roster' | 'open' | 'tier' | 'role'
+}
+
+/**
+ * Members who may enter each of `spaceIds` (every non-archived space when
+ * omitted). Batched: a fixed number of queries however many spaces are asked for.
+ */
+export async function resolveSpaceAudiences(
+  spaceIds?: string[]
+): Promise<Map<string, SpaceAudienceEntry[]>> {
+  const out = new Map<string, SpaceAudienceEntry[]>()
+  if (spaceIds && spaceIds.length === 0) return out
+
+  const db = supabaseServer()
+  const today = new Date().toISOString().split('T')[0]
+  let spaceQuery = db.from('community_spaces').select('id, access_type').eq('is_archived', false)
+  if (spaceIds) spaceQuery = spaceQuery.in('id', spaceIds)
+
+  // Explicit ranges: these are the member-scale reads, and PostgREST otherwise
+  // caps them at its default page size, silently truncating a large audience.
+  const [
+    { data: spaces },
+    { data: tierRows },
+    { data: roleRows },
+    { data: roster },
+    { data: liveRows },
+    { data: memberships },
+    { data: globalRoles },
+  ] = await Promise.all([
+    spaceQuery,
+    db.from('community_space_tiers').select('space_id, tier_id'),
+    db.from('community_space_roles').select('space_id, role'),
+    db
+      .from('community_space_members')
+      .select('space_id, member_id, role')
+      .eq('status', 'active')
+      .range(0, 99_999),
+    db.from('members').select('id').eq('is_active', true).is('deleted_at', null).range(0, 99_999),
+    db
+      .from('member_memberships')
+      .select('member_id, tier_id, expires_at')
+      .eq('renewal_status', 'active')
+      .range(0, 99_999),
+    db.from('member_roles').select('member_id, role').eq('scope', 'global').range(0, 99_999),
+  ])
+
+  // Only live members ever count: a deactivated or soft-deleted person keeps their
+  // tier and role rows, so filtering here stops them reappearing in every audience.
+  const live = new Set((liveRows ?? []).map((m) => (m as { id: string }).id))
+
+  const byTier = new Map<string, string[]>()
+  for (const m of (memberships ?? []) as Array<{
+    member_id: string; tier_id: string | null; expires_at: string | null
+  }>) {
+    if (!m.tier_id || !live.has(m.member_id)) continue
+    if (m.expires_at && m.expires_at < today) continue
+    const arr = byTier.get(m.tier_id) ?? []
+    arr.push(m.member_id)
+    byTier.set(m.tier_id, arr)
+  }
+
+  const byRole = new Map<string, string[]>()
+  for (const r of (globalRoles ?? []) as Array<{ member_id: string; role: string }>) {
+    if (!live.has(r.member_id)) continue
+    const arr = byRole.get(r.role) ?? []
+    arr.push(r.member_id)
+    byRole.set(r.role, arr)
+  }
+
+  const rosterBySpace = new Map<string, Array<{ memberId: string; role: SpaceRole }>>()
+  for (const r of (roster ?? []) as Array<{ space_id: string; member_id: string; role: SpaceRole }>) {
+    if (!live.has(r.member_id)) continue
+    const arr = rosterBySpace.get(r.space_id) ?? []
+    arr.push({ memberId: r.member_id, role: r.role })
+    rosterBySpace.set(r.space_id, arr)
+  }
+
+  const tiersBySpace = groupValues(tierRows ?? [], 'space_id', 'tier_id')
+  const rolesBySpace = groupValues(roleRows ?? [], 'space_id', 'role')
+
+  for (const s of (spaces ?? []) as Array<{ id: string; access_type: SpaceAccessType }>) {
+    const entries: SpaceAudienceEntry[] = []
+    const seen = new Set<string>()
+    const add = (
+      memberId: string,
+      reason: SpaceAudienceEntry['reason'],
+      role: SpaceRole = 'member'
+    ) => {
+      if (seen.has(memberId)) return
+      seen.add(memberId)
+      entries.push({ memberId, role, reason })
+    }
+
+    // Roster rows go first — they carry the explicit moderator/admin role.
+    for (const r of rosterBySpace.get(s.id) ?? []) add(r.memberId, 'roster', r.role)
+
+    if (s.access_type === 'open') {
+      for (const id of live) add(id, 'open')
+    } else {
+      for (const tierId of tiersBySpace.get(s.id) ?? []) {
+        for (const id of byTier.get(tierId) ?? []) add(id, 'tier')
+      }
+      for (const role of rolesBySpace.get(s.id) ?? []) {
+        for (const id of byRole.get(role) ?? []) add(id, 'role')
+      }
+    }
+    out.set(s.id, entries)
+  }
+  return out
+}
+
+/** Audience sizes only — for the directory and admin member counts. */
+export async function resolveSpaceMemberCounts(spaceIds?: string[]): Promise<Map<string, number>> {
+  const audiences = await resolveSpaceAudiences(spaceIds)
+  const out = new Map<string, number>()
+  for (const [spaceId, entries] of audiences) out.set(spaceId, entries.length)
+  return out
+}
+
+/**
+ * Space ids this member may enter — the batched counterpart of
+ * getSpaceAccessById, for callers that would otherwise resolve every space
+ * one query at a time (the Home feed).
+ */
+export async function getAccessibleSpaceIds(member: CommunityMember): Promise<Set<string>> {
+  const db = supabaseServer()
+  const [{ data: spaces }, { data: tierRows }, { data: roleRows }, { data: roster }] =
+    await Promise.all([
+      db.from('community_spaces').select('id, access_type').eq('is_archived', false),
+      db.from('community_space_tiers').select('space_id, tier_id'),
+      db.from('community_space_roles').select('space_id, role'),
+      db
+        .from('community_space_members')
+        .select('space_id, role, status, muted')
+        .eq('member_id', member.id),
+    ])
+
+  const tiersBySpace = groupValues(tierRows ?? [], 'space_id', 'tier_id')
+  const rolesBySpace = groupValues(roleRows ?? [], 'space_id', 'role') as Map<string, MemberRole[]>
+  const memberRoles = rolesBySpace.size > 0 ? await getGlobalRoleNames(member.id) : []
+
+  const mine = new Map<string, SpaceMembership>()
+  for (const r of (roster ?? []) as Array<{
+    space_id: string; role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null
+  }>) {
+    mine.set(r.space_id, { role: r.role, status: r.status, muted: !!r.muted })
+  }
+
+  const out = new Set<string>()
+  for (const s of (spaces ?? []) as Array<{ id: string; access_type: SpaceAccessType }>) {
+    const access = resolveSpaceAccess(
+      member,
+      s,
+      tiersBySpace.get(s.id) ?? [],
+      mine.get(s.id) ?? null,
+      rolesBySpace.get(s.id) ?? [],
+      memberRoles
+    )
+    if (access.canAccess) out.add(s.id)
+  }
+  return out
+}
+
 /**
  * The set of member ids who should receive a notification for space-wide events
- * (e.g. a new announcement) — i.e. "everyone with access to the space":
- *   • Open space   → every active member (anyone in the community can enter).
- *   • Private/Secret → members whose active membership tier is assigned to the
- *                      space, plus anyone on the active roster.
- * Always includes active roster members regardless of access type. In-app only.
+ * (e.g. a new announcement) — i.e. everyone with access to the space. Previously
+ * this resolved roster + open + tier members but not role-granted ones, so an
+ * announcement in a role room (Teachers'/Mentors'/Coaches') notified nobody.
+ * In-app only.
  */
 export async function spaceNotificationAudience(spaceId: string): Promise<string[]> {
-  const db = supabaseServer()
-  const { data: s } = await db
-    .from('community_spaces')
-    .select('access_type')
-    .eq('id', spaceId)
-    .maybeSingle()
-  if (!s) return []
-  const accessType = (s as { access_type: SpaceAccessType }).access_type
-  const ids = new Set<string>()
-
-  // Active roster members always count (inherited access from an Object, or a moderator).
-  const { data: roster } = await db
-    .from('community_space_members')
-    .select('member_id')
-    .eq('space_id', spaceId)
-    .eq('status', 'active')
-  for (const r of (roster ?? []) as { member_id: string }[]) ids.add(r.member_id)
-
-  if (accessType === 'open') {
-    const { data: all } = await db.from('members').select('id').eq('is_active', true)
-    for (const m of (all ?? []) as { id: string }[]) ids.add(m.id)
-    return [...ids]
-  }
-
-  // Private/Secret — members holding an active, unexpired tier assigned to the space.
-  const { data: tierRows } = await db
-    .from('community_space_tiers')
-    .select('tier_id')
-    .eq('space_id', spaceId)
-  const tierIds = (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
-  if (tierIds.length) {
-    const today = new Date().toISOString().split('T')[0]
-    const { data: memRows } = await db
-      .from('member_memberships')
-      .select('member_id, expires_at, members!inner(is_active)')
-      .in('tier_id', tierIds)
-      .eq('renewal_status', 'active')
-    for (const m of (memRows ?? []) as Array<{
-      member_id: string
-      expires_at: string | null
-      members: { is_active: boolean } | { is_active: boolean }[] | null
-    }>) {
-      const active = Array.isArray(m.members) ? m.members[0]?.is_active : m.members?.is_active
-      if (active && (!m.expires_at || m.expires_at >= today)) ids.add(m.member_id)
-    }
-  }
-  return [...ids]
+  const audiences = await resolveSpaceAudiences([spaceId])
+  return (audiences.get(spaceId) ?? []).map((e) => e.memberId)
 }
 
 /**

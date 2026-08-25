@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
-import { memberCanAccessSpace, type CommunityMember } from '@/lib/community'
+import { type CommunityMember } from '@/lib/community'
+import { getAccessibleSpaceIds } from '@/lib/spaces'
 
 // Mark a post read for a member (idempotent upsert). Called when the post detail
 // page renders. Bumps read_at so re-reading after new activity clears unread.
@@ -85,22 +86,15 @@ export interface FeedPost {
 // access, flagged unread. Excludes archived spaces and tier-locked spaces.
 export async function getHomeFeed(member: CommunityMember, limit = 15): Promise<FeedPost[]> {
   const db = supabaseServer()
-  const { data: spaces } = await db
-    .from('community_spaces')
-    .select('id, slug, name, min_tier_rank')
-    .eq('is_archived', false)
+  const [{ data: spaces }, allowed] = await Promise.all([
+    db.from('community_spaces').select('id, slug, name').eq('is_archived', false),
+    // One batched resolve rather than a per-space round trip each.
+    getAccessibleSpaceIds(member),
+  ])
 
-  const accessChecks = await Promise.all(
-    (spaces ?? []).map(async (s) => ({
-      space: s as { id: string; slug: string; name: string; min_tier_rank: number },
-      ok: await memberCanAccessSpace(member, s as { id: string; min_tier_rank: number }),
-    })),
+  const accessible = ((spaces ?? []) as { id: string; slug: string; name: string }[]).filter((s) =>
+    allowed.has(s.id),
   )
-  const accessible = accessChecks.filter((c) => c.ok).map((c) => c.space) as {
-    id: string
-    slug: string
-    name: string
-  }[]
   if (accessible.length === 0) return []
   const spaceById = new Map(accessible.map((s) => [s.id, s]))
 

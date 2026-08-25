@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
-import { type CommunityMember, getCurrentMember, memberCanAccess } from '@/lib/community'
+import { type CommunityMember, getCurrentMember } from '@/lib/community'
+import { getSpaceAccessById } from '@/lib/spaces'
 import { containerAccessPersists } from '@/lib/containers'
 import { ensureCoachingContainer } from '@/lib/container-sync'
 import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
@@ -590,17 +591,14 @@ export async function canAccessChannel(channelId: string, memberId: string): Pro
   if (!ch) return false
   if (ch.kind === 'coaching') return ch.member_id === memberId || ch.host_member_id === memberId
   if (ch.kind === 'space') {
-    // Space chat mirrors space-view access (tier + entitlement gated). Resolved
-    // for the current member, who must be the one asking.
+    // Space chat mirrors space-view access, resolved by the same Space access
+    // model the space page uses. Resolved for the current member, who must be
+    // the one asking.
     if (!ch.space_id) return false
     const me = await getCurrentMember()
     if (!me || me.id !== memberId) return false
-    const { data: space } = await db
-      .from('community_spaces')
-      .select('min_tier_rank')
-      .eq('id', ch.space_id)
-      .maybeSingle()
-    return memberCanAccess(me, 'space', ch.space_id, (space?.min_tier_rank as number) ?? 0)
+    const access = await getSpaceAccessById(me, ch.space_id)
+    return !!access?.canAccess
   }
   // cohort: member must belong to the cohort (or be its mentor) AND the container's
   // content must still persist (an archived cohort re-gates unless kept open — D1).

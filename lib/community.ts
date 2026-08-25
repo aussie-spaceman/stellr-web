@@ -217,15 +217,25 @@ export async function memberHasSpaceTrainingGrant(
 }
 
 /**
- * Space access convenience wrapper — entitlement-aware (Access Map) with the
- * space's min_tier_rank as legacy fallback. Use for every space view/feed gate
- * so the page, posts, comments and chat all agree.
+ * Space access convenience wrapper. Delegates to the Space access model
+ * (open/private/secret + assigned tiers + assigned roles + roster), which is what
+ * the directory and the space pages already use.
+ *
+ * It used to go through memberCanAccess('space', …), i.e. the content_entitlements
+ * matrix with min_tier_rank as fallback. That was a second, disagreeing access
+ * system: an entitlement row pinned the OPEN General space to two tiers, so every
+ * other tier was blocked from its feed, posts and chat while the directory
+ * correctly advertised it as open to all. Conversely min_tier_rank 0 let every
+ * member read posts from private tier spaces they could not enter. One resolver
+ * now decides, so the page, posts, comments, chat and feed always agree.
  */
 export async function memberCanAccessSpace(
   member: CommunityMember,
-  space: { id: string; min_tier_rank: number }
+  space: { id: string }
 ): Promise<boolean> {
-  return memberCanAccess(member, 'space', space.id, space.min_tier_rank)
+  const { getSpaceAccessById } = await import('@/lib/spaces')
+  const access = await getSpaceAccessById(member, space.id)
+  return !!access?.canAccess
 }
 
 /**

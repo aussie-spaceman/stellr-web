@@ -1,6 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { resolveTierMap } from '@/lib/tiers-server'
 import { SpacesAdminList, type AdminSpaceRow } from '@/components/admin/community/spaces/SpacesAdminList'
+import { resolveSpaceMemberCounts } from '@/lib/spaces'
 import type { SpaceAccessType, SpaceTheme } from '@/lib/spaces'
 
 export const metadata = { title: 'Admin — Manage Spaces' }
@@ -8,14 +9,16 @@ export const dynamic = 'force-dynamic'
 
 export default async function AdminSpacesPage() {
   const db = supabaseServer()
-  const [{ data: spaces }, { data: tierRows }, { data: activeRows }, tierMap] = await Promise.all([
+  const [{ data: spaces }, { data: tierRows }, memberCounts, tierMap] = await Promise.all([
     db
       .from('community_spaces')
       .select('id, slug, name, access_type, theme, posting_policy, is_archived')
       .eq('is_archived', false)
       .order('display_order', { ascending: true }),
     db.from('community_space_tiers').select('space_id, tier_id'),
-    db.from('community_space_members').select('space_id').eq('status', 'active'),
+    // Derived audience, not roster rows: tier/role access writes no roster row,
+    // so counting rows showed every tier and role Space as having 0 members.
+    resolveSpaceMemberCounts(),
     resolveTierMap(),
   ])
 
@@ -27,11 +30,6 @@ export default async function AdminSpacesPage() {
     arr.push(name)
     tierNamesBySpace.set(t.space_id, arr)
   }
-  const memberCounts = new Map<string, number>()
-  for (const r of (activeRows ?? []) as { space_id: string }[]) {
-    memberCounts.set(r.space_id, (memberCounts.get(r.space_id) ?? 0) + 1)
-  }
-
   const rows: AdminSpaceRow[] = ((spaces ?? []) as Array<{
     id: string; slug: string; name: string; access_type: SpaceAccessType; theme: SpaceTheme; posting_policy: 'all' | 'moderators'
   }>).map((s) => ({

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
+import { onboardingRequirements, emergencyContactComplete } from '@/lib/onboarding-requirements'
 
 interface ExistingMember {
   id: string
@@ -103,22 +104,28 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
 
   const [schoolSelection, setSchoolSelection] = useState<SchoolSelection | null>(null)
 
-  // Volunteers are never students for onboarding purposes — a college-bracket
-  // volunteer still skips grade/t-shirt/school/emergency-contact requirements.
-  const isStudent = !volunteerFlow && (form.age_bracket === 'high_school' || form.age_bracket === 'college')
-  // Students always provide a school; teachers provide their school/district.
-  // Adult mentors & parents may add one but it isn't required.
-  const schoolRequired = isStudent || form.event_role === 'teacher'
+  // Who is being asked what — shared with the API that validates this payload,
+  // so the wizard can never ask for less than the route demands.
+  // date_of_birth is included so the questions react as it is typed: a minor
+  // is saved as a high-school participant whatever role they picked, so the
+  // grade question appears the moment the date says under 18.
+  const req = onboardingRequirements({
+    event_role: form.event_role,
+    age_bracket: form.age_bracket,
+    date_of_birth: form.date_of_birth,
+    volunteerFlow,
+  })
+  const schoolRequired = req.school === 'required'
 
   // The active step list is dynamic: role only when asked, emergency only for
-  // students (it's an event-participation requirement for minors/students).
+  // those who attend events (students and mentors).
   const steps = useMemo<StepKey[]>(() => {
     const s: StepKey[] = []
     if (showRoleStep) s.push('role')
     s.push('details')
-    if (isStudent) s.push('emergency')
+    if (req.emergencyContact !== 'hidden') s.push('emergency')
     return s
-  }, [showRoleStep, isStudent])
+  }, [showRoleStep, req.emergencyContact])
 
   const [stepKey, setStepKey] = useState<StepKey>(skipRoleStep ? 'details' : 'role')
   const stepIndex = Math.max(0, steps.indexOf(stepKey))
@@ -154,16 +161,21 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
   function detailsValid(): boolean {
     if (!form.date_of_birth || !form.gender || !form.phone.trim()) return false
     if (volunteerFlow && !isAdultDob(form.date_of_birth)) return false
-    if (isStudent && (!form.grade || !form.tshirt_size)) return false
+    if (req.grade === 'required' && !form.grade) return false
+    if (req.tshirtSize === 'required' && !form.tshirt_size) return false
     if (schoolRequired && !schoolValid(schoolSelection)) return false
     return true
   }
 
+  const ecState = emergencyContactComplete([
+    form.ec_first_name, form.ec_last_name, form.ec_email, form.ec_phone, form.ec_relationship,
+  ])
+
   function emergencyValid(): boolean {
-    return !!(
-      form.ec_first_name.trim() && form.ec_last_name.trim() && form.ec_email.trim() &&
-      form.ec_phone.trim() && form.ec_relationship
-    )
+    if (req.emergencyContact === 'required') return ecState.all
+    // Optional: leave it entirely blank, or fill it in properly. A half-entered
+    // contact is no contact at all, so it is not a third option.
+    return !ecState.any || ecState.all
   }
 
   function goNext() {
@@ -333,28 +345,38 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
             </p>
           )}
 
-          {isStudent && (
+          {/* Asked independently: a mentor gives a t-shirt size but has no grade. */}
+          {(req.grade !== 'hidden' || req.tshirtSize !== 'hidden') && (
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">Grade / Year</label>
-                <select value={form.grade} onChange={(e) => set('grade', e.target.value)} className={inputClass}>
-                  <option value="">Select…</option>
-                  {GRADES.filter((g) =>
-                    form.age_bracket === 'high_school' ? g.value.startsWith('grade_') : !g.value.startsWith('grade_')
-                  ).map((g) => (
-                    <option key={g.value} value={g.value}>{g.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">T-shirt size</label>
-                <select value={form.tshirt_size} onChange={(e) => set('tshirt_size', e.target.value)} className={inputClass}>
-                  <option value="">Select…</option>
-                  {['S', 'M', 'L', 'XL', '2XL', '3XL_plus'].map((s) => (
-                    <option key={s} value={s}>{s.replace('_plus', '+')}</option>
-                  ))}
-                </select>
-              </div>
+              {req.grade !== 'hidden' && (
+                <div>
+                  <label className="block text-xs text-brand-muted-soft mb-1">Grade / Year</label>
+                  <select value={form.grade} onChange={(e) => set('grade', e.target.value)} className={inputClass}>
+                    <option value="">Select…</option>
+                    {GRADES.filter((g) =>
+                      req.isMinor || form.age_bracket === 'high_school'
+                        ? g.value.startsWith('grade_')
+                        : !g.value.startsWith('grade_')
+                    ).map((g) => (
+                      <option key={g.value} value={g.value}>{g.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {req.tshirtSize !== 'hidden' && (
+                <div>
+                  <label className="block text-xs text-brand-muted-soft mb-1">
+                    T-shirt size
+                    {req.tshirtSize === 'optional' && <span className="text-brand-muted-soft"> (optional)</span>}
+                  </label>
+                  <select value={form.tshirt_size} onChange={(e) => set('tshirt_size', e.target.value)} className={inputClass}>
+                    <option value="">Select…</option>
+                    {['S', 'M', 'L', 'XL', '2XL', '3XL_plus'].map((s) => (
+                      <option key={s} value={s}>{s.replace('_plus', '+')}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           )}
 
@@ -397,8 +419,17 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
 
       {stepKey === 'emergency' && (
         <div className="space-y-4">
-          <h2 className="text-base font-semibold text-brand-blue-dark">Emergency contact</h2>
-          <p className="text-xs text-brand-muted-soft">Required for event participation.</p>
+          <h2 className="text-base font-semibold text-brand-blue-dark">
+            Emergency contact
+            {req.emergencyContact === 'optional' && (
+              <span className="font-normal text-brand-muted-soft"> (optional)</span>
+            )}
+          </h2>
+          <p className="text-xs text-brand-muted-soft">
+            {req.emergencyContact === 'optional'
+              ? 'We only need this if you attend an event — you can skip it now and add it later from your account.'
+              : 'Required for event participation.'}
+          </p>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -429,6 +460,12 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
               {EMERGENCY_RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
+
+          {req.emergencyContact === 'optional' && ecState.any && !ecState.all && (
+            <p className="text-sm text-brand-grey-dark">
+              Please complete every field, or clear them all — a partial contact can&rsquo;t be used.
+            </p>
+          )}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 

@@ -7,6 +7,7 @@ import { normalizeEmail } from '@/lib/member-enums'
 import { logActivity } from '@/lib/activity-log'
 import { grantVolunteerRole, dispatchVolunteerAgreement } from '@/lib/volunteer'
 import { syncMemberClassificationRole } from '@/lib/member-roles'
+import { onboardingRequirements, emergencyContactComplete } from '@/lib/onboarding-requirements'
 import { sendAccountConfirmation, notifyStaffOfRegistration } from '@/lib/registration-notify'
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
@@ -27,27 +28,36 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
-  // Onboarding fields are mandatory by audience (mirrors the client wizard):
-  // everyone gives a phone; students give grade/t-shirt/school + emergency
-  // contact; teachers give their school/district. Volunteers are never treated
-  // as students — a college-bracket volunteer skips the student requirements —
-  // and must be 18+.
+  // Onboarding fields are mandatory by audience. Everyone gives a phone; the
+  // rest comes from the SAME rule set the wizard asks by, so this can never
+  // demand a field the member was never shown. Volunteers must also be 18+.
   const isVolunteerSignup = event_role === 'volunteer'
-  const isStudentBracket = !isVolunteerSignup && (age_bracket === 'high_school' || age_bracket === 'college')
+  const required = onboardingRequirements({ event_role, age_bracket, date_of_birth })
   const schoolProvided = (school_id && school_id !== 'new') || (school_id === 'new' && !!new_school_name?.trim())
-  const schoolRequired = isStudentBracket || event_role === 'teacher'
 
   if (!phone?.trim()) {
     return NextResponse.json({ error: 'Phone number is required' }, { status: 400 })
   }
-  if (isStudentBracket && (!grade || !tshirt_size)) {
-    return NextResponse.json({ error: 'Grade and t-shirt size are required' }, { status: 400 })
+  if (required.grade === 'required' && !grade) {
+    return NextResponse.json({ error: 'Grade is required' }, { status: 400 })
   }
-  if (schoolRequired && !schoolProvided) {
+  if (required.tshirtSize === 'required' && !tshirt_size) {
+    return NextResponse.json({ error: 'T-shirt size is required' }, { status: 400 })
+  }
+  if (required.school === 'required' && !schoolProvided) {
     return NextResponse.json({ error: 'School is required' }, { status: 400 })
   }
-  if (isStudentBracket && (!ec_first_name?.trim() || !ec_last_name?.trim() || !ec_email?.trim() || !ec_phone?.trim() || !ec_relationship)) {
+  const ec = emergencyContactComplete([ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship])
+  if (required.emergencyContact === 'required' && !ec.all) {
     return NextResponse.json({ error: 'Emergency contact details are required' }, { status: 400 })
+  }
+  // Where it is optional, blank is fine but half-filled is not — a name with no
+  // phone number is not an emergency contact.
+  if (required.emergencyContact === 'optional' && ec.any && !ec.all) {
+    return NextResponse.json(
+      { error: 'Please complete every emergency contact field, or leave them all blank' },
+      { status: 400 },
+    )
   }
 
   const db = supabaseServer()

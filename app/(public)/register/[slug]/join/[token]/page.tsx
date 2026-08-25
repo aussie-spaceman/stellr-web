@@ -104,7 +104,14 @@ export default async function GroupJoinPage({ params }: PageProps) {
 
   // Check if already registered
   const clerkUser = await currentUser()
-  const memberEmail = clerkUser?.emailAddresses?.[0]?.emailAddress ?? ''
+  // Match on the PRIMARY address. emailAddresses[] is not ordered primary-first,
+  // so [0] can be a secondary — e.g. an address left behind by an OAuth provider
+  // whose email later changed — and matching on it misses the participant row,
+  // showing the join form again to someone already registered.
+  const memberEmail =
+    clerkUser?.emailAddresses?.find((e) => e.id === clerkUser.primaryEmailAddressId)?.emailAddress ??
+    clerkUser?.emailAddresses?.[0]?.emailAddress ??
+    ''
 
   let alreadyRegistered = false
   if (memberEmail) {

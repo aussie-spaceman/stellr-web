@@ -120,6 +120,12 @@ export async function POST(req: Request) {
     ec_phone: ec_phone || null,
     ec_relationship: ec_relationship || null,
     is_active: true,
+    // Clear the soft-delete stamp too. This object is also applied to a row found
+    // by EMAIL below, which may be a previously soft-deleted member (Clerk
+    // user.deleted sets is_active=false + deleted_at). Reviving with is_active
+    // alone leaves a zombie: active to the member, deleted to every
+    // `deleted_at is null` reader.
+    deleted_at: null,
   }
 
   let memberError

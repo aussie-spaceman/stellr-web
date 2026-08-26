@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 import { logActivity } from '@/lib/activity-log'
 
 function requireAdmin(sessionClaims: Record<string, unknown> | null | undefined) {
@@ -48,7 +48,7 @@ export async function PATCH(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   const { flagId, action, hideContent } = parsed.data
 
-  const admin = await getCurrentMember()
+  const admin = await getSignedInMember()
   const db = supabaseServer()
 
   const { data: flag } = await db

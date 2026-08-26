@@ -29,6 +29,24 @@ export interface SpaceMembership {
   muted: boolean
 }
 
+/** The two things an admin can block a member on, per space (migration 142). */
+export type SuspensionScope = 'access' | 'posting'
+
+/**
+ * A member's LIVE negative grants on a space — expired rows are already
+ * filtered out by loadSpaceSuspensions. These outrank every positive grant
+ * except the platform-admin bypass: revoking has to beat open/tier/role access,
+ * which write no roster row and so cannot be undone by deleting one.
+ */
+export interface SpaceSuspensions {
+  /** Revoked — cannot enter, read, or be notified about this space. */
+  access: boolean
+  /** Suspended — may read, may not post. Supersedes community_space_members.muted. */
+  posting: boolean
+}
+
+export const NO_SUSPENSIONS: SpaceSuspensions = { access: false, posting: false }
+
 export interface SpaceSummary {
   id: string
   slug: string
@@ -40,6 +58,12 @@ export interface SpaceSummary {
   assignedTierIds: string[]
   memberCount: number
   channelCount: number
+  /**
+   * Blocked by an admin revocation rather than by failing a tier gate. Drives the
+   * card copy: a revoked member must NOT be shown "Requires Scholar · Upgrade",
+   * which would sell them a tier that cannot let them back in.
+   */
+  revoked?: boolean
 }
 
 export interface SpaceAccess {
@@ -48,9 +72,13 @@ export interface SpaceAccess {
   /** Whether the space should appear in the directory at all. */
   visible: boolean
   /** Why access was (not) granted — drives copy + grouping. */
-  reason: 'admin' | 'open' | 'tier' | 'role' | 'roster' | 'invited' | 'denied'
+  reason: 'admin' | 'open' | 'tier' | 'role' | 'roster' | 'invited' | 'denied' | 'revoked'
   /** Private/secret space the member can't currently enter. */
   gated: boolean
+  /** Blocked by an admin revocation rather than by failing a gate. */
+  revoked: boolean
+  /** Suspended from posting by an admin — may still read. */
+  postingSuspended: boolean
 }
 
 /**
@@ -65,32 +93,54 @@ export function resolveSpaceAccess(
   // Access Convergence: web-app roles granted to the space, and the member's own
   // global roles. Optional so existing callers keep tier-only behaviour unchanged.
   assignedRoles: MemberRole[] = [],
-  memberRoles: MemberRole[] = []
+  memberRoles: MemberRole[] = [],
+  // Admin revocation / posting suspension (migration 142). Optional so callers
+  // that have already excluded revoked members keep their existing behaviour.
+  suspensions: SpaceSuspensions = NO_SUSPENSIONS
 ): SpaceAccess {
-  // Platform admins bypass every gate and can see everything.
+  const posting = suspensions.posting
+
+  // Platform admins bypass every gate and can see everything — including a space
+  // they have somehow been suspended on, since they are the ones moderating it.
   if (member.isAdmin) {
-    return { canAccess: true, visible: true, reason: 'admin', gated: false }
+    return { canAccess: true, visible: true, reason: 'admin', gated: false, revoked: false, postingSuspended: false }
+  }
+
+  // Revocation is checked BEFORE every positive grant. Deleting a roster row can
+  // only undo a roster grant, so an open/tier/role member could never otherwise
+  // be removed from a space at all.
+  if (suspensions.access) {
+    return {
+      canAccess: false,
+      // Secret stays invisible; anything else shows as Restricted with revoked copy,
+      // so the member isn't told a tier upgrade would let them back in.
+      visible: space.access_type !== 'secret',
+      reason: 'revoked',
+      gated: true,
+      revoked: true,
+      postingSuspended: posting,
+    }
   }
 
   // An accepted roster row (any role) grants access regardless of tier.
   if (membership?.status === 'active') {
-    return { canAccess: true, visible: true, reason: 'roster', gated: false }
+    return { canAccess: true, visible: true, reason: 'roster', gated: false, revoked: false, postingSuspended: posting }
   }
 
   if (space.access_type === 'open') {
-    return { canAccess: true, visible: true, reason: 'open', gated: false }
+    return { canAccess: true, visible: true, reason: 'open', gated: false, revoked: false, postingSuspended: posting }
   }
 
   // Private / secret: tier match auto-grants.
   const tierMatch = member.activeTierIds.some((id) => assignedTierIds.includes(id))
   if (tierMatch) {
-    return { canAccess: true, visible: true, reason: 'tier', gated: false }
+    return { canAccess: true, visible: true, reason: 'tier', gated: false, revoked: false, postingSuspended: posting }
   }
 
   // Web-app role match auto-grants (e.g. a Volunteer Space granted to 'volunteer').
   const roleMatch = assignedRoles.length > 0 && memberRoles.some((r) => assignedRoles.includes(r))
   if (roleMatch) {
-    return { canAccess: true, visible: true, reason: 'role', gated: false }
+    return { canAccess: true, visible: true, reason: 'role', gated: false, revoked: false, postingSuspended: posting }
   }
 
   // No access. Private stays visible (greyed/Restricted); secret is hidden.
@@ -99,7 +149,53 @@ export function resolveSpaceAccess(
     visible: space.access_type === 'private',
     reason: 'denied',
     gated: true,
+    revoked: false,
+    postingSuspended: posting,
   }
+}
+
+/**
+ * Live suspensions for the given spaces and/or members, keyed `spaceId:memberId`.
+ * Rows whose expires_at has passed are treated as lifted but left in the table,
+ * so the record of who suspended whom (and why) survives.
+ */
+export async function loadSpaceSuspensions(opts: {
+  spaceIds?: string[]
+  memberIds?: string[]
+} = {}): Promise<Map<string, SpaceSuspensions>> {
+  const out = new Map<string, SpaceSuspensions>()
+  if (opts.spaceIds?.length === 0 || opts.memberIds?.length === 0) return out
+
+  const db = supabaseServer()
+  let q = db
+    .from('community_space_suspensions')
+    .select('space_id, member_id, scope, expires_at')
+    .range(0, 99_999)
+  if (opts.spaceIds) q = q.in('space_id', opts.spaceIds)
+  if (opts.memberIds) q = q.in('member_id', opts.memberIds)
+
+  const { data, error } = await q
+  // A failed read must not silently un-suspend everyone: surface it to the caller
+  // rather than returning an empty map that reads as "nobody is suspended".
+  if (error) throw new Error(`loadSpaceSuspensions failed — ${error.message}`)
+
+  const now = Date.now()
+  for (const r of (data ?? []) as Array<{
+    space_id: string; member_id: string; scope: SuspensionScope; expires_at: string | null
+  }>) {
+    if (r.expires_at && new Date(r.expires_at).getTime() <= now) continue
+    const key = `${r.space_id}:${r.member_id}`
+    const cur = out.get(key) ?? { access: false, posting: false }
+    cur[r.scope] = true
+    out.set(key, cur)
+  }
+  return out
+}
+
+/** One member's live suspensions on one space. */
+export async function loadSuspension(spaceId: string, memberId: string): Promise<SpaceSuspensions> {
+  const map = await loadSpaceSuspensions({ spaceIds: [spaceId], memberIds: [memberId] })
+  return map.get(`${spaceId}:${memberId}`) ?? NO_SUSPENSIONS
 }
 
 export interface PendingInvite {
@@ -157,6 +253,10 @@ export async function getSpacesDirectory(member: CommunityMember): Promise<Space
   // counting rows reported every tier/role Space as empty.
   const memberCounts = await resolveSpaceMemberCounts()
 
+  // This member's own revocations/suspensions, so a revoked space drops out of
+  // Your spaces / Discover and shows as Restricted with revoked copy instead.
+  const mySuspensions = await loadSpaceSuspensions({ memberIds: [member.id] })
+
   const tiersBySpace = groupValues(tierRows ?? [], 'space_id', 'tier_id')
   const channelCounts = countBy(channels ?? [], 'space_id')
   const myRoster = new Map<string, SpaceMembership>()
@@ -175,7 +275,8 @@ export async function getSpacesDirectory(member: CommunityMember): Promise<Space
     const assignedTierIds = tiersBySpace.get(s.id) ?? []
     const membership = myRoster.get(s.id) ?? null
     const assignedRoles = rolesBySpace.get(s.id) ?? []
-    const access = resolveSpaceAccess(member, s, assignedTierIds, membership, assignedRoles, memberRoles)
+    const suspensions = mySuspensions.get(`${s.id}:${member.id}`) ?? NO_SUSPENSIONS
+    const access = resolveSpaceAccess(member, s, assignedTierIds, membership, assignedRoles, memberRoles, suspensions)
     if (!access.visible) continue
 
     const summary: SpaceSummary = {
@@ -188,6 +289,7 @@ export async function getSpacesDirectory(member: CommunityMember): Promise<Space
       assignedTierIds,
       memberCount: memberCounts.get(s.id) ?? 0,
       channelCount: channelCounts.get(s.id) ?? 0,
+      revoked: access.revoked,
     }
 
     if (!access.canAccess) {
@@ -302,7 +404,8 @@ export async function getSpaceForMember(
     : null
   // Member's global roles only matter when the space actually grants some (most don't).
   const memberRoles = assignedRoles.length > 0 ? await getGlobalRoleNames(member.id) : []
-  const access = resolveSpaceAccess(member, s, assignedTierIds, membership, assignedRoles, memberRoles)
+  const suspensions = await loadSuspension(s.id, member.id)
+  const access = resolveSpaceAccess(member, s, assignedTierIds, membership, assignedRoles, memberRoles, suspensions)
 
   // Secret + inaccessible → behave as not found so the URL leaks nothing.
   if (s.access_type === 'secret' && !access.canAccess) return null
@@ -319,7 +422,10 @@ export async function getSpaceForMember(
     channelCount: (channels ?? []).length,
     access,
     myRole: membership?.status === 'active' ? membership.role : null,
-    myMuted: membership?.muted ?? false,
+    // Either lever silences them: the legacy roster mute (read for one more
+    // release) or a 'posting' suspension, which also works for a tier/role member
+    // who has no roster row to carry a mute.
+    myMuted: (membership?.muted ?? false) || suspensions.posting,
     channels: (channels ?? []) as SpaceChannel[],
     postingPolicy: ((s as { posting_policy?: 'all' | 'moderators' }).posting_policy ?? 'all'),
     allowMemberUploads: ((s as { allow_member_uploads?: boolean }).allow_member_uploads ?? true),
@@ -377,7 +483,8 @@ export async function getSpaceAccessById(
     ? { role: mineRow.role, status: mineRow.status, muted: !!mineRow.muted }
     : null
   const memberRoles = assignedRoles.length > 0 ? await getGlobalRoleNames(member.id) : []
-  return resolveSpaceAccess(member, s as { access_type: SpaceAccessType }, assignedTierIds, membership, assignedRoles, memberRoles)
+  const suspensions = await loadSuspension(spaceId, member.id)
+  return resolveSpaceAccess(member, s as { access_type: SpaceAccessType }, assignedTierIds, membership, assignedRoles, memberRoles, suspensions)
 }
 
 // ─── Derived audiences (who is really in a Space) ────────────────────────────
@@ -396,6 +503,8 @@ export interface SpaceAudienceEntry {
   role: SpaceRole
   /** How they got in — mirrors SpaceAccess.reason. */
   reason: 'roster' | 'open' | 'tier' | 'role'
+  /** Suspended from posting by an admin — still in the audience, still reads. */
+  postingSuspended: boolean
 }
 
 /**
@@ -423,6 +532,7 @@ export async function resolveSpaceAudiences(
     { data: liveRows },
     { data: memberships },
     { data: globalRoles },
+    suspensions,
   ] = await Promise.all([
     spaceQuery,
     db.from('community_space_tiers').select('space_id, tier_id'),
@@ -439,6 +549,9 @@ export async function resolveSpaceAudiences(
       .eq('renewal_status', 'active')
       .range(0, 99_999),
     db.from('member_roles').select('member_id, role').eq('scope', 'global').range(0, 99_999),
+    // Revoked members are removed from the audience below, so counts, the admin
+    // Members tab and announcement fan-out all drop them together.
+    loadSpaceSuspensions(spaceIds ? { spaceIds } : {}),
   ])
 
   // Only live members ever count: a deactivated or soft-deleted person keeps their
@@ -485,7 +598,11 @@ export async function resolveSpaceAudiences(
     ) => {
       if (seen.has(memberId)) return
       seen.add(memberId)
-      entries.push({ memberId, role, reason })
+      const susp = suspensions.get(`${s.id}:${memberId}`)
+      // A revoked member is not in the audience at all — mirrors resolveSpaceAccess
+      // checking revocation ahead of every positive grant.
+      if (susp?.access) return
+      entries.push({ memberId, role, reason, postingSuspended: !!susp?.posting })
     }
 
     // Roster rows go first — they carry the explicit moderator/admin role.
@@ -514,6 +631,378 @@ export async function resolveSpaceMemberCounts(spaceIds?: string[]): Promise<Map
   return out
 }
 
+/** One Space a member can reach, as the admin member record needs to see it. */
+export interface MemberSpaceGrant {
+  spaceId: string
+  slug: string
+  name: string
+  accessType: SpaceAccessType
+  role: SpaceRole
+  status: 'active' | 'invited'
+  reason: 'roster' | 'open' | 'tier' | 'role' | 'object' | 'invited'
+  grantRef: string | null
+  postingSuspended: boolean
+  revoked: boolean
+}
+
+/**
+ * Every Space this member can reach, and why — the inverse of
+ * resolveSpaceAudience, resolved by the same precedence so the two directions
+ * always agree.
+ *
+ * Deliberately does NOT apply the platform-admin bypass: this answers "what has
+ * this person been granted", which is the question the admin member record and
+ * the Person 360 are asking. Running it for an admin would otherwise return
+ * every Space with reason 'admin' and tell you nothing.
+ *
+ * Revoked Spaces are returned flagged rather than omitted, so an admin can see
+ * and lift the block.
+ */
+export async function resolveMemberSpaces(memberId: string): Promise<MemberSpaceGrant[]> {
+  const db = supabaseServer()
+  const today = new Date().toISOString().split('T')[0]
+
+  const [
+    { data: spaces },
+    { data: tierRows },
+    { data: roleRows },
+    { data: sourceRows },
+    { data: roster },
+    suspensions,
+    { data: myTiers },
+    { data: myRoles },
+  ] = await Promise.all([
+    db
+      .from('community_spaces')
+      .select('id, slug, name, access_type')
+      .eq('is_archived', false)
+      .order('display_order', { ascending: true }),
+    db.from('community_space_tiers').select('space_id, tier_id'),
+    db.from('community_space_roles').select('space_id, role'),
+    db.from('community_space_sources').select('space_id, object_type, object_ref'),
+    db
+      .from('community_space_members')
+      .select('space_id, role, status, muted, invited_by')
+      .eq('member_id', memberId),
+    loadSpaceSuspensions({ memberIds: [memberId] }),
+    db
+      .from('member_memberships')
+      .select('tier_id, expires_at')
+      .eq('member_id', memberId)
+      .eq('renewal_status', 'active'),
+    db.from('member_roles').select('role').eq('member_id', memberId).eq('scope', 'global'),
+  ])
+
+  const myTierIds = new Set(
+    ((myTiers ?? []) as Array<{ tier_id: string | null; expires_at: string | null }>)
+      .filter((m) => m.tier_id && !(m.expires_at && m.expires_at < today))
+      .map((m) => m.tier_id as string)
+  )
+  const myRoleNames = new Set(((myRoles ?? []) as Array<{ role: string }>).map((r) => r.role))
+
+  const tiersBySpace = groupValues(tierRows ?? [], 'space_id', 'tier_id')
+  const rolesBySpace = groupValues(roleRows ?? [], 'space_id', 'role')
+
+  const rosterBySpace = new Map<string, {
+    role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null; invited_by: string | null
+  }>()
+  for (const r of (roster ?? []) as Array<{
+    space_id: string; role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null; invited_by: string | null
+  }>) {
+    rosterBySpace.set(r.space_id, r)
+  }
+
+  // Only ask an Object for its roster when this member actually has a roster row
+  // on a Space that Object feeds — otherwise every member record would fan out
+  // into a query per linked Event.
+  const sources = (sourceRows ?? []) as Array<{ space_id: string; object_type: string; object_ref: string }>
+  const relevantSources = sources.filter((src) => rosterBySpace.has(src.space_id))
+  const objectGrant = new Map<string, string>()
+  if (relevantSources.length) {
+    const { objectActiveMemberIds } = await import('@/lib/space-inheritance')
+    await Promise.all(
+      relevantSources.map(async (src) => {
+        try {
+          const ids = await objectActiveMemberIds(
+            db,
+            src.object_type as 'event' | 'training' | 'mentoring' | 'coaching',
+            src.object_ref
+          )
+          if (ids.includes(memberId) && !objectGrant.has(src.space_id)) {
+            objectGrant.set(src.space_id, `${src.object_type}:${src.object_ref}`)
+          }
+        } catch (e) {
+          console.error('[spaces] member source attribution failed (non-fatal):', src, e)
+        }
+      })
+    )
+  }
+
+  const out: MemberSpaceGrant[] = []
+  for (const sp of (spaces ?? []) as Array<{
+    id: string; slug: string; name: string; access_type: SpaceAccessType
+  }>) {
+    const susp = suspensions.get(`${sp.id}:${memberId}`)
+    const mine = rosterBySpace.get(sp.id)
+    const objectRef = objectGrant.get(sp.id) ?? null
+
+    let reason: MemberSpaceGrant['reason'] | null = null
+    let grantRef: string | null = null
+
+    if (mine) {
+      reason = mine.status === 'invited' ? 'invited' : objectRef ? 'object' : mine.invited_by ? 'invited' : 'roster'
+      grantRef = objectRef
+    } else if (sp.access_type === 'open') {
+      reason = 'open'
+    } else {
+      const tierId = (tiersBySpace.get(sp.id) ?? []).find((id) => myTierIds.has(id))
+      if (tierId) {
+        reason = 'tier'
+        grantRef = tierId
+      } else {
+        const role = (rolesBySpace.get(sp.id) ?? []).find((r) => myRoleNames.has(r))
+        if (role) {
+          reason = 'role'
+          grantRef = role
+        }
+      }
+    }
+
+    // No grant at all and nothing revoked → this Space simply isn't theirs.
+    if (!reason && !susp?.access) continue
+
+    out.push({
+      spaceId: sp.id,
+      slug: sp.slug,
+      name: sp.name,
+      accessType: sp.access_type,
+      role: mine?.role ?? 'member',
+      status: mine?.status ?? 'active',
+      reason: reason ?? 'roster',
+      grantRef,
+      postingSuspended: !!mine?.muted || !!susp?.posting,
+      revoked: !!susp?.access,
+    })
+  }
+  return out
+}
+
+/** One person in a Space, as the admin roster needs to see them. */
+export interface SpaceAudienceMember {
+  memberId: string
+  name: string
+  email: string | null
+  tierName: string | null
+  /** Roster role where one exists, otherwise the implicit 'member'. */
+  role: SpaceRole
+  /** Derived-only members are 'active' — they can walk in right now. */
+  status: 'active' | 'invited'
+  /** How they got in. 'object' = inherited from a linked Event/Training/Cohort. */
+  reason: 'roster' | 'open' | 'tier' | 'role' | 'object' | 'invited'
+  /**
+   * Machine-readable detail for `reason`: a tier id, a web-app role name, or
+   * `objectType:objectRef`. Null for 'open' and bare 'roster'. Callers that can
+   * reach Sanity (lib/space-admin) turn this into a friendly label.
+   */
+  grantRef: string | null
+  /** Suspended from posting — reads, cannot post. */
+  postingSuspended: boolean
+  /** Revoked — cannot enter. Listed anyway so an admin can restore them. */
+  revoked: boolean
+  addedAt: string | null
+}
+
+/**
+ * The admin roster for ONE space: every person who can enter it, how they got
+ * in, and any admin block on them.
+ *
+ * This is deliberately a superset of resolveSpaceAudiences rather than a second
+ * implementation of it — it additionally carries invited-not-yet-accepted rows
+ * and revoked members, both of which an admin must see and act on but neither of
+ * which belongs in an access audience. spaces.audience.test.ts asserts that
+ * filtering this down to (active ∧ not revoked) reproduces resolveSpaceAudiences
+ * exactly, so the two cannot drift apart the way the roster table and the access
+ * model did.
+ *
+ * `exceptionsOnly` drops plain derived members, leaving roster rows, role
+ * holders and blocked members — the only sane rendering for an `open` space,
+ * whose audience is every live member on the platform.
+ */
+export async function resolveSpaceAudience(
+  spaceId: string,
+  opts: { exceptionsOnly?: boolean } = {}
+): Promise<SpaceAudienceMember[]> {
+  const db = supabaseServer()
+  const { data: space } = await db
+    .from('community_spaces')
+    .select('id, access_type')
+    .eq('id', spaceId)
+    .maybeSingle()
+  if (!space) return []
+  const accessType = (space as { access_type: SpaceAccessType }).access_type
+
+  const today = new Date().toISOString().split('T')[0]
+  const [
+    { data: tierRows },
+    { data: roleRows },
+    { data: sourceRows },
+    { data: roster },
+    suspensions,
+    { data: liveRows },
+    { data: memberships },
+    { data: globalRoles },
+  ] = await Promise.all([
+    db.from('community_space_tiers').select('tier_id').eq('space_id', spaceId),
+    db.from('community_space_roles').select('role').eq('space_id', spaceId),
+    db.from('community_space_sources').select('object_type, object_ref').eq('space_id', spaceId),
+    db
+      .from('community_space_members')
+      .select('member_id, role, status, muted, invited_by, added_at')
+      .eq('space_id', spaceId)
+      .range(0, 99_999),
+    loadSpaceSuspensions({ spaceIds: [spaceId] }),
+    db
+      .from('members')
+      .select('id, first_name, last_name, email')
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .range(0, 99_999),
+    db
+      .from('member_memberships')
+      .select('member_id, tier_id, expires_at')
+      .eq('renewal_status', 'active')
+      .range(0, 99_999),
+    db.from('member_roles').select('member_id, role').eq('scope', 'global').range(0, 99_999),
+  ])
+
+  type LiveMember = { id: string; first_name: string | null; last_name: string | null; email: string | null }
+  const liveById = new Map<string, LiveMember>(
+    ((liveRows ?? []) as LiveMember[]).map((m) => [m.id, m])
+  )
+
+  const spaceTierIds = (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
+  const spaceRoles = (roleRows ?? []).map((r) => (r as { role: string }).role)
+
+  // Which member holds which of THIS space's granting tiers / roles, so the
+  // badge can name the specific grant rather than just its kind.
+  const tierGrant = new Map<string, string>()
+  for (const m of (memberships ?? []) as Array<{ member_id: string; tier_id: string | null; expires_at: string | null }>) {
+    if (!m.tier_id || !liveById.has(m.member_id)) continue
+    if (m.expires_at && m.expires_at < today) continue
+    if (!spaceTierIds.includes(m.tier_id)) continue
+    if (!tierGrant.has(m.member_id)) tierGrant.set(m.member_id, m.tier_id)
+  }
+  const roleGrant = new Map<string, string>()
+  for (const r of (globalRoles ?? []) as Array<{ member_id: string; role: string }>) {
+    if (!liveById.has(r.member_id)) continue
+    if (!spaceRoles.includes(r.role)) continue
+    if (!roleGrant.has(r.member_id)) roleGrant.set(r.member_id, r.role)
+  }
+
+  // Attribute roster rows to the Object that produced them. syncObjectSpaceRoster
+  // writes a bare roster row with no marker, so the only way to tell an inherited
+  // member from a manually-added one is to ask each linked Object for its roster.
+  // One query per source, not per member.
+  const objectGrant = new Map<string, string>()
+  const sources = (sourceRows ?? []) as Array<{ object_type: string; object_ref: string }>
+  if (sources.length) {
+    const { objectActiveMemberIds } = await import('@/lib/space-inheritance')
+    await Promise.all(
+      sources.map(async (src) => {
+        try {
+          const ids = await objectActiveMemberIds(
+            db,
+            src.object_type as 'event' | 'training' | 'mentoring' | 'coaching',
+            src.object_ref
+          )
+          for (const id of ids) {
+            if (!objectGrant.has(id)) objectGrant.set(id, `${src.object_type}:${src.object_ref}`)
+          }
+        } catch (e) {
+          // A source whose roster can't be read costs us the badge, not the row.
+          console.error('[spaces] source attribution failed (non-fatal):', src, e)
+        }
+      })
+    )
+  }
+
+  const rosterRows = (roster ?? []) as Array<{
+    member_id: string
+    role: SpaceRole
+    status: 'invited' | 'active'
+    muted: boolean | null
+    invited_by: string | null
+    added_at: string | null
+  }>
+
+  const out: SpaceAudienceMember[] = []
+  const seen = new Set<string>()
+
+  const push = (
+    memberId: string,
+    reason: SpaceAudienceMember['reason'],
+    grantRef: string | null,
+    role: SpaceRole,
+    status: 'active' | 'invited',
+    mutedFlag: boolean,
+    addedAt: string | null
+  ) => {
+    if (seen.has(memberId)) return
+    const m = liveById.get(memberId)
+    // Deactivated and soft-deleted people keep their tier, role and roster rows;
+    // skipping them here is what stops them haunting every audience.
+    if (!m) return
+    seen.add(memberId)
+    const susp = suspensions.get(`${spaceId}:${memberId}`)
+    out.push({
+      memberId,
+      name: [m.first_name, m.last_name].filter(Boolean).join(' ') || m.email || 'Member',
+      email: m.email,
+      tierName: null, // filled in below, in one batched query
+      role,
+      status,
+      reason,
+      grantRef,
+      postingSuspended: mutedFlag || !!susp?.posting,
+      revoked: !!susp?.access,
+      addedAt,
+    })
+  }
+
+  // Same precedence as resolveSpaceAudiences: roster rows first (they carry the
+  // explicit moderator/admin role), then open, then tier, then role.
+  for (const r of rosterRows) {
+    const objectRef = objectGrant.get(r.member_id) ?? null
+    const reason: SpaceAudienceMember['reason'] =
+      r.status === 'invited' ? 'invited' : objectRef ? 'object' : r.invited_by ? 'invited' : 'roster'
+    push(r.member_id, reason, objectRef, r.role, r.status, !!r.muted, r.added_at)
+  }
+
+  if (accessType === 'open') {
+    for (const id of liveById.keys()) push(id, 'open', null, 'member', 'active', false, null)
+  } else {
+    for (const [memberId, tierId] of tierGrant) push(memberId, 'tier', tierId, 'member', 'active', false, null)
+    for (const [memberId, role] of roleGrant) push(memberId, 'role', role, 'member', 'active', false, null)
+  }
+
+  const rows = opts.exceptionsOnly
+    ? out.filter((r) => r.reason !== 'open' || r.revoked || r.postingSuspended || r.role !== 'member')
+    : out
+
+  // Tier names last, over only the rows we're returning.
+  const { getActiveTierNames } = await import('@/lib/tiers-server')
+  const tierNames = await getActiveTierNames(rows.map((r) => r.memberId))
+  for (const r of rows) r.tierName = tierNames.get(r.memberId) ?? null
+
+  return rows.sort((a, b) => {
+    // Blocked people first (they're what an admin came here for), then by role
+    // weight, then name.
+    const blocked = (r: SpaceAudienceMember) => (r.revoked ? 0 : r.postingSuspended ? 1 : 2)
+    const weight = (r: SpaceAudienceMember) => (r.role === 'admin' ? 0 : r.role === 'moderator' ? 1 : 2)
+    return blocked(a) - blocked(b) || weight(a) - weight(b) || a.name.localeCompare(b.name)
+  })
+}
+
 /**
  * Space ids this member may enter — the batched counterpart of
  * getSpaceAccessById, for callers that would otherwise resolve every space
@@ -535,6 +1024,7 @@ export async function getAccessibleSpaceIds(member: CommunityMember): Promise<Se
   const tiersBySpace = groupValues(tierRows ?? [], 'space_id', 'tier_id')
   const rolesBySpace = groupValues(roleRows ?? [], 'space_id', 'role') as Map<string, MemberRole[]>
   const memberRoles = rolesBySpace.size > 0 ? await getGlobalRoleNames(member.id) : []
+  const mySuspensions = await loadSpaceSuspensions({ memberIds: [member.id] })
 
   const mine = new Map<string, SpaceMembership>()
   for (const r of (roster ?? []) as Array<{
@@ -551,7 +1041,8 @@ export async function getAccessibleSpaceIds(member: CommunityMember): Promise<Se
       tiersBySpace.get(s.id) ?? [],
       mine.get(s.id) ?? null,
       rolesBySpace.get(s.id) ?? [],
-      memberRoles
+      memberRoles,
+      mySuspensions.get(`${s.id}:${member.id}`) ?? NO_SUSPENSIONS
     )
     if (access.canAccess) out.add(s.id)
   }
@@ -632,16 +1123,24 @@ export async function claimPendingSpaceInvites(memberId: string, email: string):
   return claimed
 }
 
-/** Whether a member is muted in a given space (for the comment write path). */
+/**
+ * Whether a member is silenced in a given space (for the post/comment write
+ * paths). Two sources: the legacy community_space_members.muted flag, which only
+ * ever existed for roster members, and a 'posting' suspension, which also covers
+ * a tier- or role-granted member who has no roster row to carry a mute.
+ */
 export async function isMemberMutedInSpace(spaceId: string, memberId: string): Promise<boolean> {
   const db = supabaseServer()
-  const { data } = await db
-    .from('community_space_members')
-    .select('muted')
-    .eq('space_id', spaceId)
-    .eq('member_id', memberId)
-    .maybeSingle()
-  return !!(data as { muted: boolean } | null)?.muted
+  const [{ data }, suspensions] = await Promise.all([
+    db
+      .from('community_space_members')
+      .select('muted')
+      .eq('space_id', spaceId)
+      .eq('member_id', memberId)
+      .maybeSingle(),
+    loadSuspension(spaceId, memberId),
+  ])
+  return !!(data as { muted: boolean } | null)?.muted || suspensions.posting
 }
 
 /**

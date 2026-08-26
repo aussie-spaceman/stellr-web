@@ -5,6 +5,7 @@ import { watchSheet, isGoogleSheetsConfigured } from '@/lib/google-sheets'
 import { ownsTeam } from '@/lib/team-access'
 import { syncParticipantsFromSheet } from '@/lib/sheet-participant-sync'
 import { randomUUID } from 'crypto'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // POST /api/members/teams/[id]/sheet-sync
 // Reads the linked Google Sheet and upserts participant records.
@@ -13,6 +14,11 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — see lib/impersonation.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentMember } from '@/lib/community'
 import { canAccessChannel, listMessages, postMessage } from '@/lib/sessions'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // Persistent chat for mentoring cohorts + 1:1 coaching (FR-COM-11/12).
 // Channels outlive any single session. Access is guarded per channel.
@@ -21,6 +22,11 @@ export async function GET(req: Request) {
 
 // POST /api/community/chat  Body: { channelId, body }
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

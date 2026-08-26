@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 import { STAFF_SCOPES } from '@/lib/admin-auth'
 
 // Admin CRUD for the staff-roles function-scope seam (migration 044).
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   ).maybeSingle()
   if (!member) return NextResponse.json({ error: 'Member not found.' }, { status: 404 })
 
-  const admin = await getCurrentMember()
+  const admin = await getSignedInMember()
   const { error } = await db.from('staff_roles').upsert(
     { member_id: member.id, scopes: clean, granted_by: admin?.id ?? null, updated_at: new Date().toISOString() },
     { onConflict: 'member_id' },

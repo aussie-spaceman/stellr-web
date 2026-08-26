@@ -9,12 +9,18 @@ import { ownsTeam } from '@/lib/team-access'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { getMemberOnFileByMembershipId } from '@/lib/member-onfile'
 import { ensureIndividualPayments } from '@/lib/individual-payment'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // POST /api/members/teams/[id]/participants — group organiser adds a participant
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — see lib/impersonation.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

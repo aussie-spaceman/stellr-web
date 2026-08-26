@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { isGoogleSheetsConfigured } from '@/lib/google-sheets'
 import { ownsTeam } from '@/lib/team-access'
 import { google } from 'googleapis'
+import { impersonatedMemberId } from '@/lib/impersonation'
 
 function getAuth() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
@@ -115,11 +116,16 @@ export async function GET(
     // Ownership: the registrant (teacher / student manager) or the nominated
     // teacher POC may open the group's sheet — matched by member account or the
     // email they registered/were nominated under (see lib/team-access).
-    const { data: member } = await db
-      .from('members')
-      .select('id, email')
-      .eq('clerk_user_id', userId)
-      .maybeSingle()
+    // Honours an admin view-as session, so the ownership check runs against the
+    // member being viewed rather than the admin (who owns no team).
+    const viewAsId = await impersonatedMemberId()
+    const { data: member } = viewAsId
+      ? await db.from('members').select('id, email').eq('id', viewAsId).maybeSingle()
+      : await db
+          .from('members')
+          .select('id, email')
+          .eq('clerk_user_id', userId)
+          .maybeSingle()
 
     const m = member as { id: string; email: string | null } | null
     if (!m || !ownsTeam(m, reg)) {

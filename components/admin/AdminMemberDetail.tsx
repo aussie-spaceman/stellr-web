@@ -11,6 +11,7 @@ import { TERMINAL_SESSION_STATUSES } from '@/lib/deletion/registry'
 import { MemberMembershipManager } from '@/components/admin/MemberMembershipManager'
 import { MemberCompliancePanel, type MemberCompliance } from '@/components/admin/MemberCompliancePanel'
 import { MemberAccessPanel } from '@/components/admin/MemberAccessPanel'
+import { MemberSpacesPanel } from '@/components/admin/MemberSpacesPanel'
 import { ActivityTimeline, type ActivityItem } from '@/components/activity/ActivityTimeline'
 
 interface Member {
@@ -123,6 +124,7 @@ function label(val: string) {
 
 export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, sessions, membershipId, activity, compliance }: Props) {
   const router = useRouter()
+  const [enteringPortal, setEnteringPortal] = useState(false)
   const [form, setForm] = useState({
     first_name: member.first_name,
     last_name: member.last_name,
@@ -193,6 +195,32 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
     }
   }
 
+  // Start a read-only view-as session across the WHOLE member portal, then land
+  // on their home page. The previous button opened a mirror of the account page
+  // inside the admin shell, which only ever covered profile / teams / billing.
+  async function handleEnterPortalAs() {
+    setEnteringPortal(true)
+    try {
+      const res = await fetch('/api/admin/impersonation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId: member.id }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        alert(j.error ?? 'Could not start view-as')
+        setEnteringPortal(false)
+        return
+      }
+      // Full navigation, not router.push: every server component must re-resolve
+      // with the new cookie in place.
+      window.location.href = '/home'
+    } catch {
+      alert('Could not start view-as')
+      setEnteringPortal(false)
+    }
+  }
+
   async function handleDeactivate() {
     const res = await fetch(`/api/admin/members/${member.id}`, { method: 'DELETE' })
     if (res.ok) router.push('/admin/members')
@@ -223,11 +251,22 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           )}
         </div>
         <div className="flex gap-3">
+          <button
+            onClick={handleEnterPortalAs}
+            disabled={enteringPortal}
+            title="Open the member portal exactly as this member sees it (read only)"
+            className="border border-brand-border text-brand-muted px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-canvas disabled:opacity-50"
+          >
+            {enteringPortal ? 'Opening…' : 'View as member'}
+          </button>
+          {/* The older read-only mirror of the account page. Kept for one
+              release as a fallback if the full-portal session misbehaves. */}
           <Link
             href={`/admin/members/${member.id}/view-as`}
-            className="border border-brand-border text-brand-muted px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-canvas"
+            title="Older read-only summary of profile, teams and billing"
+            className="self-center text-xs text-brand-muted-soft hover:text-brand-blue hover:underline"
           >
-            View as member
+            Account summary
           </Link>
           <button
             onClick={handleSave}
@@ -583,6 +622,10 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
 
           <div className="bg-white rounded-xl border border-brand-border p-5">
             <MemberAccessPanel memberId={member.id} />
+          </div>
+
+          <div className="bg-white rounded-xl border border-brand-border p-5">
+            <MemberSpacesPanel memberId={member.id} />
           </div>
 
           <div className="bg-white rounded-xl border border-brand-border p-5">

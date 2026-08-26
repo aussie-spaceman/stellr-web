@@ -9,7 +9,7 @@ import {
   SPACE_SOURCE_TYPE_TO_OBJECT,
   type AccessObjectType,
 } from '@/lib/access-objects'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 import { getAllEvents, getAllCampaigns } from '@/lib/sanity'
 
 // /api/admin/access/objects/[id]/contents — the Contents tab of the unified
@@ -190,7 +190,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!sourceType) {
       return NextResponse.json({ error: `Spaces cannot be attached to a ${object.objectType}.` }, { status: 400 })
     }
-    const admin = await getCurrentMember()
+    const admin = await getSignedInMember()
     const sourceRef = object.objectType === 'event' || object.objectType === 'campaign'
       ? (object.slug ?? object.ref)
       : (object.containerId ?? object.ref)

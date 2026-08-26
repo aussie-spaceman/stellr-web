@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 const BUCKET = 'teacher-licenses'
 const MAX_BYTES = 10 * 1024 * 1024 // 10 MB
@@ -28,6 +29,11 @@ function magicMatches(b: Uint8Array): boolean {
 // to the member's existing license row; the image is sensitive and only ever
 // served via short-lived signed URLs.
 export async function POST(req: NextRequest) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
@@ -96,6 +102,11 @@ export async function POST(req: NextRequest) {
 
 // DELETE — the member removes their uploaded license image at any time.
 export async function DELETE() {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

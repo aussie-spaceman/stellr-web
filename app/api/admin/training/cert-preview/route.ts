@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, signedDownloadUrl } from '@/lib/community'
+import { getSignedInMember, signedDownloadUrl } from '@/lib/community'
 import { courseIssuer, type MaterialKind, type CourseTheme } from '@/lib/training-display'
 import { renderCertificatePdf } from '@/lib/certificate'
 
@@ -26,7 +26,7 @@ export async function GET(req: Request) {
     .maybeSingle()
   if (!mod) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const admin = await getCurrentMember()
+  const admin = await getSignedInMember()
   const templatePath = (mod.cert_template_path as string | null) ?? null
   let templateBytes: ArrayBuffer | null = null
   if (templatePath) {

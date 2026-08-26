@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 const flagSchema = z.object({
   contentType: z.enum(['post', 'comment', 'resource']),
@@ -16,6 +17,11 @@ const flagSchema = z.object({
 // POST /api/community/flag — member or teacher flags a post, comment, or resource
 // for admin review (FR-COM-07). Reports land in the space's Moderation queue.
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

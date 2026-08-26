@@ -13,7 +13,7 @@ import { TIER_GROUPS } from '@/lib/tiers'
 import { formatDateShort } from '@/lib/utils'
 import { SPACE_TRAINING_BRACKETS, type BracketRequirements, type AgeBracketKey } from '@/lib/space-training'
 import type { AdminSpaceConfig } from '@/lib/space-admin'
-import type { SpaceAccessType, SpaceRole, SpaceTheme } from '@/lib/spaces'
+import type { SpaceAccessType, SpaceAudienceMember, SpaceRole, SpaceTheme } from '@/lib/spaces'
 
 const TABS = [
   ['general', 'General'],
@@ -102,7 +102,7 @@ export function SpaceConfig({
             {tab === 'access' && <AccessTab space={space} assignedTierIds={config.assignedTierIds} assignedRoles={config.assignedRoles} sources={config.sources} tierIdByName={tierIdByName} act={act} patchSpace={patchSpace} />}
             {tab === 'resources' && <ResourcesTab spaceId={space.id} resources={config.resources} act={act} onUploaded={() => router.refresh()} />}
             {tab === 'training' && <TrainingTab assigned={config.assignedTraining} catalogue={config.trainingCatalogue} act={act} />}
-            {tab === 'members' && <MembersTab space={space} members={config.members} act={act} patchSpace={patchSpace} />}
+            {tab === 'members' && <MembersTab space={space} config={config} act={act} patchSpace={patchSpace} />}
             {tab === 'announcements' && <AnnouncementsTab announcements={config.announcements} act={act} />}
             {tab === 'moderation' && <ModerationTab moderation={config.moderation} act={act} />}
           </div>
@@ -786,16 +786,119 @@ function TrainingTab({
 }
 
 // ─── Members & permissions ────────────────────────────────────────────────────
+
+/** How a member got into the space → the badge an admin reads. */
+const GRANT_META: Record<
+  SpaceAudienceMember['reason'],
+  { label: string; tint: string; color: string; removable: boolean }
+> = {
+  open:    { label: 'Open space', tint: '#EDFAF4', color: '#137A56', removable: false },
+  tier:    { label: 'Tier',       tint: '#FBEFDD', color: '#9A6112', removable: false },
+  role:    { label: 'Role',       tint: '#F6F2FF', color: '#5B3FD1', removable: false },
+  object:  { label: 'Object',     tint: '#EAF0FE', color: '#2C53C6', removable: false },
+  invited: { label: 'Invited',    tint: '#F4F5F7', color: '#4A5568', removable: true },
+  roster:  { label: 'Added directly', tint: '#F4F5F7', color: '#4A5568', removable: true },
+}
+
+/** Plain-English reason a member cannot simply be removed from the roster. */
+function whyNotRemovable(m: SpaceMemberRow): string | null {
+  switch (m.reason) {
+    case 'open':
+      return 'This space is open to every member, so there is no grant to remove. Revoke access to block them.'
+    case 'tier':
+      return `Their ${m.grantLabel ?? 'membership'} tier grants this space automatically. Removing a roster row would not stop them — revoke access instead.`
+    case 'role':
+      return `Their ${m.grantLabel ?? 'web-app'} role grants this space automatically. Revoke access to block them.`
+    case 'object':
+      return `Inherited from ${m.grantLabel ?? 'a linked object'}. Removing the row here would be rewritten on the next sync — revoke access instead.`
+    default:
+      return null
+  }
+}
+
+type SpaceMemberRow = AdminSpaceConfig['members'][number]
+
+function GrantBadge({ m }: { m: SpaceMemberRow }) {
+  const meta = GRANT_META[m.reason]
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em]"
+      style={{ color: meta.color, background: meta.tint }}
+      title={m.grantLabel ? `${meta.label}: ${m.grantLabel}` : meta.label}
+    >
+      {meta.label}
+      {m.grantLabel && <span className="max-w-[10rem] truncate normal-case opacity-80">· {m.grantLabel}</span>}
+    </span>
+  )
+}
+
 function MembersTab({
-  space, members, act, patchSpace,
+  space, config, act, patchSpace,
 }: {
   space: AdminSpaceConfig['space']
-  members: AdminSpaceConfig['members']
+  config: AdminSpaceConfig
   act: Act
   patchSpace: Patch
 }) {
   const [inviteOpen, setInviteOpen] = useState(false)
-  const [managing, setManaging] = useState<AdminSpaceConfig['members'][number] | null>(null)
+  const [managing, setManaging] = useState<SpaceMemberRow | null>(null)
+
+  // The server component renders the first page; this takes over the moment an
+  // admin searches, filters or pages, reading the same resolver.
+  const [rows, setRows] = useState<SpaceMemberRow[] | null>(null)
+  const [total, setTotal] = useState(config.members.length)
+  const [query, setQuery] = useState('')
+  const [reason, setReason] = useState('')
+  const [status, setStatus] = useState('')
+  const [page, setPage] = useState(1)
+  const [showAll, setShowAll] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  const PAGE_SIZE = 50
+  const members = rows ?? config.members
+  const filtering = !!(query.trim() || reason || status || showAll || page > 1)
+
+  const load = async (over: Partial<{ q: string; reason: string; status: string; page: number; all: boolean }> = {}) => {
+    const q = over.q ?? query
+    const r = over.reason ?? reason
+    const st = over.status ?? status
+    const pg = over.page ?? page
+    const all = over.all ?? showAll
+    if (!q.trim() && !r && !st && !all && pg === 1) {
+      setRows(null)
+      setTotal(config.members.length)
+      return
+    }
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({ page: String(pg), pageSize: String(PAGE_SIZE) })
+      if (q.trim()) params.set('q', q.trim())
+      if (r) params.set('reason', r)
+      if (st) params.set('status', st)
+      if (all) params.set('all', '1')
+      const res = await fetch(`/api/admin/community/spaces/${space.id}/members?${params}`)
+      if (!res.ok) {
+        toast('Could not load the member list')
+        return
+      }
+      const j = await res.json()
+      setRows(j.members ?? [])
+      setTotal(j.total ?? 0)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const setFilter = (patch: Partial<{ q: string; reason: string; status: string; all: boolean }>) => {
+    if (patch.q !== undefined) setQuery(patch.q)
+    if (patch.reason !== undefined) setReason(patch.reason)
+    if (patch.status !== undefined) setStatus(patch.status)
+    if (patch.all !== undefined) setShowAll(patch.all)
+    setPage(1)
+    void load({ ...patch, page: 1 })
+  }
+
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
     <div>
@@ -819,27 +922,107 @@ function MembersTab({
       </Field>
 
       <div className="mt-5 mb-2 flex items-center justify-between">
-        <p className="text-sm font-subheading font-semibold text-brand-blue-dark">Members &amp; roles</p>
-        <button onClick={() => setInviteOpen(true)} className="inline-flex items-center gap-1 rounded-lg bg-brand-blue px-3 py-1.5 text-xs font-subheading font-semibold text-white hover:bg-brand-blue-dark">
-          <Plus className="h-3.5 w-3.5" /> Invite member
+        <div>
+          <p className="text-sm font-subheading font-semibold text-brand-blue-dark">Members &amp; roles</p>
+          <p className="text-xs text-brand-muted-soft">
+            {config.audienceTotal} {config.audienceTotal === 1 ? 'person can' : 'people can'} enter this space.
+            {config.membersAreExceptions && !filtering && ' Listing only those with a role or a block — search to find anyone else.'}
+          </p>
+        </div>
+        <button onClick={() => setInviteOpen(true)} className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-brand-blue px-3 py-1.5 text-xs font-subheading font-semibold text-white hover:bg-brand-blue-dark">
+          <Plus className="h-3.5 w-3.5" /> Add moderator
         </button>
       </div>
+
+      {/* Search + filters */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[200px] flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted-soft" />
+          <input
+            value={query}
+            onChange={(e) => setFilter({ q: e.target.value })}
+            placeholder="Search this space by name or email…"
+            className={`${inputCls} pl-8`}
+          />
+        </div>
+        <select value={reason} onChange={(e) => setFilter({ reason: e.target.value })} className="rounded-lg border border-brand-border px-2 py-2 text-sm text-brand-muted">
+          <option value="">How they got in</option>
+          {(Object.keys(GRANT_META) as SpaceAudienceMember['reason'][]).map((k) => (
+            <option key={k} value={k}>{GRANT_META[k].label}</option>
+          ))}
+        </select>
+        <select value={status} onChange={(e) => setFilter({ status: e.target.value })} className="rounded-lg border border-brand-border px-2 py-2 text-sm text-brand-muted">
+          <option value="">Any status</option>
+          <option value="active">Active</option>
+          <option value="invited">Invited</option>
+          <option value="blocked">Suspended or revoked</option>
+        </select>
+      </div>
+
       <div className="divide-y divide-brand-hairline rounded-lg border border-brand-border">
-        {members.map((m) => (
-          <div key={m.memberId} className="flex items-center gap-2 px-3 py-2.5">
-            <span className="flex-1 truncate text-sm text-brand-blue-dark">{m.name}</span>
+        {loading && <p className="px-3 py-4 text-center text-sm text-brand-muted-soft">Loading…</p>}
+        {!loading && members.map((m) => (
+          <div key={m.memberId} className={`flex items-center gap-2 px-3 py-2.5 ${m.revoked ? 'bg-red-50/40' : ''}`}>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-brand-blue-dark">{m.name}</p>
+              {m.email && <p className="truncate text-xs text-brand-muted-soft">{m.email}</p>}
+            </div>
+            <GrantBadge m={m} />
             {m.tierName && <TierPill name={m.tierName} />}
             {m.role !== 'member' && <RolePill role={m.role} />}
             {m.status === 'invited' && <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-[10px] uppercase text-brand-muted-soft">invited</span>}
-            {m.muted && <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] uppercase text-red-600">muted</span>}
-            <button onClick={() => setManaging(m)} className="text-xs text-brand-blue hover:underline">Manage</button>
+            {m.postingSuspended && <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] uppercase text-amber-700">suspended</span>}
+            {m.revoked && <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] uppercase text-red-600">revoked</span>}
+            <button onClick={() => setManaging(m)} className="shrink-0 text-xs text-brand-blue hover:underline">Manage</button>
           </div>
         ))}
-        {members.length === 0 && <p className="px-3 py-4 text-center text-sm text-brand-muted-soft">No members yet.</p>}
+        {!loading && members.length === 0 && (
+          <p className="px-3 py-4 text-center text-sm text-brand-muted-soft">
+            {filtering ? 'No members match those filters.' : 'No members yet.'}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-2 flex items-center justify-between text-xs text-brand-muted-soft">
+        <span>
+          {filtering ? `${total} ${total === 1 ? 'match' : 'matches'}` : `Showing ${members.length} of ${config.audienceTotal}`}
+          {config.membersAreExceptions && !showAll && (
+            <button onClick={() => setFilter({ all: true })} className="ml-2 text-brand-blue hover:underline">
+              Show everyone
+            </button>
+          )}
+        </span>
+        {pages > 1 && (
+          <span className="flex items-center gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => { const p = page - 1; setPage(p); void load({ page: p }) }}
+              className="rounded border border-brand-border px-2 py-1 disabled:opacity-40"
+            >Previous</button>
+            <span>Page {page} of {pages}</span>
+            <button
+              disabled={page >= pages}
+              onClick={() => { const p = page + 1; setPage(p); void load({ page: p }) }}
+              className="rounded border border-brand-border px-2 py-1 disabled:opacity-40"
+            >Next</button>
+          </span>
+        )}
       </div>
 
       <InviteMemberModal open={inviteOpen} onClose={() => setInviteOpen(false)} act={act} />
-      {managing && <ManageMemberModal member={managing} onClose={() => setManaging(null)} act={act} />}
+      {managing && (
+        <ManageMemberModal
+          member={managing}
+          onClose={() => setManaging(null)}
+          act={async (body, msg) => {
+            const ok = await act(body, msg)
+            // Refresh the filtered view too — router.refresh() only repaints the
+            // server-rendered first page.
+            if (ok && filtering) await load()
+            return ok
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -931,29 +1114,91 @@ function InviteMemberModal({ open, onClose, act }: { open: boolean; onClose: () 
   )
 }
 
-function ManageMemberModal({ member, onClose, act }: { member: AdminSpaceConfig['members'][number]; onClose: () => void; act: Act }) {
+function ManageMemberModal({ member, onClose, act }: { member: SpaceMemberRow; onClose: () => void; act: Act }) {
   const [role, setRole] = useState<SpaceRole>(member.role)
+  const [reason, setReason] = useState('')
+  const [confirmRevoke, setConfirmRevoke] = useState(false)
+  const blocked = whyNotRemovable(member)
+
   return (
-    <Modal open onClose={onClose} title={`Manage ${member.name}`}
+    <Modal open onClose={onClose} title={`Manage ${member.name}`} subtitle={member.email ?? undefined}
       footer={<>
-        <button onClick={onClose} className={btnGhost}>Cancel</button>
+        <button onClick={onClose} className={btnGhost}>Close</button>
         <button onClick={async () => { if (await act({ action: 'update-member-role', memberId: member.memberId, role }, 'Role saved')) onClose() }} className={btnPrimary}>Save role</button>
       </>}
     >
-      {/* Members can't be removed from a space here — their access is inherited from
-          an Object (Event/Training/Cohort/Workshop). Use Mute to stop them posting. */}
+      <div className="mb-4 rounded-lg bg-brand-canvas p-2.5 text-xs text-brand-muted-soft">
+        <span className="font-semibold text-brand-muted">How they got in: </span>
+        {GRANT_META[member.reason].label}
+        {member.grantLabel && ` — ${member.grantLabel}`}
+        {blocked && <p className="mt-1">{blocked}</p>}
+      </div>
+
       <RoleSegmented role={role} setRole={setRole} roles={['member', 'moderator']} />
-      <div className="mt-4 flex items-center justify-between rounded-lg border border-brand-border px-3 py-2.5">
-        <div>
+
+      {/* Posting suspension */}
+      <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-brand-border px-3 py-2.5">
+        <div className="min-w-0">
           <p className="text-sm font-subheading font-semibold text-brand-blue-dark">Posting</p>
-          <p className="text-xs text-brand-muted-soft">{member.muted ? 'Muted — can read but not post.' : 'Can post in this space.'}</p>
+          <p className="text-xs text-brand-muted-soft">
+            {member.postingSuspended ? 'Suspended — can read but not post.' : 'Can post in this space.'}
+          </p>
         </div>
-        {member.muted ? (
-          <button onClick={async () => { if (await act({ action: 'unmute-member', memberId: member.memberId }, 'Member unmuted')) onClose() }} className="rounded-lg border border-brand-border px-3 py-1.5 text-xs font-subheading font-semibold text-brand-muted hover:bg-brand-canvas">Unmute</button>
+        {member.postingSuspended ? (
+          <button onClick={async () => { if (await act({ action: 'resume-posting', memberId: member.memberId }, 'Posting restored')) onClose() }} className="shrink-0 rounded-lg border border-brand-border px-3 py-1.5 text-xs font-subheading font-semibold text-brand-muted hover:bg-brand-canvas">Lift suspension</button>
         ) : (
-          <button onClick={async () => { if (await act({ action: 'mute-member', memberId: member.memberId }, 'Member muted')) onClose() }} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-subheading font-semibold text-red-600 hover:bg-red-50">Mute</button>
+          <button onClick={async () => { if (await act({ action: 'suspend-posting', memberId: member.memberId, reason }, 'Posting suspended')) onClose() }} className="shrink-0 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-subheading font-semibold text-amber-700 hover:bg-amber-50">Suspend posting</button>
         )}
       </div>
+
+      {/* Access revocation */}
+      <div className="mt-2 rounded-lg border border-brand-border px-3 py-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-subheading font-semibold text-brand-blue-dark">Access</p>
+            <p className="text-xs text-brand-muted-soft">
+              {member.revoked
+                ? 'Revoked — cannot enter this space, whatever else grants it.'
+                : 'Can enter this space.'}
+            </p>
+          </div>
+          {member.revoked ? (
+            <button onClick={async () => { if (await act({ action: 'restore-access', memberId: member.memberId }, 'Access restored')) onClose() }} className="shrink-0 rounded-lg border border-brand-border px-3 py-1.5 text-xs font-subheading font-semibold text-brand-muted hover:bg-brand-canvas">Restore access</button>
+          ) : (
+            <button onClick={() => setConfirmRevoke((v) => !v)} className="shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-subheading font-semibold text-red-600 hover:bg-red-50">Revoke access</button>
+          )}
+        </div>
+
+        {confirmRevoke && !member.revoked && (
+          <div className="mt-3 border-t border-brand-hairline pt-3">
+            <p className="mb-2 text-xs text-brand-muted-soft">
+              They will lose access immediately and stop receiving this space&rsquo;s announcements. The block
+              outranks their tier, role and any linked object, and stays until you lift it.
+            </p>
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Reason (optional, recorded on their activity log)"
+              className={`${inputCls} mb-2`}
+            />
+            <button
+              onClick={async () => { if (await act({ action: 'revoke-access', memberId: member.memberId, reason }, 'Access revoked')) onClose() }}
+              className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-subheading font-semibold text-white hover:bg-red-700"
+            >Confirm revoke</button>
+          </div>
+        )}
+      </div>
+
+      {/* Roster removal — only ever meaningful for a directly-added member. */}
+      {!blocked && (
+        <button
+          onClick={async () => {
+            if (!confirm(`Remove ${member.name} from this space?`)) return
+            if (await act({ action: 'remove-member', memberId: member.memberId }, 'Removed from space')) onClose()
+          }}
+          className="mt-3 text-xs text-red-500 hover:underline"
+        >Remove from space</button>
+      )}
     </Modal>
   )
 }

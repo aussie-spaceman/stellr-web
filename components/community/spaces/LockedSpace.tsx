@@ -12,12 +12,14 @@ interface Props {
   description: string | null
   assignedTierIds: string[]
   tierNames: Record<string, string>
+  /** Blocked by an admin revocation rather than by a tier gate. */
+  revoked?: boolean
 }
 
 // Locked screen (screen 07): shown when a member opens a Private space their tier
 // can't join. Access is automatic by tier or admin invite — the CTA routes to the
 // membership page anchored at the lowest qualifying tier (F-02).
-export function LockedSpace({ name, theme, description, assignedTierIds, tierNames }: Props) {
+export function LockedSpace({ name, theme, description, assignedTierIds, tierNames, revoked = false }: Props) {
   const qualifyingNames = assignedTierIds.map((id) => tierNames[id]).filter(Boolean)
   const upgradeHref = membershipUpgradeHref(qualifyingNames)
   return (
@@ -47,28 +49,51 @@ export function LockedSpace({ name, theme, description, assignedTierIds, tierNam
 
         {description && <p className="mt-3 text-sm text-brand-muted">{description}</p>}
 
-        <div
-          className="mt-6 rounded-[14px] p-4 text-left"
-          style={{ background: '#FBEFDD', border: '1px solid #F2DBB6' }}
-        >
-          <p className="text-xs font-subheading font-semibold uppercase tracking-[0.08em]" style={{ color: '#B5711F' }}>
-            Requires membership tier
-          </p>
-          <p className="mt-1 text-sm text-brand-blue-dark">
-            {describeAssignedTiers(assignedTierIds, tierNames)}
-          </p>
-        </div>
+        {revoked ? (
+          // An admin removed them. No tier buys a way back in, so the upgrade CTA
+          // is withheld rather than offering to sell something that cannot work.
+          <>
+            <div
+              className="mt-6 rounded-[14px] p-4 text-left"
+              style={{ background: '#FDECEC', border: '1px solid #F5C6C6' }}
+            >
+              <p className="text-xs font-subheading font-semibold uppercase tracking-[0.08em] text-red-700">
+                Access removed
+              </p>
+              <p className="mt-1 text-sm text-brand-blue-dark">
+                An administrator has removed your access to this space.
+              </p>
+            </div>
+            <p className="mt-4 text-xs text-brand-muted-soft">
+              If you think this is a mistake, contact the Stellr team.
+            </p>
+          </>
+        ) : (
+          <>
+            <div
+              className="mt-6 rounded-[14px] p-4 text-left"
+              style={{ background: '#FBEFDD', border: '1px solid #F2DBB6' }}
+            >
+              <p className="text-xs font-subheading font-semibold uppercase tracking-[0.08em]" style={{ color: '#B5711F' }}>
+                Requires membership tier
+              </p>
+              <p className="mt-1 text-sm text-brand-blue-dark">
+                {describeAssignedTiers(assignedTierIds, tierNames)}
+              </p>
+            </div>
 
-        <div className="mt-6">
-          <Button href={upgradeHref} as={Link}>
-            See membership options →
-          </Button>
-        </div>
+            <div className="mt-6">
+              <Button href={upgradeHref} as={Link}>
+                See membership options →
+              </Button>
+            </div>
 
-        <p className="mt-4 text-xs text-brand-muted-soft">
-          Access to this space is granted automatically when your membership matches one of these
-          tiers, or when an admin invites you.
-        </p>
+            <p className="mt-4 text-xs text-brand-muted-soft">
+              Access to this space is granted automatically when your membership matches one of these
+              tiers, or when an admin invites you.
+            </p>
+          </>
+        )}
       </div>
     </div>
   )

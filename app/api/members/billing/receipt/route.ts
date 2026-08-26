@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import type Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { stripeClient } from '@/lib/refunds/stripe'
+import { impersonatedMemberId } from '@/lib/impersonation'
 
 // GET /api/members/billing/receipt?participation=<participant_id>
 // Redirects to the Stripe receipt for a participation the member was paid into:
@@ -56,12 +57,16 @@ export async function GET(req: NextRequest) {
 
   const db = supabaseServer()
 
-  const { data: member } = await db
-    .from('members')
-    .select('id')
-    .eq('clerk_user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle()
+  // Honours an admin view-as session (read only).
+  const viewAsId = await impersonatedMemberId()
+  const { data: member } = viewAsId
+    ? await db.from('members').select('id').eq('id', viewAsId).maybeSingle()
+    : await db
+        .from('members')
+        .select('id')
+        .eq('clerk_user_id', userId)
+        .eq('is_active', true)
+        .maybeSingle()
   if (!member) return htmlMessage('Member record not found.', 404)
 
   const { data: participant } = await db

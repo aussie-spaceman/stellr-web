@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
+import { assertNotImpersonating } from '@/lib/impersonation'
 import { getHostCaps } from '@/lib/sessions'
 
 // Host weekly availability (FR-COM-11/12): coaches/mentors set when they're free.
@@ -15,6 +16,11 @@ async function requireHost() {
 
 // POST — add a window. Body: { weekday, startMinute, endMinute, sessionType? }
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await requireHost()
   if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
@@ -46,6 +52,11 @@ export async function POST(req: Request) {
 
 // DELETE — remove a window. Body: { id }
 export async function DELETE(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await requireHost()
   if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { id } = await req.json().catch(() => ({}))

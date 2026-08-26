@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 import { ensureTrainingContainer } from '@/lib/container-sync'
 
 // Admin: create / list / update training modules (FR-COM-10).
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   const title = (body.title as string | undefined)?.trim()
   if (!title) return NextResponse.json({ error: 'title required' }, { status: 400 })
 
-  const admin = await getCurrentMember()
+  const admin = await getSignedInMember()
   const db = supabaseServer()
   const { data, error } = await db
     .from('training_modules')

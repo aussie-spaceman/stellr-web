@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 import { listModules } from '@/lib/training'
 import { supabaseServer } from '@/lib/supabase'
 import { ALL_TIER_NAMES } from '@/lib/tiers'
@@ -9,7 +9,7 @@ import { CreateWorkshopForm } from '@/components/admin/coaching/CreateWorkshopFo
 export const metadata = { title: 'Admin · New coaching workshop' }
 
 export default async function NewWorkshopPage() {
-  const member = await getCurrentMember()
+  const member = await getSignedInMember()
   if (!member) redirect('/sign-up')
   if (!member.isAdmin) redirect('/community/coaching')
 

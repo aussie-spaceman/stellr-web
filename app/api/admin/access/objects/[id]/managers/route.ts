@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { resolveAccessObject } from '@/lib/access-objects'
 import { grantObjectRole } from '@/lib/object-roles'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 import { MANAGE_ROLES, type MemberRole } from '@/lib/member-roles'
 
 // /api/admin/access/objects/[id]/managers — the manage axis for any object.
@@ -84,7 +84,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const parsed = bodySchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
 
-  const admin = await getCurrentMember()
+  const admin = await getSignedInMember()
   const result = await grantObjectRole(parsed.data.memberId, object.objectType, object.ref, admin?.id)
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 500 })
   return NextResponse.json({ ok: true })

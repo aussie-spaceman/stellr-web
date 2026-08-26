@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
@@ -18,6 +19,11 @@ function getStripe() {
 // registration where the member pays their own share. Group payments owned by
 // an organiser are NOT payable here (the organiser settles their invoice).
 export async function POST(req: NextRequest) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — see lib/impersonation.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

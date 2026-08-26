@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { MANAGE_ROLES, ROLE_LABELS, type MemberRole } from '@/lib/member-roles'
+import { resolveMemberSpaces, type MemberSpaceGrant } from '@/lib/spaces'
 
 // "All access in one place" (convergence P3 → admin/access Person 360).
 //
@@ -18,9 +19,19 @@ export type AccessObjectType =
   | 'space' | 'course' | 'workshop' | 'cohort' | 'event' | 'campaign' | 'resource' | 'group'
 
 export interface AccessSource {
-  kind: 'roster' | 'manager' | 'tier' | 'role'
-  /** Human label: 'Roster' | 'Added directly' | 'Rule (tier)' | 'Rule (role)' | 'Manager'. */
+  kind: 'roster' | 'manager' | 'tier' | 'role' | 'open' | 'object' | 'invited'
+  /** Human label, e.g. 'Roster' | 'Rule (tier)' | 'Open space' | 'Manager'. */
   label: string
+}
+
+/** How a Space grant reads in the Effective Access list. */
+const SPACE_SOURCE: Record<MemberSpaceGrant['reason'], AccessSource> = {
+  roster: { kind: 'roster', label: 'Roster' },
+  object: { kind: 'object', label: 'Object' },
+  invited: { kind: 'invited', label: 'Invited' },
+  tier: { kind: 'tier', label: 'Rule (tier)' },
+  role: { kind: 'role', label: 'Rule (role)' },
+  open: { kind: 'open', label: 'Open space' },
 }
 
 export interface EffectiveAccessRow {
@@ -61,22 +72,18 @@ function titleCase(s: string): string {
 export async function getMemberAccessSummary(memberId: string): Promise<MemberAccessSummary> {
   const db = supabaseServer()
 
-  const [containerRes, spaceRes, tierRes, roleRes, objectRoleRes, ownedRes] = await Promise.all([
+  const [containerRes, memberSpaces, roleRes, objectRoleRes, ownedRes] = await Promise.all([
     // Container rosters (cohorts, workshops, courses, competitions).
     db.from('cohort_members')
       .select('relationship, mentoring_cohorts!inner(id, name, container_type, campaign_ref, lifecycle, mentor_member_id)')
       .eq('member_id', memberId)
       .eq('status', 'active'),
-    // Space rosters (direct or inherited via community_space_sources).
-    db.from('community_space_members')
-      .select('role, community_spaces!inner(id, name, is_archived)')
-      .eq('member_id', memberId)
-      .eq('status', 'active'),
-    // Active tiers → tier-granted spaces resolve below.
-    db.from('member_memberships')
-      .select('tier_id, expires_at, renewal_status')
-      .eq('member_id', memberId)
-      .eq('renewal_status', 'active'),
+    // Spaces: ONE resolver, shared with the Space admin roster
+    // (lib/spaces resolveMemberSpaces). This used to be three separate queries
+    // here — roster rows, tier grants, role grants — which between them never
+    // accounted for access_type='open', so every open Space was missing from a
+    // member's effective access even though they could walk straight into it.
+    resolveMemberSpaces(memberId),
     // All canonical roles (global feed the role-space grants; object-scoped feed managers).
     db.from('member_roles')
       .select('role, scope, object_type, object_id')
@@ -97,8 +104,7 @@ export async function getMemberAccessSummary(memberId: string): Promise<MemberAc
   // direction, since an admin could conclude a grant is missing and re-grant or
   // mis-investigate. Callers catch and surface a 500 instead.
   const primaryErr =
-    containerRes.error ?? spaceRes.error ?? tierRes.error ??
-    roleRes.error ?? objectRoleRes.error ?? ownedRes.error
+    containerRes.error ?? roleRes.error ?? objectRoleRes.error ?? ownedRes.error
   if (primaryErr) {
     throw new Error(`getMemberAccessSummary: access query failed — ${primaryErr.message}`)
   }
@@ -144,49 +150,17 @@ export async function getMemberAccessSummary(memberId: string): Promise<MemberAc
     upsert(objectType, ref, label, titleCase(relationship), { kind: 'roster', label: 'Roster' }, c.lifecycle === 'archived')
   }
 
-  // ── 2. Space rosters ──────────────────────────────────────────────────────
-  type SpaceJoin = { id: string; name: string; is_archived: boolean }
-  for (const r of spaceRes.data ?? []) {
-    const s = (Array.isArray(r.community_spaces) ? r.community_spaces[0] : r.community_spaces) as SpaceJoin
-    upsert('space', s.id, s.name, titleCase((r.role as string) ?? 'member'), { kind: 'roster', label: 'Roster' }, s.is_archived)
+  // ── 2. Spaces (roster, object inheritance, tier, role, open) ──────────────
+  // A revoked Space is dropped entirely: this list answers "what can they
+  // reach", and a revocation means the answer is nothing, whatever granted it.
+  for (const g of memberSpaces) {
+    if (g.revoked) continue
+    upsert('space', g.spaceId, g.name, titleCase(g.role), SPACE_SOURCE[g.reason], false)
   }
 
-  // ── 3. Tier-granted spaces ────────────────────────────────────────────────
-  const today = new Date().toISOString().split('T')[0]
-  const activeTierIds = (tierRes.data ?? [])
-    .filter((m) => !m.expires_at || m.expires_at >= today)
-    .map((m) => m.tier_id as string | null)
-    .filter((id): id is string => !!id)
-
-  if (activeTierIds.length > 0) {
-    const { data: tierSpaces, error: tierSpacesErr } = await db
-      .from('community_space_tiers')
-      .select('community_spaces!inner(id, name, is_archived)')
-      .in('tier_id', activeTierIds)
-    if (tierSpacesErr) throw new Error(`getMemberAccessSummary: tier-space query failed — ${tierSpacesErr.message}`)
-    for (const r of tierSpaces ?? []) {
-      const s = (Array.isArray(r.community_spaces) ? r.community_spaces[0] : r.community_spaces) as SpaceJoin
-      upsert('space', s.id, s.name, 'Member', { kind: 'tier', label: 'Rule (tier)' }, s.is_archived)
-    }
-  }
-
-  // ── 4. Role-granted spaces ────────────────────────────────────────────────
   const allRoles = (roleRes.data ?? []) as Array<{
     role: MemberRole; scope: string; object_type: string | null; object_id: string | null
   }>
-  const globalRoles = [...new Set(allRoles.filter((r) => r.scope === 'global').map((r) => r.role))]
-
-  if (globalRoles.length > 0) {
-    const { data: roleSpaces, error: roleSpacesErr } = await db
-      .from('community_space_roles')
-      .select('role, community_spaces!inner(id, name, is_archived)')
-      .in('role', globalRoles)
-    if (roleSpacesErr) throw new Error(`getMemberAccessSummary: role-space query failed — ${roleSpacesErr.message}`)
-    for (const r of roleSpaces ?? []) {
-      const s = (Array.isArray(r.community_spaces) ? r.community_spaces[0] : r.community_spaces) as SpaceJoin
-      upsert('space', s.id, s.name, 'Member', { kind: 'role', label: 'Rule (role)' }, s.is_archived)
-    }
-  }
 
   // ── 5. Managers ───────────────────────────────────────────────────────────
   // 5a. Structural: containers where this member is the coach/mentor.

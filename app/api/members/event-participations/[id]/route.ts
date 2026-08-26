@@ -1,12 +1,18 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // DELETE /api/members/event-participations/[id] — member deletes own event record
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — see lib/impersonation.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

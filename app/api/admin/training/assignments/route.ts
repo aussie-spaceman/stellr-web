@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 import { attachAllowed, type AccessObjectType } from '@/lib/access-objects'
 
 // Admin CRUD for course_object_assignments — assign a course to an Object with
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
       { status: 403 },
     )
   }
-  const admin = await getCurrentMember()
+  const admin = await getSignedInMember()
   const db = supabaseServer()
   const { data, error } = await db
     .from('course_object_assignments')

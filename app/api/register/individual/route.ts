@@ -13,6 +13,7 @@ import { getCurrentMember } from '@/lib/community'
 import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { prepareRegistrationAddons, addRegistrationAddons } from '@/lib/store/event-merch'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
@@ -45,6 +46,11 @@ export async function POST(req: NextRequest) {
     // Trust the session email over whatever the client submitted; this prevents
     // duplicate member rows and forged-identity registrations. Falls back to the
     // submitted email when there's no resolvable session (e.g. on www).
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
     const sessionMember = await getCurrentMember().catch(() => null)
     const email: string = normalizeEmail(sessionMember?.email ?? body.email)
 

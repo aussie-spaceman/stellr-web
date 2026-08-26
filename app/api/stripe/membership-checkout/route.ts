@@ -4,6 +4,7 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { buildCreditDiscount } from '@/lib/refunds/redeem'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -12,6 +13,11 @@ function getStripe() {
 }
 
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — see lib/impersonation.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const { userId } = await auth()
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

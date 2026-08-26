@@ -9,9 +9,15 @@ import { grantVolunteerRole, dispatchVolunteerAgreement } from '@/lib/volunteer'
 import { syncMemberClassificationRole } from '@/lib/member-roles'
 import { onboardingRequirements, emergencyContactComplete } from '@/lib/onboarding-requirements'
 import { sendAccountConfirmation, notifyStaffOfRegistration } from '@/lib/registration-notify'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — see lib/impersonation.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

@@ -5,6 +5,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { computeUnitPrice } from '@/lib/store/pricing'
 import { createPendingOrder, STORE_FLAT_SHIPPING_CENTS, type CheckoutLine } from '@/lib/store/orders'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -16,6 +17,11 @@ function getStripe() {
 // for logged-in members), creates a pending order, and returns a Stripe Checkout
 // URL. Works for guests and members.
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — see lib/impersonation.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const stripe = getStripe()
   if (!stripe) return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
 

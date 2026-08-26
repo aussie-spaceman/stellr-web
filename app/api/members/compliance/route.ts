@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
 import { loadComplianceForMember } from '@/lib/compliance'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // GET /api/members/compliance — the current member's clearance state (license +
 // background check), so the account page can show status and the license form.
@@ -46,6 +47,11 @@ const licenseSchema = z.object({
 // and RESETS verification, since the documentation changed and must be reviewed
 // again by an admin.
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

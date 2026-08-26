@@ -11,6 +11,7 @@ import {
   normaliseUrl,
   sha256Hex,
 } from '@/lib/resource-upload'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // Resources Catalogue — contribution endpoint (handover §4.5). A manager of a
 // container adds a file or link; on a dedup match the member can already reach we
@@ -31,6 +32,11 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

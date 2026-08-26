@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { resendEnvelope } from '@/lib/docusign'
 import { ownsTeam } from '@/lib/team-access'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -12,6 +13,11 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; pid: string }> },
 ) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — see lib/impersonation.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

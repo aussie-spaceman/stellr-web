@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 import { listModules } from '@/lib/training'
 import { listMentoringTiers } from '@/lib/mentoring'
 import { CreateCohortForm } from '@/components/community/mentoring/CreateCohortForm'
@@ -10,7 +10,7 @@ import { AdminMentoringNav } from '@/components/admin/mentoring/AdminMentoringNa
 export const metadata = { title: 'Admin · New cohort' }
 
 export default async function AdminNewCohortPage() {
-  const member = await getCurrentMember()
+  const member = await getSignedInMember()
   if (!member) redirect('/sign-in')
 
   const [modules, tiers] = await Promise.all([listModules(member), listMentoringTiers()])

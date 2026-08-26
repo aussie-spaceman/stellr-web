@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentMember } from '@/lib/community'
 import { getHostCaps, hostRespond, setHostNotes, addActions, scheduleMentoring } from '@/lib/sessions'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // Host session management (FR-COM-11/12). One endpoint, switched on `action`:
 //   respond  → accept/decline/cancel/complete a session
@@ -8,6 +9,11 @@ import { getHostCaps, hostRespond, setHostNotes, addActions, scheduleMentoring }
 //   actions  → set close-out actions for a member
 //   schedule → schedule a mentoring session for a cohort
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   const caps = await getHostCaps(member.id)

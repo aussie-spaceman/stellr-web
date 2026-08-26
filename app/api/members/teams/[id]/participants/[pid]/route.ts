@@ -4,12 +4,18 @@ import { supabaseServer } from '@/lib/supabase'
 import { sendEmail, studentLeftTeamEmail } from '@/lib/email'
 import { normalizeEventRole } from '@/lib/member-enums'
 import { ownsTeam } from '@/lib/team-access'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // PATCH /api/members/teams/[id]/participants/[pid]
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; pid: string }> }
 ) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — see lib/impersonation.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
@@ -76,6 +82,11 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; pid: string }> }
 ) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — see lib/impersonation.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

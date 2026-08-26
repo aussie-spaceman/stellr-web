@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
 import { getSpaceForMember } from '@/lib/spaces'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 const schema = z.object({ spaceSlug: z.string().min(1) })
 
@@ -10,6 +11,11 @@ const schema = z.object({ spaceSlug: z.string().min(1) })
 // active roster row so it moves from Discover → Your spaces and they're counted
 // as a member. Private/secret spaces are join-by-invite/tier only, never here.
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

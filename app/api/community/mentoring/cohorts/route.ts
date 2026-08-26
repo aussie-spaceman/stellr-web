@@ -3,11 +3,17 @@ import { getCurrentMember } from '@/lib/community'
 import { getHostCaps } from '@/lib/sessions'
 import { createCohort } from '@/lib/mentoring'
 import { DEFAULT_TZ, type CohortTheme } from '@/lib/mentoring-format'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // POST /api/community/mentoring/cohorts — create a cohort + send invites.
 // Available to platform admins and members holding the mentor role. A mentor
 // becomes the cohort's mentor by default; an admin may name a different mentor.
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

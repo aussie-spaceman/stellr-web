@@ -1,7 +1,9 @@
 import { supabaseServer } from '@/lib/supabase'
-import { getActiveTierNames } from '@/lib/tiers-server'
+import { resolveTierMap } from '@/lib/tiers-server'
 import { getEventsBySlugs } from '@/lib/sanity'
-import type { SpaceAccessType, SpaceRole, SpaceTheme } from '@/lib/spaces'
+import { resolveSpaceAudience, type SpaceAudienceMember } from '@/lib/spaces'
+import { ROLE_LABELS, type MemberRole } from '@/lib/member-roles'
+import type { SpaceAccessType, SpaceTheme } from '@/lib/spaces'
 import type { BracketRequirements } from '@/lib/space-training'
 
 // Loads everything the admin single-space config screen needs (screens 11–17).
@@ -23,7 +25,17 @@ export interface AdminSpaceConfig {
   assignedRoles: string[]
   // Objects (Event/Training/Mentoring/Coaching) whose members inherit this space.
   sources: { id: string; objectType: string; objectRef: string; label: string }[]
-  members: { memberId: string; name: string; tierName: string | null; role: SpaceRole; status: 'invited' | 'active'; muted: boolean }[]
+  /**
+   * The DERIVED audience, not the roster table. Tier and role grants write no
+   * community_space_members row, so reading that table alone showed every tier
+   * and role Space as empty while its member count (already derived) disagreed.
+   * `grantLabel` is the resolved, human-readable form of grantRef.
+   */
+  members: (SpaceAudienceMember & { grantLabel: string | null })[]
+  /** True when the audience was trimmed to exceptions (open spaces). */
+  membersAreExceptions: boolean
+  /** Live-member total for an open space, whose audience is everyone. */
+  audienceTotal: number
   // `attachmentId` is set for files linked from the Global Resources Catalogue
   // (detach removes the link only); null for files uploaded to this space (remove
   // deletes the binary).
@@ -64,7 +76,6 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
     { data: tierRows },
     { data: roleRows },
     { data: sourceRows },
-    { data: memberRows },
     { data: resourceRows },
     { data: trainRows },
     { data: catalogue },
@@ -74,47 +85,28 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
     db.from('community_space_tiers').select('tier_id').eq('space_id', spaceId),
     db.from('community_space_roles').select('role').eq('space_id', spaceId),
     db.from('community_space_sources').select('id, object_type, object_ref').eq('space_id', spaceId).order('created_at'),
-    db.from('community_space_members').select('member_id, role, status, muted, members:member_id(first_name, last_name)').eq('space_id', spaceId),
     db.from('community_resources').select('id, title, file_type, from_chat, created_at').eq('space_id', spaceId).order('created_at', { ascending: false }),
     db.from('community_space_training').select('training_module_id, is_mandatory, bracket_requirements, display_order, training_modules(title)').eq('space_id', spaceId).order('display_order'),
     db.from('training_modules').select('id, title').eq('is_published', true).order('display_order'),
     db.from('community_announcements').select('id, title, body, created_at').eq('space_id', spaceId).order('created_at', { ascending: false }),
   ])
 
-  type MRow = { member_id: string; role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null; members: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null }
-  const mrows = (memberRows ?? []) as unknown as MRow[]
-  const tierNames = await getActiveTierNames(mrows.map((m) => m.member_id))
-  const members = mrows.map((m) => ({
-    memberId: m.member_id,
-    name: nameOf(rel(m.members)),
-    tierName: tierNames.get(m.member_id) ?? null,
-    role: m.role,
-    status: m.status,
-    muted: !!m.muted,
-  }))
+  // An open Space's audience is every live member, so list only the exceptions
+  // (roster rows, role holders, blocked people) rather than the whole platform.
+  const isOpen = (s as { access_type: SpaceAccessType }).access_type === 'open'
+  const audience = await resolveSpaceAudience(spaceId, { exceptionsOnly: isOpen })
+  const audienceTotal = isOpen
+    ? (await db
+        .from('members')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .is('deleted_at', null)).count ?? audience.length
+    : audience.length
 
   // Resolve friendly labels for the linked-object list (raw refs are slugs/uuids).
   const srcRows = (sourceRows ?? []) as Array<{ id: string; object_type: string; object_ref: string }>
-  const labelByKey = new Map<string, string>()
-  if (srcRows.length) {
-    const eventSlugs = srcRows.filter((r) => r.object_type === 'event').map((r) => r.object_ref)
-    const trainIds = srcRows.filter((r) => r.object_type === 'training').map((r) => r.object_ref)
-    const cohortIds = srcRows.filter((r) => r.object_type === 'mentoring' || r.object_type === 'coaching').map((r) => r.object_ref)
-    const [events, { data: mods }, { data: cohorts }] = await Promise.all([
-      eventSlugs.length ? getEventsBySlugs(eventSlugs) : Promise.resolve([]),
-      trainIds.length ? db.from('training_modules').select('id, title').in('id', trainIds) : Promise.resolve({ data: [] as { id: string; title: string }[] }),
-      cohortIds.length ? db.from('mentoring_cohorts').select('id, name').in('id', cohortIds) : Promise.resolve({ data: [] as { id: string; name: string | null }[] }),
-    ])
-    for (const e of events as Array<{ title?: string; slug?: { current?: string } }>) {
-      const s = e.slug?.current
-      if (s) labelByKey.set(`event:${s}`, e.title ?? s)
-    }
-    for (const m of (mods ?? []) as Array<{ id: string; title: string }>) labelByKey.set(`training:${m.id}`, m.title)
-    for (const c of (cohorts ?? []) as Array<{ id: string; name: string | null }>) {
-      labelByKey.set(`mentoring:${c.id}`, c.name ?? c.id)
-      labelByKey.set(`coaching:${c.id}`, c.name ?? c.id)
-    }
-  }
+  const labelByKey = await buildSourceLabels(db, srcRows)
+  const members = await applyGrantLabels(audience, labelByKey)
 
   // Files linked from the Global Resources Catalogue live on the space's container
   // (container_contents), not on community_resources.space_id. Surface those too so
@@ -174,6 +166,8 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
       label: labelByKey.get(`${x.object_type}:${x.object_ref}`) ?? x.object_ref,
     })),
     members,
+    membersAreExceptions: isOpen,
+    audienceTotal,
     resources: [
       ...(resourceRows ?? []).map((r) => {
         const x = r as { id: string; title: string; file_type: string | null; from_chat: boolean; created_at: string }
@@ -263,4 +257,131 @@ async function loadModeration(
       }
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)
+}
+
+
+// ─── Grant labelling (shared with the paginated members API) ─────────────────
+
+type SourceRow = { object_type: string; object_ref: string }
+
+/** `objectType:objectRef` → the human name of that Event / Course / Cohort. */
+async function buildSourceLabels(
+  db: ReturnType<typeof supabaseServer>,
+  srcRows: SourceRow[],
+): Promise<Map<string, string>> {
+  const labelByKey = new Map<string, string>()
+  if (!srcRows.length) return labelByKey
+
+  const eventSlugs = srcRows.filter((r) => r.object_type === 'event').map((r) => r.object_ref)
+  const trainIds = srcRows.filter((r) => r.object_type === 'training').map((r) => r.object_ref)
+  const cohortIds = srcRows.filter((r) => r.object_type === 'mentoring' || r.object_type === 'coaching').map((r) => r.object_ref)
+  const [events, { data: mods }, { data: cohorts }] = await Promise.all([
+    eventSlugs.length ? getEventsBySlugs(eventSlugs) : Promise.resolve([]),
+    trainIds.length ? db.from('training_modules').select('id, title').in('id', trainIds) : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+    cohortIds.length ? db.from('mentoring_cohorts').select('id, name').in('id', cohortIds) : Promise.resolve({ data: [] as { id: string; name: string | null }[] }),
+  ])
+  for (const e of events as Array<{ title?: string; slug?: { current?: string } }>) {
+    const slug = e.slug?.current
+    if (slug) labelByKey.set(`event:${slug}`, e.title ?? slug)
+  }
+  for (const m of (mods ?? []) as Array<{ id: string; title: string }>) labelByKey.set(`training:${m.id}`, m.title)
+  for (const c of (cohorts ?? []) as Array<{ id: string; name: string | null }>) {
+    labelByKey.set(`mentoring:${c.id}`, c.name ?? c.id)
+    labelByKey.set(`coaching:${c.id}`, c.name ?? c.id)
+  }
+  return labelByKey
+}
+
+/**
+ * Turn each member's machine-readable grantRef into the badge the admin reads.
+ * This is what makes revoke comprehensible: "you can't remove them, their
+ * Pathfinder tier lets them in" is only obvious once the tier is named.
+ */
+async function applyGrantLabels(
+  audience: SpaceAudienceMember[],
+  labelByKey: Map<string, string>,
+): Promise<(SpaceAudienceMember & { grantLabel: string | null })[]> {
+  const tierMap = audience.some((m) => m.reason === 'tier') ? await resolveTierMap() : null
+  return audience.map((m) => {
+    let grantLabel: string | null = null
+    if (m.grantRef) {
+      if (m.reason === 'tier') grantLabel = tierMap?.nameById[m.grantRef] ?? null
+      else if (m.reason === 'role') grantLabel = ROLE_LABELS[m.grantRef as MemberRole] ?? m.grantRef
+      else grantLabel = labelByKey.get(m.grantRef) ?? m.grantRef
+    }
+    return { ...m, grantLabel }
+  })
+}
+
+export interface SpaceMembersPage {
+  members: (SpaceAudienceMember & { grantLabel: string | null })[]
+  /** Rows matching the filters, before paging. */
+  total: number
+  /** Everyone who can enter, however the list was filtered. */
+  audienceTotal: number
+  exceptionsOnly: boolean
+}
+
+/**
+ * The Space members roster, filtered, searched and paged — what the Members tab
+ * calls once an admin types or turns a page. Reads the same resolver as
+ * loadSpaceAdmin, so the first page and the searched page can't disagree.
+ */
+export async function loadSpaceMembersPage(
+  spaceId: string,
+  opts: {
+    q?: string
+    reason?: string
+    status?: 'blocked' | 'invited' | 'active'
+    page?: number
+    pageSize?: number
+    /** Force the full audience of an open space rather than just its exceptions. */
+    includeEveryone?: boolean
+  } = {},
+): Promise<SpaceMembersPage> {
+  const db = supabaseServer()
+  const { data: s } = await db
+    .from('community_spaces')
+    .select('access_type')
+    .eq('id', spaceId)
+    .maybeSingle()
+  const isOpen = (s as { access_type: SpaceAccessType } | null)?.access_type === 'open'
+  const exceptionsOnly = isOpen && !opts.includeEveryone && !opts.q
+
+  const audience = await resolveSpaceAudience(spaceId, { exceptionsOnly })
+
+  const q = opts.q?.trim().toLowerCase()
+  const filtered = audience.filter((m) => {
+    if (q && !`${m.name} ${m.email ?? ''}`.toLowerCase().includes(q)) return false
+    if (opts.reason && m.reason !== opts.reason) return false
+    if (opts.status === 'blocked' && !m.revoked && !m.postingSuspended) return false
+    if (opts.status === 'invited' && m.status !== 'invited') return false
+    if (opts.status === 'active' && (m.status !== 'active' || m.revoked)) return false
+    return true
+  })
+
+  const page = Math.max(1, opts.page ?? 1)
+  const pageSize = Math.min(200, Math.max(1, opts.pageSize ?? 50))
+  const slice = filtered.slice((page - 1) * pageSize, page * pageSize)
+
+  const { data: sourceRows } = await db
+    .from('community_space_sources')
+    .select('object_type, object_ref')
+    .eq('space_id', spaceId)
+  const labelByKey = await buildSourceLabels(db, (sourceRows ?? []) as SourceRow[])
+
+  const audienceTotal = isOpen
+    ? (await db
+        .from('members')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .is('deleted_at', null)).count ?? filtered.length
+    : audience.length
+
+  return {
+    members: await applyGrantLabels(slice, labelByKey),
+    total: filtered.length,
+    audienceTotal,
+    exceptionsOnly,
+  }
 }

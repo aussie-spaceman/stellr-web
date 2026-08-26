@@ -9,6 +9,7 @@ import {
   hostRespond,
 } from '@/lib/sessions'
 import { assignCohortAction, attachCohortResource, detachCohortResource, searchAttachableResources } from '@/lib/mentoring'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // GET — resource-library search for the coach's "Assign material" picker.
 export async function GET(req: Request) {
@@ -27,6 +28,11 @@ export async function GET(req: Request) {
 // schedule sessions, assign training material, assign actions to the member.
 // Body: { workshopId, action, ...payload }. Coach-gated by isCohortMentor.
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

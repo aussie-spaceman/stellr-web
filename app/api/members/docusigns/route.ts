@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { impersonatedMemberId } from '@/lib/impersonation'
 
 // GET /api/members/docusigns — returns DocuSign envelopes for the current member
 export async function GET() {
@@ -9,12 +10,17 @@ export async function GET() {
 
   const db = supabaseServer()
 
-  const { data: member } = await db
-    .from('members')
-    .select('id')
-    .eq('clerk_user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle()
+  // Honours an admin view-as session, so the portal shows THIS member's
+  // envelopes rather than the admin's own (usually empty) list.
+  const viewAsId = await impersonatedMemberId()
+  const { data: member } = viewAsId
+    ? await db.from('members').select('id').eq('id', viewAsId).maybeSingle()
+    : await db
+        .from('members')
+        .select('id')
+        .eq('clerk_user_id', userId)
+        .eq('is_active', true)
+        .maybeSingle()
 
   if (!member) return NextResponse.json({ envelopes: [] })
 

@@ -13,6 +13,7 @@ export async function LockedSpaceGate({ space }: { space: SpaceDetail }) {
       description={space.description}
       assignedTierIds={space.assignedTierIds}
       tierNames={tierMap.nameById}
+      revoked={space.access.revoked}
     />
   )
 }

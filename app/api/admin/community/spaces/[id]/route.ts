@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { notifyMember } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
-import { createPendingSpaceInvite, spaceNotificationAudience } from '@/lib/spaces'
+import { createPendingSpaceInvite, spaceNotificationAudience, resolveSpaceAudience } from '@/lib/spaces'
+import { logActivity, actorFromAuth } from '@/lib/activity-log'
 import { attachSpaceResource, ensureSpaceContainer } from '@/lib/container-sync'
 import { sanitizeBracketRequirements, anyBracketMandatory } from '@/lib/space-training'
 import { syncSpaceSourceRoster } from '@/lib/space-inheritance'
@@ -202,6 +203,87 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     case 'remove-member': {
       if (!b.memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
       await db.from('community_space_members').delete().eq('space_id', spaceId).eq('member_id', b.memberId)
+
+      // Deleting the roster row only undoes a ROSTER grant. If the member is
+      // still in the derived audience — because a tier, a web-app role, an open
+      // space or a linked Object lets them in — say so plainly instead of
+      // reporting a removal that did nothing. (An Object grant would also be
+      // re-written by the next reconcile pass.)
+      const stillIn = (await resolveSpaceAudience(spaceId)).find(
+        (m) => m.memberId === b.memberId && !m.revoked
+      )
+      if (stillIn) {
+        return NextResponse.json({
+          ok: true,
+          stillHasAccess: true,
+          grantedBy: stillIn.reason,
+          note: 'Roster row removed, but this member still reaches the space another way — revoke to block them.',
+        })
+      }
+      return NextResponse.json({ ok: true })
+    }
+
+    // ── Suspend (posting) / revoke (access) ─────────────────────────────────
+    // Both are NEGATIVE grants in community_space_suspensions (migration 142),
+    // checked ahead of every positive grant. That is the only thing that can stop
+    // a tier-, role- or open-granted member, none of whom have a roster row to
+    // delete.
+    case 'revoke-access':
+    case 'restore-access':
+    case 'suspend-posting':
+    case 'resume-posting': {
+      const scope = action.endsWith('-access') ? 'access' : 'posting'
+      const lifting = action.startsWith('restore-') || action.startsWith('resume-')
+      const memberId = b.memberId as string | undefined
+      if (!memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
+
+      if (lifting) {
+        const { error } = await db
+          .from('community_space_suspensions')
+          .delete()
+          .eq('space_id', spaceId)
+          .eq('member_id', memberId)
+          .eq('scope', scope)
+        if (error) return NextResponse.json({ error: 'Could not lift the block' }, { status: 500 })
+        // Clear the legacy roster mute too, or a resumed member stays silenced by
+        // the column the write paths still read.
+        if (scope === 'posting') {
+          await db
+            .from('community_space_members')
+            .update({ muted: false })
+            .eq('space_id', spaceId)
+            .eq('member_id', memberId)
+        }
+      } else {
+        const { error } = await db.from('community_space_suspensions').upsert(
+          {
+            space_id: spaceId,
+            member_id: memberId,
+            scope,
+            reason: typeof b.reason === 'string' && b.reason.trim() ? b.reason.trim() : null,
+            created_by: adminMemberId,
+            expires_at: typeof b.expiresAt === 'string' && b.expiresAt ? b.expiresAt : null,
+          },
+          { onConflict: 'space_id,member_id,scope' }
+        )
+        if (error) return NextResponse.json({ error: 'Could not apply the block' }, { status: 500 })
+      }
+
+      const { data: sp } = await db.from('community_spaces').select('name').eq('id', spaceId).maybeSingle()
+      const spaceName = (sp as { name: string } | null)?.name ?? 'a space'
+      const verb =
+        scope === 'access'
+          ? lifting ? 'Restored access to' : 'Revoked access to'
+          : lifting ? 'Lifted posting suspension in' : 'Suspended posting in'
+      void logActivity({
+        ...(await actorFromAuth()),
+        memberId,
+        category: 'community',
+        action: `space_${scope}_${lifting ? 'restored' : 'blocked'}`,
+        summary: `${verb} ${spaceName}`,
+        metadata: { spaceId, scope, reason: b.reason ?? null, expiresAt: b.expiresAt ?? null },
+      })
+
       return NextResponse.json({ ok: true })
     }
 
@@ -369,19 +451,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
       if (!memberId) return NextResponse.json({ error: 'Could not resolve member to mute' }, { status: 404 })
 
-      // Members can post in open spaces without a roster row, so upsert one
-      // carrying the mute rather than only updating an existing row.
-      const { data: existing } = await db
-        .from('community_space_members')
-        .select('id')
-        .eq('space_id', spaceId)
-        .eq('member_id', memberId)
-        .maybeSingle()
-      if (existing) {
-        await db.from('community_space_members').update({ muted: true }).eq('id', (existing as { id: string }).id)
-      } else {
-        await db.from('community_space_members').insert({ space_id: spaceId, member_id: memberId, role: 'member', status: 'active', muted: true })
-      }
+      // Writes a 'posting' suspension rather than the roster mute flag. The flag
+      // needed a roster row to live on, so muting a tier- or role-granted member
+      // meant inventing one for them; the suspension needs nothing.
+      const { error: muteErr } = await db.from('community_space_suspensions').upsert(
+        {
+          space_id: spaceId,
+          member_id: memberId,
+          scope: 'posting',
+          reason: b.flagId ? 'Muted from the moderation queue' : null,
+          created_by: adminMemberId,
+        },
+        { onConflict: 'space_id,member_id,scope' }
+      )
+      if (muteErr) return NextResponse.json({ error: 'Could not mute member' }, { status: 500 })
 
       // Resolve the originating flag (if any) so the report leaves the queue.
       if (b.flagId) {
@@ -394,6 +477,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     case 'unmute-member': {
       if (!b.memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
+      await db
+        .from('community_space_suspensions')
+        .delete()
+        .eq('space_id', spaceId)
+        .eq('member_id', b.memberId)
+        .eq('scope', 'posting')
+      // Legacy flag cleared too — the write paths still read it for one release.
       await db.from('community_space_members').update({ muted: false }).eq('space_id', spaceId).eq('member_id', b.memberId)
       return NextResponse.json({ ok: true })
     }

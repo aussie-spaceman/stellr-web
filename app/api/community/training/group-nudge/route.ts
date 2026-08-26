@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
 import { notifyMember } from '@/lib/notify'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // POST /api/community/training/group-nudge
 // Body: { memberIds: string[], objectRef: string, objectLabel?: string }
@@ -9,6 +10,11 @@ import { notifyMember } from '@/lib/notify'
 // students registered under THIS teacher (teacher_email) for the given Object can
 // be nudged — the request is intersected with that set server-side.
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const teacher = await getCurrentMember()
   if (!teacher) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   if (teacher.event_role !== 'teacher') {

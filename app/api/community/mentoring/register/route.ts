@@ -6,6 +6,7 @@ import { enrollWithCredit, enrollFree, getCohortFull, resolveCohortAccess } from
 import { getOrCreateCohortOffering } from '@/lib/entitlements'
 import { getAcademyDiscountPercent, academyLineItemFromPrice, discountCents } from '@/lib/academy-discount'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -16,6 +17,11 @@ function getStripe() {
 // Self-register for an open mentoring cohort: free-with-membership, with a
 // mentoring credit, or via a one-off Stripe payment.
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 

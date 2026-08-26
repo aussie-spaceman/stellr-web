@@ -41,7 +41,12 @@ export function SpaceCard({ space, restricted = false, joinable = false, unread 
       )}
 
       <div className="mt-auto flex items-center justify-between pt-3">
-        {restricted ? (
+        {restricted && space.revoked ? (
+          // Revoked by an admin: no tier buys a way back in, so no Upgrade link.
+          <span className="inline-flex flex-wrap items-center gap-1 text-xs text-brand-muted-soft">
+            <Lock className="h-3 w-3" /> Access removed by an admin
+          </span>
+        ) : restricted ? (
           <span className="inline-flex flex-wrap items-center gap-1 text-xs text-brand-muted-soft">
             <Lock className="h-3 w-3" /> Requires{' '}
             {describeAssignedTiers(space.assignedTierIds, tierNames)} ·{' '}

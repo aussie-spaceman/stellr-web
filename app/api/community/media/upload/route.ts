@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 const MAX_BYTES = 8 * 1024 * 1024 // 8 MB
 const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
@@ -16,6 +17,11 @@ const EXT: Record<string, string> = {
 // post/comment. Stored privately under community-media/<memberId>/; served back
 // through the access-gated proxy at /api/community/media/<path>. Returns { src }.
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

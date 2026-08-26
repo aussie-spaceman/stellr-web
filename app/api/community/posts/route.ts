@@ -5,6 +5,7 @@ import { getCurrentMember, getSpaceBySlug, memberCanAccessSpace, tiptapToPlainTe
 import { getSpaceForMember, canPostInSpace } from '@/lib/spaces'
 import { getChannelPosts } from '@/lib/space-posts'
 import { extractMentionIds, notifyMentions } from '@/lib/mentions'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 const createPostSchema = z.object({
   spaceSlug: z.string().min(1),
@@ -48,6 +49,11 @@ export async function GET(req: Request) {
 // POST /api/community/posts — create a post. Channel path uses the Spaces access
 // model (access_type + roster) and posting policy; legacy path is unchanged.
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
@@ -132,6 +138,11 @@ export async function POST(req: Request) {
 // channel announcement (the "Pinned announcement" ribbon). Restricted to a space's
 // admins/mentors (or a platform admin) — the in-space moderator roles.
 export async function PATCH(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

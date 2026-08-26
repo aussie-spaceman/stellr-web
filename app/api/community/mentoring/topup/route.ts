@@ -5,6 +5,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { CREDIT_PACK_PRICE_CENTS } from '@/lib/mentoring-format'
 import { getAcademyDiscountPercent, discountCents } from '@/lib/academy-discount'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -19,6 +20,11 @@ function getStripe() {
 // `quantity` on success (grantPurchasedLot), which enrollment then draws FIFO
 // alongside the tier allowance (migration 122). Mirrors /api/community/coaching/topup.
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 

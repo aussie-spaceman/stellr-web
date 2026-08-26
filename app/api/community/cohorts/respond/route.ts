@@ -3,10 +3,16 @@ import { getCurrentMember } from '@/lib/community'
 import { respondToInvite } from '@/lib/sessions'
 import { supabaseServer } from '@/lib/supabase'
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // POST /api/community/cohorts/respond — a member accepts or declines a pending
 // cohort invite (PRD §11). Body: { cohortId, action: 'accept' | 'decline' }.
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

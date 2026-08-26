@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isMemberRequestable, getEntityDef } from '@/lib/deletion/registry'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // POST /api/members/deletion-requests  { entity, id, reason }
 // A member requests deletion of one of the allowed entity types (event activity,
@@ -10,6 +11,11 @@ import { isMemberRequestable, getEntityDef } from '@/lib/deletion/registry'
 const ALLOWED = new Set(['event_participation', 'school', 'session'])
 
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — see lib/impersonation.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

@@ -4,6 +4,7 @@ import { getSpaceForMember } from '@/lib/spaces'
 import { supabaseServer } from '@/lib/supabase'
 import { attachSpaceResource } from '@/lib/container-sync'
 import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
 
@@ -24,6 +25,11 @@ function fileLabel(name: string, mime: string): string {
 // post auto-saves into the space's Resources (from_chat), inheriting space access.
 // Body: { spaceSlug, postId, file }.
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

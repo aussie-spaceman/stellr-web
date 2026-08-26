@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 import { getVideoProvider, getEmbedConfig, trainingRoomName } from '@/lib/video-provider'
 
 // GET /api/admin/training/live-room?itemId=
@@ -31,7 +31,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'This lesson is not a Record (live) lesson' }, { status: 400 })
   }
 
-  const member = await getCurrentMember()
+  const member = await getSignedInMember()
   const displayName = [member?.first_name, member?.last_name].filter(Boolean).join(' ') || 'Stellr Admin'
   const room = trainingRoomName(itemId)
   const jwt = await getVideoProvider().getJoinToken(

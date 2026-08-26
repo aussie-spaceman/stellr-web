@@ -5,6 +5,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getRequestById, scheduleFromRequest } from '@/lib/coaching-requests'
 import { getAcademyDiscountPercent, discountCents } from '@/lib/academy-discount'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 const SESSION_PRICE_CENTS = Number(process.env.COACHING_SESSION_PRICE_CENTS) || 4000
 
@@ -20,6 +21,11 @@ function getStripe() {
 // purchased lot and completes the booking — so the DB is the source of truth even
 // if the member closes the tab.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 

@@ -2,12 +2,18 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
 import { canRenameAttachment } from '@/lib/resources-catalogue'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // PATCH /api/community/resources/attachment/[id]
 // Rename an attachment (container_contents.display_name). Per-attachment naming
 // (decision 1) — scoped to this one attachment, gated to the binary's uploader
 // (handover §4.4). Sending an empty name clears the override (reverts to title).
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

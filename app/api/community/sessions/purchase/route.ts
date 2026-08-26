@@ -5,6 +5,7 @@ import { getCurrentMember } from '@/lib/community'
 import { getAcademyDiscountPercent, academyLineItemFromPrice } from '@/lib/academy-discount'
 import { getTierExtraPriceId } from '@/lib/entitlements'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // POST /api/community/sessions/purchase  Body: { sessionType: 'coaching' | 'mentoring' }
 // Starts a Stripe Checkout for one additional session (FR-COM-11/12). The price
@@ -17,6 +18,11 @@ function getStripe() {
 }
 
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

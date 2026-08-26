@@ -43,8 +43,11 @@ const ROLE_LABELS: Record<string, string> = {
 // Plain-language explanation of each "effective access" source badge.
 const SOURCE_HINT: Record<string, string> = {
   Roster: 'Direct roster membership on this object (added to its people list)',
+  Object: 'Inherited from a linked Event, Training, Cohort or Workshop',
+  Invited: 'Invited directly by an admin (Moderator grants come this way)',
   'Rule (tier)': 'Granted automatically by a tier-based access rule',
   'Rule (role)': 'Granted automatically by a role-based access rule',
+  'Open space': 'Open to every member — no grant needed',
   Manager: 'Manages this object (coach / mentor / staff role)',
 }
 

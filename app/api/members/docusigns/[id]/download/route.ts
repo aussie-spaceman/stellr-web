@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getEnvelopeDocument } from '@/lib/docusign'
+import { impersonatedMemberId } from '@/lib/impersonation'
 
 // GET /api/members/docusigns/[id]/download — stream executed PDF to the member
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -11,12 +12,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params
   const db = supabaseServer()
 
-  const { data: member } = await db
-    .from('members')
-    .select('id')
-    .eq('clerk_user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle()
+  // Honours an admin view-as session (read only).
+  const viewAsId = await impersonatedMemberId()
+  const { data: member } = viewAsId
+    ? await db.from('members').select('id').eq('id', viewAsId).maybeSingle()
+    : await db
+        .from('members')
+        .select('id')
+        .eq('clerk_user_id', userId)
+        .eq('is_active', true)
+        .maybeSingle()
 
   if (!member) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 

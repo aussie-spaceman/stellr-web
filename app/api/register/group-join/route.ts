@@ -14,6 +14,7 @@ import {
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { upsertMember } from '@/lib/member-sync'
 import { ageFromDob, registrationStatus } from '@/lib/utils'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // A participant, normalised to the enum/shape the participants + members tables
 // and DocuSign expect — built either from the signed-in member's profile, or
@@ -46,6 +47,11 @@ interface JoinPerson {
 //     passwordless Clerk account + sign-in token, so they're auto-logged-in on
 //     success — no detour through the (timeout-prone) hosted sign-in widget.
 export async function POST(req: NextRequest) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — see lib/impersonation.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const { userId } = await auth()
   const body = await req.json().catch(() => ({}))
   const { token, details } = body as { token?: string; details?: Record<string, unknown> }

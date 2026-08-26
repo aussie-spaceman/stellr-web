@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
+import { assertNotImpersonating, impersonatedMemberId } from '@/lib/impersonation'
 
 // Treat null/undefined/'' as equivalent so an untouched empty field (the form
 // submits null DB values as '') is not flagged as a change.
@@ -22,7 +23,9 @@ export async function GET() {
 
   const db = supabaseServer()
 
-  const { data: member, error } = await db
+  // Honours an admin view-as session (read only — PATCH is blocked outright).
+  const viewAsId = await impersonatedMemberId()
+  const query = db
     .from('members')
     .select(`
       *,
@@ -32,9 +35,9 @@ export async function GET() {
       member_allergies(*, allergy_options(*)),
       event_participations(*)
     `)
-    .eq('clerk_user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle()
+  const { data: member, error } = viewAsId
+    ? await query.eq('id', viewAsId).maybeSingle()
+    : await query.eq('clerk_user_id', userId).eq('is_active', true).maybeSingle()
 
   if (error) {
     console.error('Error fetching member:', error)
@@ -46,6 +49,11 @@ export async function GET() {
 
 // PATCH /api/members/me — update the current member's profile
 export async function PATCH(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — see lib/impersonation.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

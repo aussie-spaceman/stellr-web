@@ -8,6 +8,7 @@ import {
   inviteMembersToCohort,
 } from '@/lib/sessions'
 import { assignCohortAction, attachCohortResource, detachCohortResource, searchAttachableResources } from '@/lib/mentoring'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // GET — resource-library search for the "Attach a resource" picker (mentor/admin).
 export async function GET(req: Request) {
@@ -26,6 +27,11 @@ export async function GET(req: Request) {
 // (PRD §11): assign training material, and schedule a session series.
 // Body: { cohortId, action, ...payload }. Mentor-gated by isCohortMentor.
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

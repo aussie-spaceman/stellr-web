@@ -24,6 +24,7 @@ import { getMemberOnFileByMembershipId } from '@/lib/member-onfile'
 import { getCurrentMember } from '@/lib/community'
 import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
 import type { RegistrationRow } from '@/lib/database.types'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -87,6 +88,11 @@ export async function POST(req: NextRequest) {
     // their session email is authoritative. This keeps the registrant bound to
     // their own member row and avoids duplicate/forged identities. Additional
     // adults and students are unaffected — group logic is otherwise unchanged.
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
     const sessionMember = await getCurrentMember().catch(() => null)
     if (sessionMember?.email && teacher) {
       teacher.email = sessionMember.email

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getCurrentMember } from '@/lib/community'
 import { notifyCommunityAdmins } from '@/lib/notify'
 import { supabaseServer } from '@/lib/supabase'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // A member reports that a training lesson's resource is unavailable/broken
 // (e.g. no link provided, or a placeholder like "TBC"). Routes an in-app +
@@ -11,6 +12,11 @@ export async function POST(
   { params }: { params: Promise<{ itemId: string }> }
 ) {
   const { itemId } = await params
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 

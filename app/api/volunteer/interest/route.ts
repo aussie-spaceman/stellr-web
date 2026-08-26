@@ -4,6 +4,7 @@ import { getCurrentMember } from '@/lib/community'
 import { getEventBySlug } from '@/lib/sanity'
 import { isVolunteer } from '@/lib/volunteer'
 import { logActivity } from '@/lib/activity-log'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 /**
  * POST { eventSlug, interested } — a volunteer raising (or withdrawing) their
@@ -11,6 +12,11 @@ import { logActivity } from '@/lib/activity-log'
  * interest on the event's Volunteers panel and assign from there.
  */
 export async function POST(req: NextRequest) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   if (!(await isVolunteer(member.id))) {

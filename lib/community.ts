@@ -58,21 +58,51 @@ export interface CommunityMember {
  * Returns null when unauthenticated, no member row exists, or the member is inactive.
  */
 export async function getCurrentMember(): Promise<CommunityMember | null> {
+  return resolveMember(true)
+}
+
+/**
+ * The REAL signed-in member, never the impersonated one.
+ *
+ * Admin surfaces use this: they want the acting admin's identity for
+ * created_by / resolved_by / author fields, and an admin who happens to be
+ * mid-"view as member" must not have their admin actions recorded against the
+ * person they were looking at.
+ */
+export async function getSignedInMember(): Promise<CommunityMember | null> {
+  return resolveMember(false)
+}
+
+async function resolveMember(allowImpersonation: boolean): Promise<CommunityMember | null> {
   const { userId, sessionClaims } = await auth()
   if (!userId) return null
-  const isAdmin = isAdminClaims(sessionClaims)
+  let isAdmin = isAdminClaims(sessionClaims)
+
+  // Admin "view as member": this ONE branch turns the whole member portal into
+  // that member's view, because every member-facing page and API route resolves
+  // itself through here. lib/impersonation re-checks the admin claim, so a
+  // lingering cookie on a non-admin session resolves to null and changes nothing.
+  const { impersonatedMemberId } = await import('@/lib/impersonation')
+  const viewAsId = allowImpersonation && isAdmin ? await impersonatedMemberId() : null
 
   const db = supabaseServer()
-  const { data: member } = await db
+  const query = db
     .from('members')
     .select(`
       id, first_name, last_name, email, event_role, age_bracket,
       member_memberships(renewal_status, started_at, expires_at, tier_id, membership_tiers(name, is_free))
     `)
-    .eq('clerk_user_id', userId)
-    .maybeSingle()
+  const { data: member } = viewAsId
+    ? await query.eq('id', viewAsId).maybeSingle()
+    : await query.eq('clerk_user_id', userId).maybeSingle()
 
   if (!member) return null
+
+  // Drop the admin bypass while viewing as someone else. Without this the
+  // admin's own claims satisfy every tier, entitlement and Space gate, so the
+  // portal would show what an ADMIN sees rather than what the member sees —
+  // which is the entire point of the feature.
+  if (viewAsId) isAdmin = false
 
   // The Supabase client types the nested join loosely (membership_tiers can come
   // back as an object or array depending on cardinality), so normalize here.

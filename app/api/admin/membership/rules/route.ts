@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 import { attachAllowed, type AccessObjectType } from '@/lib/access-objects'
 import { ALL_TIER_NAMES } from '@/lib/tiers'
 
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
   const objectRuleError = await validateObjectRule(b)
   if (objectRuleError) return NextResponse.json({ error: objectRuleError }, { status: 400 })
 
-  const admin = await getCurrentMember()
+  const admin = await getSignedInMember()
   const db = supabaseServer()
   const isCredits = grantKind === 'credits'
   const isObjectGrant = grantKind === 'attach_object' || grantKind === 'roster_add'

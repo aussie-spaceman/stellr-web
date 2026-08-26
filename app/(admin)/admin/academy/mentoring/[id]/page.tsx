@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 import { listCohortSessions, listCohortTraining, getCohortChannel } from '@/lib/sessions'
 import { listModules } from '@/lib/training'
 import { supabaseServer } from '@/lib/supabase'
@@ -12,7 +12,7 @@ import { AdminManageCohort } from '@/components/admin/mentoring/AdminManageCohor
 export const metadata = { title: 'Admin · Manage cohort' }
 
 export default async function AdminManageCohortPage({ params }: { params: Promise<{ id: string }> }) {
-  const member = await getCurrentMember()
+  const member = await getSignedInMember()
   if (!member) notFound()
   const { id } = await params
   const cohort = await getCohortFull(id)

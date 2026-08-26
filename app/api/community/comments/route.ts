@@ -5,6 +5,7 @@ import { getCurrentMember, tiptapToPlainText } from '@/lib/community'
 import { getSpaceAccessById, isMemberMutedInSpace } from '@/lib/spaces'
 import { sendEmail, communityReplyEmail } from '@/lib/email'
 import { extractMentionIds, notifyMentions } from '@/lib/mentions'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 const createCommentSchema = z.object({
   postId: z.string().uuid(),
@@ -71,6 +72,11 @@ async function notifyPostAuthor({
 
 // POST /api/community/comments — reply to a post or another comment (FR-COM-02).
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 import { listCohortSessions, listCohortTraining, getCohortChannel } from '@/lib/sessions'
 import { listModules } from '@/lib/training'
 import { supabaseServer } from '@/lib/supabase'
@@ -12,7 +12,7 @@ import { AdminManageWorkshop } from '@/components/admin/coaching/AdminManageWork
 export const metadata = { title: 'Admin · Manage workshop' }
 
 export default async function AdminManageWorkshopPage({ params }: { params: Promise<{ id: string }> }) {
-  const member = await getCurrentMember()
+  const member = await getSignedInMember()
   if (!member) redirect('/sign-up')
   if (!member.isAdmin) redirect('/community/coaching')
 

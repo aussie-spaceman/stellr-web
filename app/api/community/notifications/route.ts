@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // GET /api/community/notifications — last 20 notifications for the current member.
 // ?unread=1 returns only the unread count (used by the polling bell).
@@ -35,6 +36,11 @@ export async function GET(req: Request) {
 
 // POST /api/community/notifications/read-all — mark all as read
 export async function POST() {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

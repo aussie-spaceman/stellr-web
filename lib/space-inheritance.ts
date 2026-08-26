@@ -53,7 +53,7 @@ export async function syncObjectSpaceRoster(
  * Training sources are not backfilled here (members reach training-linked spaces
  * via their event/cohort assignment, not the module id).
  */
-async function objectActiveMemberIds(
+export async function objectActiveMemberIds(
   db: SupabaseClient,
   objectType: SpaceObjectType,
   objectRef: string,

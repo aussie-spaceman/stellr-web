@@ -6,6 +6,7 @@ import { getMemberCampaignRegistration } from '@/lib/campaign-registrations'
 import { sendEmail, campaignProposalReceivedEmail } from '@/lib/email'
 import { deadlineInfo } from '@/lib/campaigns'
 import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 const BUCKET = 'campaign-proposals'
 const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
@@ -15,6 +16,11 @@ const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const { slug } = await params
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
     const member = await getCurrentMember()
     if (!member) return NextResponse.json({ error: 'You need to be signed in.' }, { status: 401 })
 

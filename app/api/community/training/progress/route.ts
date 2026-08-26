@@ -3,11 +3,17 @@ import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, memberCanAccess } from '@/lib/community'
 import { autoCompleteTrainingAction } from '@/lib/sessions'
 import { ensureCertificate } from '@/lib/training-portal'
+import { assertNotImpersonating } from '@/lib/impersonation'
 
 // POST /api/community/training/progress
 // Body: { itemId: string, status: 'completed' | 'in_progress' }
 // Records the member's progress on a single training item (FR-COM-10).
 export async function POST(req: Request) {
+  // Read-only while an admin is viewing as this member. Impersonation is a lens,
+  // not a login — an admin must never post, book or pay as somebody else.
+  const impersonationBlock = await assertNotImpersonating()
+  if (impersonationBlock) return impersonationBlock
+
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 

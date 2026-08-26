@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, RESOURCES_BUCKET } from '@/lib/community'
+import { getSignedInMember, RESOURCES_BUCKET } from '@/lib/community'
 import { attachSpaceResource } from '@/lib/container-sync'
 import { createLinkBinary, normaliseUrl } from '@/lib/resource-upload'
 import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
   if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const uploader = await getCurrentMember()
+  const uploader = await getSignedInMember()
 
   // Link resources arrive as JSON; file uploads as multipart form-data.
   if (req.headers.get('content-type')?.includes('application/json')) {

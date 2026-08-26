@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
-import { getCurrentMember } from '@/lib/community'
+import { getSignedInMember } from '@/lib/community'
 
 const audienceSchema = z.object({
   activeOnly: z.boolean().optional(),
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
   const { name, templateId, triggerType, scheduledAt, eventKey, delayDays, sequenceKey, audience } = parsed.data
 
   const db = supabaseServer()
-  const admin = await getCurrentMember()
+  const admin = await getSignedInMember()
   const { data, error } = await db
     .from('email_campaigns')
     .insert({

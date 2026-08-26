@@ -107,6 +107,7 @@ const {
   resolveSpaceAudiences,
   resolveSpaceAudience,
   resolveMemberSpaces,
+  resolveDerivedGrant,
   NO_SUSPENSIONS,
 } = await import('@/lib/spaces')
 
@@ -264,5 +265,35 @@ describe('resolveMemberSpaces — the inverse view agrees with the roster view',
     const mine = await resolveMemberSpaces('m5')
     expect(mine.map((g) => g.spaceId)).toContain('sp-open')
     expect(mine.find((g) => g.spaceId === 'sp-open')?.reason).toBe('open')
+  })
+})
+
+describe('resolveDerivedGrant — what demoting a moderator must not destroy', () => {
+  // The Space role is an overlay carried by a roster row, but access is usually
+  // derived. Demotion deletes the row, which is right for someone who is also
+  // tier- or role-granted and catastrophic for someone whose row is their only
+  // way in. This is the check that tells those two apart.
+
+  it('names the tier that would still let them in', async () => {
+    // m1 holds T1, which grants sp-tier.
+    expect(await resolveDerivedGrant('sp-tier', 'm1')).toEqual({ reason: 'tier', grantRef: 'T1' })
+  })
+
+  it('names the web-app role that would still let them in', async () => {
+    expect(await resolveDerivedGrant('sp-role', 'm4')).toEqual({ reason: 'role', grantRef: 'volunteer' })
+  })
+
+  it('treats an open space as a grant for everyone', async () => {
+    expect(await resolveDerivedGrant('sp-open', 'm5')).toEqual({ reason: 'open', grantRef: null })
+  })
+
+  it('returns null when the roster row is the ONLY way in — deleting it would remove access', async () => {
+    // m5 is a moderator on sp-tier by roster and holds no granting tier or role.
+    expect(await resolveDerivedGrant('sp-tier', 'm5')).toBeNull()
+  })
+
+  it('ignores a lapsed membership, which is not a grant', async () => {
+    // m3's T1 membership expired in 2020.
+    expect(await resolveDerivedGrant('sp-tier', 'm3')).toBeNull()
   })
 })

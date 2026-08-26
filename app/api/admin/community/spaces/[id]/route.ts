@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { notifyMember } from '@/lib/notify'
 import { sendEmail } from '@/lib/email'
-import { createPendingSpaceInvite, spaceNotificationAudience, resolveSpaceAudience } from '@/lib/spaces'
+import { createPendingSpaceInvite, spaceNotificationAudience, resolveSpaceAudience, resolveDerivedGrant } from '@/lib/spaces'
 import { logActivity, actorFromAuth } from '@/lib/activity-log'
 import { attachSpaceResource, ensureSpaceContainer } from '@/lib/container-sync'
 import { sanitizeBracketRequirements, anyBracketMandatory } from '@/lib/space-training'
@@ -196,9 +196,44 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     case 'update-member-role': {
       const role = ['admin', 'moderator', 'member'].includes(b.role) ? b.role : 'member'
-      if (!b.memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
-      await db.from('community_space_members').update({ role }).eq('space_id', spaceId).eq('member_id', b.memberId)
-      return NextResponse.json({ ok: true })
+      const memberId = b.memberId as string | undefined
+      if (!memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
+
+      // The Space role is an OVERLAY carried by a roster row, but access itself is
+      // usually derived — tier, web-app role, open space or a linked Object all
+      // grant entry without writing a row. This used to be a bare UPDATE, so for
+      // any derived member it matched nothing, returned ok, and the admin was told
+      // "Role saved" while the role reverted on the next refresh.
+      if (role === 'member') {
+        // Demotion. Deleting the row is right for someone who is ALSO derived —
+        // their badge goes back to naming the real source. It would remove access
+        // entirely from someone whose roster row is their only way in, so that
+        // case keeps the row and just drops the elevated role.
+        const derived = await resolveDerivedGrant(spaceId, memberId)
+        if (derived) {
+          await db
+            .from('community_space_members')
+            .delete()
+            .eq('space_id', spaceId)
+            .eq('member_id', memberId)
+          return NextResponse.json({ ok: true, role, grantedBy: derived.reason })
+        }
+        const { error } = await db
+          .from('community_space_members')
+          .update({ role })
+          .eq('space_id', spaceId)
+          .eq('member_id', memberId)
+        if (error) return NextResponse.json({ error: 'Could not update role' }, { status: 500 })
+        return NextResponse.json({ ok: true, role, grantedBy: 'roster' })
+      }
+
+      // Elevation to Moderator / Stellr Admin always needs a row to carry it.
+      const { error } = await db.from('community_space_members').upsert(
+        { space_id: spaceId, member_id: memberId, role, status: 'active' },
+        { onConflict: 'space_id,member_id' }
+      )
+      if (error) return NextResponse.json({ error: 'Could not update role' }, { status: 500 })
+      return NextResponse.json({ ok: true, role })
     }
     case 'remove-member': {
       if (!b.memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })

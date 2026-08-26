@@ -1117,8 +1117,33 @@ function InviteMemberModal({ open, onClose, act }: { open: boolean; onClose: () 
 function ManageMemberModal({ member, onClose, act }: { member: SpaceMemberRow; onClose: () => void; act: Act }) {
   const [role, setRole] = useState<SpaceRole>(member.role)
   const [reason, setReason] = useState('')
-  const [confirmRevoke, setConfirmRevoke] = useState(false)
+  const [expiresAt, setExpiresAt] = useState('')
+  const [confirming, setConfirming] = useState<null | 'posting' | 'access'>(null)
   const blocked = whyNotRemovable(member)
+
+  // Both blocks are permanent until lifted; an end date is optional, and the
+  // resolver treats a past one as already lifted without deleting the record.
+  const blockDetails = (
+    <>
+      <input
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Reason (optional, recorded on their activity log)"
+        className={`${inputCls} mb-2`}
+      />
+      <label className="mb-2 block text-xs text-brand-muted-soft">
+        Lift automatically on (optional — leave blank to keep it until you lift it)
+        <input
+          type="date"
+          value={expiresAt}
+          onChange={(e) => setExpiresAt(e.target.value)}
+          className={`${inputCls} mt-1`}
+        />
+      </label>
+    </>
+  )
+  // Send end-of-day so a date entered as "lift on the 5th" lasts through the 5th.
+  const expiryPayload = expiresAt ? new Date(`${expiresAt}T23:59:59`).toISOString() : null
 
   return (
     <Modal open onClose={onClose} title={`Manage ${member.name}`} subtitle={member.email ?? undefined}
@@ -1137,17 +1162,31 @@ function ManageMemberModal({ member, onClose, act }: { member: SpaceMemberRow; o
       <RoleSegmented role={role} setRole={setRole} roles={['member', 'moderator']} />
 
       {/* Posting suspension */}
-      <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-brand-border px-3 py-2.5">
-        <div className="min-w-0">
-          <p className="text-sm font-subheading font-semibold text-brand-blue-dark">Posting</p>
-          <p className="text-xs text-brand-muted-soft">
-            {member.postingSuspended ? 'Suspended — can read but not post.' : 'Can post in this space.'}
-          </p>
-        </div>
+      <div className="mt-4 rounded-lg border border-brand-border px-3 py-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-subheading font-semibold text-brand-blue-dark">Posting</p>
+            <p className="text-xs text-brand-muted-soft">
+              {member.postingSuspended ? 'Suspended — can read but not post.' : 'Can post in this space.'}
+            </p>
+          </div>
         {member.postingSuspended ? (
           <button onClick={async () => { if (await act({ action: 'resume-posting', memberId: member.memberId }, 'Posting restored')) onClose() }} className="shrink-0 rounded-lg border border-brand-border px-3 py-1.5 text-xs font-subheading font-semibold text-brand-muted hover:bg-brand-canvas">Lift suspension</button>
         ) : (
-          <button onClick={async () => { if (await act({ action: 'suspend-posting', memberId: member.memberId, reason }, 'Posting suspended')) onClose() }} className="shrink-0 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-subheading font-semibold text-amber-700 hover:bg-amber-50">Suspend posting</button>
+          <button onClick={() => setConfirming((v) => (v === 'posting' ? null : 'posting'))} className="shrink-0 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-subheading font-semibold text-amber-700 hover:bg-amber-50">Suspend posting</button>
+        )}
+        </div>
+        {confirming === 'posting' && !member.postingSuspended && (
+          <div className="mt-3 border-t border-brand-hairline pt-3">
+            <p className="mb-2 text-xs text-brand-muted-soft">
+              They keep full access and can still read this space — they just cannot post.
+            </p>
+            {blockDetails}
+            <button
+              onClick={async () => { if (await act({ action: 'suspend-posting', memberId: member.memberId, reason, expiresAt: expiryPayload }, 'Posting suspended')) onClose() }}
+              className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-subheading font-semibold text-white hover:bg-amber-700"
+            >Confirm suspension</button>
+          </div>
         )}
       </div>
 
@@ -1165,24 +1204,19 @@ function ManageMemberModal({ member, onClose, act }: { member: SpaceMemberRow; o
           {member.revoked ? (
             <button onClick={async () => { if (await act({ action: 'restore-access', memberId: member.memberId }, 'Access restored')) onClose() }} className="shrink-0 rounded-lg border border-brand-border px-3 py-1.5 text-xs font-subheading font-semibold text-brand-muted hover:bg-brand-canvas">Restore access</button>
           ) : (
-            <button onClick={() => setConfirmRevoke((v) => !v)} className="shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-subheading font-semibold text-red-600 hover:bg-red-50">Revoke access</button>
+            <button onClick={() => setConfirming((v) => (v === 'access' ? null : 'access'))} className="shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-subheading font-semibold text-red-600 hover:bg-red-50">Revoke access</button>
           )}
         </div>
 
-        {confirmRevoke && !member.revoked && (
+        {confirming === 'access' && !member.revoked && (
           <div className="mt-3 border-t border-brand-hairline pt-3">
             <p className="mb-2 text-xs text-brand-muted-soft">
               They will lose access immediately and stop receiving this space&rsquo;s announcements. The block
-              outranks their tier, role and any linked object, and stays until you lift it.
+              outranks their tier, role and any linked object.
             </p>
-            <input
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Reason (optional, recorded on their activity log)"
-              className={`${inputCls} mb-2`}
-            />
+            {blockDetails}
             <button
-              onClick={async () => { if (await act({ action: 'revoke-access', memberId: member.memberId, reason }, 'Access revoked')) onClose() }}
+              onClick={async () => { if (await act({ action: 'revoke-access', memberId: member.memberId, reason, expiresAt: expiryPayload }, 'Access revoked')) onClose() }}
               className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-subheading font-semibold text-white hover:bg-red-700"
             >Confirm revoke</button>
           </div>

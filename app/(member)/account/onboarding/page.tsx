@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { OnboardingForm, type SelectedTier } from '@/components/member/OnboardingForm'
 import { supabaseServer } from '@/lib/supabase'
 import { tierBySlug } from '@/app/(public)/membership/tier-data'
+import { impersonatedMemberId } from '@/lib/impersonation'
 
 export const metadata = { title: 'Complete Your Profile' }
 
@@ -40,12 +41,13 @@ export default async function OnboardingPage({
   }
 
   // If member record is already complete, skip onboarding (resume `next` if present)
+  // Admin view-as: resolve the member being viewed, not the admin.
+  const viewAsId = await impersonatedMemberId()
   const db = supabaseServer()
-  const { data: member } = await db
-    .from('members')
-    .select('id, date_of_birth, gender, age_bracket, event_role')
-    .eq('clerk_user_id', userId)
-    .maybeSingle()
+  const memberQuery = db.from('members').select('id, date_of_birth, gender, age_bracket, event_role')
+  const { data: member } = viewAsId
+    ? await memberQuery.eq('id', viewAsId).maybeSingle()
+    : await memberQuery.eq('clerk_user_id', userId).maybeSingle()
 
   if (member?.date_of_birth && member?.gender) redirect(next ?? '/home')
 

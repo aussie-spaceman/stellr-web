@@ -1,6 +1,7 @@
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { auth, currentUser, clerkClient } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
+import { impersonatedMemberId } from '@/lib/impersonation'
 import { AccountProfile } from '@/components/member/AccountProfile'
 import { MembershipCard } from '@/components/member/MembershipCard'
 import { EventHistory } from '@/components/member/EventHistory'
@@ -34,28 +35,53 @@ export default async function AccountPage({
   const { userId } = await auth()
   if (!userId) redirect('/sign-in')
 
-  const clerkUserRaw = await currentUser()
-  const clerkUser = clerkUserRaw ? { imageUrl: clerkUserRaw.imageUrl ?? null } : null
+  // Admin view-as. This page resolves its member directly rather than through
+  // getCurrentMember(), so without this branch it rendered the ADMIN's own
+  // profile, membership, registrations, DocuSigns and billing underneath a
+  // banner announcing someone else's name.
+  const viewAsId = await impersonatedMemberId()
+
   const db = supabaseServer()
+  const memberQuery = db
+    .from('members')
+    .select(`
+      *,
+      member_schools(*, schools(*)),
+      member_memberships(*, membership_tiers(*)),
+      member_ethnicities(ethnicity_option_id),
+      member_allergies(allergy_option_id),
+      event_participations(*)
+    `)
 
   const [{ data: member }, { data: ethnicityOptions }, { data: allergyOptions }] = await Promise.all([
-    db
-      .from('members')
-      .select(`
-        *,
-        member_schools(*, schools(*)),
-        member_memberships(*, membership_tiers(*)),
-        member_ethnicities(ethnicity_option_id),
-        member_allergies(allergy_option_id),
-        event_participations(*)
-      `)
-      .eq('clerk_user_id', userId)
-      .maybeSingle(),
+    viewAsId
+      ? memberQuery.eq('id', viewAsId).maybeSingle()
+      : memberQuery.eq('clerk_user_id', userId).maybeSingle(),
     db.from('ethnicity_options').select('id, name').order('name'),
     db.from('allergy_options').select('id, name').order('name'),
   ])
 
   if (!member) redirect('/account/onboarding')
+
+  // The avatar comes from Clerk. currentUser() is the ADMIN mid-view-as, so
+  // resolve the viewed member's own image instead — otherwise the page shows the
+  // right name over the wrong face.
+  let clerkUser: { imageUrl: string | null } | null = null
+  if (viewAsId) {
+    const clerkId = (member as { clerk_user_id?: string | null }).clerk_user_id
+    if (clerkId) {
+      try {
+        const client = await clerkClient()
+        const u = await client.users.getUser(clerkId)
+        clerkUser = { imageUrl: u.imageUrl ?? null }
+      } catch {
+        // No Clerk account (or a transient failure) — fall back to the placeholder.
+      }
+    }
+  } else {
+    const clerkUserRaw = await currentUser()
+    clerkUser = clerkUserRaw ? { imageUrl: clerkUserRaw.imageUrl ?? null } : null
+  }
 
   const { data: directoryPrefs } = await db
     .from('member_directory_prefs')

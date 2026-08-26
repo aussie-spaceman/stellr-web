@@ -631,6 +631,78 @@ export async function resolveSpaceMemberCounts(spaceIds?: string[]): Promise<Map
   return out
 }
 
+/**
+ * Would this member reach the Space WITHOUT any roster row — and by what?
+ *
+ * The Space role (Moderator / Stellr Admin) is an OVERLAY on access, stored as a
+ * roster row, while access itself is usually derived. That makes demotion
+ * delicate: deleting the row is right for someone who is also tier- or
+ * role-granted (their badge should go back to naming the real source), and
+ * catastrophic for someone whose roster row is their ONLY way in. This answers
+ * which case you are in.
+ *
+ * Returns null when the roster row is the member's only grant.
+ */
+export async function resolveDerivedGrant(
+  spaceId: string,
+  memberId: string
+): Promise<{ reason: 'open' | 'tier' | 'role' | 'object'; grantRef: string | null } | null> {
+  const db = supabaseServer()
+  const today = new Date().toISOString().split('T')[0]
+
+  const [{ data: space }, { data: tierRows }, { data: roleRows }, { data: sourceRows }, { data: myTiers }, { data: myRoles }] =
+    await Promise.all([
+      db.from('community_spaces').select('access_type').eq('id', spaceId).maybeSingle(),
+      db.from('community_space_tiers').select('tier_id').eq('space_id', spaceId),
+      db.from('community_space_roles').select('role').eq('space_id', spaceId),
+      db.from('community_space_sources').select('object_type, object_ref').eq('space_id', spaceId),
+      db
+        .from('member_memberships')
+        .select('tier_id, expires_at')
+        .eq('member_id', memberId)
+        .eq('renewal_status', 'active'),
+      db.from('member_roles').select('role').eq('member_id', memberId).eq('scope', 'global'),
+    ])
+  if (!space) return null
+
+  if ((space as { access_type: SpaceAccessType }).access_type === 'open') {
+    return { reason: 'open', grantRef: null }
+  }
+
+  const spaceTierIds = (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
+  const heldTier = ((myTiers ?? []) as Array<{ tier_id: string | null; expires_at: string | null }>)
+    .filter((m) => m.tier_id && !(m.expires_at && m.expires_at < today))
+    .map((m) => m.tier_id as string)
+    .find((id) => spaceTierIds.includes(id))
+  if (heldTier) return { reason: 'tier', grantRef: heldTier }
+
+  const spaceRoles = (roleRows ?? []).map((r) => (r as { role: string }).role)
+  const heldRole = ((myRoles ?? []) as Array<{ role: string }>)
+    .map((r) => r.role)
+    .find((r) => spaceRoles.includes(r))
+  if (heldRole) return { reason: 'role', grantRef: heldRole }
+
+  const sources = (sourceRows ?? []) as Array<{ object_type: string; object_ref: string }>
+  if (sources.length) {
+    const { objectActiveMemberIds } = await import('@/lib/space-inheritance')
+    for (const src of sources) {
+      try {
+        const ids = await objectActiveMemberIds(
+          db,
+          src.object_type as 'event' | 'training' | 'mentoring' | 'coaching',
+          src.object_ref
+        )
+        if (ids.includes(memberId)) {
+          return { reason: 'object', grantRef: `${src.object_type}:${src.object_ref}` }
+        }
+      } catch (e) {
+        console.error('[spaces] derived-grant source check failed (non-fatal):', src, e)
+      }
+    }
+  }
+  return null
+}
+
 /** One Space a member can reach, as the admin member record needs to see it. */
 export interface MemberSpaceGrant {
   spaceId: string

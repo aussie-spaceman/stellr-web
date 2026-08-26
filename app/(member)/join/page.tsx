@@ -5,6 +5,7 @@ import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
 import { getMonthlyPriceMap } from '@/lib/membership-monthly'
 import { tierBySlug } from '@/app/(public)/membership/tier-data'
 import { JoinCheckout } from '@/components/membership/JoinCheckout'
+import { impersonatedMemberId } from '@/lib/impersonation'
 
 export const metadata = { title: 'Join Stellr' }
 
@@ -30,12 +31,13 @@ export default async function JoinPage({
   const { userId } = await auth()
   if (!userId) redirect(`/sign-up?next=${encodeURIComponent(selfPath)}`)
 
+  // Admin view-as: resolve the member being viewed, not the admin.
+  const viewAsId = await impersonatedMemberId()
   const db = supabaseServer()
-  const { data: member } = await db
-    .from('members')
-    .select('id, date_of_birth, gender')
-    .eq('clerk_user_id', userId)
-    .maybeSingle()
+  const memberQuery = db.from('members').select('id, date_of_birth, gender')
+  const { data: member } = viewAsId
+    ? await memberQuery.eq('id', viewAsId).maybeSingle()
+    : await memberQuery.eq('clerk_user_id', userId).maybeSingle()
 
   // Not onboarded yet → finish the profile, then return here to pay.
   if (!member?.date_of_birth || !member?.gender) {

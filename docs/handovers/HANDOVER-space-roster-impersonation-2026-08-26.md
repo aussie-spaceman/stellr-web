@@ -54,73 +54,76 @@ every request. `getCurrentMember()` is the seam (~102 call sites in one branch).
 `assertNotImpersonating()` guards writes in **53 route files**; Stripe/DocuSign/checkout are
 blocked outright.
 
+## 2a. Follow-up pass, same day (`1383d20`)
+
+Browser verification was completed by David: the Members tab, suspend, revoke and a
+view-as session are confirmed functional. The three close-out findings below were then
+fixed and deployed:
+
+- **`/account` view-as** — `/account`, `/join` and `/account/onboarding` now resolve through
+  `impersonatedMemberId()`. `/account` also resolves the viewed member's Clerk **avatar**;
+  it previously used `currentUser()`, showing the right name over the admin's face.
+- **`update-member-role`** — elevation upserts the roster row that carries the role;
+  demotion deletes it only when `resolveDerivedGrant()` confirms the member still reaches
+  the Space another way, and otherwise keeps the row so demotion cannot silently remove
+  access. Five tests cover it.
+- **Block expiry** — suspend and revoke both take an optional end date, and suspend gained a
+  confirm step so it reads the same as revoke.
+- **Migration 143** (written, NOT applied) — adds `community_space_sources.object_ref` to
+  `event_slug_inventory()`.
+
+The items below are what remains.
+
 ## 3. Open items — read this before touching the feature
 
-### 3.1 HIGH — `/account` shows the ADMIN's own account during view-as
+### 3.1 DECISION — apply migration 143
 
-`app/(member)/account/page.tsx:52` resolves the member by `.eq('clerk_user_id', userId)`, so
-in a view-as session it renders the **admin's** profile, membership, registrations,
-DocuSigns, compliance and volunteering — underneath a banner reading "Viewing as
-&lt;member&gt;". Actively misleading, and it is the page an admin is most likely to open.
+`supabase/migrations/143_event_slug_inventory_space_sources.sql` is written and dry-run but
+**not applied**. It is inert for the app: nothing in the running code calls
+`event_slug_inventory()` — only `npm run audit:event-slugs` and `check:deploy-ready` do. All
+6 Space→event links resolve cleanly today, so applying it does not change the audit's
+verdict; it means a future rename cannot break one silently.
 
-Same pattern, lower stakes: `app/(member)/join/page.tsx:37`,
-`app/(member)/account/onboarding/page.tsx:47`.
+### 3.2 DECISION — the second slug blind spot, deliberately left open
 
-The impersonation sweep covered `app/api/**` only; these are *pages*. Everything routed
-through `getCurrentMember()` (community, home, campaigns) is correct.
+`mentoring_cohorts.campaign_ref` holds a bare event slug when
+`container_type = 'event_participation'` and is invisible to the audit for the same reason.
+Adding it flags **16 rows across 5 slugs**:
 
-**Fix:** resolve these three through `getCurrentMember()` or `currentMemberId()`.
+| Slug | Rows | Reading |
+|---|---|---|
+| `nevada-space-design-challenge-2026` | 6 | legacy year-suffixed |
+| `nevada-space-design-challenge-2027` | 4 | legacy; the known-dead slug |
+| `minnesota-environmental-design-challenge-2026` | 3 | legacy year-suffixed |
+| `space-design-campaign-fall-2027` | 2 | reads as a CAMPAIGN slug |
+| `environmental-design-campaign` | 1 | reads as a CAMPAIGN slug |
 
-### 3.2 HIGH — "Save role" silently does nothing for derived members
+The audit compares against Sanity documents of `_type == "event"` only, so the two campaign
+refs would be permanent false positives unless they are recategorised. Sorting legacy rows
+from miscategorised ones is a data decision — hence left out of 143.
 
-`update-member-role` in `app/api/admin/community/spaces/[id]/route.ts` updates
-`community_space_members`. **Prod has zero roster rows** — every member now listed in the
-rebuilt Members tab is tier-, role- or open-granted and has no row. The update matches
-nothing, the route returns `{ok:true}`, the UI toasts "Role saved", and the role reverts on
-refresh.
-
-This path was fine before: the tab only ever listed roster members. Listing derived members
-made a broken path reachable.
-
-**Fix:** upsert a roster row carrying the role (the pre-142 `mute-member` action did exactly
-this for the same reason), or refuse with a message naming why.
-
-### 3.3 HIGH — none of this has been exercised in a browser
-
-No suspension or revocation has ever been written. No view-as session has ever been started.
-Verification was types, build, tests, and HTTP status codes only. Before trusting it:
-
-- Open a Space's Members tab. Every name is derived — that is the fix working.
-- Suspend, then revoke, someone. Confirm they leave the audience and the count drops.
-- Start a view-as session and walk into a Space.
-
-### 3.4 MEDIUM — no UI for the suspension expiry
-
-The API accepts `expiresAt` and the resolver treats a past date as lifted, but the Manage
-modal never offers it, so every block is indefinite. The agreed behaviour was
-"permanent-until-lifted, **optionally** given an expiry".
-
-### 3.5 MEDIUM — realtime under impersonation is unverified
+### 3.3 MEDIUM — realtime under impersonation is unverified
 
 Supabase realtime subscribes as the browser's own identity, so live chat in a Space may not
 reach parity during view-as. Flagged before building and never checked.
 
-### 3.6 MEDIUM — `resolveSpaceAudience` scalability
+### 3.4 MEDIUM — `resolveSpaceAudience` scalability
 
 It loads every live member, every active membership and every global role on each call, and
 now sits behind an interactive paginated endpoint. Fine at 6 members; not at 6,000. Needs a
 cache or a SQL-side view before the member base grows.
 
-### 3.7 LOW
+### 3.5 LOW
 
 - **Drop `community_space_members.muted`** once confident — kept readable for one release on
   purpose, so a code rollback cannot lose an active mute.
 - **Retire `/admin/members/[id]/view-as`** (the old mirror, relinked as "Account summary")
   and its `readOnly` prop plumbing, which is a parallel implementation of the read-only rule.
-- **Branch `feat/space-roster-suspend-impersonation-2026-08-26`** is merged but still on
-  origin.
-- **`lib/object-roles.ts:42`** is not impersonation-aware, so an admin mid-view-as sees
-  manage affordances the member would not. Cosmetic — writes are blocked regardless.
+- ~~Branch cleanup~~ — done, branch deleted locally and on origin.
+
+`lib/object-roles.ts` was flagged at close-out as a possible impersonation gap. It is not:
+it is imported only by two `/api/admin/access/**` routes, so it is an admin-manage check and
+correctly resolves the real signed-in user.
 
 ## 4. Traps worth carrying forward
 

@@ -24,17 +24,26 @@ const DATA: Record<string, Record<string, unknown>[]> = {
     { id: 'sp-tier', slug: 'scholars', name: 'Scholars', access_type: 'private', is_archived: false, display_order: 1 },
     { id: 'sp-role', slug: 'volunteers', name: 'Volunteers', access_type: 'private', is_archived: false, display_order: 2 },
     { id: 'sp-secret', slug: 'inner', name: 'Inner Circle', access_type: 'secret', is_archived: false, display_order: 3 },
+    // Linked to an event AND carrying a tier and a role grant. That combination
+    // is the bug this suite now pins: the grants must count for nothing.
+    { id: 'sp-event', slug: 'nevada', name: 'Nevada Challenge', access_type: 'private', is_archived: false, display_order: 4 },
   ],
   community_space_tiers: [
     { space_id: 'sp-tier', tier_id: 'T1' },
     { space_id: 'sp-secret', tier_id: 'T2' },
+    { space_id: 'sp-event', tier_id: 'T1' },
   ],
-  community_space_roles: [{ space_id: 'sp-role', role: 'volunteer' }],
-  community_space_sources: [],
+  community_space_roles: [
+    { space_id: 'sp-role', role: 'volunteer' },
+    { space_id: 'sp-event', role: 'volunteer' },
+  ],
+  community_space_sources: [{ space_id: 'sp-event', object_type: 'event', object_ref: 'ev-1' }],
   community_space_members: [
     { space_id: 'sp-tier', member_id: 'm5', role: 'moderator', status: 'active', muted: false, invited_by: null, added_at: '2026-01-01' },
     // Invited but never accepted — an admin must see them, an audience must not.
     { space_id: 'sp-role', member_id: 'm2', role: 'moderator', status: 'invited', muted: false, invited_by: 'admin-1', added_at: '2026-02-01' },
+    // Written by syncObjectSpaceRoster when m3 registered for the event.
+    { space_id: 'sp-event', member_id: 'm3', role: 'member', status: 'active', muted: false, invited_by: null, added_at: '2026-03-01' },
   ],
   member_memberships: [
     { member_id: 'm1', tier_id: 'T1', expires_at: null, renewal_status: 'active' },
@@ -95,7 +104,10 @@ vi.mock('@/lib/tiers-server', () => ({
   getActiveTierNames: async () => new Map<string, string>(),
   resolveTierMap: async () => ({ nameById: {} }),
 }))
-vi.mock('@/lib/space-inheritance', () => ({ objectActiveMemberIds: async () => [] }))
+vi.mock('@/lib/space-inheritance', () => ({
+  objectActiveMemberIds: async (_db: unknown, _type: string, ref: string) =>
+    (ref === 'ev-1' ? ['m3'] : []),
+}))
 vi.mock('@/lib/member-roles', () => ({
   ROLE_LABELS: { volunteer: 'Volunteer' },
   getGlobalRoleNames: async (id: string) =>
@@ -295,5 +307,51 @@ describe('resolveDerivedGrant — what demoting a moderator must not destroy', (
   it('ignores a lapsed membership, which is not a grant', async () => {
     // m3's T1 membership expired in 2020.
     expect(await resolveDerivedGrant('sp-tier', 'm3')).toBeNull()
+  })
+})
+
+
+describe('an event Space admits its registrants and nobody else', () => {
+  // sp-event is linked to an event AND still carries a tier grant (T1) and a
+  // role grant (volunteer) in the tables. Those are exactly the rows migration
+  // 145 deleted from the six real event Spaces, and they are left here on
+  // purpose: the resolvers must reach the right answer even when the rows exist,
+  // because a Space linked to an event afterwards would otherwise keep its old,
+  // wider audience.
+  //
+  // Before this rule, community_space_roles matched a member's GLOBAL role, so
+  // 'teacher' on an event Space admitted every teacher in the organisation
+  // rather than the teachers at that event — 7 members held access to all 6
+  // event Spaces in prod without registering for any of them.
+
+  it('ignores the tier grant: m1 holds T1 and is still not in the audience', async () => {
+    const audiences = await resolveSpaceAudiences()
+    expect(ids(audiences.get('sp-event') ?? [])).toEqual(['m3'])
+  })
+
+  it('ignores the role grant: m4 is a volunteer and is still not in the audience', async () => {
+    const roster = await resolveSpaceAudience('sp-event')
+    expect(roster.map((r) => r.memberId)).not.toContain('m4')
+  })
+
+  it('does not offer the event Space to a member who only holds the tier', async () => {
+    const mine = await resolveMemberSpaces('m1')
+    expect(mine.map((g) => g.spaceId)).not.toContain('sp-event')
+  })
+
+  it('admits the registrant, attributed to the event rather than to a rule', async () => {
+    const mine = await resolveMemberSpaces('m3')
+    const grant = mine.find((g) => g.spaceId === 'sp-event')
+    expect(grant).toBeTruthy()
+    expect(grant!.reason).toBe('object')
+    expect(grant!.grantRef).toBe('event:ev-1')
+  })
+
+  it('will not name a tier or role as the fallback that survives a demotion', async () => {
+    // The dangerous version: resolveDerivedGrant answering 'tier' here would let
+    // an admin delete m3's roster row believing T1 would still let them in.
+    expect(await resolveDerivedGrant('sp-event', 'm1')).toBeNull()
+    expect(await resolveDerivedGrant('sp-event', 'm4')).toBeNull()
+    expect(await resolveDerivedGrant('sp-event', 'm3')).toEqual({ reason: 'object', grantRef: 'event:ev-1' })
   })
 })

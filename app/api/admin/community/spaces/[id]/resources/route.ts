@@ -6,6 +6,7 @@ import { attachSpaceResource } from '@/lib/container-sync'
 import { createLinkBinary, normaliseUrl } from '@/lib/resource-upload'
 import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
 import { attachAllowed } from '@/lib/access-objects'
+import { MAX_UPLOAD_BYTES } from '@/lib/upload-client'
 
 // POST /api/admin/community/spaces/[id]/resources — admin adds a resource into a
 // space's Resources (Assign resource modal, screen 20). A file arrives as
@@ -14,7 +15,10 @@ import { attachAllowed } from '@/lib/access-objects'
 function isAdmin(sessionClaims: unknown) {
   return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
 }
-const MAX_BYTES = 25 * 1024 * 1024
+// Vercel rejects a request body over 4.5MB at the edge, so a larger cap here
+// could never be reached — the browser would just see a failed request. Keep it
+// in step with MAX_UPLOAD_BYTES, which the upload forms enforce client-side.
+const MAX_BYTES = MAX_UPLOAD_BYTES
 
 function fileLabel(name: string, mime: string): string {
   const ext = (name.split('.').pop() ?? '').toLowerCase()
@@ -71,7 +75,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const form = await req.formData().catch(() => null)
   const file = form?.get('file')
   if (!(file instanceof File)) return NextResponse.json({ error: 'file required' }, { status: 400 })
-  if (file.size > MAX_BYTES) return NextResponse.json({ error: 'File too large (max 25MB)' }, { status: 413 })
+  if (file.size > MAX_BYTES) {
+    return NextResponse.json({ error: 'File too large (max 4MB) — add it as a link instead.' }, { status: 413 })
+  }
 
   const db = supabaseServer()
   let adminMemberId: string | null = null

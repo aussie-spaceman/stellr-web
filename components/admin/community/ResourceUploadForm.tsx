@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { postUpload, readUploadBlob } from '@/lib/upload-client'
 
 type ResourceKind = 'file' | 'link'
 
@@ -35,27 +36,35 @@ export function ResourceUploadForm() {
     setSuccess(false)
 
     try {
-      const res =
-        kind === 'link'
-          ? await fetch('/api/admin/community/resources', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                url: url.trim(),
-                title: title.trim(),
-                description: description.trim() || undefined,
-              }),
-            })
-          : await (() => {
-              const fd = new FormData()
-              fd.append('file', file as File)
-              fd.append('title', title.trim())
-              if (description.trim()) fd.append('description', description.trim())
-              return fetch('/api/admin/community/resources', { method: 'POST', body: fd })
-            })()
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error ?? 'Could not save resource.')
+      let result
+      if (kind === 'link') {
+        result = await postUpload(
+          '/api/admin/community/resources',
+          JSON.stringify({
+            url: url.trim(),
+            title: title.trim(),
+            description: description.trim() || undefined,
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        )
+      } else {
+        // Pull the bytes off disk before posting: a file that only exists as a
+        // Drive/iCloud placeholder otherwise fails mid-stream and the request
+        // never reaches the server.
+        const read = await readUploadBlob(file as File)
+        if ('error' in read) {
+          setError(read.error)
+          return
+        }
+        const fd = new FormData()
+        fd.append('file', read.blob, (file as File).name)
+        fd.append('title', title.trim())
+        if (description.trim()) fd.append('description', description.trim())
+        result = await postUpload('/api/admin/community/resources', fd)
+      }
+
+      if ('error' in result) {
+        setError(result.error)
         return
       }
       setSuccess(true)
@@ -64,8 +73,6 @@ export function ResourceUploadForm() {
       setTitle('')
       setDescription('')
       router.refresh()
-    } catch {
-      setError('Network error — please try again.')
     } finally {
       setUploading(false)
     }

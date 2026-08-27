@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileText, Link2, Upload, Search, Users, AlertTriangle } from 'lucide-react'
+import { postUpload, readUploadBlob } from '@/lib/upload-client'
 
 // Manager "Add a resource" form (handover §4.5). Lives in the manager workspace,
 // scoped to one object the user manages. Uploads target the OBJECT — a new
@@ -53,35 +54,42 @@ export function AddResourceForm({
     setBusy(true)
     setError(null)
     try {
-      let res: Response
+      let result
       if (tab === 'file') {
         if (!file) {
           setError('Choose a file')
           return
         }
+        // Read the bytes up front so a Drive/iCloud placeholder reports itself
+        // instead of failing mid-stream with no request reaching the server.
+        const read = await readUploadBlob(file)
+        if ('error' in read) {
+          setError(read.error)
+          return
+        }
         const form = new FormData()
         form.append('containerId', containerId)
-        form.append('file', file)
+        form.append('file', read.blob, file.name)
         form.append('displayName', name)
-        res = await fetch('/api/community/resources/contribute', { method: 'POST', body: form })
+        result = await postUpload('/api/community/resources/contribute', form)
       } else {
         if (!url.trim()) {
           setError('Enter a URL')
           return
         }
-        res = await fetch('/api/community/resources/contribute', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ containerId, action: 'addLink', url, displayName: name }),
-        })
+        result = await postUpload(
+          '/api/community/resources/contribute',
+          JSON.stringify({ containerId, action: 'addLink', url, displayName: name }),
+          { headers: { 'Content-Type': 'application/json' } },
+        )
       }
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setError(json.error ?? 'Could not add resource')
+
+      if ('error' in result) {
+        setError(result.error)
         return
       }
-      if (json.duplicate) {
-        setDup(json.duplicate as DuplicateMatch)
+      if (result.data.duplicate) {
+        setDup(result.data.duplicate as DuplicateMatch)
         return
       }
       done()

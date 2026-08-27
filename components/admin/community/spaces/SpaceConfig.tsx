@@ -12,6 +12,7 @@ import { AccessBadge, ACCESS_META, TierPill, RolePill } from '@/components/commu
 import { TIER_GROUPS } from '@/lib/tiers'
 import { formatDateShort } from '@/lib/utils'
 import { SPACE_TRAINING_BRACKETS, type BracketRequirements, type AgeBracketKey } from '@/lib/space-training'
+import { postUpload, readUploadBlob } from '@/lib/upload-client'
 import type { AdminSpaceConfig } from '@/lib/space-admin'
 import type { SpaceAccessType, SpaceAudienceMember, SpaceRole, SpaceTheme } from '@/lib/spaces'
 
@@ -443,30 +444,43 @@ function ResourcesTab({
   const upload = async () => {
     if (!file) return
     setBusy(true)
-    const form = new FormData()
-    form.append('file', file)
-    const res = await fetch(`/api/admin/community/spaces/${spaceId}/resources`, { method: 'POST', body: form })
-    setBusy(false)
-    if (!res.ok) return toast('Upload failed')
-    toast('Resource added')
-    closeModal()
-    onUploaded()
+    try {
+      // Read the bytes before posting — a Drive/iCloud placeholder otherwise
+      // fails mid-stream, which rejected the fetch and left this modal stuck
+      // on "Uploading…" with nothing shown.
+      const read = await readUploadBlob(file)
+      if ('error' in read) return toast(read.error)
+
+      const form = new FormData()
+      form.append('file', read.blob, file.name)
+      const result = await postUpload(`/api/admin/community/spaces/${spaceId}/resources`, form)
+      if ('error' in result) return toast(result.error)
+
+      toast('Resource added')
+      closeModal()
+      onUploaded()
+    } finally {
+      setBusy(false)
+    }
   }
 
   const saveLink = async () => {
     if (!linkUrl.trim()) return
     setBusy(true)
-    const res = await fetch(`/api/admin/community/spaces/${spaceId}/resources`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: linkUrl.trim(), title: linkTitle.trim() || undefined }),
-    })
-    setBusy(false)
-    const j = await res.json().catch(() => ({}))
-    if (!res.ok) return toast(j.error ?? 'Could not add link')
-    toast('Link added')
-    closeModal()
-    onUploaded()
+    try {
+      const result = await postUpload(
+        `/api/admin/community/spaces/${spaceId}/resources`,
+        JSON.stringify({ url: linkUrl.trim(), title: linkTitle.trim() || undefined }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
+      if ('error' in result) return toast(result.error)
+
+      toast('Link added')
+      closeModal()
+      onUploaded()
+    } finally {
+      setBusy(false)
+    }
   }
 
   const search = async (q: string) => {

@@ -5,6 +5,7 @@ import { getSignedInMember, RESOURCES_BUCKET } from '@/lib/community'
 import { attachSpaceResource } from '@/lib/container-sync'
 import { createLinkBinary, normaliseUrl } from '@/lib/resource-upload'
 import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
+import { MAX_UPLOAD_BYTES } from '@/lib/upload-client'
 
 // POST /api/admin/community/resources — create a resource record. A resource is
 // either an uploaded file (multipart/form-data: file, title, description?, spaceId?)
@@ -51,6 +52,14 @@ export async function POST(req: Request) {
 
   if (!file || !title) {
     return NextResponse.json({ error: 'file and title are required' }, { status: 400 })
+  }
+  // Anything larger never gets this far (Vercel rejects the body at the edge),
+  // but answer with a real message for the sizes that do.
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return NextResponse.json({ error: 'File too large (max 4MB) — add it as a link instead.' }, { status: 413 })
+  }
+  if (file.size === 0) {
+    return NextResponse.json({ error: 'That file came through empty — please try again.' }, { status: 400 })
   }
 
   const db = supabaseServer()

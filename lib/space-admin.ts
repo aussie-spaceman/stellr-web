@@ -1,4 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
+import { listSpaceResources, type SpaceResource } from '@/lib/space-resources'
 import { resolveTierMap } from '@/lib/tiers-server'
 import { getEventsBySlugs } from '@/lib/sanity'
 import { resolveSpaceAudience, type SpaceAudienceMember } from '@/lib/spaces'
@@ -39,7 +40,7 @@ export interface AdminSpaceConfig {
   // `attachmentId` is set for files linked from the Global Resources Catalogue
   // (detach removes the link only); null for files uploaded to this space (remove
   // deletes the binary).
-  resources: { id: string; title: string; fileType: string | null; fromChat: boolean; createdAt: string; attachmentId: string | null }[]
+  resources: SpaceResource[]
   assignedTraining: { moduleId: string; title: string; mandatory: boolean; bracketRequirements: BracketRequirements }[]
   trainingCatalogue: { id: string; title: string }[]
   announcements: { id: string; title: string; body: string | null; createdAt: string }[]
@@ -76,7 +77,6 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
     { data: tierRows },
     { data: roleRows },
     { data: sourceRows },
-    { data: resourceRows },
     { data: trainRows },
     { data: catalogue },
     { data: annRows },
@@ -85,7 +85,6 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
     db.from('community_space_tiers').select('tier_id').eq('space_id', spaceId),
     db.from('community_space_roles').select('role').eq('space_id', spaceId),
     db.from('community_space_sources').select('id, object_type, object_ref').eq('space_id', spaceId).order('created_at'),
-    db.from('community_resources').select('id, title, file_type, from_chat, created_at').eq('space_id', spaceId).order('created_at', { ascending: false }),
     db.from('community_space_training').select('training_module_id, is_mandatory, bracket_requirements, display_order, training_modules(title)').eq('space_id', spaceId).order('display_order'),
     db.from('training_modules').select('id, title').eq('is_published', true).order('display_order'),
     db.from('community_announcements').select('id, title, body, created_at').eq('space_id', spaceId).order('created_at', { ascending: false }),
@@ -108,51 +107,10 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
   const labelByKey = await buildSourceLabels(db, srcRows)
   const members = await applyGrantLabels(audience, labelByKey)
 
-  // Files linked from the Global Resources Catalogue live on the space's container
-  // (container_contents), not on community_resources.space_id. Surface those too so
-  // catalogue-attached files show alongside direct uploads. content_ref has no FK,
-  // so resolve the binaries in a second query rather than an embedded join.
-  const catalogueResources: AdminSpaceConfig['resources'] = []
-  const { data: containerRow } = await db
-    .from('mentoring_cohorts')
-    .select('id')
-    .eq('container_type', 'space')
-    .eq('campaign_ref', (s as { slug: string }).slug)
-    .maybeSingle()
-  const containerId = (containerRow as { id: string } | null)?.id ?? null
-  if (containerId) {
-    const { data: cc } = await db
-      .from('container_contents')
-      .select('id, content_ref, display_name, created_at')
-      .eq('container_id', containerId)
-      .eq('content_type', 'resource')
-    const ccRows = (cc ?? []) as Array<{ id: string; content_ref: string; display_name: string | null; created_at: string }>
-    const refs = ccRows.map((r) => r.content_ref)
-    if (refs.length) {
-      const { data: bins } = await db
-        .from('community_resources')
-        .select('id, title, file_type, space_id')
-        .in('id', refs)
-      const binById = new Map(
-        ((bins ?? []) as Array<{ id: string; title: string; file_type: string | null; space_id: string | null }>).map((x) => [x.id, x]),
-      )
-      for (const row of ccRows) {
-        const bin = binById.get(row.content_ref)
-        if (!bin) continue
-        // Files uploaded to THIS space already appear via the space_id query below
-        // (with a delete-binary Remove action). Skip them here to avoid duplicates.
-        if (bin.space_id === spaceId) continue
-        catalogueResources.push({
-          id: bin.id,
-          title: row.display_name || bin.title,
-          fileType: bin.file_type,
-          fromChat: false,
-          createdAt: row.created_at,
-          attachmentId: row.id,
-        })
-      }
-    }
-  }
+  // Direct uploads + files linked from the Global Resources Catalogue, read
+  // through the same helper the member-facing Space page uses so the two can
+  // never disagree about what is in a Space.
+  const resources = await listSpaceResources(spaceId, (s as { slug: string }).slug)
 
   return {
     space: s as AdminSpaceConfig['space'],
@@ -168,13 +126,7 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
     members,
     membersAreExceptions: isOpen,
     audienceTotal,
-    resources: [
-      ...(resourceRows ?? []).map((r) => {
-        const x = r as { id: string; title: string; file_type: string | null; from_chat: boolean; created_at: string }
-        return { id: x.id, title: x.title, fileType: x.file_type, fromChat: !!x.from_chat, createdAt: x.created_at, attachmentId: null }
-      }),
-      ...catalogueResources,
-    ],
+    resources,
     assignedTraining: (trainRows ?? []).map((t) => {
       const x = t as { training_module_id: string; is_mandatory: boolean; bracket_requirements: BracketRequirements | null; training_modules: { title: string } | { title: string }[] | null }
       return {
@@ -189,13 +141,14 @@ export async function loadSpaceAdmin(spaceId: string): Promise<AdminSpaceConfig 
       const x = a as { id: string; title: string; body: string | null; created_at: string }
       return { id: x.id, title: x.title, body: x.body, createdAt: x.created_at }
     }),
-    moderation: await loadModeration(db, spaceId),
+    moderation: await loadModeration(db, spaceId, resources),
   }
 }
 
 async function loadModeration(
   db: ReturnType<typeof supabaseServer>,
-  spaceId: string
+  spaceId: string,
+  resources: SpaceResource[]
 ): Promise<AdminSpaceConfig['moderation']> {
   // Resolve which posts / comments / resources belong to this space, then pull
   // pending flags against them.
@@ -220,9 +173,11 @@ async function loadModeration(
     commentIds = [...commentMap.keys()]
   }
 
-  const { data: resources } = await db.from('community_resources').select('id, title').eq('space_id', spaceId)
+  // Every resource IN the space, not just those uploaded to it — a member can
+  // flag a catalogue-linked file too, and reading community_resources.space_id
+  // alone would drop that flag out of the queue silently.
   const resourceMap = new Map<string, { quoted: string; where: string }>()
-  for (const r of (resources ?? []) as Array<{ id: string; title: string }>) {
+  for (const r of resources) {
     resourceMap.set(r.id, { quoted: r.title, where: 'Resource' })
   }
 

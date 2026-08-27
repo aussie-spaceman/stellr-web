@@ -3,17 +3,10 @@
 import { useState } from 'react'
 import { Flag } from 'lucide-react'
 import { ResourceDownloadButton } from '@/components/community/ResourceDownloadButton'
+import type { SpaceResource } from '@/lib/space-resources'
 import { FlagModal } from '@/components/community/spaces/FlagModal'
 
-export interface ResourceItem {
-  id: string
-  title: string
-  fileType: string | null
-  fromChat: boolean
-  sizeBytes: number | null
-  createdAt: string
-  uploaderName: string | null
-}
+export type ResourceItem = SpaceResource
 
 const TYPE_COLOR: Record<string, { fg: string; bg: string }> = {
   PDF: { fg: '#C0392B', bg: '#FBEAEA' },
@@ -22,6 +15,7 @@ const TYPE_COLOR: Record<string, { fg: string; bg: string }> = {
   DOC: { fg: '#2C53C6', bg: '#EAF0FE' },
   PPT: { fg: '#E0922F', bg: '#FBEFDD' },
   CAD: { fg: '#7C5CFC', bg: '#F6F2FF' },
+  LINK: { fg: '#2C53C6', bg: '#EAF0FE' },
 }
 
 function fmtBytes(n: number | null): string {
@@ -56,7 +50,7 @@ export function ResourcesList({ items }: { items: ResourceItem[] }) {
             const c = (r.fileType && TYPE_COLOR[r.fileType]) || { fg: '#5C637E', bg: '#EEF0F6' }
             const meta = [fmtBytes(r.sizeBytes), r.uploaderName, fmtDate(r.createdAt)].filter(Boolean).join(' · ')
             return (
-              <div key={r.id} className="flex items-center gap-3 px-4 py-3">
+              <div key={r.attachmentId ?? r.id} className="flex items-center gap-3 px-4 py-3">
                 <span
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-[10px] font-subheading font-bold"
                   style={{ color: c.fg, background: c.bg }}
@@ -85,7 +79,12 @@ export function ResourcesList({ items }: { items: ResourceItem[] }) {
                     <Flag className="h-3.5 w-3.5" />
                   </button>
                 )}
-                <ResourceDownloadButton resourceId={r.id} title={r.title} />
+                <ResourceDownloadButton
+                  resourceId={r.id}
+                  attachmentId={r.attachmentId}
+                  kind={r.kind}
+                  title={r.title}
+                />
               </div>
             )
           })}

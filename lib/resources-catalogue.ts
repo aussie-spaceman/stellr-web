@@ -2,6 +2,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { memberMeetsTier, type CommunityMember } from '@/lib/community'
 import { managedContainerIds } from '@/lib/resource-upload'
 import { accessGatesEnforced, eventAccessGates } from '@/lib/access-gates'
+import { getAccessibleSpaceIds } from '@/lib/spaces'
 
 // Global Resources Catalogue — read path (Resources_Refactor handover, PR1).
 //
@@ -134,12 +135,12 @@ function resourceKind(contentType: 'resource' | 'recording', fileType: string | 
 }
 
 /** Every container the member is an active roster member of, keyed by id. */
-async function memberContainers(memberId: string): Promise<Map<string, ContainerMeta>> {
+async function memberContainers(member: CommunityMember): Promise<Map<string, ContainerMeta>> {
   const db = supabaseServer()
   const { data } = await db
     .from('cohort_members')
     .select('mentoring_cohorts!inner(id, name, container_type, campaign_ref, lifecycle)')
-    .eq('member_id', memberId)
+    .eq('member_id', member.id)
     .eq('status', 'active')
 
   type Cont = {
@@ -171,28 +172,37 @@ async function memberContainers(memberId: string): Promise<Map<string, Container
   // Spaces resolve their roster via community_space_members, NOT cohort_members,
   // so they're added separately. The container's visibility comes from the space
   // (community_spaces.access_type), not the auto-created container row.
-  await addSpaceContainers(db, memberId, map)
+  await addSpaceContainers(db, member, map)
 
   return map
 }
 
-/** Add the member's active Spaces (community_space_members) to the container map. */
+/**
+ * Add the member's accessible Spaces to the container map.
+ *
+ * Resolved with getAccessibleSpaceIds — the SAME resolver that gates the space
+ * pages — not by reading community_space_members directly. Tier and role grants
+ * write no roster row, so the roster-only read returned nothing for them: every
+ * catalogue-linked file in a tier Space was unreachable (403 on open, and hidden
+ * from /community/resources) for exactly the members the Space exists for.
+ */
 async function addSpaceContainers(
   db: ReturnType<typeof supabaseServer>,
-  memberId: string,
+  member: CommunityMember,
   map: Map<string, ContainerMeta>,
 ): Promise<void> {
+  const accessibleIds = await getAccessibleSpaceIds(member)
+  if (accessibleIds.size === 0) return
+
   const { data: rows } = await db
-    .from('community_space_members')
-    .select('community_spaces!inner(slug, name, access_type, is_archived)')
-    .eq('member_id', memberId)
-    .eq('status', 'active')
+    .from('community_spaces')
+    .select('slug, name, access_type, is_archived')
+    .in('id', [...accessibleIds])
 
   type Space = { slug: string; name: string; access_type: string | null; is_archived: boolean }
   const spaceBySlug = new Map<string, Space>()
-  for (const r of rows ?? []) {
-    const s = (Array.isArray(r.community_spaces) ? r.community_spaces[0] : r.community_spaces) as Space | null
-    if (s && !s.is_archived) spaceBySlug.set(s.slug, s)
+  for (const r of (rows ?? []) as Space[]) {
+    if (!r.is_archived) spaceBySlug.set(r.slug, r)
   }
   if (spaceBySlug.size === 0) return
 
@@ -351,7 +361,7 @@ export async function listMemberResources(
   member: CommunityMember,
   query: CatalogueQuery = {},
 ): Promise<CatalogueRow[]> {
-  const containers = await memberContainers(member.id)
+  const containers = await memberContainers(member)
   const attachments = await attachmentsFor([...containers.keys()])
   if (attachments.length === 0) return []
 
@@ -580,7 +590,7 @@ export async function getResourceDetail(
     .maybeSingle()
   if (!clicked) return null
 
-  const containers = await memberContainers(member.id)
+  const containers = await memberContainers(member)
   const clickedContainer = containers.get(clicked.container_id as string)
   // Member must be able to open the clicked attachment.
   if (!clickedContainer || !passesMinMembership(member, (clicked.min_membership as number | null) ?? null)) {
@@ -669,7 +679,7 @@ export async function resolveDownloadableAttachment(
     .maybeSingle()
   if (!att) return null
 
-  const containers = await memberContainers(member.id)
+  const containers = await memberContainers(member)
   const container = containers.get(att.container_id as string)
   if (!container || !passesMinMembership(member, (att.min_membership as number | null) ?? null)) {
     return null

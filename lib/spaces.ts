@@ -207,6 +207,54 @@ export interface PendingInvite {
   inviterName: string | null
 }
 
+// ─── Event-linked Spaces own their own access ────────────────────────────────
+//
+// A Space linked to an Event through community_space_sources gets its members
+// from that Event's roster and from nowhere else. Tier and role grants are
+// suppressed on it — not merely discouraged — because the two mean incompatible
+// things:
+//
+//   community_space_roles matches a member's GLOBAL role (resolveSpaceAccess
+//   reads getGlobalRoleNames, which excludes object-scoped roles). On an event
+//   Space, ticking 'teacher' therefore admits every teacher in the organisation,
+//   not the teachers at that event. That is exactly how 7 members came to hold
+//   access to all 6 event Spaces in prod without registering for any of them.
+//
+// The admin UI reads the checkboxes the other way round — "who is at this
+// event" — so the trap is easy to walk into and invisible afterwards. Migration
+// 145 deleted the existing grants; the admin API now refuses to write new ones;
+// and this suppression is the backstop that keeps it true at read time whatever
+// is in the table.
+//
+// Enforced where the grants are LOADED rather than inside resolveSpaceAccess:
+// five resolvers apply tier/role matching (the directory, the space page, the
+// audience, the member's grant list, the notification audience) and only a rule
+// all of them share cannot drift.
+
+/** Space ids whose access is owned by a linked Event. */
+export async function loadEventLinkedSpaceIds(spaceIds?: string[]): Promise<Set<string>> {
+  if (spaceIds && spaceIds.length === 0) return new Set()
+  const db = supabaseServer()
+  let q = db.from('community_space_sources').select('space_id').eq('object_type', 'event')
+  if (spaceIds) q = q.in('space_id', spaceIds)
+  const { data } = await q.range(0, 99_999)
+  return new Set(((data ?? []) as Array<{ space_id: string }>).map((r) => r.space_id))
+}
+
+/**
+ * Blank the tier/role grants of every event-linked Space in a spaceId→grants
+ * map. Callers keep using `.get(id) ?? []`, so a dropped key reads as no grant.
+ */
+export function withoutEventLinkedGrants<T>(
+  bySpace: Map<string, T[]>,
+  eventLinked: Set<string>
+): Map<string, T[]> {
+  if (eventLinked.size === 0) return bySpace
+  const out = new Map(bySpace)
+  for (const id of eventLinked) out.delete(id)
+  return out
+}
+
 export interface SpacesDirectory {
   /** Accessible non-open spaces, and open spaces the member has joined. */
   yourSpaces: SpaceSummary[]
@@ -244,7 +292,10 @@ export async function getSpacesDirectory(member: CommunityMember): Promise<Space
   // (getSpaceForMember) does. Omitting these bucketed role-granted spaces into
   // Restricted even though opening them directly let the member straight in.
   const { data: roleRows } = await db.from('community_space_roles').select('space_id, role')
-  const rolesBySpace = groupValues(roleRows ?? [], 'space_id', 'role') as Map<string, MemberRole[]>
+  const rolesBySpace = withoutEventLinkedGrants(
+    groupValues(roleRows ?? [], 'space_id', 'role') as Map<string, MemberRole[]>,
+    await loadEventLinkedSpaceIds()
+  )
   // Only worth loading the member's own roles when some space actually grants one.
   const memberRoles = rolesBySpace.size > 0 ? await getGlobalRoleNames(member.id) : []
 
@@ -257,7 +308,10 @@ export async function getSpacesDirectory(member: CommunityMember): Promise<Space
   // Your spaces / Discover and shows as Restricted with revoked copy instead.
   const mySuspensions = await loadSpaceSuspensions({ memberIds: [member.id] })
 
-  const tiersBySpace = groupValues(tierRows ?? [], 'space_id', 'tier_id')
+  // Event-linked Spaces take their members from the event, never from a tier
+  // or role grant. See loadEventLinkedSpaceIds.
+  const eventLinked = await loadEventLinkedSpaceIds()
+  const tiersBySpace = withoutEventLinkedGrants(groupValues(tierRows ?? [], 'space_id', 'tier_id'), eventLinked)
   const channelCounts = countBy(channels ?? [], 'space_id')
   const myRoster = new Map<string, SpaceMembership>()
   for (const r of (roster ?? []) as { space_id: string; role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null }[]) {
@@ -396,8 +450,9 @@ export async function getSpaceForMember(
       resolveSpaceMemberCounts([s.id]),
     ])
 
-  const assignedTierIds = (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
-  const assignedRoles = (roleRows ?? []).map((r) => (r as { role: MemberRole }).role)
+  const isEventLinked = (await loadEventLinkedSpaceIds([s.id])).has(s.id)
+  const assignedTierIds = isEventLinked ? [] : (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
+  const assignedRoles = isEventLinked ? [] : (roleRows ?? []).map((r) => (r as { role: MemberRole }).role)
   const mineRow = mine as { role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null } | null
   const membership: SpaceMembership | null = mineRow
     ? { role: mineRow.role, status: mineRow.status, muted: !!mineRow.muted }
@@ -476,8 +531,9 @@ export async function getSpaceAccessById(
       .maybeSingle(),
   ])
 
-  const assignedTierIds = (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
-  const assignedRoles = (roleRows ?? []).map((r) => (r as { role: MemberRole }).role)
+  const isEventLinked = (await loadEventLinkedSpaceIds([spaceId])).has(spaceId)
+  const assignedTierIds = isEventLinked ? [] : (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
+  const assignedRoles = isEventLinked ? [] : (roleRows ?? []).map((r) => (r as { role: MemberRole }).role)
   const mineRow = mine as { role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null } | null
   const membership: SpaceMembership | null = mineRow
     ? { role: mineRow.role, status: mineRow.status, muted: !!mineRow.muted }
@@ -585,8 +641,11 @@ export async function resolveSpaceAudiences(
     rosterBySpace.set(r.space_id, arr)
   }
 
-  const tiersBySpace = groupValues(tierRows ?? [], 'space_id', 'tier_id')
-  const rolesBySpace = groupValues(roleRows ?? [], 'space_id', 'role')
+  const audienceEventLinked = await loadEventLinkedSpaceIds(spaceIds)
+  const tiersBySpace = withoutEventLinkedGrants(
+    groupValues(tierRows ?? [], 'space_id', 'tier_id'), audienceEventLinked)
+  const rolesBySpace = withoutEventLinkedGrants(
+    groupValues(roleRows ?? [], 'space_id', 'role'), audienceEventLinked)
 
   for (const s of (spaces ?? []) as Array<{ id: string; access_type: SpaceAccessType }>) {
     const entries: SpaceAudienceEntry[] = []
@@ -669,14 +728,17 @@ export async function resolveDerivedGrant(
     return { reason: 'open', grantRef: null }
   }
 
-  const spaceTierIds = (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
+  const sourceList = (sourceRows ?? []) as Array<{ object_type: string; object_ref: string }>
+  const eventOwned = sourceList.some((src) => src.object_type === 'event')
+
+  const spaceTierIds = eventOwned ? [] : (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
   const heldTier = ((myTiers ?? []) as Array<{ tier_id: string | null; expires_at: string | null }>)
     .filter((m) => m.tier_id && !(m.expires_at && m.expires_at < today))
     .map((m) => m.tier_id as string)
     .find((id) => spaceTierIds.includes(id))
   if (heldTier) return { reason: 'tier', grantRef: heldTier }
 
-  const spaceRoles = (roleRows ?? []).map((r) => (r as { role: string }).role)
+  const spaceRoles = eventOwned ? [] : (roleRows ?? []).map((r) => (r as { role: string }).role)
   const heldRole = ((myRoles ?? []) as Array<{ role: string }>)
     .map((r) => r.role)
     .find((r) => spaceRoles.includes(r))
@@ -772,8 +834,11 @@ export async function resolveMemberSpaces(memberId: string): Promise<MemberSpace
   )
   const myRoleNames = new Set(((myRoles ?? []) as Array<{ role: string }>).map((r) => r.role))
 
-  const tiersBySpace = groupValues(tierRows ?? [], 'space_id', 'tier_id')
-  const rolesBySpace = groupValues(roleRows ?? [], 'space_id', 'role')
+  const memberEventLinked = await loadEventLinkedSpaceIds()
+  const tiersBySpace = withoutEventLinkedGrants(
+    groupValues(tierRows ?? [], 'space_id', 'tier_id'), memberEventLinked)
+  const rolesBySpace = withoutEventLinkedGrants(
+    groupValues(roleRows ?? [], 'space_id', 'role'), memberEventLinked)
 
   const rosterBySpace = new Map<string, {
     role: SpaceRole; status: 'invited' | 'active'; muted: boolean | null; invited_by: string | null
@@ -952,8 +1017,10 @@ export async function resolveSpaceAudience(
     ((liveRows ?? []) as LiveMember[]).map((m) => [m.id, m])
   )
 
-  const spaceTierIds = (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
-  const spaceRoles = (roleRows ?? []).map((r) => (r as { role: string }).role)
+  const audienceEventOwned = ((sourceRows ?? []) as Array<{ object_type: string }>)
+    .some((src) => src.object_type === 'event')
+  const spaceTierIds = audienceEventOwned ? [] : (tierRows ?? []).map((r) => (r as { tier_id: string }).tier_id)
+  const spaceRoles = audienceEventOwned ? [] : (roleRows ?? []).map((r) => (r as { role: string }).role)
 
   // Which member holds which of THIS space's granting tiers / roles, so the
   // badge can name the specific grant rather than just its kind.
@@ -1093,8 +1160,11 @@ export async function getAccessibleSpaceIds(member: CommunityMember): Promise<Se
         .eq('member_id', member.id),
     ])
 
-  const tiersBySpace = groupValues(tierRows ?? [], 'space_id', 'tier_id')
-  const rolesBySpace = groupValues(roleRows ?? [], 'space_id', 'role') as Map<string, MemberRole[]>
+  const accessibleEventLinked = await loadEventLinkedSpaceIds()
+  const tiersBySpace = withoutEventLinkedGrants(
+    groupValues(tierRows ?? [], 'space_id', 'tier_id'), accessibleEventLinked)
+  const rolesBySpace = withoutEventLinkedGrants(
+    groupValues(roleRows ?? [], 'space_id', 'role') as Map<string, MemberRole[]>, accessibleEventLinked)
   const memberRoles = rolesBySpace.size > 0 ? await getGlobalRoleNames(member.id) : []
   const mySuspensions = await loadSpaceSuspensions({ memberIds: [member.id] })
 

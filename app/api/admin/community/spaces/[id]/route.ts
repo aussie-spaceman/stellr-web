@@ -36,10 +36,36 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     adminMemberId = (data as { id: string } | null)?.id ?? null
   }
 
+  // A Space linked to an Event takes its members from that event's roster and
+  // from nothing else, so tier and role grants are refused on it rather than
+  // silently ignored — an admin who ticks 'teacher' on an event Space means
+  // "the teachers at this event", but community_space_roles matches a member's
+  // GLOBAL role and would admit every teacher in the organisation. lib/spaces
+  // also suppresses these at read time; this is what stops the rows existing.
+  const isEventLinked = async () => {
+    const { data } = await db
+      .from('community_space_sources')
+      .select('id')
+      .eq('space_id', spaceId)
+      .eq('object_type', 'event')
+      .limit(1)
+    return (data?.length ?? 0) > 0
+  }
+  const eventLinkedError = NextResponse.json(
+    {
+      error:
+        'This Space belongs to an event, so its members come from the event roster. ' +
+        'Tier and role grants would admit people who never registered — remove the ' +
+        'event link first if you really want a tier- or role-based Space.',
+    },
+    { status: 409 },
+  )
+
   switch (action) {
     // ── Access & tiers ──────────────────────────────────────────────────────
     case 'set-tiers': {
       const tierIds: string[] = Array.isArray(b.tierIds) ? b.tierIds : []
+      if (tierIds.length && (await isEventLinked())) return eventLinkedError
       await db.from('community_space_tiers').delete().eq('space_id', spaceId)
       if (tierIds.length) {
         await db.from('community_space_tiers').insert(tierIds.map((tier_id) => ({ space_id: spaceId, tier_id })))
@@ -50,6 +76,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // full set each save, mirroring set-tiers.
     case 'set-roles': {
       const roles: string[] = Array.isArray(b.roles) ? b.roles.filter((r: unknown) => typeof r === 'string') : []
+      if (roles.length && (await isEventLinked())) return eventLinkedError
       await db.from('community_space_roles').delete().eq('space_id', spaceId)
       if (roles.length) {
         await db.from('community_space_roles').insert(roles.map((role) => ({ space_id: spaceId, role })))
@@ -67,6 +94,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         { space_id: spaceId, object_type: objectType, object_ref: objectRef, created_by: adminMemberId },
         { onConflict: 'space_id,object_type,object_ref', ignoreDuplicates: true },
       )
+      // Linking an event makes the event the sole source of access, so any tier
+      // or role grants the Space is already carrying have to go with it —
+      // otherwise the link silently leaves the old, wider audience in place.
+      if (objectType === 'event') {
+        await db.from('community_space_tiers').delete().eq('space_id', spaceId)
+        await db.from('community_space_roles').delete().eq('space_id', spaceId)
+      }
       // Backfill: roster members already assigned to this Object into the space
       // (syncObjectSpaceRoster only covers members assigned AFTER the link).
       await syncSpaceSourceRoster(db, spaceId, objectType as 'event' | 'training' | 'mentoring' | 'coaching', objectRef)

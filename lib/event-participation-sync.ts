@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { logActivity } from '@/lib/activity-log'
 import { applyGrantTrigger } from '@/lib/membership-grants'
 import { ensureRosterMembership } from '@/lib/container-sync'
+import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 
 // Records a member's event registration into event_participations so the event
 // surfaces in the "Event Activity" lists on the member portal, the admin member
@@ -33,6 +34,16 @@ export async function recordEventParticipation(
     if (p.registrationId) {
       await ensureRosterMembership(db, p.registrationId, p.memberId)
     }
+
+    // Roster them into the event's Space. This lives here, rather than in the
+    // registration routes, because it has to hold for EVERY way a member can
+    // come to be registered — and it did not: app/api/register/group and
+    // group-join called syncObjectSpaceRoster themselves, but
+    // app/api/register/individual never did, so a solo registrant got a
+    // container row and no Space row and could not reach their own event Space.
+    // Every path already funnels through here, so this is the seam that covers
+    // all of them at once. Idempotent + non-fatal, like everything in this file.
+    await syncObjectSpaceRoster(db, 'event', p.eventSlug, p.memberId)
 
     const { data: existing } = await db
       .from('event_participations')

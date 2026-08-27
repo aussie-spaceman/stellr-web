@@ -292,9 +292,12 @@ export async function getSpacesDirectory(member: CommunityMember): Promise<Space
   // (getSpaceForMember) does. Omitting these bucketed role-granted spaces into
   // Restricted even though opening them directly let the member straight in.
   const { data: roleRows } = await db.from('community_space_roles').select('space_id, role')
+  // Event-linked Spaces take their members from the event, never from a tier or
+  // role grant. See loadEventLinkedSpaceIds.
+  const eventLinked = await loadEventLinkedSpaceIds()
   const rolesBySpace = withoutEventLinkedGrants(
     groupValues(roleRows ?? [], 'space_id', 'role') as Map<string, MemberRole[]>,
-    await loadEventLinkedSpaceIds()
+    eventLinked
   )
   // Only worth loading the member's own roles when some space actually grants one.
   const memberRoles = rolesBySpace.size > 0 ? await getGlobalRoleNames(member.id) : []
@@ -308,9 +311,6 @@ export async function getSpacesDirectory(member: CommunityMember): Promise<Space
   // Your spaces / Discover and shows as Restricted with revoked copy instead.
   const mySuspensions = await loadSpaceSuspensions({ memberIds: [member.id] })
 
-  // Event-linked Spaces take their members from the event, never from a tier
-  // or role grant. See loadEventLinkedSpaceIds.
-  const eventLinked = await loadEventLinkedSpaceIds()
   const tiersBySpace = withoutEventLinkedGrants(groupValues(tierRows ?? [], 'space_id', 'tier_id'), eventLinked)
   const channelCounts = countBy(channels ?? [], 'space_id')
   const myRoster = new Map<string, SpaceMembership>()

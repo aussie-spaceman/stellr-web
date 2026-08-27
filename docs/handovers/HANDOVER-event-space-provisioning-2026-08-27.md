@@ -96,6 +96,10 @@ Migrations 144 → 145 → 146 must land **before** the code deploy, and the cod
 4. **Verify:** `npm run audit:event-slugs` should be clean. It now sees
    `campaign_ref`, `object_ref` and `course_object_assignments.object_ref`, so it
    will report problems it previously could not.
+
+   ⚠️ **144 and 145 must go in together.** `npm run check:deploy-ready` runs this
+   audit, and once 144 widens it the 5 stale `campaign_ref` slugs become visible —
+   so applying 144 alone leaves the deploy gate failing until 145 repairs them.
 5. **Deploy the branch.**
 6. **`npm run sync:event-spaces`** (dry run), read it, then `-- --apply`.
    Expect: 6 Spaces created, 6 adopted + renamed, rosters backfilled.

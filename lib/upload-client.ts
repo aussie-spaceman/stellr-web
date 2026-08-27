@@ -17,8 +17,14 @@
 
 // Vercel rejects a request body larger than 4.5 MB before the function runs.
 // Cap the file itself a little under that so the multipart envelope and the
-// other form fields still fit.
+// other form fields still fit. This is the ceiling for any upload whose bytes
+// pass THROUGH a route handler, and it cannot be raised by configuration.
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024
+
+// Uploads that go straight to Supabase Storage never touch a function, so the
+// only ceiling is the bucket's own (50 MB on community-resources). Keep some
+// headroom under it for the watermark pass, which rewrites the object.
+export const MAX_DIRECT_UPLOAD_BYTES = 25 * 1024 * 1024
 
 type UploadFailure = { error: string }
 
@@ -30,10 +36,13 @@ function mb(bytes: number): string {
  * Read a picked file fully into memory, ready to be sent as a request body.
  * Returns the blob, or a message explaining why the file can't be uploaded.
  */
-export async function readUploadBlob(file: File): Promise<{ blob: Blob } | UploadFailure> {
-  if (file.size > MAX_UPLOAD_BYTES) {
+export async function readUploadBlob(
+  file: File,
+  maxBytes: number = MAX_UPLOAD_BYTES,
+): Promise<{ blob: Blob } | UploadFailure> {
+  if (file.size > maxBytes) {
     return {
-      error: `“${file.name}” is ${mb(file.size)}. Uploads are limited to ${mb(MAX_UPLOAD_BYTES)} — add it as a link instead.`,
+      error: `“${file.name}” is ${mb(file.size)}. Uploads are limited to ${mb(maxBytes)} — add it as a link instead.`,
     }
   }
 
@@ -85,4 +94,68 @@ export async function postUpload(
     return { error: `Upload failed (HTTP ${res.status}). Please try again.` }
   }
   return { data }
+}
+
+export type StoredUpload = {
+  storagePath: string
+  fileName: string
+  fileType: string
+  fileSize: number
+}
+
+/**
+ * Send a file straight to Supabase Storage, bypassing the function entirely.
+ *
+ * Our API issues a short-lived signed upload URL — only that metadata crosses a
+ * route handler — and the bytes go browser → storage, so the platform's 4.5 MB
+ * request-body limit never applies. The caller then posts the returned path to
+ * the resource endpoint, which watermarks the object and records the row.
+ */
+export async function uploadDirectToStorage(
+  file: File,
+  opts: { spaceId?: string } = {},
+): Promise<StoredUpload | UploadFailure> {
+  const read = await readUploadBlob(file, MAX_DIRECT_UPLOAD_BYTES)
+  if ('error' in read) return read
+
+  const ticket = await postUpload(
+    '/api/admin/community/resources/upload-url',
+    JSON.stringify({
+      fileName: file.name,
+      fileSize: read.blob.size,
+      contentType: file.type || 'application/octet-stream',
+      spaceId: opts.spaceId,
+    }),
+    { headers: { 'Content-Type': 'application/json' } },
+  )
+  if ('error' in ticket) return ticket
+
+  const path = ticket.data.path as string | undefined
+  const token = ticket.data.token as string | undefined
+  const bucket = ticket.data.bucket as string | undefined
+  if (!path || !token || !bucket) {
+    return { error: 'Could not start the upload. Please try again.' }
+  }
+
+  // Loaded on demand so route handlers importing the size constants above don't
+  // pull the browser client into a server bundle.
+  const { createStorageUploadClient } = await import('@/lib/supabase-browser')
+  try {
+    const { error } = await createStorageUploadClient()
+      .storage.from(bucket)
+      .uploadToSignedUrl(path, token, read.blob, {
+        contentType: file.type || 'application/octet-stream',
+        upsert: true,
+      })
+    if (error) return { error: `Storage rejected the file: ${error.message}` }
+  } catch {
+    return { error: 'The file did not reach storage. Check your connection and try again.' }
+  }
+
+  return {
+    storagePath: path,
+    fileName: file.name,
+    fileType: file.type || 'application/octet-stream',
+    fileSize: read.blob.size,
+  }
 }

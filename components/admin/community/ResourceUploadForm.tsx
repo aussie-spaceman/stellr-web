@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { postUpload, readUploadBlob } from '@/lib/upload-client'
+import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 
 type ResourceKind = 'file' | 'link'
 
@@ -48,19 +48,25 @@ export function ResourceUploadForm() {
           { headers: { 'Content-Type': 'application/json' } },
         )
       } else {
-        // Pull the bytes off disk before posting: a file that only exists as a
-        // Drive/iCloud placeholder otherwise fails mid-stream and the request
-        // never reaches the server.
-        const read = await readUploadBlob(file as File)
-        if ('error' in read) {
-          setError(read.error)
+        // Send the bytes straight to storage: the platform caps a request body
+        // reaching a function at 4.5MB, so anything larger can never arrive
+        // through this API. Only the resulting path is posted below.
+        const stored = await uploadDirectToStorage(file as File)
+        if ('error' in stored) {
+          setError(stored.error)
           return
         }
-        const fd = new FormData()
-        fd.append('file', read.blob, (file as File).name)
-        fd.append('title', title.trim())
-        if (description.trim()) fd.append('description', description.trim())
-        result = await postUpload('/api/admin/community/resources', fd)
+        result = await postUpload(
+          '/api/admin/community/resources',
+          JSON.stringify({
+            storagePath: stored.storagePath,
+            fileName: stored.fileName,
+            fileType: stored.fileType,
+            title: title.trim(),
+            description: description.trim() || undefined,
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        )
       }
 
       if ('error' in result) {

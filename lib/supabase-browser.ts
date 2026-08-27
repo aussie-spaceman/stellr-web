@@ -16,3 +16,14 @@ export function createBrowserSupabase(getToken: () => Promise<string | null>): S
     realtime: { params: { eventsPerSecond: 5 } },
   })
 }
+
+// Unauthenticated browser client used ONLY to PUT a file to a signed upload URL.
+// The signed URL carries its own short-lived token, so no Clerk session is
+// involved — this is what lets a large file go browser → storage directly,
+// instead of through a route handler capped at 4.5MB by the platform.
+export function createStorageUploadClient(): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !key) throw new Error('Supabase public env vars not configured')
+  return createClient(url, key, { auth: { persistSession: false } })
+}

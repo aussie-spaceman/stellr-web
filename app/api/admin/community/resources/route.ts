@@ -6,6 +6,11 @@ import { attachSpaceResource } from '@/lib/container-sync'
 import { createLinkBinary, normaliseUrl } from '@/lib/resource-upload'
 import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
 import { MAX_UPLOAD_BYTES } from '@/lib/upload-client'
+import { finaliseStoredUpload } from '@/lib/resource-finalise'
+
+// The watermark pass re-reads and rewrites the stored object, so give it more
+// room than the default for a 25MB PDF.
+export const maxDuration = 60
 
 // POST /api/admin/community/resources — create a resource record. A resource is
 // either an uploaded file (multipart/form-data: file, title, description?, spaceId?)
@@ -24,6 +29,26 @@ export async function POST(req: Request) {
     const rawUrl = (typeof b.url === 'string' ? b.url : '').trim()
     const description = (typeof b.description === 'string' ? b.description : '').trim() || null
     const spaceId = (typeof b.spaceId === 'string' && b.spaceId) || null
+
+    // Direct-to-storage upload: the bytes are already in the bucket (the browser
+    // sent them via a signed URL, which is the only way past the platform's
+    // 4.5MB request-body limit), so only the metadata arrives here.
+    if (typeof b.storagePath === 'string' && b.storagePath) {
+      if (!title) return NextResponse.json({ error: 'title is required' }, { status: 400 })
+      const done = await finaliseStoredUpload({
+        storagePath: b.storagePath,
+        title,
+        description,
+        spaceId,
+        fileType: typeof b.fileType === 'string' ? b.fileType : null,
+        uploadedBy: uploader?.id ?? null,
+      })
+      if ('error' in done) return NextResponse.json({ error: done.error }, { status: done.status })
+      const db = supabaseServer()
+      if (spaceId) await attachSpaceResource(db, spaceId, done.id)
+      return NextResponse.json({ id: done.id })
+    }
+
     if (!rawUrl || !title) {
       return NextResponse.json({ error: 'url and title are required' }, { status: 400 })
     }

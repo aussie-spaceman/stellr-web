@@ -7,6 +7,11 @@ import { createLinkBinary, normaliseUrl } from '@/lib/resource-upload'
 import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
 import { attachAllowed } from '@/lib/access-objects'
 import { MAX_UPLOAD_BYTES } from '@/lib/upload-client'
+import { finaliseStoredUpload } from '@/lib/resource-finalise'
+
+// The watermark pass re-reads and rewrites the stored object, so give it more
+// room than the default for a 25MB PDF.
+export const maxDuration = 60
 
 // POST /api/admin/community/spaces/[id]/resources — admin adds a resource into a
 // space's Resources (Assign resource modal, screen 20). A file arrives as
@@ -56,6 +61,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (req.headers.get('content-type')?.includes('application/json')) {
     const b = await req.json().catch(() => ({}))
     const rawUrl = (typeof b.url === 'string' ? b.url : '').trim()
+
+    // Direct-to-storage upload — the bytes are already in the bucket, sent by
+    // the browser via a signed URL, so only the metadata comes through here.
+    if (typeof b.storagePath === 'string' && b.storagePath) {
+      const fileName = (typeof b.fileName === 'string' ? b.fileName : '').trim()
+      const done = await finaliseStoredUpload({
+        storagePath: b.storagePath,
+        title: (typeof b.title === 'string' ? b.title : '').trim() || fileName,
+        spaceId,
+        fileType: fileLabel(fileName, typeof b.fileType === 'string' ? b.fileType : ''),
+        uploadedBy: adminId,
+        fromChat: false,
+      })
+      if ('error' in done) return NextResponse.json({ error: done.error }, { status: done.status })
+      await attachSpaceResource(db0, spaceId, done.id)
+      return NextResponse.json({ id: done.id })
+    }
+
     const title = (typeof b.title === 'string' ? b.title : '').trim() || rawUrl
     if (!rawUrl) return NextResponse.json({ error: 'url required' }, { status: 400 })
     const normalised = normaliseUrl(rawUrl)

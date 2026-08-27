@@ -12,7 +12,7 @@ import { AccessBadge, ACCESS_META, TierPill, RolePill } from '@/components/commu
 import { TIER_GROUPS } from '@/lib/tiers'
 import { formatDateShort } from '@/lib/utils'
 import { SPACE_TRAINING_BRACKETS, type BracketRequirements, type AgeBracketKey } from '@/lib/space-training'
-import { postUpload, readUploadBlob } from '@/lib/upload-client'
+import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import type { AdminSpaceConfig } from '@/lib/space-admin'
 import type { SpaceAccessType, SpaceAudienceMember, SpaceRole, SpaceTheme } from '@/lib/spaces'
 
@@ -445,15 +445,21 @@ function ResourcesTab({
     if (!file) return
     setBusy(true)
     try {
-      // Read the bytes before posting — a Drive/iCloud placeholder otherwise
-      // fails mid-stream, which rejected the fetch and left this modal stuck
-      // on "Uploading…" with nothing shown.
-      const read = await readUploadBlob(file)
-      if ('error' in read) return toast(read.error)
+      // Send the bytes straight to storage — a request body reaching a function
+      // is capped at 4.5MB by the platform, so a larger file could never arrive
+      // through this API at all. Only the resulting path is posted below.
+      const stored = await uploadDirectToStorage(file, { spaceId })
+      if ('error' in stored) return toast(stored.error)
 
-      const form = new FormData()
-      form.append('file', read.blob, file.name)
-      const result = await postUpload(`/api/admin/community/spaces/${spaceId}/resources`, form)
+      const result = await postUpload(
+        `/api/admin/community/spaces/${spaceId}/resources`,
+        JSON.stringify({
+          storagePath: stored.storagePath,
+          fileName: stored.fileName,
+          fileType: stored.fileType,
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
       if ('error' in result) return toast(result.error)
 
       toast('Resource added')

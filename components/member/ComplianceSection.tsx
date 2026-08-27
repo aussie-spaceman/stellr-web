@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import type { ComplianceState, TeacherLicense } from '@/lib/compliance'
 import { formatDateShort } from '@/lib/utils'
 
@@ -77,16 +78,26 @@ export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: st
   async function uploadDocument(file: File) {
     setUploading(true)
     setDocError('')
-    const body = new FormData()
-    body.append('file', file)
-    const res = await fetch('/api/members/compliance/document', { method: 'POST', body })
-    setUploading(false)
-    if (!res.ok) {
-      const d = await res.json().catch(() => null)
-      setDocError(d?.error ?? 'Upload failed.')
-      return
+    try {
+      // Bytes go browser → storage via a signed URL; only the path is posted.
+      const stored = await uploadDirectToStorage(file, 'compliance-document')
+      if ('error' in stored) {
+        setDocError(stored.error)
+        return
+      }
+      const result = await postUpload(
+        '/api/members/compliance/document',
+        JSON.stringify({ storagePath: stored.storagePath, fileType: stored.fileType }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
+      if ('error' in result) {
+        setDocError(result.error)
+        return
+      }
+      await load()
+    } finally {
+      setUploading(false)
     }
-    await load()
   }
 
   async function deleteDocument() {

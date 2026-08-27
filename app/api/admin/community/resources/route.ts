@@ -4,17 +4,18 @@ import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember, RESOURCES_BUCKET } from '@/lib/community'
 import { attachSpaceResource } from '@/lib/container-sync'
 import { createLinkBinary, normaliseUrl } from '@/lib/resource-upload'
-import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
-import { MAX_UPLOAD_BYTES } from '@/lib/upload-client'
 import { finaliseStoredUpload } from '@/lib/resource-finalise'
 
 // The watermark pass re-reads and rewrites the stored object, so give it more
 // room than the default for a 25MB PDF.
 export const maxDuration = 60
 
-// POST /api/admin/community/resources — create a resource record. A resource is
-// either an uploaded file (multipart/form-data: file, title, description?, spaceId?)
-// or a link (application/json: { url, title, description?, spaceId? }).
+// POST /api/admin/community/resources — create a resource record (JSON only).
+// Either a link ({ url, title, … }) or an already-uploaded file
+// ({ storagePath, fileType, title, … }) whose bytes the browser sent straight to
+// storage via /api/uploads/sign. File bodies are no longer accepted: the
+// platform caps a request body at 4.5MB before the function runs, so posting
+// bytes here silently capped every upload.
 export async function POST(req: Request) {
   const { sessionClaims } = await auth()
   const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
     if (typeof b.storagePath === 'string' && b.storagePath) {
       if (!title) return NextResponse.json({ error: 'title is required' }, { status: 400 })
       const done = await finaliseStoredUpload({
+        purpose: spaceId ? 'space-resource' : 'admin-resource',
         storagePath: b.storagePath,
         title,
         description,
@@ -69,75 +71,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ id: created.binaryId })
   }
 
-  const formData = await req.formData()
-  const file = formData.get('file') as File | null
-  const title = (formData.get('title') as string | null)?.trim()
-  const description = (formData.get('description') as string | null)?.trim() || null
-  const spaceId = (formData.get('spaceId') as string | null) || null
-
-  if (!file || !title) {
-    return NextResponse.json({ error: 'file and title are required' }, { status: 400 })
-  }
-  // Anything larger never gets this far (Vercel rejects the body at the edge),
-  // but answer with a real message for the sizes that do.
-  if (file.size > MAX_UPLOAD_BYTES) {
-    return NextResponse.json({ error: 'File too large (max 4MB) — add it as a link instead.' }, { status: 413 })
-  }
-  if (file.size === 0) {
-    return NextResponse.json({ error: 'That file came through empty — please try again.' }, { status: 400 })
-  }
-
-  const db = supabaseServer()
-
-  // Stream the file into the private bucket. Path: resources/<timestamp>-<safeName>
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const storagePath = `resources/${Date.now()}-${safeName}`
-
-  // Copyright watermark on the bottom-right of every page of uploaded PDFs.
-  let payload: File | Uint8Array = file
-  if (isPdf(file.name, file.type)) {
-    try {
-      payload = new Uint8Array(await stampPdfBytes(new Uint8Array(await file.arrayBuffer())))
-    } catch (err) {
-      console.error('[community] resource watermark failed, storing original:', err)
-    }
-  }
-
-  const { error: uploadError } = await db.storage
-    .from(RESOURCES_BUCKET)
-    .upload(storagePath, payload, {
-      contentType: file.type || 'application/octet-stream',
-      upsert: false,
-    })
-
-  if (uploadError) {
-    console.error('[community] resource upload error:', uploadError)
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
-  }
-
-  const { data: resource, error: dbError } = await db
-    .from('community_resources')
-    .insert({
-      space_id: spaceId,
-      title,
-      description,
-      storage_path: storagePath,
-      file_type: file.type || null,
-      file_size_bytes: file.size,
-      uploaded_by: uploader?.id ?? null,
-    })
-    .select('id')
-    .single()
-
-  if (dbError) {
-    console.error('[community] resource db insert error:', dbError)
-    return NextResponse.json({ error: 'Failed to save resource' }, { status: 500 })
-  }
-
-  // Space-targeted uploads also surface in the global catalogue.
-  if (spaceId) await attachSpaceResource(db, spaceId, resource.id)
-
-  return NextResponse.json({ id: resource.id })
+  return NextResponse.json(
+    { error: 'Send storagePath from a signed upload instead of a file body.' },
+    { status: 415 },
+  )
 }
 
 // GET /api/admin/community/resources — list all resources for admin UI

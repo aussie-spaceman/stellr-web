@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { RESOURCES_BUCKET } from '@/lib/community'
+import { claimUpload } from '@/lib/uploads'
 
 // Upload (or clear) a per-course certificate template PDF. When set, the member's
 // certificate download overlays their details onto this PDF (see the certificate
@@ -14,23 +14,29 @@ async function requireAdmin() {
 
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  const form = await req.formData()
-  const moduleId = form.get('moduleId') as string | null
-  const file = form.get('file') as File | null
-  if (!moduleId || !file) return NextResponse.json({ error: 'moduleId and file required' }, { status: 400 })
-  if (file.type && file.type !== 'application/pdf') {
-    return NextResponse.json({ error: 'Template must be a PDF' }, { status: 400 })
+  // The PDF went browser → storage via /api/uploads/sign; only the path lands
+  // here, and claimUpload verifies the object that actually arrived.
+  const b = await req.json().catch(() => ({}))
+  const moduleId = typeof b.moduleId === 'string' ? b.moduleId : null
+  const path = typeof b.storagePath === 'string' ? b.storagePath : ''
+  if (!moduleId || !path) {
+    return NextResponse.json({ error: 'moduleId and storagePath required' }, { status: 400 })
+  }
+  if (!path.startsWith(`training/cert-templates/${moduleId}-`)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const db = supabaseServer()
-  const path = `training/cert-templates/${moduleId}-${Date.now()}.pdf`
-  const { error: uploadError } = await db.storage
-    .from(RESOURCES_BUCKET)
-    .upload(path, file, { contentType: 'application/pdf', upsert: true })
-  if (uploadError) {
-    console.error('[training] cert template upload error:', uploadError)
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
-  }
+  const claimed = await claimUpload({
+    purpose: 'training-cert-template',
+    storagePath: path,
+    // This PDF is overlaid onto every certificate for the course, so confirm the
+    // stored object really is a PDF rather than trusting the declared type.
+    verify: (bytes) =>
+      bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46,
+    verifyError: 'Template must be a PDF',
+  })
+  if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
 
   const { error } = await db.from('training_modules').update({ cert_template_path: path }).eq('id', moduleId)
   if (error) return NextResponse.json({ error: 'Could not save template' }, { status: 500 })

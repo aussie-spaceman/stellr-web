@@ -2,11 +2,14 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
-import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
+import { claimUpload } from '@/lib/uploads'
+import { watermarkIfPdf } from '@/lib/resource-finalise'
+
+// Claiming a stored upload re-reads and may rewrite it (watermark).
+export const maxDuration = 60
 
 // Admin CRUD for per-lesson attached resources (files / links) shown beneath a
 // lesson's primary content in the member Course detail.
-export const maxRequestBodySize = '100mb'
 
 async function requireAdmin() {
   const { sessionClaims } = await auth()
@@ -35,29 +38,17 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const db = supabaseServer()
-  const isMultipart = (req.headers.get('content-type') ?? '').includes('multipart/form-data')
-
-  let itemId: string | null
-  let kind: string | null
-  let title: string | null
-  let externalUrl: string | null = null
-  let resourceId: string | null = null
-  let file: File | null = null
-
-  if (isMultipart) {
-    const form = await req.formData()
-    itemId = form.get('itemId') as string | null
-    kind = (form.get('kind') as string | null) ?? 'file'
-    title = (form.get('title') as string | null)?.trim() ?? null
-    file = form.get('file') as File | null
-  } else {
-    const b = await req.json().catch(() => ({}))
-    itemId = b.itemId ?? null
-    kind = b.kind ?? 'link'
-    title = (b.title as string | undefined)?.trim() ?? null
-    externalUrl = (b.externalUrl as string | undefined)?.trim() ?? null
-    resourceId = (b.resourceId as string | undefined) ?? null
-  }
+  // JSON only. An uploaded file arrives as a storagePath from /api/uploads/sign;
+  // the bytes never pass through here, because the platform caps a request body
+  // at 4.5MB before this function runs.
+  const b = await req.json().catch(() => ({}))
+  const itemId: string | null = b.itemId ?? null
+  const kind: string | null = b.kind ?? 'link'
+  const title: string | null = (b.title as string | undefined)?.trim() ?? null
+  const externalUrl: string | null = (b.externalUrl as string | undefined)?.trim() ?? null
+  const resourceId: string | null = (b.resourceId as string | undefined) ?? null
+  const uploadPath: string | null = (b.storagePath as string | undefined)?.trim() ?? null
+  const uploadType: string = (b.fileType as string | undefined) ?? ''
 
   // Attach an existing catalogue resource by reference — reuse its stored binary
   // rather than re-uploading. Deleting the lesson resource only drops this
@@ -99,23 +90,12 @@ export async function POST(req: Request) {
   let storagePath: string | null = null
 
   if (kind === 'file') {
-    if (!file) return NextResponse.json({ error: 'file required' }, { status: 400 })
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-    storagePath = `training/resources/${Date.now()}-${safeName}`
+    if (!uploadPath) return NextResponse.json({ error: 'storagePath required' }, { status: 400 })
+    const claimed = await claimUpload({ purpose: 'training-item-resource', storagePath: uploadPath })
+    if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
     // Copyright watermark on the bottom-right of every page of uploaded PDFs.
-    let payload: File | Uint8Array = file
-    if (isPdf(file.name, file.type)) {
-      try {
-        payload = await stampPdfBytes(new Uint8Array(await file.arrayBuffer()))
-      } catch (err) {
-        console.error('[training] resource watermark failed, storing original:', err)
-      }
-    }
-    const { error: upErr } = await db.storage.from(RESOURCES_BUCKET).upload(storagePath, payload, { contentType: file.type || 'application/octet-stream', upsert: false })
-    if (upErr) {
-      console.error('[training] resource upload error:', upErr)
-      return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
-    }
+    await watermarkIfPdf(claimed.bucket, uploadPath, claimed.bytes, uploadType)
+    storagePath = uploadPath
   } else {
     if (!externalUrl) return NextResponse.json({ error: 'externalUrl required for a link' }, { status: 400 })
   }

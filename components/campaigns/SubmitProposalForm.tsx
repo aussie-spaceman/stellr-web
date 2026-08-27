@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Upload, FileText } from 'lucide-react'
 import { Button } from '@stellr/web-ui'
 import { toast } from '@/components/ui/Toast'
+import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 
 interface Props {
   slug: string
@@ -27,19 +28,28 @@ export function SubmitProposalForm({ slug, title, deadlineLabel, groupName, init
     setSubmitting(true)
     setError(null)
     try {
-      const body = new FormData()
-      body.append('file', file)
-      if (notes.trim()) body.append('notes', notes.trim())
-      const res = await fetch(`/api/campaigns/${slug}/submit`, { method: 'POST', body })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setError(data.error ?? 'Could not submit your proposal.')
+      // Bytes go browser → storage via a signed URL; only the path is posted.
+      const stored = await uploadDirectToStorage(file, 'campaign-proposal', { slug })
+      if ('error' in stored) {
+        setError(stored.error)
         return
       }
-      setDone({ fileName: data.fileName ?? file.name })
+      const result = await postUpload(
+        `/api/campaigns/${slug}/submit`,
+        JSON.stringify({
+          storagePath: stored.storagePath,
+          fileName: stored.fileName,
+          fileType: stored.fileType,
+          notes: notes.trim() || undefined,
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
+      if ('error' in result) {
+        setError(result.error)
+        return
+      }
+      setDone({ fileName: (result.data.fileName as string) ?? file.name })
       toast('Confirmation email sent to your inbox')
-    } catch {
-      setError('Something went wrong. Please try again.')
     } finally {
       setSubmitting(false)
     }

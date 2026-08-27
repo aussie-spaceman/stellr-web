@@ -1,6 +1,7 @@
 'use client'
 
 import { useEditor, EditorContent } from '@tiptap/react'
+import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import StarterKit from '@tiptap/starter-kit'
 import Mention from '@tiptap/extension-mention'
 import Image from '@tiptap/extension-image'
@@ -73,15 +74,22 @@ export function RichTextEditor({
   const uploadImage = async (file: File) => {
     setUploading(true)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      const res = await fetch('/api/community/media/upload', { method: 'POST', body: fd })
-      const json = await res.json()
-      if (res.ok && json.src) {
-        editor?.chain().focus().setImage({ src: json.src }).run()
-      } else {
-        alert(json.error ?? 'Image upload failed')
+      // Bytes go browser → storage via a signed URL; only the path is posted.
+      const stored = await uploadDirectToStorage(file, 'community-media')
+      if ('error' in stored) {
+        alert(stored.error)
+        return
       }
+      const result = await postUpload(
+        '/api/community/media/upload',
+        JSON.stringify({ storagePath: stored.storagePath, fileType: stored.fileType }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
+      if ('error' in result) {
+        alert(result.error)
+        return
+      }
+      editor?.chain().focus().setImage({ src: result.data.src as string }).run()
     } finally {
       setUploading(false)
     }

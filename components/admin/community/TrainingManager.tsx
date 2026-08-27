@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { formatDateShort } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import {
@@ -410,11 +411,16 @@ function CertTemplateControl({ module: m, onDone }: { module: AdminModule; onDon
   const upload = async (file: File) => {
     setBusy(true)
     try {
-      const fd = new FormData()
-      fd.set('moduleId', m.id)
-      fd.set('file', file)
-      const res = await fetch('/api/admin/community/training/cert-template', { method: 'POST', body: fd })
-      if (res.ok) onDone()
+      // Bytes go browser → storage via a signed URL; only the path is posted.
+      const stored = await uploadDirectToStorage(file, 'training-cert-template', { moduleId: m.id })
+      if ('error' in stored) return alert(stored.error)
+      const result = await postUpload(
+        '/api/admin/community/training/cert-template',
+        JSON.stringify({ moduleId: m.id, storagePath: stored.storagePath }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
+      if ('error' in result) return alert(result.error)
+      onDone()
     } finally {
       setBusy(false)
     }
@@ -1134,18 +1140,35 @@ function AddLessonForm({
     setBusy(true)
     setError(null)
     try {
-      const fd = new FormData()
-      fd.set('moduleId', moduleId)
-      if (sectionId) fd.set('sectionId', sectionId)
-      fd.set('title', title)
-      fd.set('contentKind', contentKind)
-      fd.set('status', status)
-      fd.set('displayOrder', String(count))
-      if (minutes) fd.set('estimatedMinutes', minutes)
-      if (bodyText.trim()) fd.set('body', bodyText)
-      if (needsFile && file) fd.set('file', file)
-      if (needsUrl) fd.set('externalUrl', externalUrl)
-      const res = await fetch('/api/admin/community/training/items', { method: 'POST', body: fd })
+      // Lesson media (document or video) goes browser → storage via a signed
+      // URL; only its path is posted. This is what makes a real video upload
+      // possible at all — a request body over 4.5MB never reaches the function.
+      let stored: { storagePath: string; fileType: string } | null = null
+      if (needsFile && file) {
+        const up = await uploadDirectToStorage(file, 'training-item')
+        if ('error' in up) {
+          setError(up.error)
+          return
+        }
+        stored = up
+      }
+      const res = await fetch('/api/admin/community/training/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          moduleId,
+          sectionId: sectionId || undefined,
+          title,
+          contentKind,
+          status,
+          displayOrder: String(count),
+          estimatedMinutes: minutes || undefined,
+          body: bodyText.trim() || undefined,
+          storagePath: stored?.storagePath,
+          fileType: stored?.fileType,
+          externalUrl: needsUrl ? externalUrl : undefined,
+        }),
+      })
       if (res.ok) {
         setTitle('')
         setExternalUrl('')

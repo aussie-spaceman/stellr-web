@@ -2,21 +2,26 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
-import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
+import { claimUpload } from '@/lib/uploads'
+import { watermarkIfPdf } from '@/lib/resource-finalise'
 import { enqueueVideoWatermark } from '@/lib/watermark/video-queue'
 import { isInteractiveKey } from '@/lib/interactive-lessons-meta'
 
-// Video files can be large — override the default 4 MB Next.js body limit.
-export const maxRequestBodySize = '500mb'
+// Claiming a stored upload re-reads and may rewrite it (watermark).
+export const maxDuration = 60
 
 // Admin: add a lesson item to a module (FR-COM-10).
-// Accepts multipart/form-data so admins can upload/record a video or document,
-// or link a Google Doc / external URL.
+// JSON only. Video and document media is uploaded straight to storage via
+// /api/uploads/sign and referenced here by storagePath; a Google Doc / external
+// URL is linked instead. (This route used to take multipart with
+// maxRequestBodySize = '500mb', which promised something it could not deliver:
+// Vercel rejects any request body over 4.5MB before the function runs, so a
+// real video upload never had a chance of arriving.)
 //   fields: moduleId, title, contentKind, estimatedMinutes?, displayOrder?
 //           sectionId?  (group the lesson under a section)
 //           status?     ('draft' | 'published', default published)
 //           body?       (lesson notes shown beneath the featured media)
-//           file        (required for video|document)
+//           storagePath (required for video|document — from /api/uploads/sign)
 //           externalUrl (required for google_doc|link — also accepts YouTube/Vimeo embeds)
 //           interactiveKey (for interactive — a key registered in lib/interactive-lessons-meta.ts)
 // PATCH (JSON) updates an existing lesson: { id, title?, body?, status?, sectionId?, displayOrder? }
@@ -30,18 +35,23 @@ async function requireAdmin() {
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const form = await req.formData()
-  const moduleId = form.get('moduleId') as string | null
-  const title = (form.get('title') as string | null)?.trim()
-  const contentKind = form.get('contentKind') as string | null
-  const externalUrl = (form.get('externalUrl') as string | null)?.trim() || null
-  const interactiveKey = (form.get('interactiveKey') as string | null)?.trim() || null
-  const estimatedMinutes = parseInt((form.get('estimatedMinutes') as string) ?? '', 10)
-  const displayOrder = parseInt((form.get('displayOrder') as string) ?? '0', 10)
-  const sectionId = (form.get('sectionId') as string | null)?.trim() || null
-  const status = (form.get('status') as string | null) === 'draft' ? 'draft' : 'published'
-  const body = (form.get('body') as string | null)?.trim() || null
-  const file = form.get('file') as File | null
+  // JSON only. Lesson media (a document, or a VIDEO) is uploaded straight to
+  // storage via /api/uploads/sign and arrives here as a path: the platform caps
+  // a request body at 4.5MB before the function runs, so this route could never
+  // actually have accepted a real video.
+  const form = (await req.json().catch(() => ({}))) as Record<string, string | undefined>
+  const moduleId = form.moduleId ?? null
+  const title = form.title?.trim()
+  const contentKind = form.contentKind ?? null
+  const externalUrl = form.externalUrl?.trim() || null
+  const interactiveKey = form.interactiveKey?.trim() || null
+  const estimatedMinutes = parseInt(form.estimatedMinutes ?? '', 10)
+  const displayOrder = parseInt(form.displayOrder ?? '0', 10)
+  const sectionId = form.sectionId?.trim() || null
+  const status = form.status === 'draft' ? 'draft' : 'published'
+  const body = form.body?.trim() || null
+  const uploadPath = form.storagePath?.trim() || null
+  const uploadType = form.fileType ?? ''
 
   if (!moduleId || !title || !contentKind) {
     return NextResponse.json({ error: 'moduleId, title, contentKind required' }, { status: 400 })
@@ -56,7 +66,7 @@ export async function POST(req: Request) {
   // derived from the item id at view time (see lib/video-provider trainingRoomName).
   const needsFile = contentKind === 'video' || contentKind === 'document'
   const needsUrl = contentKind === 'google_doc' || contentKind === 'link'
-  if (needsFile && !file) {
+  if (needsFile && !uploadPath) {
     return NextResponse.json({ error: 'file required for video/document' }, { status: 400 })
   }
   if (needsUrl && !externalUrl) {
@@ -72,28 +82,14 @@ export async function POST(req: Request) {
   const db = supabaseServer()
   let storagePath: string | null = null
 
-  if (needsFile && file) {
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-    storagePath = `training/${Date.now()}-${safeName}`
+  if (needsFile && uploadPath) {
+    const claimed = await claimUpload({ purpose: 'training-item', storagePath: uploadPath })
+    if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
+    storagePath = uploadPath
     // PDF documents are watermarked inline; videos are queued for the ffmpeg
     // worker (can't run in this serverless route).
-    let payload: File | Uint8Array = file
-    if (contentKind === 'document' && isPdf(file.name, file.type)) {
-      try {
-        payload = new Uint8Array(await stampPdfBytes(new Uint8Array(await file.arrayBuffer())))
-      } catch (err) {
-        console.error('[training] item pdf watermark failed, storing original:', err)
-      }
-    }
-    const { error: uploadError } = await db.storage
-      .from(RESOURCES_BUCKET)
-      .upload(storagePath, payload, {
-        contentType: file.type || 'application/octet-stream',
-        upsert: false,
-      })
-    if (uploadError) {
-      console.error('[training] item upload error:', uploadError)
-      return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
+    if (contentKind === 'document') {
+      await watermarkIfPdf(claimed.bucket, storagePath, claimed.bytes, uploadType)
     }
     if (contentKind === 'video') await enqueueVideoWatermark(db, RESOURCES_BUCKET, storagePath, 'training')
   }
@@ -133,16 +129,7 @@ export async function PATCH(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const db = supabaseServer()
 
-  const isMultipart = (req.headers.get('content-type') ?? '').includes('multipart/form-data')
-  let fields: Record<string, unknown> = {}
-  let file: File | null = null
-  if (isMultipart) {
-    const form = await req.formData()
-    file = form.get('file') as File | null
-    fields = Object.fromEntries([...form.entries()].filter(([k]) => k !== 'file'))
-  } else {
-    fields = await req.json().catch(() => ({}))
-  }
+  const fields = (await req.json().catch(() => ({}))) as Record<string, unknown>
 
   const id = fields.id as string | undefined
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -171,27 +158,16 @@ export async function PATCH(req: Request) {
     patch.interactive_key = null
 
     if (needsFile) {
-      if (file) {
-        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-        const storagePath = `training/${Date.now()}-${safeName}`
-        let payload: File | Uint8Array = file
-        if (contentKind === 'document' && isPdf(file.name, file.type)) {
-          try {
-            payload = new Uint8Array(await stampPdfBytes(new Uint8Array(await file.arrayBuffer())))
-          } catch (err) {
-            console.error('[training] item pdf watermark failed, storing original:', err)
-          }
+      const uploadPath = (fields.storagePath as string | undefined)?.trim() || null
+      if (uploadPath) {
+        const claimed = await claimUpload({ purpose: 'training-item', storagePath: uploadPath })
+        if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
+        if (contentKind === 'document') {
+          await watermarkIfPdf(claimed.bucket, uploadPath, claimed.bytes, (fields.fileType as string) ?? '')
         }
-        const { error: upErr } = await db.storage
-          .from(RESOURCES_BUCKET)
-          .upload(storagePath, payload, { contentType: file.type || 'application/octet-stream', upsert: false })
-        if (upErr) {
-          console.error('[training] item re-upload error:', upErr)
-          return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
-        }
-        patch.storage_path = storagePath
+        patch.storage_path = uploadPath
         patch.external_url = null
-        if (contentKind === 'video') await enqueueVideoWatermark(db, RESOURCES_BUCKET, storagePath, 'training')
+        if (contentKind === 'video') await enqueueVideoWatermark(db, RESOURCES_BUCKET, uploadPath, 'training')
       }
       // no file provided → keep existing storage_path (metadata-only edit)
     } else if (needsUrl) {

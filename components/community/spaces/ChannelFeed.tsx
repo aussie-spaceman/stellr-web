@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { useAuth } from '@clerk/nextjs'
 import { Paperclip, Pin, MessageSquare, Flag, FileText, X } from 'lucide-react'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
@@ -139,13 +140,24 @@ export function ChannelFeed({
       }
       const { id } = await res.json()
       if (file && id) {
-        const form = new FormData()
-        form.append('file', file)
-        form.append('spaceSlug', spaceSlug)
-        form.append('postId', id)
-        const up = await fetch('/api/community/resources/attach', { method: 'POST', body: form })
-        if (up.ok) toast('File saved to Resources')
-        else toast('Posted, but the file failed to attach')
+        // Bytes go browser → storage via a signed URL; only the path is posted.
+        const stored = await uploadDirectToStorage(file, 'space-attachment', { spaceSlug })
+        if ('error' in stored) {
+          toast(`Posted, but the file failed to attach — ${stored.error}`)
+        } else {
+          const up = await postUpload(
+            '/api/community/resources/attach',
+            JSON.stringify({
+              spaceSlug,
+              postId: id,
+              storagePath: stored.storagePath,
+              fileName: stored.fileName,
+              fileType: stored.fileType,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          )
+          toast('error' in up ? `Posted, but the file failed to attach — ${up.error}` : 'File saved to Resources')
+        }
       }
       setTitle('')
       setBodyJson(null)

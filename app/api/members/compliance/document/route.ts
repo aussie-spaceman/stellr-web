@@ -3,9 +3,9 @@ import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { claimUpload } from '@/lib/uploads'
 
 const BUCKET = 'teacher-licenses'
-const MAX_BYTES = 10 * 1024 * 1024 // 10 MB
 const ALLOWED = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/heic', 'application/pdf']
 
 /** Confirm the file's leading bytes match a permitted type, so a mislabelled or
@@ -25,9 +25,10 @@ function magicMatches(b: Uint8Array): boolean {
   return false
 }
 
-// POST — upload a photo/scan of the teacher's license (private bucket). Attaches
-// to the member's existing license row; the image is sensitive and only ever
-// served via short-lived signed URLs.
+// POST — record a photo/scan of the teacher's license (private bucket) that the
+// browser uploaded straight to storage via /api/uploads/sign. Attaches to the
+// member's existing license row; the image is sensitive and only ever served
+// via short-lived signed URLs.
 export async function POST(req: NextRequest) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
@@ -47,33 +48,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Add your license details first, then attach a photo.' }, { status: 400 })
   }
 
-  const form = await req.formData()
-  const file = form.get('file') as File | null
-  if (!file) return NextResponse.json({ error: 'Choose a file to upload.' }, { status: 400 })
-  if (file.size > MAX_BYTES) return NextResponse.json({ error: 'File is larger than 10 MB.' }, { status: 400 })
-  // Require a permitted Content-Type (a blank type previously bypassed this check
-  // entirely and was stored as application/octet-stream).
-  if (!file.type || !ALLOWED.includes(file.type)) {
+  // The bytes went browser → storage via /api/uploads/sign; only the path lands
+  // here. This document is sensitive, so the checks that used to run on the
+  // request body now run on the STORED object — which is the only version that
+  // matters, and the only one the browser can't misrepresent.
+  const b = await req.json().catch(() => ({}))
+  const storagePath = typeof b.storagePath === 'string' ? b.storagePath : ''
+  const fileType = typeof b.fileType === 'string' ? b.fileType : ''
+  if (!storagePath) return NextResponse.json({ error: 'Choose a file to upload.' }, { status: 400 })
+  if (!fileType || !ALLOWED.includes(fileType)) {
     return NextResponse.json({ error: 'Upload an image (PNG/JPG/WebP/HEIC) or PDF.' }, { status: 400 })
   }
+  // Signed under this member's own prefix; refuse anything else outright.
+  if (!storagePath.startsWith(`${member.id}/`)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const storagePath = `${member.id}/${Date.now()}-${safeName}`
-  const payload = new Uint8Array(await file.arrayBuffer())
   // Defence in depth: the declared type can be spoofed, so confirm the actual
-  // leading bytes match a permitted format before writing to the bucket.
-  if (payload.length === 0 || !magicMatches(payload)) {
-    return NextResponse.json({ error: 'That file doesn’t look like a valid image or PDF.' }, { status: 400 })
-  }
-
-  const { error: uploadError } = await db.storage.from(BUCKET).upload(storagePath, payload, {
-    contentType: file.type || 'application/octet-stream',
-    upsert: true,
+  // leading bytes match a permitted format. A failed check deletes the object.
+  const claimed = await claimUpload({
+    purpose: 'compliance-document',
+    storagePath,
+    verify: magicMatches,
+    verifyError: 'That file doesn’t look like a valid image or PDF.',
   })
-  if (uploadError) {
-    console.error('[compliance/document] upload error:', uploadError)
-    return NextResponse.json({ error: 'Upload failed. Please try again.' }, { status: 500 })
-  }
+  if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
 
   // Remove any previous image so we don't orphan objects in the bucket.
   if (license.document_path && license.document_path !== storagePath) {

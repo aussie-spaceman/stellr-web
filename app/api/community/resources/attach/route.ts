@@ -1,29 +1,21 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMember, RESOURCES_BUCKET } from '@/lib/community'
+import { getCurrentMember } from '@/lib/community'
 import { getSpaceForMember } from '@/lib/spaces'
 import { supabaseServer } from '@/lib/supabase'
+import { fileLabel } from '@/lib/space-resources'
 import { attachSpaceResource } from '@/lib/container-sync'
-import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { claimUpload, discardUpload } from '@/lib/uploads'
+import { watermarkIfPdf } from '@/lib/resource-finalise'
 
-const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
+// Claiming a stored upload re-reads and may rewrite it (watermark).
+export const maxDuration = 60
 
-// Short, colour-coded file-type label for the Resources list / attachment chip.
-function fileLabel(name: string, mime: string): string {
-  const ext = (name.split('.').pop() ?? '').toLowerCase()
-  if (mime.startsWith('image/')) return 'IMG'
-  if (ext === 'pdf' || mime === 'application/pdf') return 'PDF'
-  if (['xls', 'xlsx', 'csv'].includes(ext)) return 'XLS'
-  if (['doc', 'docx'].includes(ext)) return 'DOC'
-  if (['ppt', 'pptx'].includes(ext)) return 'PPT'
-  if (['dwg', 'dxf', 'step', 'stp', 'stl', 'f3d'].includes(ext)) return 'CAD'
-  if (['zip', 'rar', '7z'].includes(ext)) return 'ZIP'
-  return (ext || 'file').toUpperCase().slice(0, 4)
-}
 
-// POST /api/community/resources/attach (multipart) — a file attached to a channel
-// post auto-saves into the space's Resources (from_chat), inheriting space access.
-// Body: { spaceSlug, postId, file }.
+// POST /api/community/resources/attach (JSON) — a file attached to a channel post
+// auto-saves into the space's Resources (from_chat), inheriting space access.
+// Body: { spaceSlug, postId, storagePath, fileName, fileType } — the bytes were
+// already sent straight to storage via /api/uploads/sign.
 export async function POST(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
@@ -33,13 +25,17 @@ export async function POST(req: Request) {
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-  const form = await req.formData().catch(() => null)
-  const file = form?.get('file')
-  const spaceSlug = String(form?.get('spaceSlug') ?? '')
-  const postId = String(form?.get('postId') ?? '')
-  if (!(file instanceof File)) return NextResponse.json({ error: 'file required' }, { status: 400 })
+  // The bytes went browser → storage via /api/uploads/sign; only the path lands
+  // here. Vercel caps a request body at 4.5MB before the function runs, so the
+  // 25MB this route used to advertise was never actually reachable.
+  const b = await req.json().catch(() => ({}))
+  const storagePath = typeof b.storagePath === 'string' ? b.storagePath : ''
+  const fileName = typeof b.fileName === 'string' ? b.fileName : ''
+  const fileType = typeof b.fileType === 'string' ? b.fileType : ''
+  const spaceSlug = String(b.spaceSlug ?? '')
+  const postId = String(b.postId ?? '')
+  if (!storagePath || !fileName) return NextResponse.json({ error: 'storagePath and fileName required' }, { status: 400 })
   if (!spaceSlug || !postId) return NextResponse.json({ error: 'spaceSlug and postId required' }, { status: 400 })
-  if (file.size > MAX_BYTES) return NextResponse.json({ error: 'File too large (max 25MB)' }, { status: 413 })
 
   const space = await getSpaceForMember(member, spaceSlug)
   if (!space || !space.access.canAccess) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -59,35 +55,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Post not found in this space' }, { status: 404 })
   }
 
-  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const rand = Buffer.from(`${member.id}:${file.name}:${file.size}`).toString('base64url').slice(0, 12)
-  const path = `community-resources/${space.id}/${rand}-${safe}`
+  const claimed = await claimUpload({ purpose: 'space-attachment', storagePath })
+  if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
 
-  let bytes = new Uint8Array(await file.arrayBuffer())
   // Copyright watermark on the bottom-right of every page of uploaded PDFs.
-  if (isPdf(file.name, file.type)) {
-    try {
-      bytes = new Uint8Array(await stampPdfBytes(bytes))
-    } catch (err) {
-      console.error('[community] resource watermark failed, storing original:', err)
-    }
-  }
-  const { error: upErr } = await db.storage.from(RESOURCES_BUCKET).upload(path, bytes, {
-    contentType: file.type || 'application/octet-stream',
-    upsert: true,
-  })
-  if (upErr) {
-    console.error('[community] resource attach upload error:', upErr)
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
-  }
+  const bytes = await watermarkIfPdf(claimed.bucket, storagePath, claimed.bytes, fileType)
 
   const { data, error } = await db
     .from('community_resources')
     .insert({
       space_id: space.id,
-      title: file.name,
-      storage_path: path,
-      file_type: fileLabel(file.name, file.type || ''),
+      title: fileName,
+      storage_path: storagePath,
+      file_type: fileLabel(fileName, fileType),
       file_size_bytes: bytes.byteLength,
       uploaded_by: member.id,
       from_chat: true,
@@ -96,6 +76,7 @@ export async function POST(req: Request) {
     .select('id')
     .single()
   if (error) {
+    await discardUpload(claimed.bucket, storagePath)
     console.error('[community] resource attach insert error:', error)
     return NextResponse.json({ error: 'Failed to save resource' }, { status: 500 })
   }

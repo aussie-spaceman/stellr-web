@@ -134,45 +134,6 @@ export async function attachBinary(
 }
 
 /** Create a file binary (storage + row), returning its id. */
-export async function createFileBinary(opts: {
-  file: File
-  buffer: Buffer
-  title: string
-  contentHash: string
-  uploadedBy: string
-}): Promise<{ binaryId: string } | { error: string }> {
-  const db = supabaseServer()
-  const safeName = opts.file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const storagePath = `resources/${Date.now()}-${safeName}`
-
-  const { error: uploadError } = await db.storage.from(RESOURCES_BUCKET).upload(storagePath, opts.buffer, {
-    contentType: opts.file.type || 'application/octet-stream',
-    upsert: false,
-  })
-  if (uploadError) {
-    console.error('[resource-upload] storage error:', uploadError)
-    return { error: 'Upload failed' }
-  }
-
-  const { data, error } = await db
-    .from('community_resources')
-    .insert({
-      title: opts.title,
-      storage_path: storagePath,
-      file_type: opts.file.type || null,
-      file_size_bytes: opts.file.size,
-      content_hash: opts.contentHash,
-      uploaded_by: opts.uploadedBy,
-    })
-    .select('id')
-    .single()
-  if (error || !data) {
-    console.error('[resource-upload] insert error:', error)
-    return { error: 'Could not save resource' }
-  }
-  return { binaryId: data.id as string }
-}
-
 /** Create a link binary (no storage), returning its id. */
 export async function createLinkBinary(opts: {
   url: string

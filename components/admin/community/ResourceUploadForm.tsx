@@ -51,7 +51,7 @@ export function ResourceUploadForm() {
         // Send the bytes straight to storage: the platform caps a request body
         // reaching a function at 4.5MB, so anything larger can never arrive
         // through this API. Only the resulting path is posted below.
-        const stored = await uploadDirectToStorage(file as File)
+        const stored = await uploadDirectToStorage(file as File, 'admin-resource')
         if ('error' in stored) {
           setError(stored.error)
           return

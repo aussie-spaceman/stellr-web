@@ -448,7 +448,7 @@ function ResourcesTab({
       // Send the bytes straight to storage — a request body reaching a function
       // is capped at 4.5MB by the platform, so a larger file could never arrive
       // through this API at all. Only the resulting path is posted below.
-      const stored = await uploadDirectToStorage(file, { spaceId })
+      const stored = await uploadDirectToStorage(file, 'space-resource', { spaceId })
       if ('error' in stored) return toast(stored.error)
 
       const result = await postUpload(

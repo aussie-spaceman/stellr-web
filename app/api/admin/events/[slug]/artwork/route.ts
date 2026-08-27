@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { claimUpload } from '@/lib/uploads'
 import { requireEventAccess } from '@/lib/event-access'
-import { RESOURCES_BUCKET } from '@/lib/community'
 
 // POST /api/admin/events/[slug]/artwork — upload badge or certificate background.
 // FormData: { kind: 'badge' | 'certificate', file: png/jpeg }
@@ -11,30 +11,35 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const access = await requireEventAccess(slug)
   if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
 
-  const formData = await req.formData()
-  const kind = formData.get('kind')
-  const file = formData.get('file') as File | null
-  if ((kind !== 'badge' && kind !== 'certificate') || !file) {
-    return NextResponse.json({ error: 'kind (badge|certificate) and file are required' }, { status: 400 })
+  // The bytes went browser → storage via /api/uploads/sign; only the path lands
+  // here. The 10MB this route advertised was never reachable — the platform
+  // rejected any body over 4.5MB before the function ran.
+  const b = await req.json().catch(() => ({}))
+  const kind = b.kind
+  const storagePath = typeof b.storagePath === 'string' ? b.storagePath : ''
+  const fileType = typeof b.fileType === 'string' ? b.fileType : ''
+  if ((kind !== 'badge' && kind !== 'certificate') || !storagePath) {
+    return NextResponse.json({ error: 'kind (badge|certificate) and storagePath are required' }, { status: 400 })
   }
-  if (!['image/png', 'image/jpeg'].includes(file.type)) {
+  if (!['image/png', 'image/jpeg'].includes(fileType)) {
     return NextResponse.json({ error: 'Artwork must be a PNG or JPEG image' }, { status: 400 })
   }
-  if (file.size > 10 * 1024 * 1024) {
-    return NextResponse.json({ error: 'Artwork must be under 10MB' }, { status: 400 })
+  if (!storagePath.startsWith(`event-artwork/${slug}/${kind}-`)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const db = supabaseServer()
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const storagePath = `event-artwork/${slug}/${kind}-${Date.now()}-${safeName}`
-
-  const { error: uploadError } = await db.storage
-    .from(RESOURCES_BUCKET)
-    .upload(storagePath, file, { contentType: file.type, upsert: false })
-  if (uploadError) {
-    console.error('[event artwork] upload error:', uploadError)
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
-  }
+  const claimed = await claimUpload({
+    purpose: 'event-artwork',
+    storagePath,
+    // A signed URL accepts any bytes, so confirm the stored object really is
+    // one of the two image formats the certificate/badge renderer can use.
+    verify: (bytes) =>
+      (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) ||
+      (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff),
+    verifyError: 'That file doesn’t look like a PNG or JPEG image.',
+  })
+  if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
 
   const column = kind === 'badge' ? 'badge_artwork_path' : 'certificate_artwork_path'
   const { error: dbError } = await db

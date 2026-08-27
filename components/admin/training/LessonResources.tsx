@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { uploadDirectToStorage } from '@/lib/upload-client'
 import { Plus, Trash2, FileText, Link2, Upload, X, Search } from 'lucide-react'
 
 // Per-lesson attached resources (files / links) shown beneath the lesson's
@@ -72,12 +73,19 @@ export function LessonResources({ itemId }: { itemId: string }) {
       let res: Response
       if (mode === 'file') {
         if (!file) { setBusy(false); return }
-        const fd = new FormData()
-        fd.set('itemId', itemId)
-        fd.set('kind', 'file')
-        fd.set('title', title.trim())
-        fd.set('file', file)
-        res = await fetch('/api/admin/community/training/resources', { method: 'POST', body: fd })
+        // Bytes go browser → storage via a signed URL; only the path is posted.
+        const stored = await uploadDirectToStorage(file, 'training-item-resource')
+        if ('error' in stored) { setBusy(false); return }
+        res = await fetch('/api/admin/community/training/resources', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            itemId,
+            kind: 'file',
+            title: title.trim(),
+            storagePath: stored.storagePath,
+            fileType: stored.fileType,
+          }),
+        })
       } else {
         if (!url.trim()) { setBusy(false); return }
         res = await fetch('/api/admin/community/training/resources', {

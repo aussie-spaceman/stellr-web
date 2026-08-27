@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { MAX_UPLOAD_BYTES, MAX_DIRECT_UPLOAD_BYTES, readUploadBlob, postUpload, uploadDirectToStorage } from './upload-client'
+import { MAX_DIRECT_UPLOAD_BYTES, readUploadBlob, postUpload, uploadDirectToStorage } from './upload-client'
 
 const uploadToSignedUrl = vi.fn()
 vi.mock('@/lib/supabase-browser', () => ({
@@ -21,7 +21,7 @@ function unreadableFile(name = 'doc.pdf'): File {
 
 describe('readUploadBlob', () => {
   it('returns the bytes for a readable file', async () => {
-    const result = await readUploadBlob(fileOf(1024))
+    const result = await readUploadBlob(fileOf(1024), MAX_DIRECT_UPLOAD_BYTES)
     expect('error' in result).toBe(false)
     if ('error' in result) return
     expect(result.blob.size).toBe(1024)
@@ -29,18 +29,18 @@ describe('readUploadBlob', () => {
   })
 
   it('explains an unreadable file instead of failing mid-upload', async () => {
-    const result = await readUploadBlob(unreadableFile('handbook.pdf'))
+    const result = await readUploadBlob(unreadableFile('handbook.pdf'), MAX_DIRECT_UPLOAD_BYTES)
     expect(result).toEqual({ error: expect.stringContaining('Could not read') })
     if ('error' in result) expect(result.error).toContain('handbook.pdf')
   })
 
   it('treats a zero-byte read as unreadable', async () => {
-    const result = await readUploadBlob(fileOf(0))
+    const result = await readUploadBlob(fileOf(0), MAX_DIRECT_UPLOAD_BYTES)
     expect(result).toEqual({ error: expect.stringContaining('Could not read') })
   })
 
-  it('rejects a file over the platform request limit before posting', async () => {
-    const result = await readUploadBlob(fileOf(MAX_UPLOAD_BYTES + 1))
+  it('rejects a file over the ceiling before posting', async () => {
+    const result = await readUploadBlob(fileOf(MAX_DIRECT_UPLOAD_BYTES + 1), MAX_DIRECT_UPLOAD_BYTES)
     expect(result).toEqual({ error: expect.stringContaining('limited to') })
   })
 })
@@ -89,7 +89,7 @@ describe('uploadDirectToStorage', () => {
 
     // Larger than anything that could reach a route handler.
     const big = fileOf(6_851_819, 'handbook.pdf')
-    const result = await uploadDirectToStorage(big)
+    const result = await uploadDirectToStorage(big, 'admin-resource')
 
     expect(result).toEqual({
       storagePath: 'resources/1-doc.pdf',
@@ -99,14 +99,14 @@ describe('uploadDirectToStorage', () => {
     })
     // Only the metadata crossed the function; the bytes went to storage.
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/community/resources/upload-url')
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/uploads/sign')
     expect(uploadToSignedUrl).toHaveBeenCalledWith('resources/1-doc.pdf', 'tok', expect.anything(), expect.anything())
   })
 
   it('still refuses a file over the bucket-side ceiling', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
-    const result = await uploadDirectToStorage(fileOf(MAX_DIRECT_UPLOAD_BYTES + 1))
+    const result = await uploadDirectToStorage(fileOf(MAX_DIRECT_UPLOAD_BYTES + 1), 'admin-resource')
     expect(result).toEqual({ error: expect.stringContaining('limited to') })
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -114,13 +114,13 @@ describe('uploadDirectToStorage', () => {
   it('reports a storage-side rejection', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(ticket()))
     uploadToSignedUrl.mockResolvedValue({ error: { message: 'exceeded the maximum allowed size' } })
-    const result = await uploadDirectToStorage(fileOf(1024))
+    const result = await uploadDirectToStorage(fileOf(1024), 'admin-resource')
     expect(result).toEqual({ error: expect.stringContaining('exceeded the maximum allowed size') })
   })
 
   it('surfaces a refused signed-URL request', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"error":"Forbidden"}', { status: 403 })))
-    const result = await uploadDirectToStorage(fileOf(1024))
+    const result = await uploadDirectToStorage(fileOf(1024), 'admin-resource')
     expect(result).toEqual({ error: 'Forbidden' })
     expect(uploadToSignedUrl).not.toHaveBeenCalled()
   })

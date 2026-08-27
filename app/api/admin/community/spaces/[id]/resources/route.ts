@@ -1,12 +1,10 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { RESOURCES_BUCKET } from '@/lib/community'
+import { fileLabel } from '@/lib/space-resources'
 import { attachSpaceResource } from '@/lib/container-sync'
 import { createLinkBinary, normaliseUrl } from '@/lib/resource-upload'
-import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
 import { attachAllowed } from '@/lib/access-objects'
-import { MAX_UPLOAD_BYTES } from '@/lib/upload-client'
 import { finaliseStoredUpload } from '@/lib/resource-finalise'
 
 // The watermark pass re-reads and rewrites the stored object, so give it more
@@ -14,27 +12,12 @@ import { finaliseStoredUpload } from '@/lib/resource-finalise'
 export const maxDuration = 60
 
 // POST /api/admin/community/spaces/[id]/resources — admin adds a resource into a
-// space's Resources (Assign resource modal, screen 20). A file arrives as
-// multipart/form-data; a link arrives as application/json { url, title? }.
+// space's Resources (Assign resource modal, screen 20). JSON only: either a link
+// ({ url, title? }) or an already-uploaded file ({ storagePath, fileName,
+// fileType }) whose bytes went straight to storage via /api/uploads/sign.
 
 function isAdmin(sessionClaims: unknown) {
   return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
-}
-// Vercel rejects a request body over 4.5MB at the edge, so a larger cap here
-// could never be reached — the browser would just see a failed request. Keep it
-// in step with MAX_UPLOAD_BYTES, which the upload forms enforce client-side.
-const MAX_BYTES = MAX_UPLOAD_BYTES
-
-function fileLabel(name: string, mime: string): string {
-  const ext = (name.split('.').pop() ?? '').toLowerCase()
-  if (mime.startsWith('image/')) return 'IMG'
-  if (ext === 'pdf' || mime === 'application/pdf') return 'PDF'
-  if (['xls', 'xlsx', 'csv'].includes(ext)) return 'XLS'
-  if (['doc', 'docx'].includes(ext)) return 'DOC'
-  if (['ppt', 'pptx'].includes(ext)) return 'PPT'
-  if (['dwg', 'dxf', 'step', 'stp', 'stl', 'f3d'].includes(ext)) return 'CAD'
-  if (['zip', 'rar', '7z'].includes(ext)) return 'ZIP'
-  return (ext || 'file').toUpperCase().slice(0, 4)
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -67,6 +50,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (typeof b.storagePath === 'string' && b.storagePath) {
       const fileName = (typeof b.fileName === 'string' ? b.fileName : '').trim()
       const done = await finaliseStoredUpload({
+        purpose: 'space-resource',
         storagePath: b.storagePath,
         title: (typeof b.title === 'string' ? b.title : '').trim() || fileName,
         spaceId,
@@ -95,59 +79,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ id: created.binaryId })
   }
 
-  const form = await req.formData().catch(() => null)
-  const file = form?.get('file')
-  if (!(file instanceof File)) return NextResponse.json({ error: 'file required' }, { status: 400 })
-  if (file.size > MAX_BYTES) {
-    return NextResponse.json({ error: 'File too large (max 4MB) — add it as a link instead.' }, { status: 413 })
-  }
-
-  const db = supabaseServer()
-  let adminMemberId: string | null = null
-  if (userId) {
-    const { data } = await db.from('members').select('id').eq('clerk_user_id', userId).maybeSingle()
-    adminMemberId = (data as { id: string } | null)?.id ?? null
-  }
-
-  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const rand = Buffer.from(`${spaceId}:${file.name}:${file.size}`).toString('base64url').slice(0, 12)
-  const path = `community-resources/${spaceId}/${rand}-${safe}`
-
-  let bytes = new Uint8Array(await file.arrayBuffer())
-  // Copyright watermark on the bottom-right of every page of uploaded PDFs.
-  if (isPdf(file.name, file.type)) {
-    try {
-      bytes = new Uint8Array(await stampPdfBytes(bytes))
-    } catch (err) {
-      console.error('[admin] resource watermark failed, storing original:', err)
-    }
-  }
-  const { error: upErr } = await db.storage.from(RESOURCES_BUCKET).upload(path, bytes, {
-    contentType: file.type || 'application/octet-stream',
-    upsert: true,
-  })
-  if (upErr) {
-    console.error('[admin] resource upload error:', upErr)
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
-  }
-
-  const { data, error } = await db
-    .from('community_resources')
-    .insert({
-      space_id: spaceId,
-      title: String(form?.get('title') ?? '').trim() || file.name,
-      storage_path: path,
-      file_type: fileLabel(file.name, file.type || ''),
-      file_size_bytes: bytes.byteLength,
-      uploaded_by: adminMemberId,
-      from_chat: false,
-    })
-    .select('id')
-    .single()
-  if (error) {
-    console.error('[admin] resource insert error:', error)
-    return NextResponse.json({ error: 'Failed to save resource' }, { status: 500 })
-  }
-  await attachSpaceResource(db, spaceId, data.id)
-  return NextResponse.json({ id: data.id })
+  return NextResponse.json(
+    { error: 'Send storagePath from a signed upload instead of a file body.' },
+    { status: 415 },
+  )
 }

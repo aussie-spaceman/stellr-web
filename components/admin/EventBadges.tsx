@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { useRouter } from 'next/navigation'
 
 // Badge & certificate generator panel (PRD 6.7).
@@ -25,17 +26,26 @@ export default function EventBadges({
   async function upload(kind: 'badge' | 'certificate', file: File) {
     setUploading(kind)
     setError(null)
-    const formData = new FormData()
-    formData.set('kind', kind)
-    formData.set('file', file)
-    const res = await fetch(`/api/admin/events/${eventSlug}/artwork`, { method: 'POST', body: formData })
-    setUploading(null)
-    if (!res.ok) {
-      const body = await res.json().catch(() => null)
-      setError(body?.error ?? 'Upload failed')
-      return
+    try {
+      // Bytes go browser → storage via a signed URL; only the path is posted.
+      const stored = await uploadDirectToStorage(file, 'event-artwork', { slug: eventSlug, kind })
+      if ('error' in stored) {
+        setError(stored.error)
+        return
+      }
+      const result = await postUpload(
+        `/api/admin/events/${eventSlug}/artwork`,
+        JSON.stringify({ kind, storagePath: stored.storagePath, fileType: stored.fileType }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
+      if ('error' in result) {
+        setError(result.error)
+        return
+      }
+      router.refresh()
+    } finally {
+      setUploading(null)
     }
-    router.refresh()
   }
 
   function UploadInput({ kind, has }: { kind: 'badge' | 'certificate'; has: boolean }) {

@@ -4,7 +4,6 @@ import { getCurrentMember } from '@/lib/community'
 import { searchAttachableResources } from '@/lib/mentoring'
 import {
   attachBinary,
-  createFileBinary,
   createLinkBinary,
   findAccessibleDuplicate,
   memberManagesContainer,
@@ -12,6 +11,11 @@ import {
   sha256Hex,
 } from '@/lib/resource-upload'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { claimUpload, discardUpload } from '@/lib/uploads'
+import { finaliseStoredUpload, watermarkIfPdf } from '@/lib/resource-finalise'
+
+// Claiming a stored upload re-reads and may rewrite it (watermark).
+export const maxDuration = 60
 
 // Resources Catalogue — contribution endpoint (handover §4.5). A manager of a
 // container adds a file or link; on a dedup match the member can already reach we
@@ -40,47 +44,64 @@ export async function POST(req: Request) {
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-  const contentType = req.headers.get('content-type') ?? ''
-
-  // ── File upload (multipart) ────────────────────────────────────────────────
-  if (contentType.includes('multipart/form-data')) {
-    const form = await req.formData()
-    const containerId = (form.get('containerId') as string | null) ?? ''
-    const file = form.get('file') as File | null
-    const displayName = ((form.get('displayName') as string | null) ?? '').trim()
-
-    if (!containerId || !file) return NextResponse.json({ error: 'containerId and file required' }, { status: 400 })
-    if (!(await memberManagesContainer(member, containerId))) {
-      return NextResponse.json({ error: 'You do not manage this object.' }, { status: 403 })
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer())
-    const contentHash = sha256Hex(buffer)
-
-    const dup = await findAccessibleDuplicate(member, { contentHash })
-    if (dup) return NextResponse.json({ duplicate: dup })
-
-    const created = await createFileBinary({
-      file,
-      buffer,
-      title: displayName || file.name,
-      contentHash,
-      uploadedBy: member.id,
-    })
-    if ('error' in created) return NextResponse.json({ error: created.error }, { status: 500 })
-    await attachBinary(containerId, created.binaryId, null)
-    return NextResponse.json({ ok: true, binaryId: created.binaryId })
-  }
-
-  // ── Link / attach-existing / detach (JSON) ─────────────────────────────────
-  const b = (await req.json().catch(() => ({}))) as {
+  // ── File upload (already in storage) ──────────────────────────────────────
+  // The bytes went browser → storage via /api/uploads/sign; only the path
+  // arrives here. Dedup hashes the STORED object, not what the browser claimed.
+  const body = (await req.json().catch(() => ({}))) as {
     containerId?: string
     action?: string
     url?: string
     binaryId?: string
     displayName?: string
     minMembership?: number | null
+    storagePath?: string
+    fileName?: string
+    fileType?: string
   }
+
+  if (body.storagePath) {
+    const containerId = body.containerId ?? ''
+    if (!containerId) return NextResponse.json({ error: 'containerId required' }, { status: 400 })
+    if (!(await memberManagesContainer(member, containerId))) {
+      return NextResponse.json({ error: 'You do not manage this object.' }, { status: 403 })
+    }
+
+    const claimed = await claimUpload({ purpose: 'container-contribution', storagePath: body.storagePath })
+    if ('error' in claimed) {
+      return NextResponse.json({ error: claimed.error }, { status: claimed.status })
+    }
+
+    const contentHash = sha256Hex(Buffer.from(claimed.bytes))
+    const dup = await findAccessibleDuplicate(member, { contentHash })
+    if (dup) {
+      // Nothing is recorded, so the object would be orphaned — drop it.
+      await discardUpload(claimed.bucket, body.storagePath)
+      return NextResponse.json({ duplicate: dup })
+    }
+
+    const displayName = (body.displayName ?? '').trim()
+    const fileType = body.fileType || null
+    // Watermarking moved here with the upload; the old multipart path stored
+    // member-contributed PDFs unstamped.
+    await watermarkIfPdf(claimed.bucket, body.storagePath, claimed.bytes, fileType)
+
+    const created = await finaliseStoredUpload({
+      purpose: 'container-contribution',
+      storagePath: body.storagePath,
+      title: displayName || body.fileName || 'Untitled',
+      fileType,
+      uploadedBy: member.id,
+      contentHash,
+    })
+    if ('error' in created) {
+      return NextResponse.json({ error: created.error }, { status: created.status })
+    }
+    await attachBinary(containerId, created.id, null)
+    return NextResponse.json({ ok: true, binaryId: created.id })
+  }
+
+  // ── Link / attach-existing / detach (JSON) ─────────────────────────────────
+  const b = body
   const containerId = b.containerId ?? ''
   if (!containerId || !(await memberManagesContainer(member, containerId))) {
     return NextResponse.json({ error: 'You do not manage this object.' }, { status: 403 })

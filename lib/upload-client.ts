@@ -1,30 +1,23 @@
-// Browser-side helpers shared by every "pick a file and POST it" form.
+// Browser-side half of every file upload in the app.
 //
-// Two failure modes used to surface as an opaque "Network error" (or, where a
-// form forgot its catch, as nothing at all — a modal stuck on "Uploading…"):
+// Bytes never pass through a route handler: Vercel rejects a request body over
+// 4.5MB before the function runs, and no configuration changes that. Instead the
+// browser asks /api/uploads/sign for a short-lived Supabase signed upload URL,
+// PUTs the file straight to storage, and posts back only the path — the owning
+// route then claims and verifies the stored object. Per-purpose limits and
+// authorisation live in lib/uploads.ts, which is the single source of truth.
 //
-//  1. The picked File is only a handle to bytes on disk. Files on a virtual or
-//     cloud-synced mount (Google Drive File Stream, iCloud "Optimise Mac
-//     Storage", a network share) are frequently placeholders, so the read fails
-//     at the moment fetch() streams the request body. The fetch rejects and the
-//     request never reaches the server at all — nothing to see in any log.
-//     readUploadBlob() pulls the bytes into memory FIRST, which both waits for
-//     a lazy download to finish and turns an unreadable file into a message.
-//
-//  2. The body is over the platform's request limit, so it is rejected at the
-//     edge before the function runs. Guard it here rather than let the browser
-//     report a bare transport failure.
+// The one thing that still happens here is reading the file off disk FIRST. A
+// picked File is only a handle to bytes; files on a cloud-synced mount (Google
+// Drive File Stream, iCloud "Optimise Mac Storage") are often placeholders, and
+// streaming straight from the handle fails mid-upload with nothing to show for
+// it. Reading waits out a lazy download and names a file that genuinely can't
+// be read.
 
-// Vercel rejects a request body larger than 4.5 MB before the function runs.
-// Cap the file itself a little under that so the multipart envelope and the
-// other form fields still fit. This is the ceiling for any upload whose bytes
-// pass THROUGH a route handler, and it cannot be raised by configuration.
-export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024
-
-// Uploads that go straight to Supabase Storage never touch a function, so the
-// only ceiling is the bucket's own (50 MB on community-resources). Keep some
-// headroom under it for the watermark pass, which rewrites the object.
-export const MAX_DIRECT_UPLOAD_BYTES = 25 * 1024 * 1024
+// Client-side backstop only. The real, per-purpose limit is enforced server-side
+// in lib/uploads.ts; this just avoids reading a hopeless file into memory before
+// asking. Keep it at or above the largest purpose there (training video).
+export const MAX_DIRECT_UPLOAD_BYTES = 200 * 1024 * 1024
 
 type UploadFailure = { error: string }
 
@@ -38,7 +31,7 @@ function mb(bytes: number): string {
  */
 export async function readUploadBlob(
   file: File,
-  maxBytes: number = MAX_UPLOAD_BYTES,
+  maxBytes: number,
 ): Promise<{ blob: Blob } | UploadFailure> {
   if (file.size > maxBytes) {
     return {
@@ -90,7 +83,7 @@ export async function postUpload(
 
   if (!res.ok) {
     if (typeof data.error === 'string') return { error: data.error }
-    if (res.status === 413) return { error: `That file is too large to upload (max ${mb(MAX_UPLOAD_BYTES)}).` }
+    if (res.status === 413) return { error: 'That file is too large to upload.' }
     return { error: `Upload failed (HTTP ${res.status}). Please try again.` }
   }
   return { data }
@@ -104,28 +97,27 @@ export type StoredUpload = {
 }
 
 /**
- * Send a file straight to Supabase Storage, bypassing the function entirely.
+ * Send a file straight to Supabase Storage for a given purpose.
  *
- * Our API issues a short-lived signed upload URL — only that metadata crosses a
- * route handler — and the bytes go browser → storage, so the platform's 4.5 MB
- * request-body limit never applies. The caller then posts the returned path to
- * the resource endpoint, which watermarks the object and records the row.
+ * The purpose decides the bucket, the size limit and who may upload — all of it
+ * server-side in lib/uploads.ts. On success the caller posts the returned
+ * storagePath to whichever route owns the resulting record.
  */
 export async function uploadDirectToStorage(
   file: File,
-  opts: { spaceId?: string } = {},
+  purpose: string,
+  context: Record<string, string | undefined> = {},
 ): Promise<StoredUpload | UploadFailure> {
+  const contentType = file.type || 'application/octet-stream'
+
+  // Read before signing: no point burning a signed URL on a file we can't read,
+  // and the size the server signs against should be the size we actually hold.
   const read = await readUploadBlob(file, MAX_DIRECT_UPLOAD_BYTES)
   if ('error' in read) return read
 
   const ticket = await postUpload(
-    '/api/admin/community/resources/upload-url',
-    JSON.stringify({
-      fileName: file.name,
-      fileSize: read.blob.size,
-      contentType: file.type || 'application/octet-stream',
-      spaceId: opts.spaceId,
-    }),
+    '/api/uploads/sign',
+    JSON.stringify({ purpose, context, fileName: file.name, fileSize: read.blob.size, contentType }),
     { headers: { 'Content-Type': 'application/json' } },
   )
   if ('error' in ticket) return ticket
@@ -143,19 +135,11 @@ export async function uploadDirectToStorage(
   try {
     const { error } = await createStorageUploadClient()
       .storage.from(bucket)
-      .uploadToSignedUrl(path, token, read.blob, {
-        contentType: file.type || 'application/octet-stream',
-        upsert: true,
-      })
+      .uploadToSignedUrl(path, token, read.blob, { contentType, upsert: true })
     if (error) return { error: `Storage rejected the file: ${error.message}` }
   } catch {
     return { error: 'The file did not reach storage. Check your connection and try again.' }
   }
 
-  return {
-    storagePath: path,
-    fileName: file.name,
-    fileType: file.type || 'application/octet-stream',
-    fileSize: read.blob.size,
-  }
+  return { storagePath: path, fileName: file.name, fileType: contentType, fileSize: read.blob.size }
 }

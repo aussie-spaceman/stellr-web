@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import {
   Plus, Trash2, GripVertical, Pencil, Check, X, ChevronDown, ChevronRight,
@@ -219,11 +220,15 @@ function CertTemplate({ moduleId, hasTemplate, onDone }: { moduleId: string; has
   const upload = async (file: File) => {
     setBusy(true)
     try {
-      const fd = new FormData()
-      fd.set('moduleId', moduleId)
-      fd.set('file', file)
-      const res = await fetch('/api/admin/community/training/cert-template', { method: 'POST', body: fd })
-      if (res.ok) onDone()
+      // Bytes go browser → storage via a signed URL; only the path is posted.
+      const stored = await uploadDirectToStorage(file, 'training-cert-template', { moduleId })
+      if ('error' in stored) return
+      const result = await postUpload(
+        '/api/admin/community/training/cert-template',
+        JSON.stringify({ moduleId, storagePath: stored.storagePath }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
+      if (!('error' in result)) onDone()
     } finally {
       setBusy(false)
     }
@@ -493,15 +498,22 @@ function LessonEditor({
         // Edit incl. content change. Multipart when a file is involved.
         let res: Response
         if (active.input === 'file' && file) {
-          const fd = new FormData()
-          fd.set('id', existing.id)
-          fd.set('title', title.trim())
-          fd.set('status', status)
-          fd.set('contentKind', contentKind)
-          if (minutes) fd.set('estimatedMinutes', minutes)
-          fd.set('body', body)
-          fd.set('file', file)
-          res = await fetch('/api/admin/community/training/items', { method: 'PATCH', body: fd })
+          // Lesson media (document or VIDEO) goes browser → storage via a signed
+          // URL; only its path is posted. A request body over 4.5MB never
+          // reaches the function, so this is what makes video uploads work.
+          const stored = await uploadDirectToStorage(file, 'training-item')
+          if ('error' in stored) {
+            setError(stored.error)
+            return
+          }
+          res = await fetch('/api/admin/community/training/items', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: existing.id, title: title.trim(), body, status, contentKind,
+              estimatedMinutes: minutes ? Number(minutes) : undefined,
+              storagePath: stored.storagePath, fileType: stored.fileType,
+            }),
+          })
         } else {
           res = await fetch('/api/admin/community/training/items', {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -517,20 +529,33 @@ function LessonEditor({
         return
       }
 
-      // New lesson.
-      const fd = new FormData()
-      fd.set('moduleId', moduleId)
-      if (target.sectionId) fd.set('sectionId', target.sectionId)
-      fd.set('title', title.trim())
-      fd.set('contentKind', contentKind)
-      fd.set('status', status)
-      fd.set('displayOrder', String(lessonCount))
-      if (minutes) fd.set('estimatedMinutes', minutes)
-      if (body.trim()) fd.set('body', body)
-      if (active.input === 'url') fd.set('externalUrl', url)
-      if (active.input === 'select') fd.set('interactiveKey', interactiveKey)
-      if (active.input === 'file' && file) fd.set('file', file)
-      const res = await fetch('/api/admin/community/training/items', { method: 'POST', body: fd })
+      // New lesson. Media goes browser → storage first; only its path is posted.
+      let stored: { storagePath: string; fileType: string } | null = null
+      if (active.input === 'file' && file) {
+        const up = await uploadDirectToStorage(file, 'training-item')
+        if ('error' in up) {
+          setError(up.error)
+          return
+        }
+        stored = up
+      }
+      const res = await fetch('/api/admin/community/training/items', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          moduleId,
+          sectionId: target.sectionId || undefined,
+          title: title.trim(),
+          contentKind,
+          status,
+          displayOrder: String(lessonCount),
+          estimatedMinutes: minutes || undefined,
+          body: body.trim() || undefined,
+          externalUrl: active.input === 'url' ? url : undefined,
+          interactiveKey: active.input === 'select' ? interactiveKey : undefined,
+          storagePath: stored?.storagePath,
+          fileType: stored?.fileType,
+        }),
+      })
       if (res.ok) onSaved(); else { const d = await res.json().catch(() => ({})); setError(d.error || 'Could not add lesson.') }
     } finally {
       setBusy(false)

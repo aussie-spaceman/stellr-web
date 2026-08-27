@@ -1,21 +1,24 @@
 import { NextResponse } from 'next/server'
 import { getCurrentMember } from '@/lib/community'
-import { supabaseServer } from '@/lib/supabase'
-import { RESOURCES_BUCKET } from '@/lib/community'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { claimUpload } from '@/lib/uploads'
 
-const MAX_BYTES = 8 * 1024 * 1024 // 8 MB
 const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
-const EXT: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/gif': 'gif',
-  'image/webp': 'webp',
+
+/** Leading bytes of the four image formats we accept. */
+function isAllowedImage(b: Uint8Array): boolean {
+  if (b.length >= 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return true // PNG
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return true // JPEG
+  if (b.length >= 3 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return true // GIF
+  if (b.length >= 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return true // WebP
+  return false
 }
 
-// POST /api/community/media/upload — a member uploads an image to embed in a
-// post/comment. Stored privately under community-media/<memberId>/; served back
-// through the access-gated proxy at /api/community/media/<path>. Returns { src }.
+// POST /api/community/media/upload — record an image a member uploaded to embed
+// in a post/comment. The bytes went straight to storage via /api/uploads/sign,
+// under community-media/<memberId>/; this claims and verifies the stored object
+// and returns the access-gated proxy URL. Returns { src }.
 export async function POST(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
@@ -25,27 +28,28 @@ export async function POST(req: Request) {
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-  const form = await req.formData().catch(() => null)
-  const file = form?.get('file')
-  if (!(file instanceof File)) return NextResponse.json({ error: 'file required' }, { status: 400 })
-  if (!ALLOWED.has(file.type)) return NextResponse.json({ error: 'Unsupported image type' }, { status: 415 })
-  if (file.size > MAX_BYTES) return NextResponse.json({ error: 'Image too large (max 8MB)' }, { status: 413 })
+  // The bytes went browser → storage via /api/uploads/sign; only the path lands
+  // here, and claimUpload re-checks the object that actually arrived.
+  const b = await req.json().catch(() => ({}))
+  const storagePath = typeof b.storagePath === 'string' ? b.storagePath : ''
+  const fileType = typeof b.fileType === 'string' ? b.fileType : ''
+  if (!storagePath) return NextResponse.json({ error: 'storagePath required' }, { status: 400 })
+  if (!ALLOWED.has(fileType)) return NextResponse.json({ error: 'Unsupported image type' }, { status: 415 })
 
-  // Filename: timestamp-ish from size + name hash isn't needed; use a random-ish
-  // suffix derived from the upload to avoid collisions without Math.random here.
-  const rand = Buffer.from(`${member.id}:${file.name}:${file.size}`).toString('base64url').slice(0, 12)
-  const path = `community-media/${member.id}/${rand}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}.${EXT[file.type]}`
-
-  const db = supabaseServer()
-  const bytes = new Uint8Array(await file.arrayBuffer())
-  const { error } = await db.storage.from(RESOURCES_BUCKET).upload(path, bytes, {
-    contentType: file.type,
-    upsert: true,
-  })
-  if (error) {
-    console.error('[community] media upload error:', error)
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
+  // Namespaced per member by the signing step; refuse anything else outright.
+  if (!storagePath.startsWith(`community-media/${member.id}/`)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  return NextResponse.json({ src: `/api/community/media/${path.split('/').map(encodeURIComponent).join('/')}` })
+  const claimed = await claimUpload({
+    purpose: 'community-media',
+    storagePath,
+    // The declared type can be spoofed and the signed URL accepts any bytes, so
+    // confirm the stored object really is one of the image formats we allow.
+    verify: (bytes) => isAllowedImage(bytes),
+    verifyError: 'That file doesn’t look like a PNG, JPEG, GIF or WebP image.',
+  })
+  if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
+
+  return NextResponse.json({ src: `/api/community/media/${storagePath.split('/').map(encodeURIComponent).join('/')}` })
 }

@@ -1,25 +1,20 @@
 import { supabaseServer } from '@/lib/supabase'
-import { RESOURCES_BUCKET } from '@/lib/community'
 import { isPdf, stampPdfBytes } from '@/lib/watermark/pdf'
-import { MAX_DIRECT_UPLOAD_BYTES } from '@/lib/upload-client'
+import { claimUpload, discardUpload, replaceUpload, type UploadPurpose, type UploadDenied } from '@/lib/uploads'
 
-// Second half of a direct-to-storage upload. The browser has already put the
-// bytes in the bucket via a signed URL (which is how a file larger than the
-// platform's 4.5MB request-body limit gets in at all); this takes it from
-// there — watermark the stored object in place, then record the row.
+// Second half of a direct-to-storage upload that becomes a community_resources
+// row. The browser has already put the bytes in the bucket via a signed URL;
+// this claims the stored object, watermarks it in place, and records it.
 //
-// The watermark still happens server-side, so the guarantee is unchanged: an
-// object sits unstamped only between the signed PUT and this call, inside a
-// private bucket, before any row exists to reach it by.
-
-// Only paths this app issues. An admin is trusted, but a typo shouldn't be able
-// to rewrite an unrelated object (a lesson recording, say).
-const ALLOWED_PREFIXES = ['resources/', 'community-resources/']
+// The watermark guarantee is unchanged by the move to direct uploads: it still
+// happens server-side on every page. An object is unstamped only between the
+// signed PUT and this call, inside a private bucket, before any row exists to
+// reach it by.
 
 type Finalised = { id: string }
-type FinaliseError = { error: string; status: number }
 
 export async function finaliseStoredUpload(args: {
+  purpose: UploadPurpose
   storagePath: string
   title: string
   description?: string | null
@@ -28,62 +23,25 @@ export async function finaliseStoredUpload(args: {
   fileType: string | null
   uploadedBy: string | null
   fromChat?: boolean
-}): Promise<Finalised | FinaliseError> {
-  const { storagePath } = args
-  if (!ALLOWED_PREFIXES.some((p) => storagePath.startsWith(p)) || storagePath.includes('..')) {
-    return { error: 'That upload path is not one we issued.', status: 400 }
-  }
+  contentHash?: string | null
+}): Promise<Finalised | UploadDenied> {
+  const claimed = await claimUpload({ purpose: args.purpose, storagePath: args.storagePath })
+  if ('error' in claimed) return claimed
 
-  const db = supabaseServer()
+  const { bucket } = claimed
+  const bytes = await watermarkIfPdf(bucket, args.storagePath, claimed.bytes, args.fileType)
 
-  const { data: stored, error: downloadError } = await db.storage
-    .from(RESOURCES_BUCKET)
-    .download(storagePath)
-  if (downloadError || !stored) {
-    console.error('[community] finalise: stored object missing:', storagePath, downloadError)
-    return { error: 'The uploaded file could not be found. Please try uploading it again.', status: 400 }
-  }
-
-  let bytes = new Uint8Array(await stored.arrayBuffer())
-
-  // Re-check the real size here: the signed URL was issued against a size the
-  // browser claimed, and this is the first point we see the actual object.
-  if (bytes.byteLength === 0 || bytes.byteLength > MAX_DIRECT_UPLOAD_BYTES) {
-    await db.storage.from(RESOURCES_BUCKET).remove([storagePath])
-    return {
-      error: bytes.byteLength === 0 ? 'That file arrived empty — please try again.' : 'File too large.',
-      status: bytes.byteLength === 0 ? 400 : 413,
-    }
-  }
-
-  // Copyright watermark on the bottom-right of every page of uploaded PDFs.
-  const name = storagePath.split('/').pop() ?? ''
-  if (isPdf(name, args.fileType)) {
-    try {
-      const stamped = new Uint8Array(await stampPdfBytes(bytes))
-      const { error: reuploadError } = await db.storage
-        .from(RESOURCES_BUCKET)
-        .upload(storagePath, stamped, { contentType: 'application/pdf', upsert: true })
-      if (reuploadError) {
-        console.error('[community] finalise: watermark re-upload failed:', reuploadError)
-      } else {
-        bytes = stamped
-      }
-    } catch (err) {
-      console.error('[community] finalise: watermark failed, keeping original:', err)
-    }
-  }
-
-  const { data: resource, error: dbError } = await db
+  const { data: resource, error: dbError } = await supabaseServer()
     .from('community_resources')
     .insert({
       space_id: args.spaceId ?? null,
       title: args.title,
       description: args.description ?? null,
-      storage_path: storagePath,
+      storage_path: args.storagePath,
       file_type: args.fileType,
       file_size_bytes: bytes.byteLength,
       uploaded_by: args.uploadedBy,
+      ...(args.contentHash ? { content_hash: args.contentHash } : {}),
       ...(args.fromChat === undefined ? {} : { from_chat: args.fromChat }),
     })
     .select('id')
@@ -91,10 +49,33 @@ export async function finaliseStoredUpload(args: {
 
   if (dbError || !resource) {
     // Don't leave the bucket holding a file nothing points at.
-    await db.storage.from(RESOURCES_BUCKET).remove([storagePath])
+    await discardUpload(bucket, args.storagePath)
     console.error('[community] finalise: db insert error:', dbError)
     return { error: 'Failed to save resource', status: 500 }
   }
 
   return { id: resource.id as string }
+}
+
+/**
+ * Copyright watermark on the bottom-right of every page of a stored PDF,
+ * rewritten in place. Returns the bytes now in storage — the original on any
+ * failure, since losing the upload would be worse than missing a stamp.
+ */
+export async function watermarkIfPdf(
+  bucket: string,
+  storagePath: string,
+  bytes: Uint8Array,
+  fileType: string | null,
+): Promise<Uint8Array> {
+  const name = storagePath.split('/').pop() ?? ''
+  if (!isPdf(name, fileType)) return bytes
+
+  try {
+    const stamped = new Uint8Array(await stampPdfBytes(bytes))
+    if (await replaceUpload(bucket, storagePath, stamped, 'application/pdf')) return stamped
+  } catch (err) {
+    console.error('[community] watermark failed, keeping original:', err)
+  }
+  return bytes
 }

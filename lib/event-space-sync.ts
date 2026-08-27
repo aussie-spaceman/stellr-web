@@ -60,7 +60,10 @@ interface SpaceRow {
 async function findSpace(db: SupabaseClient, ev: SanityEventRef): Promise<SpaceRow | null> {
   const cols = 'id, slug, name, sanity_event_id'
 
+  // A failed lookup must never read as "no Space exists" — that would have the
+  // caller create a duplicate. Throw so the webhook 500s and the script exits.
   const byId = await db.from('community_spaces').select(cols).eq('sanity_event_id', ev.sanityId).maybeSingle()
+  if (byId.error) throw new Error(`event-space-sync: Space lookup failed — ${byId.error.message}`)
   if (byId.data) return byId.data as SpaceRow
 
   const { data: links } = await db

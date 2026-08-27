@@ -27,6 +27,7 @@
     "verify:prod": "tsx scripts/verify-prod-services.ts",
   "audit:event-prices": "tsx scripts/audit-event-prices.ts",
   "audit:event-slugs": "tsx scripts/audit-event-slugs.ts",
+    "sync:event-spaces": "tsx scripts/sync-event-spaces.ts",
   "fix:event-slug": "tsx scripts/fix-event-slug.ts",
     "test": "vitest run",
     "test:watch": "vitest",

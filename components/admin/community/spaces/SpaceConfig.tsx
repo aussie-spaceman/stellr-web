@@ -251,6 +251,13 @@ function AccessTab({
   const [srcOptions, setSrcOptions] = useState<{ ref: string; label: string }[]>([])
   const [srcSearching, setSrcSearching] = useState(false)
   const isOpen = access === 'open'
+  // A Space linked to an event takes its members from that event's roster.
+  // Tier and role grants mean something different from what they look like here
+  // — a checked role matches a member's ORG-WIDE role, so 'Teacher' on an event
+  // Space admits every teacher in the organisation rather than the teachers at
+  // that event. The API refuses the write; these controls say so up front.
+  const isEventLinked = sources.some((s) => s.objectType === 'event')
+  const grantsLocked = isOpen || isEventLinked
 
   const linkedKeys = new Set(sources.map((s) => `${s.objectType}:${s.objectRef}`))
   const searchSources = async (type: string, q: string) => {
@@ -300,9 +307,17 @@ function AccessTab({
         })}
       </div>
 
+      {isEventLinked && (
+        <p className="mt-5 rounded-lg border border-brand-hairline bg-brand-canvas p-2.5 text-xs text-brand-grey-dark">
+          <span className="font-semibold">This Space belongs to an event.</span> Its members come from
+          the event roster, so tier and role grants are switched off — they would admit people who
+          never registered. Remove the event link below to grant access by tier or role instead.
+        </p>
+      )}
+
       <p className="mt-5 mb-1 text-sm font-subheading font-semibold text-brand-blue-dark">Assigned membership tiers</p>
-      <p className="mb-2 text-xs text-brand-muted-soft">{isOpen ? 'Open spaces include every tier — assignment is disabled.' : 'Holders of the checked tiers gain access automatically.'}</p>
-      <div className={`grid grid-cols-1 gap-4 sm:grid-cols-3 ${isOpen ? 'opacity-50' : ''}`}>
+      <p className="mb-2 text-xs text-brand-muted-soft">{isOpen ? 'Open spaces include every tier — assignment is disabled.' : isEventLinked ? 'Set by the linked event — assignment is disabled.' : 'Holders of the checked tiers gain access automatically.'}</p>
+      <div className={`grid grid-cols-1 gap-4 sm:grid-cols-3 ${grantsLocked ? 'opacity-50' : ''}`}>
         {TIER_GROUPS.map((g) => (
           <div key={g.key}>
             <p className="mb-1 text-xs font-subheading font-semibold uppercase tracking-[0.05em] text-brand-muted-soft">{g.label}</p>
@@ -311,7 +326,7 @@ function AccessTab({
                 const id = tierIdByName[n]
                 return (
                   <label key={n} className="flex items-center gap-2 text-sm text-brand-muted">
-                    <input type="checkbox" disabled={isOpen || !id} checked={!!id && selected.has(id)} onChange={() => id && toggle(id)} />
+                    <input type="checkbox" disabled={grantsLocked || !id} checked={!!id && selected.has(id)} onChange={() => id && toggle(id)} />
                     {n}
                   </label>
                 )
@@ -322,11 +337,15 @@ function AccessTab({
       </div>
 
       <p className="mt-5 mb-1 text-sm font-subheading font-semibold text-brand-blue-dark">Web-app roles</p>
-      <p className="mb-2 text-xs text-brand-muted-soft">Anyone holding a checked role can enter this space (in addition to tiers). E.g. grant a Volunteer Space to the Volunteer role.</p>
-      <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+      <p className="mb-2 text-xs text-brand-muted-soft">
+        {isEventLinked
+          ? 'Set by the linked event — role grants are disabled.'
+          : 'Anyone in the organisation holding a checked role can enter this space (in addition to tiers). This is an org-wide grant, not a per-event one — e.g. grant a Volunteer Space to the Volunteer role.'}
+      </p>
+      <div className={`grid grid-cols-2 gap-1 sm:grid-cols-3 ${isEventLinked ? 'opacity-50' : ''}`}>
         {SPACE_ACCESS_ROLES.map((r) => (
           <label key={r.value} className="flex items-center gap-2 text-sm text-brand-muted">
-            <input type="checkbox" checked={roles.has(r.value)} onChange={() => toggleRole(r.value)} />
+            <input type="checkbox" disabled={isEventLinked} checked={roles.has(r.value)} onChange={() => toggleRole(r.value)} />
             {r.label}
           </label>
         ))}
@@ -340,8 +359,8 @@ function AccessTab({
         <button
           onClick={async () => {
             await patchSpace({ access_type: access })
-            if (!isOpen) await act({ action: 'set-tiers', tierIds: [...selected] }, 'Tiers saved')
-            await act({ action: 'set-roles', roles: [...roles] }, 'Access updated')
+            if (!grantsLocked) await act({ action: 'set-tiers', tierIds: [...selected] }, 'Tiers saved')
+            if (!isEventLinked) await act({ action: 'set-roles', roles: [...roles] }, 'Access updated')
           }}
           className="rounded-lg bg-brand-blue px-4 py-2 text-sm font-subheading font-semibold text-white hover:bg-brand-blue-dark"
         >

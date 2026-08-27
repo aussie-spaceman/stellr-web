@@ -1,7 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { fileLabel } from '@/lib/space-resources'
 import { attachSpaceResource } from '@/lib/container-sync'
 import { createLinkBinary, normaliseUrl } from '@/lib/resource-upload'
 import { attachAllowed } from '@/lib/access-objects'
@@ -10,6 +9,19 @@ import { finaliseStoredUpload } from '@/lib/resource-finalise'
 // The watermark pass re-reads and rewrites the stored object, so give it more
 // room than the default for a 25MB PDF.
 export const maxDuration = 60
+
+// Short, colour-coded file-type label for the Resources list / attachment chip.
+function fileLabel(name: string, mime: string): string {
+  const ext = (name.split('.').pop() ?? '').toLowerCase()
+  if (mime.startsWith('image/')) return 'IMG'
+  if (ext === 'pdf' || mime === 'application/pdf') return 'PDF'
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return 'XLS'
+  if (['doc', 'docx'].includes(ext)) return 'DOC'
+  if (['ppt', 'pptx'].includes(ext)) return 'PPT'
+  if (['dwg', 'dxf', 'step', 'stp', 'stl', 'f3d'].includes(ext)) return 'CAD'
+  if (['zip', 'rar', '7z'].includes(ext)) return 'ZIP'
+  return (ext || 'file').toUpperCase().slice(0, 4)
+}
 
 // POST /api/admin/community/spaces/[id]/resources — admin adds a resource into a
 // space's Resources (Assign resource modal, screen 20). JSON only: either a link

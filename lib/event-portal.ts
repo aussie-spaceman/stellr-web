@@ -1,6 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { getEventsBySlugs, getAllEvents, getAllCampaigns } from '@/lib/sanity'
-import { registrationStatus } from '@/lib/utils'
+import { registrationStatus, todayInAppZone } from '@/lib/utils'
+import { getCampaignDates, type CampaignSeason } from '@/lib/campaigns'
 import {
   type CommunityMember,
   memberCanAccess,
@@ -106,7 +107,7 @@ const TWELVE_MONTHS_MS = 365 * 24 * 60 * 60 * 1000
 export async function getMemberEventCatalog(member: CommunityMember): Promise<CatalogEvent[]> {
   const now = Date.now()
   const horizon = now + TWELVE_MONTHS_MS
-  const currentYear = new Date().getFullYear()
+  const today = todayInAppZone()
 
   const [registered, allEvents, allCampaigns] = await Promise.all([
     getMemberEvents(member),
@@ -151,13 +152,19 @@ export async function getMemberEventCatalog(member: CommunityMember): Promise<Ca
   type CampaignDoc = {
     slug?: { current?: string }
     title?: string
+    season?: CampaignSeason
     campaignYear?: number
     registrationOpen?: boolean
   }
   for (const c of (allCampaigns ?? []) as CampaignDoc[]) {
     const slug = c.slug?.current
     if (!slug) continue
-    if (typeof c.campaignYear === 'number' && c.campaignYear < currentYear) continue // past campaign
+    // `campaignYear` is the SCHOOL year, so it cannot be compared against a
+    // calendar year — Fall 2027 finishes in Dec 2026, and comparing the bare
+    // numbers kept a term that ended months ago. Derive the real window.
+    if (c.season && typeof c.campaignYear === 'number') {
+      if (getCampaignDates(c.season, c.campaignYear).endDate < today) continue // past campaign
+    }
     bySlug.set(slug, {
       slug,
       title: c.title ?? slug,

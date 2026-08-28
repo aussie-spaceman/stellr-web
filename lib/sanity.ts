@@ -98,10 +98,11 @@ export async function getAllEvents() {
 
 export async function getAllCampaigns() {
   if (!client) return null
-  // Ordered by year asc, then season desc ('spring' > 'fall' alphabetically,
-  // which matches chronological order within a year: Spring Jan–Apr, Fall Aug–Dec).
+  // Ordered by school year asc, then season asc ('fall' < 'spring'
+  // alphabetically, which matches chronological order within a school year:
+  // Fall Aug–Dec of the prior calendar year, then Spring Jan–Apr).
   return client.fetch(`
-    *[_type == "event" && activityType == "campaign" && defined(slug.current)] | order(campaignYear asc, season desc) {
+    *[_type == "event" && activityType == "campaign" && defined(slug.current)] | order(campaignYear asc, season asc) {
       _id, title, slug, type, gradeLevel, season, campaignYear, deadline, deliverable,
       activityType, registrationOpen, tagline, image
     }

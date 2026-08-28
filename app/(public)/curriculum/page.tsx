@@ -29,8 +29,9 @@ interface Campaign {
   registrationOpen?: boolean
 }
 
+// campaignYear is the school year — both terms of 2026/27 are 2027.
 const FALLBACK_CAMPAIGNS: Campaign[] = [
-  { _id: 'fallback-1', title: '2027 Space Design Campaign', season: 'fall', campaignYear: 2026 },
+  { _id: 'fallback-1', title: '2027 Space Design Campaign', season: 'fall', campaignYear: 2027 },
   { _id: 'fallback-2', title: '2027 Environmental Design Campaign', season: 'spring', campaignYear: 2027 },
 ]
 
@@ -116,6 +117,7 @@ const paidBullets = [
   'A path to the National Championships',
 ]
 
+// `fallbackYear` is a school year, matching campaignYear.
 function pickWindow(campaigns: Campaign[], season: CampaignSeason, fallbackYear: number) {
   const match = campaigns.find((c) => c.season === season && c.campaignYear)
   const year = match?.campaignYear ?? fallbackYear
@@ -127,7 +129,7 @@ function pickWindow(campaigns: Campaign[], season: CampaignSeason, fallbackYear:
 export default async function CampaignsPage() {
   const sanityData = await getAllCampaigns().catch(() => null)
   const campaigns: Campaign[] = (sanityData as Campaign[] | null) ?? FALLBACK_CAMPAIGNS
-  const fall = pickWindow(campaigns, 'fall', 2026)
+  const fall = pickWindow(campaigns, 'fall', 2027)
   const spring = pickWindow(campaigns, 'spring', 2027)
 
   return (

@@ -147,7 +147,9 @@ export const event = {
       name: 'campaignYear',
       title: 'Campaign Year',
       type: 'number',
-      description: 'The calendar year the campaign takes place in — e.g. 2026 for Fall 2026, 2027 for Spring 2027.',
+      description:
+        'The SCHOOL year the campaign belongs to — the year it ends in. Both terms of ' +
+        '2026/27 are 2027: Fall 2027 runs Aug–Dec 2026, Spring 2027 runs Jan–Apr 2027.',
       hidden: ({ document }: { document?: Record<string, unknown> }) =>
         document?.activityType !== 'campaign',
       validation: (Rule: { custom: (fn: (v: unknown, ctx: { document?: Record<string, unknown> }) => true | string) => unknown }) =>
@@ -338,9 +340,10 @@ export const event = {
       name: 'campaignAsc',
       by: [
         { field: 'campaignYear', direction: 'asc' },
-        // 'spring' sorts after 'fall' alphabetically, which is correct:
-        // within a given year, Spring (Jan–Apr) comes before Fall (Aug–Dec)
-        { field: 'season', direction: 'desc' },
+        // 'fall' sorts before 'spring' alphabetically, which is correct:
+        // within a school year, Fall (Aug–Dec, prior calendar year) comes
+        // before Spring (Jan–Apr)
+        { field: 'season', direction: 'asc' },
       ],
     },
   ],

@@ -347,14 +347,13 @@ export function mapEventYear(input: {
 }): string | undefined {
   let year: number | undefined
 
-  // Campaigns carry `campaignYear`, which Sanity documents as the *calendar*
-  // year ("2026 for Fall 2026, 2027 for Spring 2027"). `season` is what turns
-  // that back into a school year without needing a date.
-  if (input.campaignYear) {
-    if (input.season === 'fall') year = input.campaignYear + 1
-    else if (input.season === 'spring') year = input.campaignYear
-    // Season missing: the calendar year alone cannot say which school year it
-    // belongs to, so fall through to the date rather than guess.
+  // Campaigns carry `campaignYear`, which IS the school year — campaigns are
+  // branded that way ("Fall 2027" = the autumn term of 2026/27). It therefore
+  // maps straight onto `event_year` with no season arithmetic; `season` only
+  // still gates the branch so a campaign missing one falls through to its date
+  // rather than trusting a half-filled document.
+  if (input.campaignYear && (input.season === 'fall' || input.season === 'spring')) {
+    year = input.campaignYear
   }
 
   if (year === undefined && input.date && /^\d{4}-\d{2}-\d{2}/.test(input.date)) {
@@ -376,7 +375,7 @@ export interface EventLike {
   state?: string | null
   date?: string | null
   campaignYear?: number | null
-  /** 'fall' | 'spring' — needed to turn a campaign's calendar year into a school year. */
+  /** 'fall' | 'spring' — proves the campaign year is a deliberate school year. */
   season?: string | null
 }
 

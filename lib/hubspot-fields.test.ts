@@ -98,13 +98,16 @@ describe('mapEventYear', () => {
     expect(mapEventYear({ date: '2026-07-31' })).toBe('2026')
   })
 
-  it('converts a campaign calendar year using its season', () => {
-    // Sanity documents campaignYear as the calendar year.
-    expect(mapEventYear({ campaignYear: 2026, season: 'fall' })).toBe('2027')
+  it('takes a campaign year as the school year it already is', () => {
+    // Campaigns are branded by school year, so both seasons of 2026/27 are 2027
+    // — the fall term runs in calendar 2026 and the spring term in calendar 2027.
+    expect(mapEventYear({ campaignYear: 2027, season: 'fall' })).toBe('2027')
     expect(mapEventYear({ campaignYear: 2027, season: 'spring' })).toBe('2027')
   })
 
   it('falls back to the date when a campaign has no season', () => {
+    // No season means the document is half-filled; the date decides instead of
+    // the bare number, which could be either a school or a calendar year.
     expect(mapEventYear({ campaignYear: 2026, date: '2026-11-06' })).toBe('2027')
   })
 

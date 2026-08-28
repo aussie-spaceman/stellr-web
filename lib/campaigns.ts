@@ -3,7 +3,8 @@ import type { StellarEvent } from './sanity'
 export type CampaignSeason = 'fall' | 'spring'
 
 export interface CampaignDates {
-  label: string       // e.g. "Fall 2026"
+  label: string       // e.g. "Fall 2027" — the school-year brand, not the calendar year
+  calendarYear: number // the calendar year the dates below actually fall in
   startDate: string   // ISO date
   endDate: string     // ISO date
   registrationOpens: string
@@ -13,22 +14,31 @@ export interface CampaignDates {
 /**
  * Returns all derived dates for a campaign based solely on its season and year.
  *
- * Fall   — Campaign: Aug 15 – Dec 15. Registration: Aug 1 – Nov 30.
+ * `year` is the SCHOOL year — the year it ends in, matching `schoolYearFor()` in
+ * lib/hubspot-fields.ts. Campaigns are branded that way, so "Fall 2027" is the
+ * autumn term of the 2026/27 school year and runs in calendar 2026. A spring
+ * campaign's school year and calendar year are the same.
+ *
+ * Fall   — Campaign: Aug 15 – Dec 15. Registration: Aug 1 – Nov 30.  (year − 1)
  * Spring — Campaign: Jan 1  – Apr 30. Registration: Dec 1 (prior year) – Mar 31.
  */
 export function getCampaignDates(season: CampaignSeason, year: number): CampaignDates {
   if (season === 'fall') {
+    // The autumn term of school year `year` sits in the previous calendar year.
+    const cal = year - 1
     return {
       label: `Fall ${year}`,
-      startDate: `${year}-08-15`,
-      endDate: `${year}-12-15`,
-      registrationOpens: `${year}-08-01`,
-      registrationCloses: `${year}-11-30`,
+      calendarYear: cal,
+      startDate: `${cal}-08-15`,
+      endDate: `${cal}-12-15`,
+      registrationOpens: `${cal}-08-01`,
+      registrationCloses: `${cal}-11-30`,
     }
   }
   // spring — registration opens in December of the prior year
   return {
     label: `Spring ${year}`,
+    calendarYear: year,
     startDate: `${year}-01-01`,
     endDate: `${year}-04-30`,
     registrationOpens: `${year - 1}-12-01`,
@@ -111,7 +121,8 @@ export function deadlinePhrase(info: DeadlineInfo | null): string {
   return `in ${info.daysLeft} day${info.daysLeft === 1 ? '' : 's'}`
 }
 
-// Short season label from a campaign's season + year — e.g. "Spring 2026".
+// Short season label from a campaign's season + school year — e.g. "Spring 2026".
+// Campaigns are branded by school year, so this prints `year` as stored.
 export function seasonLabel(season?: string | null, year?: number | null): string {
   if (!season || !year) return ''
   return `${season === 'fall' ? 'Fall' : 'Spring'} ${year}`

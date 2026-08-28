@@ -72,7 +72,8 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
           )}
 
           <dl className="mt-8 flex flex-wrap gap-x-12 gap-y-4">
-            <Stat label="Runs" value={dates ? `${dates.startDate.slice(5)} – ${dates.endDate.slice(5)}, ${campaign.campaignYear}` : season} />
+            {/* Calendar year, not the school-year brand — Fall 2027 runs in 2026. */}
+            <Stat label="Runs" value={dates ? `${dates.startDate.slice(5)} – ${dates.endDate.slice(5)}, ${dates.calendarYear}` : season} />
             <Stat label="Deadline" value={dl?.label ?? 'TBC'} valueClassName="text-star-gold" />
             <Stat label="Cost" value="Free with membership" />
           </dl>

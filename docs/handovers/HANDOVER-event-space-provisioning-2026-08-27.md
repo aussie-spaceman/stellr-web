@@ -2,7 +2,9 @@
 
 **Branch** `feat/event-space-provisioning-2026-08-27` (worktree at `../stellr-web-spaces`)
 **Date** 27 Aug 2026
-**Status** Code complete on the branch. **Nothing applied to prod. Nothing deployed.**
+**Status** ✅ **DEPLOYED 28 Aug 2026.** Migrations 144/145/146 applied, code live on
+`main` (`d906dfa`, Vercel `dpl_3aJY297z…` READY), backfill run. Verified in the
+database; **not yet exercised in a browser.**
 
 Built in a separate git worktree because two other sessions were committing to the
 shared checkout at the time — `main` moved three commits mid-investigation and the
@@ -133,10 +135,34 @@ Apply via the SQL editor if that recurs.
    to the event slug where that is free, and left alone where it would collide. The
    Space is found by `_id`, so a stale slug is cosmetic — but URLs change.
 
+## Deployed state, verified 28 Aug 2026
+
+12 event-linked Spaces, every one carrying its Sanity `_id` and **zero tier/role
+grants**. 6 created, 6 adopted, 2 renamed (`2027 Nevada …` → `Nevada Space Design
+Challenge`, same for South Dakota — their slugs moved too, so those URLs changed).
+All 12 tiers hold their Tier Space, including the new Parent/Guardian and Subscriber.
+Bill Allen holds **exactly one** roster row: `space-design-campaign-fall`, the event
+he registered for. 29 Spaces total.
+
+### ⚠️ One thing left open: `2027-space-design-campaigns`
+
+The Space created by hand before this work is still there, **unlinked to any event
+and still carrying 1 tier grant (Educator) and 2 role grants (participant, teacher)**.
+It was not adopted because it matches the Fall campaign on none of the three keys the
+sync uses — not the `_id`, not an event link (it has none), and not the slug. So a
+fresh `Space Design Campaign - Fall` was created alongside it.
+
+That leaves it as the one place the original defect survives: every Educator, every
+teacher and every participant in the organisation can still open it, and it now
+duplicates a properly provisioned Space. It needs to be archived or deleted — the
+work is not finished while it stands. Left in place because removing it is a data
+decision, not a mechanical one.
+
 ## Not done
 
 - **Not browser-verified.** No part of this has been exercised in a running app.
   The end-to-end proof is: register someone for one event, confirm they get that
   Space and no other.
 - The webhook's `_id` requirement is unverified against a real Sanity payload.
-- Nothing pushed to `origin`.
+- Browser verification: register someone for one event and confirm they get that
+  Space and no other. That is the proof this whole change exists to deliver.

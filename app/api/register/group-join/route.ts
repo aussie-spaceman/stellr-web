@@ -13,7 +13,8 @@ import {
 } from '@/lib/member-enums'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { upsertMember } from '@/lib/member-sync'
-import { ageFromDob, registrationStatus } from '@/lib/utils'
+import { ageFromDob } from '@/lib/utils'
+import { registrationIsOpen } from '@/lib/registration'
 import { assertNotImpersonating } from '@/lib/impersonation'
 
 // A participant, normalised to the enum/shape the participants + members tables
@@ -90,17 +91,11 @@ export async function POST(req: NextRequest) {
     )
   }
   const joinEvent = await getEventBySlug(eventSlug).catch(() => null)
-  if (joinEvent) {
-    const regStatus = registrationStatus(
-      joinEvent.registrationOpenDate,
-      joinEvent.registrationCloseDate,
+  if (joinEvent && !registrationIsOpen(joinEvent)) {
+    return NextResponse.json(
+      { error: 'Registration for this event is closed.' },
+      { status: 403 },
     )
-    if (regStatus !== 'open') {
-      return NextResponse.json(
-        { error: 'Registration for this event is closed.' },
-        { status: 403 },
-      )
-    }
   }
   const schoolName = (reg.school_name as string) ?? ''
   const memberPaysIndividually = (reg.member_pays_individually as boolean) ?? false

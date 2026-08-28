@@ -17,13 +17,18 @@ interface CampaignEvent {
 }
 
 import { formatDate as formatEventDate, registrationStatus } from '@/lib/utils'
+import { campaignStatus, seasonLabel } from '@/lib/campaigns'
 
 function formatDate(date?: string) {
   return date ? formatEventDate(date) : '—'
 }
 
 // Registration pill state.
-//   • Campaigns  → manual `registrationOpen` toggle (per the Sanity schema).
+//   • Campaigns  → campaignStatus(), the same resolver the public pages and the
+//                  member portal use. This used to be an inline `registrationOpen
+//                  ? Open : Closed`, which disagreed with /curriculum about an
+//                  unset toggle: admin said Closed, the public page derived from
+//                  dates and could say "Open now" at the same moment.
 //   • Live events → derived from the Opens/Closes dates (both empty = open),
 //                   matching the public event pages. The manual boolean is
 //                   hidden for live events in the CMS, so it must NOT be used
@@ -33,7 +38,14 @@ function registrationPill(event: StellarEvent, isCampaign: boolean): { label: st
   const SOON = 'bg-amber-100 text-amber-700'
   const CLOSED = 'bg-brand-hairline text-brand-muted-soft'
   if (isCampaign) {
-    return event.registrationOpen ? { label: 'Open', className: OPEN } : { label: 'Closed', className: CLOSED }
+    switch (campaignStatus(event)) {
+      case 'Open':
+        return { label: 'Open', className: OPEN }
+      case 'Coming soon':
+        return { label: 'Coming soon', className: SOON }
+      case 'Closed':
+        return { label: 'Closed', className: CLOSED }
+    }
   }
   switch (registrationStatus(event.registrationOpenDate, event.registrationCloseDate)) {
     case 'open':
@@ -150,7 +162,7 @@ export default async function AdminEventsPage() {
                         </td>
                         <td className="px-4 py-3 text-brand-muted">
                           {isCampaign
-                            ? [campaign.season, campaign.campaignYear].filter(Boolean).join(' ') || '—'
+                            ? seasonLabel(campaign.season, campaign.campaignYear) || '—'
                             : formatDate(event.date)}
                         </td>
                         <td className="px-4 py-3 text-brand-muted">

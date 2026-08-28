@@ -1,7 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { getEventsBySlugs, getAllEvents, getAllCampaigns } from '@/lib/sanity'
 import { registrationStatus, todayInAppZone } from '@/lib/utils'
-import { getCampaignDates, type CampaignSeason } from '@/lib/campaigns'
+import { campaignHasEnded, campaignStatusKey } from '@/lib/campaigns'
 import {
   type CommunityMember,
   memberCanAccess,
@@ -152,26 +152,21 @@ export async function getMemberEventCatalog(member: CommunityMember): Promise<Ca
   type CampaignDoc = {
     slug?: { current?: string }
     title?: string
-    season?: CampaignSeason
+    season?: string
     campaignYear?: number
     registrationOpen?: boolean
   }
   for (const c of (allCampaigns ?? []) as CampaignDoc[]) {
     const slug = c.slug?.current
     if (!slug) continue
-    // `campaignYear` is the SCHOOL year, so it cannot be compared against a
-    // calendar year — Fall 2027 finishes in Dec 2026, and comparing the bare
-    // numbers kept a term that ended months ago. Derive the real window.
-    if (c.season && typeof c.campaignYear === 'number') {
-      if (getCampaignDates(c.season, c.campaignYear).endDate < today) continue // past campaign
-    }
+    if (campaignHasEnded(c, today)) continue // past campaign
     bySlug.set(slug, {
       slug,
       title: c.title ?? slug,
       activityType: 'campaign',
       registered: false,
-      // Campaigns keep their manual on/off toggle (no live-event Open/Close dates).
-      status: c.registrationOpen ? 'open' : 'closed',
+      // Same resolver as the admin pill and the public pages.
+      status: campaignStatusKey(c),
     })
   }
 

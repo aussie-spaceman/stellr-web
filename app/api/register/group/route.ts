@@ -3,7 +3,8 @@ import { randomBytes } from 'crypto'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
-import { registrationStatus, ageFromDob } from '@/lib/utils'
+import { ageFromDob } from '@/lib/utils'
+import { registrationIsOpen } from '@/lib/registration'
 import {
   sendEmail,
   groupConfirmationEmail,
@@ -109,18 +110,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Registration window gate — reject before creating any records if the
-    // event's registration isn't currently open (FR-EVT). Campaigns are always
-    // open (async, free) so they skip the window gate.
+    // Registration gate — reject before creating any records if registration
+    // isn't currently open (FR-EVT). Campaigns used to skip this entirely, which
+    // made their CMS toggle cosmetic; `registrationIsOpen` now answers for both
+    // kinds. It reads the activity type off the CMS document rather than the
+    // client-supplied `is_campaign`, so a forged flag cannot bypass the gate.
     const eventForGate = await getEventBySlug(event_slug).catch(() => null)
-    if (eventForGate && !is_campaign) {
-      const regStatus = registrationStatus(
-        eventForGate.registrationOpenDate,
-        eventForGate.registrationCloseDate,
-      )
-      if (regStatus !== 'open') {
-        return NextResponse.json({ error: 'Registration is not open for this event.' }, { status: 403 })
-      }
+    if (eventForGate && !registrationIsOpen(eventForGate)) {
+      return NextResponse.json({ error: 'Registration is not open for this event.' }, { status: 403 })
     }
     // A school is mandatory — it drives school linking, the DocuSign SchoolName
     // tab, and FERPA scoping. The form gates on this too, but enforce it here so

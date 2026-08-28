@@ -1,4 +1,5 @@
 import type { StellarEvent } from './sanity'
+import { todayInAppZone } from './utils'
 
 export type CampaignSeason = 'fall' | 'spring'
 
@@ -46,15 +47,66 @@ export function getCampaignDates(season: CampaignSeason, year: number): Campaign
   }
 }
 
+/**
+ * Display state for a campaign. The dates say WHEN the term runs; the manual
+ * `registrationOpen` toggle says whether you can register DURING it — the same
+ * boolean `registrationIsOpen()` gates on, so the pill and the API agree.
+ *
+ * Two bugs are fixed here. Only an explicit `=== false` used to close a campaign
+ * while the admin pill closed on any falsy value, so an untouched campaign could
+ * read Closed in admin and "Open now" on the public site at the same moment. And
+ * `today` was compared in UTC, the pattern `registrationStatus()` documents as
+ * having flipped live events ~30h early in Mountain time.
+ */
 export function campaignStatusFromDates(
   dates: CampaignDates,
-  registrationOpenOverride?: boolean
+  registrationOpen?: boolean | null
 ): 'Open' | 'Coming soon' | 'Closed' {
-  if (registrationOpenOverride === false) return 'Closed'
-  const today = new Date().toISOString().split('T')[0]
-  if (dates.endDate < today) return 'Closed'
+  const today = todayInAppZone()
   if (dates.startDate > today) return 'Coming soon'
-  return 'Open'
+  if (dates.endDate < today) return 'Closed'
+  return registrationOpen === true ? 'Open' : 'Closed'
+}
+
+/** Campaign document fields the status/window helpers below read. */
+export interface CampaignLike {
+  season?: string | null
+  campaignYear?: number | null
+  registrationOpen?: boolean | null
+}
+
+/**
+ * The ONE display resolver for a campaign — admin pill, member portal and public
+ * pages all call this so they cannot drift apart again.
+ */
+export function campaignStatus(campaign: CampaignLike): 'Open' | 'Coming soon' | 'Closed' {
+  if (!campaign.season || !campaign.campaignYear) {
+    // Half-filled document: no window to derive, so the toggle alone decides.
+    return campaign.registrationOpen === true ? 'Open' : 'Closed'
+  }
+  return campaignStatusFromDates(
+    getCampaignDates(campaign.season as CampaignSeason, campaign.campaignYear),
+    campaign.registrationOpen
+  )
+}
+
+/** `campaignStatus()` in the kebab form the member catalog badges use. */
+export function campaignStatusKey(campaign: CampaignLike): 'open' | 'coming-soon' | 'closed' {
+  const status = campaignStatus(campaign)
+  return status === 'Open' ? 'open' : status === 'Coming soon' ? 'coming-soon' : 'closed'
+}
+
+/**
+ * Has a campaign's term finished? `campaignYear` is a school year, so it can
+ * never be compared against a calendar year — Fall 2027 ends in Dec 2026.
+ * An incomplete document is kept visible rather than silently dropped.
+ */
+export function campaignHasEnded(
+  campaign: { season?: string | null; campaignYear?: number | null },
+  today: string
+): boolean {
+  if (!campaign.season || !campaign.campaignYear) return false
+  return getCampaignDates(campaign.season as CampaignSeason, campaign.campaignYear).endDate < today
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────────

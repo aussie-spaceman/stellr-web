@@ -83,14 +83,15 @@ Verified against production on 25 Aug — these are current, not stale.
 
 ### High
 
-- **`/impact` is live with two contradictory scholarship promises.** A parallel
-  session softened one block and shipped it (`547a4ee`), but a second, related
-  edit to the `FUNDING_BLOCKS` "Where surplus goes" copy is **still uncommitted in
-  the shared working tree**. Live today: one block says "we will do our best to
-  cover it — either partially or in full", another still says a student "still
-  competes, at no cost to their family". This page is Ad Grants-sensitive. Not my
-  change and not mine to commit — but it needs finishing or reverting, and the
-  uncommitted half is at risk of being lost or swept into an unrelated commit.
+- ~~`/impact` scholarship promises contradict each other.~~ **RESOLVED during
+  this close-out.** A parallel session shipped the first softening (`547a4ee`)
+  and left the matching `FUNDING_BLOCKS` "Where surplus goes" edit uncommitted in
+  the shared working tree for a period; it has since been committed (`c965926`,
+  merged `1937057`) and verified live. Both blocks now describe partial-or-full
+  cover consistently. Recorded because the failure mode recurs: **this repo's
+  working tree is shared between concurrent sessions**, so an unrelated dirty file
+  may appear mid-task. Never commit one you did not author — commit by explicit
+  path, never `git add -A`.
 - **North Carolina's Stripe price ID is still dead** four days on
   (`price_1TeztlKUgSKucUJEyhlsAAFq`, not in the live account). The fee is hidden
   **and registration checkout is broken** — the route 503s before any writes.

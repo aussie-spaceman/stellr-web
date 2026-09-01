@@ -23,7 +23,7 @@ import { BENEFITS, EARNINGS, FAQS, HOW_IT_WORKS } from './content'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/grant' },
-  title: 'Teacher Grant',
+  title: 'Teacher Grant Program',
   description: `Stellr pays US high school teachers to bring a team to a live Challenge or run a Campaign at their own school — up to ${grantAmount(GRANT_AMOUNTS.annualMaximum)} a year, plus documented PD contact hours and free Catalyst membership. ${GRANT_PLACES} places for ${GRANT_PROGRAM_YEAR}.`,
 }
 
@@ -61,9 +61,8 @@ export default async function GrantPage() {
           <p className="mt-5 text-lg text-hero-lead leading-relaxed max-w-[640px]">
             Taking a team to a live Challenge or running a Campaign at your school takes real
             time — recruiting students, coordinating logistics, and following through afterward.
-            The Teacher Grant
-            recognizes that work. The grant pays as you participate, supporting both your
-            students and yourself.
+            The Teacher Grant Program is how we recognize that work. The grant pays as you
+            participate, supporting both your students and yourself.
           </p>
 
           <div className="mt-7 flex flex-wrap gap-3">

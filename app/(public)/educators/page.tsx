@@ -193,7 +193,8 @@ export default function EducatorsPage() {
             </h2>
             <p className="text-brand-grey-dark leading-relaxed mb-6">
               Taking a team to a live Challenge or running a Campaign at your school takes real
-              time. The Teacher Grant recognizes that work — {grantAmount(GRANT_AMOUNTS.annualMaximum)}{' '}
+              time. The Teacher Grant Program is how we recognize that work —{' '}
+              {grantAmount(GRANT_AMOUNTS.annualMaximum)}{' '}
               a year at most, plus {GRANT_PD_HOURS} documented PD contact hours and free Catalyst
               membership. Open to U.S. high school teachers, {GRANT_PLACES} places for{' '}
               {GRANT_PROGRAM_YEAR}.

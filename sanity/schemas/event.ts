@@ -262,6 +262,59 @@ export const event = {
     { name: 'tagline', type: 'string', title: 'Tagline' },
     { name: 'description', type: 'array', title: 'Description', of: [{ type: 'block' }] },
     { name: 'image', type: 'image', title: 'Hero Image', options: { hotspot: true } },
+
+    // ── Flyers & handouts ─────────────────────────────────────────────────────
+    // Public marketing PDFs. Deliberately a Sanity file rather than a path into
+    // /public: the bytes then hang off this document, so a slug rename can't
+    // strand them, a re-issued flyer is an upload rather than a commit + deploy,
+    // and the season's ~40MB of PDFs never lands in git history. Studio uploads
+    // go straight to Sanity's asset API, so Vercel's 4.5MB request-body cap
+    // (which constrains every in-app upload route) doesn't apply here either.
+    //
+    // An array because most events have more than one: the 3pp flyer plus the
+    // 1pp version, and at some venues a Homeschool and a Robotics variant.
+    {
+      name: 'flyers',
+      title: 'Flyers & Handouts',
+      type: 'array',
+      description:
+        'Public marketing PDFs, shown as downloads on the event page. Leave empty and the ' +
+        'Downloads section is hidden entirely. These are open — no email gate — so a teacher ' +
+        'can forward one to colleagues.',
+      of: [
+        {
+          type: 'object',
+          fields: [
+            {
+              name: 'label',
+              type: 'string',
+              title: 'Label',
+              description: 'What the download button says — e.g. "Event Flyer", "Homeschool Flyer".',
+              initialValue: 'Event Flyer',
+              validation: (Rule: { required: () => unknown }) => Rule.required(),
+            },
+            {
+              name: 'file',
+              type: 'file',
+              title: 'PDF',
+              options: { accept: 'application/pdf' },
+              validation: (Rule: { required: () => unknown }) => Rule.required(),
+            },
+            {
+              name: 'pages',
+              type: 'number',
+              title: 'Page count',
+              description:
+                'Optional — renders as "3-page PDF" beside the file size. Leave blank and the ' +
+                'card shows the size alone. scripts/upload-event-flyers.ts fills this in.',
+            },
+          ],
+          preview: {
+            select: { title: 'label', subtitle: 'file.asset.originalFilename' },
+          },
+        },
+      ],
+    },
     {
       name: 'schedule',
       title: 'Schedule',

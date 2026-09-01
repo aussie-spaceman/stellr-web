@@ -9,6 +9,7 @@ import { PortableText } from 'next-sanity'
 import type { PortableTextBlock } from '@portabletext/types'
 import { CampaignDetail } from '@/components/campaigns/CampaignDetail'
 import { EventHeroCtas, EventNotifyButton } from '@/components/sections/EventCtas'
+import { EventFlyers } from '@/components/sections/EventFlyers'
 import { getMemberCampaignContext } from '@/lib/campaign-registrations'
 import { CardPills } from '@/components/ui/CardPills'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
@@ -491,6 +492,14 @@ export default async function EventDetailPage({ params }: PageProps) {
                   </div>
                 </div>
               </div>
+
+              {/* Flyers — renders nothing when the event has none in Sanity. */}
+              <EventFlyers
+                flyers={event.flyers}
+                slug={slug}
+                title={event.title}
+                activityType={event.activityType}
+              />
 
               {/* Side CTA */}
               <div className="bg-brand-blue-dark text-white rounded-xl p-6 text-center">

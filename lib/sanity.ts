@@ -40,6 +40,35 @@ export function wmSrc(url: string): string {
 }
 
 // ── Shared types ──────────────────────────────────────────────────────────────
+
+/**
+ * A public marketing PDF hanging off an event document (schema field `flyers`).
+ * The bytes live on Sanity's CDN, so `url` is absolute and needs no media-host
+ * prefixing — unlike the self-hosted /files assets in lib/media-manifest.ts.
+ */
+export interface EventFlyer {
+  label: string
+  /** Absolute cdn.sanity.io URL. Use flyerDownloadUrl() for a download link. */
+  url: string
+  /** Bytes, straight from the asset document. */
+  size?: number
+  /** Original upload filename — becomes the saved filename via ?dl=. */
+  filename?: string
+  /** Authored, optional. Null/undefined → the card shows the size alone. */
+  pages?: number
+}
+
+/**
+ * Sanity's asset CDN serves a PDF inline by default (the browser opens its
+ * viewer). `?dl=<name>` flips it to Content-Disposition: attachment, so the
+ * flyer lands in Downloads with a sensible name rather than a hashed asset id.
+ */
+export function flyerDownloadUrl(flyer: EventFlyer): string {
+  if (!flyer.url) return flyer.url
+  const name = flyer.filename?.trim()
+  return name ? `${flyer.url}?dl=${encodeURIComponent(name)}` : `${flyer.url}?dl=`
+}
+
 // Core event shape returned by the event queries below.
 export interface StellarEvent {
   _id: string
@@ -56,6 +85,8 @@ export interface StellarEvent {
   stripePriceId?: string
   tagline?: string
   image?: { asset: { _ref: string } }
+  /** Public flyers/handouts; only fetched by getEventBySlug(). */
+  flyers?: EventFlyer[]
   registrationOpen?: boolean
   registrationOpenDate?: string
   registrationCloseDate?: string
@@ -116,6 +147,10 @@ export async function getEventBySlug(slug: string) {
       _id, title, slug, type, gradeLevel, date, endDate, activityType, setting, term,
       season, campaignYear, deadline, deliverable,
       venue, city, state, tagline, description, image,
+      // Flyers resolve the file asset inline — the page only ever needs the URL,
+      // size and original filename, never the asset document itself.
+      flyers[]{ label, pages, "url": file.asset->url, "size": file.asset->size,
+                "filename": file.asset->originalFilename },
       registrationOpen, registrationOpenDate, registrationCloseDate,
       capacity, stripePriceId, schedule[]{ time, label }
     }`,

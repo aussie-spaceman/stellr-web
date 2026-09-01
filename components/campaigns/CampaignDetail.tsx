@@ -17,6 +17,7 @@ import {
   campaignEligibilityCopy,
 } from '@/lib/campaign-content'
 import { CardPills } from '@/components/ui/CardPills'
+import { EventFlyers } from '@/components/sections/EventFlyers'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.stellreducation.org'
 
@@ -186,6 +187,15 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
               )}
             </div>
           </div>
+
+          {/* Flyers — renders nothing when the campaign has none in Sanity. */}
+          <EventFlyers
+            flyers={campaign.flyers}
+            slug={campaign.slug.current}
+            title={campaign.title}
+            activityType="campaign"
+            className="mt-6"
+          />
         </aside>
       </div>
     </>

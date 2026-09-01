@@ -15,6 +15,7 @@ import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { participationTypeFor } from '@/lib/analytics'
 import { buildEventJsonLd, buildCampaignJsonLd, buildFaqJsonLd } from '@/lib/structured-data'
 import { getEventPrice, eventPriceLabel } from '@/lib/event-pricing'
+import { CAMPAIGN_FAQS } from '@/lib/campaign-content'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 
 export const revalidate = 3600
@@ -200,7 +201,12 @@ export default async function EventDetailPage({ params }: PageProps) {
       <>
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(buildCampaignJsonLd(event, slug)) }}
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify([
+              buildCampaignJsonLd(event, slug),
+              buildFaqJsonLd(CAMPAIGN_FAQS),
+            ]),
+          }}
         />
         <TrackEvent
           event={{

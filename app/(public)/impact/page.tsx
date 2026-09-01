@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
 import { ArrowRight } from 'lucide-react'
-import { Award, Certificate, Satellite, Team } from '@stellr/icons'
+import { Award, Certificate, Global, Satellite, Team } from '@stellr/icons'
 import { Eyebrow, Button } from '@stellr/web-ui'
 import { WhitePaperGate } from '@/components/sections/WhitePaperGate'
 import { buildImpactDatasetJsonLd } from '@/lib/structured-data'
+import { STELLR_EIN } from '@/lib/org'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/impact' },
@@ -13,6 +14,29 @@ export const metadata: Metadata = {
 }
 
 const WWW = 'https://www.stellreducation.org'
+
+/* ── Funding transparency ─────────────────────────────────────────────────
+   Required reading for a Google Ad Grants reviewer, and the destination every
+   MissionFundingNote on the site links to. Keep the EIN imported rather than
+   retyped, so the number exists in exactly one place. */
+const FUNDING_BLOCKS = [
+  {
+    title: 'How we are funded',
+    body: 'Four sources: donations and corporate sponsorship, participation fees for our competitions, membership subscriptions, and a small merchandise store.',
+  },
+  {
+    title: 'What the fees pay for',
+    body: 'Running a design competition costs money before a single student walks in — venue hire, materials, insurance, background-checked staff, and travel for the industry mentors who judge the work. Participation fees are set to recover those direct costs, not to generate profit.',
+  },
+  {
+    title: 'Where surplus goes',
+    body: 'Any surplus is reinvested in one place: scholarships. In practice that means a student whose school cannot fund a place still competes, at no cost to their family.',
+  },
+  {
+    title: 'What we do not do',
+    body: 'We do not sell services commercially, run advertising on this site, take affiliate revenue, or sell any supporter\u2019s data.',
+  },
+]
 
 /* ── Participation data ───────────────────────────────────────────────────
    Figures from Stellr competition events held in 2026, from participant-
@@ -441,7 +465,56 @@ export default function ImpactPage() {
         </div>
       </section>
 
-      {/* ── 8. Closing CTA ────────────────────────────────────────────── */}
+      {/* ── 8. Financial transparency ─────────────────────────────────── */}
+      <section
+        id="funding"
+        className="section-padding bg-surface border-t border-line-light scroll-mt-24"
+      >
+        <div className="container-max">
+          <Eyebrow>Financial transparency</Eyebrow>
+          <h2 className="mt-3 font-display text-3xl sm:text-[40px] font-bold tracking-[-0.028em] leading-[1.08] text-ink max-w-3xl">
+            How Stellr is funded, and where the money goes
+          </h2>
+          <p className="mt-5 text-content-secondary leading-relaxed max-w-3xl">
+            Stellr Education is a registered 501(c)(3) nonprofit corporation, founded in May 2021 and
+            based in Utah. Our EIN is{' '}
+            <span className="font-semibold text-ink tabular-nums">{STELLR_EIN}</span>. We charge for
+            some of what we do; this is what those charges are for.
+          </p>
+
+          <div className="mt-9 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {FUNDING_BLOCKS.map((b) => (
+              <div
+                key={b.title}
+                className="bg-white rounded-panel border border-line-light p-6 sm:p-7 shadow-card-lift"
+              >
+                <h3 className="font-display text-lg font-bold text-ink leading-snug">{b.title}</h3>
+                <p className="mt-2.5 text-[15px] text-content-secondary leading-relaxed">{b.body}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-8 flex flex-col sm:flex-row sm:items-center gap-4 rounded-panel border border-primary/25 bg-primary-soft p-6">
+            <span className="hidden sm:flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-primary">
+              <Global size={22} />
+            </span>
+            <p className="text-[15px] text-content-body leading-relaxed">
+              <span className="font-semibold text-ink">Cost is never the barrier.</span>{' '}
+              If a participation fee stands between a student and a Stellr competition, we cover it
+              in full.{' '}
+              <a
+                href={`${WWW}/scholarship`}
+                className="font-medium text-primary-deep underline underline-offset-2 hover:no-underline"
+              >
+                Apply for a scholarship
+              </a>
+              .
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 9. Closing CTA ────────────────────────────────────────────── */}
       <section className="section-padding bg-white text-center">
         <div className="container-max max-w-2xl">
           <h2 className="font-display text-3xl font-bold text-ink leading-tight">

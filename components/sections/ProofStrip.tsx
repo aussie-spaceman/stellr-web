@@ -104,7 +104,7 @@ export function ProofStrip({
                 <>
                   <p className="mt-2 text-[13px] leading-snug text-content-secondary">{p.alt}</p>
                   {p.credit && (
-                    <p className="text-[11px] text-content-faint">Credit: {p.credit}</p>
+                    <p className="text-[11px] text-content-faint">{p.credit}</p>
                   )}
                 </>
               )}
@@ -158,7 +158,7 @@ export function ProofStrip({
               />
               <figcaption className="mt-3 text-center text-sm text-white/90">
                 {active.alt}
-                {active.credit && <span className="ml-2 text-white/55">· Credit: {active.credit}</span>}
+                {active.credit && <span className="ml-2 text-white/55">· {active.credit}</span>}
                 {photos.length > 1 && (
                   <span className="ml-2 text-white/55">
                     ({index + 1}/{photos.length})

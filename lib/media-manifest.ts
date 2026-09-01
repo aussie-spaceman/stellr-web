@@ -229,7 +229,7 @@ export const COMPETITION: Record<string, CompetitionAsset> = {
     gated: true,
     fileHref: '/files/jsc-2025-student-presentation.pdf',
     assetKey: 'jsc-2025-student-presentation',
-    credit: 'Student team',
+    credit: 'Student team \u00B7 \u00A9 Stellr Education',
   },
   'south-west-2022-student-presentation': {
     id: 'south-west-2022-student-presentation',
@@ -240,7 +240,7 @@ export const COMPETITION: Record<string, CompetitionAsset> = {
     gated: true,
     fileHref: '/files/south-west-2022-student-presentation.pdf',
     assetKey: 'south-west-2022-student-presentation',
-    credit: 'Student team',
+    credit: 'Student team \u00B7 \u00A9 Stellr Education',
   },
   'south-west-2025-rfp': {
     id: 'south-west-2025-rfp',
@@ -267,11 +267,23 @@ for (const c of Object.values(COMPETITION)) {
  * Photos — my chosen deployment (the doc leaves photo placement to me). Base
  * paths only; the component composes srcset from PHOTO_WIDTHS. Bytes pending.
  * ───────────────────────────────────────────────────────────────────────── */
+/** Shown when a photo carries no more specific credit. */
+export const DEFAULT_PHOTO_CREDIT = '\u00A9 Stellr Education'
+
 function photo(id: string, source: string, alt: string, credit?: string): PhotoAsset {
   // `source` records the approved Drive original this derives from (for the
   // transcode pass); not used at runtime.
   void source
-  return { id, src: mediaUrl(`/media/${id}`), alt, credit, widths: PHOTO_WIDTHS }
+  // The copyright notice used to be baked into the bottom-right pixels of every
+  // derivative. It now rides along as a caption instead, so it defaults here
+  // rather than at each of the ~60 call sites.
+  return {
+    id,
+    src: mediaUrl(`/media/${id}`),
+    alt,
+    credit: credit ?? DEFAULT_PHOTO_CREDIT,
+    widths: PHOTO_WIDTHS,
+  }
 }
 
 export const PHOTOS: Record<string, PhotoAsset> = {
@@ -290,8 +302,8 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   'home-teamwork': photo('home-teamwork', 'Drive 1wmO0jBV', 'Teamwork makes successful STEM professionals'),
   'home-group-dynamics': photo('home-group-dynamics', 'Drive 1_D_0qIV', 'Group dynamics at play'),
   // Competitions
-  'competitions-1': photo('competitions-1', 'IMG_9052', 'Collaboration - both in person and digital', 'Student team'),
-  'competitions-2': photo('competitions-2', 'IMG_9215', 'Student learn 3D modelling as a core skill', 'Student team'),
+  'competitions-1': photo('competitions-1', 'IMG_9052', 'Collaboration - both in person and digital', 'Student team \u00B7 \u00A9 Stellr Education'),
+  'competitions-2': photo('competitions-2', 'IMG_9215', 'Student learn 3D modelling as a core skill', 'Student team \u00B7 \u00A9 Stellr Education'),
   'competitions-3': photo('competitions-3', 'DSC_5501', 'Teams at the competition'),
   'competitions-ksc': photo('competitions-ksc', 'Drive 1dkLNSN9', 'Exploring Kennedy Space Center before an event'),
   // Membership
@@ -309,8 +321,8 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   'about-team-2': photo('about-team-2', 'IMG_7685', 'Mentors with students'),
   // Students
   'students-hero': photo('students-hero', 'DSC_5740', 'Students at laptops during a design session'),
-  'students-strip-1': photo('students-strip-1', 'IMG_9046', 'Student presenting work', 'Student team'),
-  'students-strip-2': photo('students-strip-2', 'IMG_9060', 'Students reviewing their design', 'Student team'),
+  'students-strip-1': photo('students-strip-1', 'IMG_9046', 'Student presenting work', 'Student team \u00B7 \u00A9 Stellr Education'),
+  'students-strip-2': photo('students-strip-2', 'IMG_9060', 'Students reviewing their design', 'Student team \u00B7 \u00A9 Stellr Education'),
   // Educators
   'educators-1': photo('educators-1', 'DSC_5776', 'Adults and students collaborating'),
   'educators-2': photo('educators-2', 'IMG_7702', 'Structural-board design session'),
@@ -324,8 +336,8 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   'why-3': photo('why-3', 'IMG_4014', 'Award-winner banner'),
   'why-4': photo('why-4', 'IMG_4015', 'Washington Achievement banner'),
   // Curriculum
-  'curriculum-1': photo('curriculum-1', 'IMG_9215', '3D modelling on laptops', 'Student team'),
-  'curriculum-2': photo('curriculum-2', 'IMG_9052', 'Preparing to pitch', 'Student team'),
+  'curriculum-1': photo('curriculum-1', 'IMG_9215', '3D modelling on laptops', 'Student team \u00B7 \u00A9 Stellr Education'),
+  'curriculum-2': photo('curriculum-2', 'IMG_9052', 'Preparing to pitch', 'Student team \u00B7 \u00A9 Stellr Education'),
   'curriculum-3': photo('curriculum-3', 'IMG_2283', 'Requirements analysis'),
   'curriculum-group-work': {
     // Source is 1440px wide — no 1920 derivative exists.

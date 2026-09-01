@@ -196,6 +196,7 @@ export default async function CompetitionsPage() {
             sizes="(max-width: 1024px) 100vw, 50vw"
             priority
             className="aspect-[4/3] shadow-card-lift"
+            showCredit
           />
         }
       />

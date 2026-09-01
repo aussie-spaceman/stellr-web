@@ -5,6 +5,7 @@ import { ALL_TIERS, FAQS } from './tier-data'
 import MembershipExplorer from './MembershipExplorer'
 import { VIDEOS } from '@/lib/media-manifest'
 import { buildFaqJsonLd } from '@/lib/structured-data'
+import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/membership' },
@@ -38,6 +39,11 @@ export default async function MembershipPage() {
         monthly={monthlyById}
         video={VIDEOS['testimonial-noah-swingle']}
       />
+      <section className="section-padding bg-white">
+        <div className="container-max max-w-3xl">
+          <MissionFundingNote />
+        </div>
+      </section>
     </>
   )
 }

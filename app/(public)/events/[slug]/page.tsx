@@ -15,6 +15,7 @@ import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { participationTypeFor } from '@/lib/analytics'
 import { buildEventJsonLd, buildCampaignJsonLd, buildFaqJsonLd } from '@/lib/structured-data'
 import { getEventPrice, eventPriceLabel } from '@/lib/event-pricing'
+import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 
 export const revalidate = 3600
 
@@ -512,6 +513,12 @@ export default async function EventDetailPage({ params }: PageProps) {
               </div>
             </aside>
           </div>
+        </div>
+      </section>
+
+      <section className="section-padding bg-surface">
+        <div className="container-max max-w-3xl">
+          <MissionFundingNote />
         </div>
       </section>
 

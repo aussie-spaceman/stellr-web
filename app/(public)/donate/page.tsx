@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Heart, Users, Rocket, ArrowRight } from 'lucide-react'
 import { getFeaturedTestimonials } from '@/lib/sanity'
+import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/donate' },
@@ -135,6 +136,9 @@ export default async function DonatePage() {
 
       {/* ── Tax receipt note ─────────────────────────────────────────── */}
       <section className="section-padding">
+        <div className="container-max max-w-2xl mx-auto">
+          <MissionFundingNote variant="donate" className="mb-8 text-left" />
+        </div>
         <div className="container-max max-w-2xl mx-auto text-center">
           <p className="text-brand-grey-dark text-sm bg-brand-grey-light rounded-xl p-4 border border-line">
             <strong>Tax receipts:</strong> Donors receive an email receipt for tax purposes following their contribution.

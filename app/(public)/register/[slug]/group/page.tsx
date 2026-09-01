@@ -5,6 +5,7 @@ import { getRegistrationPrefill } from '@/lib/registration-prefill'
 import { getEventPrice } from '@/lib/event-pricing'
 import GroupRegistrationForm from '@/components/forms/GroupRegistrationForm'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
+import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -60,6 +61,7 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
           isCampaign={isCampaign}
           isFree={isFree}
         />
+        <MissionFundingNote className="mt-10" />
       </div>
     </div>
   )

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Linkedin, Instagram, Facebook, Twitter } from 'lucide-react'
 import { CookieSettingsLink } from '@/components/analytics/CookieSettingsLink'
+import { STELLR_EIN } from '@/lib/org'
 
 const FOOTER_COLS = [
   {
@@ -43,6 +44,7 @@ const FOOTER_COLS = [
     heading: 'About',
     links: [
       { label: 'Impact', href: '/impact' },
+      { label: 'How We\u2019re Funded', href: '/impact#funding' },
       { label: 'Mission', href: '/about#mission' },
       { label: 'Team and Board', href: '/about#team' },
       { label: 'Contact Us', href: '/contact' },
@@ -63,7 +65,7 @@ function CopyrightBar() {
     <div className="border-t border-white/[0.08]">
       <div className="mx-auto max-w-chrome px-5 sm:px-8 py-5 flex flex-col sm:flex-row items-center justify-between flex-wrap gap-2.5 text-[13px] text-[#5A6490] font-sans">
         <span>
-          2026 © Stellr Education&nbsp;&nbsp;|&nbsp;&nbsp;Registered 501(c)(3)&nbsp;&nbsp;|&nbsp;&nbsp;Built In Utah, Educating The Globe
+          2026 © Stellr Education&nbsp;&nbsp;|&nbsp;&nbsp;Registered 501(c)(3) · EIN {STELLR_EIN}&nbsp;&nbsp;|&nbsp;&nbsp;Built In Utah, Educating The Globe
         </span>
         <span className="flex items-center gap-5">
           <Link href="/privacy" className="hover:text-hero-lead transition-colors">Privacy Policy</Link>

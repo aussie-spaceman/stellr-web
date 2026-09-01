@@ -1,6 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { ProductCard } from '@/components/ui/ProductCard'
 import type { StoreProductWithVariants } from '@/lib/store/types'
+import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 
 export const metadata = {
   alternates: { canonical: '/store' },
@@ -36,6 +37,8 @@ export default async function StorePage() {
             ))}
           </div>
         )}
+
+        <MissionFundingNote variant="store" className="mt-12" />
       </div>
     </div>
   )

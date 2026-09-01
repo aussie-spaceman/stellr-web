@@ -8,6 +8,16 @@ import { HubSpotTracking } from '@/components/analytics/HubSpotTracking'
 import { buildOrganizationJsonLd, buildWebSiteJsonLd } from '@/lib/structured-data'
 import '../styles/globals.css'
 
+/* Default social card. Without it every share preview came back blank — the
+   twitter:card was already summary_large_image with no image to fill it.
+   Pages that want their own image override `openGraph.images`. */
+const OG_IMAGE = {
+  url: '/images/og-default.jpg',
+  width: 1200,
+  height: 630,
+  alt: 'Stellr Education — real-world STEM design competitions for students',
+}
+
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'),
   title: {
@@ -20,9 +30,11 @@ export const metadata: Metadata = {
     siteName: 'Stellr Education',
     type: 'website',
     locale: 'en_US',
+    images: [OG_IMAGE],
   },
   twitter: {
     card: 'summary_large_image',
+    images: [OG_IMAGE.url],
   },
 }
 

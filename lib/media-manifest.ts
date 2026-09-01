@@ -321,11 +321,6 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   'about-award-1': photo('about-award-1', 'IMG_4014', 'Award-winner banner'),
   'about-award-2': photo('about-award-2', 'IMG_4015', 'Washington Achievement banner'),
   'about-team-1': photo('about-team-1', 'DSC_5529', 'The team and participants'),
-  'about-certificates': {
-    // Source is 1290px wide — no 1920 derivative exists.
-    ...photo('about-certificates', 'IMG_7768', 'Participants with their competition certificates'),
-    widths: [480, 768, 1200],
-  },
   'about-team-2': photo('about-team-2', 'IMG_7685', 'Mentors with participants'),
   // Students
   'students-hero': photo('students-hero', 'DSC_5740', 'Participants at laptops during a design session'),

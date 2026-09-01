@@ -27,8 +27,7 @@ const COPY: Record<FundingVariant, { heading: string; body: ReactNode }> = {
         and membership subscriptions cover the direct cost of running our programs — venues,
         materials, mentor travel and safeguarding — and any surplus is reinvested into scholarships
         that let students take part regardless of what their family can pay. No fee is ever a
-        barrier: <Link href="/scholarship" className="font-medium text-primary-deep underline underline-offset-2 hover:no-underline">apply for a scholarship</Link>{' '}
-        and we cover the full cost.
+        barrier: <Link href="/scholarship" className="font-medium text-primary-deep underline underline-offset-2 hover:no-underline">apply for a scholarship</Link>.
       </>
     ),
   },

@@ -4,6 +4,7 @@ import { ArrowLeft, ShoppingBag } from 'lucide-react'
 import { supabaseServer } from '@/lib/supabase'
 import { AddToCart } from '@/components/store/AddToCart'
 import type { StoreProductWithVariants } from '@/lib/store/types'
+import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,6 +70,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             />
           </div>
         </div>
+
+        <MissionFundingNote variant="store" className="mt-12" />
       </div>
     </div>
   )

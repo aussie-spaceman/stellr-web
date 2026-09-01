@@ -7,6 +7,7 @@ import { listEventAddons } from '@/lib/store/event-merch'
 import IndividualRegistrationForm from '@/components/forms/IndividualRegistrationForm'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { participationTypeFor } from '@/lib/analytics'
+import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -70,6 +71,7 @@ export default async function IndividualRegistrationPage({ params }: PageProps) 
           prefill={prefill}
           addons={addons}
         />
+        <MissionFundingNote className="mt-10" />
       </div>
     </div>
   )

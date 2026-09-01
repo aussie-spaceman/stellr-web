@@ -229,7 +229,7 @@ export const COMPETITION: Record<string, CompetitionAsset> = {
     gated: true,
     fileHref: '/files/jsc-2025-student-presentation.pdf',
     assetKey: 'jsc-2025-student-presentation',
-    credit: 'Student team',
+    credit: 'Participant team \u00B7 \u00A9 Stellr Education',
   },
   'south-west-2022-student-presentation': {
     id: 'south-west-2022-student-presentation',
@@ -240,7 +240,7 @@ export const COMPETITION: Record<string, CompetitionAsset> = {
     gated: true,
     fileHref: '/files/south-west-2022-student-presentation.pdf',
     assetKey: 'south-west-2022-student-presentation',
-    credit: 'Student team',
+    credit: 'Participant team \u00B7 \u00A9 Stellr Education',
   },
   'south-west-2025-rfp': {
     id: 'south-west-2025-rfp',
@@ -267,18 +267,30 @@ for (const c of Object.values(COMPETITION)) {
  * Photos — my chosen deployment (the doc leaves photo placement to me). Base
  * paths only; the component composes srcset from PHOTO_WIDTHS. Bytes pending.
  * ───────────────────────────────────────────────────────────────────────── */
+/** Shown when a photo carries no more specific credit. */
+export const DEFAULT_PHOTO_CREDIT = '\u00A9 Stellr Education'
+
 function photo(id: string, source: string, alt: string, credit?: string): PhotoAsset {
   // `source` records the approved Drive original this derives from (for the
   // transcode pass); not used at runtime.
   void source
-  return { id, src: mediaUrl(`/media/${id}`), alt, credit, widths: PHOTO_WIDTHS }
+  // The copyright notice used to be baked into the bottom-right pixels of every
+  // derivative. It now rides along as a caption instead, so it defaults here
+  // rather than at each of the ~60 call sites.
+  return {
+    id,
+    src: mediaUrl(`/media/${id}`),
+    alt,
+    credit: credit ?? DEFAULT_PHOTO_CREDIT,
+    widths: PHOTO_WIDTHS,
+  }
 }
 
 export const PHOTOS: Record<string, PhotoAsset> = {
   // Home
-  'home-hero': photo('home-hero', 'DSC_5544', 'Competition floor — student teams at work'),
+  'home-hero': photo('home-hero', 'DSC_5544', 'Competition floor — participant teams at work'),
   'home-strip-1': photo('home-strip-1', 'DSC_5526', 'A full room of participants and mentors'),
-  'home-strip-2': photo('home-strip-2', 'IMG_9183', 'Students collaborating during a design session'),
+  'home-strip-2': photo('home-strip-2', 'IMG_9183', 'Participants collaborating during a design session'),
   'home-strip-3': photo('home-strip-3', 'IMG_2741', 'Teams presenting their work'),
   // Home proof strip — 2026-07 feedback-doc replacements
   'home-biosphere2': photo('home-biosphere2', 'Drive 1NUyS7_k', 'Touring Biosphere2 in Arizona'),
@@ -289,13 +301,16 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   },
   'home-teamwork': photo('home-teamwork', 'Drive 1wmO0jBV', 'Teamwork makes successful STEM professionals'),
   'home-group-dynamics': photo('home-group-dynamics', 'Drive 1_D_0qIV', 'Group dynamics at play'),
+  'home-hero-floor': photo('home-hero-floor', 'DSC_5282', 'The competition floor'),
   // Competitions
-  'competitions-1': photo('competitions-1', 'IMG_9052', 'Collaboration - both in person and digital', 'Student team'),
-  'competitions-2': photo('competitions-2', 'IMG_9215', 'Student learn 3D modelling as a core skill', 'Student team'),
+  'competitions-1': photo('competitions-1', 'IMG_9052', 'Collaboration - both in person and digital', 'Participant team \u00B7 \u00A9 Stellr Education'),
+  'competitions-2': photo('competitions-2', 'IMG_9215', 'Participants learn 3D modelling as a core skill', 'Participant team \u00B7 \u00A9 Stellr Education'),
   'competitions-3': photo('competitions-3', 'DSC_5501', 'Teams at the competition'),
   'competitions-ksc': photo('competitions-ksc', 'Drive 1dkLNSN9', 'Exploring Kennedy Space Center before an event'),
   // Membership
   'membership-hero': photo('membership-hero', 'DSC_5526', 'The room, full — the Stellr community'),
+  'membership-mentor-review': photo('membership-mentor-review', 'DSC_5479', 'A mentor reviewing work with a participant'),
+  'membership-room-full': photo('membership-room-full', 'IMG_7758', 'The room, full — a Stellr competition'),
   // Events (gallery)
   'events-1': photo('events-1', 'DSC_5501', 'Future engineers learning the joys of early mornings'),
   'events-2': photo('events-2', 'DSC_5521', 'Collaboration = listening'),
@@ -306,38 +321,50 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   'about-award-1': photo('about-award-1', 'IMG_4014', 'Award-winner banner'),
   'about-award-2': photo('about-award-2', 'IMG_4015', 'Washington Achievement banner'),
   'about-team-1': photo('about-team-1', 'DSC_5529', 'The team and participants'),
-  'about-team-2': photo('about-team-2', 'IMG_7685', 'Mentors with students'),
+  'about-certificates': {
+    // Source is 1290px wide — no 1920 derivative exists.
+    ...photo('about-certificates', 'IMG_7768', 'Participants with their competition certificates'),
+    widths: [480, 768, 1200],
+  },
+  'about-team-2': photo('about-team-2', 'IMG_7685', 'Mentors with participants'),
   // Students
-  'students-hero': photo('students-hero', 'DSC_5740', 'Students at laptops during a design session'),
-  'students-strip-1': photo('students-strip-1', 'IMG_9046', 'Student presenting work', 'Student team'),
-  'students-strip-2': photo('students-strip-2', 'IMG_9060', 'Students reviewing their design', 'Student team'),
+  'students-hero': photo('students-hero', 'DSC_5740', 'Participants at laptops during a design session'),
+  'students-strip-1': photo('students-strip-1', 'IMG_9046', 'A participant presenting work', 'Participant team \u00B7 \u00A9 Stellr Education'),
+  'students-strip-2': photo('students-strip-2', 'IMG_9060', 'Participants reviewing their design', 'Participant team \u00B7 \u00A9 Stellr Education'),
   // Educators
-  'educators-1': photo('educators-1', 'DSC_5776', 'Adults and students collaborating'),
+  'educators-1': photo('educators-1', 'DSC_5776', 'Mentors and participants collaborating'),
   'educators-2': photo('educators-2', 'IMG_7702', 'Structural-board design session'),
   // Mentors
   'mentors-1': photo('mentors-1', 'IMG_7700', 'Team delegation at the whiteboard'),
-  'mentors-2': photo('mentors-2', 'IMG_2213', 'Mentors judging student presentations'),
+  'mentors-2': photo('mentors-2', 'IMG_2213', 'Mentors judging participant presentations'),
   'mentors-3': photo('mentors-3', 'IMG_2260', 'Mentor reviewing a team submission'),
   // Why-Stellr
   'why-1': photo('why-1', 'DSC_5544', 'The scale of the competition floor'),
   'why-2': photo('why-2', 'DSC_5529', 'Participants and mentors together'),
   'why-3': photo('why-3', 'IMG_4014', 'Award-winner banner'),
   'why-4': photo('why-4', 'IMG_4015', 'Washington Achievement banner'),
+  'why-auditorium': {
+    // Source is 1440px wide — no 1920 derivative exists.
+    ...photo('why-auditorium', 'Drive 484027872', 'A full auditorium at a design briefing'),
+    widths: [480, 768, 1200],
+  },
+  'why-biosphere-tour': photo('why-biosphere-tour', 'BS2 Friday Tour 3', 'Touring Biosphere 2 in Arizona'),
+  'why-teams-working': photo('why-teams-working', 'IMG_9395', 'Teams working through a design problem'),
   // Curriculum
-  'curriculum-1': photo('curriculum-1', 'IMG_9215', '3D modelling on laptops', 'Student team'),
-  'curriculum-2': photo('curriculum-2', 'IMG_9052', 'Preparing to pitch', 'Student team'),
+  'curriculum-1': photo('curriculum-1', 'IMG_9215', '3D modelling on laptops', 'Participant team \u00B7 \u00A9 Stellr Education'),
+  'curriculum-2': photo('curriculum-2', 'IMG_9052', 'Preparing to pitch', 'Participant team \u00B7 \u00A9 Stellr Education'),
   'curriculum-3': photo('curriculum-3', 'IMG_2283', 'Requirements analysis'),
   'curriculum-group-work': {
     // Source is 1440px wide — no 1920 derivative exists.
-    ...photo('curriculum-group-work', 'Drive 1PPNwa3A', 'students work in large groups, learning group dynamics and communication'),
+    ...photo('curriculum-group-work', 'Drive 1PPNwa3A', 'Participants work in large groups, learning group dynamics and communication'),
     widths: [480, 768, 1200],
   },
-  'curriculum-ty-white': photo('curriculum-ty-white', 'Drive 1plUOEjF', 'Mr Ty White with students at a competition'),
+  'curriculum-ty-white': photo('curriculum-ty-white', 'Drive 1plUOEjF', 'Mr Ty White with participants at a competition'),
   // Academy · Training
-  'academy-mentoring-cohort': photo('academy-mentoring-cohort', 'Drive 1MN0KUFE', 'A Stellr mentoring cohort collaborating'),
+  'academy-mentoring-cohort': photo('academy-mentoring-cohort', 'IMG_9061', 'A Stellr mentoring cohort collaborating'),
   'academy-1': photo('academy-1', 'IMG_7700', 'Team delegation at the whiteboard'),
   'academy-2': photo('academy-2', 'IMG_7702', 'Structural-board design session'),
-  'academy-3': photo('academy-3', 'DSC_5776', 'Adults and students collaborating'),
+  'academy-3': photo('academy-3', 'DSC_5776', 'Mentors and participants collaborating'),
 }
 
 /* ─────────────────────────────────────────────────────────────────────────

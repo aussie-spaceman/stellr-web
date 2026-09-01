@@ -212,6 +212,7 @@ export default async function CampaignsPage() {
               photo={PHOTOS['curriculum-ty-white']}
               sizes="(max-width: 1024px) 100vw, 50vw"
               className="rounded-panel"
+              showCredit
             />
           </div>
         </div>

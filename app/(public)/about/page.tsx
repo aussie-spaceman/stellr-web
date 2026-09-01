@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { Linkedin, Award, Lightbulb, Eye, Network as NetworkIcon } from 'lucide-react'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
-import { VIDEOS, QUOTES } from '@/lib/media-manifest'
+import { VIDEOS, QUOTES, PHOTOS } from '@/lib/media-manifest'
+import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/about' },
@@ -291,6 +292,14 @@ export default function AboutPage() {
         <div className="container-max text-center">
           <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">Team and Board</p>
           <h2 className="text-3xl font-bold text-brand-blue-dark mb-10">The people behind Stellr</h2>
+
+          <ResponsivePhoto
+            photo={PHOTOS['about-certificates']}
+            sizes="(max-width: 1024px) 100vw, 900px"
+            className="rounded-panel shadow-card-lift"
+            wrapperClassName="mx-auto mb-14 max-w-4xl text-left"
+            showCredit
+          />
 
           {/* Founder */}
           <div className="bg-white rounded-2xl p-8 shadow-sm max-w-md mb-12 mx-auto text-left">

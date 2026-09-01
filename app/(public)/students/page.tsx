@@ -119,7 +119,9 @@ export default function StudentsPage() {
             photo={PHOTOS['students-hero']}
             sizes="(max-width: 1024px) 100vw, 50vw"
             priority
-            className="aspect-[4/3] shadow-card-lift lg:justify-self-end"
+            className="aspect-[4/3] shadow-card-lift"
+            wrapperClassName="lg:justify-self-end"
+            showCredit
           />
         </div>
       </section>

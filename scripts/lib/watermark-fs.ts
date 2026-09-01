@@ -16,15 +16,19 @@ export const MANIFEST_PATH = join(REPO_ROOT, 'scripts', 'watermark-manifest.json
 export type AssetKind = 'image' | 'video' | 'pdf'
 
 // Directories (under public/) to scan, and which extensions in each count as which kind.
+//
+// Scope narrowed 2026-09-01 to student-submitted work only. A burned-in corner
+// mark reads as unlicensed stock photography, and Google Ad Grants rejected the
+// domain in part for "low quality" imagery; marketing photos, team headshots,
+// video posters and PDF covers now carry their credit as a visible caption
+// instead (see PhotoAsset.credit and ResponsivePhoto).
+//
+// Student work keeps the burned-in mark: it is the one category where the
+// copyright notice protects someone other than us, and it travels with the
+// image when a student's design is screenshotted or reposted.
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.avif', '.webp'])
 const SCAN: { dir: string; kinds: Partial<Record<AssetKind, Set<string>>> }[] = [
-  { dir: 'media', kinds: { image: IMAGE_EXTS } },
   { dir: 'student-work', kinds: { image: IMAGE_EXTS } },
-  { dir: 'team', kinds: { image: IMAGE_EXTS } },
-  // Video posters / thumbnails live alongside the mp4s; the mp4s themselves are re-encoded.
-  { dir: 'videos', kinds: { image: new Set(['.jpg', '.jpeg', '.png']), video: new Set(['.mp4']) } },
-  // PDF cover thumbnails + the downloadable PDFs.
-  { dir: 'files', kinds: { image: new Set(['.jpg', '.jpeg', '.png']), pdf: new Set(['.pdf']) } },
 ]
 
 export interface Target {

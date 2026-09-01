@@ -18,6 +18,7 @@ import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
 import { PHOTOS, VIDEOS } from '@/lib/media-manifest'
+import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/academy' },
@@ -425,6 +426,7 @@ export default function AcademyPage() {
             photo={PHOTOS['academy-mentoring-cohort']}
             sizes="(max-width: 1024px) 100vw, 45vw"
             className="rounded-panel border border-line"
+            showCredit
           />
           <div>
             <Eyebrow className="text-space-violet">Mentoring</Eyebrow>
@@ -449,6 +451,7 @@ export default function AcademyPage() {
                 Explore membership tiers
               </Button>
             </div>
+            <MissionFundingNote className="mt-8" />
           </div>
         </div>
       </section>

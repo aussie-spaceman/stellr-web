@@ -30,7 +30,7 @@ const FUNDING_BLOCKS = [
   },
   {
     title: 'Where surplus goes',
-    body: 'Any surplus is reinvested in one place: scholarships. In practice that means a student whose school cannot fund a place still competes, at no cost to their family.',
+    body: 'Any surplus is reinvested in one place: scholarships. In practice that means helping students whose school cannot fund a place to take part \u2014 covering some or all of the participation fee.',
   },
   {
     title: 'What we do not do',

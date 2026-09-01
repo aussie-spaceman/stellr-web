@@ -62,11 +62,19 @@ export interface EventFlyer {
  * Sanity's asset CDN serves a PDF inline by default (the browser opens its
  * viewer). `?dl=<name>` flips it to Content-Disposition: attachment, so the
  * flyer lands in Downloads with a sensible name rather than a hashed asset id.
+ *
+ * The CDN echoes the ?dl= value into that header verbatim, so a percent-encoded
+ * name is *saved* percent-encoded ("2027%20-%20SDC…pdf" — verified against the
+ * live CDN). Normalise to a filename that needs no encoding at all instead.
  */
 export function flyerDownloadUrl(flyer: EventFlyer): string {
   if (!flyer.url) return flyer.url
-  const name = flyer.filename?.trim()
-  return name ? `${flyer.url}?dl=${encodeURIComponent(name)}` : `${flyer.url}?dl=`
+  const base = (flyer.filename ?? flyer.label ?? '')
+    .replace(/\.pdf$/i, '')
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+  return `${flyer.url}?dl=${base || 'flyer'}.pdf`
 }
 
 // Core event shape returned by the event queries below.

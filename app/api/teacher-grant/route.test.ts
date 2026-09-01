@@ -50,7 +50,7 @@ const VALID = {
 
 function post(body: unknown) {
   return POST(
-    new Request('https://www.stellreducation.org/api/teacher-stipend', {
+    new Request('https://www.stellreducation.org/api/teacher-grant', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -71,8 +71,8 @@ beforeEach(() => {
   autoGrantBaseMembership.mockClear()
 })
 
-describe('POST /api/teacher-stipend', () => {
-  it('accepts a valid application and captures it as teacher_stipend', async () => {
+describe('POST /api/teacher-grant', () => {
+  it('accepts a valid application and captures it as teacher_grant', async () => {
     const res = await post(VALID)
 
     expect(res.status).toBe(200)
@@ -80,12 +80,12 @@ describe('POST /api/teacher-stipend', () => {
     expect(sendEmail).toHaveBeenCalledTimes(1)
 
     const arg = lastCapture()
-    expect(arg.source).toBe('teacher_stipend')
+    expect(arg.source).toBe('teacher_grant')
     expect(arg.email).toBe('dana@lincolnhigh.edu')
-    expect(arg.properties.stipend_planned_activities).toBe('Both')
-    expect(arg.properties.stipend_prior_stellr).toBe('No')
-    expect(arg.properties.stipend_status).toBe('Applied')
-    expect(arg.properties.stipend_expected_students).toBe('12')
+    expect(arg.properties.grant_planned_activities).toBe('Both')
+    expect(arg.properties.grant_prior_stellr).toBe('No')
+    expect(arg.properties.grant_status).toBe('Applied')
+    expect(arg.properties.grant_expected_students).toBe('12')
   })
 
   it('segments every applicant as a high school teacher without asking', async () => {
@@ -95,7 +95,7 @@ describe('POST /api/teacher-stipend', () => {
     expect(props.event_demographic).toBe('High School')
     expect(props.jobtitle).toBe('Teacher')
     // Superseded by event_demographic — a second copy is a second thing to sync.
-    expect(props.stipend_grade_levels).toBeUndefined()
+    expect(props.grant_grade_levels).toBeUndefined()
   })
 
   it('registers the applicant as an adult teacher member, matched on email', async () => {
@@ -158,7 +158,7 @@ describe('POST /api/teacher-stipend', () => {
 
   it('stamps the application date at UTC midnight, not the current instant', async () => {
     await post(VALID)
-    const value = Number(lastCapture().properties.stipend_application_date)
+    const value = Number(lastCapture().properties.grant_application_date)
     expect(Number.isInteger(value)).toBe(true)
     // HubSpot rejects a date property that is not exactly UTC midnight.
     expect(value % 86_400_000).toBe(0)
@@ -166,7 +166,7 @@ describe('POST /api/teacher-stipend', () => {
 
   it('ignores a program year supplied by the client', async () => {
     await post({ ...VALID, programYear: '2028' })
-    expect(lastCapture().properties.stipend_program_year).toBe('2027')
+    expect(lastCapture().properties.grant_program_year).toBe('2027')
   })
 
   it('replies to the applicant, not to the site', async () => {

@@ -15,12 +15,12 @@ import { ProofStrip } from '@/components/sections/ProofStrip'
 import { WorkCard } from '@/components/sections/WorkCard'
 import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
 import {
-  STIPEND_AMOUNTS,
-  STIPEND_PD_HOURS,
-  STIPEND_PLACES,
-  STIPEND_PROGRAM_YEAR,
-  stipendAmount,
-} from '@/lib/stipend'
+  GRANT_AMOUNTS,
+  GRANT_PD_HOURS,
+  GRANT_PLACES,
+  GRANT_PROGRAM_YEAR,
+  grantAmount,
+} from '@/lib/grant'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/educators' },
@@ -32,13 +32,13 @@ export const metadata: Metadata = {
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
 /* NOTE: The Educators and Schools sections were left blank in the source doc;
-   the copy below is on-brand draft placeholder content for review. The Stipend
+   the copy below is on-brand draft placeholder content for review. The Teacher Grant
    section is NOT placeholder — it is the approved program copy, and its numbers
-   come from lib/stipend.ts so the page, the agreement and the API route agree. */
+   come from lib/grant.ts so the page, the agreement and the API route agree. */
 
 const sections = [
   { id: 'educators', label: 'For Educators' },
-  { id: 'stipend', label: 'Teacher Stipend' },
+  { id: 'grant', label: 'Teacher Grant' },
   { id: 'schools', label: 'For Schools' },
 ]
 
@@ -158,7 +158,7 @@ export default function EducatorsPage() {
         </div>
       </section>
 
-      {/* ── Educator video testimonials (moved above Teacher Stipend) ─── */}
+      {/* ── Educator video testimonials (moved above Teacher Grant) ─── */}
       <section className="section-padding bg-white">
         <div className="container-max">
           <div className="grid gap-6 sm:grid-cols-2 max-w-5xl mx-auto">
@@ -172,12 +172,12 @@ export default function EducatorsPage() {
         </div>
       </section>
 
-      {/* ── #stipend ──────────────────────────────────────────────────────
+      {/* ── #grant ────────────────────────────────────────────────────────
           Teaser only. The full program — earnings table, FAQ (with its FAQPage
-          schema) and the application form — lives once, at /stipend. Two pages
+          schema) and the application form — lives once, at /grant. Two pages
           carrying the same copy would compete for the same search terms and
           double every future edit. */}
-      <section id="stipend" className="section-padding bg-brand-grey-light scroll-mt-36">
+      <section id="grant" className="section-padding bg-brand-grey-light scroll-mt-36">
         <div className="container-max">
           <div className="max-w-3xl">
             <div className="flex items-center gap-3 mb-4">
@@ -185,7 +185,7 @@ export default function EducatorsPage() {
                 <Wallet size={22} className="text-brand-blue" />
               </div>
               <p className="text-sm font-bold uppercase tracking-widest text-brand-blue">
-                Teacher Stipend
+                Teacher Grant
               </p>
             </div>
             <h2 className="text-3xl font-bold text-brand-blue-dark mb-4">
@@ -193,16 +193,16 @@ export default function EducatorsPage() {
             </h2>
             <p className="text-brand-grey-dark leading-relaxed mb-6">
               Taking a team to a live Challenge or running a Campaign at your school takes real
-              time. The Teacher Stipend recognizes that work — {stipendAmount(STIPEND_AMOUNTS.annualMaximum)}{' '}
-              a year at most, plus {STIPEND_PD_HOURS} documented PD contact hours and free Catalyst
-              membership. Open to U.S. high school teachers, {STIPEND_PLACES} places for{' '}
-              {STIPEND_PROGRAM_YEAR}.
+              time. The Teacher Grant recognizes that work — {grantAmount(GRANT_AMOUNTS.annualMaximum)}{' '}
+              a year at most, plus {GRANT_PD_HOURS} documented PD contact hours and free Catalyst
+              membership. Open to U.S. high school teachers, {GRANT_PLACES} places for{' '}
+              {GRANT_PROGRAM_YEAR}.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link href="/stipend" className="btn-primary">
-                See the Teacher Stipend <ArrowRight size={16} />
+              <Link href="/grant" className="btn-primary">
+                See the Teacher Grant <ArrowRight size={16} />
               </Link>
-              <Link href="/stipend#apply" className="btn-outline">
+              <Link href="/grant#apply" className="btn-outline">
                 Apply now
               </Link>
             </div>

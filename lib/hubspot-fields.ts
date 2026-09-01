@@ -26,8 +26,8 @@ export const HS = {
   city: 'city',
   state: 'state',
   jobTitle: 'jobtitle',
-  /** HubSpot's own standard property. The stipend route writes the applicant's
-   *  school here rather than adding a `stipend_school_name` duplicate — and
+  /** HubSpot's own standard property. The grant route writes the applicant's
+   *  school here rather than adding a `grant_school_name` duplicate — and
    *  deliberately not to `company`, which can trigger company auto-association
    *  on what is a school name, not a customer. */
   school: 'school',
@@ -46,17 +46,17 @@ export const HS = {
   registrationInterest: 'registration_interest_type',
   leadSource: 'stellr_lead_source',
 
-  // Teacher Stipend Program (created by scripts/hubspot-setup.ts)
-  stipendProgramYear: 'stipend_program_year',
-  stipendStatus: 'stipend_status',
-  stipendApplicationDate: 'stipend_application_date',
-  stipendPlannedActivities: 'stipend_planned_activities',
-  stipendExpectedStudents: 'stipend_expected_students',
-  stipendSubjects: 'stipend_subjects',
-  stipendYearsTeaching: 'stipend_years_teaching',
-  stipendPriorStellr: 'stipend_prior_stellr',
-  stipendMotivation: 'stipend_motivation',
-  stipendReferralSource: 'stipend_referral_source',
+  // Teacher Grant Program (created by scripts/hubspot-setup.ts)
+  grantProgramYear: 'grant_program_year',
+  grantStatus: 'grant_status',
+  grantApplicationDate: 'grant_application_date',
+  grantPlannedActivities: 'grant_planned_activities',
+  grantExpectedStudents: 'grant_expected_students',
+  grantSubjects: 'grant_subjects',
+  grantYearsTeaching: 'grant_years_teaching',
+  grantPriorStellr: 'grant_prior_stellr',
+  grantMotivation: 'grant_motivation',
+  grantReferralSource: 'grant_referral_source',
 } as const
 
 /* ── Lead sources ────────────────────────────────────────────────────────── */
@@ -69,7 +69,7 @@ export const LEAD_SOURCES = {
   asset_request: 'Asset Request',
   scholarship: 'Scholarship',
   host_event: 'Host An Event',
-  teacher_stipend: 'Teacher Stipend',
+  teacher_grant: 'Teacher Grant',
 } as const
 
 export type LeadSource = keyof typeof LEAD_SOURCES
@@ -87,7 +87,7 @@ export const FORM_ENV_VARS: Record<LeadSource, string> = {
   asset_request: 'HUBSPOT_FORM_ASSET_REQUEST',
   scholarship: 'HUBSPOT_FORM_SCHOLARSHIP',
   host_event: 'HUBSPOT_FORM_HOST_EVENT',
-  teacher_stipend: 'HUBSPOT_FORM_TEACHER_STIPEND',
+  teacher_grant: 'HUBSPOT_FORM_TEACHER_GRANT',
 }
 
 export function formIdFor(source: LeadSource): string | undefined {
@@ -120,7 +120,7 @@ export const LEAD_SOURCE_LIFECYCLE: Record<LeadSource, 'subscriber' | 'lead'> = 
   // Asked us for something that needs a person to respond.
   scholarship: 'lead',
   host_event: 'lead',
-  teacher_stipend: 'lead',
+  teacher_grant: 'lead',
 }
 
 /** Routes whose contacts HubSpot will wrongly leave at Lead. */
@@ -152,9 +152,9 @@ export const REGISTRATION_INTEREST = {
 
 export type RegistrationInterest = keyof typeof REGISTRATION_INTEREST
 
-export { STIPEND_DEMOGRAPHIC } from '@/lib/stipend'
+export { GRANT_DEMOGRAPHIC } from '@/lib/grant'
 
-/* ── Teacher Stipend Program ────────────────────────────────────────────── */
+/* ── Teacher Grant Program ────────────────────────────────────────────── */
 
 /**
  * Stored values are the human labels, matching every other Stellr enumeration
@@ -162,7 +162,7 @@ export { STIPEND_DEMOGRAPHIC } from '@/lib/stipend'
  * column of `waitlist` / `both` reads as a bug where `Waitlist` / `Both` reads
  * as an answer.
  */
-export const STIPEND_STATUS = {
+export const GRANT_STATUS = {
   applied: 'Applied',
   accepted: 'Accepted',
   waitlist: 'Waitlist',
@@ -174,15 +174,15 @@ export const STIPEND_STATUS = {
  * What the applicant plans to run. A Competition is the umbrella; a Challenge is
  * the live form of it and a Campaign the remote-at-their-school form — so the
  * two options are Challenge and Campaign, never "Competition and Campaign".
- * See the vocabulary note in lib/stipend.ts.
+ * See the vocabulary note in lib/grant.ts.
  */
-export const STIPEND_ACTIVITIES = {
+export const GRANT_ACTIVITIES = {
   challenge: 'Challenge',
   campaign: 'Campaign',
   both: 'Both',
 } as const
 
-export const STIPEND_PRIOR = {
+export const GRANT_PRIOR = {
   yes: 'Yes',
   no: 'No',
 } as const

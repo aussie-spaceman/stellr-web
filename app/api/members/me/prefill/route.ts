@@ -15,7 +15,7 @@ import { getRegistrationPrefill } from '@/lib/registration-prefill'
  * registration prefill also carries date of birth, gender, health conditions
  * and emergency contacts — that belongs in the JS of a registration page the
  * member deliberately opened, not in every page that happens to have a footer.
- * Forms needing the full record (registration, group join, the stipend
+ * Forms needing the full record (registration, group join, the grant
  * application) take it as a server prop instead.
  *
  * Returns `{}` for a signed-out visitor — not a 401. There is nothing wrong

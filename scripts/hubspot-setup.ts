@@ -47,10 +47,10 @@ import {
   LEAD_SOURCES,
   NOTIFY_STATUS,
   REGISTRATION_INTEREST,
-  STIPEND_ACTIVITIES,
-  STIPEND_PRIOR,
-  STIPEND_DEMOGRAPHIC,
-  STIPEND_STATUS,
+  GRANT_ACTIVITIES,
+  GRANT_PRIOR,
+  GRANT_DEMOGRAPHIC,
+  GRANT_STATUS,
   HS,
 } from '../lib/hubspot-fields'
 
@@ -176,87 +176,87 @@ const PROPERTIES: PropertyDef[] = [
     options: opts(Object.values(LEAD_SOURCES)),
   },
 
-  /* ── Teacher Stipend Program ──────────────────────────────────────────
-     Deliberately absent: a `stipend_school_name` field. HubSpot's standard
+  /* ── Teacher Grant Program ──────────────────────────────────────────
+     Deliberately absent: a `grant_school_name` field. HubSpot's standard
      `school` property already exists and holds exactly that, and a second
-     copy is a second thing to keep in step. Likewise no `stipend_applicant`
-     boolean — `stellr_lead_source = Teacher Stipend` and a non-empty
-     `stipend_status` both already say so, and a third flag is a third thing
+     copy is a second thing to keep in step. Likewise no `grant_applicant`
+     boolean — `stellr_lead_source = Teacher Grant` and a non-empty
+     `grant_status` both already say so, and a third flag is a third thing
      that can disagree with the other two. */
   {
-    name: HS.stipendProgramYear,
-    label: 'Stipend Program Year',
+    name: HS.grantProgramYear,
+    label: 'Grant Program Year',
     description:
-      'Calendar year of the Teacher Stipend cohort this application is for. Calendar, not school year — the stipend runs Jan–Dec and pays on 31 May.',
+      'Calendar year of the Teacher Grant cohort this application is for. Calendar, not school year — the grant runs Jan–Dec and pays on 31 May.',
     type: 'string',
     fieldType: 'text',
   },
   {
-    name: HS.stipendStatus,
-    label: 'Stipend Status',
+    name: HS.grantStatus,
+    label: 'Grant Status',
     description:
-      'Where this applicant sits in the Teacher Stipend intake. The site only ever writes "Applied"; everything after that is set by a human.',
+      'Where this applicant sits in the Teacher Grant Program intake. The site only ever writes "Applied"; everything after that is set by a human.',
     type: 'enumeration',
     fieldType: 'select',
-    options: opts(Object.values(STIPEND_STATUS)),
+    options: opts(Object.values(GRANT_STATUS)),
   },
   {
-    name: HS.stipendApplicationDate,
-    label: 'Stipend Application Date',
-    description: 'When this contact applied for the Teacher Stipend.',
+    name: HS.grantApplicationDate,
+    label: 'Grant Application Date',
+    description: 'When this contact applied for the Teacher Grant.',
     type: 'date',
     fieldType: 'date',
   },
   {
-    name: HS.stipendPlannedActivities,
-    label: 'Stipend Planned Activities',
+    name: HS.grantPlannedActivities,
+    label: 'Grant Planned Activities',
     description:
       'What the applicant plans to run: a live Challenge, a Campaign at their own school, or both. Both is the only route to the $500 annual maximum.',
     type: 'enumeration',
     fieldType: 'select',
-    options: opts(Object.values(STIPEND_ACTIVITIES)),
+    options: opts(Object.values(GRANT_ACTIVITIES)),
   },
   {
-    name: HS.stipendExpectedStudents,
-    label: 'Stipend Expected Students',
+    name: HS.grantExpectedStudents,
+    label: 'Grant Expected Students',
     description:
       'How many students the applicant expects to involve. Thresholds are 5 students plus the teacher attending a live Challenge, or 8 registered for a Campaign.',
     type: 'number',
     fieldType: 'number',
   },
   {
-    name: HS.stipendSubjects,
-    label: 'Stipend Subjects Taught',
+    name: HS.grantSubjects,
+    label: 'Grant Subjects Taught',
     description: 'What the applicant teaches.',
     type: 'string',
     fieldType: 'text',
   },
   {
-    name: HS.stipendYearsTeaching,
-    label: 'Stipend Years Teaching',
+    name: HS.grantYearsTeaching,
+    label: 'Grant Years Teaching',
     description: 'How long the applicant has been teaching. Free text — some answer in ranges.',
     type: 'string',
     fieldType: 'text',
   },
   {
-    name: HS.stipendPriorStellr,
-    label: 'Stipend Prior Stellr Experience',
+    name: HS.grantPriorStellr,
+    label: 'Grant Prior Stellr Experience',
     description: 'Whether the applicant has run a Stellr Challenge or Campaign before.',
     type: 'enumeration',
     fieldType: 'select',
-    options: opts(Object.values(STIPEND_PRIOR)),
+    options: opts(Object.values(GRANT_PRIOR)),
   },
   {
-    name: HS.stipendMotivation,
-    label: 'Stipend Motivation',
+    name: HS.grantMotivation,
+    label: 'Grant Motivation',
     description: 'The applicant\u2019s own words on why they want to take part.',
     type: 'string',
     fieldType: 'textarea',
   },
   {
-    name: HS.stipendReferralSource,
-    label: 'Stipend Referral Source',
-    description: 'How the applicant heard about the Teacher Stipend.',
+    name: HS.grantReferralSource,
+    label: 'Grant Referral Source',
+    description: 'How the applicant heard about the Teacher Grant.',
     type: 'string',
     fieldType: 'text',
   },
@@ -292,30 +292,30 @@ const EVENT_FIELDS = [
 ]
 
 /**
- * The stipend application asks far more than any other lead route, and the
+ * The grant application asks far more than any other lead route, and the
  * Forms API rejects the whole submission if it names a field the form does not
- * declare — so every property `app/api/teacher-stipend/route.ts` writes has to
+ * declare — so every property `app/api/teacher-grant/route.ts` writes has to
  * appear here or the conversion is lost.
  */
-const STIPEND_FIELDS = [
+const GRANT_FIELDS = [
   HS.phone,
   HS.school,
   HS.city,
   HS.state,
   HS.jobTitle,
   // Grade levels taught reuse the portal's existing event taxonomy rather than a
-  // parallel stipend_* copy — see the note on STIPEND_DEMOGRAPHIC.
+  // parallel grant_* copy — see the note on GRANT_DEMOGRAPHIC.
   HS.eventDemographic,
-  HS.stipendProgramYear,
-  HS.stipendStatus,
-  HS.stipendApplicationDate,
-  HS.stipendPlannedActivities,
-  HS.stipendExpectedStudents,
-  HS.stipendSubjects,
-  HS.stipendYearsTeaching,
-  HS.stipendPriorStellr,
-  HS.stipendMotivation,
-  HS.stipendReferralSource,
+  HS.grantProgramYear,
+  HS.grantStatus,
+  HS.grantApplicationDate,
+  HS.grantPlannedActivities,
+  HS.grantExpectedStudents,
+  HS.grantSubjects,
+  HS.grantYearsTeaching,
+  HS.grantPriorStellr,
+  HS.grantMotivation,
+  HS.grantReferralSource,
 ]
 
 const FORMS: { key: keyof typeof LEAD_SOURCES; name: string; fields: string[] }[] = [
@@ -326,9 +326,9 @@ const FORMS: { key: keyof typeof LEAD_SOURCES; name: string; fields: string[] }[
   { key: 'scholarship', name: 'Website — Scholarship Application', fields: COMMON_FIELDS },
   { key: 'host_event', name: 'Website — Host An Event', fields: COMMON_FIELDS },
   {
-    key: 'teacher_stipend',
-    name: 'Website — Teacher Stipend Application',
-    fields: [...COMMON_FIELDS, ...STIPEND_FIELDS],
+    key: 'teacher_grant',
+    name: 'Website — Teacher Grant Application',
+    fields: [...COMMON_FIELDS, ...GRANT_FIELDS],
   },
 ]
 
@@ -471,7 +471,7 @@ async function extendEventYears() {
  *     and the waitlist opt-out writes it — without this the write is rejected
  *     and someone stays subscribed.
  *   • `stellr_lead_source` is written by *every* route, so each new lead source
- *     (Teacher Stipend was the first) needs its option added to a property
+ *     (Teacher Grant was the first) needs its option added to a property
  *     that already exists. Miss it and HubSpot drops the property from the
  *     write — the lead lands with no source, which is exactly the invisible
  *     contact this whole module exists to prevent.
@@ -611,7 +611,7 @@ const NO_VALIDATION = { blockedEmailDomains: [], useDefaultBlockList: false }
  * fails the whole form definition with
  * `Some required fields were not set: [minAllowedDigits, maxAllowedDigits]`,
  * and the message names no field, so it looks like a malformed request rather
- * than one field's missing property. (Hit when `stipend_expected_students`
+ * than one field's missing property. (Hit when `grant_expected_students`
  * became the first number field in any Stellr form.)
  *
  * Four digits matches the route's own `^\\d{1,4}$` cap on the value.
@@ -783,7 +783,7 @@ async function main() {
   await ensureEnumOptions(HS.leadSource, Object.values(LEAD_SOURCES), 'lead sources')
   await ensureEnumOptions(
     HS.eventDemographic,
-    [STIPEND_DEMOGRAPHIC],
+    [GRANT_DEMOGRAPHIC],
     'event demographics',
   )
 

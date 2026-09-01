@@ -1,4 +1,4 @@
-// Teacher Stipend Program — the numbers the page and the API route must agree on.
+// Teacher Grant Program — the numbers the page and the API route must agree on.
 //
 // The program is a fixed, budgeted pilot: 15 places, $500 maximum per teacher,
 // $7,500 total exposure. Those figures appear in the marketing copy, in the
@@ -20,16 +20,16 @@
 // and one Campaign" is wrong — the second names a category and one of its own
 // members as if they were siblings.
 
-/** Calendar year of the current cohort. Calendar, not school year: the stipend
+/** Calendar year of the current cohort. Calendar, not school year: the grant
  *  runs Jan–Dec and pays on 31 May, unlike events, which are named for the
  *  school year they end in (see schoolYearFor in lib/hubspot-fields.ts). */
-export const STIPEND_PROGRAM_YEAR = '2027'
+export const GRANT_PROGRAM_YEAR = '2027'
 
 /** Cohort size. Enforced by hand for the pilot — the form does not close itself. */
-export const STIPEND_PLACES = 15
+export const GRANT_PLACES = 15
 
-/** What each milestone pays, in whole dollars. */
-export const STIPEND_AMOUNTS = {
+/** What each milestone is worth, in whole dollars. */
+export const GRANT_AMOUNTS = {
   onboarding: 50,
   /** A live Challenge — the teacher brings a team to a venue. */
   challenge: 200,
@@ -39,20 +39,20 @@ export const STIPEND_AMOUNTS = {
   annualMaximum: 500,
 } as const
 
-/** Minimum participants for each earning activity. */
-export const STIPEND_THRESHOLDS = {
+/** Minimum participants for each funded activity. */
+export const GRANT_THRESHOLDS = {
   /** Students who must *attend* a live Challenge, plus the teacher — six people. */
   challengeStudents: 5,
   /** Students who must be *registered* for a Campaign. */
   campaignStudents: 8,
 } as const
 
-export const STIPEND_PAYMENT_DATE = '31 May'
+export const GRANT_PAYMENT_DATE = '31 May'
 
-export const STIPEND_PD_HOURS = '10–20'
+export const GRANT_PD_HOURS = '10–20'
 
 /** Dollar amount as it appears in copy: "$200". */
-export function stipendAmount(value: number): string {
+export function grantAmount(value: number): string {
   return '$' + value.toLocaleString('en-US')
 }
 
@@ -65,10 +65,10 @@ export function closeOutThreshold(students: number): number {
 }
 
 /**
- * The stipend is open to high school teachers only, so there is nothing to ask:
+ * The grant is open to high school teachers only, so there is nothing to ask:
  * every applicant's demographic is known before they start typing. Written to
  * the portal's existing `event_demographic` rather than a parallel
- * `stipend_grade_levels`, so a teacher and the events serving their students
+ * `grant_grade_levels`, so a teacher and the events serving their students
  * land in one segment instead of two that need reconciling.
  */
-export const STIPEND_DEMOGRAPHIC = 'High School'
+export const GRANT_DEMOGRAPHIC = 'High School'

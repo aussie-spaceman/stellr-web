@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Check } from 'lucide-react'
 import { Document, Team } from '@stellr/icons'
 import { Button, Eyebrow, InfoPill } from '@stellr/web-ui'
-import TeacherStipendForm from '@/components/forms/TeacherStipendForm'
+import TeacherGrantForm from '@/components/forms/TeacherGrantForm'
 import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { VIDEOS, QUOTES } from '@/lib/media-manifest'
@@ -11,25 +11,25 @@ import { getRegistrationPrefill } from '@/lib/registration-prefill'
 import { buildFaqJsonLd } from '@/lib/structured-data'
 import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
 import {
-  STIPEND_AMOUNTS,
-  STIPEND_PAYMENT_DATE,
-  STIPEND_PD_HOURS,
-  STIPEND_PLACES,
-  STIPEND_PROGRAM_YEAR,
-  STIPEND_THRESHOLDS,
-  stipendAmount,
-} from '@/lib/stipend'
+  GRANT_AMOUNTS,
+  GRANT_PAYMENT_DATE,
+  GRANT_PD_HOURS,
+  GRANT_PLACES,
+  GRANT_PROGRAM_YEAR,
+  GRANT_THRESHOLDS,
+  grantAmount,
+} from '@/lib/grant'
 import { BENEFITS, EARNINGS, FAQS, HOW_IT_WORKS } from './content'
 
 export const metadata: Metadata = {
-  alternates: { canonical: '/stipend' },
-  title: 'Teacher Stipend',
-  description: `Stellr pays US high school teachers to bring a team to a live Challenge or run a Campaign at their own school — up to ${stipendAmount(STIPEND_AMOUNTS.annualMaximum)} a year, plus documented PD contact hours and free Catalyst membership. ${STIPEND_PLACES} places for ${STIPEND_PROGRAM_YEAR}.`,
+  alternates: { canonical: '/grant' },
+  title: 'Teacher Grant',
+  description: `Stellr pays US high school teachers to bring a team to a live Challenge or run a Campaign at their own school — up to ${grantAmount(GRANT_AMOUNTS.annualMaximum)} a year, plus documented PD contact hours and free Catalyst membership. ${GRANT_PLACES} places for ${GRANT_PROGRAM_YEAR}.`,
 }
 
-const ONE_PAGER = '/files/Stellr-Teacher-Stipend-Overview.pdf'
+const ONE_PAGER = '/files/Stellr-Teacher-Grant-Overview.pdf'
 
-export default async function StipendPage() {
+export default async function GrantPage() {
   // Tier prices are resolved live from Stripe — a marketing surface must never
   // hard-code one (see lib/tier-pricing.ts). If Catalyst can't be resolved we
   // drop the figure rather than print an invented number.
@@ -54,28 +54,28 @@ export default async function StipendPage() {
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden bg-midnight text-white pt-16 pb-[70px] px-4 sm:px-6 lg:px-8 bg-[radial-gradient(120%_130%_at_85%_-10%,#28306B_0%,#141A3D_45%,#0E1330_100%)]">
         <div className="container-max">
-          <Eyebrow className="text-hero-dim">Educate · Teacher Stipend</Eyebrow>
+          <Eyebrow className="text-hero-dim">Educate · Teacher Grant</Eyebrow>
           <h1 className="mt-4 text-4xl sm:text-5xl font-bold tracking-display leading-[1.05] max-w-[760px]">
             We support the teachers who want to offer Stellr activities to their students
           </h1>
           <p className="mt-5 text-lg text-hero-lead leading-relaxed max-w-[640px]">
             Taking a team to a live Challenge or running a Campaign at your school takes real
             time — recruiting students, coordinating logistics, and following through afterward.
-            The Teacher Stipend
-            recognizes that work. You can earn as you participate, supporting both your students
-            and yourself.
+            The Teacher Grant
+            recognizes that work. The grant pays as you participate, supporting both your
+            students and yourself.
           </p>
 
           <div className="mt-7 flex flex-wrap gap-3">
             <InfoPill>
-              Up to {stipendAmount(STIPEND_AMOUNTS.annualMaximum)} a year
+              Up to {grantAmount(GRANT_AMOUNTS.annualMaximum)} a year
             </InfoPill>
-            <InfoPill>{STIPEND_PLACES} places for {STIPEND_PROGRAM_YEAR}</InfoPill>
+            <InfoPill>{GRANT_PLACES} places for {GRANT_PROGRAM_YEAR}</InfoPill>
             <InfoPill>US high school teachers</InfoPill>
           </div>
 
           <div className="mt-8 flex flex-wrap gap-3">
-            <Button href="#apply">Apply for the stipend</Button>
+            <Button href="#apply">Apply for the grant</Button>
             <Button href={ONE_PAGER} variant="outlineWhite" target="_blank" rel="noopener">
               <Document size={18} /> Download the one-pager
             </Button>
@@ -83,10 +83,10 @@ export default async function StipendPage() {
         </div>
       </section>
 
-      {/* ── What you can earn ─────────────────────────────────────────── */}
+      {/* ── What you receive ──────────────────────────────────────────── */}
       <section className="bg-surface section-padding">
         <div className="container-max max-w-content">
-          <Eyebrow>What you can earn</Eyebrow>
+          <Eyebrow>What you receive</Eyebrow>
           <h2 className="mt-3 text-3xl font-bold text-ink leading-tight">
             Paid for what you actually do
           </h2>
@@ -94,7 +94,7 @@ export default async function StipendPage() {
           <div className="mt-6 overflow-x-auto rounded-panel border border-line bg-white shadow-card-lift">
             <table className="w-full text-sm">
               <caption className="sr-only">
-                Teacher Stipend earnings by activity for {STIPEND_PROGRAM_YEAR}
+                Teacher Grant Program amounts by activity for {GRANT_PROGRAM_YEAR}
               </caption>
               <thead>
                 <tr className="border-b border-line text-left">
@@ -102,7 +102,7 @@ export default async function StipendPage() {
                     What you do
                   </th>
                   <th scope="col" className="p-4 font-display font-semibold text-ink w-36">
-                    What you earn
+                    What you receive
                   </th>
                 </tr>
               </thead>
@@ -113,14 +113,14 @@ export default async function StipendPage() {
                       <span className="font-semibold text-ink">{row.what}</span> — {row.detail}
                     </td>
                     <td className="p-4 font-semibold text-ink whitespace-nowrap">
-                      {stipendAmount(row.amount)}
+                      {grantAmount(row.amount)}
                     </td>
                   </tr>
                 ))}
                 <tr className="bg-primary-soft">
                   <td className="p-4 font-bold text-ink">Maximum per year</td>
                   <td className="p-4 font-bold text-ink whitespace-nowrap">
-                    {stipendAmount(STIPEND_AMOUNTS.annualMaximum)}
+                    {grantAmount(GRANT_AMOUNTS.annualMaximum)}
                   </td>
                 </tr>
               </tbody>
@@ -129,7 +129,7 @@ export default async function StipendPage() {
 
           <p className="mt-3 text-sm text-content-muted">
             You can do one Challenge and one Campaign each year. Payment comes as a single check,
-            posted {STIPEND_PAYMENT_DATE}.
+            posted {GRANT_PAYMENT_DATE}.
           </p>
         </div>
       </section>
@@ -173,7 +173,7 @@ export default async function StipendPage() {
                   Campaign at your school, or both. Open to U.S. high school teachers only.
                 </p>
                 <p className="mt-3">
-                  {`Expect to spend somewhere between ${STIPEND_PD_HOURS} hours across the year.`}{' '}
+                  {`Expect to spend somewhere between ${GRANT_PD_HOURS} hours across the year.`}{' '}
                   It&rsquo;s built to fit around teaching, not to sit on top of it.
                 </p>
               </div>
@@ -249,10 +249,10 @@ export default async function StipendPage() {
           <div>
             <Eyebrow>Ready to take part?</Eyebrow>
             <h2 className="mt-3 text-3xl font-bold text-ink leading-tight">
-              Apply for {STIPEND_PROGRAM_YEAR}
+              Apply for {GRANT_PROGRAM_YEAR}
             </h2>
             <p className="mt-4 text-[15.5px] text-content-secondary leading-relaxed">
-              Applications for calendar {STIPEND_PROGRAM_YEAR} are open now, for {STIPEND_PLACES}{' '}
+              Applications for calendar {GRANT_PROGRAM_YEAR} are open now, for {GRANT_PLACES}{' '}
               places. We read every application and reply to all of them, whether or not you get a
               place.
             </p>
@@ -305,7 +305,7 @@ export default async function StipendPage() {
                   !
                 </span>
                 <p className="text-[13.5px] text-content-body leading-relaxed">
-                  {`A live Challenge needs at least ${STIPEND_THRESHOLDS.challengeStudents} students plus you to attend; a Campaign needs at least ${STIPEND_THRESHOLDS.campaignStudents} students registered. Closing out needs two-thirds of them to submit their responses.`}{' '}
+                  {`A live Challenge needs at least ${GRANT_THRESHOLDS.challengeStudents} students plus you to attend; a Campaign needs at least ${GRANT_THRESHOLDS.campaignStudents} students registered. Closing out needs two-thirds of them to submit their responses.`}{' '}
                   Apply anyway if you&rsquo;re close — we&rsquo;d rather talk it through.
                 </p>
               </div>
@@ -313,7 +313,7 @@ export default async function StipendPage() {
           </div>
 
           <div className="bg-white border border-line rounded-panel shadow-card-lift p-7 sm:p-9">
-            <TeacherStipendForm programYear={STIPEND_PROGRAM_YEAR} prefill={prefill} />
+            <TeacherGrantForm programYear={GRANT_PROGRAM_YEAR} prefill={prefill} />
           </div>
         </div>
       </section>

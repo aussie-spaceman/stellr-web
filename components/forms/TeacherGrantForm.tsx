@@ -9,7 +9,7 @@ import FieldError from '@/components/forms/FieldError'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 import { GENDERS } from '@/lib/registration-constants'
-import { STIPEND_PLACES, STIPEND_PROGRAM_YEAR, STIPEND_THRESHOLDS } from '@/lib/stipend'
+import { GRANT_PLACES, GRANT_PROGRAM_YEAR, GRANT_THRESHOLDS } from '@/lib/grant'
 
 const inputClass = (hasError: boolean) =>
   `w-full px-4 py-3 rounded-control border text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary ${hasError ? 'border-danger' : 'border-line'}`
@@ -26,7 +26,7 @@ const US_STATES = [
 ]
 
 /**
- * Mirrors the schema in app/api/teacher-stipend/route.ts. This copy exists to
+ * Mirrors the schema in app/api/teacher-grant/route.ts. This copy exists to
  * give the person filling the form a useful message next to the field they got
  * wrong; the server's copy is the one that decides what is accepted.
  */
@@ -67,12 +67,12 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
-export default function TeacherStipendForm({
-  programYear = STIPEND_PROGRAM_YEAR,
+export default function TeacherGrantForm({
+  programYear = GRANT_PROGRAM_YEAR,
   prefill,
 }: {
   programYear?: string
-  /** The signed-in member's record, resolved on the server — see /stipend. */
+  /** The signed-in member's record, resolved on the server — see /grant. */
   prefill?: RegistrationPrefill | null
 }) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -101,12 +101,12 @@ export default function TeacherStipendForm({
   async function onSubmit(data: FormData) {
     setStatus('loading')
     try {
-      const res = await fetch('/api/teacher-stipend', {
+      const res = await fetch('/api/teacher-grant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
-      if (res.ok) trackLeadSubmitted('teacher_stipend')
+      if (res.ok) trackLeadSubmitted('teacher_grant')
       setStatus(res.ok ? 'success' : 'error')
     } catch {
       setStatus('error')
@@ -148,9 +148,9 @@ export default function TeacherStipendForm({
       {/* Honeypot. Positioned off-screen rather than display:none — better bots
           skip hidden fields precisely because they read as traps. */}
       <div aria-hidden="true" className="absolute left-[-9999px] w-px h-px overflow-hidden">
-        <label htmlFor="stipend-website">Website</label>
+        <label htmlFor="grant-website">Website</label>
         <input
-          id="stipend-website"
+          id="grant-website"
           type="text"
           tabIndex={-1}
           autoComplete="off"
@@ -439,7 +439,7 @@ export default function TeacherStipendForm({
                 className={inputClass(!!errors.expectedStudents)}
               />
               <p className={hintClass}>
-                {`A rough number is fine. A Challenge needs at least ${STIPEND_THRESHOLDS.challengeStudents} students plus you to attend; a Campaign needs at least ${STIPEND_THRESHOLDS.campaignStudents} registered.`}
+                {`A rough number is fine. A Challenge needs at least ${GRANT_THRESHOLDS.challengeStudents} students plus you to attend; a Campaign needs at least ${GRANT_THRESHOLDS.campaignStudents} registered.`}
               </p>
               <FieldError id="expectedStudents-error" message={errors.expectedStudents?.message} />
             </div>
@@ -464,7 +464,7 @@ export default function TeacherStipendForm({
             </div>
             <div>
               <label htmlFor="referralSource" className={labelClass}>
-                How did you hear about the stipend?
+                How did you hear about the grant?
               </label>
               <input
                 id="referralSource"
@@ -565,10 +565,10 @@ export default function TeacherStipendForm({
           disabled={status === 'loading'}
           className="w-full disabled:opacity-60"
         >
-          {status === 'loading' ? 'Sending…' : 'Apply for the stipend'}
+          {status === 'loading' ? 'Sending…' : 'Apply for the grant'}
         </Button>
         <p className={`${hintClass} text-center`}>
-          {STIPEND_PLACES} places for {programYear}. We read every application and reply to all
+          {GRANT_PLACES} places for {programYear}. We read every application and reply to all
           of them.
         </p>
       </div>

@@ -43,7 +43,7 @@ export type LeadFormSource =
   | 'host_event'
   | 'contact'
   | 'join_network'
-  | 'teacher_stipend'
+  | 'teacher_grant'
 
 /**
  * Who the route actually speaks to. This is the switch that lets an ad tag be
@@ -61,7 +61,7 @@ const LEAD_AUDIENCE: Record<LeadFormSource, LeadAudience> = {
   host_event: 'b2b',
   join_network: 'b2b',
   contact: 'b2b',
-  teacher_stipend: 'b2b',
+  teacher_grant: 'b2b',
   // Students and parents.
   newsletter: 'b2c',
   event_notify: 'b2c',

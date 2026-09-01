@@ -31,7 +31,7 @@ const staticPaths: { path: string; changeFrequency: MetadataRoute.Sitemap[number
   // Audience landing pages.
   { path: '/students', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/educators', changeFrequency: 'monthly', priority: 0.8 },
-  { path: '/stipend', changeFrequency: 'monthly', priority: 0.8 },
+  { path: '/grant', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/educate', changeFrequency: 'monthly', priority: 0.7 },
   { path: '/mentors', changeFrequency: 'monthly', priority: 0.7 },
   { path: '/network', changeFrequency: 'monthly', priority: 0.7 },

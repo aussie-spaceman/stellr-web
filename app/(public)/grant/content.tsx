@@ -1,15 +1,15 @@
 import Link from 'next/link'
 import {
-  STIPEND_AMOUNTS,
-  STIPEND_PAYMENT_DATE,
-  STIPEND_PD_HOURS,
-  STIPEND_THRESHOLDS,
+  GRANT_AMOUNTS,
+  GRANT_PAYMENT_DATE,
+  GRANT_PD_HOURS,
+  GRANT_THRESHOLDS,
   closeOutThreshold,
-  stipendAmount,
-} from '@/lib/stipend'
+  grantAmount,
+} from '@/lib/grant'
 
 /**
- * Published copy for /stipend. Every figure is read from lib/stipend.ts rather
+ * Published copy for /grant. Every figure is read from lib/grant.ts rather
  * than typed here, so the page, the participation agreement and the API route
  * cannot drift apart.
  */
@@ -18,29 +18,29 @@ export const EARNINGS: { what: string; detail: string; amount: number }[] = [
   {
     what: 'Onboarding',
     detail: 'orientation, agreement, a short baseline survey, and a one-page plan for your year',
-    amount: STIPEND_AMOUNTS.onboarding,
+    amount: GRANT_AMOUNTS.onboarding,
   },
   {
     what: 'Bring a team to a live Challenge',
-    detail: `at least ${STIPEND_THRESHOLDS.challengeStudents} students plus you attend — ${STIPEND_THRESHOLDS.challengeStudents + 1} attendees minimum`,
-    amount: STIPEND_AMOUNTS.challenge,
+    detail: `at least ${GRANT_THRESHOLDS.challengeStudents} students plus you attend — ${GRANT_THRESHOLDS.challengeStudents + 1} attendees minimum`,
+    amount: GRANT_AMOUNTS.challenge,
   },
   {
     what: 'Run a Campaign at your school',
-    detail: `in class or as a club, with at least ${STIPEND_THRESHOLDS.campaignStudents} students registered`,
-    amount: STIPEND_AMOUNTS.campaign,
+    detail: `in class or as a club, with at least ${GRANT_THRESHOLDS.campaignStudents} students registered`,
+    amount: GRANT_AMOUNTS.campaign,
   },
   {
     what: 'Close out',
     detail:
       'you submit your survey and reflection, and at least two-thirds of your students submit theirs',
-    amount: STIPEND_AMOUNTS.closeOut,
+    amount: GRANT_AMOUNTS.closeOut,
   },
 ]
 
 export const BENEFITS: { title: string; body: string }[] = [
   {
-    title: `${STIPEND_PD_HOURS} documented PD contact hours.`,
+    title: `${GRANT_PD_HOURS} documented PD contact hours.`,
     body: 'You get a written statement of hours and the standards covered. It may count toward CTE or recertification, subject to your district’s approval.',
   },
   {
@@ -80,7 +80,7 @@ export const HOW_IT_WORKS: { title: string; body: string }[] = [
   },
   {
     title: 'Get paid.',
-    body: `One check, posted ${STIPEND_PAYMENT_DATE}, covering everything you earned that year.`,
+    body: `One check, posted ${GRANT_PAYMENT_DATE}, covering everything you completed that year.`,
   },
 ]
 
@@ -93,19 +93,19 @@ export const HOW_IT_WORKS: { title: string; body: string }[] = [
 export const FAQS: { q: string; text: string; node?: React.ReactNode }[] = [
   {
     q: 'When exactly do I get paid?',
-    text: `Checks post on ${STIPEND_PAYMENT_DATE} each year and cover everything you completed since the last payout. Sign up in January and you're paid that same ${STIPEND_PAYMENT_DATE}. Anything you finish after ${STIPEND_PAYMENT_DATE} rolls into the next year's check.`,
+    text: `Checks post on ${GRANT_PAYMENT_DATE} each year and cover everything you completed since the last payout. Sign up in January and you're paid that same ${GRANT_PAYMENT_DATE}. Anything you finish after ${GRANT_PAYMENT_DATE} rolls into the next year's check.`,
   },
   {
     q: 'What is the difference between a Challenge and a Campaign?',
-    text: 'Both are ways of running a Competition. A Challenge is the live version — you bring a team to a venue for the event. A Campaign is the remote version — you run it at your own school, in class or as a club. Either one earns the same amount.',
+    text: 'Both are ways of running a Competition. A Challenge is the live version — you bring a team to a venue for the event. A Campaign is the remote version — you run it at your own school, in class or as a club. Each is worth the same amount.',
   },
   {
     q: 'Do I need to do both a Challenge and a Campaign?',
-    text: `No. Either one earns ${stipendAmount(STIPEND_AMOUNTS.challenge)}. Doing both is how you reach the ${stipendAmount(STIPEND_AMOUNTS.annualMaximum)} maximum.`,
+    text: `No. Each is worth ${grantAmount(GRANT_AMOUNTS.challenge)}. Doing both is how you reach the ${grantAmount(GRANT_AMOUNTS.annualMaximum)} maximum.`,
   },
   {
     q: 'What counts as "at least two-thirds of student responses"?',
-    text: `Two-thirds of the students who took part, rounded up. Bring ${STIPEND_THRESHOLDS.challengeStudents} students to a Challenge and ${closeOutThreshold(STIPEND_THRESHOLDS.challengeStudents)} of them need to submit; run a Campaign with ${STIPEND_THRESHOLDS.campaignStudents} students and ${closeOutThreshold(STIPEND_THRESHOLDS.campaignStudents)} need to submit. We'll give you the links and a reminder schedule to make this straightforward.`,
+    text: `Two-thirds of the students who took part, rounded up. Bring ${GRANT_THRESHOLDS.challengeStudents} students to a Challenge and ${closeOutThreshold(GRANT_THRESHOLDS.challengeStudents)} of them need to submit; run a Campaign with ${GRANT_THRESHOLDS.campaignStudents} students and ${closeOutThreshold(GRANT_THRESHOLDS.campaignStudents)} need to submit. We'll give you the links and a reminder schedule to make this straightforward.`,
   },
   {
     q: 'Does this count for CTE credit?',

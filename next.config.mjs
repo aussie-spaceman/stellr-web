@@ -7,6 +7,10 @@ const nextConfig = {
       { source: '/login', destination: '/sign-in', permanent: true },
       { source: '/signup', destination: '/sign-up', permanent: true },
       { source: '/register', destination: '/sign-up', permanent: true },
+      // The Teacher Stipend was renamed the Teacher Grant Program. The printed
+      // one-pager already in teachers' hands says stellreducation.org/stipend,
+      // so this URL has to keep working indefinitely.
+      { source: '/stipend', destination: '/grant', permanent: true },
       // 'Activities' → 'Campaigns' → now the Curriculum Campaigns page at /curriculum.
       { source: '/activities', destination: '/curriculum', permanent: true },
       // www keeps the legacy marketing redirect; host-scoped so the member portal

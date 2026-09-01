@@ -5,9 +5,9 @@ import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import {
   HS,
   LEAD_SOURCE_LIFECYCLE,
-  STIPEND_ACTIVITIES,
-  STIPEND_PRIOR,
-  STIPEND_STATUS,
+  GRANT_ACTIVITIES,
+  GRANT_PRIOR,
+  GRANT_STATUS,
   hubspotDateValue,
 } from '@/lib/hubspot-fields'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
@@ -16,7 +16,7 @@ import { upsertMember } from '@/lib/member-sync'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
 import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
 import { GENDERS } from '@/lib/registration-constants'
-import { STIPEND_DEMOGRAPHIC, STIPEND_PROGRAM_YEAR } from '@/lib/stipend'
+import { GRANT_DEMOGRAPHIC, GRANT_PROGRAM_YEAR } from '@/lib/grant'
 
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
@@ -69,7 +69,7 @@ function esc(v: unknown): string {
 }
 
 export async function POST(req: Request) {
-  const limited = rateLimitGuard(req, 'teacher-stipend', { limit: 3, windowMs: HOUR_MS })
+  const limited = rateLimitGuard(req, 'teacher-grant', { limit: 3, windowMs: HOUR_MS })
   if (limited) return limited
 
   try {
@@ -90,12 +90,12 @@ export async function POST(req: Request) {
     // Honeypot tripped: accept silently. A 400 here teaches the bot to retry
     // with the field cleared.
     if (v.website) {
-      console.warn('[spam] honeypot teacher-stipend')
+      console.warn('[spam] honeypot teacher-grant')
       return NextResponse.json({ ok: true })
     }
 
     const name = `${v.firstName} ${v.lastName}`
-    const activities = STIPEND_ACTIVITIES[v.plannedActivities]
+    const activities = GRANT_ACTIVITIES[v.plannedActivities]
     const rows: [string, string][] = [
       ['Name', name],
       ['Email', `<a href="mailto:${esc(v.email)}">${esc(v.email)}</a>`],
@@ -106,9 +106,9 @@ export async function POST(req: Request) {
       ['Years teaching', esc(v.yearsTeaching) || '—'],
       ['Plans to run', esc(activities)],
       ['Expected students', esc(v.expectedStudents)],
-      ['Run Stellr before', v.priorStellr ? esc(STIPEND_PRIOR[v.priorStellr]) : '—'],
+      ['Run Stellr before', v.priorStellr ? esc(GRANT_PRIOR[v.priorStellr]) : '—'],
       ['Heard about it via', esc(v.referralSource) || '—'],
-      ['Program year', esc(STIPEND_PROGRAM_YEAR)],
+      ['Program year', esc(GRANT_PROGRAM_YEAR)],
     ]
     const htmlRows = rows
       .map(
@@ -117,19 +117,19 @@ export async function POST(req: Request) {
       )
       .join('')
 
-    const subject = `Teacher Stipend application — ${name}, ${v.schoolName}`
+    const subject = `Teacher Grant application — ${name}, ${v.schoolName}`
     const html = `
-      <h2>New Teacher Stipend application</h2>
+      <h2>New Teacher Grant application</h2>
       <table style="border-collapse:collapse;width:100%;max-width:600px">${htmlRows}</table>
       <h3 style="margin:20px 0 6px">Why they want to take part</h3>
       <p style="white-space:pre-wrap;margin:0">${esc(v.motivation)}</p>
       <p style="color:#9ca3af;font-size:12px;margin-top:24px">
         Consent given: yes · Payment terms acknowledged: yes<br>
-        Sent via the Stellr Education website Teacher Stipend form.
+        Sent via the Stellr Education website Teacher Grant form.
       </p>
     `
     const text = [
-      'New Teacher Stipend application',
+      'New Teacher Grant application',
       '',
       `Name: ${name}`,
       `Email: ${v.email}`,
@@ -140,9 +140,9 @@ export async function POST(req: Request) {
       `Years teaching: ${v.yearsTeaching || '—'}`,
       `Plans to run: ${activities}`,
       `Expected students: ${v.expectedStudents}`,
-      `Run Stellr before: ${v.priorStellr ? STIPEND_PRIOR[v.priorStellr] : '—'}`,
+      `Run Stellr before: ${v.priorStellr ? GRANT_PRIOR[v.priorStellr] : '—'}`,
       `Heard about it via: ${v.referralSource || '—'}`,
-      `Program year: ${STIPEND_PROGRAM_YEAR}`,
+      `Program year: ${GRANT_PROGRAM_YEAR}`,
       '',
       'Why they want to take part:',
       v.motivation,
@@ -160,13 +160,13 @@ export async function POST(req: Request) {
       email: v.email,
       firstName: v.firstName,
       lastName: v.lastName,
-      source: 'teacher_stipend',
-      lifecycleStage: LEAD_SOURCE_LIFECYCLE.teacher_stipend,
+      source: 'teacher_grant',
+      lifecycleStage: LEAD_SOURCE_LIFECYCLE.teacher_grant,
       activity:
-        `Teacher Stipend application (${STIPEND_PROGRAM_YEAR}) — ${v.schoolName}, ` +
+        `Teacher Grant application (${GRANT_PROGRAM_YEAR}) — ${v.schoolName}, ` +
         `${v.schoolCity}, ${v.schoolState}. Plans to run: ${activities}, ` +
         `~${v.expectedStudents} students.`,
-      logEntry: logLine('teacher_stipend', `${activities} · ${v.schoolName} · ${STIPEND_PROGRAM_YEAR}`),
+      logEntry: logLine('teacher_grant', `${activities} · ${v.schoolName} · ${GRANT_PROGRAM_YEAR}`),
       properties: {
         ...(v.phone ? { [HS.phone]: v.phone } : {}),
         [HS.school]: v.schoolName,
@@ -174,30 +174,30 @@ export async function POST(req: Request) {
         [HS.state]: v.schoolState,
         // The cohort year is a program constant, not something the browser
         // gets a say in — a forged payload must not book a place in 2028.
-        [HS.stipendProgramYear]: STIPEND_PROGRAM_YEAR,
-        [HS.stipendStatus]: STIPEND_STATUS.applied,
-        [HS.stipendApplicationDate]: hubspotDateValue(new Date()),
-        [HS.stipendPlannedActivities]: activities,
-        [HS.stipendExpectedStudents]: v.expectedStudents,
-        [HS.stipendSubjects]: v.subjects,
-        // The stipend is high-school-only, so the demographic is known without
-        // asking — see STIPEND_DEMOGRAPHIC.
-        [HS.eventDemographic]: STIPEND_DEMOGRAPHIC,
+        [HS.grantProgramYear]: GRANT_PROGRAM_YEAR,
+        [HS.grantStatus]: GRANT_STATUS.applied,
+        [HS.grantApplicationDate]: hubspotDateValue(new Date()),
+        [HS.grantPlannedActivities]: activities,
+        [HS.grantExpectedStudents]: v.expectedStudents,
+        [HS.grantSubjects]: v.subjects,
+        // The grant is high-school-only, so the demographic is known without
+        // asking — see GRANT_DEMOGRAPHIC.
+        [HS.eventDemographic]: GRANT_DEMOGRAPHIC,
         [HS.jobTitle]: 'Teacher',
-        ...(v.yearsTeaching ? { [HS.stipendYearsTeaching]: v.yearsTeaching } : {}),
-        ...(v.priorStellr ? { [HS.stipendPriorStellr]: STIPEND_PRIOR[v.priorStellr] } : {}),
-        [HS.stipendMotivation]: v.motivation,
-        ...(v.referralSource ? { [HS.stipendReferralSource]: v.referralSource } : {}),
+        ...(v.yearsTeaching ? { [HS.grantYearsTeaching]: v.yearsTeaching } : {}),
+        ...(v.priorStellr ? { [HS.grantPriorStellr]: GRANT_PRIOR[v.priorStellr] } : {}),
+        [HS.grantMotivation]: v.motivation,
+        ...(v.referralSource ? { [HS.grantReferralSource]: v.referralSource } : {}),
       },
       context: {
         hutk: readHubspotCookie(req),
-        pageUri: `${SITE_URL}/educators#stipend`,
-        pageName: 'Teacher Stipend application',
+        pageUri: `${SITE_URL}/grant`,
+        pageName: 'Teacher Grant application',
       },
     })
 
     // ── Register the applicant as an Educator ────────────────────────────
-    // The stipend is for teachers, and a teacher who applies is a teacher we
+    // The grant is for teachers, and a teacher who applies is a teacher we
     // want on the books — so the form doubles as the free Educator signup
     // rather than asking them to go and do it separately.
     //
@@ -232,15 +232,15 @@ export async function POST(req: Request) {
         })
         await autoGrantBaseMembership(db, memberId)
       } else {
-        console.error('[teacher-stipend] Member upsert returned no id for', v.email)
+        console.error('[teacher-grant] Member upsert returned no id for', v.email)
       }
     } catch (err) {
-      console.error('[teacher-stipend] Educator registration failed (non-fatal):', err)
+      console.error('[teacher-grant] Educator registration failed (non-fatal):', err)
     }
 
     return NextResponse.json({ ok: true })
   } catch (err) {
-    console.error('[teacher-stipend] Unexpected error:', err)
+    console.error('[teacher-grant] Unexpected error:', err)
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

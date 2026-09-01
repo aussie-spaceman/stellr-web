@@ -499,9 +499,9 @@ export default function ImpactPage() {
               <Global size={22} />
             </span>
             <p className="text-[15px] text-content-body leading-relaxed">
-              <span className="font-semibold text-ink">Cost is never the barrier.</span>{' '}
-              If a participation fee stands between a student and a Stellr competition, we cover it
-              in full.{' '}
+              <span className="font-semibold text-ink">We never want cost to be a barrier.</span>{' '}
+              If a participation fee stands between a student and a Stellr competition, we will do
+              our best to cover it — either partially or in full.{' '}
               <a
                 href={`${WWW}/scholarship`}
                 className="font-medium text-primary-deep underline underline-offset-2 hover:no-underline"

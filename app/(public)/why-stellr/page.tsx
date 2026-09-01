@@ -5,7 +5,8 @@ import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 import { AssetGate } from '@/components/sections/AssetGate'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { WorkCard } from '@/components/sections/WorkCard'
-import { VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
+import { VIDEOS, QUOTES, COMPETITION, PHOTOS } from '@/lib/media-manifest'
+import { ProofStrip } from '@/components/sections/ProofStrip'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/why-stellr' },
@@ -383,6 +384,25 @@ export default function WhyStellrPage() {
               Full packages, reach statistics and impact data — sent straight to your inbox.
             </p>
           </div>
+        </div>
+      </section>
+
+      {/* ── Proof strip ───────────────────────────────────────────────── */}
+      <section className="section-padding bg-surface border-t border-line-light">
+        <div className="container-max">
+          <Eyebrow>What it looks like</Eyebrow>
+          <h2 className="mt-3 font-display text-3xl font-bold text-ink leading-tight max-w-2xl">
+            A Stellr competition, from the floor
+          </h2>
+          <ProofStrip
+            photos={[
+              PHOTOS['why-auditorium'],
+              PHOTOS['why-teams-working'],
+              PHOTOS['why-biosphere-tour'],
+            ]}
+            columns={3}
+            className="mt-8"
+          />
         </div>
       </section>
 

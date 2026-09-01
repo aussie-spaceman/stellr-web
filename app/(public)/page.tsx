@@ -5,7 +5,7 @@ import { getFeaturedEvents, type StellarEvent } from '@/lib/sanity'
 import { EventCard } from '@/components/ui/EventCard'
 import { QuoteRotator } from '@/components/sections/QuoteRotator'
 import { ProofStrip } from '@/components/sections/ProofStrip'
-import { PHOTOS } from '@/lib/media-manifest'
+import { PHOTOS, photoSrcSet } from '@/lib/media-manifest'
 import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
 
 export const metadata: Metadata = {
@@ -112,11 +112,30 @@ export default async function HomePage() {
     <>
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <section className="relative bg-brand-blue-dark text-white overflow-hidden">
-        <div
-          className="absolute inset-0 bg-cover bg-center opacity-20"
-          style={{ backgroundImage: "url('/images/hero-stem.jpg')" }}
-          aria-hidden="true"
-        />
+        {/* The hero photo used to be a CSS background pointing at
+            /images/hero-stem.jpg while the file on disk was hero-stem.JPG —
+            case-sensitive on Vercel, so it 404'd and the hero rendered empty.
+            It is now a manifest photo going through the same responsive
+            AVIF/JPEG pipeline as every other image on the site. */}
+        <picture aria-hidden="true">
+          <source
+            type="image/avif"
+            srcSet={photoSrcSet(PHOTOS['home-hero-floor'], 'avif')}
+            sizes="100vw"
+          />
+          <source
+            type="image/jpeg"
+            srcSet={photoSrcSet(PHOTOS['home-hero-floor'], 'jpg')}
+            sizes="100vw"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element -- responsive <picture> with explicit srcset/sizes is intentional here */}
+          <img
+            src={`${PHOTOS['home-hero-floor'].src}-1920.jpg`}
+            alt=""
+            fetchPriority="high"
+            className="absolute inset-0 h-full w-full object-cover opacity-20"
+          />
+        </picture>
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-36">
           <div className="max-w-5xl">
             <h1 className="text-4xl sm:text-5xl xl:text-6xl font-bold leading-tight">

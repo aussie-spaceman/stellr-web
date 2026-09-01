@@ -98,6 +98,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Campaigns are entered as a GROUP, never by an individual student — the
+    // campaign page only ever links to the group form. This route is still
+    // reachable by URL, though, and an individual campaign registration would be
+    // written as type 'individual' while the member's campaign context and
+    // workspace both filter on type 'campaign' — so it would be accepted and
+    // then be invisible to the person who made it. Reject it before any writes.
+    if ((eventForGate as { activityType?: string } | null)?.activityType === 'campaign') {
+      return NextResponse.json(
+        {
+          error:
+            'Campaigns are entered as a group, not by individual students. Please use the group registration form.',
+        },
+        { status: 400 },
+      )
+    }
+
     // Amount owed: the per-seat event fee (one seat), or 0 when the event is
     // free — either no Stripe price at all, or an explicit $0 price object.
     // Drives the payment access gate, and the line item further down.

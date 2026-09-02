@@ -114,6 +114,7 @@ const config: Config = {
         'ds-card': tokens.radius.card,
         'panel':   tokens.radius.panel,
         'cta':     tokens.radius.cta,
+        'pill':    tokens.radius.pill,
       },
       maxWidth: {
         content: tokens.space.contentMax, // 1080px

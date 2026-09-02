@@ -13,8 +13,8 @@ things this session surfaced.** Every command runs from
 
 | # | Item | Effort | Blocks what |
 |---|---|---|---|
-| 1 | Booking URL on Preview | 1 min | Nothing — cosmetic |
-| 2 | Rotate the webhook secret | 3 min | Item 4 |
+| 1 | Two Preview variables | 1 min | Nothing — consistency |
+| 2 | ~~Rotate the webhook secret~~ | **done** | — |
 | 3 | Three GTM tags | ~20 min | All landing-page funnel reporting |
 | 4 | Wire Motion to the webhook | ~30 min | Knowing who actually booked |
 | 5 | Submit the live form once | 5 min | Proof the HubSpot GUID is right |
@@ -24,46 +24,66 @@ things this session surfaced.** Every command runs from
 
 ---
 
-## 1. Booking URL on Preview
+## 1. Two Preview environment variables
 
-Production is set and verified. Preview is not — the command was run from the
-home directory before the `cd`, so it errored.
+Production is complete and verified. Preview is missing both of these.
 
 ```bash
 printf '%s' 'https://app.usemotion.com/meet/david-m-shaw/welcome' | npx vercel env add NEXT_PUBLIC_BOOKING_URL preview
 ```
 
-Cosmetic only: without it, preview builds fall back to the same URL hard-coded
-in `components/lp/LandingPage.tsx`.
+```bash
+printf '%s' '74b755b6-d823-4073-90c4-975d523a4612' | npx vercel env add HUBSPOT_FORM_LANDING_PAGE preview
+```
+
+**Correcting earlier advice in this handover.** An earlier revision said the form
+GUID belonged on Production only, reasoning that a GUID on Preview would let
+preview deployments write real contacts into the live portal. That was wrong on
+both counts, checked against the project on 2 Sep 2026:
+
+- Six of the seven existing `HUBSPOT_FORM_*` variables **are** on Preview. Only
+  `HUBSPOT_FORM_TEACHER_GRANT` is Production-only, and it is the newest.
+- `HUBSPOT_ACCESS_TOKEN` is on Preview **and** Production. So a preview
+  deployment already writes real contacts to the live portal through the
+  contacts-API fallback path, with or without a form GUID.
+
+Withholding the GUID from Preview therefore prevents no pollution. It only makes
+a preview submission land without conversion attribution and behave differently
+from production — which is the opposite of what a preview is for.
+
+The earlier reading came from the `vercel env ls production` environments
+column, which shows only the queried environment's scope. Vercel stores a
+per-environment value as a separate entry under the same name, so a variable set
+for both appears once in each listing. Query the environment you actually care
+about.
 
 ---
 
-## 2. Rotate `MOTION_WEBHOOK_SECRET` to a value you can read
+## 2. Rotate `MOTION_WEBHOOK_SECRET` — DONE
 
-The secret currently in Vercel was piped straight from `openssl` into
-`env add`, so it was never displayed. It cannot be recovered: Vercel stores it
-as Secret-type, `vercel env pull` substitutes `[SENSITIVE]`, and the CLI has no
-`env get`. You need the value to configure whatever signs the requests in item 4.
+Rotated 2 Sep 2026 to a value recorded outside Vercel. Kept here for the
+mechanism, which applies to any Secret-type variable:
 
-```bash
-npx vercel env rm MOTION_WEBHOOK_SECRET production
-```
+A Vercel Secret cannot be read back — `vercel env pull` substitutes
+`[SENSITIVE]` and the CLI has no `env get`. Piping `openssl` straight into
+`env add` means the value is gone the moment the command returns. Generate it
+where you can see it first:
 
 ```bash
 openssl rand -hex 32 | tee /tmp/motion-secret
 ```
 
-Copy that into your password manager, then:
+Record it, then add and clean up:
 
 ```bash
 printf '%s' "$(cat /tmp/motion-secret)" | npx vercel env add MOTION_WEBHOOK_SECRET production && rm /tmp/motion-secret
 ```
 
-```bash
-npx vercel redeploy --prod
-```
+To rotate, `npx vercel env rm MOTION_WEBHOOK_SECRET production` first, then
+repeat, then `npx vercel redeploy --prod` and update the signing side to match —
+the webhook rejects anything signed with the old secret.
 
-Use `printf`, never `echo` or a paste into the interactive prompt — a trailing
+Use `printf`, never `echo` or a paste into the interactive prompt: a trailing
 newline becomes part of the secret and the HMAC then never matches.
 
 ---

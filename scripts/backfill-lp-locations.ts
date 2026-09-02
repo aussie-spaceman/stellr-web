@@ -171,7 +171,15 @@ async function main() {
         _type: 'plannedLocation',
         // A deterministic id makes a re-run after a partial failure a no-op
         // rather than a duplicate pin in the same city.
-        _id: `plannedLocation.${site.slug}`,
+        //
+        // The separator MUST NOT be a dot. A dot in a Sanity document id puts
+        // the document in a non-root path, and only root-path documents are
+        // readable without a token — it is the same mechanism that hides
+        // `drafts.`. Four documents created as `plannedLocation.<slug>` existed,
+        // returned fine to any authenticated query, and were invisible to the
+        // public site: the live page rendered "zero in planning" and nothing
+        // errored anywhere.
+        _id: `plannedLocation-${site.slug}`,
         slug: { _type: 'slug', current: site.slug },
         venue: site.venue,
         city: site.city,
@@ -183,7 +191,34 @@ async function main() {
     }
   }
 
-  console.log(APPLY ? '\n✓ Applied.' : '\n✓ Dry run complete — nothing written.')
+  /* ── 4. Verify as the public sees it ──────────────────────────────────────
+   * The whole point of this check: an authenticated query is not evidence.
+   * Four planned locations created with a dot in their `_id` returned
+   * perfectly to every authenticated query and were invisible to the live
+   * site, which rendered "zero in planning" and logged nothing anywhere. So
+   * re-read the dataset with NO token, exactly as the public site does. */
+  if (APPLY) {
+    const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
+    const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production'
+    const url = new URL(`https://${projectId}.api.sanity.io/v2024-01-01/data/query/${dataset}`)
+    url.searchParams.set('query', 'count(*[_type == "plannedLocation"])')
+    const res = await fetch(url) // deliberately unauthenticated
+    const publicCount = ((await res.json()) as { result?: number }).result ?? 0
+
+    console.log(`\nPublic visibility: ${publicCount} of ${PLANNED.length} planned locations`)
+    if (publicCount !== PLANNED.length) {
+      console.error(
+        `\n✗ ${PLANNED.length - publicCount} planned location(s) are invisible to an ` +
+          'unauthenticated client, so the live site will not show them.\n' +
+          '  Most likely cause: a document `_id` containing a dot. Only root-path ' +
+          'documents are publicly readable.\n',
+      )
+      process.exitCode = 1
+      return
+    }
+  }
+
+  console.log(APPLY ? '\n✓ Applied and publicly visible.' : '\n✓ Dry run complete — nothing written.')
 }
 
 main().catch((err) => {

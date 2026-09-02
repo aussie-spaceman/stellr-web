@@ -50,17 +50,32 @@ printf '%s' 'https://app.usemotion.com/meet/david-m-shaw/welcome' | npx vercel e
 printf '%s' 'https://app.usemotion.com/meet/david-m-shaw/welcome' | npx vercel env add NEXT_PUBLIC_BOOKING_URL preview
 ```
 
+**Generate it where you can see it, then add it.** Vercel stores this as a
+Secret-type variable, and a Secret cannot be read back: `vercel env pull`
+substitutes `[SENSITIVE]` and the CLI has no `env get`. Pipe `openssl` straight
+into `env add` and the value is gone the moment the command returns — you will
+have to rotate it to learn what it is.
+
 ```bash
-openssl rand -hex 32 | tr -d '\n' | npx vercel env add MOTION_WEBHOOK_SECRET production
+openssl rand -hex 32 | tee /tmp/motion-secret
 ```
 
-That last one never prints the secret. To read it back when you wire up Motion:
+Copy that value somewhere durable (a password manager), then:
 
 ```bash
-npx vercel env pull /tmp/lp-env --environment=production && grep MOTION_WEBHOOK_SECRET /tmp/lp-env
+printf '%s' "$(cat /tmp/motion-secret)" | npx vercel env add MOTION_WEBHOOK_SECRET production && rm /tmp/motion-secret
 ```
 
-Delete `/tmp/lp-env` afterwards — it contains every production secret.
+To rotate — which is also how to recover from having lost it:
+
+```bash
+npx vercel env rm MOTION_WEBHOOK_SECRET production
+openssl rand -hex 32 | tee /tmp/motion-secret
+printf '%s' "$(cat /tmp/motion-secret)" | npx vercel env add MOTION_WEBHOOK_SECRET production && rm /tmp/motion-secret
+```
+
+Then redeploy, and update the secret on the Zapier/Make side to match — the
+webhook rejects anything signed with the old one.
 
 Piping the value matters: run `vercel env add` with no stdin and it prompts
 interactively, and a pasted value can pick up a trailing newline that becomes
@@ -193,12 +208,11 @@ the form and the calendar is the only join between the two.
 
 ### 2a. Generate the secret
 
-```bash
-openssl rand -hex 32
-```
+See step 0 — generate it somewhere you can read it before adding it, because a
+Secret-type variable cannot be read back out of Vercel. If you already added one
+blind, the rotate recipe in step 0 is how to get a known value.
 
-Put the output in Vercel as `MOTION_WEBHOOK_SECRET` (Production — the webhook
-only ever points at production), as in step 0, then redeploy. Until it is set the route answers `503` and writes nothing — deliberately.
+Until it is set the route answers `503` and writes nothing — deliberately.
 
 ### 2b. Wire Motion to it
 

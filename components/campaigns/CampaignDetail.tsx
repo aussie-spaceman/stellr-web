@@ -13,6 +13,7 @@ import {
   CAMPAIGN_FAQS,
   CAMPAIGN_INCLUDED,
   CAMPAIGN_INCLUDED_NOTE,
+  CAMPAIGN_INCLUDED_NOTE_HREF,
   CAMPAIGN_STEPS,
   campaignEligibilityCopy,
 } from '@/lib/campaign-content'
@@ -131,7 +132,10 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
               </li>
             ))}
           </ul>
-          <p className="mt-4 text-sm text-content-secondary">{CAMPAIGN_INCLUDED_NOTE}</p>
+          <p className="mt-4 text-sm text-content-secondary">
+            {CAMPAIGN_INCLUDED_NOTE}{' '}
+            <Link href={CAMPAIGN_INCLUDED_NOTE_HREF} className="underline text-primary-deep">Compare memberships</Link>.
+          </p>
 
           {/* FAQ accordion — campaign-specific; the event set is venue-bound */}
           <h2 className="mt-12 font-heading text-ds-h2 font-bold text-ink">

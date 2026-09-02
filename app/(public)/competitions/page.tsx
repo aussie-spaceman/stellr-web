@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { Launch, Environment } from '@stellr/icons'
 import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
-import { AUDIENCES } from '../membership/tier-data'
+import { AUDIENCES, educatorTierHighlights } from '../membership/tier-data'
 import {
   Hero,
   SectionHeading,
@@ -125,43 +125,17 @@ const themes = [
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
-/* Teacher membership tiers — structure (ids, names, roles, order) comes from
-   the /membership explorer's tier data (source of truth) so the two pages
-   can't drift; prices are injected from membership_tiers at render. Only the
-   competition-focused "what's included" summaries live here. */
+/* Teacher membership tiers — structure AND content both come from the
+   /membership explorer's tier data (source of truth), transcribed from the
+   "2027 Membership Tiers" flyer. The summaries below used to be a second
+   hand-maintained copy of the ladder and had drifted from it; they are now
+   derived, so the two pages cannot disagree. Prices are injected from
+   membership_tiers at render. */
 const educatorTiers = AUDIENCES.educator.tiers
 
-const TIER_ITEMS: Record<string, string[]> = {
-  educator: [
-    'Request for Proposal (RFP) & Mission Handbook',
-    'Scoring rubric',
-    'Competition Guide for Teachers',
-    'Basic assessment tools',
-    'Students can register as members',
-  ],
-  catalyst: [
-    'Lesson plans',
-    'Worksheets — cost control, Gantt, materials',
-    'Judging template',
-    'Intro & close-out calls + slides',
-    'Intermediate assessment tools',
-  ],
-  innovator: [
-    'Group mentoring — 8 × 30-min / semester (recorded)',
-    'Agentic AI sub-contractors + project advisor',
-    'Biweekly student feedback calls',
-    'Advanced assessment tools & question banks',
-    'Common Core alignment',
-    'Students invited as Explorer',
-  ],
-  trailblazer: [
-    'Student awards presented',
-    'Virtual presentation deliverable (Zoom)',
-    'CTE credits · NGSS & ISTE alignment',
-    'LMS upload (SCORM)',
-    'Students upgraded to Pathfinder (12 months)',
-  ],
-}
+const TIER_ITEMS: Record<string, string[]> = Object.fromEntries(
+  educatorTiers.map((t, i) => [t.id, educatorTierHighlights(i)]),
+)
 
 const TIER_HIGHLIGHT: Record<string, { badge: string; featured: boolean }> = {
   innovator: { badge: 'Best Value', featured: true },

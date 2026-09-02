@@ -37,8 +37,9 @@ export type GrantTrigger =
   | 'competition_registration'
   // Fired when a member acquires a membership tier (Stripe purchase or admin
   // assignment), carrying the acquired tier in ctx.sourceTierId. Powers the
-  // "educator buys Innovator/Trailblazer → their registered students get
-  // Pathfinder" fan-out rule (grant_target='registered_students').
+  // "educator buys Trailblazer → their registered students get Pathfinder"
+  // fan-out rule (grant_target='registered_students'). Trailblazer-only since
+  // migration 147 — the 2027 flyer puts the student upgrade on the top tier alone.
   | 'tier_purchased'
   // Dormant: legacy content-tier enrollment trigger (content tiers retired). Kept
   // so existing rows validate; no caller fires it.
@@ -342,7 +343,7 @@ export async function applyGrantTrigger(
     months = null
   } else if (rule.duration_kind === 'match_source') {
     // Expire with the triggering membership (students' Pathfinder lapses when the
-    // educator's Innovator/Trailblazer does). Fall back to 12mo if not resolvable.
+    // educator's Trailblazer does). Fall back to 12mo if not resolvable.
     expiresAt = await sourceMembershipExpiry(db, memberId, ctx.sourceTierId ?? null)
     if (expiresAt === undefined) months = rule.duration_months ?? 12
   } else {

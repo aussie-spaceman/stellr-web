@@ -25,8 +25,13 @@ export interface Tier {
   /** Note beside the price, e.g. 'always' | 'per year'. */
   priceNote: string
   free?: boolean
-  store: string
-  academy: string
+  /**
+   * Store / Academy discount headline. School & college only — the 2027 teacher
+   * ladder carries no store or academy discount, so the educator tiers omit both
+   * and the waterfall skips the discount strip entirely.
+   */
+  store?: string
+  academy?: string
   /** Academy sessions included at no extra cost (school/college redesign card). */
   academyIncluded?: AcademyIncluded | null
   /** Educator facts-block mentoring line (waterfall only). */
@@ -129,22 +134,22 @@ export const AUDIENCES: Record<AudienceId, Audience> = {
     tiers: [
       {
         id: 'educator', name: 'Educator', role: 'Everyone starts here', priceNote: 'always', free: true,
-        store: '5%', academy: '5%', mentor: '5% off all Academy material', revert: null,
+        mentor: 'Not included', revert: null,
         get: [{ kind: 'free', text: 'Free for every teacher & educator' }], granted: [], cells: [],
       },
       {
-        id: 'catalyst', name: 'Catalyst', role: 'Competition toolkit', priceNote: 'per year',
-        store: '5%', academy: '5%', mentor: '5% off all Academy material', revert: null,
+        id: 'catalyst', name: 'Catalyst', role: 'Full material & PD hours', priceNote: 'per year',
+        mentor: 'Not included', revert: null,
         get: [{ kind: 'buy', text: 'Buy a Catalyst membership' }], granted: [], cells: [],
       },
       {
-        id: 'innovator', name: 'Innovator', role: 'Mentoring & AI tools', priceNote: 'per year',
-        store: '10%', academy: '10%', mentor: 'Group mentoring included — 8 × 30-min sessions each semester. Recorded for ongoing reference', revert: null,
+        id: 'innovator', name: 'Innovator', role: 'Live feedback & mentoring', priceNote: 'per year',
+        mentor: 'Biweekly group call', revert: null,
         get: [{ kind: 'buy', text: 'Buy an Innovator membership' }], granted: [], cells: [],
       },
       {
-        id: 'trailblazer', name: 'Trailblazer', role: 'Career & Technical Education (CTE)', priceNote: 'per year',
-        store: '10%', academy: '10%', mentor: 'Group mentoring included — 8 × 30-min sessions each semester. Recorded for ongoing reference', revert: null,
+        id: 'trailblazer', name: 'Trailblazer', role: 'Standards, SCORM & awards', priceNote: 'per year',
+        mentor: 'Biweekly group call', revert: null,
         get: [{ kind: 'buy', text: 'Buy a Trailblazer membership' }], granted: [], cells: [],
       },
     ],
@@ -233,8 +238,8 @@ export const VALUE_CARDS: Record<AudienceId, ValueCard[]> = {
   ],
   educator: [
     { icon: 'document', title: 'A competition, ready to teach', body: 'Lesson plans, worksheets, judging templates and assessment tools — a full toolkit that drops straight into your classroom.' },
-    { icon: 'idea', title: 'AI tools and live support', body: 'Agentic project advisors, sub-contractor tools, and live kick-off and close-out calls — so you never run a competition alone.' },
-    { icon: 'certificate', title: 'Credentialed impact', body: 'CTE credits, CPD hours, standards alignment (Common Core, NGSS, ISTE) and student awards — measurable, recognised outcomes.' },
+    { icon: 'idea', title: 'AI tools and live support', body: 'Agentic contractors, an agentic project manager, and live kick-off and close-out calls — so you never run a competition alone.' },
+    { icon: 'certificate', title: 'Credentialed impact', body: 'PD certificates worth up to 10 hours, standards alignment (Common Core, NGSS, ISTE, TEKS) and student awards — measurable, recognised outcomes.' },
   ],
 }
 
@@ -243,66 +248,118 @@ export const FAQS: { q: string; a: string }[] = [
   { q: 'How do I join Stellr?', a: 'Create a free account and you’re an Explorer (school), Alumni (college) or Educator (teacher) straight away — no card, no trial. Upgrade whenever it makes sense for you.' },
   { q: 'Can I buy a paid tier directly?', a: 'Yes. If you see the benefit, sign up today! Otherwise, register for a Competition and you’ll automatically upgrade your membership.' },
   { q: 'What happens when my tier expires?', a: 'All tier increases are valid for 12 months — regardless of whether you were granted one through competition participation or purchased an upgrade. Refer to our Terms of Service if you’re looking for refund information.' },
-  { q: 'What’s the difference between Store and Academy discounts?', a: 'They are two separate tracks. Your Store discount (5–10%) applies to merchandise in the web store. Your Academy discount (0–25%) applies to mentoring, coaching and training. Higher tiers carry deeper discounts on both.' },
+  { q: 'What’s the difference between Store and Academy discounts?', a: 'They are two separate tracks on the school and college ladders. Your Store discount (5–10%) applies to merchandise in the web store; your Academy discount (0–25%) applies to mentoring, coaching and training. Higher tiers carry deeper discounts on both. Teacher memberships work differently — they include material, support and PD hours outright rather than carrying discounts.' },
   { q: 'Can a teacher or school district enrol students on their behalf?', a: 'Absolutely! A staff member, or nominated student manager, must register as a Stellr member — but they can do that as part of the competition registration process.' },
 ]
 
-/* ── Educator content waterfall — 37 resources × 7 categories ─────────────── */
+/* ── Educator content waterfall — canon: "2027 Membership Tiers" flyer ─────── */
+//
+// SOURCE OF TRUTH for what each teacher tier includes. The /competitions tier
+// ladder derives its summaries from this list (educatorTierHighlights) so the
+// two public surfaces cannot drift apart — they used to be maintained
+// separately and did.
+//
+// Categories and their order mirror the flyer's six rows exactly. There is no
+// separate "student membership" band: the flyer files the Pathfinder upgrade
+// under Student support.
 export interface WaterfallCategory { key: string; name: string; color: string }
 export const WATERFALL_CATEGORIES: WaterfallCategory[] = [
   { key: 'core', name: 'Core material', color: '#13183A' },
+  { key: 'teacher', name: 'Teacher support', color: '#E0922F' },
   { key: 'student', name: 'Student support', color: '#3C6DF6' },
-  { key: 'live', name: 'Live competition', color: '#7C5CFC' },
-  { key: 'edu', name: 'Educator support', color: '#E0922F' },
-  { key: 'cte', name: 'CTE & standards', color: '#1FA97A' },
+  { key: 'live', name: 'Live competition engagement', color: '#7C5CFC' },
+  { key: 'cte', name: 'CTE / PD hours', color: '#1FA97A' },
   { key: 'ai', name: 'AI tools', color: '#16B6C4' },
-  { key: 'mem', name: 'Student membership', color: '#E0A23A' },
 ]
 
-/** t = educator tier index (0 Educator → 3 Trailblazer); c = category key. */
-export interface WaterfallItem { t: number; c: string; x: string }
+/**
+ * t = educator tier index (0 Educator → 3 Trailblazer); c = category key.
+ *
+ * `up` marks a line that UPGRADES something the member already holds rather
+ * than adding a new benefit — the abridged RFP becoming the full one, BASIC
+ * assessment tools becoming MODERATE, a 2hr PD certificate becoming 6hr. These
+ * are shown in the ladder but excluded from the "N of N benefits" counter,
+ * which would otherwise overstate what a paid tier actually adds.
+ */
+export interface WaterfallItem { t: number; c: string; x: string; up?: true }
 export const WATERFALL_ITEMS: WaterfallItem[] = [
-  // Educator (free) — t:0 — 9 new
-  { t: 0, c: 'core', x: 'RFP' },
-  { t: 0, c: 'core', x: 'Mission Handbook' },
-  { t: 0, c: 'core', x: 'Scoring Rubric' },
-  { t: 0, c: 'student', x: 'Activity Planning — Basic' },
-  { t: 0, c: 'student', x: 'Sub-Contractor Guide' },
-  { t: 0, c: 'live', x: 'Campaign submission & written judging feedback' },
-  { t: 0, c: 'edu', x: 'Competition Guide for Teachers' },
-  { t: 0, c: 'edu', x: 'Assessment Tools — Basic' },
-  { t: 0, c: 'mem', x: 'Students can register as members' },
-  // Catalyst — t:1 — 9 new
-  { t: 1, c: 'student', x: 'Activity Planning — Advanced' },
-  { t: 1, c: 'student', x: 'Worksheets — cost control, Gantt, materials calc' },
-  { t: 1, c: 'live', x: 'Intro & close-out calls' },
-  { t: 1, c: 'edu', x: 'Assessment Tools — Intermediate' },
-  { t: 1, c: 'edu', x: 'Intro + close-out slides' },
-  { t: 1, c: 'edu', x: 'Judging template' },
-  { t: 1, c: 'edu', x: 'Lesson plans' },
-  { t: 1, c: 'edu', x: 'Curated resources (sites, books, videos)' },
-  { t: 1, c: 'ai', x: 'AI ethics — student guide & teacher notes' },
-  // Innovator — t:2 — 12 new
-  { t: 2, c: 'student', x: 'Brainstorming templates' },
-  { t: 2, c: 'student', x: 'Curated student resources' },
-  { t: 2, c: 'live', x: 'Biweekly 30-min student feedback calls' },
-  { t: 2, c: 'edu', x: 'Assessment Tools — Advanced' },
-  { t: 2, c: 'edu', x: 'Question banks' },
-  { t: 2, c: 'edu', x: 'Background / resource slides + talking notes' },
-  { t: 2, c: 'edu', x: 'Reflection templates' },
-  { t: 2, c: 'cte', x: 'Standards alignment — Common Core' },
-  { t: 2, c: 'cte', x: 'Biweekly group mentoring calls (recorded)' },
-  { t: 2, c: 'ai', x: 'Agentic sub-contractors' },
-  { t: 2, c: 'ai', x: 'Agentic project advisor' },
-  { t: 2, c: 'mem', x: 'Student participants invited as Explorer' },
-  // Trailblazer — t:3 — 7 new
-  { t: 3, c: 'live', x: 'Student awards presented' },
-  { t: 3, c: 'live', x: 'Virtual presentation deliverable (Zoom)' },
-  { t: 3, c: 'edu', x: 'LMS upload (SCORM)' },
-  { t: 3, c: 'cte', x: 'Standards alignment — NGSS & ISTE' },
-  { t: 3, c: 'cte', x: 'CTE credits' },
-  { t: 3, c: 'ai', x: 'AI ethics — teacher guide, slides, talking points' },
-  { t: 3, c: 'mem', x: 'Students upgraded to Pathfinder (12 months)' },
+  // ── Educator · always free — t:0 ──
+  { t: 0, c: 'core', x: 'RFP (abridged)' },
+  { t: 0, c: 'core', x: 'Mission Handbook (abridged)' },
+  { t: 0, c: 'teacher', x: 'Campaign Guide — Teacher BASIC' },
+  { t: 0, c: 'teacher', x: '4- & 10-week indicative schedules' },
+  { t: 0, c: 'teacher', x: 'Assessment Tools BASIC' },
+  { t: 0, c: 'student', x: 'Campaign Guide — Student BASIC' },
+  { t: 0, c: 'live', x: 'Optional submission & written judging feedback' },
+  // ── Catalyst — t:1 ──
+  { t: 1, c: 'core', x: 'RFP — full edition', up: true },
+  { t: 1, c: 'core', x: 'Mission Handbook — full edition', up: true },
+  { t: 1, c: 'core', x: '3× Worksheets' },
+  { t: 1, c: 'teacher', x: 'Campaign Guide — Teacher MODERATE', up: true },
+  { t: 1, c: 'teacher', x: 'Assessment Tools MODERATE', up: true },
+  { t: 1, c: 'teacher', x: 'Slides: kick-off & close-out' },
+  { t: 1, c: 'teacher', x: 'Tutorials: Space Systems' },
+  { t: 1, c: 'student', x: 'Campaign Guide — Student MODERATE', up: true },
+  { t: 1, c: 'student', x: 'Brainstorming templates' },
+  { t: 1, c: 'live', x: 'Introductory call' },
+  { t: 1, c: 'live', x: 'Close-out call, incl. judging feedback' },
+  { t: 1, c: 'cte', x: 'PD certificate — 2 hrs' },
+  { t: 1, c: 'ai', x: 'AI ethics: student guide' },
+  // ── Innovator — t:2 ──
+  { t: 2, c: 'teacher', x: 'Campaign Guide — Teacher ADVANCED', up: true },
+  { t: 2, c: 'teacher', x: 'Assessment Tools ADVANCED', up: true },
+  { t: 2, c: 'teacher', x: 'Tutorials: Engineering Leadership' },
+  { t: 2, c: 'teacher', x: 'Reflection templates' },
+  { t: 2, c: 'teacher', x: 'Question banks' },
+  { t: 2, c: 'student', x: 'Campaign Guide — Student ADVANCED', up: true },
+  { t: 2, c: 'student', x: 'Curated resources' },
+  { t: 2, c: 'live', x: '90 min of live student feedback (1–3 calls)' },
+  { t: 2, c: 'cte', x: 'Standards alignment: Common Core' },
+  { t: 2, c: 'cte', x: 'PD certificate — 6 hrs', up: true },
+  { t: 2, c: 'cte', x: 'Biweekly group mentoring call' },
+  { t: 2, c: 'ai', x: 'Agentic contractors' },
+  { t: 2, c: 'ai', x: 'Agentic project manager' },
+  // ── Trailblazer — t:3 ──
+  { t: 3, c: 'teacher', x: 'LMS upload (SCORM formatted)' },
+  { t: 3, c: 'teacher', x: 'Tutorials: Extreme Environments' },
+  { t: 3, c: 'student', x: 'Student membership upgraded to Pathfinder for 1 year' },
+  { t: 3, c: 'live', x: '3 hrs of live student feedback (2–6 calls)', up: true },
+  { t: 3, c: 'live', x: 'Virtual presentations & awards ceremony' },
+  { t: 3, c: 'cte', x: 'Standards alignment: NGSS, ISTE, TEKS' },
+  { t: 3, c: 'cte', x: 'PD certificate — 10 hrs', up: true },
+  { t: 3, c: 'ai', x: 'AI ethics: career planning + teacher guide' },
 ]
 
-export const WATERFALL_TOTAL = WATERFALL_ITEMS.length // 37
+/** Distinct benefits across the ladder — upgrade steps are not counted twice. */
+export const WATERFALL_TOTAL = WATERFALL_ITEMS.filter((i) => !i.up).length
+
+/** New (non-upgrade) benefits a tier adds, and how many lines it upgrades. */
+export function waterfallCounts(t: number): { added: number; upgraded: number } {
+  const items = WATERFALL_ITEMS.filter((i) => i.t === t)
+  return { added: items.filter((i) => !i.up).length, upgraded: items.filter((i) => i.up).length }
+}
+
+/**
+ * A short, category-balanced summary of what a teacher tier adds — one line per
+ * category in flyer order, then a second pass to fill up to `max`. Used by the
+ * /competitions tier ladder so its copy is derived from this list rather than
+ * hand-maintained beside it.
+ */
+export function educatorTierHighlights(t: number, max = 5): string[] {
+  const items = WATERFALL_ITEMS.filter((i) => i.t === t)
+  const out: string[] = []
+  const taken = new Set<string>()
+  for (let pass = 0; out.length < max; pass++) {
+    let progressed = false
+    for (const cat of WATERFALL_CATEGORIES) {
+      if (out.length >= max) break
+      const next = items.find((i) => i.c === cat.key && !taken.has(i.x))
+      if (!next) continue
+      taken.add(next.x)
+      out.push(next.x)
+      progressed = true
+    }
+    if (!progressed) break
+  }
+  return out
+}

@@ -57,13 +57,15 @@ export const CAMPAIGN_INCLUDED: string[] = [
 
 /**
  * The upsell beneath the list, in the flyer's own framing. Names the paid tiers
- * without prices and without linking to /membership — that page is known to be
- * out of date, and pointing campaign traffic at inaccurate pricing is worse than
- * saying less. Add the link when /membership is corrected.
+ * without prices; the link goes to /membership, which was realigned to the 2027
+ * flyer and is safe to point campaign traffic at again (it previously was not).
  */
 export const CAMPAIGN_INCLUDED_NOTE =
   'Stellr material is always available for free. Catalyst, Innovator and Trailblazer ' +
   'memberships add deeper teacher support, PD hours and extra student benefits.'
+
+/** Where CAMPAIGN_INCLUDED_NOTE's "Compare memberships" link points. */
+export const CAMPAIGN_INCLUDED_NOTE_HREF = '/membership'
 
 /** The campaign arc, start to finish — the counterpart to the event-day steps. */
 export const CAMPAIGN_STEPS: { title: string; body: string }[] = [

@@ -6,7 +6,7 @@ import { TierCard, Button, bracketPalette, tierShade, tierGlow } from '@stellr/w
 import type { TierId } from '@stellr/web-ui'
 import {
   AUDIENCES, AUDIENCE_ORDER, VALUE_CARDS, FAQS,
-  WATERFALL_CATEGORIES, WATERFALL_ITEMS, WATERFALL_TOTAL,
+  WATERFALL_CATEGORIES, WATERFALL_ITEMS, WATERFALL_TOTAL, waterfallCounts,
   tierBySlug, type AudienceId, type ValueIcon, type Tier,
 } from './tier-data'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
@@ -481,13 +481,16 @@ function Waterfall({ selIdx, priceOf }: { selIdx: number; priceOf: (id: TierId) 
   let cum = 0
   const rows = eduTiers.map((t, idx) => {
     const newItems = WATERFALL_ITEMS.filter((i) => i.t === idx)
-    cum += newItems.length
+    const counts = waterfallCounts(idx)
+    // Upgrade lines (abridged → full, BASIC → MODERATE) are shown but not counted:
+    // they deepen a benefit the member already holds rather than adding one.
+    cum += counts.added
     const groups = WATERFALL_CATEGORIES
       .map((cat) => ({ name: cat.name, color: cat.color, items: newItems.filter((i) => i.c === cat.key).map((i) => i.x) }))
       .filter((g) => g.items.length > 0)
     return {
-      id: t.id, name: t.name, priceNote: t.priceNote, store: t.store, academy: t.academy, mentor: t.mentor ?? '',
-      newCount: newItems.length, total: cum,
+      id: t.id, name: t.name, priceNote: t.priceNote, mentor: t.mentor ?? '',
+      newCount: counts.added, upgradedCount: counts.upgraded, total: cum,
       barPct: `${Math.round((cum / WATERFALL_TOTAL) * 100)}%`,
       opacity: idx <= selIdx ? 1 : 0.42,
       isSelected: idx === selIdx,
@@ -497,7 +500,7 @@ function Waterfall({ selIdx, priceOf }: { selIdx: number; priceOf: (id: TierId) 
   })
 
   let wfTotal = 0
-  eduTiers.forEach((_, idx) => { if (idx <= selIdx) wfTotal += WATERFALL_ITEMS.filter((i) => i.t === idx).length })
+  eduTiers.forEach((_, idx) => { if (idx <= selIdx) wfTotal += waterfallCounts(idx).added })
   const selName = eduTiers[selIdx]?.name ?? eduTiers[0].name
 
   return (
@@ -510,7 +513,7 @@ function Waterfall({ selIdx, priceOf }: { selIdx: number; priceOf: (id: TierId) 
         </div>
         <div className="rounded-xl px-4 py-3 text-right" style={{ background: '#E4F7F9', border: '1px solid #C2EBEF' }}>
           <p className="font-bold text-[11px] tracking-[.06em] uppercase mb-1" style={{ color: '#0E7480' }}>Unlocked at {selName}</p>
-          <p className="font-display font-bold text-[26px] text-ink leading-none">{wfTotal} <span className="text-[14px] font-semibold" style={{ color: '#2A8A94' }}>of {WATERFALL_TOTAL} resources</span></p>
+          <p className="font-display font-bold text-[26px] text-ink leading-none">{wfTotal} <span className="text-[14px] font-semibold" style={{ color: '#2A8A94' }}>of {WATERFALL_TOTAL} benefits</span></p>
         </div>
       </div>
 
@@ -539,9 +542,12 @@ function Waterfall({ selIdx, priceOf }: { selIdx: number; priceOf: (id: TierId) 
                 <div className="h-[9px] rounded-full overflow-hidden mb-2" style={{ background: '#EEF0F7' }}>
                   <div className="h-full rounded-full" style={{ background: shade, width: row.barPct }} />
                 </div>
-                <p className="text-[13px] text-content-body mb-3.5"><b className="text-ink">+{row.newCount} new</b> · {row.total} of {WATERFALL_TOTAL} unlocked</p>
+                <p className="text-[13px] text-content-body mb-3.5">
+                  <b className="text-ink">+{row.newCount} new</b>
+                  {row.upgradedCount > 0 && <> · {row.upgradedCount} upgraded</>}
+                  {' · '}{row.total} of {WATERFALL_TOTAL} unlocked
+                </p>
                 <div className="flex flex-col gap-1.5 pt-[13px]" style={{ borderTop: '1px dashed #E4E7F2' }}>
-                  <div className="flex justify-between gap-2.5 text-[12.5px]"><span className="text-content-faint whitespace-nowrap">Store / Academy Discounts</span><span className="font-semibold text-content-body whitespace-nowrap">{row.store} / {row.academy}</span></div>
                   <div className="flex justify-between gap-2.5 text-[12.5px]"><span className="text-content-faint whitespace-nowrap">Mentoring</span><span className="font-semibold text-content-body text-right">{row.mentor}</span></div>
                 </div>
               </div>

@@ -360,6 +360,19 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   'academy-1': photo('academy-1', 'IMG_7700', 'Team delegation at the whiteboard'),
   'academy-2': photo('academy-2', 'IMG_7702', 'Structural-board design session'),
   'academy-3': photo('academy-3', 'DSC_5776', 'Mentors and participants collaborating'),
+  // Audience landing pages (/lp/[slug]) — client event photography supplied with
+  // the 2026-09 landing-page handoff. The two heroes are per-audience and must
+  // never appear in the gallery, or a page shows the same photograph twice.
+  'lp-hero-robotics': {
+    // Source is 1600px wide — no 1920 derivative exists.
+    ...photo('lp-hero-robotics', 'handoff mission-room', 'A competition mission room with students at tables in front of a wall of design notes'),
+    widths: [480, 768, 1200],
+  },
+  'lp-hero-homeschool': photo('lp-hero-homeschool', 'handoff teams-working', 'Students gathered around laptops and tablets working on a design together'),
+  'lp-gallery-1': photo('lp-gallery-1', 'handoff tablet-pair', 'Two students working through a design together on a tablet'),
+  'lp-gallery-2': photo('lp-gallery-2', 'handoff design-doc', "A laptop showing a company's design documentation part-way through the weekend"),
+  'lp-gallery-3': photo('lp-gallery-3', 'handoff mentor-student', 'A mentor and a student reviewing work on a tablet together'),
+  'lp-gallery-4': photo('lp-gallery-4', 'handoff cohort-group', 'A large group of student participants together at the end of a competition'),
 }
 
 /* ─────────────────────────────────────────────────────────────────────────

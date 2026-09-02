@@ -120,8 +120,8 @@ interface PropertyDef {
   name: string
   label: string
   description: string
-  type: 'string' | 'enumeration' | 'date' | 'number'
-  fieldType: 'text' | 'textarea' | 'select' | 'checkbox' | 'date' | 'number'
+  type: 'string' | 'enumeration' | 'date' | 'number' | 'bool'
+  fieldType: 'text' | 'textarea' | 'select' | 'checkbox' | 'date' | 'number' | 'booleancheckbox'
   options?: { label: string; value: string; displayOrder: number }[]
 }
 
@@ -260,6 +260,104 @@ const PROPERTIES: PropertyDef[] = [
     type: 'string',
     fieldType: 'text',
   },
+
+  /* ── Audience landing pages (/lp/[slug]) ────────────────────────────
+     One shared form serves every audience page; lp_audience and
+     lp_source_page are what separate them in reporting, so the next six
+     pages need no new HubSpot objects.
+
+     Property names are IMMUTABLE once created, and re-creating an archived
+     name resurrects its old data — grant_prior_stellr came back with eleven
+     rows when that happened. Treat this list as final. */
+  {
+    name: HS.stellrRole,
+    label: 'Stellr Role',
+    description: 'How the contact described themselves on a landing-page enquiry.',
+    type: 'enumeration',
+    fieldType: 'select',
+    options: opts(['teacher', 'parent', 'student']),
+  },
+  {
+    name: HS.expectedStudentCount,
+    label: 'Expected Student Count',
+    description:
+      'Roughly how many students the contact expects to bring, from a landing-page enquiry. Deliberately separate from Grant Expected Students, which is scoped to a grant application.',
+    type: 'number',
+    fieldType: 'number',
+  },
+  {
+    name: HS.lpAudience,
+    label: 'LP Audience',
+    description: 'Which audience landing page captured this contact.',
+    type: 'enumeration',
+    fieldType: 'select',
+    options: opts(['first_robotics_teacher', 'homeschool']),
+  },
+  {
+    name: HS.lpSourcePage,
+    label: 'LP Source Page',
+    description: 'Slug of the landing page, e.g. first-robotics-teachers.',
+    type: 'string',
+    fieldType: 'text',
+  },
+  {
+    name: HS.lpProgramInterest,
+    label: 'LP Program Interest',
+    description: 'Which programme the landing page was marketing.',
+    type: 'enumeration',
+    fieldType: 'select',
+    options: opts(['space-design-competition', 'environmental-design-competition']),
+  },
+  {
+    name: HS.lpCallBooked,
+    label: 'LP Call Booked',
+    description:
+      'Set by the Motion booking webhook, never by the form. Every landing-page submission implies a call was offered; this records whether one was actually taken.',
+    type: 'bool',
+    fieldType: 'booleancheckbox',
+    // A HubSpot bool property is still an enumeration underneath, and the API
+    // rejects a booleancheckbox created without its two options.
+    options: [
+      { label: 'Yes', value: 'true', displayOrder: 0 },
+      { label: 'No', value: 'false', displayOrder: 1 },
+    ],
+  },
+  {
+    name: HS.lpUtmSource,
+    label: 'LP UTM Source',
+    description:
+      'Landing-page UTM copy. HubSpot keeps its own hs_analytics_source chain from the hutk, but that chain is first-touch-weighted and gets overwritten — these copies are what make the per-page numbers survive.',
+    type: 'string',
+    fieldType: 'text',
+  },
+  {
+    name: HS.lpUtmMedium,
+    label: 'LP UTM Medium',
+    description: 'Landing-page UTM copy.',
+    type: 'string',
+    fieldType: 'text',
+  },
+  {
+    name: HS.lpUtmCampaign,
+    label: 'LP UTM Campaign',
+    description: 'Landing-page UTM copy.',
+    type: 'string',
+    fieldType: 'text',
+  },
+  {
+    name: HS.lpUtmContent,
+    label: 'LP UTM Content',
+    description: 'Landing-page UTM copy.',
+    type: 'string',
+    fieldType: 'text',
+  },
+  {
+    name: HS.lpUtmTerm,
+    label: 'LP UTM Term',
+    description: 'Landing-page UTM copy.',
+    type: 'string',
+    fieldType: 'text',
+  },
 ]
 
 /**
@@ -318,6 +416,22 @@ const GRANT_FIELDS = [
   HS.grantReferralSource,
 ]
 
+const LANDING_PAGE_FIELDS = [
+  HS.stellrRole,
+  HS.expectedStudentCount,
+  HS.lpAudience,
+  HS.lpSourcePage,
+  HS.lpProgramInterest,
+  HS.lpUtmSource,
+  HS.lpUtmMedium,
+  HS.lpUtmCampaign,
+  HS.lpUtmContent,
+  HS.lpUtmTerm,
+  // Deliberately NOT lp_call_booked: the Motion webhook owns that property, and
+  // a form that declares a field the submission never sends is a field HubSpot
+  // will happily blank on every submit.
+]
+
 const FORMS: { key: keyof typeof LEAD_SOURCES; name: string; fields: string[] }[] = [
   { key: 'event_notify', name: 'Website — Event Notify', fields: [...COMMON_FIELDS, ...EVENT_FIELDS] },
   { key: 'newsletter', name: 'Website — Newsletter Subscribe', fields: COMMON_FIELDS },
@@ -329,6 +443,11 @@ const FORMS: { key: keyof typeof LEAD_SOURCES; name: string; fields: string[] }[
     key: 'teacher_grant',
     name: 'Website — Teacher Grant Application',
     fields: [...COMMON_FIELDS, ...GRANT_FIELDS],
+  },
+  {
+    key: 'landing_page',
+    name: 'Website — Landing Page Enquiry',
+    fields: [...COMMON_FIELDS, ...LANDING_PAGE_FIELDS],
   },
 ]
 

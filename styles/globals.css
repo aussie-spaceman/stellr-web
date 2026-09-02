@@ -151,3 +151,16 @@
   }
   .bar-animate { animation: bar-grow 0.7s ease-out both; }
 }
+
+/* Landing-page lead form: the one transition between the form card and the
+   booking card. The design system asks for restrained motion, so this is a
+   short fade and nothing else — no slide, no scale. Sits inside the same
+   reduced-motion guard as the block above via the .lp-fade-in class only being
+   animated here. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes lp-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .lp-fade-in { animation: lp-fade-in 0.18s ease-out both; }
+}

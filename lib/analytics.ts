@@ -44,6 +44,11 @@ export type LeadFormSource =
   | 'contact'
   | 'join_network'
   | 'teacher_grant'
+  // Audience landing pages. Two keys for one HubSpot source on purpose: the
+  // b2b/b2c split below is per-source, and a teacher page and a family page are
+  // not the same ad audience.
+  | 'landing_page_teacher'
+  | 'landing_page_family'
 
 /**
  * Who the route actually speaks to. This is the switch that lets an ad tag be
@@ -62,10 +67,12 @@ const LEAD_AUDIENCE: Record<LeadFormSource, LeadAudience> = {
   join_network: 'b2b',
   contact: 'b2b',
   teacher_grant: 'b2b',
+  landing_page_teacher: 'b2b',
   // Students and parents.
   newsletter: 'b2c',
   event_notify: 'b2c',
   scholarship: 'b2c',
+  landing_page_family: 'b2c',
 }
 
 /**

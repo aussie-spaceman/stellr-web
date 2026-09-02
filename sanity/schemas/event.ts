@@ -258,6 +258,47 @@ export const event = {
         document?.activityType === 'campaign',
     },
 
+    // ── Landing-page map ──────────────────────────────────────────────────────
+    // Coordinates drive the pins on the "Where we run" map used by the audience
+    // landing pages (see lib/locations.ts). Deliberately optional: a location
+    // with no coordinates still counts in the legend and appears in the
+    // accessible location list, it just has no pin — which is a better failure
+    // than a pin defaulted to (0, 0) in the Gulf of Guinea.
+    {
+      name: 'latitude',
+      type: 'number',
+      title: 'Latitude',
+      description: 'Decimal degrees. Used only by the landing-page location map.',
+      validation: (Rule: { min: (n: number) => { max: (n: number) => unknown } }) =>
+        Rule.min(-90).max(90),
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType === 'campaign',
+    },
+    {
+      name: 'longitude',
+      type: 'number',
+      title: 'Longitude',
+      description: 'Decimal degrees. Used only by the landing-page location map.',
+      validation: (Rule: { min: (n: number) => { max: (n: number) => unknown } }) =>
+        Rule.min(-180).max(180),
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType === 'campaign',
+    },
+    // Untick to keep a real, dated event off the marketing map without touching
+    // its dates or slug — clearing a date would look like a draft to every other
+    // consumer, and renaming a slug has orphaned production rows before.
+    {
+      name: 'showOnLocationMap',
+      type: 'boolean',
+      title: 'Show on landing-page map',
+      description:
+        'On by default. Untick for an event that should not appear on the audience ' +
+        'landing pages\u2019 "Where we run" map.',
+      initialValue: true,
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType === 'campaign',
+    },
+
     // ── Content & Display ─────────────────────────────────────────────────────
     { name: 'tagline', type: 'string', title: 'Tagline' },
     { name: 'description', type: 'array', title: 'Description', of: [{ type: 'block' }] },

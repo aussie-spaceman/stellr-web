@@ -1,7 +1,7 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { STATIC_SITEMAP_PATHS, STATIC_ROUTE_EXCLUSIONS } from './sitemap'
+import { STATIC_SITEMAP_PATHS, STATIC_ROUTE_EXCLUSIONS, LANDING_PAGE_SITEMAP_PATHS } from './sitemap'
 
 /**
  * Guards against the sitemap silently falling behind the routes. Fifteen public
@@ -57,5 +57,18 @@ describe('sitemap static route coverage', () => {
 
   it('has no duplicate entries', () => {
     expect(new Set(STATIC_SITEMAP_PATHS).size).toBe(STATIC_SITEMAP_PATHS.length)
+  })
+
+  it('includes every audience landing page, derived from the registry', () => {
+    // /lp/[slug] is parameterised, so the on-disk walker above cannot see the
+    // individual pages. They come from content/lp instead, which means adding an
+    // audience page cannot leave it out of the sitemap.
+    expect(LANDING_PAGE_SITEMAP_PATHS).toEqual([
+      '/lp/first-robotics-teachers',
+      '/lp/homeschool-students',
+    ])
+    for (const path of LANDING_PAGE_SITEMAP_PATHS) {
+      expect(STATIC_SITEMAP_PATHS).not.toContain(path)
+    }
   })
 })

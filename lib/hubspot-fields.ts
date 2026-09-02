@@ -57,6 +57,26 @@ export const HS = {
   grantPriorStellr: 'grant_prior_stellr',
   grantMotivation: 'grant_motivation',
   grantReferralSource: 'grant_referral_source',
+
+  // Audience landing pages (/lp/[slug]) — created by scripts/hubspot-setup.ts.
+  // `expected_student_count` is deliberately NOT grant_expected_students: that
+  // one is scoped to a grant application, and reusing it would mix an enquiry's
+  // rough group size into grant reporting.
+  stellrRole: 'stellr_role',
+  expectedStudentCount: 'expected_student_count',
+  lpAudience: 'lp_audience',
+  lpSourcePage: 'lp_source_page',
+  lpProgramInterest: 'lp_program_interest',
+  /** Set by the Motion booking webhook, never by the form. */
+  lpCallBooked: 'lp_call_booked',
+  // HubSpot keeps its own hs_analytics_source chain from the hutk, but that
+  // chain is first-touch-weighted and gets overwritten. These explicit copies
+  // are what make the per-page numbers survive.
+  lpUtmSource: 'lp_utm_source',
+  lpUtmMedium: 'lp_utm_medium',
+  lpUtmCampaign: 'lp_utm_campaign',
+  lpUtmContent: 'lp_utm_content',
+  lpUtmTerm: 'lp_utm_term',
 } as const
 
 /* ── Lead sources ────────────────────────────────────────────────────────── */
@@ -70,6 +90,10 @@ export const LEAD_SOURCES = {
   scholarship: 'Scholarship',
   host_event: 'Host An Event',
   teacher_grant: 'Teacher Grant',
+  // One source for every audience landing page. Per-page reporting comes from
+  // lp_audience and lp_source_page, so the next six pages need no new HubSpot
+  // objects, no new workflows and no new form.
+  landing_page: 'Landing Page',
 } as const
 
 export type LeadSource = keyof typeof LEAD_SOURCES
@@ -88,6 +112,7 @@ export const FORM_ENV_VARS: Record<LeadSource, string> = {
   scholarship: 'HUBSPOT_FORM_SCHOLARSHIP',
   host_event: 'HUBSPOT_FORM_HOST_EVENT',
   teacher_grant: 'HUBSPOT_FORM_TEACHER_GRANT',
+  landing_page: 'HUBSPOT_FORM_LANDING_PAGE',
 }
 
 export function formIdFor(source: LeadSource): string | undefined {
@@ -121,6 +146,9 @@ export const LEAD_SOURCE_LIFECYCLE: Record<LeadSource, 'subscriber' | 'lead'> = 
   scholarship: 'lead',
   host_event: 'lead',
   teacher_grant: 'lead',
+  // Every landing-page submission is a request for a call, so it is a lead from
+  // the first touch — not a subscriber who might be marketed to later.
+  landing_page: 'lead',
 }
 
 /** Routes whose contacts HubSpot will wrongly leave at Lead. */

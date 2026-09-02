@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next'
 import { getAllEvents, getAllCampaigns, getAllNewsPosts } from '@/lib/sanity'
+import { LANDING_PAGE_SLUGS } from '@/content/lp'
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -60,6 +61,24 @@ export const STATIC_ROUTE_EXCLUSIONS = ['/store/cart', '/store/success']
 
 export const STATIC_SITEMAP_PATHS = staticPaths.map((r) => r.path)
 
+/**
+ * Audience landing pages (/lp/[slug]).
+ *
+ * Derived from the registry rather than listed above, for two reasons: they are
+ * a parameterised route with no page.tsx of their own for the static-route
+ * guard to find, and adding an audience page is meant to be a config file plus
+ * a registry line — a third place to remember would be the thing that goes
+ * stale. Indexed deliberately; see app/(public)/lp/[slug]/page.tsx.
+ */
+export const LANDING_PAGE_SITEMAP_PATHS = LANDING_PAGE_SLUGS.map((slug) => `/lp/${slug}`)
+
+const landingPageRoutes: MetadataRoute.Sitemap = LANDING_PAGE_SITEMAP_PATHS.map((path) => ({
+  url: `${BASE_URL}${path}`,
+  lastModified: new Date(),
+  changeFrequency: 'monthly' as const,
+  priority: 0.7,
+}))
+
 const staticRoutes: MetadataRoute.Sitemap = staticPaths.map((r) => ({
   url: `${BASE_URL}${r.path}`,
   lastModified: new Date(),
@@ -103,5 +122,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })
   )
 
-  return [...staticRoutes, ...eventRoutes, ...campaignRoutes, ...newsRoutes]
+  return [...staticRoutes, ...landingPageRoutes, ...eventRoutes, ...campaignRoutes, ...newsRoutes]
 }

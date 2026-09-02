@@ -358,8 +358,12 @@ export default async function CompetitionsPage() {
 
               <div className="mt-5 flex flex-col gap-1.5">
                 <p className="text-sm text-content-muted">
-                  Registering for a Competition assigns your students{' '}
-                  <strong className="text-content-secondary">Explorer</strong> membership as well.
+                  {/* Matches the live grant rule "Competition registration → Pathfinder
+                      (12mo)" (tier_grant_rules, event_role: participant). This previously
+                      said Explorer, which no rule grants on registration. */}
+                  Registering for a Competition gives your students{' '}
+                  <strong className="text-content-secondary">Pathfinder</strong> membership,
+                  free for 12 months.
                 </p>
                 <Link href="/membership" className="text-sm font-semibold text-primary inline-flex items-center gap-1">
                   View membership tiers <ArrowRight size={14} />

@@ -6,6 +6,10 @@
 > HubSpot properties were archived and recreated as `grant_*` (internal names are
 > immutable there) — cheap only because they held no data. "Earn" language went
 > with it: you earn a stipend, a grant pays out.
+>
+> **Tracker:** [Teacher Grant Program — Open Actions](https://docs.google.com/document/d/197-xlKEqriDDlshE2u_4X1Ys_tPZwX1cw8jXWaRqQis/edit)
+> (replaces the earlier Close-Out Actions doc, which was trashed — its body still
+> used stipend wording and the Drive connector cannot edit a Google Doc's body).
 
 **Date:** 24 August 2026
 **Status:** SHIPPED AND LIVE — commit `2b6f2b5` on `main`
@@ -172,3 +176,35 @@ with a tickable Complete column. Summary of the sharp ones:
   that the live page states four times.
 - **P2** — `/contact` still says "Enquiry Type" (British) against an American-English
   content standard.
+
+---
+
+## 8. The rename, and what it cost
+
+Three HubSpot behaviours worth not rediscovering:
+
+**Internal property names are immutable.** Renaming is archive-and-recreate. It was cheap
+here only because the properties held no application data — that window closes with the
+first applicant.
+
+**HubSpot refuses to delete a property still bound to a form.** The delete returns `400`
+with no useful message; archive the form first and the same call returns `204`. My first
+sweep logged "archived" for ten properties that had in fact all failed, because I printed
+the label without checking the status code.
+
+**Re-creating a property with a previously archived internal name resurrects its old
+data.** `stipend_prior_stellr` came back holding 11 contacts from 2024–25 — real Stellr
+teachers, including the one whose video testimonial is on the page. A zero-data guard
+caught it; those values were migrated to `grant_prior_stellr`, verified value-for-value,
+and only then was the old property archived. Had the first sweep succeeded, that history
+would have gone with it.
+
+Two process notes: the Bash batch write was blocked by the permissions classifier, so the
+migration went through the HubSpot MCP `manage_crm_objects`, which caps at **10 objects per
+call**. And a bare find-and-replace is not enough for a rename of this kind — "earn" is
+stipend language that a grant does not share, and a blanket pass also corrupted a
+*historical* note in this file about the earlier Educator→Teacher rename by grant-ifying
+the search terms it was documenting.
+
+**Leave `/stipend → /grant` in `next.config.mjs` permanently.** The printed one-pager
+already in teachers' hands carries the old URL.

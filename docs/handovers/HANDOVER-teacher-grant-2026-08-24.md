@@ -1,20 +1,27 @@
-# Handover — Teacher Stipend Program
+# Handover — Teacher Grant Program
+
+> **RENAMED 1 Sept 2026 — the Teacher Stipend is now the Teacher Grant Program.**
+> A label change only: amounts, thresholds, payment date and tax framing are
+> unchanged. `/stipend` permanently redirects to `/grant`. The ten `stipend_*`
+> HubSpot properties were archived and recreated as `grant_*` (internal names are
+> immutable there) — cheap only because they held no data. "Earn" language went
+> with it: you earn a stipend, a grant pays out.
 
 **Date:** 24 August 2026
 **Status:** SHIPPED AND LIVE — commit `2b6f2b5` on `main`
-**Tracker:** [Teacher Stipend — Close-Out Actions](https://docs.google.com/document/d/1aJbPjvs3CTKl_UQzTXPgDeKoUFhcg0HxYd_-bRem8_o/edit)
-**Supersedes:** `~/Documents/Claude/Projects/Website Rebuild/HANDOVER-Teacher-Stipend.md` (the pre-build design handover, now carrying a SHIPPED banner)
+**Tracker:** [Teacher Grant — Close-Out Actions](https://docs.google.com/document/d/1aJbPjvs3CTKl_UQzTXPgDeKoUFhcg0HxYd_-bRem8_o/edit)
+**Supersedes:** `~/Documents/Claude/Projects/Website Rebuild/HANDOVER-Teacher-Grant.md` (the pre-build design handover, now carrying a SHIPPED banner)
 
 ---
 
 ## 1. The one thing to know
 
 **Nothing has ever run through this code.** Verified at close-out: zero contacts in
-HubSpot portal 24379847 carry `stipend_status`. The page is live, the form is live, the
+HubSpot portal 24379847 carry `grant_status`. The page is live, the form is live, the
 HubSpot properties exist — but no application has been submitted, by a teacher or by me.
 
 That matters more than usual here, because the Educator-registration block in
-`app/api/teacher-stipend/route.ts` is **deliberately non-fatal**. If `upsertMember`, the
+`app/api/teacher-grant/route.ts` is **deliberately non-fatal**. If `upsertMember`, the
 school link or the tier grant fails, the applicant still sees success, the email still
 arrives, and the only trace is a `console.error` in the Vercel logs. That was the right
 call — losing a membership grant is recoverable, losing an application is not — but it
@@ -29,22 +36,22 @@ through all three systems.** The tracker doc has the checklist.
 
 | Surface | Detail |
 |---|---|
-| `/stipend` | Page, application form, FAQPage JSON-LD (7 questions), one-pager download |
-| `/api/teacher-stipend` | zod validation, 3/hour rate limit, honeypot, Resend, `captureLead`, member creation |
+| `/grant` | Page, application form, FAQPage JSON-LD (7 questions), one-pager download |
+| `/api/teacher-grant` | zod validation, 3/hour rate limit, honeypot, Resend, `captureLead`, member creation |
 | `/api/members/me/prefill` | Narrow (name/email/phone/school) prefill for scattered lead forms |
-| Nav + footer | "Teacher Stipend" in the Educate dropdown after Curriculum, and the footer's Educate column |
-| `/educators#stipend` | Trimmed to a ~67-word teaser linking to `/stipend` |
-| HubSpot 24379847 | 10 `stipend_*` properties, `Teacher Stipend` on the `stellr_lead_source` enum, form "Website — Teacher Stipend Application" |
-| Vercel Production | `HUBSPOT_FORM_TEACHER_STIPEND` set |
+| Nav + footer | "Teacher Grant" in the Educate dropdown after Curriculum, and the footer's Educate column |
+| `/educators#grant` | Trimmed to a ~67-word teaser linking to `/grant` |
+| HubSpot 24379847 | 10 `grant_*` properties, `Teacher Grant` on the `stellr_lead_source` enum, form "Website — Teacher Grant Application" |
+| Vercel Production | `HUBSPOT_FORM_TEACHER_GRANT` set |
 
-**Program figures live in `lib/stipend.ts`.** The page, the FAQ, the API route and the
+**Program figures live in `lib/grant.ts`.** The page, the FAQ, the API route and the
 copy all read from it. Change a number there, not in a template.
 
 ---
 
 ## 3. Vocabulary — three words, one hierarchy
 
-Codified in the header of `lib/stipend.ts`, and they are not interchangeable:
+Codified in the header of `lib/grant.ts`, and they are not interchangeable:
 
 - **Competition** — the umbrella. A team joins a Competition.
 - **Challenge** — a Competition run **live**, at a venue the teacher travels to.
@@ -68,14 +75,14 @@ grade-levels question — `event_demographic` is `High School` by definition.
 **A new `LEAD_SOURCES` value never reaches the live enum.** `scripts/hubspot-setup.ts`
 skips any property that already exists, so a new option is never added to
 `stellr_lead_source` — and HubSpot **silently drops** a property whose value is not a
-declared option. Every stipend capture would have landed with no lead source. Fixed by
+declared option. Every grant capture would have landed with no lead source. Fixed by
 generalising `ensureNotifyStatusOptions` into `ensureEnumOptions(property, wanted, label)`,
 now called for the lead source too. **Any future lead source depends on that call.**
 
 **A HubSpot `number` form field needs digit bounds.** Omitting
 `minAllowedDigits`/`maxAllowedDigits` 400s the *entire* form definition with a message
 that names no field: `Some required fields were not set: [minAllowedDigits,
-maxAllowedDigits]`. It reads like a malformed request. `stipend_expected_students` was
+maxAllowedDigits]`. It reads like a malformed request. `grant_expected_students` was
 the first number field in any Stellr form; `NUMBER_VALIDATION` now covers it.
 
 **Order the deploy: HubSpot first, code second.** The properties and the enum option were
@@ -94,7 +101,7 @@ page form load separate instances of `useMemberPrefill.ts`, so `/contact` fired 
 identical requests until the cache moved to `globalThis`.
 
 **`members.date_of_birth` and `gender` are NOT NULL with no default.** That is why the
-stipend form collects them — a member simply cannot be created without them.
+grant form collects them — a member simply cannot be created without them.
 
 ---
 
@@ -103,7 +110,7 @@ stipend form collects them — a member simply cannot be created without them.
 Two mechanisms, deliberately:
 
 - **Server prop, full record** — `getRegistrationPrefill()` for rich forms on their own
-  pages: individual + group registration, group join, and the stipend form.
+  pages: individual + group registration, group join, and the grant form.
 - **Client hook, narrow record** — `useMemberPrefill.ts` + `/api/members/me/prefill` for
   the scattered lead forms: contact, scholarship, host-event, join-network, subscribe,
   both asset gates, event notify.
@@ -120,14 +127,14 @@ would get their own email pre-filled for every student.
 ## 6. Collateral
 
 Authoritative documents now live in
-`Shared drives/Stellr/2 Community/Stipend Plan/`:
+`Shared drives/Stellr/2 Community/Grant Plan/`:
 
-- `Stellr Education Stipend - Overview.pdf` / `.docx` — the one-pager (also served at
-  `/files/Stellr-Teacher-Stipend-Overview.pdf`)
-- `Participation Agreement - Teacher Stipend V3.docx` — **V2 left intact**; a versioned
+- `Stellr Education Grant - Overview.pdf` / `.docx` — the one-pager (also served at
+  `/files/Stellr-Teacher-Grant-Overview.pdf`)
+- `Participation Agreement - Teacher Grant V3.docx` — **V2 left intact**; a versioned
   legal draft gets a new version, not an in-place edit
 
-`~/Documents/Claude/Projects/Website Rebuild/README-Stipend-Collateral.md` lists what is
+`~/Documents/Claude/Projects/Website Rebuild/README-Grant-Collateral.md` lists what is
 authoritative and what is safe to delete.
 
 **Editing `.docx` here:** LibreOffice **is** installed at
@@ -151,13 +158,13 @@ only be deleted or replaced, not corrected.
 All tracked in the [close-out doc](https://docs.google.com/document/d/1aJbPjvs3CTKl_UQzTXPgDeKoUFhcg0HxYd_-bRem8_o/edit)
 with a tickable Complete column. Summary of the sharp ones:
 
-- **P1** — end-to-end submission, Educator auto-registration, `stipend_application_date`
+- **P1** — end-to-end submission, Educator auto-registration, `grant_application_date`
   acceptance, signed-in prefill, notification email, conversion tracking: all shipped,
   none exercised.
 - **P1** — `members.marketing_consent` is NOT NULL DEFAULT true and no signup path sets
-  it, so a stipend applicant is enrolled into marketing drips while their consent
+  it, so a grant applicant is enrolled into marketing drips while their consent
   checkbox only covers contact *about their application*. Pre-existing across every
-  registration route; the stipend wording sharpens it. Worth a privacy-counsel view.
+  registration route; the grant wording sharpens it. Worth a privacy-counsel view.
 - **P1** — participation agreement V3 still unreviewed by counsel while the page
   publicly accepts applications.
 - **P2** — keyboard/screen-reader pass never run (was an explicit go-live item).

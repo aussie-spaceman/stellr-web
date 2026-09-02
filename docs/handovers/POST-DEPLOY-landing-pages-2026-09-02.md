@@ -7,32 +7,97 @@ Routes: `/lp/first-robotics-teachers` and `/lp/homeschool-students`.
 
 ---
 
-## 0. First: four Vercel environment variables
+## 0. First: three Vercel environment variables
 
-Nothing below matters until these are set. **Production + Preview** for each.
+Nothing below matters until these are set. Verified against the live project
+(`stellr-web`, team `aussie-spaceman`) on 2 Sep 2026:
+**`HUBSPOT_PORTAL_ID` and `NEXT_PUBLIC_HUBSPOT_PORTAL_ID` are already set on
+Preview + Production** — nothing to do there.
 
-| Variable | Value |
-|---|---|
-| `HUBSPOT_FORM_LANDING_PAGE` | `74b755b6-d823-4073-90c4-975d523a4612` |
-| `NEXT_PUBLIC_BOOKING_URL` | `https://app.usemotion.com/meet/david-m-shaw/welcome` |
-| `MOTION_WEBHOOK_SECRET` | generate one — see step 2 |
-| `HUBSPOT_PORTAL_ID` | `24379847` (already set; confirm it survived) |
+| Variable | Value | Environments |
+|---|---|---|
+| `HUBSPOT_FORM_LANDING_PAGE` | `74b755b6-d823-4073-90c4-975d523a4612` | **Production only** |
+| `NEXT_PUBLIC_BOOKING_URL` | `https://app.usemotion.com/meet/david-m-shaw/welcome` | Production + Preview |
+| `MOTION_WEBHOOK_SECRET` | generate — see below | **Production only** |
+
+**Production only for the two HubSpot-writing variables**, which corrects the
+"Production + Preview" that `scripts/hubspot-setup.ts` prints. All seven
+existing `HUBSPOT_FORM_*` variables are Production-only, and that is the right
+call rather than an oversight: a form GUID on Preview means every preview
+deployment writes real contacts into the live CRM, and there is no sandbox
+portal to write them to instead. Without the GUID on Preview the route falls
+back to the contacts-API path, which needs a token Preview also does not have,
+so a preview submission logs and dead-letters instead of polluting the portal.
+
+`NEXT_PUBLIC_BOOKING_URL` is safe on Preview — it is just a link — and useful
+there, so set it on both.
+
+### Commands
 
 ```bash
-npx vercel env add HUBSPOT_FORM_LANDING_PAGE production
-npx vercel env add NEXT_PUBLIC_BOOKING_URL production
-npx vercel env add MOTION_WEBHOOK_SECRET production
+cd ~/Documents/GitHub/stellr-web
 ```
 
-`NEXT_PUBLIC_*` variables are inlined at build time, so **redeploy after adding
-them** — an existing deployment will not pick the booking URL up. Without it the
-page falls back to the same URL hard-coded in `components/lp/LandingPage.tsx`,
-so the button still works; the env var is what lets you change it later without
-a code change.
+```bash
+printf '%s' '74b755b6-d823-4073-90c4-975d523a4612' | npx vercel env add HUBSPOT_FORM_LANDING_PAGE production
+```
 
-Check what is actually set with `npx vercel env ls`. Note its "created" column
-resets whenever a variable is edited — that is how an unsaved variable gets
-spotted.
+```bash
+printf '%s' 'https://app.usemotion.com/meet/david-m-shaw/welcome' | npx vercel env add NEXT_PUBLIC_BOOKING_URL production
+```
+
+```bash
+printf '%s' 'https://app.usemotion.com/meet/david-m-shaw/welcome' | npx vercel env add NEXT_PUBLIC_BOOKING_URL preview
+```
+
+```bash
+openssl rand -hex 32 | tr -d '\n' | npx vercel env add MOTION_WEBHOOK_SECRET production
+```
+
+That last one never prints the secret. To read it back when you wire up Motion:
+
+```bash
+npx vercel env pull /tmp/lp-env --environment=production && grep MOTION_WEBHOOK_SECRET /tmp/lp-env
+```
+
+Delete `/tmp/lp-env` afterwards — it contains every production secret.
+
+Piping the value matters: run `vercel env add` with no stdin and it prompts
+interactively, and a pasted value can pick up a trailing newline that becomes
+part of the secret. `printf` (not `echo`) avoids that.
+
+### Then confirm
+
+```bash
+npx vercel env ls production | grep -E 'LANDING_PAGE|BOOKING|MOTION'
+```
+
+Three rows. Note the "created" column resets whenever a variable is edited —
+that is how an unsaved or half-typed variable gets spotted.
+
+### Then merge — in that order
+
+**Environment variables do not apply to deployments that already exist.**
+`NEXT_PUBLIC_*` is inlined at build time, and the server-side ones are read from
+the deployment's own snapshot of the environment.
+
+So set the variables *first*, then merge — the merge triggers a fresh production
+build via the Vercel git integration (about four minutes) and that build picks
+all three up. Done in this order there is no separate redeploy step at all:
+
+```bash
+git checkout main && git pull && git merge feat/landing-pages-2026-09-02 && git push
+```
+
+If you merge before setting them, nothing breaks visibly — the booking button
+still works, because `components/lp/LandingPage.tsx` falls back to the same
+Motion URL — but leads land through the contacts-API path with no form
+submission, so the conversion attribution the shared form exists to record is
+lost for every submission until you redeploy. Recover with:
+
+```bash
+npx vercel redeploy --prod
+```
 
 ---
 
@@ -132,8 +197,8 @@ the form and the calendar is the only join between the two.
 openssl rand -hex 32
 ```
 
-Put the output in Vercel as `MOTION_WEBHOOK_SECRET` (Production + Preview), then
-redeploy. Until it is set the route answers `503` and writes nothing — deliberately.
+Put the output in Vercel as `MOTION_WEBHOOK_SECRET` (Production — the webhook
+only ever points at production), as in step 0, then redeploy. Until it is set the route answers `503` and writes nothing — deliberately.
 
 ### 2b. Wire Motion to it
 

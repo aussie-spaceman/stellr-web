@@ -15,12 +15,12 @@ things this session surfaced.** Every command runs from
 |---|---|---|---|
 | 1 | ~~Two Preview variables~~ | **done** | — |
 | 2 | ~~Rotate the webhook secret~~ | **done** | — |
-| 3 | Three GTM tags | ~20 min | All landing-page funnel reporting |
-| 4 | Close the booking loop — **built**, 3 setup steps | ~10 min | Knowing who actually booked |
+| 3 | ~~Three GTM tags~~ | **done** | — |
+| 4 | ~~Close the booking loop~~ | **done + verified** | — |
 | 5 | ~~Submit the live form once~~ | **done** | — |
 | 6 | Fix a venue name in Studio | 2 min | Nothing — copy accuracy |
 | 7 | Open a plannedLocation in Studio | 2 min | Nothing — a look-over |
-| 8 | `flyer_download` has no GTM tag | ~5 min | Flyer download reporting (pre-existing) |
+| 8 | ~~`flyer_download` GTM tag~~ | **done** | — |
 
 ---
 
@@ -229,9 +229,18 @@ Verified already: an unsigned POST and a POST with a junk signature both return
 
 The cron is written, tested and deployed. It reads the calendar Motion writes
 bookings onto, and for any attendee that is **already** a HubSpot contact it
-sets `LP Call Booked` and writes a timeline note. It runs at 15 past every hour,
-reconciling the last 72 hours, so a booking is picked up within the hour and a
-missed run self-heals on the next one.
+sets `LP Call Booked` and writes a timeline note. It runs daily at 12:00 UTC,
+reconciling the last 72 hours, so a skipped run — or two — self-heals on the
+next one.
+
+**Daily, not hourly.** The Vercel account is on the Hobby plan, which rejects
+any cron expression running more than once a day — and rejects it at deployment
+*validation*, so the build fails without creating a deployment record. An hourly
+schedule silently blocked every deploy for three hours before that was spotted:
+`vercel ls` showed nothing wrong because there was nothing to show. Daily is
+sufficient here — the flag feeds funnel reporting and a follow-up list, neither
+of which needs to be fresh within the hour, and `?hours=` picks a booking up
+immediately when needed.
 
 It will do nothing at all until the steps below are done — deliberately:
 it answers `200` with a `skipped` reason rather than alarming hourly about

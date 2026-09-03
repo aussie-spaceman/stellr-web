@@ -9,7 +9,17 @@ import {
   selectGuestEmails,
 } from '@/lib/motion-bookings'
 
-// GET /api/cron/motion-bookings — runs hourly (see vercel.json).
+// GET /api/cron/motion-bookings — runs daily at 12:00 UTC (see vercel.json).
+//
+// Daily, not hourly, because the Vercel account is on the Hobby plan, which
+// rejects any cron expression that would run more than once a day — and it
+// rejects it at deployment *validation*, so the build fails without producing a
+// deployment record. An hourly schedule here silently blocked every deploy for
+// three hours before that was spotted.
+//
+// Daily is honestly sufficient: this flag feeds funnel reporting and a
+// follow-up list, neither of which needs to be fresh within the hour. When a
+// booking needs reflecting immediately, call the route by hand with ?hours=.
 //
 // Closes the landing-page funnel. Everything up to "submitted" is recorded by
 // the form; this is what records "booked".
@@ -38,7 +48,12 @@ import {
 // past, at which point it is never picked up. Keying on when the event was
 // *written* catches it on the next run.
 
-/** Hours of calendar history to reconcile on each run. */
+/**
+ * Hours of calendar history to reconcile on each run.
+ *
+ * Three days against a daily schedule, so a skipped run — or two — still
+ * self-heals on the next one rather than leaving a permanent hole.
+ */
 const DEFAULT_LOOKBACK_HOURS = 72
 
 /** Ceiling for a manual backfill, so `?hours=` cannot ask for the whole calendar. */
@@ -63,7 +78,8 @@ export async function GET(req: Request) {
   }
 
   // `?hours=` exists for the first run, which should reach back over the whole
-  // campaign rather than three days, and for re-reconciling after a fix.
+  // campaign rather than three days, for re-reconciling after a fix, and for
+  // picking up a booking now rather than at noon tomorrow.
   const requested = Number(new URL(req.url).searchParams.get('hours'))
   const hours =
     Number.isFinite(requested) && requested > 0

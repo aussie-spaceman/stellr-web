@@ -233,59 +233,70 @@ sets `LP Call Booked` and writes a timeline note. It runs at 15 past every hour,
 reconciling the last 72 hours, so a booking is picked up within the hour and a
 missed run self-heals on the next one.
 
-It will do nothing at all until the three steps below are done — deliberately:
+It will do nothing at all until the steps below are done — deliberately:
 it answers `200` with a `skipped` reason rather than alarming hourly about
 something that is simply not wired yet.
 
-#### Step 1 — share the calendar with the service account
+#### Step 1 — enable the Google Calendar API
 
-Find which calendar a Motion booking actually lands on (book a slot against
-yourself if you are not sure), then in Google Calendar:
+**Done? No.** This is not the sharing step and it is easy to conflate with it:
+the service account and the calendar share can both be perfect while the API
+itself is switched off for the Cloud project. Sheets and Drive are enabled on
+`stellr-498516`; Calendar is not, and the read fails with
+"Google Calendar API has not been used in project 652253368530 before or it is
+disabled".
 
-**Settings for that calendar → Share with specific people → Add people** →
+Enable it here, then wait a minute or two for it to propagate:
 
 ```
-stellr-sheets@stellr-498516.iam.gserviceaccount.com
+https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview?project=652253368530
 ```
 
-Permission: **See all event details**. Not "Make changes" — the job only reads.
+Only you can do this — it needs your Google account on the Cloud project.
 
-Sharing directly is what avoids the Workspace admin console entirely. (The
-alternative is `GOOGLE_CALENDAR_IMPERSONATE`, which needs `calendar.readonly`
-authorised for this service account's client ID under domain-wide delegation.
-Only worth it if you would rather not share the calendar.)
+#### Step 2 — share the calendar with the service account
 
-#### Step 2 — three Vercel variables
+**Done.** `stellr-sheets@stellr-498516.iam.gserviceaccount.com` has
+"See event details" on `david.shaw@stellreducation.org`, confirmed 2 Sep 2026.
 
-`MOTION_CALENDAR_ID` is the calendar's ID from the same settings page — usually
-just the owning mailbox address.
+For reference, if it ever needs redoing: Google Calendar → Settings for that
+calendar → Share with specific people → add the service-account address with
+**See all event details**. Read-only is deliberate; the job never writes.
+
+Note this is your **primary** calendar, so it carries your whole working day.
+That is exactly why `MOTION_BOOKING_TITLE` matters — see step 3.
+
+#### Step 3 — fix `MOTION_CALENDAR_ID`, which currently holds placeholder text
+
+`MOTION_BOOKING_TITLE` = `Stellr` is set correctly. But `MOTION_CALENDAR_ID` was
+added as the literal string `<the calendar id>`, straight from the example
+command, so the cron would ask Google for a calendar of that name and get a 404
+that looks exactly like a permissions failure.
 
 ```bash
-npx vercel env add MOTION_CALENDAR_ID production --value '<the calendar id>' --sensitive --yes
+npx vercel env rm MOTION_CALENDAR_ID production
 ```
 
 ```bash
-npx vercel env add MOTION_BOOKING_TITLE production --value 'Stellr' --sensitive --yes
+npx vercel env add MOTION_CALENDAR_ID production --value 'david.shaw@stellreducation.org' --sensitive --yes
 ```
-
-`MOTION_BOOKING_TITLE` is matched as a case-insensitive substring of the event
-title, and it matters: the calendar holds your whole working day, and without it
-a dentist appointment would stamp "booked an intro call" on whoever was on it.
-Check the real title first — if Motion names the event something without
-"Stellr" in it, use whatever it actually says.
-
-Optional, for any Stellr address that gets added to these invites. The
-organiser, `MOTION_CALENDAR_ID` and `CONTACT_EMAIL` are already excluded:
-
-```bash
-npx vercel env add MOTION_BOOKING_EXCLUDE_EMAILS production --value 'someone@stellreducation.org' --sensitive --yes
-```
-
-Then redeploy so the cron picks them up:
 
 ```bash
 npx vercel redeploy --prod
 ```
+
+#### Verify before trusting it
+
+Once step 1 has propagated, this proves the access, the calendar ID and the
+title needle in one go — without touching HubSpot:
+
+```bash
+npx tsx scripts/probe-motion-calendar.ts david.shaw@stellreducation.org 90 Stellr
+```
+
+It prints each matching event with its guests, so you can see exactly which
+address the cron would stamp. If nothing matches it lists the titles that *are*
+on the calendar, which is how to pick the right `MOTION_BOOKING_TITLE`.
 
 #### Step 3 — run it once by hand, reaching back over the whole campaign
 

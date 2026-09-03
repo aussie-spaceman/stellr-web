@@ -137,8 +137,11 @@ export async function GET(req: Request) {
       {
         error: 'Calendar read or HubSpot write failed',
         hint:
-          'A 403 usually means MOTION_CALENDAR_ID is not shared with GOOGLE_SERVICE_ACCOUNT_EMAIL ' +
-          '("See all event details"), or calendar.readonly is not authorised for impersonation.',
+          'Three causes, in the order they bite: the Google Calendar API is not enabled on the ' +
+          'Cloud project (the error names a console URL — Sheets and Drive being enabled says ' +
+          'nothing about Calendar); MOTION_CALENDAR_ID is not shared with ' +
+          'GOOGLE_SERVICE_ACCOUNT_EMAIL as "See all event details"; or calendar.readonly is not ' +
+          'authorised for impersonation. Run scripts/probe-motion-calendar.ts to tell them apart.',
         detail: String(err),
       },
       { status: 500 },

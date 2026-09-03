@@ -99,6 +99,11 @@ export interface LandingPageConfig {
     reassurance: string
     callNote: string
     consentLabel: string
+    redirect: {
+      heading: string
+      body: string
+      manual: string
+    }
     confirm: {
       eyebrow: string
       heading: string

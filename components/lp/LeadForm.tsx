@@ -14,20 +14,24 @@ import type { LandingPageConfig } from '@/content/lp/types'
 /**
  * The lead form, and the booking hand-off it leads to.
  *
- * Two rules shape everything here:
+ * On success this redirects straight to the Motion calendar. Three rules make
+ * that safe:
  *
  *   1. **Store the lead before anything navigates.** A lost lead is the only
  *      unrecoverable failure on this page — the visitor is gone and we never
- *      knew they came. So the booking step is a panel we render after the POST
- *      resolves, and a failed POST still shows the panel with an error line
- *      rather than dropping the visitor on a dead end.
- *   2. **Never promise payment.** The button says "Learn more now" and the
+ *      knew they came. So the redirect waits for the POST to resolve *and* for
+ *      the route to confirm the lead actually reached HubSpot.
+ *   2. **A failed write never redirects.** If the lead did not store, the card
+ *      falls back to the manual booking panel with an error line, so the
+ *      visitor can still book and we have told them the truth. Redirecting
+ *      there would hand us a booking with no contact to attach it to.
+ *   3. **Never promise payment.** The button says "Learn more now" and the
  *      reassurance line says so explicitly. Nothing here charges anyone.
  *
  * The Motion calendar does not support prefill — `?name=`/`?email=` and its own
- * `?e=` are all ignored (tested against the live page 2026-09-02) — so the
- * panel copy tells the visitor they will be asked again rather than pretending
- * the hand-off is seamless.
+ * `?e=` are all ignored (tested against the live page 2026-09-02) — so the copy
+ * warns the visitor they will be asked again rather than pretending the
+ * hand-off is seamless.
  */
 
 const schema = z.object({
@@ -109,7 +113,7 @@ export function LeadForm({
 }) {
   const { form, audience, slug, analyticsSource } = config
   const utm = useUtm()
-  const [state, setState] = useState<'form' | 'booking'>('form')
+  const [state, setState] = useState<'form' | 'redirecting' | 'booking'>('form')
   const [failed, setFailed] = useState(false)
   const confirmHeading = useRef<HTMLHeadingElement>(null)
 
@@ -122,11 +126,12 @@ export function LeadForm({
     defaultValues: { role: form.defaultRole, students: form.defaultStudents },
   })
 
-  // Moving between the two card states is a context change, not a style change:
-  // send focus to the new heading so a screen-reader user is not left reading a
-  // form that is no longer there.
+  // Moving between card states is a context change, not a style change: send
+  // focus to the new heading so a screen-reader user is not left reading a form
+  // that is no longer there. Relevant even in the redirecting state, which is
+  // what a slow or blocked navigation leaves on screen.
   useEffect(() => {
-    if (state === 'booking') confirmHeading.current?.focus()
+    if (state !== 'form') confirmHeading.current?.focus()
   }, [state])
 
   async function onSubmit(data: FormData) {
@@ -153,15 +158,49 @@ export function LeadForm({
       const body: { stored?: boolean } = res.ok ? await res.json().catch(() => ({})) : {}
       if (res.ok && body.stored) {
         trackLeadSubmitted(analyticsSource, { lp_audience: audience, page_slug: slug })
-      } else {
-        setFailed(true)
+        // Both events are pushed before navigating. GA4's tags send over
+        // sendBeacon, which survives a same-tab navigation; a tag that did not
+        // would lose the conversion, which is why nothing here waits on GTM.
+        trackBookingClick({ audience, pageSlug: slug })
+        setState('redirecting')
+        if (bookingUrl) window.location.assign(bookingUrl)
+        return
       }
+      // Stored is false: the route accepted the request but HubSpot rejected the
+      // write, and captureLead has already dead-lettered and alerted. Do not
+      // redirect — a booking with no contact behind it is worse than a visitor
+      // who was told plainly and given a working link.
+      setFailed(true)
     } catch {
       // Network failure. The visitor still gets the booking step — better a
       // booked call we have to reconcile by hand than a dead end.
       setFailed(true)
     }
     setState('booking')
+  }
+
+  if (state === 'redirecting') {
+    return (
+      <div
+        className="grid gap-4 rounded-panel border border-line bg-white p-7 lp-fade-in"
+        aria-live="polite"
+      >
+        <p className="font-display text-ds-eyebrow font-bold uppercase text-content-faint">
+          {form.confirm.eyebrow}
+        </p>
+        <h3
+          ref={confirmHeading}
+          tabIndex={-1}
+          className="font-display text-[22px] font-bold tracking-heading text-ink focus:outline-none"
+        >
+          {form.redirect.heading}
+        </h3>
+        <p className="text-ds-body leading-relaxed text-content-secondary">{form.redirect.body}</p>
+        <Button href={bookingUrl} variant="primary" className="w-full">
+          {form.redirect.manual}
+        </Button>
+      </div>
+    )
   }
 
   if (state === 'booking') {

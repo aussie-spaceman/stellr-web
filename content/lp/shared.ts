@@ -71,6 +71,19 @@ export const FORM_SHELL = {
     'Every enquiry ends with a short call. You will pick a time straight after the ' +
     'form — no waiting on an email.',
   consentLabel: 'I agree to Stellr Education contacting me about this competition.',
+  /**
+   * Shown while the browser is on its way to the Motion calendar. Almost nobody
+   * sees it — the redirect fires in the same tick — but it is what a slow
+   * connection, a blocked navigation or a back-button return lands on, so it
+   * carries a working link rather than being a spinner.
+   */
+  redirect: {
+    heading: 'Taking you to the calendar',
+    body:
+      'Your details are saved. The calendar will ask for your name and email again. ' +
+      'If nothing happens in a few seconds, use the link below.',
+    manual: 'Open the calendar',
+  },
   confirm: {
     eyebrow: 'Step 2 of 2',
     heading: 'Pick a time to talk',

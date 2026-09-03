@@ -16,7 +16,7 @@ things this session surfaced.** Every command runs from
 | 1 | ~~Two Preview variables~~ | **done** | — |
 | 2 | ~~Rotate the webhook secret~~ | **done** | — |
 | 3 | Three GTM tags | ~20 min | All landing-page funnel reporting |
-| 4 | Wire Motion to the webhook | ~30 min | Knowing who actually booked |
+| 4 | Close the booking loop | ~30 min, or ask | Knowing who actually booked |
 | 5 | ~~Submit the live form once~~ | **done** | — |
 | 6 | Fix a venue name in Studio | 2 min | Nothing — copy accuracy |
 | 7 | Open a plannedLocation in Studio | 2 min | Nothing — a look-over |
@@ -176,82 +176,138 @@ answer rather than what the UI shows as saved.
 
 ---
 
-## 4. Wire Motion to the booking webhook
+## 4. Close the booking loop
 
 **Priority raised.** Since the form now redirects automatically,
-`lp_booking_click` fires on every stored submission and carries no information
-about whether anyone actually booked. Without this webhook the funnel reads
-"submitted" and stops, with nothing downstream of it at all.
+`lp_booking_click` fires on every stored submission and says nothing about
+whether anyone booked. Without this, the funnel reads "submitted" and stops.
 
-The receiver is built, deployed and live:
+### First: Motion cannot do this natively. Checked 2 Sep 2026
 
-```
-https://www.stellreducation.org/api/webhooks/motion
-```
+An earlier revision said to "check Motion's settings for a native webhook
+first". That is now answered definitively — it has none:
 
-It verifies an HMAC-SHA256 signature over the raw body, finds the attendee email
-anywhere in the payload, and — **only for a contact that already exists** — sets
-`lp_call_booked = true` and writes a timeline note. It never creates contacts, so
-a booking from any other source cannot invent a landing-page lead.
+- **Motion's API has no webhooks and no event subscriptions.** Its endpoints
+  cover comments, custom fields, projects, recurring tasks, schedules,
+  statuses, tasks, users and workspaces. There is nothing for booking links,
+  meetings or calendar events.
+- **Zapier and Make expose only two Motion triggers**: new task and new
+  comment. No booking trigger exists.
+- Do not be misled by **MotionTools** (`motiontools.io`), which does document
+  booking webhooks. It is an unrelated logistics product, not `usemotion.com`.
 
-This matters more than it normally would: **Motion does not support prefilling
-name or email** (tested against your live booking page — `?name=`, `?email=` and
-its own `?e=` are all ignored), so the email address the visitor types on both
-the form and the calendar is the only join between a submission and a booking.
+So the signal has to come from **the calendar Motion writes the booking into** —
+Google Calendar, on Stellr's Workspace. Two ways to read it.
 
-### 4a. Check for a native webhook first
+---
 
-Motion → Settings → Integrations / API. If there is a "meeting booked" webhook,
-point it at the URL above and give it the secret from item 2. Done.
+### Prove the receiver works first — either way
 
-### 4b. Otherwise use Zapier or Make
-
-Motion's public API is task-focused, so this is the likely path.
-
-1. **Trigger:** Motion → "New Meeting Booked" if it exists. If not, use
-   Google Calendar → "New Event" on the calendar Motion writes to, filtered to
-   the "Welcome To Stellr Events with David" event type. That route works even
-   with no Motion trigger at all.
-2. **Code by Zapier** step (Zapier cannot compute an HMAC in a Webhooks step).
-   Input fields: `email`, `startTime`, `secret` (paste the item-2 value):
-
-   ```js
-   const crypto = require('crypto')
-   const body = JSON.stringify({ email: inputData.email, startTime: inputData.startTime })
-   const sig = crypto.createHmac('sha256', inputData.secret).update(body).digest('hex')
-   output = [{ body, sig }]
-   ```
-
-3. **Webhooks by Zapier → Custom Request:**
-   - Method `POST`, URL `https://www.stellreducation.org/api/webhooks/motion`
-   - Data: `{{body}}` from step 2, sent raw
-   - Headers: `Content-Type: application/json` and
-     `X-Motion-Signature: {{sig}}`
-
-   It must send *exactly* the string that was signed. A "Custom Request" with a
-   raw body does that; a normal Webhooks POST rebuilds the JSON and the
-   signature stops matching.
-
-   Make.com does the same with its own HMAC function.
-
-### 4c. Confirm
-
-An unsigned request must be rejected:
+Before wiring anything, confirm the endpoint and your secret agree. Use the
+value you recorded when rotating it; a Vercel Secret cannot be read back.
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' -X POST https://www.stellreducation.org/api/webhooks/motion -H 'content-type: application/json' -d '{"email":"test@example.org"}'
+MOTION_WEBHOOK_SECRET='<the value you recorded>' npx tsx scripts/test-motion-webhook.ts you@stellreducation.org --prod
 ```
 
-- `401` — working as intended. **Verified 401 on 2 Sep 2026 after the rotation,
-  so the current secret is live on production and no redeploy is needed.**
-- `503` — `MOTION_WEBHOOK_SECRET` is not set on that deployment; redeploy.
+It prints the exact body and signature it sent — which is what a Zapier Code
+step has to reproduce byte for byte — and explains whatever status comes back.
 
-Then book a real slot against your own email and check the HubSpot contact:
-`LP Call Booked` should read Yes, with a note "Booked an intro call via Motion
-for …".
+- `200` with `matched: true` — working; that contact was stamped.
+- `200` with `matched: false` — working, but no such contact in HubSpot. Expected
+  for an address that has never submitted the form.
+- `401` — the secret here does not match the deployment, or the body changed
+  after signing.
+- `503` — the secret is not set on the deployment.
 
-Once this is live, a HubSpot list of
-`LP Audience is known AND LP Call Booked is No` is your follow-up queue.
+Verified already: an unsigned POST and a POST with a junk signature both return
+`401`, so the endpoint is not open.
+
+---
+
+### Option A — Zapier or Make on Google Calendar (recommended if you want it today)
+
+About 30 minutes. Needs a Zapier plan that includes multi-step Zaps and Code.
+
+**1. Find out what the booking event is called.** Open a real Motion booking on
+your Google Calendar and note the exact event title and which calendar it lands
+on. Everything below keys off that.
+
+**2. Trigger:** Google Calendar → **New Event Matching Search**.
+- Calendar: whichever one Motion writes to
+- Search term: the event title from step 1, e.g. `Welcome To Stellr Events`
+
+Use *Matching Search*, not "New Event" — otherwise every meeting on your
+calendar hits the webhook.
+
+**3. Code by Zapier** (JavaScript). Input fields: `attendees` (the trigger's
+attendee emails), `startTime` (event start), `secret` (paste the rotated value).
+
+```js
+const crypto = require('crypto')
+
+// Exclude your own address: the receiver takes the first email-shaped value it
+// finds, so passing the organiser through would stamp "call booked" on your own
+// contact record.
+const ORGANISER = 'david.shaw@stellreducation.org'
+const guest = String(inputData.attendees || '')
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .find((e) => e.includes('@') && e !== ORGANISER)
+
+if (!guest) throw new Error('No guest email on this event — nothing to report')
+
+const body = JSON.stringify({ email: guest, startTime: inputData.startTime })
+const sig = crypto.createHmac('sha256', inputData.secret).update(body).digest('hex')
+output = [{ body, sig, guest }]
+```
+
+**4. Webhooks by Zapier → Custom Request**
+- Method `POST`
+- URL `https://www.stellreducation.org/api/webhooks/motion`
+- Data: `{{body}}` from step 3, **sent raw**
+- Headers: `Content-Type: application/json` and `X-Motion-Signature: {{sig}}`
+
+It must send byte-for-byte what was signed. **Custom Request** with a raw body
+does that. A plain "POST" action rebuilds the JSON from fields and the signature
+stops matching — that is the single most likely thing to go wrong here.
+
+**5. Test** with a real booking against an address that has submitted the form,
+then check the HubSpot contact: `LP Call Booked` = Yes, plus a note reading
+"Booked an intro call via Motion for …".
+
+---
+
+### Option B — an in-house cron (recommended overall; needs a build)
+
+No subscription, no HMAC, and it reconciles retroactively — it will pick up
+bookings made before it was switched on, which Option A cannot.
+
+Everything it needs already exists in this repo: a Google service account
+(`lib/google-sheets.ts` builds a JWT), eleven Vercel crons with a shared
+`CRON_SECRET`, and `lib/hubspot.ts`. The pattern to copy is
+`app/api/cron/hubspot-lifecycle`, which exists for the same reason — a
+correction that has to happen out of band.
+
+Shape:
+
+1. Share the Motion booking calendar with the service-account address
+   (`GOOGLE_SERVICE_ACCOUNT_EMAIL`) as **See all event details**. Sharing
+   directly avoids domain-wide delegation and needs no Workspace admin console.
+2. Add `https://www.googleapis.com/auth/calendar.readonly` to the JWT scopes in
+   `lib/google-sheets.ts` — it currently requests `spreadsheets` and `drive`
+   only, so calendar reads would 403 today.
+3. `app/api/cron/motion-bookings/route.ts`: list events in the last 48 hours
+   matching the booking title, take each non-organiser attendee, and for any
+   that matches an existing HubSpot contact set `lp_call_booked` and write the
+   note. Idempotent — skip a contact that is already stamped.
+4. One line in `vercel.json`. Hourly is plenty.
+
+The webhook route stays either way: it costs nothing, and it is the path a
+native Motion webhook would use if one ever ships.
+
+**This is not built.** Ask and it can be, in about the time Option A takes to
+configure — with tests, and without a Zapier task quota on every booking.
 
 ---
 

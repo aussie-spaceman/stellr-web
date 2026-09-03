@@ -17,7 +17,7 @@ things this session surfaced.** Every command runs from
 | 2 | ~~Rotate the webhook secret~~ | **done** | — |
 | 3 | Three GTM tags | ~20 min | All landing-page funnel reporting |
 | 4 | Wire Motion to the webhook | ~30 min | Knowing who actually booked |
-| 5 | Submit the live form once | 5 min | Proof the HubSpot GUID is right |
+| 5 | ~~Submit the live form once~~ | **done** | — |
 | 6 | Fix a venue name in Studio | 2 min | Nothing — copy accuracy |
 | 7 | Open a plannedLocation in Studio | 2 min | Nothing — a look-over |
 | 8 | `flyer_download` has no GTM tag | ~5 min | Flyer download reporting (pre-existing) |
@@ -178,6 +178,11 @@ answer rather than what the UI shows as saved.
 
 ## 4. Wire Motion to the booking webhook
 
+**Priority raised.** Since the form now redirects automatically,
+`lp_booking_click` fires on every stored submission and carries no information
+about whether anyone actually booked. Without this webhook the funnel reads
+"submitted" and stops, with nothing downstream of it at all.
+
 The receiver is built, deployed and live:
 
 ```
@@ -250,37 +255,21 @@ Once this is live, a HubSpot list of
 
 ---
 
-## 5. Submit the live form once — the one thing untested
+## 5. Submit the live form once — DONE
 
-The route has eleven unit tests against a mocked HubSpot, and the browser flow
-was verified with `fetch` stubbed. That was deliberate, so no test contact was
-written into the live CRM — but it means **a real submission has never run
-through the live HubSpot path.**
+Verified 2 Sep 2026: a real submission runs correctly through the live HubSpot
+path, which also confirms `HUBSPOT_FORM_LANDING_PAGE` was pasted correctly.
 
-It also matters because `HUBSPOT_FORM_LANDING_PAGE` is Secret-type and cannot be
-read back, so nobody has confirmed the GUID pasted cleanly. A wrong GUID fails
-quietly: the lead still saves through the contacts-API fallback, so the contact
-appears and looks healthy while the conversion is lost.
+**The flow changed after this test.** The two-step confirmation panel is gone:
+a successful submission now redirects straight to the Motion calendar in the
+same tab. The panel remains as the failure path only — shown when HubSpot
+rejected the write, with an error line and a working manual link.
 
-1. Open `https://www.stellreducation.org/lp/first-robotics-teachers` and submit
-   the form with your own email.
-2. In HubSpot, open that contact and check **all four**:
-   - **Recent Conversion** reads "Website — Landing Page Enquiry" — *this is the
-     check that proves the GUID.* If it names something else or is blank, the
-     GUID is wrong.
-   - `LP Audience` = First robotics teacher, `LP Source Page` =
-     `first-robotics-teachers`, `Stellr Role` = teacher.
-   - A note on the timeline: "Landing page enquiry — /lp/first-robotics-teachers …".
-   - `Stellr Activity Log` has a new appended line.
-3. Then delete the contact so it does not pollute reporting.
-
-If Recent Conversion is wrong, the fix is to re-add the variable and redeploy:
-
-```bash
-npx vercel env rm HUBSPOT_FORM_LANDING_PAGE production
-printf '%s' '74b755b6-d823-4073-90c4-975d523a4612' | npx vercel env add HUBSPOT_FORM_LANDING_PAGE production
-npx vercel redeploy --prod
-```
+One reporting consequence, which raises the priority of item 4:
+`lp_booking_click` now fires automatically on every stored submission rather
+than on a click, so it is roughly 1:1 with `lead_submitted` and no longer
+measures intent. **The Motion booking webhook is now the only thing that can
+tell a hand-off from an actual booking.**
 
 ---
 

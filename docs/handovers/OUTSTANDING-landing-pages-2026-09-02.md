@@ -13,7 +13,7 @@ things this session surfaced.** Every command runs from
 
 | # | Item | Effort | Blocks what |
 |---|---|---|---|
-| 1 | Two Preview variables | 1 min | Nothing — consistency |
+| 1 | ~~Two Preview variables~~ | **done** | — |
 | 2 | ~~Rotate the webhook secret~~ | **done** | — |
 | 3 | Three GTM tags | ~20 min | All landing-page funnel reporting |
 | 4 | Wire Motion to the webhook | ~30 min | Knowing who actually booked |
@@ -24,17 +24,31 @@ things this session surfaced.** Every command runs from
 
 ---
 
-## 1. Two Preview environment variables
+## 1. Two Preview environment variables — DONE
 
-Production is complete and verified. Preview is missing both of these.
+Added 2 Sep 2026. Preview now matches Production:
+`NEXT_PUBLIC_BOOKING_URL` (Config) and `HUBSPOT_FORM_LANDING_PAGE` (Secret).
+
+**The `printf | vercel env add` pattern does not work for `preview`.** Adding a
+Preview variable prompts for a Git branch *after* reading the value, so the
+piped stdin is consumed by the value and the branch prompt hits EOF and aborts —
+printing the help text and adding nothing. Use `--value` with `--yes` instead,
+which takes the default empty branch (meaning all preview branches):
 
 ```bash
-printf '%s' 'https://app.usemotion.com/meet/david-m-shaw/welcome' | npx vercel env add NEXT_PUBLIC_BOOKING_URL preview
+npx vercel env add NEXT_PUBLIC_BOOKING_URL preview --value 'https://app.usemotion.com/meet/david-m-shaw/welcome' --no-sensitive --yes
 ```
 
 ```bash
-printf '%s' '74b755b6-d823-4073-90c4-975d523a4612' | npx vercel env add HUBSPOT_FORM_LANDING_PAGE preview
+npx vercel env add HUBSPOT_FORM_LANDING_PAGE preview --value '74b755b6-d823-4073-90c4-975d523a4612' --sensitive --yes
 ```
+
+`--no-sensitive` stores as Config, `--sensitive` as Secret. The CLI infers this
+correctly from a `NEXT_PUBLIC_` prefix, but with `--yes` in play it is worth
+being explicit — a Secret cannot be read back afterwards to check.
+
+For `production` there is no branch prompt, so the `printf |` form is fine
+there. `--value` works for both and is the safer habit.
 
 **Correcting earlier advice in this handover.** An earlier revision said the form
 GUID belonged on Production only, reasoning that a GUID on Preview would let
@@ -47,15 +61,14 @@ both counts, checked against the project on 2 Sep 2026:
   deployment already writes real contacts to the live portal through the
   contacts-API fallback path, with or without a form GUID.
 
-Withholding the GUID from Preview therefore prevents no pollution. It only makes
+Withholding the GUID from Preview therefore prevented no pollution. It only made
 a preview submission land without conversion attribution and behave differently
-from production — which is the opposite of what a preview is for.
+from production — the opposite of what a preview is for.
 
 The earlier reading came from the `vercel env ls production` environments
 column, which shows only the queried environment's scope. Vercel stores a
 per-environment value as a separate entry under the same name, so a variable set
-for both appears once in each listing. Query the environment you actually care
-about.
+for both appears once in each listing. Query the environment you care about.
 
 ---
 
@@ -224,8 +237,9 @@ An unsigned request must be rejected:
 curl -s -o /dev/null -w '%{http_code}\n' -X POST https://www.stellreducation.org/api/webhooks/motion -H 'content-type: application/json' -d '{"email":"test@example.org"}'
 ```
 
-- `401` — working as intended.
-- `503` — `MOTION_WEBHOOK_SECRET` is not set on that deployment. Redeploy after item 2.
+- `401` — working as intended. **Verified 401 on 2 Sep 2026 after the rotation,
+  so the current secret is live on production and no redeploy is needed.**
+- `503` — `MOTION_WEBHOOK_SECRET` is not set on that deployment; redeploy.
 
 Then book a real slot against your own email and check the HubSpot contact:
 `LP Call Booked` should read Yes, with a note "Booked an intro call via Motion

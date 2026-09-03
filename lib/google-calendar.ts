@@ -50,8 +50,17 @@ export interface CalendarQuery {
  * start-time window would miss it entirely and then miss it again once the
  * window had moved past.
  *
- * `showDeleted` is on so a cancelled booking still comes back and can be
- * filtered by status rather than silently looking like it never happened.
+ * `showDeleted` is deliberately **off**. Turning it on caps `updatedMin` at
+ * roughly 25 days — Google only retains deleted events that long and rejects
+ * anything older with "The requested minimum modification time lies too far in
+ * the past" (measured against the live API: 25 days passes, 30 does not, and
+ * with it off a 365-day window is fine). That ceiling would have gutted the
+ * one advantage this job has over a trigger-based Zap, which is reconciling
+ * retroactively.
+ *
+ * Nothing is lost by it. With `singleEvents` on, a cancelled booking simply
+ * does not come back, which is the same outcome as fetching it and discarding
+ * it — `isLiveBooking` stays as a guard for anything that slips through.
  */
 export async function listUpdatedEvents({
   updatedSince,
@@ -73,7 +82,7 @@ export async function listUpdatedEvents({
       // always a real time rather than a recurrence rule.
       singleEvents: true,
       orderBy: 'updated',
-      showDeleted: true,
+      showDeleted: false,
       maxResults: 250,
       ...(titleQuery ? { q: titleQuery } : {}),
       ...(pageToken ? { pageToken } : {}),

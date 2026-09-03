@@ -85,6 +85,7 @@ export async function GET(req: Request) {
   const stamped: string[] = []
   const alreadyBooked: string[] = []
   const unknown: string[] = []
+  const notLandingPageLead: string[] = []
   const warnings: string[] = []
   let considered = 0
 
@@ -103,6 +104,23 @@ export async function GET(req: Request) {
         const contact = await getContactByEmail(email, [HS.lpCallBooked, HS.lpAudience])
         if (!contact) {
           unknown.push(email)
+          continue
+        }
+
+        // Second guard, and the one that matters on a shared primary calendar:
+        // only a contact who actually came from a landing page can be recorded
+        // as having booked a landing-page call. `lp_call_booked` means nothing
+        // otherwise.
+        //
+        // This exists because the title filter alone is not safe. Set to
+        // "Stellr" against this calendar it matched 212 of 250 events —
+        // curriculum reviews, partner introductions, colleagues — and every one
+        // of those people who happens to be a HubSpot contact would have been
+        // stamped. A booking-link rename would put us right back there, and a
+        // wrong note on a real partner's record is not something a later fix
+        // takes back.
+        if (!contact.properties?.[HS.lpAudience]) {
+          notLandingPageLead.push(email)
           continue
         }
 
@@ -155,6 +173,7 @@ export async function GET(req: Request) {
     stampedNow: stamped,
     alreadyBooked: alreadyBooked.length,
     notInHubspot: unknown.length,
+    notLandingPageLead: notLandingPageLead.length,
     warnings,
   })
 }

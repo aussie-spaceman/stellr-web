@@ -38,7 +38,9 @@ beforeEach(() => {
   vi.stubEnv('MOTION_CALENDAR_ID', 'bookings@stellreducation.org')
   vi.stubEnv('MOTION_BOOKING_TITLE', 'Stellr')
   listUpdatedEvents.mockReset().mockResolvedValue([bookingEvent()])
-  getContactByEmail.mockReset().mockResolvedValue({ id: '101', properties: {} })
+  getContactByEmail
+    .mockReset()
+    .mockResolvedValue({ id: '101', properties: { lp_audience: 'first_robotics_teacher' } })
   upsertContact.mockReset().mockResolvedValue({ ok: true })
   createNote.mockReset().mockResolvedValue({ ok: true })
 })
@@ -69,9 +71,24 @@ describe('GET /api/cron/motion-bookings', () => {
     expect(createNote).not.toHaveBeenCalled()
   })
 
+  it('never stamps a contact who did not come from a landing page', async () => {
+    // The decisive guard. With the needle set to "Stellr" this calendar matched
+    // 212 of 250 events — partners, colleagues, curriculum calls — and any of
+    // them who is a HubSpot contact would otherwise be marked as having booked
+    // a landing-page call.
+    getContactByEmail.mockResolvedValue({ id: '404', properties: {} })
+    const res = await call()
+    await expect(res.json()).resolves.toMatchObject({ booked: 0, notLandingPageLead: 1 })
+    expect(upsertContact).not.toHaveBeenCalled()
+    expect(createNote).not.toHaveBeenCalled()
+  })
+
   it('is idempotent — an already-stamped contact gets no second note', async () => {
     // This job re-reads the same 72 hours every hour, so a re-run must be inert.
-    getContactByEmail.mockResolvedValue({ id: '101', properties: { lp_call_booked: 'true' } })
+    getContactByEmail.mockResolvedValue({
+      id: '101',
+      properties: { lp_audience: 'homeschool', lp_call_booked: 'true' },
+    })
     const res = await call()
     await expect(res.json()).resolves.toMatchObject({ booked: 0, alreadyBooked: 1 })
     expect(createNote).not.toHaveBeenCalled()

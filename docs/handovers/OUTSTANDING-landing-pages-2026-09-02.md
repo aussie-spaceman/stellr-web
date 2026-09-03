@@ -16,7 +16,7 @@ things this session surfaced.** Every command runs from
 | 1 | ~~Two Preview variables~~ | **done** | — |
 | 2 | ~~Rotate the webhook secret~~ | **done** | — |
 | 3 | Three GTM tags | ~20 min | All landing-page funnel reporting |
-| 4 | Close the booking loop | ~30 min, or ask | Knowing who actually booked |
+| 4 | Close the booking loop — **built**, 3 setup steps | ~10 min | Knowing who actually booked |
 | 5 | ~~Submit the live form once~~ | **done** | — |
 | 6 | Fix a venue name in Studio | 2 min | Nothing — copy accuracy |
 | 7 | Open a plannedLocation in Studio | 2 min | Nothing — a look-over |
@@ -225,89 +225,112 @@ Verified already: an unsigned POST and a POST with a junk signature both return
 
 ---
 
-### Option A — Zapier or Make on Google Calendar (recommended if you want it today)
+### Built: `app/api/cron/motion-bookings` — three things left for you
 
-About 30 minutes. Needs a Zapier plan that includes multi-step Zaps and Code.
+The cron is written, tested and deployed. It reads the calendar Motion writes
+bookings onto, and for any attendee that is **already** a HubSpot contact it
+sets `LP Call Booked` and writes a timeline note. It runs at 15 past every hour,
+reconciling the last 72 hours, so a booking is picked up within the hour and a
+missed run self-heals on the next one.
 
-**1. Find out what the booking event is called.** Open a real Motion booking on
-your Google Calendar and note the exact event title and which calendar it lands
-on. Everything below keys off that.
+It will do nothing at all until the three steps below are done — deliberately:
+it answers `200` with a `skipped` reason rather than alarming hourly about
+something that is simply not wired yet.
 
-**2. Trigger:** Google Calendar → **New Event Matching Search**.
-- Calendar: whichever one Motion writes to
-- Search term: the event title from step 1, e.g. `Welcome To Stellr Events`
+#### Step 1 — share the calendar with the service account
 
-Use *Matching Search*, not "New Event" — otherwise every meeting on your
-calendar hits the webhook.
+Find which calendar a Motion booking actually lands on (book a slot against
+yourself if you are not sure), then in Google Calendar:
 
-**3. Code by Zapier** (JavaScript). Input fields: `attendees` (the trigger's
-attendee emails), `startTime` (event start), `secret` (paste the rotated value).
+**Settings for that calendar → Share with specific people → Add people** →
 
-```js
-const crypto = require('crypto')
-
-// Exclude your own address: the receiver takes the first email-shaped value it
-// finds, so passing the organiser through would stamp "call booked" on your own
-// contact record.
-const ORGANISER = 'david.shaw@stellreducation.org'
-const guest = String(inputData.attendees || '')
-  .split(',')
-  .map((e) => e.trim().toLowerCase())
-  .find((e) => e.includes('@') && e !== ORGANISER)
-
-if (!guest) throw new Error('No guest email on this event — nothing to report')
-
-const body = JSON.stringify({ email: guest, startTime: inputData.startTime })
-const sig = crypto.createHmac('sha256', inputData.secret).update(body).digest('hex')
-output = [{ body, sig, guest }]
+```
+stellr-sheets@stellr-498516.iam.gserviceaccount.com
 ```
 
-**4. Webhooks by Zapier → Custom Request**
-- Method `POST`
-- URL `https://www.stellreducation.org/api/webhooks/motion`
-- Data: `{{body}}` from step 3, **sent raw**
-- Headers: `Content-Type: application/json` and `X-Motion-Signature: {{sig}}`
+Permission: **See all event details**. Not "Make changes" — the job only reads.
 
-It must send byte-for-byte what was signed. **Custom Request** with a raw body
-does that. A plain "POST" action rebuilds the JSON from fields and the signature
-stops matching — that is the single most likely thing to go wrong here.
+Sharing directly is what avoids the Workspace admin console entirely. (The
+alternative is `GOOGLE_CALENDAR_IMPERSONATE`, which needs `calendar.readonly`
+authorised for this service account's client ID under domain-wide delegation.
+Only worth it if you would rather not share the calendar.)
 
-**5. Test** with a real booking against an address that has submitted the form,
-then check the HubSpot contact: `LP Call Booked` = Yes, plus a note reading
-"Booked an intro call via Motion for …".
+#### Step 2 — three Vercel variables
 
----
+`MOTION_CALENDAR_ID` is the calendar's ID from the same settings page — usually
+just the owning mailbox address.
 
-### Option B — an in-house cron (recommended overall; needs a build)
+```bash
+npx vercel env add MOTION_CALENDAR_ID production --value '<the calendar id>' --sensitive --yes
+```
 
-No subscription, no HMAC, and it reconciles retroactively — it will pick up
-bookings made before it was switched on, which Option A cannot.
+```bash
+npx vercel env add MOTION_BOOKING_TITLE production --value 'Stellr' --sensitive --yes
+```
 
-Everything it needs already exists in this repo: a Google service account
-(`lib/google-sheets.ts` builds a JWT), eleven Vercel crons with a shared
-`CRON_SECRET`, and `lib/hubspot.ts`. The pattern to copy is
-`app/api/cron/hubspot-lifecycle`, which exists for the same reason — a
-correction that has to happen out of band.
+`MOTION_BOOKING_TITLE` is matched as a case-insensitive substring of the event
+title, and it matters: the calendar holds your whole working day, and without it
+a dentist appointment would stamp "booked an intro call" on whoever was on it.
+Check the real title first — if Motion names the event something without
+"Stellr" in it, use whatever it actually says.
 
-Shape:
+Optional, for any Stellr address that gets added to these invites. The
+organiser, `MOTION_CALENDAR_ID` and `CONTACT_EMAIL` are already excluded:
 
-1. Share the Motion booking calendar with the service-account address
-   (`GOOGLE_SERVICE_ACCOUNT_EMAIL`) as **See all event details**. Sharing
-   directly avoids domain-wide delegation and needs no Workspace admin console.
-2. Add `https://www.googleapis.com/auth/calendar.readonly` to the JWT scopes in
-   `lib/google-sheets.ts` — it currently requests `spreadsheets` and `drive`
-   only, so calendar reads would 403 today.
-3. `app/api/cron/motion-bookings/route.ts`: list events in the last 48 hours
-   matching the booking title, take each non-organiser attendee, and for any
-   that matches an existing HubSpot contact set `lp_call_booked` and write the
-   note. Idempotent — skip a contact that is already stamped.
-4. One line in `vercel.json`. Hourly is plenty.
+```bash
+npx vercel env add MOTION_BOOKING_EXCLUDE_EMAILS production --value 'someone@stellreducation.org' --sensitive --yes
+```
 
-The webhook route stays either way: it costs nothing, and it is the path a
-native Motion webhook would use if one ever ships.
+Then redeploy so the cron picks them up:
 
-**This is not built.** Ask and it can be, in about the time Option A takes to
-configure — with tests, and without a Zapier task quota on every booking.
+```bash
+npx vercel redeploy --prod
+```
+
+#### Step 3 — run it once by hand, reaching back over the whole campaign
+
+The hourly schedule only looks at 72 hours. Run it with a wide window once to
+reconcile every booking made so far — it is idempotent, so this is safe to
+repeat:
+
+```bash
+CRON_SECRET=$(npx vercel env pull /tmp/e --environment=production >/dev/null 2>&1 && grep '^CRON_SECRET' /tmp/e | cut -d= -f2- | tr -d '"'; rm -f /tmp/e)
+curl -s -H "Authorization: Bearer $CRON_SECRET" 'https://www.stellreducation.org/api/cron/motion-bookings?hours=2000' | python3 -m json.tool
+```
+
+Reading the response:
+
+- `booked` / `stampedNow` — contacts stamped on this run.
+- `alreadyBooked` — stamped on an earlier run. Proof it is idempotent.
+- `notInHubspot` — attendees with no contact record. Expected for meetings that
+  did not come from a landing page; the job never creates a contact, or any
+  meeting on this calendar could invent a lead.
+- `considered: 0` with events on the calendar — `MOTION_BOOKING_TITLE` does not
+  match the real event title.
+- `skipped` — a variable from step 2 is missing.
+- `500` with a `hint` — almost always step 1 was not done, or was done for the
+  wrong calendar.
+
+Then confirm in HubSpot: the contact shows `LP Call Booked` = Yes and a note
+reading "Booked an intro call for 2026-09-10 15:30 UTC (via the Motion booking
+link)."
+
+Once it is running, a HubSpot list of `LP Audience is known AND LP Call Booked
+is No` is your follow-up queue: people who asked for a call and never took one.
+
+#### If you would rather not share a calendar: Zapier
+
+Still possible, and `scripts/test-motion-webhook.ts` plus
+`app/api/webhooks/motion` remain in place for it. Trigger on Google Calendar →
+**New Event Matching Search**, add a **Code by Zapier** step to HMAC the body
+with `MOTION_WEBHOOK_SECRET`, and POST it with **Webhooks → Custom Request**
+sending the raw signed body and an `X-Motion-Signature` header. Two traps: a
+plain POST action rebuilds the JSON and the signature stops matching, and the
+payload must be just `{email, startTime}` — the receiver takes the first
+email-shaped value it finds, and a raw calendar event contains your own address.
+
+The cron is the better path: no task quota per booking, no HMAC to keep in sync,
+and it reconciles retroactively, which a trigger-based Zap cannot.
 
 ---
 

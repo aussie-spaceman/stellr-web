@@ -102,7 +102,13 @@ DocuSign requires promoting the JWT integration key from demo to production; it 
 
 1. **Hit the API-call threshold in demo.** DocuSign won't let you promote until the integration key has logged **≥ 20 successful API calls** in the demo environment (with an acceptable success rate). You already have some from real demo registrations; `npm run verify:prod` adds a few per run (1 auth + 3 template reads). Check progress in **DocuSign Admin (demo) → Integrations → Apps and Keys → your app → API request logging** (enable logging if off, then accrue calls).
 2. **Start the promotion.** In the demo account, **Apps and Keys → your integration key → Actions → "Start" / "Go-Live"**. DocuSign runs an automated review of the logged calls. Most JWT integrations are approved automatically within minutes; if flagged, address the listed issues and resubmit.
-3. **Get a production DocuSign account** (the org's real, paid account) if you don't have one. Promotion makes the *app* eligible for prod, but the account itself is separate.
+3. **Production account — DECIDED 4 Sept 2026: the production account under `david.shaw@stellreducation.org`.** Promotion makes the *app* eligible for prod; the account itself is separate. (Not the sandbox account, which is also named "Stellr" and also has `david.shaw@stellreducation.org` as its user — that one is `DEVCENTER_DEMO_RESTRICTED_JUNE2025` on `demo.docusign.net`. And not the personal `david.shaw@insimeducation.com` account on `na4.docusign.net`.)
+
+   > Probed 4 Sept 2026: a production JWT with the current integration key + RSA
+   > key returns `invalid_grant / no_valid_keys_or_signatures` against
+   > `account.docusign.com`. The production side is **not** set up yet — steps 1, 2
+   > and 4–6 below all still have to be done. Confirm the real production
+   > `account_id` and region `base_uri` via step 5 rather than assuming.
 4. **Add the integration key to the production account.** In **Apps and Keys** on the *production* account, the promoted integration key (client ID) appears or is added. **Add your RSA keypair** there (you can reuse the same public key as demo, or generate a fresh prod keypair — if fresh, that becomes the new `DOCUSIGN_PRIVATE_KEY`). Set the redirect URI.
 5. **Find the production account ID + base URI (region-specific).** After auth, call `GET https://account.docusign.com/oauth/userinfo` — the response's `accounts[]` gives the prod `account_id` and `base_uri` (e.g. `https://na3.docusign.net`, `na4`, `eu`, `au`, `ca`). The base path env is that `base_uri` + `/restapi`. Using the wrong region's base path is a common cause of 401/404s.
 6. **Re-grant JWT consent on production.** Consent is per-environment. Have the impersonated user (`DOCUSIGN_USER_ID`) open: `https://account.docusign.com/oauth/auth?response_type=code&scope=signature%20impersonation&client_id=<PROD_INTEGRATION_KEY>&redirect_uri=<your_redirect>` and approve.

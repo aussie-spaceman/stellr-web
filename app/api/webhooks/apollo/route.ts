@@ -14,6 +14,7 @@ import {
   moveDealToStage,
   type Engagement,
 } from '@/lib/hubspot-deals'
+import { associateDefault, ensureCompany } from '@/lib/hubspot-companies'
 
 /**
  * Apollo outbound engagement → HubSpot Participant Pipeline deal.
@@ -121,6 +122,20 @@ async function handleEvent(
     contact = { id: created.id, properties: {} }
   }
 
+  // The account. Resolved from Apollo's organisation fields where present and
+  // from the email domain otherwise; null for a consumer mailbox, which is a
+  // legitimate way for a prospect to reply and not an error.
+  const company = await ensureCompany({
+    domain: findString(payload, [
+      'primary_domain', 'domain', 'website_url', 'organization_website', 'website',
+    ]),
+    name: findString(payload, [
+      'organization_name', 'company_name', 'account_name', 'company',
+    ]),
+    email,
+  })
+  if (company) await associateDefault('contacts', contact.id, 'companies', company.id)
+
   const decision = decideDealAction(engagement, await dealsForContact(contact.id))
   const sequence = findString(payload, ['sequence_name', 'sequenceName', 'emailer_campaign_name'])
   const label = [contact.properties.firstname, contact.properties.lastname]
@@ -130,7 +145,14 @@ async function handleEvent(
 
   if (decision.action === 'none') {
     console.log('[apollo-webhook]', email, engagement, '→ no change:', decision.reason)
-    return { ok: true, email, engagement, action: 'none', reason: decision.reason }
+    return {
+      ok: true,
+      email,
+      engagement,
+      action: 'none',
+      reason: decision.reason,
+      companyId: company?.id,
+    }
   }
 
   if (decision.action === 'create') {
@@ -139,6 +161,9 @@ async function handleEvent(
       stage: decision.stage,
       contactId: contact.id,
     })
+    if (deal.ok && deal.id && company) {
+      await associateDefault('deals', deal.id, 'companies', company.id)
+    }
     if (deal.ok) {
       await createNote(
         contact.id,
@@ -147,10 +172,20 @@ async function handleEvent(
           `${sequence ? ` from sequence "${sequence}"` : ''}.`,
       )
     }
-    return { ok: deal.ok, email, engagement, action: 'create', dealId: deal.id }
+    return {
+      ok: deal.ok,
+      email,
+      engagement,
+      action: 'create',
+      dealId: deal.id,
+      companyId: company?.id,
+    }
   }
 
   const moved = await moveDealToStage(decision.dealId, decision.stage)
+  if (moved.ok && company) {
+    await associateDefault('deals', decision.dealId, 'companies', company.id)
+  }
   if (moved.ok) {
     await createNote(
       contact.id,
@@ -164,6 +199,7 @@ async function handleEvent(
     engagement,
     action: 'advance',
     dealId: decision.dealId,
+    companyId: company?.id,
   }
 }
 

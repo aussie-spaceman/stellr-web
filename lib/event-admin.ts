@@ -1,6 +1,8 @@
 import { supabaseServer } from '@/lib/supabase'
 import { deriveCompliance, loadComplianceRecordsByEmails, type ComplianceState } from '@/lib/compliance'
 import { registrationPaid, paymentPill, type PaymentPillState } from '@/lib/payment-status'
+import { describeEnvelope, describeMissingEnvelope, type DocusignPill } from '@/lib/docusign-status'
+import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
 
 // Data assembly for the admin/event-manager event detail view (PRD 6.7).
 // Per-participant pill logic (user-confirmed 11-Jun-2026, supersedes the
@@ -9,16 +11,25 @@ import { registrationPaid, paymentPill, type PaymentPillState } from '@/lib/paym
 //              requested an invoice; red "Pmt Link Unpaid" / green "Pmt Link
 //              Paid" for every Stripe-checkout path (individual registrations,
 //              group card payments, members paying individually).
-//   DocuSign — red "Issued", orange "Partially Complete" (some but not all
-//              signers done), green "Complete"; plus red "Not Issued" when
-//              paperwork is required but no envelope exists yet, red
-//              "Declined", and gray "Not Required".
+//   DocuSign — derived by lib/docusign-status.describeEnvelope(), shared with
+//              the admin table, the member portal and the reminder cron. The
+//              pill now carries the count AND names the outstanding signer
+//              (docusign_detail), because "Partially Complete" alone sent staff
+//              to the database to answer a parent's email (4 Sept 2026). Adds
+//              "Email Bounced" — DocuSign told us an address was dead and we
+//              were discarding it.
 //   Check-in — green "Checked In" / orange "Registered" (kept alongside the
 //              two pills above so event-day arrival state stays visible).
 
 /** Re-exported from lib/payment-status, where the mapping itself lives. */
 export type PaymentPill = PaymentPillState
-export type DocusignPill = 'not_required' | 'not_issued' | 'issued' | 'partial' | 'declined' | 'complete'
+/**
+ * Re-exported from lib/docusign-status, which is now the single vocabulary for
+ * DocuSign state across the roster, the admin table, the portal and the reminder
+ * cron. This file used to declare its own narrower copy, which is how four
+ * surfaces ended up disagreeing about the same envelope.
+ */
+export type { DocusignPill }
 
 export interface RosterParticipant {
   id: string
@@ -42,6 +53,10 @@ export interface RosterParticipant {
   docusign: 'completed' | 'outstanding' | 'not_required'
   payment_pill: PaymentPill
   docusign_pill: DocusignPill
+  /** Pill text, e.g. "Partially Complete · 1 of 2". */
+  docusign_label: string
+  /** Who is still outstanding, e.g. "Awaiting Tamara Buk (parent/guardian)". */
+  docusign_detail: string | null
   // Background-check / license clearance for adult non-students (PRD §13).
   // 'not_required' for students and minors; the roster renders it as n/a.
   compliance_pill: ComplianceState
@@ -103,26 +118,41 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       .order('created_at', { ascending: true }),
     db
       .from('docusign_envelopes')
-      .select('participant_id, status, signers_total, signers_completed')
+      .select('id, participant_id, status, signers_total, signers_completed, reused_from')
       .eq('event_slug', eventSlug),
   ])
   if (regError) throw new Error(`Failed to load registrations: ${regError.message}`)
   if (envError) throw new Error(`Failed to load docusign envelopes: ${envError.message}`)
 
   // Latest-wins per participant: completed beats anything else
-  interface EnvelopeProgress { status: string; total: number; completed: number }
+  interface EnvelopeProgress {
+    id: string
+    status: string
+    signers_total: number | null
+    signers_completed: number | null
+    reused_from: string | null
+  }
   const envelopeByParticipant = new Map<string, EnvelopeProgress>()
   for (const env of envelopes ?? []) {
     if (!env.participant_id) continue
     const prev = envelopeByParticipant.get(env.participant_id)
     if (prev?.status !== 'completed') {
       envelopeByParticipant.set(env.participant_id, {
+        id: env.id as string,
         status: env.status,
-        total: (env.signers_total as number | null) ?? 1,
-        completed: (env.signers_completed as number | null) ?? 0,
+        signers_total: (env.signers_total as number | null) ?? null,
+        signers_completed: (env.signers_completed as number | null) ?? null,
+        reused_from: (env.reused_from as string | null) ?? null,
       })
     }
   }
+
+  // Per-recipient state for those envelopes, so the roster can name the person
+  // who still has to sign instead of showing a bare "Partially Complete".
+  const recipientsByEnvelope = await loadRecipientsByEnvelopeRows(
+    db,
+    [...envelopeByParticipant.values()].map((e) => e.id),
+  )
 
   // Compliance (background-check / license) records for every participant email,
   // in one query. Requirement is driven by the participant's role for THIS event,
@@ -158,12 +188,13 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       else if (minor) docusign = 'outstanding'
       else docusign = 'not_required'
 
-      let docusign_pill: DocusignPill
-      if (!env) docusign_pill = minor ? 'not_issued' : 'not_required'
-      else if (env.status === 'completed') docusign_pill = 'complete'
-      else if (env.status === 'declined') docusign_pill = 'declined'
-      else if (env.status === 'voided') docusign_pill = 'not_issued'
-      else docusign_pill = env.completed > 0 && env.completed < env.total ? 'partial' : 'issued'
+      // One shared derivation (lib/docusign-status) rather than this file's own.
+      // A voided envelope still reads as needing re-issue, matching the previous
+      // behaviour of collapsing it into "Not Issued", but now says so explicitly.
+      const description = env
+        ? describeEnvelope(env, recipientsByEnvelope.get(env.id) ?? [])
+        : describeMissingEnvelope(minor)
+      const docusign_pill: DocusignPill = description.pill
 
       // Compliance pill: derive from the member's license/checks (by email) but
       // using the participant's role/dob for THIS event. No member row → records
@@ -200,6 +231,8 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
         emergency_contact_email: (p.emergency_contact_email as string | null) || null,
         paid,
         docusign,
+        docusign_label:  description.label,
+        docusign_detail: description.detail,
         payment_pill,
         docusign_pill,
         compliance_pill,

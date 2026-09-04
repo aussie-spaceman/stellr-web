@@ -8,6 +8,7 @@ import { EventHistory } from '@/components/member/EventHistory'
 import { TeamsTab } from '@/components/member/TeamsTab'
 import { BillingHistory } from '@/components/member/BillingHistory'
 import { DocusignsSection } from '@/components/member/DocusignsSection'
+import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
 import { MyRegistrations } from '@/components/member/MyRegistrations'
 import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
 import { ViewAsBanner } from '@/components/admin/ViewAsBanner'
@@ -58,6 +59,17 @@ export default async function ViewAsMemberPage({
   ])
 
   if (!member) notFound()
+
+  // Same recipient join the member's own portal does, so view-as shows the
+  // outstanding signer rather than a bare "1 of 2 signed".
+  const docusignRecipients = await loadRecipientsByEnvelopeRows(
+    db,
+    (docusignEnvelopes ?? []).map(e => e.id as string),
+  )
+  const docusignRows = (docusignEnvelopes ?? []).map(e => ({
+    ...e,
+    recipients: docusignRecipients.get(e.id as string) ?? [],
+  }))
 
   // The member's avatar comes from Clerk (same source as their own /account).
   let clerkUser: { imageUrl: string | null } | null = null
@@ -196,7 +208,7 @@ export default async function ViewAsMemberPage({
               <MyRegistrations registrations={myRegistrations} />
               <EventHistory participations={member.event_participations ?? []} editable={false} />
               <DocusignsSection
-                initialEnvelopes={docusignEnvelopes ?? []}
+                initialEnvelopes={docusignRows}
                 dateOfBirth={member.date_of_birth}
                 eventRole={member.event_role}
                 adminDownload

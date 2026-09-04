@@ -356,34 +356,103 @@ export function docusignSentToMinorEmail({
           </p>
         </div>
         <p style="color:#6b7280;font-size:14px">They will receive a separate email from DocuSign with a link to review and sign. If they haven't received it, ask them to check their spam folder.</p>
+        <p style="color:#6b7280;font-size:14px"><strong>You will get your own DocuSign email too.</strong> The form has two signature sections — one for your parent or guardian and one for you — and DocuSign sends them as two separate emails. Both must be signed before the form is complete.</p>
         <p style="color:#6b7280;font-size:14px">Once signed, the consent form stays on your member record and remains valid for 3 years across all Stellr events — you won't be asked again until it expires.</p>
         <p style="color:#6b7280;font-size:14px">We will send a reminder if the form hasn't been signed within one week. Once signed, you'll receive a confirmation email with a copy of the completed form.</p>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
   })
-  const text = `Hi ${firstName},\n\nA parental consent form has been sent to ${guardianName} (${guardianEmail}) for your participation in ${eventTitle}.\n\nYour registration is not yet confirmed until the form is signed. Please ask your parent or guardian to check their inbox for an email from DocuSign.\n\n— Stellr Education`
+  const text = `Hi ${firstName},\n\nA parental consent form has been sent to ${guardianName} (${guardianEmail}) for your participation in ${eventTitle}.\n\nYou will get your own DocuSign email too: the form has two signature sections, one for your parent or guardian and one for you, sent as two separate emails. Both must be signed.\n\nYour registration is not yet confirmed until the form is complete. Please ask your parent or guardian to check their inbox for an email from DocuSign.\n\n— Stellr Education`
   return { subject, html, text }
 }
 
+/**
+ * Reminder to the student. `waitingOn` is the list of signers who have NOT yet
+ * signed, taken from docusign_envelope_recipients.
+ *
+ * WHY the shape changed (4 Sept 2026): this template used to hard-code "we
+ * haven't received a signed consent form from {guardianName}" and the cron never
+ * checked who was actually outstanding. A family whose parent HAD signed but
+ * whose student had not would be told their parent was the holdup. Worse, the
+ * consent form carries two separate signature blocks, so "we already signed it"
+ * and "it isn't signed" were both true at once and neither side could see why.
+ */
 export function docusignReminderToMinorEmail({
-  firstName, guardianName, eventTitle,
+  firstName, eventTitle, waitingOn,
 }: {
-  firstName: string; guardianName: string; eventTitle: string
+  firstName: string
+  eventTitle: string
+  /** Outstanding signers, e.g. [{ name: 'Tamara Buk', role: 'parent/guardian' }]. */
+  waitingOn: { name: string; role: string; neverOpened?: boolean }[]
 }) {
-  const subject = `Reminder — parental consent still required for ${eventTitle}`
+  const guardianPart = waitingOn.find(w => w.role === 'parent/guardian')
+  const studentPart  = waitingOn.find(w => w.role === 'student')
+
+  const subject = guardianPart && !studentPart
+    ? `Reminder — parental consent still required for ${eventTitle}`
+    : studentPart && !guardianPart
+    ? `Reminder — your signature is still required for ${eventTitle}`
+    : `Reminder — two signatures still required for ${eventTitle}`
+
+  const outstandingHtml = waitingOn.length > 0
+    ? `<ul style="margin:8px 0 0;padding-left:20px">${waitingOn
+        .map(w => `<li><strong>${w.name}</strong> — the ${w.role} signature${w.neverOpened ? ' (the DocuSign email has not been opened yet)' : ''}</li>`)
+        .join('')}</ul>`
+    : ''
+
+  const bothNote = guardianPart && studentPart
+    ? `<p>This form needs <strong>two separate signatures</strong> and DocuSign sends a separate email for each one. Signing one of them does not complete the form.</p>`
+    : guardianPart
+    ? `<p>Your own signature is already recorded — it is the parent/guardian section that is still outstanding. DocuSign sends that as a <strong>separate email</strong> to them, so signing your copy did not complete the form.</p>`
+    : `<p>Your parent or guardian has already signed. It is <strong>your</strong> signature that is still outstanding — DocuSign sends that as a separate email addressed to you.</p>`
+
   const html = emailLayout({
     heading: 'Consent Form Reminder',
     bodyHtml: `
         <p>Hi ${firstName},</p>
-        <p>We haven't received a signed consent form from <strong>${guardianName}</strong> for your participation in <strong>${eventTitle}</strong>.</p>
-        <p>We've sent them another reminder via DocuSign. Please let them know to check their inbox (and spam folder) for an email from DocuSign.</p>
+        <p>The consent form for <strong>${eventTitle}</strong> is not complete yet. Still to sign:</p>
+        ${outstandingHtml}
+        ${bothNote}
+        <p>We've sent another reminder via DocuSign. Please check the inbox — and the spam folder — for an email from DocuSign.</p>
         <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:24px 0">
           <p style="margin:0;font-size:14px;color:#92400e">
-            <strong>Your registration remains unconfirmed</strong> until the consent form is signed. Please follow up with your parent or guardian as soon as possible.
+            <strong>Your registration remains unconfirmed</strong> until every signature on the form is complete.
           </p>
         </div>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
   })
-  const text = `Hi ${firstName},\n\nWe haven't received a signed consent form from ${guardianName} for ${eventTitle}. We've sent them another reminder.\n\nYour registration remains unconfirmed until the form is signed.\n\n— Stellr Education`
+  const outstandingText = waitingOn.map(w => `  - ${w.name} (${w.role} signature)`).join('\n')
+  const text = `Hi ${firstName},\n\nThe consent form for ${eventTitle} is not complete yet. Still to sign:\n${outstandingText}\n\nThis form needs a signature in each section and DocuSign emails them separately, so signing one does not complete the form.\n\nYour registration remains unconfirmed until every signature is complete.\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
+/**
+ * Stellr's own email to the parent/guardian. Until now the guardian heard from
+ * DocuSign and nothing else: if that email was filtered or ignored there was no
+ * second channel, and neither the family nor Stellr had any way to notice. A
+ * guardian sat on an unopened envelope for nine days before a parent wrote in.
+ */
+export function docusignSentToGuardianEmail({
+  guardianName, minorName, eventTitle, isReminder = false,
+}: {
+  guardianName: string; minorName: string; eventTitle: string; isReminder?: boolean
+}) {
+  const subject = isReminder
+    ? `Reminder — your signature is needed for ${minorName} (${eventTitle})`
+    : `Your signature is needed for ${minorName} (${eventTitle})`
+  const html = emailLayout({
+    heading: isReminder ? 'Consent Form Reminder' : 'Consent Form Sent',
+    bodyHtml: `
+        <p>Hi ${guardianName},</p>
+        <p>${isReminder ? 'We still need your' : 'We have sent you a'} parental consent form for <strong>${minorName}</strong> to take part in <strong>${eventTitle}</strong>.</p>
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:24px 0">
+          <p style="margin:0 0 8px;font-size:14px;color:#92400e"><strong>What to look for</strong></p>
+          <p style="margin:0;font-size:14px;color:#92400e">A separate email from <strong>DocuSign</strong> (dse@docusign.net) with the subject "PARENT/GUARDIAN signature required — ${eventTitle}". Please check your spam folder if it isn't in your inbox.</p>
+        </div>
+        <p>The form has <strong>two signature sections</strong> — one for you and one for the student — and DocuSign sends a separate email for each. Signing the student's section does not complete yours.</p>
+        <p style="color:#6b7280;font-size:14px">${minorName}'s registration stays unconfirmed until the parent/guardian section is signed.</p>
+        <p style="color:#6b7280;font-size:14px">Questions, or need it sent to a different address? Just reply to this email.</p>`,
+  })
+  const text = `Hi ${guardianName},\n\n${isReminder ? 'We still need your' : 'We have sent you a'} parental consent form for ${minorName} to take part in ${eventTitle}.\n\nLook for a separate email from DocuSign (dse@docusign.net), subject "PARENT/GUARDIAN signature required — ${eventTitle}". Check your spam folder if it isn't in your inbox.\n\nThe form has two signature sections — one for you and one for the student — sent as two separate DocuSign emails. Signing the student's section does not complete yours.\n\nQuestions, or need it sent to a different address? Reply to this email.\n\n— Stellr Education`
   return { subject, html, text }
 }
 

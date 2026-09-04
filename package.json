@@ -25,6 +25,8 @@
     "seed:teacher-drip": "tsx scripts/seed-teacher-drip.ts",
     "set-admin": "tsx scripts/set-admin.ts",
     "verify:prod": "tsx scripts/verify-prod-services.ts",
+    "docusign:templates": "tsx scripts/docusign-templates.ts",
+    "docusign:remediate": "tsx scripts/docusign-remediate-sandbox.ts",
   "audit:event-prices": "tsx scripts/audit-event-prices.ts",
     "verify:apollo-hubspot": "tsx scripts/verify-apollo-hubspot.ts",
     "probe:apollo": "tsx scripts/probe-apollo-engagement.ts",

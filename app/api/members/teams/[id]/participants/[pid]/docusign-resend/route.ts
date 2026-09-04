@@ -66,9 +66,14 @@ export async function POST(
 
   await resendEnvelope(envelope.envelope_id)
 
+  // last_manual_resend_at, NOT reminder_sent_at: the reminder cron used to skip
+  // any envelope with reminder_sent_at set, so a teacher nudging their own team
+  // member silently switched off all future automated chasing for that family
+  // (4 Sept 2026). The 7-day rate limit above still uses sent_at.
+  const now = new Date().toISOString()
   await db
     .from('docusign_envelopes')
-    .update({ reminder_sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .update({ last_manual_resend_at: now, updated_at: now })
     .eq('id', envelope.id)
 
   return NextResponse.json({ ok: true })

@@ -12,10 +12,12 @@ import {
 import {
   sendEmail,
   docusignSentToMinorEmail,
+  docusignSentToGuardianEmail,
   docusignSentToSignerEmail,
   docusignOnFileEmail,
 } from './email'
 import { notifyCommunityAdmins } from './notify'
+import { SandboxCredentialsError } from './env-guards'
 
 // Human-readable label per agreement type, used in emails and the portal UI.
 export const AGREEMENT_LABEL: Record<AgreementType, string> = {
@@ -147,6 +149,15 @@ export async function dispatchAgreement(
       await safeEmail(ctx.email, docusignSentToMinorEmail({
         firstName: ctx.firstName, guardianName, guardianEmail: ctx.guardianEmail, eventTitle: ctx.eventTitle,
       }))
+      // The guardian is the signature that actually gates the registration, yet
+      // until now they only ever heard from DocuSign — so a filtered or ignored
+      // DocuSign email was a silent dead end for everyone. Tell them directly,
+      // in our own voice, what is coming and from whom.
+      await safeEmail(ctx.guardianEmail, docusignSentToGuardianEmail({
+        guardianName,
+        minorName:  `${ctx.firstName} ${ctx.lastName}`,
+        eventTitle: ctx.eventTitle,
+      }))
       return
     }
 
@@ -173,6 +184,25 @@ export async function dispatchAgreement(
     }))
   } catch (err) {
     console.error(`[docusign] dispatchAgreement (${type}) failed (non-fatal):`, err)
+
+    // The sandbox guard (lib/env-guards) fires here. Registration still succeeds
+    // — paperwork is deliberately non-fatal — but the participant is now
+    // unpapered and nothing else in the system will notice, which is precisely
+    // how three months of demo consent forms went unremarked. A production
+    // deployment on sandbox credentials is an outage, so say so loudly.
+    if (err instanceof SandboxCredentialsError) {
+      await notifyCommunityAdmins({
+        type: 'action',
+        body: `No agreement could be issued for ${ctx.firstName} ${ctx.lastName} (${ctx.eventTitle}): production is pointed at the DocuSign sandbox. Registration succeeded but the participant has NO paperwork. Complete the DocuSign production cutover (docs/GO-LIVE-CHECKLIST.md §4a), then re-issue.`,
+        referenceType: 'participant',
+        referenceId: ctx.participantId ?? undefined,
+        email: {
+          subject: `URGENT: DocuSign is on sandbox — no agreement issued for ${ctx.firstName} ${ctx.lastName}`,
+          html: `<p><strong>${ctx.firstName} ${ctx.lastName}</strong> (${ctx.email}) registered for <strong>${ctx.eventTitle}</strong>, but no ${AGREEMENT_LABEL[type] ?? 'agreement'} could be issued: this production deployment is configured against the DocuSign <strong>sandbox</strong>, whose envelopes are stamped "Demonstration document only" and are not binding.</p><p>The registration went through. The participant currently has <strong>no paperwork on file</strong>.</p><p>Complete the DocuSign production cutover (docs/GO-LIVE-CHECKLIST.md §4a), then re-issue.</p>`,
+          text: `${ctx.firstName} ${ctx.lastName} (${ctx.email}) registered for ${ctx.eventTitle}, but no ${AGREEMENT_LABEL[type] ?? 'agreement'} could be issued: this production deployment is on the DocuSign SANDBOX. The registration went through; the participant has no paperwork on file. Complete the production cutover (docs/GO-LIVE-CHECKLIST.md §4a), then re-issue.`,
+        },
+      }).catch(() => {})
+    }
   }
 }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { formatDateShort } from '@/lib/utils'
+import { describeEnvelope, PILL_CLASSES, type RecipientLike } from '@/lib/docusign-status'
 
 interface Envelope {
   id: string
@@ -17,6 +18,8 @@ interface Envelope {
   reused_from?: string | null
   signers_total?: number | null
   signers_completed?: number | null
+  /** Per-recipient state (migration 148) — who still has to sign. */
+  recipients?: RecipientLike[]
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -48,31 +51,22 @@ export function EnvelopeStatusBadge({ status }: { status: string }) {
   return <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
 }
 
-// Signer-progress pill — mirrors the Event Management roster logic so the portal
-// and admin event views agree: issued (red), partially complete (orange, some
-// but not all signers done), complete (green); plus declined (red), voided
-// (gray), on-file (teal). Needs signers_total / signers_completed (migration
-// 032) to surface the partial state; falls back to the flat status otherwise.
+// Signer-progress pill, derived by lib/docusign-status — the same function the
+// roster, the admin table and the reminder cron use. The portal used to compute
+// this here from two integers, which is why it could say "1 of 2 signed" but
+// never name the person the family actually needed to chase.
 function EnvelopeProgressBadge({ env }: { env: Envelope }) {
-  const total = env.signers_total ?? 1
-  const completed = env.signers_completed ?? 0
-
-  let label: string
-  let cls: string
-  if (env.reused_from) {
-    label = 'On file'; cls = 'bg-teal-100 text-teal-700'
-  } else if (env.status === 'completed') {
-    label = 'Complete'; cls = 'bg-green-100 text-green-700'
-  } else if (env.status === 'declined') {
-    label = 'Declined'; cls = 'bg-red-100 text-red-600'
-  } else if (env.status === 'voided') {
-    label = 'Voided'; cls = 'bg-brand-hairline text-brand-muted-soft'
-  } else if (completed > 0 && completed < total) {
-    label = `Partially complete · ${completed} of ${total} signed`; cls = 'bg-orange-100 text-orange-700'
-  } else {
-    label = 'Issued'; cls = 'bg-red-100 text-red-600'
-  }
-  return <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
+  const d = describeEnvelope(env, env.recipients ?? [])
+  return (
+    <>
+      <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${PILL_CLASSES[d.pill]}`}>
+        {d.label}
+      </span>
+      {d.detail && (
+        <p className="mt-1 text-xs leading-tight text-brand-grey-dark">{d.detail}</p>
+      )}
+    </>
+  )
 }
 
 const fmt = formatDateShort

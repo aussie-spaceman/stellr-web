@@ -291,8 +291,14 @@ Migration 147 is the highest applied in prod, so the recipient table is **148**.
 ## 6. What shipped (4 Sept 2026)
 
 Branch `feat/docusign-remediation-2026-09-04`. `npx tsc --noEmit` clean; 483 tests pass
-(22 new). **Migration 148 is written but NOT applied** — apply it before deploying, or
-every query selecting `reminder_count` / `docusign_envelope_recipients` fails.
+(22 new). **Migration 148 was applied to production on 4 Sept 2026** — dry-run in an
+aborted transaction first, then applied and verified: table + 13 columns + 4 indexes, RLS
+on with a single `service_role`-scoped policy (no `TO public` leak), 2 new columns on
+`docusign_envelopes`, backfill set `reminder_count = 1` on the one already-reminded
+envelope. PostgREST picked the new table up with no `PGRST205`, the anon key reads zero
+rows from it, and no new Supabase advisories were raised. The code is still unmerged, so
+prod is currently running the OLD code against the NEW schema — which is the safe
+direction (added table, added nullable/defaulted columns; nothing renamed or dropped).
 
 ### Status clarity (§1)
 

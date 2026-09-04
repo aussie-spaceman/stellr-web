@@ -27,6 +27,8 @@
     "verify:prod": "tsx scripts/verify-prod-services.ts",
   "audit:event-prices": "tsx scripts/audit-event-prices.ts",
     "verify:apollo-hubspot": "tsx scripts/verify-apollo-hubspot.ts",
+    "probe:apollo": "tsx scripts/probe-apollo-engagement.ts",
+    "backfill:apollo": "tsx scripts/backfill-apollo-engagement.ts",
   "audit:event-slugs": "tsx scripts/audit-event-slugs.ts",
     "sync:event-spaces": "tsx scripts/sync-event-spaces.ts",
     "upload:event-flyers": "tsx scripts/upload-event-flyers.ts",

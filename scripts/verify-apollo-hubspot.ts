@@ -19,7 +19,8 @@
  * Read-only: it creates no deal and modifies nothing.
  *
  * Prerequisites (.env.local): HUBSPOT_ACCESS_TOKEN with
- *   crm.objects.deals.read, crm.objects.deals.write
+ *   crm.objects.deals.read, crm.objects.deals.write,
+ *   crm.objects.companies.read, crm.objects.companies.write
  *
  * `crm.pipelines.deals.read` is a private-app-era scope and is NOT offered in
  * the service-key catalogue, so the stage cross-check below is best-effort:
@@ -96,6 +97,33 @@ async function main() {
     `  ${canWrite ? '✓' : '✗'} crm.objects.deals.write   ${writeProbe.status}` +
       (canWrite ? ' (probe only — nothing was created)' : ''),
   )
+
+  const compRead = await get('/crm/v3/objects/companies?limit=1')
+  console.log(
+    `  ${compRead.ok ? '✓' : '✗'} crm.objects.companies.read  ${compRead.status}`,
+  )
+
+  // Same non-destructive shape as the deal probe: a company id that cannot exist.
+  const compWrite = await fetch(`${BASE}/crm/v3/objects/companies/0`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ properties: {} }),
+  })
+  const canWriteCompanies = compWrite.status !== 403
+  console.log(
+    `  ${canWriteCompanies ? '✓' : '✗'} crm.objects.companies.write ${compWrite.status}` +
+      (canWriteCompanies ? ' (probe only — nothing was created)' : ''),
+  )
+
+  if (!compRead.ok || !canWriteCompanies) {
+    console.error(
+      '\n✗ The token cannot read and write companies. Add\n' +
+        '  crm.objects.companies.read and crm.objects.companies.write to the\n' +
+        '  Stellr-Web-Lead-Capture service key. Deals will still be created, but\n' +
+        '  with no account attached.',
+    )
+    process.exit(1)
+  }
 
   if (!dealsRead.ok || !canWrite) {
     console.error(

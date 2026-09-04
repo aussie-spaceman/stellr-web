@@ -12,6 +12,7 @@ import {
 import {
   sendEmail,
   docusignSentToMinorEmail,
+  docusignSentToGuardianEmail,
   docusignSentToSignerEmail,
   docusignOnFileEmail,
 } from './email'
@@ -146,6 +147,15 @@ export async function dispatchAgreement(
       await recordEnvelope(db, ctx, type, envelope, guardianName, ctx.guardianEmail)
       await safeEmail(ctx.email, docusignSentToMinorEmail({
         firstName: ctx.firstName, guardianName, guardianEmail: ctx.guardianEmail, eventTitle: ctx.eventTitle,
+      }))
+      // The guardian is the signature that actually gates the registration, yet
+      // until now they only ever heard from DocuSign — so a filtered or ignored
+      // DocuSign email was a silent dead end for everyone. Tell them directly,
+      // in our own voice, what is coming and from whom.
+      await safeEmail(ctx.guardianEmail, docusignSentToGuardianEmail({
+        guardianName,
+        minorName:  `${ctx.firstName} ${ctx.lastName}`,
+        eventTitle: ctx.eventTitle,
       }))
       return
     }

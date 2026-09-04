@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   domainFromEmail,
   isFreeEmailDomain,
@@ -58,5 +58,100 @@ describe('isFreeEmailDomain', () => {
     expect(isFreeEmailDomain('gmail.com')).toBe(true)
     expect(isFreeEmailDomain('ccsd.net')).toBe(false)
     expect(isFreeEmailDomain(undefined)).toBe(false)
+  })
+})
+
+/**
+ * Regression guard for the duplicate accounts the first Apollo backfill
+ * produced. `findCompanyByDomain` used to answer `null` both for "no such
+ * company" and for "the lookup failed"; under load HubSpot rate-limited the
+ * search, the failure read as absent, and a second company was created for a
+ * domain that already had one. Two districts ended up doubled.
+ */
+describe('ensureCompany', () => {
+  const OLD = process.env.HUBSPOT_ACCESS_TOKEN
+
+  beforeEach(() => {
+    process.env.HUBSPOT_ACCESS_TOKEN = 'test-token'
+    vi.resetModules()
+  })
+  afterEach(() => {
+    process.env.HUBSPOT_ACCESS_TOKEN = OLD
+    vi.unstubAllGlobals()
+  })
+
+  /** Minimal fetch double that records which endpoints were called. */
+  function stubFetch(handler: (url: string) => { status: number; body?: unknown }) {
+    const calls: string[] = []
+    vi.stubGlobal('fetch', async (url: string) => {
+      calls.push(url)
+      const { status, body } = handler(url)
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        json: async () => body ?? {},
+        text: async () => JSON.stringify(body ?? {}),
+      } as Response
+    })
+    return calls
+  }
+
+  it('does NOT create a company when the domain lookup fails', async () => {
+    const calls = stubFetch((url) =>
+      url.includes('/search') ? { status: 429 } : { status: 200, body: { id: 'NEW' } },
+    )
+    const { ensureCompany } = await import('./hubspot-companies')
+    const result = await ensureCompany({ email: 'head@ccsd.net' })
+
+    expect(result).toBeNull()
+    expect(calls.some((u) => u.includes('/search'))).toBe(true)
+    // The create endpoint must never have been reached.
+    expect(calls.some((u) => /\/companies$/.test(u))).toBe(false)
+  })
+
+  it('reuses the existing company when one is found', async () => {
+    stubFetch((url) =>
+      url.includes('/search')
+        ? { status: 200, body: { results: [{ id: '123' }] } }
+        : { status: 200, body: { id: 'NEW' } },
+    )
+    const { ensureCompany } = await import('./hubspot-companies')
+    expect(await ensureCompany({ email: 'head@ccsd.net' })).toEqual({
+      id: '123',
+      created: false,
+    })
+  })
+
+  /**
+   * The other half of the duplicate bug: HubSpot's search index lags writes, so
+   * two contacts at the same new domain processed back to back both read
+   * "absent". The second must be served from memory, not searched again.
+   */
+  it('memoises a domain so a second contact cannot create a duplicate', async () => {
+    let searches = 0
+    let creates = 0
+    stubFetch((url) => {
+      if (url.includes('/search')) {
+        searches++
+        return { status: 200, body: { results: [] } } // always "absent"
+      }
+      creates++
+      return { status: 200, body: { id: 'NEW' } }
+    })
+    const { ensureCompany } = await import('./hubspot-companies')
+    const a = await ensureCompany({ email: 'one@arrupejesuit.com' })
+    const b = await ensureCompany({ email: 'two@arrupejesuit.com' })
+
+    expect(a).toEqual({ id: 'NEW', created: true })
+    expect(b).toEqual({ id: 'NEW', created: false })
+    expect(creates).toBe(1)
+    expect(searches).toBe(1)
+  })
+
+  it('returns null for a consumer mailbox without calling HubSpot', async () => {
+    const calls = stubFetch(() => ({ status: 200, body: {} }))
+    const { ensureCompany } = await import('./hubspot-companies')
+    expect(await ensureCompany({ email: 'someone@gmail.com' })).toBeNull()
+    expect(calls).toHaveLength(0)
   })
 })

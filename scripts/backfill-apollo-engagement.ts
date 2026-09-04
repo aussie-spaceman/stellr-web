@@ -43,11 +43,6 @@ const PER_PAGE = 100
 const MAX_PAGES = 500 // Apollo's own cap: 50,000 records
 const PACE_MS = 300 // keep clear of HubSpot's burst limit
 
-const REPLY_CLASSES = [
-  'willing_to_meet', 'follow_up_question', 'not_interested',
-  'no_longer_at_company', 'out_of_office', 'unsubscribe', 'other',
-]
-
 type Engagement = 'clicked' | 'replied'
 
 interface Prospect {
@@ -55,8 +50,6 @@ interface Prospect {
   engagement: Engagement
   firstName?: string
   lastName?: string
-  companyName?: string
-  companyDomain?: string
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -119,13 +112,17 @@ const nonEmpty = (v: string) => v.trim().length > 0
 function toProspect(msg: Record<string, unknown>, engagement: Engagement): Prospect | null {
   const email = deepFind(msg, ['to_email', 'email', 'recipient_email', 'contact_email'], isEmail)
   if (!email) return null
+  // Apollo sends a single `to_name`, not first/last. And the message carries no
+  // organisation at all — `account_id` on it is the *sending* mailbox, not the
+  // prospect's company — so the company is resolved from the email domain and
+  // named after it until something better enriches it.
+  const toName = deepFind(msg, ['to_name'], nonEmpty)
+  const [firstName, ...rest] = (toName ?? '').split(/\s+/).filter(Boolean)
   return {
     email: email.toLowerCase(),
     engagement,
-    firstName: deepFind(msg, ['first_name', 'firstName'], nonEmpty),
-    lastName: deepFind(msg, ['last_name', 'lastName'], nonEmpty),
-    companyName: deepFind(msg, ['organization_name', 'company_name', 'account_name', 'name'], nonEmpty),
-    companyDomain: deepFind(msg, ['primary_domain', 'domain', 'website_url', 'website'], nonEmpty),
+    firstName: firstName || undefined,
+    lastName: rest.length ? rest.join(' ') : undefined,
   }
 }
 
@@ -138,12 +135,25 @@ async function collect(
   console.log(`\nFetching ${label} from Apollo…`)
   let page = 1
   let seen = 0
+  let rejected = 0
   while (page <= MAX_PAGES) {
     const json = await apollo({ ...filter, page, per_page: PER_PAGE })
     const msgs = messagesOf(json)
     if (!msgs.length) break
     for (const m of msgs) {
       seen++
+      // Apollo silently IGNORES an unrecognised stat value and returns the
+      // unfiltered set — which is mostly `scheduled`, i.e. queued mail that has
+      // never been sent. Importing that as engagement would invent a pipeline
+      // out of nothing, so every message is checked rather than trusted.
+      if (m.status !== 'completed') {
+        rejected++
+        continue
+      }
+      if (engagement === 'replied' && m.replied !== true) {
+        rejected++
+        continue
+      }
       const p = toProspect(m, engagement)
       if (!p) continue
       const existing = into.get(p.email)
@@ -159,6 +169,15 @@ async function collect(
     await sleep(150)
   }
   console.log('')
+  if (rejected) {
+    console.log(`   ${rejected} message(s) rejected as not genuine ${label}`)
+    if (rejected > seen / 2) {
+      throw new Error(
+        `Over half the "${label}" messages failed the sanity check — Apollo is ` +
+          'likely ignoring the filter and returning unsent mail. Refusing to continue.',
+      )
+    }
+  }
 }
 
 /* ── Main ────────────────────────────────────────────────────────────────── */
@@ -172,19 +191,18 @@ async function main() {
   const { decideDealAction, dealsForContact, createDeal, moveDealToStage } = await import(
     '../lib/hubspot-deals'
   )
-  const { ensureCompany, associateDefault } = await import('../lib/hubspot-companies')
+  const { ensureCompany, associateDefault, domainFromEmail, findCompanyByDomain } =
+    await import('../lib/hubspot-companies')
   const { getContactByEmail, upsertContact } = await import('../lib/hubspot')
 
   console.log(APPLY ? '*** APPLY — writing to HubSpot ***' : 'DRY RUN — nothing will be written')
 
   const prospects = new Map<string, Prospect>()
   await collect('clicks', { emailer_message_stats: ['clicked'] }, 'clicked', prospects)
-  await collect(
-    'replies',
-    { emailer_message_reply_classes: REPLY_CLASSES },
-    'replied',
-    prospects,
-  )
+  // stats:["replied"] rather than emailer_message_reply_classes: the probe
+  // showed reply_classes returns only replies that have been *classified*
+  // (8 of 11), silently dropping the rest.
+  await collect('replies', { emailer_message_stats: ['replied'] }, 'replied', prospects)
 
   const all = [...prospects.values()].slice(0, LIMIT)
   const clicked = all.filter((p) => p.engagement === 'clicked').length
@@ -196,6 +214,8 @@ async function main() {
   )
 
   const tally = { created: 0, advanced: 0, skipped: 0, companies: 0, failed: 0 }
+  const previewedDomains = new Set<string>()
+  const knownDomains = new Set<string>()
 
   for (const [i, p] of all.entries()) {
     const n = `${i + 1}/${all.length}`
@@ -221,13 +241,19 @@ async function main() {
         contact = { id: made.id, properties: {} }
       }
 
-      const company = APPLY
-        ? await ensureCompany({
-            domain: p.companyDomain,
-            name: p.companyName,
-            email: p.email,
-          })
-        : null
+      // In a dry run the company is still *looked up* — read-only — so the
+      // preview reports how many new accounts would appear rather than zero.
+      let company: { id: string; created: boolean } | null = null
+      if (APPLY) {
+        company = await ensureCompany({ email: p.email })
+      } else {
+        const dom = domainFromEmail(p.email)
+        if (dom && !previewedDomains.has(dom) && !knownDomains.has(dom)) {
+          const found = await findCompanyByDomain(dom)
+          if (found.status === 'absent') previewedDomains.add(dom)
+          else if (found.status === 'found') knownDomains.add(dom)
+        }
+      }
       if (company) {
         if (company.created) tally.companies++
         await associateDefault('contacts', contact.id, 'companies', company.id)

@@ -55,6 +55,14 @@ export function isFreeEmailDomain(domain: string | undefined): boolean {
   return !!domain && FREE_EMAIL_DOMAINS.has(domain)
 }
 
+/** domain → company id, for the life of the process. See ensureCompany. */
+const domainCache = new Map<string, string>()
+
+/** Testing seam: drop memoised domains. */
+export function resetCompanyCache() {
+  domainCache.clear()
+}
+
 /* ── HubSpot I/O ─────────────────────────────────────────────────────────── */
 
 async function hubspot(path: string, method: 'GET' | 'POST' | 'PUT', body?: unknown) {
@@ -68,19 +76,38 @@ async function hubspot(path: string, method: 'GET' | 'POST' | 'PUT', body?: unkn
   })
 }
 
-export async function findCompanyByDomain(domain: string): Promise<string | null> {
-  if (!HUBSPOT_ACCESS_TOKEN) return null
+export type CompanyLookup =
+  | { status: 'found'; id: string }
+  | { status: 'absent' }
+  | { status: 'error' }
+
+/**
+ * Look a company up by domain.
+ *
+ * Returns a three-way result on purpose. Collapsing "no such company" and "the
+ * lookup failed" into one `null` is what produced duplicate accounts on the
+ * first backfill: under load HubSpot rate-limited the search, the failure read
+ * as "absent", and `ensureCompany` created a second record for a domain that
+ * already had one. A failed lookup must never authorise a create.
+ */
+export async function findCompanyByDomain(domain: string): Promise<CompanyLookup> {
+  if (!HUBSPOT_ACCESS_TOKEN) return { status: 'error' }
   try {
     const res = await hubspot('/crm/v3/objects/companies/search', 'POST', {
       filterGroups: [{ filters: [{ propertyName: 'domain', operator: 'EQ', value: domain }] }],
       properties: ['domain'],
       limit: 1,
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      console.error('[hubspot-companies] Domain lookup failed', domain, res.status)
+      return { status: 'error' }
+    }
     const json = (await res.json()) as { results?: { id: string }[] }
-    return json.results?.[0]?.id ?? null
-  } catch {
-    return null
+    const id = json.results?.[0]?.id
+    return id ? { status: 'found', id } : { status: 'absent' }
+  } catch (err) {
+    console.error('[hubspot-companies] Domain lookup threw', domain, err)
+    return { status: 'error' }
   }
 }
 
@@ -154,9 +181,22 @@ export async function ensureCompany(input: {
   const domain = normaliseDomain(input.domain) ?? domainFromEmail(input.email)
   if (!domain || isFreeEmailDomain(domain)) return null
 
+  // HubSpot's company search runs off an index that lags writes, so two
+  // contacts at the same new domain processed back to back would both read
+  // "absent" and both create. Memoise within the process: a caller that has
+  // already resolved this domain never races itself.
+  const cached = domainCache.get(domain)
+  if (cached) return { id: cached, created: false }
+
   const existing = await findCompanyByDomain(domain)
-  if (existing) return { id: existing, created: false }
+  if (existing.status === 'error') return null // never create on a failed lookup
+  if (existing.status === 'found') {
+    domainCache.set(domain, existing.id)
+    return { id: existing.id, created: false }
+  }
 
   const created = await createCompany({ domain, name: input.name })
-  return created.ok && created.id ? { id: created.id, created: true } : null
+  if (!created.ok || !created.id) return null
+  domainCache.set(domain, created.id)
+  return { id: created.id, created: true }
 }

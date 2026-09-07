@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { resendEnvelope, type AgreementType } from '@/lib/docusign'
 import { AGREEMENT_LABEL } from '@/lib/docusign-agreements'
 import { sendEmail, docusignReminderToMinorEmail, docusignReminderToSignerEmail } from '@/lib/email'
+import { guardCron } from '@/lib/cron'
 
 // GET /api/cron/docusign-reminders
 // Vercel cron calls this daily at 09:00 UTC (see vercel.json).
@@ -12,10 +13,8 @@ import { sendEmail, docusignReminderToMinorEmail, docusignReminderToSignerEmail 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const blocked = guardCron(req)
+  if (blocked) return blocked
 
   const db = supabaseServer()
   const sevenDaysAgo = new Date(Date.now() - SEVEN_DAYS_MS).toISOString()

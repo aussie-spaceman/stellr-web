@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { formatDateTime } from '@/lib/utils'
 import { supabaseServer } from '@/lib/supabase'
 import { notifyMember } from '@/lib/notify'
+import { guardCron } from '@/lib/cron'
 
 // GET /api/cron/session-reminders — runs hourly (see vercel.json).
 // Reminds participants + hosts of upcoming coaching/mentoring sessions at two
 // buckets: 24h out and 1h out (FR-COM-11/12). Idempotent via sent_reminders.
 
 export async function GET(req: NextRequest) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const blocked = guardCron(req)
+  if (blocked) return blocked
 
   const db = supabaseServer()
   const now = Date.now()

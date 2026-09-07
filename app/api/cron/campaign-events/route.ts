@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { fireCampaignEvent } from '@/lib/email-campaigns'
+import { guardCron } from '@/lib/cron'
 
 // GET /api/cron/campaign-events — runs daily (see vercel.json). Translates
 // date-based membership milestones into campaign events. Currently:
@@ -9,9 +10,8 @@ import { fireCampaignEvent } from '@/lib/email-campaigns'
 // campaign send ledger dedups (dedup_key = the expiry date), so re-runs and the
 // 1-day scan window can never double-send for a given renewal cycle.
 export async function GET(req: NextRequest) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const blocked = guardCron(req)
+  if (blocked) return blocked
 
   const db = supabaseServer()
 

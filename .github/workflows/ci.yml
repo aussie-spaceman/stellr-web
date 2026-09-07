@@ -1,0 +1,61 @@
+name: CI
+
+# Every gate in this file was previously local and optional. The deploy record
+# shows what that meant in practice: a production deployment made from a dirty
+# working tree, and most changes reaching production without any of these
+# having run. A check that only runs when someone remembers is not a check.
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # Placeholders. `next build` instantiates clients at module scope (see
+      # lib/supabase.ts), so the build needs syntactically valid values — it
+      # never connects to anything with them. Real values live in Vercel.
+      NEXT_PUBLIC_APP_ENV: dev
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
+      NEXT_PUBLIC_SANITY_PROJECT_ID: placeholder
+      NEXT_PUBLIC_SANITY_DATASET: production
+      NEXT_PUBLIC_SITE_URL: https://www.stellreducation.org
+      NEXT_PUBLIC_AUTH_APP_URL: https://app.stellreducation.org
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_placeholder
+      CLERK_SECRET_KEY: sk_test_placeholder
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the Vercel project's runtime (nodeVersion 24.x), which is
+          # the thing this job exists to predict. Note .nvmrc says 22 — see the
+          # PR description; worth reconciling separately.
+          node-version: 24.x
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Design-system lint
+        run: npm run lint:tokens
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Build
+        run: npm run build

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runEntitlementsLifecycle } from '@/lib/entitlements'
+import { guardCron } from '@/lib/cron'
 
 // GET /api/cron/entitlements — runs daily (see vercel.json).
 // Re-grants per-period tier allowances (e.g. the quarterly free mentoring
@@ -7,9 +8,8 @@ import { runEntitlementsLifecycle } from '@/lib/entitlements'
 // membership has lapsed. Idempotent: a no-op until a new period opens or a
 // membership lapses. Purchased entitlements are never touched.
 export async function GET(req: NextRequest) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const blocked = guardCron(req)
+  if (blocked) return blocked
   try {
     const result = await runEntitlementsLifecycle()
     return NextResponse.json(result)

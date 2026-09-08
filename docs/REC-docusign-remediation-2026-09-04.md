@@ -329,9 +329,11 @@ The roster pill now reads **"Partially Complete · 1 of 2"** with **"Awaiting Ta
 ### Guardrails (§2 Phase D)
 
 - `lib/env-guards.ts` — a **production** deployment pointed at the DocuSign sandbox now
-  refuses to issue an envelope. Same rule available for Stripe and Clerk. Note the guard
-  treats a *missing* `DOCUSIGN_BASE_PATH` as sandbox, because `lib/docusign.ts` defaults
-  to demo — that gap is exactly how this could have recurred.
+  refuses to issue an envelope. Same rule available for Stripe and Clerk. (Since PR #29
+  the underlying `isProductionDeployment()` lives in `lib/env.ts` alongside the other
+  environment signal; `env-guards` keeps the credential detection and the refusal.)
+  Note the guard treats a *missing* `DOCUSIGN_BASE_PATH` as sandbox, because
+  `lib/docusign.ts` defaults to demo — that gap is exactly how this could have recurred.
 - `/admin` dashboard gains an **Integration environments** card; `GET
   /api/admin/health/integrations` is the scriptable form. Environment only — never a key.
 - `npm run verify:prod` now states what SANDBOX *means*, and checks the volunteer template.

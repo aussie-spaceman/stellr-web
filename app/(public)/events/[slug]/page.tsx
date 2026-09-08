@@ -16,6 +16,7 @@ import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { participationTypeFor } from '@/lib/analytics'
 import { buildEventJsonLd, buildCampaignJsonLd, buildFaqJsonLd } from '@/lib/structured-data'
 import { getEventPrice, eventPriceLabel } from '@/lib/event-pricing'
+import { getSeriesMembers } from '@/lib/schema-series'
 import { CAMPAIGN_FAQS } from '@/lib/campaign-content'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 
@@ -60,6 +61,17 @@ const statusConfig = {
   'coming-soon': { label: 'Coming Soon', className: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
   closed: { label: 'Registration Closed', className: 'bg-red-50 text-red-700 border-red-200' },
 }
+
+// Sanity's lifecycle `status`, shown as its own pill alongside the registration
+// one. This is the same field that sets schema.org eventStatus, so a cancelled
+// event can't read "Registration Open" to a visitor while telling Google it is
+// off — a page and markup disagreeing is what gets structured data ignored.
+const lifecycleConfig = {
+  cancelled: { label: 'Event Cancelled', className: 'bg-red-100 text-red-800 border-red-300' },
+  postponed: { label: 'Event Postponed', className: 'bg-yellow-50 text-yellow-800 border-yellow-300' },
+  rescheduled: { label: 'New Date', className: 'bg-blue-50 text-blue-800 border-blue-200' },
+  moved_online: { label: 'Now Virtual', className: 'bg-blue-50 text-blue-800 border-blue-200' },
+} as const
 
 // The competition season these pages describe. The prize trip and the t-shirt
 // are named by year in the copy below — bump this one constant each season
@@ -195,6 +207,10 @@ export default async function EventDetailPage({ params }: PageProps) {
   const event: EventData | null = await getEventBySlug(slug).catch(() => null)
   if (!event) notFound()
 
+  // The sibling events of this competition theme, so the `superEvent` series
+  // node carries real dates, venues and a fee range (lib/schema-series.ts).
+  const seriesMembers = await getSeriesMembers()
+
   // Campaigns render a dedicated, membership-aware detail view (no ticketing).
   if (event.activityType === 'campaign') {
     const ctx = await getMemberCampaignContext()
@@ -203,10 +219,14 @@ export default async function EventDetailPage({ params }: PageProps) {
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify([
-              buildCampaignJsonLd(event, slug),
-              buildFaqJsonLd(CAMPAIGN_FAQS),
-            ]),
+            // A campaign with no season/year has no derivable dates, so it
+            // has no valid Event node — the FAQ block still stands alone.
+            __html: JSON.stringify(
+              [
+                buildCampaignJsonLd(event, slug, { series: seriesMembers }),
+                buildFaqJsonLd(CAMPAIGN_FAQS),
+              ].filter(Boolean),
+            ),
           }}
         />
         <TrackEvent
@@ -226,7 +246,12 @@ export default async function EventDetailPage({ params }: PageProps) {
     )
   }
 
-  const status = registrationStatus(event.registrationOpenDate, event.registrationCloseDate)
+  const lifecycle = event.status && event.status !== 'scheduled' ? event.status : null
+  // Nothing should still be selling places at an event that isn't happening.
+  const status =
+    lifecycle === 'cancelled' || lifecycle === 'postponed'
+      ? 'closed'
+      : registrationStatus(event.registrationOpenDate, event.registrationCloseDate)
   const { label: statusLabel, className: statusClass } = statusConfig[status]
 
   // Per-participant fee, resolved live from Stripe. `priceLabel` is null when
@@ -237,9 +262,13 @@ export default async function EventDetailPage({ params }: PageProps) {
 
   // JSON-LD for this event (Offline/Online Event + superEvent + offer) plus the
   // FAQ accordion rendered further down the page. The offer carries the same
-  // fee shown on the page — schema that contradicts the visible price is
-  // treated as spam.
-  const jsonLd = [buildEventJsonLd(event, slug, price), buildFaqJsonLd(FAQS)]
+  // fee and availability shown on the page — schema that contradicts the
+  // visible price or status is treated as spam. An event with no date yet
+  // builds no Event node at all; the FAQ block is published on its own.
+  const jsonLd = [
+    buildEventJsonLd(event, slug, { price, series: seriesMembers }),
+    buildFaqJsonLd(FAQS),
+  ].filter(Boolean)
 
   return (
     <>
@@ -274,6 +303,13 @@ export default async function EventDetailPage({ params }: PageProps) {
           {/* Standardised three-pill row (Event · Grade · Theme) + status */}
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <CardPills kind="event" gradeLevel={event.gradeLevel} type={event.type} size="md" />
+            {lifecycle && (
+              <span
+                className={`text-sm font-semibold px-3 py-1.5 rounded-full border ${lifecycleConfig[lifecycle].className}`}
+              >
+                {lifecycleConfig[lifecycle].label}
+              </span>
+            )}
             <span className={`text-sm font-semibold px-3 py-1.5 rounded-full border ${statusClass}`}>
               {statusLabel}
             </span>

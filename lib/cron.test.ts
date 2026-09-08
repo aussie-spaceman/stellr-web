@@ -2,10 +2,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // APP_ENV is read once at module load, so each case re-imports through a fresh
 // module registry rather than mutating an already-evaluated constant.
-async function load(appEnv: string | undefined, cronSecret = 'secret') {
+async function load(
+  appEnv: string | undefined,
+  cronSecret = 'secret',
+  vercelEnv: string | undefined = undefined,
+) {
   vi.resetModules()
   if (appEnv === undefined) vi.stubEnv('NEXT_PUBLIC_APP_ENV', '')
   else vi.stubEnv('NEXT_PUBLIC_APP_ENV', appEnv)
+  vi.stubEnv('VERCEL_ENV', vercelEnv ?? '')
   vi.stubEnv('CRON_SECRET', cronSecret)
   return {
     ...(await import('./cron')),
@@ -40,6 +45,43 @@ describe('APP_ENV', () => {
     const { appEnv, isProd } = await load('prod')
     expect(appEnv()).toBe('prod')
     expect(isProd()).toBe(true)
+  })
+})
+
+// The other question lib/env.ts answers: which Vercel deployment *target* this
+// is. Deliberately a separate signal from APP_ENV — see that module's header.
+describe('vercelTarget', () => {
+  it('reports the platform-set target', async () => {
+    const { vercelTarget, isProductionDeployment } = await load('prod', 'secret', 'production')
+    expect(vercelTarget()).toBe('production')
+    expect(isProductionDeployment()).toBe(true)
+  })
+
+  it('reports preview deployments as preview', async () => {
+    const { vercelTarget, isProductionDeployment } = await load('dev', 'secret', 'preview')
+    expect(vercelTarget()).toBe('preview')
+    expect(isProductionDeployment()).toBe(false)
+  })
+
+  it('reports an unset VERCEL_ENV as development — running off Vercel', async () => {
+    const { vercelTarget, isProductionDeployment } = await load('dev')
+    expect(vercelTarget()).toBe('development')
+    expect(isProductionDeployment()).toBe(false)
+  })
+})
+
+// The whole reason the two signals are not collapsed into one. The planned dev
+// Vercel project tracks its own branch, so VERCEL_ENV=production there while
+// APP_ENV says dev. If the cron guard read VERCEL_ENV, all twelve crons would
+// run on that project and mail real members a second time every day.
+describe('the two signals diverge on the dev Vercel project', () => {
+  it('is a production deployment target that is not our production environment', async () => {
+    const { isProd, isProductionDeployment, guardCron } = await load('dev', 'secret', 'production')
+    expect(isProductionDeployment()).toBe(true)
+    expect(isProd()).toBe(false)
+    const res = guardCron(req('Bearer secret'))
+    expect(res?.status).toBe(200)
+    await expect(res?.json()).resolves.toEqual({ skipped: true, reason: 'APP_ENV=dev' })
   })
 })
 

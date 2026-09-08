@@ -80,7 +80,10 @@ www↔app experience and is the critical path.
 >
 > **What now enforces this** (so a doc checkbox is no longer the only control):
 > - `lib/env-guards.ts` — a production deployment pointed at the DocuSign sandbox
->   **refuses to issue an envelope**. This has to run inside the deployment:
+>   **refuses to issue an envelope**. (The "is this production?" test it uses,
+>   `isProductionDeployment()`, moved to `lib/env.ts` in PR #29; `env-guards`
+>   keeps the credential detection and the refusal.) This has to run inside the
+>   deployment:
 >   `vercel env pull` redacts secret values, so nothing external can audit prod.
 > - `/admin` dashboard → *Integration environments* card, and
 >   `GET /api/admin/health/integrations`, both showing live vs sandbox per integration.

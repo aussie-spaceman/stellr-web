@@ -1,8 +1,9 @@
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { verifyConnectHmac, getEnvelopeSignerProgress, type AgreementType } from '@/lib/docusign'
+import { verifyConnectHmac, type AgreementType } from '@/lib/docusign'
 import { AGREEMENT_LABEL } from '@/lib/docusign-agreements'
+import { syncEnvelopeRecipients, loadRecipientsByEnvelopeRows, alertOnNewBounces } from '@/lib/docusign-recipients'
 import { sendEmail, docusignCompletedToMinorEmail, docusignCompletedToSignerEmail } from '@/lib/email'
 import { logActivity } from '@/lib/activity-log'
 
@@ -61,19 +62,17 @@ export async function POST(req: Request) {
   const db = supabaseServer()
   const now = new Date().toISOString()
 
-  // Recipient-level signing progress (roster "partially complete" pill).
-  // Recount from the recipients API rather than incrementing locally —
-  // idempotent under DocuSign Connect's at-least-once delivery.
-  if (payload.event === 'recipient-completed') {
-    try {
-      const progress = await getEnvelopeSignerProgress(envelopeId)
-      await db
-        .from('docusign_envelopes')
-        .update({ signers_total: progress.total, signers_completed: progress.completed, updated_at: now })
-        .eq('envelope_id', envelopeId)
-    } catch (err) {
-      console.error('[docusign-webhook] Failed to update signer progress:', err)
-    }
+  // ── Recipient-level state ────────────────────────────────────────────────────
+  // Every event refreshes the full signer list, not just recipient-completed.
+  // The API call was always being made here; it just kept two integers and threw
+  // the rest away, which is why nothing downstream could name the outstanding
+  // signer, notice a bounced address, or tell "never opened it" from "opened it
+  // yesterday". Recounted from DocuSign rather than incremented locally, so it
+  // stays idempotent under Connect's at-least-once delivery.
+  await syncRecipients(db, envelopeId)
+
+  // recipient-* events carry no envelope-level status change of their own.
+  if (payload.event.startsWith('recipient-')) {
     return NextResponse.json({ received: true })
   }
 
@@ -146,4 +145,33 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ received: true })
+}
+
+// Mirrors DocuSign's signer list into docusign_envelope_recipients and raises an
+// admin alert the first time an address is reported bounced. Non-fatal
+// throughout: a DocuSign hiccup here must not stop the envelope's status change
+// from being recorded, and must not make us return non-2xx (Connect would retry
+// the whole event, re-running the side effects below it).
+async function syncRecipients(
+  db: ReturnType<typeof supabaseServer>,
+  envelopeId: string,
+): Promise<void> {
+  try {
+    const { data: row } = await db
+      .from('docusign_envelopes')
+      .select('id, minor_name, event_title, participant_id')
+      .eq('envelope_id', envelopeId)
+      .maybeSingle()
+    if (!row) return
+
+    const before = (await loadRecipientsByEnvelopeRows(db, [row.id as string])).get(row.id as string) ?? []
+    const after = await syncEnvelopeRecipients(db, row.id as string, envelopeId)
+    await alertOnNewBounces(before, after, {
+      minorName:     (row.minor_name as string) ?? 'a participant',
+      eventTitle:    (row.event_title as string) ?? '',
+      participantId: (row.participant_id as string | null) ?? null,
+    })
+  } catch (err) {
+    console.error('[docusign-webhook] recipient sync failed (non-fatal):', err)
+  }
 }

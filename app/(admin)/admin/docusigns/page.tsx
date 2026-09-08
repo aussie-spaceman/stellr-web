@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
 import { DocusignTable, type EnvelopeRow } from '@/components/admin/DocusignTable'
+import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
 
 export const metadata = { title: 'Admin — Consent Forms' }
 
@@ -12,10 +13,22 @@ export default async function AdminDocusignsPage() {
 
   const db = supabaseServer()
 
+  // signers_total / signers_completed were missing from this select, so a
+  // 1-of-2 envelope rendered as a flat "Awaiting signature" here while the
+  // roster called the same row "Partially Complete" (4 Sept 2026).
   const { data: envelopes } = await db
     .from('docusign_envelopes')
-    .select('id, envelope_id, status, envelope_type, signer_name, signer_email, minor_name, event_title, event_slug, sent_at, completed_at, declined_at, reminder_sent_at, participant_id, member_id, reused_from')
+    .select('id, envelope_id, status, envelope_type, signer_name, signer_email, minor_name, event_title, event_slug, sent_at, completed_at, declined_at, reminder_sent_at, reminder_count, participant_id, member_id, reused_from, signers_total, signers_completed')
     .order('sent_at', { ascending: false })
+
+  const recipientsByEnvelope = await loadRecipientsByEnvelopeRows(
+    db,
+    (envelopes ?? []).map(e => e.id as string),
+  )
+  const rows = (envelopes ?? []).map(e => ({
+    ...e,
+    recipients: recipientsByEnvelope.get(e.id as string) ?? [],
+  })) as EnvelopeRow[]
 
   const pending   = (envelopes ?? []).filter(e => e.status === 'sent' || e.status === 'delivered').length
   const completed = (envelopes ?? []).filter(e => e.status === 'completed').length
@@ -45,7 +58,7 @@ export default async function AdminDocusignsPage() {
         </div>
       </div>
 
-      <DocusignTable initial={(envelopes ?? []) as EnvelopeRow[]} />
+      <DocusignTable initial={rows} />
     </div>
   )
 }

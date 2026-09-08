@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { formatDateShort } from '@/lib/utils'
+import { describeEnvelope, PILL_CLASSES, type RecipientLike } from '@/lib/docusign-status'
 
 export interface EnvelopeRow {
   id: string
@@ -20,22 +21,29 @@ export interface EnvelopeRow {
   participant_id: string
   member_id: string | null
   reused_from?: string | null
+  signers_total?: number | null
+  signers_completed?: number | null
+  reminder_count?: number | null
+  /** Per-recipient state (migration 148) — who still has to sign. */
+  recipients?: RecipientLike[]
 }
 
-const STATUS_STYLES: Record<string, { label: string; cls: string }> = {
-  sent:      { label: 'Awaiting signature', cls: 'bg-amber-100 text-amber-700'  },
-  delivered: { label: 'Viewed',             cls: 'bg-brand-blue/10 text-brand-blue'    },
-  completed: { label: 'Signed',             cls: 'bg-green-100 text-green-700'  },
-  declined:  { label: 'Declined',           cls: 'bg-red-100 text-red-600'      },
-  voided:    { label: 'Voided',             cls: 'bg-brand-hairline text-brand-muted-soft'    },
-  // Coverage rows: participant covered by previously signed paperwork
-  // (3-year validity) instead of receiving a new envelope.
-  on_file:   { label: 'On file',            cls: 'bg-teal-100 text-teal-700'    },
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const { label, cls } = STATUS_STYLES[status] ?? { label: status, cls: 'bg-brand-hairline text-brand-muted-soft' }
-  return <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
+// Status text, colour and the "who is outstanding" line all come from
+// lib/docusign-status now — the same derivation the roster, the member portal
+// and the reminder cron use. This table previously had its own mapping that
+// couldn't express a partially-signed envelope at all.
+function StatusCell({ env }: { env: EnvelopeRow }) {
+  const d = describeEnvelope(env, env.recipients ?? [])
+  return (
+    <div>
+      <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${PILL_CLASSES[d.pill]}`}>
+        {d.label}
+      </span>
+      {d.detail && (
+        <p className="mt-1 text-[11px] leading-tight text-brand-grey-dark max-w-[220px]">{d.detail}</p>
+      )}
+    </div>
+  )
 }
 
 function fmt(iso: string | null) {
@@ -163,7 +171,7 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
                     <div className="font-medium">{env.signer_name}</div>
                     <div className="text-xs text-brand-muted-soft">{env.signer_email}</div>
                   </td>
-                  <td className="px-4 py-3"><StatusBadge status={env.reused_from ? 'on_file' : env.status} /></td>
+                  <td className="px-4 py-3"><StatusCell env={env} /></td>
                   <td className="px-4 py-3 text-brand-muted-soft text-xs whitespace-nowrap">
                     {env.reused_from ? (
                       <div className="text-brand-muted-soft">Not sent — covered by prior signing</div>
@@ -171,7 +179,10 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
                       <>
                         <div>{fmt(env.sent_at)}</div>
                         {env.reminder_sent_at && (
-                          <div className="text-brand-muted-soft mt-0.5">Reminded {fmt(env.reminder_sent_at)}</div>
+                          <div className="text-brand-muted-soft mt-0.5">
+                            Reminded {fmt(env.reminder_sent_at)}
+                            {(env.reminder_count ?? 0) > 1 && ` (${env.reminder_count}×)`}
+                          </div>
                         )}
                       </>
                     )}

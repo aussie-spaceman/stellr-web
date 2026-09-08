@@ -114,6 +114,13 @@ async function checkDocuSign() {
   console.log(`oauth:     ${oauthUrl}`)
   console.log(`base path: ${basePath}`)
   console.log(`environment: ${isProd ? 'PRODUCTION' : 'SANDBOX / DEMO'}`)
+  // This line printed "SANDBOX / DEMO" correctly for three months while real
+  // families signed non-binding demo documents, because nobody ran the script
+  // and the output was just informational. Say what it MEANS, not just what it is.
+  if (!isProd) {
+    console.log(bad('Envelopes issued from here are stamped "DEMONSTRATION DOCUMENT ONLY" and are NOT binding signatures.'))
+    console.log('       ↳ go-live steps: docs/GO-LIVE-CHECKLIST.md §4a')
+  }
 
   if (!integrationKey || !userId || !privateKey || !accountId) {
     console.log(bad('Missing DocuSign credentials — cannot auth.'))
@@ -154,14 +161,19 @@ async function checkDocuSign() {
   }
 
   // Retrieve each configured template by ID.
+  // The volunteer template has never existed: DOCUSIGN_VOLUNTEER_TEMPLATE_ID is
+  // unset in Vercel and no such template exists in the account, so
+  // createVolunteerAgreementEnvelope() throws for every volunteer. It was
+  // missing from this list too, which is why nothing ever reported it.
   const templates = [
     { label: 'minor/guardian consent', id: process.env.DOCUSIGN_TEMPLATE_ID },
     { label: 'adult agreement', id: process.env.DOCUSIGN_ADULT_TEMPLATE_ID },
     { label: 'mentor agreement', id: process.env.DOCUSIGN_MENTOR_TEMPLATE_ID },
+    { label: 'volunteer agreement', id: process.env.DOCUSIGN_VOLUNTEER_TEMPLATE_ID },
   ]
   console.log('\nTemplates:')
   for (const t of templates) {
-    if (!t.id) { console.log(`  ${warn('')}${t.label}: env not set`); continue }
+    if (!t.id) { console.log(`  ${bad('')}${t.label}: env not set — this agreement type CANNOT be issued`); continue }
     try {
       const res = await fetch(`${basePath}/v2.1/accounts/${accountId}/templates/${t.id}`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },

@@ -8,3 +8,7 @@ build/
 .DS_Store
 .vercel
 storybook-static/
+
+# DocuSign template exports (scripts/docusign-templates.ts) — bulky base64 PDFs,
+# regenerate on demand; not a source artefact.
+/scripts/docusign-templates/

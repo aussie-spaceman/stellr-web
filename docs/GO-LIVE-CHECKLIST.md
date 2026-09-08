@@ -62,9 +62,39 @@ www↔app experience and is the critical path.
 
 ---
 
-## 4. E-signature (DocuSign) — ❌ STILL SANDBOX (2026-06-10)
+## 4. E-signature (DocuSign) — ❌ STILL SANDBOX (re-confirmed 2026-09-04)
 
 > Verified `account-d.docusign.com` + `demo.docusign.net` — envelopes are non-binding demo envelopes. **Production requires the DocuSign Go-Live promotion** (≈20 successful demo API calls → promote the integration key in DocuSign admin), then a prod account ID + **re-granted JWT consent** + the **3 templates recreated in the prod account** (the demo template GUIDs change). Also confirm Vercel's `DOCUSIGN_*` vars aren't still demo.
+
+> ### ⚠️ This box stayed unticked for three months while real families signed
+>
+> Re-confirmed 4 Sept 2026, triggered by a parent's email. Production — not a dev
+> machine — issued real parental consent forms (COPPA consent, photo release, risk
+> waiver) from the demo account. Proof: Connect config `22193922` **inside the demo
+> account** posts to `https://www.stellreducation.org/api/webhooks/docusign`, and
+> the account plan is `DEVCENTER_DEMO_RESTRICTED_JUNE2025`. Every page of those
+> executed documents is stamped *"DEMONSTRATION DOCUMENT ONLY"*.
+>
+> **Affected:** 2 in-flight family consents + 1 completed staff agreement
+> (bill.allen@, 6 Aug 2026). The other 8 envelopes in the account are test data.
+>
+> **What now enforces this** (so a doc checkbox is no longer the only control):
+> - `lib/env-guards.ts` — a production deployment pointed at the DocuSign sandbox
+>   **refuses to issue an envelope**. This has to run inside the deployment:
+>   `vercel env pull` redacts secret values, so nothing external can audit prod.
+> - `/admin` dashboard → *Integration environments* card, and
+>   `GET /api/admin/health/integrations`, both showing live vs sandbox per integration.
+> - `npm run verify:prod` now says what SANDBOX **means** rather than just printing it.
+>
+> **Tooling for the cutover below:**
+> - `npm run docusign:templates export` / `import --apply` — copies the templates
+>   verbatim between accounts, so step 7's "recreate them and match every tab label
+>   exactly" is not done by hand.
+> - `npm run docusign:remediate void --apply` (against sandbox), then
+>   `reissue --apply` (against production) — voids the demo envelopes and re-issues
+>   them for real. **Order matters**, and a completed row must be voided first or
+>   `findValidAgreement()` treats the person as covered for 3 years and silently
+>   swallows the re-issue.
 
 ### 4a. Go-Live promotion — step by step
 
@@ -72,7 +102,13 @@ DocuSign requires promoting the JWT integration key from demo to production; it 
 
 1. **Hit the API-call threshold in demo.** DocuSign won't let you promote until the integration key has logged **≥ 20 successful API calls** in the demo environment (with an acceptable success rate). You already have some from real demo registrations; `npm run verify:prod` adds a few per run (1 auth + 3 template reads). Check progress in **DocuSign Admin (demo) → Integrations → Apps and Keys → your app → API request logging** (enable logging if off, then accrue calls).
 2. **Start the promotion.** In the demo account, **Apps and Keys → your integration key → Actions → "Start" / "Go-Live"**. DocuSign runs an automated review of the logged calls. Most JWT integrations are approved automatically within minutes; if flagged, address the listed issues and resubmit.
-3. **Get a production DocuSign account** (the org's real, paid account) if you don't have one. Promotion makes the *app* eligible for prod, but the account itself is separate.
+3. **Production account — DECIDED 4 Sept 2026: the production account under `david.shaw@stellreducation.org`.** Promotion makes the *app* eligible for prod; the account itself is separate. (Not the sandbox account, which is also named "Stellr" and also has `david.shaw@stellreducation.org` as its user — that one is `DEVCENTER_DEMO_RESTRICTED_JUNE2025` on `demo.docusign.net`. And not the personal `david.shaw@insimeducation.com` account on `na4.docusign.net`.)
+
+   > Probed 4 Sept 2026: a production JWT with the current integration key + RSA
+   > key returns `invalid_grant / no_valid_keys_or_signatures` against
+   > `account.docusign.com`. The production side is **not** set up yet — steps 1, 2
+   > and 4–6 below all still have to be done. Confirm the real production
+   > `account_id` and region `base_uri` via step 5 rather than assuming.
 4. **Add the integration key to the production account.** In **Apps and Keys** on the *production* account, the promoted integration key (client ID) appears or is added. **Add your RSA keypair** there (you can reuse the same public key as demo, or generate a fresh prod keypair — if fresh, that becomes the new `DOCUSIGN_PRIVATE_KEY`). Set the redirect URI.
 5. **Find the production account ID + base URI (region-specific).** After auth, call `GET https://account.docusign.com/oauth/userinfo` — the response's `accounts[]` gives the prod `account_id` and `base_uri` (e.g. `https://na3.docusign.net`, `na4`, `eu`, `au`, `ca`). The base path env is that `base_uri` + `/restapi`. Using the wrong region's base path is a common cause of 401/404s.
 6. **Re-grant JWT consent on production.** Consent is per-environment. Have the impersonated user (`DOCUSIGN_USER_ID`) open: `https://account.docusign.com/oauth/auth?response_type=code&scope=signature%20impersonation&client_id=<PROD_INTEGRATION_KEY>&redirect_uri=<your_redirect>` and approve.
@@ -89,12 +125,16 @@ Then complete the env + webhook items below.
   - [ ] `DOCUSIGN_OAUTH_URL=https://account.docusign.com`
   - [ ] `DOCUSIGN_BASE_PATH=https://<your-prod-base>.docusign.net/restapi`
 - [ ] Production `DOCUSIGN_ACCOUNT_ID`, `DOCUSIGN_INTEGRATION_KEY`, `DOCUSIGN_USER_ID`, `DOCUSIGN_PRIVATE_KEY` (JWT consent granted on the prod account).
-- [ ] Template IDs for the prod account: `DOCUSIGN_TEMPLATE_ID` (minor/guardian consent), `DOCUSIGN_ADULT_TEMPLATE_ID`, `DOCUSIGN_MENTOR_TEMPLATE_ID`.
+- [ ] Template IDs for the prod account: `DOCUSIGN_TEMPLATE_ID` (minor/guardian consent), `DOCUSIGN_ADULT_TEMPLATE_ID`, `DOCUSIGN_MENTOR_TEMPLATE_ID`. Use `npm run docusign:templates export` then `import --apply` — it prints the new GUIDs ready to paste.
+- [ ] `DOCUSIGN_VOLUNTEER_TEMPLATE_ID` — **this template has never existed in any account and the env var has never been set, so every volunteer agreement throws today.** Build `Participant Agreement - Volunteers` with roles `Volunteer` + `StellrRepresentative` and tabs `VolunteerName`, `VolunteerEmail`, `VolunteerPhone`, `EventTitle`.
 - [ ] Mentor counter-signer: `DOCUSIGN_STELLR_REP_NAME`, `DOCUSIGN_STELLR_REP_EMAIL`; template must define `StellrRepresentative` role at routing order 1.
 - [ ] Verify DocuSign template **tab labels** match the app's tabs (e.g. `TeacherPhone`, `MentorPhone`, the emergency-contact relationship tab from migration 014).
 - [ ] DocuSign Connect (webhook): point to `https://app.stellreducation.org/api/webhooks/docusign`; set `DOCUSIGN_CONNECT_HMAC_KEY` to match the Connect config. **Full setup (events, HMAC, JSON format): [DOCUSIGN-CONNECT.md](./DOCUSIGN-CONNECT.md).**
 - [ ] Enable the **recipient "Signed/Completed"** trigger event in the Connect config — required for the 🟠 "partially complete" DocuSign pill (envelope-only events make it jump 🔴→🟢 and skip the partial state).
+- [ ] Also enable **recipient "Delivered"** and **recipient "AutoResponded"**. Delivered is how we tell "never opened the link" from "opened it and hasn't signed"; AutoResponded is DocuSign reporting a **bounced address**, which we used to discard entirely — so a guardian with a dead email looked identical to a slow one and was chased forever.
+- [ ] **Delete Connect config `22193922` from the demo account** once production Connect is live. Left in place, the sandbox keeps posting to the production webhook indefinitely.
 - [ ] Test each agreement type sends and the signed-status webhook returns 200.
+- [ ] Confirm a re-issued consent form has **no** "Demonstration document only" watermark before telling any family it is signed.
 
 ---
 

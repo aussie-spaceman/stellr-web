@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { EventRosterData, PaymentPill, DocusignPill, RosterParticipant } from '@/lib/event-admin'
+import type { EventRosterData, PaymentPill, RosterParticipant } from '@/lib/event-admin'
+import { PILL_CLASSES as DOCUSIGN_PILL_CLASSES } from '@/lib/docusign-status'
 import type { ComplianceState } from '@/lib/compliance'
 import type { CompanyRow } from '@/components/admin/EventCompanies'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
@@ -18,14 +19,9 @@ const PAYMENT_PILLS: Record<PaymentPill, { label: string; className: string }> =
   waived:         { label: 'No Fee',           className: 'bg-brand-hairline text-brand-muted-soft' },
 }
 
-const DOCUSIGN_PILLS: Record<DocusignPill, { label: string; className: string }> = {
-  not_required: { label: 'Not Required', className: 'bg-brand-hairline text-brand-muted-soft' },
-  not_issued:   { label: 'Not Issued', className: 'bg-red-100 text-red-700' },
-  issued:       { label: 'Issued', className: 'bg-red-100 text-red-700' },
-  partial:      { label: 'Partially Complete', className: 'bg-orange-100 text-orange-700' },
-  declined:     { label: 'Declined', className: 'bg-red-100 text-red-700' },
-  complete:     { label: 'Complete', className: 'bg-green-100 text-green-700' },
-}
+// Label and colour both come from lib/docusign-status now. This file used to
+// keep its own copy, which is how the roster, the admin table and the portal
+// ended up describing the same envelope three different ways.
 
 // Background-check / license pill (PRD §13). Two shades of green — emerald for a
 // passed background check, green for a verified license — plus orange in-process
@@ -353,7 +349,13 @@ export default function EventRoster({
                         <Pill {...PAYMENT_PILLS[p.payment_pill]} />
                       </td>
                       <td className="px-4 py-2.5">
-                        <Pill {...DOCUSIGN_PILLS[p.docusign_pill]} />
+                        <Pill label={p.docusign_label} className={DOCUSIGN_PILL_CLASSES[p.docusign_pill]} />
+                        {/* Names the outstanding signer. Without this, answering
+                            "we already signed it" meant querying the DB and then
+                            DocuSign — which is exactly what happened on 4 Sept 2026. */}
+                        {p.docusign_detail && (
+                          <p className="mt-1 text-[11px] leading-tight text-brand-grey-dark">{p.docusign_detail}</p>
+                        )}
                       </td>
                       <td className="px-4 py-2.5">
                         <Pill {...COMPLIANCE_PILLS[p.compliance_pill]} />

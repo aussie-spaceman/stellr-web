@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { impersonatedMemberId } from '@/lib/impersonation'
+import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
 
 // GET /api/members/docusigns — returns DocuSign envelopes for the current member
 export async function GET() {
@@ -30,5 +31,17 @@ export async function GET() {
     .eq('member_id', member.id)
     .order('sent_at', { ascending: false })
 
-  return NextResponse.json({ envelopes: envelopes ?? [] })
+  // Per-recipient state so the portal can tell a family WHICH signature is
+  // outstanding — the question that prompted all of this (4 Sept 2026).
+  const recipientsByEnvelope = await loadRecipientsByEnvelopeRows(
+    db,
+    (envelopes ?? []).map(e => e.id as string),
+  )
+
+  return NextResponse.json({
+    envelopes: (envelopes ?? []).map(e => ({
+      ...e,
+      recipients: recipientsByEnvelope.get(e.id as string) ?? [],
+    })),
+  })
 }

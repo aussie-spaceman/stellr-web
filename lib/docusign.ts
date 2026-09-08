@@ -1,4 +1,5 @@
 import { createSign, createHmac, timingSafeEqual } from 'crypto'
+import { assertLiveCredentials } from './env-guards'
 
 const ENV = {
   oauthUrl:       process.env.DOCUSIGN_OAUTH_URL         ?? 'https://account-d.docusign.com',
@@ -97,6 +98,17 @@ function consentDocBase64(minor: string, guardian: string, event: string): strin
 
 // ── Public interface ──────────────────────────────────────────────────────────
 
+// Called before every envelope creation. On a Vercel PRODUCTION deployment
+// pointed at the DocuSign sandbox this throws instead of issuing, because a
+// sandbox envelope is stamped "DEMONSTRATION DOCUMENT ONLY" and is not a binding
+// signature — which is exactly what happened to real families between June and
+// September 2026. Reads and resends are deliberately NOT gated: remediating the
+// sandbox envelopes that already exist requires being able to inspect and void
+// them. Outside production this is a no-op, so dev/preview keep using the sandbox.
+function assertCanIssueEnvelopes(): void {
+  assertLiveCredentials('docusign')
+}
+
 export interface EnvelopeParams {
   minorFirstName:  string
   minorLastName:   string
@@ -119,6 +131,7 @@ export interface CreatedEnvelope {
 }
 
 export async function createConsentEnvelope(p: EnvelopeParams): Promise<CreatedEnvelope> {
+  assertCanIssueEnvelopes()
   const minorName = `${p.minorFirstName} ${p.minorLastName}`
   const signerCount = p.minorEmail ? 2 : 1
   let body: object
@@ -140,12 +153,29 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<CreatedE
       { tabLabel: 'SchoolName',       value: p.schoolName      ?? '' },
       { tabLabel: 'SchoolState',      value: p.schoolState     ?? '' },
     ]
+    // Per-recipient email subjects. The envelope-level subject was identical for
+    // both roles, so a family received two near-identical DocuSign emails and
+    // signing either one felt like finishing. Worst case (seen in prod): the
+    // guardian's address and the participant's address are the SAME inbox, so
+    // both landed side by side — the parent signed the student's copy, the
+    // guardian block stayed blank, and our roster just said "Partially Complete".
+    // Naming the role in the subject is what makes the two tellable apart.
+    const roleEmail = (heading: string, instruction: string) => ({
+      emailSubject: `${heading} — ${p.eventTitle}`,
+      emailBody:    `${instruction}\n\nThis is one of two signatures required on this form. It is not complete until both are signed.`,
+      supportedLanguage: 'en',
+    })
+
     const templateRoles: object[] = [{
       roleName:     'Guardian',
       name:         p.guardianName,
       email:        p.guardianEmail,
       routingOrder: '1',
       tabs: { textTabs: sharedTextTabs },
+      emailNotification: roleEmail(
+        'PARENT/GUARDIAN signature required',
+        `Please sign the "Parent / Legal Guardian" section of the consent form for ${minorName}.`,
+      ),
     }]
     if (p.minorEmail) {
       templateRoles.push({
@@ -154,6 +184,10 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<CreatedE
         email:        p.minorEmail,
         routingOrder: '1',
         tabs: { textTabs: sharedTextTabs },
+        emailNotification: roleEmail(
+          'STUDENT signature required',
+          `${minorName} — please sign the "Student Signature" section of the consent form. A parent or guardian must sign their own section separately.`,
+        ),
       })
     }
     body = {
@@ -220,6 +254,7 @@ export interface AdultAgreementParams {
 }
 
 export async function createAdultAgreementEnvelope(p: AdultAgreementParams): Promise<CreatedEnvelope> {
+  assertCanIssueEnvelopes()
   if (!ENV.adultTemplateId) throw new Error('DOCUSIGN_ADULT_TEMPLATE_ID not configured')
   const fullName = `${p.firstName} ${p.lastName}`
 
@@ -259,6 +294,7 @@ export interface MentorAgreementParams {
 }
 
 export async function createMentorAgreementEnvelope(p: MentorAgreementParams): Promise<CreatedEnvelope> {
+  assertCanIssueEnvelopes()
   if (!ENV.mentorTemplateId) throw new Error('DOCUSIGN_MENTOR_TEMPLATE_ID not configured')
   const fullName = `${p.firstName} ${p.lastName}`
   const signerCount = ENV.stellrRepEmail ? 2 : 1
@@ -311,6 +347,7 @@ export interface VolunteerAgreementParams {
 }
 
 export async function createVolunteerAgreementEnvelope(p: VolunteerAgreementParams): Promise<CreatedEnvelope> {
+  assertCanIssueEnvelopes()
   if (!ENV.volunteerTemplateId) throw new Error('DOCUSIGN_VOLUNTEER_TEMPLATE_ID not configured')
   const fullName = `${p.firstName} ${p.lastName}`
   const signerCount = ENV.stellrRepEmail ? 2 : 1
@@ -360,13 +397,57 @@ export async function createVolunteerAgreementEnvelope(p: VolunteerAgreementPara
 export async function getEnvelopeSignerProgress(
   envelopeId: string,
 ): Promise<{ total: number; completed: number }> {
+  const { total, completed } = summariseSigners(await getEnvelopeRecipients(envelopeId))
+  return { total, completed }
+}
+
+/** One DocuSign signer, as stored in docusign_envelope_recipients. */
+export interface EnvelopeRecipient {
+  recipientId:  string
+  roleName:     string | null
+  name:         string
+  email:        string
+  /** Lower-cased DocuSign status. 'autoresponded' means the address bounced. */
+  status:       string
+  routingOrder: number | null
+  /** Null on a 'sent' recipient = they have never opened the signing link. */
+  deliveredAt:  string | null
+  signedAt:     string | null
+  declinedAt:   string | null
+}
+
+// The full recipient list, which is what the Connect webhook persists. This is
+// the same API call getEnvelopeSignerProgress always made — it just kept two
+// integers and threw the rest away, leaving us unable to answer "who do we
+// chase?" without a live API call. Carbon copies and other non-signing
+// recipients are excluded, as before.
+export async function getEnvelopeRecipients(envelopeId: string): Promise<EnvelopeRecipient[]> {
   const res = await dsRequest(`/envelopes/${envelopeId}/recipients`)
   if (!res.ok) throw new Error(`DocuSign recipients fetch failed: ${await res.text()}`)
-  const data = await res.json() as { signers?: { status?: string }[] }
-  const signers = data.signers ?? []
+  const data = await res.json() as {
+    signers?: {
+      recipientId?: string; roleName?: string; name?: string; email?: string
+      status?: string; routingOrder?: string
+      deliveredDateTime?: string; signedDateTime?: string; declinedDateTime?: string
+    }[]
+  }
+  return (data.signers ?? []).map((s, i) => ({
+    recipientId:  s.recipientId ?? String(i + 1),
+    roleName:     s.roleName ?? null,
+    name:         s.name ?? '',
+    email:        s.email ?? '',
+    status:       (s.status ?? 'sent').toLowerCase(),
+    routingOrder: s.routingOrder ? Number(s.routingOrder) : null,
+    deliveredAt:  s.deliveredDateTime ?? null,
+    signedAt:     s.signedDateTime ?? null,
+    declinedAt:   s.declinedDateTime ?? null,
+  }))
+}
+
+export function summariseSigners(recipients: EnvelopeRecipient[]): { total: number; completed: number } {
   return {
-    total: signers.length,
-    completed: signers.filter((s) => (s.status ?? '').toLowerCase() === 'completed').length,
+    total:     recipients.length,
+    completed: recipients.filter((r) => r.status === 'completed').length,
   }
 }
 

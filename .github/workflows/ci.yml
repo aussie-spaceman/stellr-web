@@ -39,9 +39,9 @@ jobs:
       CLERK_SECRET_KEY: sk_test_placeholder
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           # Matches the Vercel project's runtime (nodeVersion 24.x), which is
           # the thing this job exists to predict. Note .nvmrc says 22 — see the

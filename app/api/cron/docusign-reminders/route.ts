@@ -10,6 +10,7 @@ import {
   docusignReminderToSignerEmail,
   docusignSentToGuardianEmail,
 } from '@/lib/email'
+import { guardCron } from '@/lib/cron'
 
 // GET /api/cron/docusign-reminders
 // Vercel cron calls this daily at 09:00 UTC (see vercel.json).
@@ -35,10 +36,8 @@ const MAX_CHASES = 4
 const DAY_MS = 24 * 60 * 60 * 1000
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const blocked = guardCron(req)
+  if (blocked) return blocked
 
   const db = supabaseServer()
   const firstChaseCutoff = new Date(Date.now() - FIRST_CHASE_AFTER_DAYS * DAY_MS).toISOString()

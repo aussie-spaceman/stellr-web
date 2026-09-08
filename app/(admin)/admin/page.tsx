@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { integrationEnvironments, isProductionDeployment, type IntegrationEnvironment } from '@/lib/env-guards'
+import { isProductionDeployment, vercelTarget } from '@/lib/env'
+import { integrationEnvironments, type IntegrationEnvironment } from '@/lib/env-guards'
 
 export const metadata = { title: 'Admin — Dashboard' }
 
@@ -21,7 +22,8 @@ const INTEGRATION_LABELS: Record<string, string> = {
 // Which environment each integration is actually pointed at. Production issued
 // real parental consent forms from the DocuSign DEMO account for three months
 // and nothing surfaced it: `vercel env pull` redacts secret values, so this can
-// only be answered from inside the deployment. See lib/env-guards.ts.
+// only be answered from inside the deployment. See lib/env-guards.ts, and
+// lib/env.ts for why this panel keys off the Vercel target rather than APP_ENV.
 function IntegrationHealth() {
   const environments = integrationEnvironments()
   const problems = isProductionDeployment()
@@ -33,7 +35,7 @@ function IntegrationHealth() {
       <div className="flex items-baseline justify-between gap-4">
         <h2 className="font-heading uppercase text-brand-blue-dark">Integration environments</h2>
         <span className="text-xs text-brand-muted-soft">
-          Deployment: {process.env.VERCEL_ENV ?? 'development'}
+          Deployment: {vercelTarget()}
         </span>
       </div>
 

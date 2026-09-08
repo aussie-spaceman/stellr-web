@@ -11,6 +11,11 @@ import {
 // PRODUCTION deployment issuing real parental consent forms from the DocuSign
 // developer sandbox, which stamps every executed page "DEMONSTRATION DOCUMENT
 // ONLY" and is not a binding signature.
+//
+// VERCEL_ENV is the input here because that is what assertLiveCredentials keys
+// off. The two "where am I" signals themselves — appEnv()/isProd() against
+// vercelTarget()/isProductionDeployment(), and why they must stay distinct —
+// live in lib/env.ts and are covered in lib/cron.test.ts.
 
 const SAVED = { ...process.env }
 

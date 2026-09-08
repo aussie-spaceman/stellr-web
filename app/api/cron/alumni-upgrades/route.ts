@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { notifyMember } from '@/lib/notify'
 import { grantTierAllocations } from '@/lib/entitlements'
+import { guardCron } from '@/lib/cron'
 
 // GET /api/cron/alumni-upgrades — runs daily (see vercel.json).
 // The Alumni tier "automatically upgrades on July 1st of the School Student's
@@ -11,9 +12,8 @@ import { grantTierAllocations } from '@/lib/entitlements'
 // sent_reminders (kind='alumni').
 
 export async function GET(req: NextRequest) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const blocked = guardCron(req)
+  if (blocked) return blocked
 
   const db = supabaseServer()
   const today = new Date()

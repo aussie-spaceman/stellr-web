@@ -1,5 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
+import { APP_HOST, SITE_URL } from '@/lib/env'
 
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
@@ -23,11 +24,11 @@ const isPublicOnlyRoute = createRouteMatcher([
   '/privacy(.*)',
 ])
 
-const WWW = 'https://www.stellreducation.org'
+const WWW = SITE_URL
 
 export default clerkMiddleware(async (auth, req) => {
   const host = req.headers.get('host') ?? ''
-  const isAppSubdomain = host === 'app.stellreducation.org'
+  const isAppSubdomain = host === APP_HOST
   const url = new URL(req.url)
 
   // Resolve auth once and reuse across all branches

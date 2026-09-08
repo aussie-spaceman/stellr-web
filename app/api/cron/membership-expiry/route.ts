@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { expireLapsedGrants } from '@/lib/membership-grants'
+import { guardCron } from '@/lib/cron'
 
 // GET /api/cron/membership-expiry — runs daily (see vercel.json).
 // Flips complimentary / rule-granted memberships to 'expired' once their
@@ -8,9 +9,8 @@ import { expireLapsedGrants } from '@/lib/membership-grants'
 // Idempotent: rows are only updated while still 'active'.
 
 export async function GET(req: NextRequest) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const blocked = guardCron(req)
+  if (blocked) return blocked
 
   const expired = await expireLapsedGrants()
   return NextResponse.json({ expired })

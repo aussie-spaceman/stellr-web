@@ -33,6 +33,9 @@ function call(url = 'https://www.stellreducation.org/api/cron/motion-bookings', 
 }
 
 beforeEach(() => {
+  // The guard in lib/cron declines outside production, so a test that
+  // exercises the route's real work has to say it is production.
+  vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'prod')
   vi.stubEnv('CRON_SECRET', 'test-secret')
   vi.stubEnv('HUBSPOT_ACCESS_TOKEN', 'token')
   vi.stubEnv('MOTION_CALENDAR_ID', 'bookings@stellreducation.org')

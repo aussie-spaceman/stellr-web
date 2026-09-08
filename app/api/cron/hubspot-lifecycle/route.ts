@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { searchContacts, setLifecycleStage } from '@/lib/hubspot'
 import { HS, LEAD_SOURCE_LIFECYCLE, LEAD_SOURCES, SUBSCRIBER_LEAD_SOURCES } from '@/lib/hubspot-fields'
+import { guardCron } from '@/lib/cron'
 
 // GET /api/cron/hubspot-lifecycle — runs daily (see vercel.json).
 //
@@ -39,9 +40,8 @@ const LOOKBACK_DAYS = 3
 const MAX_PER_RUN = 100
 
 export async function GET(req: NextRequest) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const blocked = guardCron(req)
+  if (blocked) return blocked
 
   if (!process.env.HUBSPOT_ACCESS_TOKEN) {
     return NextResponse.json({ error: 'HUBSPOT_ACCESS_TOKEN not set', corrected: 0 }, { status: 200 })

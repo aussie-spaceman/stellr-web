@@ -6,6 +6,9 @@ name: CI
 # having run. A check that only runs when someone remembers is not a check.
 
 on:
+  # Manual trigger, so the workflow can be exercised without waiting for an
+  # event — and so it is reachable while it is still the only one in the repo.
+  workflow_dispatch:
   pull_request:
     branches: [main, dev]
   push:

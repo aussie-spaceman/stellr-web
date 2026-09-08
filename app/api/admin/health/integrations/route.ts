@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { integrationEnvironments, isProductionDeployment } from '@/lib/env-guards'
+import { isProductionDeployment, vercelTarget } from '@/lib/env'
+import { integrationEnvironments } from '@/lib/env-guards'
 
 // GET /api/admin/health/integrations
 //
@@ -18,7 +19,7 @@ export async function GET() {
   if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const environments = integrationEnvironments()
-  const deployment = process.env.VERCEL_ENV ?? 'development'
+  const deployment = vercelTarget()
   const production = isProductionDeployment()
 
   // On a production deployment, anything still on sandbox credentials is a

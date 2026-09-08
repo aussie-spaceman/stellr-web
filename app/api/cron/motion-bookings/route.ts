@@ -8,6 +8,7 @@ import {
   matchesBookingTitle,
   selectGuestEmails,
 } from '@/lib/motion-bookings'
+import { guardCron } from '@/lib/cron'
 
 // GET /api/cron/motion-bookings — runs daily at 12:00 UTC (see vercel.json).
 //
@@ -60,9 +61,8 @@ const DEFAULT_LOOKBACK_HOURS = 72
 const MAX_LOOKBACK_HOURS = 24 * 400
 
 export async function GET(req: Request) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const blocked = guardCron(req)
+  if (blocked) return blocked
 
   // A missing dependency is a 200 with an explanation, matching the other
   // crons: an alarm every hour for something that is simply not wired yet is

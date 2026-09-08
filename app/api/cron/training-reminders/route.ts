@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runTrainingReminders } from '@/lib/training-reminders'
+import { guardCron } from '@/lib/cron'
 
 // GET /api/cron/training-reminders — runs daily (see vercel.json).
 // Reminds participants who haven't finished mandatory training as a deadline
@@ -8,9 +9,8 @@ import { runTrainingReminders } from '@/lib/training-reminders'
 // assignments; honours each course's reminder & escalation settings. See
 // lib/training-reminders.ts for the engine.
 export async function GET(req: NextRequest) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const blocked = guardCron(req)
+  if (blocked) return blocked
   const result = await runTrainingReminders()
   return NextResponse.json(result)
 }

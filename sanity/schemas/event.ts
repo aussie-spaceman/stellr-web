@@ -219,6 +219,61 @@ export const event = {
       hidden: ({ document }: { document?: Record<string, unknown> }) =>
         document?.activityType === 'campaign',
     },
+    // Times are optional and feed the Google Event markup only — the page shows
+    // the authored Schedule below. Leave them blank and Search shows the date
+    // alone; fill them in and it can show a start time, so they MUST match the
+    // published schedule.
+    {
+      name: 'startTime',
+      type: 'string',
+      title: 'Start Time (optional)',
+      description: 'Venue-local 24-hour "HH:MM", e.g. "09:00". Must match the Schedule below.',
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType === 'campaign',
+    },
+    {
+      name: 'endTime',
+      type: 'string',
+      title: 'End Time (optional)',
+      description: 'Venue-local 24-hour "HH:MM", e.g. "16:30".',
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType === 'campaign',
+    },
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    // Google requires the markup to state whether an event is actually going
+    // ahead, and treats a page that contradicts its own markup as spam. So this
+    // one field drives both: the schema.org eventStatus AND the pill on the
+    // event page. Cancelling or postponing here also stops the page offering
+    // registration — but it does NOT close the registration API on its own, so
+    // set Registration Closes as well.
+    {
+      name: 'status',
+      type: 'string',
+      title: 'Event Status',
+      options: {
+        list: [
+          { title: 'Going ahead as planned', value: 'scheduled' },
+          { title: 'Cancelled', value: 'cancelled' },
+          { title: 'Postponed (no new date yet)', value: 'postponed' },
+          { title: 'Rescheduled (new date below)', value: 'rescheduled' },
+          { title: 'Moved online', value: 'moved_online' },
+        ],
+        layout: 'radio',
+      },
+      initialValue: 'scheduled',
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType === 'campaign',
+    },
+    {
+      name: 'previousStartDate',
+      type: 'date',
+      title: 'Original Date (rescheduled events)',
+      description:
+        'The date this event was first due to run. Required by Google when the status is ' +
+        'Rescheduled, and ignored otherwise — set Event Date to the new date.',
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.status !== 'rescheduled',
+    },
 
     // ── Live Event-only: Venue ────────────────────────────────────────────────
     {
@@ -254,6 +309,18 @@ export const event = {
       name: 'state',
       type: 'string',
       title: 'State',
+      hidden: ({ document }: { document?: Record<string, unknown> }) =>
+        document?.activityType === 'campaign',
+    },
+    // Blank means the US, which is what the State field above already implies.
+    // Set it for anywhere else: the address markup used to assert 'US' for every
+    // venue, which put the Maldonado event in the United States.
+    {
+      name: 'country',
+      type: 'string',
+      title: 'Country (non-US events only)',
+      description:
+        'Two-letter ISO country code — e.g. "UY" for Uruguay. Leave blank for events in the US.',
       hidden: ({ document }: { document?: Record<string, unknown> }) =>
         document?.activityType === 'campaign',
     },

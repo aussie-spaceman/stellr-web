@@ -25,6 +25,7 @@ import { PageMedia } from '@/components/sections/PageMedia'
 import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { buildCompetitionSeriesJsonLd } from '@/lib/structured-data'
+import { getSeriesMembers } from '@/lib/schema-series'
 
 export const metadata: Metadata = {
   title: 'Competitions',
@@ -142,12 +143,17 @@ const TIER_HIGHLIGHT: Record<string, { badge: string; featured: boolean }> = {
 }
 
 export default async function CompetitionsPage() {
-  const tierPrices = await getTierPriceMap()
+  // The series nodes describe themselves from the events that make them up —
+  // dates, venues and the real fee range — so `EventSeries`, which Google
+  // validates as an Event, isn't a node with a name and nothing else.
+  const [tierPrices, seriesMembers] = await Promise.all([getTierPriceMap(), getSeriesMembers()])
   return (
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildCompetitionSeriesJsonLd()) }}
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(buildCompetitionSeriesJsonLd(seriesMembers)),
+        }}
       />
       <TrackEvent
         event={{

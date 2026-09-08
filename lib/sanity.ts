@@ -98,6 +98,18 @@ export interface StellarEvent {
   registrationOpen?: boolean
   registrationOpenDate?: string
   registrationCloseDate?: string
+  capacity?: number
+  /** ISO country code. Unset for US events — the state field implies those. */
+  country?: string
+  latitude?: number
+  longitude?: number
+  /** Venue-local "HH:mm", optional. Only consumer is the Event JSON-LD. */
+  startTime?: string
+  endTime?: string
+  /** Lifecycle state. Drives schema.org eventStatus and the page status pill. */
+  status?: 'scheduled' | 'cancelled' | 'postponed' | 'rescheduled' | 'moved_online'
+  /** The date it was originally due to run; required by Google when rescheduled. */
+  previousStartDate?: string
   // Campaign-only fields (activityType === 'campaign')
   activityType?: 'live_event' | 'campaign'
   season?: 'fall' | 'spring'
@@ -160,10 +172,30 @@ export async function getEventBySlug(slug: string) {
       flyers[]{ label, pages, "url": file.asset->url, "size": file.asset->size,
                 "filename": file.asset->originalFilename },
       registrationOpen, registrationOpenDate, registrationCloseDate,
-      capacity, stripePriceId, schedule[]{ time, label }
+      capacity, stripePriceId, schedule[]{ time, label },
+      country, latitude, longitude, startTime, endTime, status, previousStartDate
     }`,
     { slug }
   )
+}
+
+// Every live event, projected for the schema.org Event graph — the fields
+// `buildEventJsonLd()` reads and nothing else. Used to describe a competition
+// series from the events that actually make it up (lib/schema-series.ts), so
+// the EventSeries node carries real dates, places and a real fee range rather
+// than placeholders. Dateless documents are excluded: they have no valid Event
+// node, so they can't belong to a series window either.
+export async function getEventsForSchema(): Promise<StellarEvent[] | null> {
+  if (!client) return null
+  return client.fetch(`
+    *[_type == "event" && defined(slug.current) && defined(date)
+      && (activityType == "live_event" || !defined(activityType))] | order(date asc) {
+      _id, title, slug, type, gradeLevel, date, endDate, startTime, endTime,
+      activityType, setting, venue, city, state, country, latitude, longitude,
+      tagline, image, registrationOpen, registrationOpenDate, registrationCloseDate,
+      capacity, stripePriceId, status, previousStartDate
+    }
+  `)
 }
 
 // Minimal event/campaign metadata for a set of slugs — used by the Community

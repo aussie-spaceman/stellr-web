@@ -70,21 +70,32 @@ true`, `isProd() === false`, and `guardCron` still declines.
 
 ## 3. Open items
 
-### 3.1 `NEXT_PUBLIC_APP_ENV` is set on Production — but confirm the *value*
+### 3.1 `NEXT_PUBLIC_APP_ENV` on Production — CLOSED, value confirmed live
 
 **Resolved in part, same day.** `npx vercel@latest env ls production` confirms the
 variable exists in the **Production** scope, created ~21:50 UTC on 8 Sept, which
 predates the production build from the PR #29 merge at 22:39 UTC — so it is baked into
 the live build. Type `Config` (plaintext), Production-only, no Preview entry.
 
-**Still open:** the value was not confirmed to be exactly `prod`. `vercel env ls` never
-prints values, and `appEnv()` matches `'prod'` **exactly** — `'production'` or any typo
-reads as `dev`. To read it without leaving prod config in the repo:
+**Closed, same day, by exercising the guard in production** rather than by reading
+the value. A cron called with the real secret returned its actual work, not a skip:
 
-```bash
-npx vercel@latest env pull /tmp/v.env --environment=production --yes \
-  && grep NEXT_PUBLIC_APP_ENV /tmp/v.env; rm -f /tmp/v.env
 ```
+$ curl -s -H "authorization: Bearer $CRON_SECRET" \
+    https://www.stellreducation.org/api/cron/lead-capture-failures
+{"unresolved":0,"alerted":false}
+```
+
+`guardCron()` returns `{ skipped: true, ... }` before reaching any route body unless
+`isProd()` is true, so a response carrying the route's own payload is proof that
+`appEnv()` evaluated to exactly `prod` in the live runtime. (`lead-capture-failures`
+is the safe probe: it sends nothing when the dead-letter queue is empty, so invoking
+it has no side effect. It also incidentally confirms the local `CRON_SECRET` matches
+Production.)
+
+This is stronger evidence than reading the variable, because it tests the value
+*through the code path that depends on it* — a `vercel env pull` would have shown the
+string without proving `appEnv()` parses it as intended.
 
 Why this matters: all 12 routes in `app/api/cron/` call `guardCron()`, all 12 are
 scheduled in `vercel.json`, and `appEnv()` defaults to `dev`. A wrong value means every

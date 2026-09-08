@@ -112,6 +112,25 @@ export function assertProd(what: string) {
 Note the default is `dev`, not `prod`: an unset variable must fail safe toward
 "don't send it", never toward "send it to a real teacher."
 
+> **As shipped** (PR #28, then PR #29 — `lib/env.ts` is the current reference).
+> Three things differ from the sketch above:
+>
+> - **Functions, not constants.** `appEnv()` / `isProd()` are read at call time.
+>   A constant evaluated on import bakes in whatever the environment looked like
+>   when the module was first required, which breaks tests that import a route
+>   before stubbing and any runtime that injects config late.
+> - **Crons return `200`, not `204`.** `guardCron()` replies
+>   `{ skipped: true, reason: 'APP_ENV=dev' }` with a 200, so Vercel does not
+>   record a failing job every single day. The trade-off is that a skipping cron
+>   looks green in the Vercel dashboard, so `NEXT_PUBLIC_APP_ENV=prod` being set
+>   on the production project is not optional — nothing else will tell you.
+> - **There is a second signal.** `vercelTarget()` / `isProductionDeployment()`
+>   read `VERCEL_ENV` and answer a different question: which Vercel deployment
+>   *target* this is. That is the right signal for "are these credentials
+>   supposed to be live?" and the **wrong** one for the cron guard, precisely
+>   because the dev project described in §2 will report `VERCEL_ENV=production`
+>   on its own branch. The header of `lib/env.ts` documents which to reach for.
+
 Then make it load-bearing in three places:
 
 - **Crons.** Vercel runs crons on a project's *production* deployment — and the

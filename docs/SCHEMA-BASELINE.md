@@ -1,8 +1,15 @@
 # The database schema of record
 
 `supabase/baseline.sql` is a `pg_dump --schema-only` of production, taken
-9 Sept 2026. It is the authoritative definition of the `public` schema: 101
-tables, 8 enum types, 18 functions, 98 RLS policies, 145 indexes, 11 triggers.
+9 Sept 2026. It is the authoritative definition of the application schema —
+2 schemas: 112 tables, 15 enum types, 45 functions, 98 RLS policies, 156
+indexes, 13 triggers, 397 grants.
+
+**Two schemas, not one.** `entitlements` is created by migration 088 and used by
+21 later migrations; it holds the ledger behind coaching and mentoring
+allowances. A `--schema=public` dump omits it and then fails on load, because
+public triggers reference `entitlements` functions. The first version of this
+file made exactly that mistake.
 
 ## Why it exists
 
@@ -56,8 +63,17 @@ does that, and it is not recoverable from this repo's history.
 # Do NOT add `-c 'create schema public'` — baseline.sql:26 creates the schema
 # itself, so pre-creating it aborts the load at that line.
 /opt/homebrew/opt/libpq/bin/psql "<session-pooler-URI>" -W --set ON_ERROR_STOP=1 \
+  -c 'drop schema if exists entitlements cascade' \
   -c 'drop schema public cascade' \
   -f supabase/baseline.sql
+
+# Expect ONE error at the very end:
+#     ERROR: permission denied to change default privileges
+# 26 ALTER DEFAULT PRIVILEGES statements at the tail are FOR ROLE
+# supabase_admin, which the pooler user cannot act for. They govern objects
+# created in FUTURE by that role, so the schema is complete without them — the
+# 397 GRANTs that matter run earlier. Verify with the query below rather than
+# trusting the exit code.
 
 # 2. Tell the CLI those migrations are already present, so `db push` applies
 #    only NEW ones rather than trying to replay all 148.
@@ -68,9 +84,20 @@ Verify parity by comparing **columns**, not tables — a table count matches lon
 before the schema does:
 
 ```sql
-select count(distinct table_name) as tables, count(*) as columns
-from information_schema.columns where table_schema = 'public';
+select
+  (select count(distinct table_name) from information_schema.columns where table_schema='public') as pub_tables,
+  (select count(*) from information_schema.columns where table_schema='public') as pub_columns,
+  (select count(*) from information_schema.routines where routine_schema='entitlements') as ent_functions;
 ```
+
+As of 9 Sept 2026 production reports `102 / 988 / 27`.
+
+## Seeding
+
+`npm run seed:dev` applies `supabase/seed.sql` on top. One surprise worth
+knowing: it creates **13** community spaces, not the one in the file. A trigger
+(`tg_ensure_tier_space`) provisions a space per membership tier, so 12 tiers plus
+the fixture. Correct behaviour, but it looks like a bug until you know.
 
 ## Keeping it current
 
@@ -78,7 +105,8 @@ Refresh the baseline whenever a migration lands in production:
 
 ```bash
 /opt/homebrew/opt/libpq/bin/pg_dump "<prod-session-pooler-URI>" -W \
-  --schema=public --schema-only --no-owner -f supabase/baseline.sql
+  --schema=public --schema=entitlements \
+  --schema-only --no-owner -f supabase/baseline.sql
 ```
 
 A stale baseline is worse than none — it will be trusted. Note production still

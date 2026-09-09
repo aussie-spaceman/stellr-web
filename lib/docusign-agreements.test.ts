@@ -31,7 +31,7 @@ import { dispatchAgreement } from './docusign-agreements'
 
 interface Fixture {
   /** Envelope already attached to this exact participant row. */
-  participantEnvelope?: { id: string } | null
+  participantEnvelope?: { id: string; status?: string } | null
   /** Live (sent/delivered) envelope for this person on this event. */
   openEnvelope?: { id: string } | null
   /** Completed, unexpired agreement on the member's record. */
@@ -45,11 +45,12 @@ function makeDb(fixture: Fixture) {
 
   const db = {
     from(table: string) {
-      const filters: { eq: Record<string, unknown>; inCol: string | null } = { eq: {}, inCol: null }
+      const filters: { eq: Record<string, unknown>; inCol: string | null; inVals: unknown[] | null } =
+        { eq: {}, inCol: null, inVals: null }
       const chain = {
         select: () => chain,
         eq: (col: string, val: unknown) => { filters.eq[col] = val; return chain },
-        in: (col: string) => { filters.inCol = col; return chain },
+        in: (col: string, vals: unknown[]) => { filters.inCol = col; filters.inVals = vals; return chain },
         gte: () => chain,
         order: () => chain,
         limit: () => chain,
@@ -67,12 +68,19 @@ function makeDb(fixture: Fixture) {
 
 function resolve(
   table: string,
-  filters: { eq: Record<string, unknown>; inCol: string | null },
+  filters: { eq: Record<string, unknown>; inCol: string | null; inVals: unknown[] | null },
   fixture: Fixture,
 ): unknown {
   if (table === 'members') return fixture.memberByEmail ?? null
   if (table !== 'docusign_envelopes') return null
-  if (filters.eq.participant_id) return fixture.participantEnvelope ?? null
+  if (filters.eq.participant_id) {
+    const row = fixture.participantEnvelope
+    if (!row) return null
+    // Honour the status filter so a dead (voided/declined) envelope does not
+    // count as paperwork on record.
+    if (row.status && filters.inVals && !filters.inVals.includes(row.status)) return null
+    return row
+  }
   if (filters.inCol === 'status') return fixture.openEnvelope ?? null
   if (filters.eq.status === 'completed') return fixture.completedEnvelope ?? null
   return null
@@ -110,6 +118,27 @@ describe('dispatchAgreement — never issues paperwork already in the system', (
     expect(createAdult).not.toHaveBeenCalled()
     expect(inserts).toHaveLength(0)
     expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('RE-ISSUES when the participant\'s only envelope was voided', async () => {
+    // A voided envelope is dead paperwork. This check used to match ANY row for
+    // the participant regardless of status, so once an envelope was voided no
+    // code path could ever issue a replacement — dispatchAgreement just returned
+    // and the participant stayed unpapered. Surfaced 9 Sept 2026 re-issuing the
+    // consent forms that had been executed in the DocuSign sandbox.
+    const { db, inserts } = makeDb({ participantEnvelope: { id: 'env-voided', status: 'voided' } })
+    await dispatchAgreement(db, ADULT)
+
+    expect(createAdult).toHaveBeenCalledTimes(1)
+    expect(inserts).toHaveLength(1)
+  })
+
+  it('still skips when the participant has a live (sent) envelope', async () => {
+    const { db, inserts } = makeDb({ participantEnvelope: { id: 'env-live', status: 'sent' } })
+    await dispatchAgreement(db, ADULT)
+
+    expect(createAdult).not.toHaveBeenCalled()
+    expect(inserts).toHaveLength(0)
   })
 
   it('skips when an unsigned envelope for this person is already out for the event', async () => {

@@ -36,14 +36,12 @@ const ENV = {
   privateKey: (process.env.DOCUSIGN_PRIVATE_KEY ?? '').replace(/\\n/g, '\n'),
 }
 
-// The four templates the app issues. The volunteer one does not exist yet in any
-// account — DOCUSIGN_VOLUNTEER_TEMPLATE_ID is unset, so volunteer agreements
-// throw today. It is listed so the gap is visible during the cutover.
+// The three templates the app issues. There is deliberately no volunteer
+// template: volunteers sign the mentor agreement (Stellr, 9 Sept 2026).
 const TEMPLATE_ENVS = [
   { env: 'DOCUSIGN_TEMPLATE_ID',           label: 'minor' },
   { env: 'DOCUSIGN_ADULT_TEMPLATE_ID',     label: 'adult' },
   { env: 'DOCUSIGN_MENTOR_TEMPLATE_ID',    label: 'mentor' },
-  { env: 'DOCUSIGN_VOLUNTEER_TEMPLATE_ID', label: 'volunteer' },
 ] as const
 
 function base64url(buf: Buffer): string {

@@ -152,6 +152,26 @@ describe('dispatchAgreement — never issues paperwork already in the system', (
     expect(inserts).toHaveLength(0)
   })
 
+  it('alerts admins when the agreement could not be issued at all', async () => {
+    // Registration is deliberately allowed to succeed when DocuSign fails, so
+    // nothing else in the system notices that a participant is unpapered. That
+    // silence is how three months of demonstration consent forms went unremarked,
+    // and the most likely production cause now is the 40-envelope monthly cap.
+    createAdult.mockRejectedValueOnce(new Error('ENVELOPE_LIMIT_EXCEEDED'))
+    const { db, inserts } = makeDb({})
+    await dispatchAgreement(db, ADULT)
+
+    expect(inserts).toHaveLength(0)
+    expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
+    const alert = notifyCommunityAdmins.mock.calls[0][0] as {
+      body: string; email: { subject: string }
+    }
+    expect(alert.body).toContain('Ada Lovelace')
+    expect(alert.body).toContain('ENVELOPE_LIMIT_EXCEEDED')
+    expect(alert.body).toContain('NO paperwork')
+    expect(alert.email.subject).toContain('Ada Lovelace')
+  })
+
   it('reuses unexpired signed paperwork on the member record instead of re-sending', async () => {
     const { db, inserts } = makeDb({
       completedEnvelope: {

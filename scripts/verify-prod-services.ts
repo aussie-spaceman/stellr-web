@@ -161,15 +161,12 @@ async function checkDocuSign() {
   }
 
   // Retrieve each configured template by ID.
-  // The volunteer template has never existed: DOCUSIGN_VOLUNTEER_TEMPLATE_ID is
-  // unset in Vercel and no such template exists in the account, so
-  // createVolunteerAgreementEnvelope() throws for every volunteer. It was
-  // missing from this list too, which is why nothing ever reported it.
+  // No volunteer template: volunteers sign the MENTOR agreement (Stellr,
+  // 9 Sept 2026), so the mentor row covers them.
   const templates = [
     { label: 'minor/guardian consent', id: process.env.DOCUSIGN_TEMPLATE_ID },
     { label: 'adult agreement', id: process.env.DOCUSIGN_ADULT_TEMPLATE_ID },
     { label: 'mentor agreement', id: process.env.DOCUSIGN_MENTOR_TEMPLATE_ID },
-    { label: 'volunteer agreement', id: process.env.DOCUSIGN_VOLUNTEER_TEMPLATE_ID },
   ]
   console.log('\nTemplates:')
   for (const t of templates) {

@@ -11,7 +11,6 @@ const ENV = {
   templateId:       process.env.DOCUSIGN_TEMPLATE_ID         ?? '', // minor / guardian consent
   adultTemplateId:  process.env.DOCUSIGN_ADULT_TEMPLATE_ID   ?? '', // adult participation agreement
   mentorTemplateId: process.env.DOCUSIGN_MENTOR_TEMPLATE_ID  ?? '', // mentor participation agreement
-  volunteerTemplateId: process.env.DOCUSIGN_VOLUNTEER_TEMPLATE_ID ?? '', // volunteer agreement
   stellrRepName:  process.env.DOCUSIGN_STELLR_REP_NAME  ?? 'Stellr Education',
   stellrRepEmail: process.env.DOCUSIGN_STELLR_REP_EMAIL ?? '', // counter-signer on mentor agreements
   connectHmacKey: process.env.DOCUSIGN_CONNECT_HMAC_KEY  ?? '',
@@ -346,26 +345,41 @@ export interface VolunteerAgreementParams {
   eventTitle: string
 }
 
+/**
+ * Volunteers sign the MENTOR agreement.
+ *
+ * Confirmed by Stellr 9 Sept 2026: volunteer is an event role, and for legal
+ * purposes those people execute the mentor participation agreement — there is no
+ * separate volunteer document, and there never has been. This function used to
+ * demand a DOCUSIGN_VOLUNTEER_TEMPLATE_ID that was never set in any environment,
+ * so every volunteer agreement threw.
+ *
+ * The envelope is still recorded with envelope_type 'volunteer', because
+ * lib/volunteer.ts keys its in-flight check and the admin status panel off that
+ * type. Only the DOCUMENT and the DocuSign role are the mentor's — hence the
+ * 'Mentor' roleName and Mentor* tab labels, which must match the template or the
+ * fields silently come through blank.
+ */
 export async function createVolunteerAgreementEnvelope(p: VolunteerAgreementParams): Promise<CreatedEnvelope> {
   assertCanIssueEnvelopes()
-  if (!ENV.volunteerTemplateId) throw new Error('DOCUSIGN_VOLUNTEER_TEMPLATE_ID not configured')
+  if (!ENV.mentorTemplateId) throw new Error('DOCUSIGN_MENTOR_TEMPLATE_ID not configured')
   const fullName = `${p.firstName} ${p.lastName}`
   const signerCount = ENV.stellrRepEmail ? 2 : 1
 
-  // Volunteer + Stellr representative counter-sign concurrently, mirroring the
-  // mentor agreement. The 'StellrRepresentative' role must exist on the template;
-  // it is only added when DOCUSIGN_STELLR_REP_EMAIL is configured.
+  // Volunteer + Stellr representative counter-sign concurrently. The
+  // 'StellrRepresentative' role must exist on the template; it is only added when
+  // DOCUSIGN_STELLR_REP_EMAIL is configured.
   const templateRoles: object[] = [{
-    roleName:     'Volunteer',
+    roleName:     'Mentor',
     name:         fullName,
     email:        p.email,
     routingOrder: '1',
     tabs: {
       textTabs: [
-        { tabLabel: 'VolunteerName',  value: fullName      },
-        { tabLabel: 'VolunteerEmail', value: p.email       },
-        { tabLabel: 'VolunteerPhone', value: p.phone ?? '' },
-        { tabLabel: 'EventTitle',     value: p.eventTitle  },
+        { tabLabel: 'MentorName',  value: fullName      },
+        { tabLabel: 'MentorEmail', value: p.email       },
+        { tabLabel: 'MentorPhone', value: p.phone ?? '' },
+        { tabLabel: 'EventTitle',  value: p.eventTitle  },
       ],
     },
   }]
@@ -380,8 +394,8 @@ export async function createVolunteerAgreementEnvelope(p: VolunteerAgreementPara
 
   const body = {
     status:       'sent',
-    emailSubject: `Volunteer Agreement — ${p.eventTitle}`,
-    templateId:   ENV.volunteerTemplateId,
+    emailSubject: `Mentor Participation Agreement — ${p.eventTitle}`,
+    templateId:   ENV.mentorTemplateId,
     templateRoles,
   }
 

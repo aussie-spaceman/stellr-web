@@ -14,7 +14,7 @@ the code is worse than none, because it is believed.
 
 | | Production | Dev |
 |---|---|---|
-| Vercel project | `stellr-web` (`prj_wMlZwzDocSUrQ5sFZMngrNBeoUvx`) | `stellr-web-dev` — **not yet created**, see §4 |
+| Vercel project | `stellr-web` (`prj_wMlZwzDocSUrQ5sFZMngrNBeoUvx`) | `stellr-web-dev` (`prj_Nd2kmpMj3bBuXbSjc6teUdwh9gPO`) |
 | Tracked branch | `main` | `dev` |
 | Domains | www / app / apex `.stellreducation.org` | TBD — `dev.` / `app-dev.` |
 | Supabase | `hwtzpfrnksksxlwwabqz` "Stellr Registrations" | `xvxlhbxtiwxpopoqjygm` "stellr-web-dev" |
@@ -77,12 +77,13 @@ dev safety comes from the code declining to call them, not from a sandbox.
 
 Ordered by what blocks what.
 
-1. **Create the `stellr-web-dev` Vercel project.** The API will not do it — a
-   repo may have only one project created through `create_git_project`, and it
-   silently reuses the existing one. Dashboard → Add New → Project → import
-   `aussie-spaceman/stellr-web` → name it `stellr-web-dev`, then Settings → Git
-   → **Production Branch: `dev`**. Without that last step it tracks `main` and
-   becomes a second production.
+1. ~~**Create the `stellr-web-dev` Vercel project.**~~ **Done 9 Sept** —
+   `prj_Nd2kmpMj3bBuXbSjc6teUdwh9gPO`, linked to `aussie-spaceman/stellr-web`.
+   Two traps for anyone repeating this: the API will not create it (a repo gets
+   one project through `create_git_project`, and it silently reuses the existing
+   one), and **Production Branch does not appear as a setting until a Git
+   repository is connected** — it is a property of the Git link, not of the
+   project, so a bare project has nowhere to set it.
 2. **Seed the dev database.** 148 migrations, never replayed from zero, so this
    is also the first test of whether they are coherent:
    ```

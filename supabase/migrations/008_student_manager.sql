@@ -1,3 +1,11 @@
+-- Supabase installs uuid-ossp into the `extensions` schema, which is on the
+-- search_path for the SQL editor and PostgREST (see supabase/config.toml
+-- extra_search_path) but NOT for a `supabase db push` session. These migrations
+-- were only ever applied through the editor, so the unqualified
+-- uuid_generate_v4() call below resolved there and fails on a replay.
+-- Inert for any database where this migration is already applied.
+set search_path = public, extensions;
+
 -- Migration 006: School Student Manager role + group registration enhancements
 
 -- ── registrations: new columns ─────────────────────────────────────────────

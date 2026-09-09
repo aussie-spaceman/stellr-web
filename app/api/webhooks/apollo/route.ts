@@ -91,17 +91,26 @@ async function handleEvent(
   if (!engagement) {
     console.warn('[apollo-webhook] Unrecognised event, ignoring:', JSON.stringify(payload))
     return {
-      ok: true,
-      ignored:
-        'could not tell a click from a reply — point the Apollo workflow at ' +
-        '?event=clicked or ?event=replied',
+      httpStatus: 400,
+      ok: false,
+      error: 'Could not tell a click from a reply',
+      fix:
+        'Point each Apollo workflow at its own URL: ?event=clicked on the ' +
+        '"Email clicked" workflow and ?event=replied on the "Email replied" one.',
     }
   }
 
   const email = findEmail(payload)
   if (!email) {
     console.error('[apollo-webhook] No email in payload:', JSON.stringify(payload))
-    return { ok: true, ignored: 'no email in payload' }
+    return {
+      httpStatus: 422,
+      ok: false,
+      error: 'No email address in the payload',
+      fix:
+        'The Send webhook Body must include the contact\'s email, e.g. ' +
+        '{"email":"{{contact.email}}"} — inserted with the { } picker.',
+    }
   }
 
   // Unlike the Motion webhook, this one *does* create the contact when absent.
@@ -220,7 +229,27 @@ export async function POST(req: Request) {
   try {
     payload = JSON.parse(raw)
   } catch {
-    return NextResponse.json({ error: 'Malformed body' }, { status: 400 })
+    // Apollo's "Send webhook" action ships with an EMPTY Body field, and an
+    // empty body lands here as an unparseable request. That misconfiguration
+    // silently dropped every event for five days, because all Apollo surfaces
+    // is "error code 400". Say exactly what is wrong and exactly how to fix it,
+    // and log what actually arrived.
+    console.error(
+      '[apollo-webhook] Unparseable body (%d bytes): %s',
+      raw.length,
+      raw.slice(0, 200) || '<empty>',
+    )
+    return NextResponse.json(
+      {
+        error: raw.trim() ? 'Body is not valid JSON' : 'Request body was empty',
+        fix:
+          'In the Apollo workflow, open the Send webhook action and set the Body to ' +
+          'JSON containing the contact, e.g. {"email":"{{contact.email}}",' +
+          '"first_name":"{{contact.first_name}}","last_name":"{{contact.last_name}}"} — ' +
+          'use the { } picker to insert the variables rather than typing them.',
+      },
+      { status: 400 },
+    )
   }
 
   // Apollo may send one event or a batch; treat both the same.
@@ -230,5 +259,12 @@ export async function POST(req: Request) {
   const results = []
   for (const event of events) results.push(await handleEvent(event, declared))
 
-  return NextResponse.json(results.length === 1 ? results[0] : { ok: true, results })
+  // A misconfigured workflow must fail visibly in Apollo's own "Test
+  // connection", not return 200 and quietly do nothing.
+  const problem = results.find((r) => typeof r.httpStatus === 'number')
+  const status = (problem?.httpStatus as number | undefined) ?? 200
+
+  return NextResponse.json(results.length === 1 ? results[0] : { ok: !problem, results }, {
+    status,
+  })
 }

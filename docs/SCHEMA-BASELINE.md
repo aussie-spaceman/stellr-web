@@ -53,9 +53,10 @@ does that, and it is not recoverable from this repo's history.
 #
 # Load into an EMPTY schema; a partial load is the failure mode this guards
 # against.
+# Do NOT add `-c 'create schema public'` — baseline.sql:26 creates the schema
+# itself, so pre-creating it aborts the load at that line.
 /opt/homebrew/opt/libpq/bin/psql "<session-pooler-URI>" -W --set ON_ERROR_STOP=1 \
   -c 'drop schema public cascade' \
-  -c 'create schema public' \
   -f supabase/baseline.sql
 
 # 2. Tell the CLI those migrations are already present, so `db push` applies

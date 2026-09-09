@@ -67,7 +67,7 @@ dev safety comes from the code declining to call them, not from a sandbox.
 | Variable | Dev handling |
 |---|---|
 | `HUBSPOT_ACCESS_TOKEN`, `HUBSPOT_FORM_*`, `HUBSPOT_PORTAL_ID` | **Omit entirely.** No sandbox portal exists on this plan (`POST-DEPLOY-landing-pages-2026-09-02.md`). Absent token → the route dead-letters to `lead_capture_failures` instead of writing. A `HUBSPOT_DRY_RUN=1` switch that logs the intended write would be better than relying on absence — not built yet |
-| `RESEND_API_KEY` | Only one verified domain exists, so dev would send **real mail from the real domain**. Omit until a recipient safelist exists in `lib/email.ts`. This is the largest outstanding gap in Phase 2 |
+| `RESEND_API_KEY` | **Safe to set as of 9 Sept.** `lib/email.ts` now redirects every recipient to `DEV_EMAIL_SAFELIST` (default `hello@stellreducation.org`) outside production, dropping cc and recording the intended addresses in the subject. Set `DEV_EMAIL_SAFELIST` alongside it; blank it to suppress non-production mail entirely |
 | `GOOGLE_SERVICE_ACCOUNT_*`, `MOTION_CALENDAR_ID` | Omit. Reads a real calendar |
 | `APOLLO_WEBHOOK_SECRET`, `MOTION_WEBHOOK_SECRET` | Omit. Inbound webhooks should only ever reach production |
 | `PRINTFUL_*` | Omit. Real orders |
@@ -96,5 +96,6 @@ Ordered by what blocks what.
    the REC asks for, which production still lacks.
 3. **Populate dev variables** per §2–4.
 4. **Point `dev.` / `app-dev.` DNS** at the dev project.
-5. **Build the Resend recipient safelist** before any dev deployment gets
-   `RESEND_API_KEY`.
+5. ~~**Build the Resend recipient safelist**~~ **Done 9 Sept** — see §4.
+   `lib/email.ts` is the only path to Resend (the waitlist script imports
+   `sendEmail` rather than calling the API), so one guard covers every send.

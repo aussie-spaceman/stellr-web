@@ -42,11 +42,33 @@ does that, and it is not recoverable from this repo's history.
 
 ```bash
 # 1. Schema. Requires psql 18+ — pg_dump 18 emits a \restrict directive.
-/opt/homebrew/opt/libpq/bin/psql "<session-pooler-URI>" -W -f supabase/baseline.sql
+#
+# --set ON_ERROR_STOP=1 is NOT optional. Without it psql prints errors and
+# carries on, so a target that already holds some of these tables ends up
+# silently half-migrated: the pre-existing tables keep their old shape and
+# every CREATE TABLE for them is skipped. That happened on 9 Sept — the dev
+# database looked right (matching table count, functions and policies) while
+# participants and registrations were 31 columns short, and it surfaced only
+# when a trigger fired on a column that was not there.
+#
+# Load into an EMPTY schema; a partial load is the failure mode this guards
+# against.
+/opt/homebrew/opt/libpq/bin/psql "<session-pooler-URI>" -W --set ON_ERROR_STOP=1 \
+  -c 'drop schema public cascade' \
+  -c 'create schema public' \
+  -f supabase/baseline.sql
 
 # 2. Tell the CLI those migrations are already present, so `db push` applies
 #    only NEW ones rather than trying to replay all 148.
 npx supabase migration repair --status applied <version> …
+```
+
+Verify parity by comparing **columns**, not tables — a table count matches long
+before the schema does:
+
+```sql
+select count(distinct table_name) as tables, count(*) as columns
+from information_schema.columns where table_schema = 'public';
 ```
 
 ## Keeping it current

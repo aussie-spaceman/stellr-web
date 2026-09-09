@@ -30,8 +30,14 @@ import { createClient } from '@supabase/supabase-js'
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
 
-import { voidEnvelope } from '../lib/docusign'
-import { dispatchAgreement } from '../lib/docusign-agreements'
+// lib/docusign and lib/docusign-agreements are imported DYNAMICALLY, below,
+// after dotenv has run. ESM hoists every static import above module-body
+// statements, so a static import here would evaluate lib/docusign — which reads
+// process.env into a module-level ENV at load time — BEFORE dotenv.config().
+// The result was an empty private key and "No key provided to sign" on every
+// DocuSign call, which this script then mis-reported as "expected for completed
+// envelopes". The DB rows were marked voided while the real envelopes stayed
+// live. (Same trap bit the waitlist script; see the ESM/dotenv note in docs.)
 
 const APPLY = process.argv.includes('--apply')
 const MODE = process.argv[2]
@@ -103,13 +109,26 @@ async function doVoid(client: ReturnType<typeof db>): Promise<void> {
     console.log(`${APPLY ? '•' : 'DRY RUN'} ${tag}  ${env.envelope_id}`)
     if (!APPLY) continue
 
+    const { voidEnvelope } = await import('../lib/docusign')
+    let voidedInDocuSign = true
     try {
       await voidEnvelope(env.envelope_id, VOID_REASON)
     } catch (err) {
-      // A completed envelope cannot be voided in DocuSign. The DB row still must
-      // be voided, or findValidAgreement() will suppress the re-issue.
-      console.log(`   ↳ DocuSign void refused (expected for completed envelopes): ${err instanceof Error ? err.message : err}`)
+      voidedInDocuSign = false
+      const msg = err instanceof Error ? err.message : String(err)
+      // A COMPLETED envelope genuinely cannot be voided — that is expected, and
+      // the DB row must still be voided so findValidAgreement() cannot suppress
+      // the re-issue. Anything else is a real failure and must not be dressed up
+      // as success: saying "voided" while the envelope is still out is worse than
+      // failing loudly, because the recipients can still sign a dead document.
+      const expected = /completed|cannot be voided|ENVELOPE_CANNOT_VOID/i.test(msg)
+      console.log(`   ↳ DocuSign void ${expected ? 'refused (expected — envelope already completed)' : 'FAILED'}: ${msg}`)
+      if (!expected) {
+        console.log('   ↳ Leaving the DB row untouched so this stays visible. Fix the cause and re-run.')
+        continue
+      }
     }
+    if (voidedInDocuSign) console.log('   ↳ voided in DocuSign')
     const { error } = await client.from('docusign_envelopes')
       .update({ status: 'voided', updated_at: new Date().toISOString() })
       .eq('id', env.id)
@@ -162,6 +181,7 @@ async function doReissue(client: ReturnType<typeof db>): Promise<void> {
     const { data: member } = await client
       .from('members').select('id').eq('email', p.email).maybeSingle()
 
+    const { dispatchAgreement } = await import('../lib/docusign-agreements')
     await dispatchAgreement(client, {
       participantId:     p.id as string,
       memberId:          (member?.id as string | undefined) ?? null,

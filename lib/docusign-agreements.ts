@@ -24,7 +24,11 @@ export const AGREEMENT_LABEL: Record<AgreementType, string> = {
   minor:     'Parental Consent Form',
   adult:     'Participation Agreement',
   mentor:    'Mentor Participation Agreement',
-  volunteer: 'Volunteer Agreement',
+  // Volunteers execute the mentor document (Stellr, 9 Sept 2026), so the label
+  // names what they actually receive — an email promising a "Volunteer
+  // Agreement" beside a document headed "Mentor Participation Agreement" reads
+  // as a mistake.
+  volunteer: 'Mentor Participation Agreement',
 }
 
 // Signed paperwork is valid for this long, across all Stellr events.
@@ -75,13 +79,21 @@ export async function dispatchAgreement(
     // manual add and a re-run of any of them could each stack a duplicate
     // envelope on the same person. Every caller now gets all three.
 
-    // 1. This participant already has an envelope — re-running the caller (a
-    //    sheet re-sync, a replayed Drive webhook) must never re-send.
+    // 1. This participant already has LIVE OR SIGNED paperwork — re-running the
+    //    caller (a sheet re-sync, a replayed Drive webhook) must never re-send.
+    //
+    //    The status filter matters: this check used to match ANY row, including
+    //    voided and declined ones. A voided envelope is dead paperwork that MUST
+    //    be re-issuable, so the omission made re-issue impossible through every
+    //    code path — dispatchAgreement simply returned, silently, and the
+    //    participant stayed unpapered. Found 9 Sept 2026 while re-issuing the
+    //    consent forms that had been executed in the DocuSign sandbox.
     if (ctx.participantId) {
       const { data: existing } = await db
         .from('docusign_envelopes')
         .select('id')
         .eq('participant_id', ctx.participantId)
+        .in('status', BLOCKING_ENVELOPE_STATUSES)
         .limit(1)
         .maybeSingle()
       if (existing) return
@@ -190,19 +202,33 @@ export async function dispatchAgreement(
     // unpapered and nothing else in the system will notice, which is precisely
     // how three months of demo consent forms went unremarked. A production
     // deployment on sandbox credentials is an outage, so say so loudly.
-    if (err instanceof SandboxCredentialsError) {
-      await notifyCommunityAdmins({
-        type: 'action',
-        body: `No agreement could be issued for ${ctx.firstName} ${ctx.lastName} (${ctx.eventTitle}): production is pointed at the DocuSign sandbox. Registration succeeded but the participant has NO paperwork. Complete the DocuSign production cutover (docs/GO-LIVE-CHECKLIST.md §4a), then re-issue.`,
-        referenceType: 'participant',
-        referenceId: ctx.participantId ?? undefined,
-        email: {
-          subject: `URGENT: DocuSign is on sandbox — no agreement issued for ${ctx.firstName} ${ctx.lastName}`,
-          html: `<p><strong>${ctx.firstName} ${ctx.lastName}</strong> (${ctx.email}) registered for <strong>${ctx.eventTitle}</strong>, but no ${AGREEMENT_LABEL[type] ?? 'agreement'} could be issued: this production deployment is configured against the DocuSign <strong>sandbox</strong>, whose envelopes are stamped "Demonstration document only" and are not binding.</p><p>The registration went through. The participant currently has <strong>no paperwork on file</strong>.</p><p>Complete the DocuSign production cutover (docs/GO-LIVE-CHECKLIST.md §4a), then re-issue.</p>`,
-          text: `${ctx.firstName} ${ctx.lastName} (${ctx.email}) registered for ${ctx.eventTitle}, but no ${AGREEMENT_LABEL[type] ?? 'agreement'} could be issued: this production deployment is on the DocuSign SANDBOX. The registration went through; the participant has no paperwork on file. Complete the production cutover (docs/GO-LIVE-CHECKLIST.md §4a), then re-issue.`,
-        },
-      }).catch(() => {})
-    }
+    // ANY failure here leaves a registered participant with no paperwork, and
+    // nothing else in the system notices — that silence is how three months of
+    // demonstration consent forms went unremarked. The most likely cause in
+    // production is now the envelope quota (the plan allows 40 per month, and a
+    // single 30-student group registration nearly exhausts it), which DocuSign
+    // rejects per-envelope: registration succeeds, the log gets a line, and the
+    // participant is unpapered. So alert on everything, not just the sandbox guard.
+    const label = AGREEMENT_LABEL[type] ?? 'agreement'
+    const who = `${ctx.firstName} ${ctx.lastName}`
+    const sandbox = err instanceof SandboxCredentialsError
+    const reason = sandbox
+      ? 'this production deployment is configured against the DocuSign SANDBOX, whose envelopes are stamped "Demonstration document only" and are not binding'
+      : `DocuSign rejected the request: ${err instanceof Error ? err.message : String(err)}`
+    const fix = sandbox
+      ? 'Complete the DocuSign production cutover (docs/GO-LIVE-CHECKLIST.md §4a), then re-issue.'
+      : 'Check the DocuSign account status and envelope allowance, then re-issue.'
+    await notifyCommunityAdmins({
+      type: 'action',
+      body: `No ${label} could be issued for ${who} (${ctx.eventTitle}) — ${reason}. Registration succeeded but the participant has NO paperwork on file. ${fix}`,
+      referenceType: 'participant',
+      referenceId: ctx.participantId ?? undefined,
+      email: {
+        subject: `Action needed: no ${label} issued for ${who}`,
+        html: `<p><strong>${who}</strong> (${ctx.email}) registered for <strong>${ctx.eventTitle}</strong>, but no ${label} could be issued — ${reason}.</p><p>The registration went through. The participant currently has <strong>no paperwork on file</strong>.</p><p>${fix}</p>`,
+        text: `${who} (${ctx.email}) registered for ${ctx.eventTitle}, but no ${label} could be issued — ${reason}. The registration went through; the participant has no paperwork on file. ${fix}`,
+      },
+    }).catch(() => {})
   }
 }
 
@@ -211,6 +237,11 @@ export async function dispatchAgreement(
 // be re-issued; a completed one is caught by findValidAgreement — which carries
 // coverage across all events, not just this one — so neither is listed here.
 const OPEN_ENVELOPE_STATUSES = ['created', 'sent', 'delivered']
+
+// Envelope states that still count as paperwork on a participant's record, and
+// so must block a duplicate issue: in flight, or signed. Voided and declined are
+// deliberately absent — both mean the paperwork is dead and has to be re-issued.
+const BLOCKING_ENVELOPE_STATUSES = [...OPEN_ENVELOPE_STATUSES, 'completed']
 
 // Is an agreement of this type already out for this person and this event? The
 // participant-id check can't see it when the person was re-added under a new

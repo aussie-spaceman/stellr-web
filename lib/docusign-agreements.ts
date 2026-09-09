@@ -75,13 +75,21 @@ export async function dispatchAgreement(
     // manual add and a re-run of any of them could each stack a duplicate
     // envelope on the same person. Every caller now gets all three.
 
-    // 1. This participant already has an envelope — re-running the caller (a
-    //    sheet re-sync, a replayed Drive webhook) must never re-send.
+    // 1. This participant already has LIVE OR SIGNED paperwork — re-running the
+    //    caller (a sheet re-sync, a replayed Drive webhook) must never re-send.
+    //
+    //    The status filter matters: this check used to match ANY row, including
+    //    voided and declined ones. A voided envelope is dead paperwork that MUST
+    //    be re-issuable, so the omission made re-issue impossible through every
+    //    code path — dispatchAgreement simply returned, silently, and the
+    //    participant stayed unpapered. Found 9 Sept 2026 while re-issuing the
+    //    consent forms that had been executed in the DocuSign sandbox.
     if (ctx.participantId) {
       const { data: existing } = await db
         .from('docusign_envelopes')
         .select('id')
         .eq('participant_id', ctx.participantId)
+        .in('status', BLOCKING_ENVELOPE_STATUSES)
         .limit(1)
         .maybeSingle()
       if (existing) return
@@ -211,6 +219,11 @@ export async function dispatchAgreement(
 // be re-issued; a completed one is caught by findValidAgreement — which carries
 // coverage across all events, not just this one — so neither is listed here.
 const OPEN_ENVELOPE_STATUSES = ['created', 'sent', 'delivered']
+
+// Envelope states that still count as paperwork on a participant's record, and
+// so must block a duplicate issue: in flight, or signed. Voided and declined are
+// deliberately absent — both mean the paperwork is dead and has to be re-issued.
+const BLOCKING_ENVELOPE_STATUSES = [...OPEN_ENVELOPE_STATUSES, 'completed']
 
 // Is an agreement of this type already out for this person and this event? The
 // participant-id check can't see it when the person was re-added under a new

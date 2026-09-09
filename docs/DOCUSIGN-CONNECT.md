@@ -34,12 +34,19 @@ The pill arithmetic ([`lib/event-admin.ts`](../lib/event-admin.ts), and the port
 
 ## Required configuration
 
-- **Endpoint URL:** `https://app.stellreducation.org/api/webhooks/docusign`
+- **Endpoint URL:** `https://www.stellreducation.org/api/webhooks/docusign`
+  (both subdomains serve the same deployment; `www` is what the live configs use)
 - **Format:** JSON / REST (**"Aggregate"**) — the handler parses `payload.event` and `payload.data.envelopeId` from JSON. The legacy XML/SOAP format will **not** parse.
 - **HMAC:** enable HMAC signing on the config; the key must equal Vercel's `DOCUSIGN_CONNECT_HMAC_KEY`.
 - **Trigger events:**
   - Envelope: **Completed**, **Declined**, **Voided** (and Sent/Delivered if you want those statuses).
   - Recipient: **Recipient Signed/Completed** ← sends `recipient-completed`. **This one is required for the 🟠 "partially complete" pill.** Without it the count never moves off `0` until the whole envelope completes, so a 2-signer minor consent jumps 🔴 → 🟢 and never shows 🟠.
+  - Recipient: **Delivered** ← `recipient-delivered`. Distinguishes "has never opened the signing link" from "opened it and hasn't signed". Drives the "never opened" wording in the roster and the chase emails.
+  - Recipient: **AutoResponded** ← `recipient-autoresponded`. This is DocuSign reporting a **bounced address**. Without it a dead guardian email is indistinguishable from a slow one and gets chased forever; with it the roster shows 🔴 Email Bounced and admins are alerted once.
+
+> Live configurations (9 Sept 2026): production `21769859`, sandbox `22193922`.
+> Both point at the `www` endpoint. Delete the sandbox one once remediation is finished —
+> until then it is a demo account posting into the production webhook.
 
 No recipient data needs to be included in the payload — the handler re-fetches recipients from the API, so the minimal envelope payload is enough.
 

@@ -1,4 +1,5 @@
 import { emailLayout } from '@/lib/email-layout'
+import { appEnv, isProd } from '@/lib/env'
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 
@@ -32,6 +33,53 @@ interface EmailAttachment {
   contentType?: string
 }
 
+// ── Recipient safety outside production ───────────────────────────────────────
+//
+// Resend's Free plan allows exactly ONE verified domain, so a non-production
+// deployment cannot send from a separate sandbox domain — it would send real
+// mail, from the real address, to whoever is in the database. Dev data is
+// seeded from real people often enough that this is a matter of when, not if.
+//
+// So the safety comes from the code rather than from the credentials: outside
+// production every recipient is replaced by a single safelist address, and the
+// intended recipients are moved into the subject so nothing is lost.
+const DEV_MAIL_SAFELIST = (process.env.DEV_EMAIL_SAFELIST ?? 'hello@stellreducation.org').trim()
+
+export interface RoutedRecipients {
+  /** Where the mail actually goes. `null` means: do not send at all. */
+  to: string | null
+  cc: string[]
+  /** Prepended to the subject outside production; empty in production. */
+  subjectPrefix: string
+}
+
+/**
+ * Decide who actually receives a message.
+ *
+ * In production this is the identity function. Everywhere else the mail is
+ * redirected to DEV_MAIL_SAFELIST, cc is dropped (a cc'd address is a real
+ * person too), and the original recipients are recorded in the subject.
+ *
+ * If the safelist is explicitly blanked, nothing is sent. Suppressing a
+ * developer's test mail is a nuisance; sending a stale reminder to a teacher
+ * from a half-configured environment is not, so the ambiguous case fails
+ * toward silence.
+ */
+export function routeRecipients(to: string, cc: string[] = []): RoutedRecipients {
+  if (isProd()) return { to, cc, subjectPrefix: '' }
+
+  if (!DEV_MAIL_SAFELIST) {
+    return { to: null, cc: [], subjectPrefix: '' }
+  }
+
+  const intended = [to, ...cc].filter(Boolean).join(', ')
+  return {
+    to: DEV_MAIL_SAFELIST,
+    cc: [],
+    subjectPrefix: `[${appEnv()} \u2192 ${intended}] `,
+  }
+}
+
 interface SendEmailOptions {
   to: string
   /** Override the default transactional sender (e.g. MARKETING_FROM for campaigns). */
@@ -50,6 +98,16 @@ export async function sendEmail({ to, from, cc, replyTo, subject, html, text, at
     return
   }
 
+  const routed = routeRecipients(to, cc ?? [])
+  if (!routed.to) {
+    console.warn(
+      `[email] Suppressed (APP_ENV=${appEnv()}, DEV_EMAIL_SAFELIST is blank) — would have sent to:`,
+      to,
+      subject,
+    )
+    return
+  }
+
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -58,10 +116,10 @@ export async function sendEmail({ to, from, cc, replyTo, subject, html, text, at
     },
     body: JSON.stringify({
       from: from ?? FROM,
-      to: [to],
-      cc: cc ?? [],
+      to: [routed.to],
+      cc: routed.cc,
       reply_to: replyTo ?? DEFAULT_REPLY_TO,
-      subject,
+      subject: routed.subjectPrefix + subject,
       html,
       text,
       ...(attachments && attachments.length
@@ -78,7 +136,7 @@ export async function sendEmail({ to, from, cc, replyTo, subject, html, text, at
 
   if (!res.ok) {
     const err = await res.text()
-    console.error('[email] Resend error sending to', to, '—', err)
+    console.error('[email] Resend error sending to', routed.to, '—', err)
     throw new Error(`Failed to send email: ${err}`)
   }
 }

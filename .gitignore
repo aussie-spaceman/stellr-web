@@ -12,3 +12,8 @@ storybook-static/
 # DocuSign template exports (scripts/docusign-templates.ts) — bulky base64 PDFs,
 # regenerate on demand; not a source artefact.
 /scripts/docusign-templates/
+
+# Supabase CLI scratch state — rewritten by every `supabase link`, and
+# per-machine. Tracking it made every session that linked a project produce a
+# spurious diff, and two sessions linking different projects conflict.
+supabase/.temp/

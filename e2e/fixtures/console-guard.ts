@@ -45,9 +45,24 @@ const THIRD_PARTY_ORIGINS = [
   'vercel.live', // Vercel comments/feedback widget
 ]
 
+/**
+ * Same-origin paths that only exist on Vercel's edge.
+ *
+ * `@vercel/analytics` injects a script from /_vercel/insights/, which Vercel's
+ * infrastructure serves — not the Next server. Running the production build
+ * anywhere else (CI, or `next start` locally) it 404s, always, and says nothing
+ * about the app.
+ *
+ * A path exemption rather than ignoring 404s in general: a blanket 404 filter
+ * would hide a genuinely missing image or script, which is exactly the kind of
+ * regression this guard is for.
+ */
+const VERCEL_EDGE_PATHS = ['/_vercel/insights/', '/_vercel/speed-insights/']
+
 function isThirdParty(url: string | undefined): boolean {
   if (!url) return false
-  return THIRD_PARTY_ORIGINS.some((origin) => url.includes(origin))
+  if (THIRD_PARTY_ORIGINS.some((origin) => url.includes(origin))) return true
+  return VERCEL_EDGE_PATHS.some((path) => url.includes(path))
 }
 
 export function attachConsoleGuard(page: Page): string[] {

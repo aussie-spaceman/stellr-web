@@ -22,8 +22,14 @@ mechanism; this skill is the sequence.
    working tree via the CLI — precisely what `check-deploy-ready.mjs` existed to
    prevent, bypassed because it was optional.
 3. **Trust CI, not a local run.** Local gates are advisory; `verify` decides.
-4. **Squash into `dev`.** Feature branches squash; `promote` merges. The reason
-   is in that skill.
+4. **Squash into `dev`, then abandon the branch.** Feature branches squash;
+   `promote` merges (the reason is in that skill). The corollary matters as much
+   as the rule: **never keep committing to a branch after it has been
+   squash-merged.** The squash puts a *different* commit on `dev`, so git sees
+   the squashed copy and your original commits as unrelated additions of the
+   same files, and the next merge is a wall of `add/add` conflicts. Branch fresh
+   from `dev` for the next piece of work — Phase 5 removes the old worktree so
+   this is the path of least resistance.
 5. **A green suite is not evidence until it identifies its target.** The E2E
    suite twice reported "21 passed" against a Vercel page that was not the app —
    a login wall, then a "Deployment is building" placeholder. Both have an `<h1>`
@@ -137,11 +143,20 @@ If GitHub reports `BEHIND` (protection is strict), update rather than rebase:
 gh pr update-branch <n>
 ```
 
-Then tidy up:
+Then tidy up. This is not housekeeping — it is what stops the branch being
+reused after its squash:
 
 ```bash
 git worktree remove ../stellr-web-<name>   # --force if node_modules remain
+git branch -d <type>/<slug>
 ```
+
+**More work on the same subject starts a NEW branch from `dev`.** Reusing the
+merged one produces `add/add` conflicts on every file it touched, because the
+squash on `dev` shares no ancestry with the commits still on your branch. If you
+are already in that state, merge `dev` in (never rebase), keep your side for the
+files you own, and regenerate `package-lock.json` with
+`npm install --package-lock-only` rather than resolving it by hand.
 
 `git worktree remove` refuses on ignored files, and `git branch -d` compares
 against the branch's **upstream**, not `main` — both have wasted time here. If

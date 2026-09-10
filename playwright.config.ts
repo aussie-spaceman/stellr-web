@@ -43,17 +43,11 @@ export default defineConfig({
 
   use: {
     baseURL,
-    // Vercel Deployment Protection guards the dev project. Without this header
-    // every request is redirected to a Vercel login page — and a suite that
-    // asserts against a login page reports green while testing nothing, which
-    // is exactly what happened on 10 Sept. e2e/global-setup.ts now fails the
-    // run rather than letting that recur.
-    extraHTTPHeaders: process.env.VERCEL_AUTOMATION_BYPASS_SECRET
-      ? {
-          'x-vercel-protection-bypass': process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
-          'x-vercel-set-bypass-cookie': 'true',
-        }
-      : {},
+    // Vercel's bypass headers are NOT set here. use.extraHTTPHeaders applies to
+    // every origin, and fonts.gstatic.com and clerk.accounts.dev reject the
+    // unexpected header in CORS preflight — so fonts and the Clerk SDK fail to
+    // load and every page logs console errors that look like an app regression.
+    // e2e/fixtures/test.ts scopes them to the host under test instead.
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

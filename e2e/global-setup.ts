@@ -87,4 +87,47 @@ async function assertServingTheApp(url: URL) {
   if (response.status >= 400) {
     throw new Error(`\n${url.host} returned ${response.status} for /. Nothing to test against.\n`)
   }
+
+  // Positive identification, not absence of known-bad pages.
+  //
+  // Twice now this suite has reported a confident green while pointed at
+  // something that was not the app: first a Vercel login page, then Vercel's
+  // "Deployment is building" placeholder shown because the deployment sat
+  // QUEUED and never built. Both have an <h1> and neither logs app console
+  // errors, so every visual assertion passed.
+  //
+  // Enumerating those two would just wait for a third. So the target must
+  // positively identify as this app before any spec runs.
+  let body: string
+  try {
+    body = await (await fetch(url.toString(), { headers, redirect: 'follow' })).text()
+  } catch (error) {
+    const cause = (error as { cause?: Error }).cause?.message ?? (error as Error).message
+    if (/redirect count exceeded/i.test(cause)) {
+      throw new Error(
+        `\n${url.host} is stuck in a redirect loop.\n\n` +
+          'Usually one of two things:\n' +
+          '  · the deployment never built, so the alias points at nothing;\n' +
+          '  · NEXT_PUBLIC_SITE_URL and NEXT_PUBLIC_AUTH_APP_URL disagree with\n' +
+          '    the host actually serving the request, so proxy.ts redirects a\n' +
+          '    public route to itself.\n',
+      )
+    }
+    throw new Error(`\nCould not read ${url.host}: ${cause}\n`)
+  }
+
+  if (/Deployment is building|DEPLOYMENT_NOT_FOUND|Deployment has failed/i.test(body)) {
+    throw new Error(
+      `\n${url.host} is serving a Vercel placeholder, not the app — the deployment\n` +
+        'is still building, missing, or failed. Wait for it to be READY, then re-run.\n',
+    )
+  }
+
+  if (!/Stellr/i.test(body)) {
+    throw new Error(
+      `\n${url.host} does not look like this app: its home page never mentions\n` +
+        '"Stellr". Refusing to run — a suite that cannot tell the app from a\n' +
+        'placeholder reports confidence it has not earned.\n',
+    )
+  }
 }

@@ -23,3 +23,6 @@ supabase/.temp/
 /playwright-report/
 /blob-report/
 /e2e/.auth/
+
+# clerk configuration (can include secrets)
+/.clerk/

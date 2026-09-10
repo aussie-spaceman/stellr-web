@@ -28,6 +28,28 @@ const BENIGN = [
   /\[Fast Refresh\]/,
 ]
 
+/**
+ * Origins that are not this app and whose failures say nothing about it.
+ *
+ * Filtering by ORIGIN rather than by message text matters. Vercel's preview
+ * toolbar loads fonts from instant-preview-site.vercel.app, which fails CORS on
+ * every preview page and produces two console errors per font: a descriptive
+ * CORS line, and a bare "Failed to load resource: net::ERR_FAILED". Allowing
+ * that second message by text would hide every genuine failed request in the
+ * app — exactly the regressions this guard exists to catch. The console
+ * message's location carries the resource URL, so the origin can be checked
+ * instead.
+ */
+const THIRD_PARTY_ORIGINS = [
+  'instant-preview-site.vercel.app', // Vercel preview toolbar assets
+  'vercel.live', // Vercel comments/feedback widget
+]
+
+function isThirdParty(url: string | undefined): boolean {
+  if (!url) return false
+  return THIRD_PARTY_ORIGINS.some((origin) => url.includes(origin))
+}
+
 export function attachConsoleGuard(page: Page): string[] {
   const errors: string[] = []
 
@@ -35,6 +57,9 @@ export function attachConsoleGuard(page: Page): string[] {
     if (message.type() !== 'error') return
     const text = message.text()
     if (BENIGN.some((pattern) => pattern.test(text))) return
+    // The CORS message names the blocked URL in its text; the paired
+    // ERR_FAILED names it only in the message location.
+    if (isThirdParty(text) || isThirdParty(message.location()?.url)) return
     errors.push(text)
   })
 

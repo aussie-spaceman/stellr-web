@@ -69,8 +69,7 @@ export function ResponsivePhoto({
         alt={photo.alt}
         loading={priority ? 'eager' : 'lazy'}
         decoding="async"
-        // @ts-expect-error fetchpriority is a valid HTML attr not yet in React's types
-        fetchpriority={priority ? 'high' : undefined}
+        fetchPriority={priority ? 'high' : undefined}
         className={`h-full w-full object-cover ${imgClassName}`}
       />
       {photo.credit && !showCredit && <span className="sr-only">Credit: {photo.credit}</span>}

@@ -3,6 +3,8 @@ import { formatDateShort } from '@/lib/utils'
 import Link from 'next/link'
 import { supabaseServer } from '@/lib/supabase'
 import { getRegistrationPrefill } from '@/lib/registration-prefill'
+import { getEventBySlug } from '@/lib/sanity'
+import { gradeBand } from '@/lib/grade-band'
 import GroupJoinClient from './GroupJoinClient'
 
 interface PageProps {
@@ -139,6 +141,12 @@ export default async function GroupJoinPage({ params }: PageProps) {
   const organiserName = `${reg.teacher_first_name} ${reg.teacher_last_name}`
   const organiserRole = reg.registrant_role === 'student_manager' ? 'Student Manager' : 'Teacher'
 
+  // Grade options follow the event's eligible range. The event document is the
+  // only place that range lives, and it is not on the token row — a Sanity
+  // outage must not take the join form down with it, so fall back to the
+  // default band rather than failing the page.
+  const band = gradeBand((await getEventBySlug(slug).catch(() => null)) ?? {})
+
   return (
     <div className="min-h-screen bg-surface">
       <div className="bg-brand-blue-dark text-white py-10 px-4">
@@ -178,6 +186,8 @@ export default async function GroupJoinPage({ params }: PageProps) {
             memberPaysIndividually={reg.member_pays_individually}
             isAuthenticated={!!userId}
             prefill={userId ? await getRegistrationPrefill().catch(() => null) : null}
+            gradeMin={band.min}
+            gradeMax={band.max}
           />
         )}
       </div>

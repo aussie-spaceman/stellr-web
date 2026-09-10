@@ -18,6 +18,7 @@ import {
   campaignEligibilityCopy,
 } from '@/lib/campaign-content'
 import { CardPills } from '@/components/ui/CardPills'
+import { gradeBand } from '@/lib/grade-band'
 import { EventFlyers } from '@/components/sections/EventFlyers'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.stellreducation.org'
@@ -68,7 +69,7 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
           </Link>
 
           <div className="mt-6 flex flex-wrap items-center gap-2">
-            <CardPills kind="campaign" gradeLevel={campaign.gradeLevel} theme={theme} size="md" />
+            <CardPills kind="campaign" gradeLevel={gradeBand(campaign).label} theme={theme} size="md" />
             <span
               className={`rounded-full px-3 py-1.5 text-sm font-semibold ${
                 isOpen
@@ -178,7 +179,7 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
             <p className="mt-4 text-sm text-content-secondary">
               <span className="font-heading font-bold text-ink">Eligibility</span>
               <br />
-              {campaignEligibilityCopy(campaign.gradeLevel)}
+              {campaignEligibilityCopy(campaign)}
             </p>
 
             <div className="mt-5">

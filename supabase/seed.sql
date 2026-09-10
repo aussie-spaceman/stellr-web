@@ -198,6 +198,50 @@ on conflict (id) do update set
   description = excluded.description,
   is_archived = excluded.is_archived;
 
+-- ── A partially-signed DocuSign envelope ─────────────────────────────────────
+--
+-- The guardian has signed; the STUDENT has not. That specific arrangement is the
+-- fixture's whole point: until 9 Sept the app asserted the guardian was the
+-- holdout without checking, so a family in this exact state was told the
+-- opposite of the truth (REC-docusign-remediation-2026-09-04). Anything that
+-- reports who is outstanding must get this row right.
+--
+-- envelope_id is a fixture string, not a real DocuSign envelope — nothing here
+-- calls DocuSign, and it must never resolve against the sandbox.
+
+insert into public.docusign_envelopes (
+  id, event_slug, event_title, envelope_id, status,
+  signer_name, signer_email, minor_name, envelope_type,
+  signers_total, signers_completed, sent_at, member_id
+) values (
+  '00000000-0000-4000-9000-000000000001',
+  'seed-regional-challenge', 'Seed Regional Challenge (fixture)',
+  'fixture-envelope-partially-signed', 'delivered',
+  'Grace Teacher', 'grace.teacher+clerk_test@example.com', 'Ada Student', 'minor',
+  2, 1, now() - interval '9 days', '00000000-0000-4000-a000-000000000001'
+)
+on conflict (id) do update set
+  status = excluded.status,
+  signers_total = excluded.signers_total,
+  signers_completed = excluded.signers_completed,
+  sent_at = excluded.sent_at;
+
+insert into public.docusign_envelope_recipients (
+  id, envelope_row, recipient_id, role_name, name, email, status, routing_order, signed_at
+) values
+  ('00000000-0000-4000-9100-000000000001', '00000000-0000-4000-9000-000000000001',
+   '1', 'Guardian', 'Grace Teacher', 'grace.teacher+clerk_test@example.com',
+   'completed', 1, now() - interval '8 days'),
+
+  -- The outstanding one. A report naming Grace here is the regression.
+  ('00000000-0000-4000-9100-000000000002', '00000000-0000-4000-9000-000000000001',
+   '2', 'Minor', 'Ada Student', 'ada.student+clerk_test@example.com',
+   'delivered', 2, null)
+on conflict (id) do update set
+  status = excluded.status,
+  signed_at = excluded.signed_at,
+  role_name = excluded.role_name;
+
 commit;
 
 -- ── After seeding: link Clerk users ──────────────────────────────────────────

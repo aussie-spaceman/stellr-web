@@ -95,7 +95,18 @@ export default defineConfig({
         // free port per worktree via scripts/dev.mjs.
         command: process.env.CI ? 'npm start' : 'npm run dev',
         port: PORT,
-        reuseExistingServer: !process.env.CI,
+        // Reuse ONLY a port this worktree has claimed.
+        //
+        // scripts/dev.mjs writes PORT into the worktree's .env.local, so its
+        // presence means "this worktree owns that port". Without it the default
+        // is 3000 — where a SIBLING worktree's dev server may already be
+        // running, and blanket reuse silently attaches the suite to another
+        // branch's code. That happened on 10 Sept and produced a failure whose
+        // cause was invisible; it could equally produce a pass.
+        //
+        // With no claimed port Playwright starts its own, and a conflict then
+        // fails loudly instead of resolving into the wrong app.
+        reuseExistingServer: !process.env.CI && Boolean(process.env.PORT),
         timeout: 180_000,
       },
 })

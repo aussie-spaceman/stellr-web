@@ -10,10 +10,18 @@
 --    instead of creating a member through the UI first. That difference is most
 --    of the runtime of an E2E suite.
 --
--- 2. NO REAL PEOPLE. Every address is on `example.test`, a reserved TLD that
---    cannot receive mail (RFC 2606). The safelist in lib/email.ts is the real
---    guard; this is the belt to its braces, so that even a misconfigured
---    environment has nowhere to send.
+-- 2. NO REAL PEOPLE. Every address is on `example.com` — reserved by IANA under
+--    RFC 2606 and carrying no MX record, so it cannot receive mail. The safelist
+--    in lib/email.ts is the real guard; this is the belt to its braces.
+--
+--    `example.test` would be the more literally correct reserved TLD and was the
+--    first choice, but Clerk validates address FORMAT against real TLDs and
+--    rejects it outright — before any verification setting applies.
+--
+--    The three fixtures with Clerk accounts carry the `+clerk_test` subaddress.
+--    On a development instance Clerk treats those as test users: no mail is
+--    sent and a fixed verification code is accepted, which is what lets a
+--    Playwright fixture sign in without an inbox.
 --
 -- Idempotent: re-running updates fixtures in place rather than duplicating, so
 -- it is safe to run after every migration.
@@ -74,25 +82,25 @@ insert into public.members (
   age_bracket, event_role, grade, tshirt_size, is_active, marketing_consent
 ) values
   ('00000000-0000-4000-a000-000000000001', 'Ada',  'Student',
-   (current_date - interval '16 years')::date, 'female', 'ada.student@example.test',
+   (current_date - interval '16 years')::date, 'female', 'ada.student+clerk_test@example.com',
    'high_school', 'participant', 'grade_11', 'M', true, true),
 
   ('00000000-0000-4000-a000-000000000002', 'Grace', 'Teacher',
-   (current_date - interval '41 years')::date, 'female', 'grace.teacher@example.test',
+   (current_date - interval '41 years')::date, 'female', 'grace.teacher+clerk_test@example.com',
    'adult', 'teacher', null, 'L', true, true),
 
   ('00000000-0000-4000-a000-000000000003', 'Alan', 'Admin',
-   (current_date - interval '38 years')::date, 'male', 'alan.admin@example.test',
+   (current_date - interval '38 years')::date, 'male', 'alan.admin+clerk_test@example.com',
    'adult', 'adult', null, 'L', true, false),
 
   ('00000000-0000-4000-a000-000000000004', 'Mae',  'Mentor',
-   (current_date - interval '29 years')::date, 'prefer_not_to_say', 'mae.mentor@example.test',
+   (current_date - interval '29 years')::date, 'prefer_not_to_say', 'mae.mentor@example.com',
    'college', 'mentor', null, 'S', true, true),
 
   -- Inactive on purpose: access gates that only ever see active members are not
   -- actually being tested.
   ('00000000-0000-4000-a000-000000000005', 'Ida', 'Lapsed',
-   (current_date - interval '17 years')::date, 'female', 'ida.lapsed@example.test',
+   (current_date - interval '17 years')::date, 'female', 'ida.lapsed@example.com',
    'high_school', 'participant', 'grade_12', 'M', false, false)
 on conflict (id) do update set
   first_name = excluded.first_name,
@@ -152,7 +160,7 @@ insert into public.registrations (
 ) values
   ('00000000-0000-4000-d000-000000000001', 'seed-regional-challenge',
    'Seed Regional Challenge (fixture)', 'group', 'confirmed',
-   'Grace', 'Teacher', 'grace.teacher@example.test', 'Fixture High School',
+   'Grace', 'Teacher', 'grace.teacher+clerk_test@example.com', 'Fixture High School',
    'Denver', 'CO'),
 
   ('00000000-0000-4000-d000-000000000002', 'seed-regional-challenge',
@@ -167,12 +175,12 @@ insert into public.participants (
   gender, t_shirt_size, school_name, age_bracket, event_role, grade
 ) values
   ('00000000-0000-4000-e000-000000000001', '00000000-0000-4000-d000-000000000001',
-   'Ada', 'Student', 'ada.student@example.test', '+15550100',
+   'Ada', 'Student', 'ada.student+clerk_test@example.com', '+15550100',
    (current_date - interval '16 years')::date, 'female', 'M',
    'Fixture High School', 'high_school', 'participant', 'grade_11'),
 
   ('00000000-0000-4000-e000-000000000002', '00000000-0000-4000-d000-000000000001',
-   'Ravi', 'Teammate', 'ravi.teammate@example.test', '+15550101',
+   'Ravi', 'Teammate', 'ravi.teammate@example.com', '+15550101',
    (current_date - interval '17 years')::date, 'male', 'L',
    'Fixture High School', 'high_school', 'participant', 'grade_12')
 on conflict (id) do update set

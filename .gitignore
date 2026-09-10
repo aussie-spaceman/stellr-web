@@ -26,6 +26,3 @@ supabase/.temp/
 
 # clerk configuration (can include secrets)
 /.clerk/
-
-# Per-promotion progress docs — local state, like .claude/plans/
-.claude/releases/

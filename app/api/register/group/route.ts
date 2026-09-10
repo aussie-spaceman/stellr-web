@@ -26,6 +26,7 @@ import { getCurrentMember } from '@/lib/community'
 import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
 import type { RegistrationRow } from '@/lib/database.types'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { assertLiveCredentials } from '@/lib/env-guards'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -894,6 +895,12 @@ export async function POST(req: NextRequest) {
       // point, so we surface the failure and let the confirmation/billing flow
       // recover rather than orphaning silently.
       try {
+        // Refuse to take money on a production deployment holding TEST keys. A test-mode
+        // charge looks successful and settles nothing — the Stripe equivalent of the
+        // DocuSign sandbox envelopes that were not binding signatures. Reads are
+        // deliberately not gated: a wrong price is visible, a phantom payment is not.
+        assertLiveCredentials('stripe')
+
         const session = await stripe.checkout.sessions.create({
           mode: 'payment',
           line_items: [{ price: stripePriceId, quantity: total_participants }],

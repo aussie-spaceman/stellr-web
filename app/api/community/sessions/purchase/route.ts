@@ -6,6 +6,7 @@ import { getAcademyDiscountPercent, academyLineItemFromPrice } from '@/lib/acade
 import { getTierExtraPriceId } from '@/lib/entitlements'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { assertLiveCredentials } from '@/lib/env-guards'
 
 // POST /api/community/sessions/purchase  Body: { sessionType: 'coaching' | 'mentoring' }
 // Starts a Stripe Checkout for one additional session (FR-COM-11/12). The price
@@ -60,6 +61,12 @@ export async function POST(req: Request) {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
   const academyPct = await getAcademyDiscountPercent(member.activeTierIds)
   const lineItem = await academyLineItemFromPrice(stripe, priceId, academyPct, `Extra ${sessionType} session`)
+  // Refuse to take money on a production deployment holding TEST keys. A test-mode
+  // charge looks successful and settles nothing — the Stripe equivalent of the
+  // DocuSign sandbox envelopes that were not binding signatures. Reads are
+  // deliberately not gated: a wrong price is visible, a phantom payment is not.
+  assertLiveCredentials('stripe')
+
   const session = await stripe.checkout.sessions.create({
     customer: customerId ?? undefined,
     mode: 'payment',

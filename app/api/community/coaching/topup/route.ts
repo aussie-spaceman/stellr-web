@@ -5,6 +5,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getAcademyDiscountPercent, discountCents } from '@/lib/academy-discount'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { assertLiveCredentials } from '@/lib/env-guards'
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -48,6 +49,12 @@ export async function POST(req: Request) {
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
   const back = workshopId ? `/community/coaching/${workshopId}/access` : '/community/coaching'
+  // Refuse to take money on a production deployment holding TEST keys. A test-mode
+  // charge looks successful and settles nothing — the Stripe equivalent of the
+  // DocuSign sandbox envelopes that were not binding signatures. Reads are
+  // deliberately not gated: a wrong price is visible, a phantom payment is not.
+  assertLiveCredentials('stripe')
+
   const checkout = await stripe.checkout.sessions.create({
     mode: 'payment',
     line_items: [

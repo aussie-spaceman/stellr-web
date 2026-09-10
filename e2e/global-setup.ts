@@ -1,5 +1,7 @@
+import { clerkSetup } from '@clerk/testing/playwright'
+
 /**
- * Two checks before any spec runs.
+ * Two checks before any spec runs, plus Clerk's testing setup.
  *
  * 1. Refuse production.
  * 2. Refuse a target that is not actually serving this app.
@@ -25,6 +27,10 @@ const FORBIDDEN_HOSTS = [
 ]
 
 export default async function globalSetup() {
+  // Exchanges the secret key for a testing token, so auth.setup.ts can sign in
+  // without meeting Clerk's bot-detection and new-device challenges.
+  if (process.env.CLERK_SECRET_KEY) await clerkSetup()
+
   const raw = process.env.E2E_BASE_URL
   if (!raw) return // localhost, started by the config's webServer
 

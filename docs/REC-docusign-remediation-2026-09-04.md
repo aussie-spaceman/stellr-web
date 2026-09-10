@@ -8,9 +8,11 @@ outstanding, and the reminder cron is both misleading and single-shot.
 Everything below is evidence-backed against the live DocuSign account and the prod DB on
 4 Sept 2026.
 
-> **Status:** the code for §1, §3 and the guardrails in §2 Phase D has shipped on
-> `feat/docusign-remediation-2026-09-04` — see **§6 What shipped** at the end.
-> §2 Phases A–C are console work that still has to be done by a human, in order.
+> **⚠️ SUPERSEDED — this is a historical record, not a live plan.**
+> All of it shipped and the cutover completed on 9 Sept 2026 (PRs #27, #35, #37).
+> For current configuration, remaining open items and the traps worth knowing, read
+> **[HANDOVER-docusign-2026-09-09.md](handovers/HANDOVER-docusign-2026-09-09.md)** instead.
+> Kept because the analysis of *why* each defect existed is still the best account of it.
 
 ---
 

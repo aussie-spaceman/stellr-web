@@ -26,9 +26,22 @@ const isPublicOnlyRoute = createRouteMatcher([
 
 const WWW = SITE_URL
 
+// Production splits the site across two hostnames — www for the public site,
+// app for the member portal — and everything below keys off which one served
+// the request.
+//
+// A dev or preview deployment has only ONE hostname, so both variables point at
+// it. Without this check that single host matches APP_HOST, every request is
+// treated as the member app, and the public-only redirect below sends /about to
+// WWW/about — the same URL — which loops until the browser gives up. Observed on
+// the dev deployment on 10 Sept.
+//
+// Production is unaffected: its two hosts differ, so this is false there.
+const IS_SINGLE_HOST = APP_HOST === new URL(WWW).host
+
 export default clerkMiddleware(async (auth, req) => {
   const host = req.headers.get('host') ?? ''
-  const isAppSubdomain = host === APP_HOST
+  const isAppSubdomain = !IS_SINGLE_HOST && host === APP_HOST
   const url = new URL(req.url)
 
   // Resolve auth once and reuse across all branches

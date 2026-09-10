@@ -17,6 +17,10 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 
+// Read .env.local — see the note in scripts/db-status.mjs. Same trap: the
+// guidance said to set DEV_DATABASE_URL there, and nothing read the file.
+if (existsSync('.env.local')) process.loadEnvFile('.env.local')
+
 /** The dev Supabase project. Only this ref may be seeded. */
 const DEV_PROJECT_REF = 'xvxlhbxtiwxpopoqjygm'
 

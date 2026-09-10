@@ -95,6 +95,8 @@ async function main() {
     console.log(`dev: claimed port ${port} for ${basename(here)} (written to .env.local)`)
   }
 
+  pinLocalOrigins(here, port)
+
   const others = claimedPorts(here)
   if (others.size) {
     const list = [...others].map(([p, name]) => `${name}:${p}`).join(', ')
@@ -110,3 +112,40 @@ async function main() {
 }
 
 main()
+
+/**
+ * Point NEXT_PUBLIC_SITE_URL and NEXT_PUBLIC_AUTH_APP_URL at this worktree.
+ *
+ * WHY (10 Sept 2026): lib/env.ts defaults both to the PRODUCTION origins, which
+ * is right for a deployment and wrong for a laptop. With them unset, proxy.ts
+ * did exactly what it is supposed to do and redirected every public route off
+ * localhost to www.stellreducation.org — so `npm run dev` and, worse, the whole
+ * Playwright smoke suite were exercising PRODUCTION. Smoke only asserts a
+ * non-error status and one <h1>; production satisfies both, so it reported a
+ * confident green while never once loading local code.
+ *
+ * Both are set to the same origin on purpose: that is the single-host branch in
+ * proxy.ts (IS_SINGLE_HOST), which serves www and app routes together instead
+ * of redirecting between two hosts that do not exist locally.
+ *
+ * Only ever ADDS them. A worktree that has deliberately set either — pointing
+ * at a preview deployment, say — is left alone.
+ */
+function pinLocalOrigins(here, port) {
+  const envFile = join(here, '.env.local')
+  const current = readFileSync(envFile, 'utf8')
+  const origin = `http://localhost:${port}`
+
+  const missing = ['NEXT_PUBLIC_SITE_URL', 'NEXT_PUBLIC_AUTH_APP_URL'].filter(
+    (name) => !new RegExp(`^${name}=`, 'm').test(current),
+  )
+  if (!missing.length) return
+
+  appendFileSync(
+    envFile,
+    `\n# Added by scripts/dev.mjs. Without these, lib/env.ts falls back to the\n` +
+      `# production origins and proxy.ts redirects local routes to the live site.\n` +
+      missing.map((name) => `${name}=${origin}\n`).join(''),
+  )
+  console.log(`dev: pinned ${missing.join(' and ')} to ${origin}`)
+}

@@ -4,6 +4,7 @@ import { notifyMember } from '@/lib/notify'
 import { logActivity } from '@/lib/activity-log'
 import { stripeClient } from './stripe'
 import { resolvePolicy, applicableTier, computeRefundOptions, daysOut } from './policy'
+import { assertLiveCredentials } from '@/lib/env-guards'
 
 export type RefundChoice = 'cash' | 'credit'
 
@@ -116,6 +117,12 @@ export async function executeRefund(
       return { type: 'manual_required', refundCents: option.cents, detail: 'No Stripe payment reference — refund manually in Stripe' }
     }
     try {
+      // Refuse to take money on a production deployment holding TEST keys. A test-mode
+      // charge looks successful and settles nothing — the Stripe equivalent of the
+      // DocuSign sandbox envelopes that were not binding signatures. Reads are
+      // deliberately not gated: a wrong price is visible, a phantom payment is not.
+      assertLiveCredentials('stripe')
+
       const refund = await stripe.refunds.create({ payment_intent: paymentIntent, amount: option.cents })
       const result: RefundResult = { type: 'cash', refundCents: option.cents, stripeRefundId: refund.id, detail: `Refunded ${(option.cents / 100).toFixed(2)} ${currency.toUpperCase()}` }
       await audit(db, p, eventSlug, result, actorMemberId, paidCents, null, d, option.pct)

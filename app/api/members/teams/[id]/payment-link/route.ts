@@ -4,6 +4,7 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { assertLiveCredentials } from '@/lib/env-guards'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -67,6 +68,12 @@ export async function POST(
   const event = await getEventBySlug(registration.event_slug)
   const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId
   if (!stripePriceId) return NextResponse.json({ error: 'No price configured for this event' }, { status: 400 })
+
+  // Refuse to take money on a production deployment holding TEST keys. A test-mode
+  // charge looks successful and settles nothing — the Stripe equivalent of the
+  // DocuSign sandbox envelopes that were not binding signatures. Reads are
+  // deliberately not gated: a wrong price is visible, a phantom payment is not.
+  assertLiveCredentials('stripe')
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',

@@ -1,4 +1,5 @@
 import { clerkClient } from '@clerk/nextjs/server'
+import { assertLiveCredentials } from '@/lib/env-guards'
 
 export interface ProvisionedClerkUser {
   clerkUserId: string
@@ -34,6 +35,11 @@ export async function ensureClerkUserAndSignInToken(
   let created = false
 
   if (!user) {
+    // Refuse to create a user on a production deployment holding TEST keys, which
+    // would put a real member's account in the development instance where nobody
+    // would look for it.
+    assertLiveCredentials('clerk')
+
     user = await client.users.createUser({
       emailAddress: [email],
       firstName,

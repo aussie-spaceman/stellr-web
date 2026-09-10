@@ -39,6 +39,12 @@ export interface Prospect {
 
 export interface ReconcileResult {
   considered: number
+  /** Engaged prospects Apollo returned, before any windowing. */
+  total: number
+  /** True when `total` exceeded the limit, so this run saw only part of them. */
+  truncated: boolean
+  /** Index this run's window started at. Rotates so coverage completes. */
+  windowOffset: number
   created: number
   advanced: number
   skipped: number
@@ -174,13 +180,43 @@ export async function fetchEngagedProspects(apiKey: string): Promise<Prospect[]>
 
 export async function reconcileProspects(
   prospects: Prospect[],
-  opts: { apply: boolean; limit?: number; paceMs?: number; onLog?: (line: string) => void },
+  opts: {
+    apply: boolean
+    limit?: number
+    /**
+     * Where this run's window starts. Only meaningful when there are more
+     * prospects than `limit`; callers should advance it between runs so every
+     * prospect is eventually reached.
+     */
+    offset?: number
+    paceMs?: number
+    onLog?: (line: string) => void
+  },
 ): Promise<ReconcileResult> {
   const log = opts.onLog ?? (() => {})
   const pace = opts.paceMs ?? 300
-  const all = opts.limit ? prospects.slice(0, opts.limit) : prospects
+  // A ROTATING window, not the first N.
+  //
+  // This used to be `prospects.slice(0, limit)`, which took the same first 200
+  // every run: past 200 engaged contacts, anyone beyond that index was never
+  // reconciled and nothing said so. The limit itself is worth keeping — each
+  // prospect costs several HubSpot round-trips, so an unbounded run would both
+  // exhaust the rate limit and outlive the function — but the window has to move.
+  //
+  // Wrapping at the end means coverage completes in ceil(total / limit) runs.
+  const total = prospects.length
+  const limit = opts.limit && opts.limit > 0 ? opts.limit : total
+  const truncated = total > limit
+  const offset = truncated ? ((opts.offset ?? 0) % total + total) % total : 0
+  const all = truncated
+    ? [...prospects.slice(offset), ...prospects.slice(0, offset)].slice(0, limit)
+    : prospects
+
   const r: ReconcileResult = {
     considered: all.length,
+    total,
+    truncated,
+    windowOffset: offset,
     created: 0,
     advanced: 0,
     skipped: 0,

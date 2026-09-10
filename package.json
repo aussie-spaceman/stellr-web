@@ -6,11 +6,14 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/dev.mjs",
     "build:tokens": "node design/build-tokens.mjs",
     "lint:tokens": "node scripts/ds-lint.mjs",
+    "lint:migrations": "node scripts/check-migration-names.mjs",
+    "migration:new": "supabase migration new",
+    "db:status": "node scripts/db-status.mjs",
     "check:deploy-ready": "node scripts/check-deploy-ready.mjs",
-    "prebuild": "node design/build-tokens.mjs && node scripts/ds-lint.mjs && tsx scripts/check-watermarks.ts",
+    "prebuild": "node design/build-tokens.mjs && node scripts/ds-lint.mjs && node scripts/check-migration-names.mjs && tsx scripts/check-watermarks.ts",
     "build": "next build",
     "start": "next start",
     "watermark:pdfs": "tsx scripts/watermark-pdfs.ts",

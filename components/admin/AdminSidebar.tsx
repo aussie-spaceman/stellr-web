@@ -51,7 +51,6 @@ const SECTIONS: Section[] = [
     label: 'Operations', href: '/admin/activity-log', color: '#6A708C', icon: SlidersHorizontal,
     items: [
       { href: '/admin/activity-log', label: 'Activity log' },
-      { href: '/admin/delegations', label: 'Delegations' },
       { href: '/admin/staff', label: 'Staff roles' },
       { href: '/admin/docusigns', label: 'Consent forms' },
       { href: '/admin/compliance', label: 'Background checks' },

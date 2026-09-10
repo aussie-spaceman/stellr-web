@@ -60,6 +60,33 @@ export function normaliseEngagement(value: string | null | undefined): Engagemen
   return undefined
 }
 
+/**
+ * Does this payload still contain unsubstituted template placeholders?
+ *
+ * Apollo's "Test connection" posts the Body **verbatim**, without resolving any
+ * dynamic variable — verified in production: it sent
+ * `{"email":"{{contact.email}}"}` literally. So a Body that references the
+ * contact can never produce a passing test, and treating that as a hard error
+ * leaves an operator chasing a green tick that does not exist.
+ *
+ * Matches Apollo's `{{...}}` tokens and the guillemet placeholders used in
+ * setup instructions.
+ */
+export function hasUnresolvedTemplateTokens(payload: unknown): boolean {
+  const seen = new Set<unknown>()
+  const stack: unknown[] = [payload]
+  while (stack.length) {
+    const node = stack.pop()
+    if (!node || typeof node !== 'object' || seen.has(node)) continue
+    seen.add(node)
+    for (const value of Object.values(node as Record<string, unknown>)) {
+      if (typeof value === 'string' && /\{\{[^}]*\}\}|«[^»]*»/.test(value)) return true
+      if (value && typeof value === 'object') stack.push(value)
+    }
+  }
+  return false
+}
+
 const EVENT_KEYS = [
   'event',
   'event_type',

@@ -86,7 +86,11 @@ export default defineConfig({
   webServer: process.env.E2E_BASE_URL
     ? undefined
     : {
-        command: 'npm run dev',
+        // CI builds first and serves the production output: that is what
+        // deploys, and a dev-server-only suite would miss anything differing
+        // between them. Locally `npm run dev` keeps the fast loop and claims a
+        // free port per worktree via scripts/dev.mjs.
+        command: process.env.CI ? 'npm start' : 'npm run dev',
         port: PORT,
         reuseExistingServer: !process.env.CI,
         timeout: 180_000,

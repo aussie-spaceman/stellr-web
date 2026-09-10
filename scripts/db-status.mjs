@@ -16,6 +16,16 @@
 import { execFileSync } from 'node:child_process'
 import { readdirSync, existsSync } from 'node:fs'
 
+// Read .env.local, the way every other entry point in this repo does.
+//
+// WHY: this script's own failure message says to put the URI "into .env.local"
+// — and it did not read that file, so following the instruction changed
+// nothing and the script failed again, identically. `npm run db:status` had
+// therefore never once run successfully; only its refusal path had ever been
+// exercised. An error message that prescribes a fix which does not work is
+// worse than one that just states the problem.
+if (existsSync('.env.local')) process.loadEnvFile('.env.local')
+
 const DEV_REF = 'xvxlhbxtiwxpopoqjygm'
 const PROD_REF = 'hwtzpfrnksksxlwwabqz'
 

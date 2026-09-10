@@ -80,6 +80,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@clerk/testing": "^2.2.34",
     "@playwright/test": "^1.63.0",
     "@storybook/nextjs": "^10.4.6",
     "@testing-library/jest-dom": "^6.9.1",

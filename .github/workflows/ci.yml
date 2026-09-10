@@ -62,3 +62,106 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    needs: verify
+    timeout-minutes: 20
+
+    env:
+      # Non-secret configuration. The dev Supabase project, never production —
+      # e2e/global-setup.ts also refuses production hosts by name, but the URL
+      # is pinned here so a mis-set secret cannot silently redirect the suite.
+      NEXT_PUBLIC_APP_ENV: dev
+      NEXT_PUBLIC_SUPABASE_URL: https://xvxlhbxtiwxpopoqjygm.supabase.co
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      NEXT_PUBLIC_AUTH_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
+      NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: /account
+      NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: /account/onboarding
+
+      # Secrets. Configure at Settings → Secrets and variables → Actions.
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.DEV_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DEV_SUPABASE_SERVICE_ROLE_KEY }}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.DEV_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.DEV_CLERK_SECRET_KEY }}
+      E2E_MEMBER_PASSWORD: ${{ secrets.E2E_MEMBER_PASSWORD }}
+      E2E_TEACHER_PASSWORD: ${{ secrets.E2E_TEACHER_PASSWORD }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+
+      # Until the secrets exist this job cannot do anything meaningful. It says
+      # so and stops, rather than failing every PR — but it does NOT report a
+      # misleading pass: the summary states plainly that nothing ran.
+      - name: Check configuration
+        id: config
+        run: |
+          missing=""
+          for name in NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY \
+                      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY CLERK_SECRET_KEY \
+                      E2E_MEMBER_PASSWORD E2E_TEACHER_PASSWORD E2E_ADMIN_PASSWORD; do
+            [ -z "${!name}" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### E2E did not run"
+              echo ""
+              echo "Missing repository secrets:"
+              for m in $missing; do echo "- \`$m\`"; done
+              echo ""
+              echo "Add them at **Settings → Secrets and variables → Actions**."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.config.outputs.ready == 'true'
+        run: npm ci
+
+      # Cached by version: a browser download is ~90MB and does not change
+      # between runs of the same Playwright release.
+      - if: steps.config.outputs.ready == 'true'
+        id: pw-version
+        run: echo "v=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - if: steps.config.outputs.ready == 'true'
+        uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.v }}
+
+      - if: steps.config.outputs.ready == 'true' && steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      # Deps only when the browser was cached — the system libraries are not.
+      - if: steps.config.outputs.ready == 'true' && steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # Built and served here rather than tested against a Vercel preview.
+      # Preview builds queue behind one another on this plan, and a suite that
+      # waits on someone else's queue is a suite that gets skipped.
+      - if: steps.config.outputs.ready == 'true'
+        run: npm run build
+
+      - if: steps.config.outputs.ready == 'true'
+        run: npx playwright test
+        env:
+          CI: 'true'
+
+      - if: always() && steps.config.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

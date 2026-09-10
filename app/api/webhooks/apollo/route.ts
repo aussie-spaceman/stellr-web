@@ -4,6 +4,7 @@ import {
   classify,
   findEmail,
   findString,
+  hasUnresolvedTemplateTokens,
   normaliseEngagement,
 } from '@/lib/apollo-events'
 import { createNote, getContactByEmail, upsertContact } from '@/lib/hubspot'
@@ -102,6 +103,27 @@ async function handleEvent(
 
   const email = findEmail(payload)
   if (!email) {
+    // Apollo's Test connection posts the Body verbatim, without resolving any
+    // dynamic variable, so a body that references the contact ALWAYS arrives
+    // here as literal `{{contact.email}}`. Acknowledge it as a configuration
+    // test rather than failing a check that can never pass — the daily
+    // reconciliation is what guarantees a real event is never lost, so this
+    // leniency costs nothing.
+    if (hasUnresolvedTemplateTokens(payload)) {
+      console.warn(
+        '[apollo-webhook] Template variables unresolved — treating as a connection test:',
+        JSON.stringify(payload),
+      )
+      return {
+        ok: true,
+        test: true,
+        note:
+          'Connection OK. Apollo sent the Body without resolving its variables, ' +
+          'which is what "Test connection" always does — a real click or reply ' +
+          'will carry actual values.',
+      }
+    }
+
     console.error('[apollo-webhook] No email in payload:', JSON.stringify(payload))
     return {
       httpStatus: 422,

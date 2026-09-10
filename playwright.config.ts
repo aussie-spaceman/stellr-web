@@ -52,8 +52,11 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     // Generous: the first request to a cold Vercel preview pays a lambda start.
-    actionTimeout: 15_000,
-    navigationTimeout: 30_000,
+    // CI runners are cold: no warm DNS, no cached third-party scripts, and a
+    // freshly started server. Doubling these there costs nothing on a passing
+    // run — a timeout only elapses when something is already wrong.
+    actionTimeout: process.env.CI ? 30_000 : 15_000,
+    navigationTimeout: process.env.CI ? 60_000 : 30_000,
   },
 
   projects: [

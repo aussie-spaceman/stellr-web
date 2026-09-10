@@ -4,6 +4,7 @@ import { ArrowRight, Rocket } from 'lucide-react'
 import { urlFor, wmSrc, type StellarEvent } from '@/lib/sanity'
 import { formatDate, formatDateRange, registrationStatus } from '@/lib/utils'
 import { CardPills } from '@/components/ui/CardPills'
+import { gradeBand } from '@/lib/grade-band'
 
 interface EventCardProps {
   event: StellarEvent
@@ -38,7 +39,7 @@ export function EventCard({ event }: EventCardProps) {
       <div className="p-5 flex flex-col flex-1">
         {/* Standardised three-pill row (Event · Grade · Theme) + status */}
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <CardPills kind="event" gradeLevel={event.gradeLevel} type={event.type} />
+          <CardPills kind="event" gradeLevel={gradeBand(event).label} type={event.type} />
           <span className={`text-xs font-semibold px-2 py-1 rounded-full ${className}`}>
             {label}
           </span>

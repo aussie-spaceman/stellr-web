@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { getEventBySlug } from '@/lib/sanity'
+import { gradeBand } from '@/lib/grade-band'
 import { formatDateRange } from '@/lib/utils'
 import { getRegistrationPrefill } from '@/lib/registration-prefill'
 import { getEventPrice } from '@/lib/event-pricing'
@@ -17,6 +18,8 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
   if (!event) notFound()
 
   const prefill = await getRegistrationPrefill().catch(() => null)
+  // Grade options follow the event's eligible range, not a fixed 9–12.
+  const band = gradeBand(event)
   const isCampaign = event.activityType === 'campaign'
   // Nothing to charge = the form skips the "how will the group pay?" question
   // entirely rather than offering three methods that all collect nothing. That
@@ -60,6 +63,8 @@ export default async function GroupRegistrationPage({ params }: PageProps) {
           prefill={prefill}
           isCampaign={isCampaign}
           isFree={isFree}
+          gradeMin={band.min}
+          gradeMax={band.max}
         />
         <MissionFundingNote className="mt-10" />
       </div>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { estimateSchoolGrade, inferHighSchoolGrade } from './grade-logic'
+import { estimateSchoolGrade, inferStudentGrade } from './grade-logic'
 
 // Fixed evaluation date so the "current school year" is deterministic. October is
 // past the July rollover, so the fall year is 2026.
@@ -29,24 +29,44 @@ describe('estimateSchoolGrade', () => {
   })
 })
 
-describe('inferHighSchoolGrade', () => {
+describe('inferStudentGrade', () => {
   it('returns the estimated HS grade as a string', () => {
-    expect(inferHighSchoolGrade('2012-03-01', undefined, ASOF)).toBe('9')
-    expect(inferHighSchoolGrade('2009-03-01', undefined, ASOF)).toBe('12')
+    expect(inferStudentGrade('2012-03-01', undefined, ASOF)).toBe('9')
+    expect(inferStudentGrade('2009-03-01', undefined, ASOF)).toBe('12')
   })
 
-  it('clamps out-of-band ages into 9–12', () => {
-    expect(inferHighSchoolGrade('2020-01-01', undefined, ASOF)).toBe('9')  // too young → 9
-    expect(inferHighSchoolGrade('1990-01-01', undefined, ASOF)).toBe('12') // too old → 12
+  it('clamps out-of-band ages into 9–12 by default', () => {
+    expect(inferStudentGrade('2020-01-01', undefined, ASOF)).toBe('9')  // too young → 9
+    expect(inferStudentGrade('1990-01-01', undefined, ASOF)).toBe('12') // too old → 12
+  })
+
+  // The reason the band is a parameter: on a grades 7–12 event, clamping an
+  // eligible seventh-grader up to 9 puts a wrong grade in front of them.
+  it('clamps into the event band when one is given', () => {
+    const band = { min: 7, max: 12 }
+    expect(inferStudentGrade('2014-03-01', undefined, ASOF, { band })).toBe('7')
+    expect(inferStudentGrade('2020-01-01', undefined, ASOF, { band })).toBe('7')
+    expect(inferStudentGrade('1990-01-01', undefined, ASOF, { band })).toBe('12')
+  })
+
+  // clampToBand:false is the group-join form, whose list runs up to Grad/PhD:
+  // a grade outside the band must return '' rather than snap to an edge and
+  // overwrite a manually chosen college year.
+  it('returns "" outside the band when clamping is off', () => {
+    expect(inferStudentGrade('1990-01-01', undefined, ASOF, { clampToBand: false })).toBe('')
+    expect(inferStudentGrade('2014-03-01', undefined, ASOF, { clampToBand: false })).toBe('')
+    expect(
+      inferStudentGrade('2014-03-01', undefined, ASOF, { band: { min: 7, max: 12 }, clampToBand: false }),
+    ).toBe('7')
   })
 
   it('applies the school State to the inference', () => {
-    expect(inferHighSchoolGrade('2011-10-15', null, ASOF)).toBe('9')
-    expect(inferHighSchoolGrade('2011-10-15', 'New York', ASOF)).toBe('10')
+    expect(inferStudentGrade('2011-10-15', null, ASOF)).toBe('9')
+    expect(inferStudentGrade('2011-10-15', 'New York', ASOF)).toBe('10')
   })
 
   it('returns "" for missing or invalid input rather than throwing', () => {
-    expect(inferHighSchoolGrade('', 'Utah', ASOF)).toBe('')
-    expect(inferHighSchoolGrade('not-a-date', 'Utah', ASOF)).toBe('')
+    expect(inferStudentGrade('', 'Utah', ASOF)).toBe('')
+    expect(inferStudentGrade('not-a-date', 'Utah', ASOF)).toBe('')
   })
 })

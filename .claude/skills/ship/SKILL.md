@@ -1,188 +1,156 @@
 ---
 name: ship
-description: Ship work from a Claude Code session — verify against the session's spec/PRD, run unit + Playwright E2E, open a PR, and land it. Use when the user says ship it, deploy, raise a PR, merge this, or asks to get the session's work into GitHub/production.
+description: Ship a session's work from a worktree onto the `dev` integration branch — isolate the session, verify against what was asked, let CI gate it, open a PR, land it. Use when the user says ship it, raise a PR, merge this, or asks to get the session's work onto dev. For dev → production, use `promote`.
 ---
 
-# Ship
+# Ship (session → `dev`)
 
-Takes work built during a session from working tree → reviewed → tested → PR →
-merged → verified on Vercel. Runs in phases; **stop at every gate marked ⛔ and
-get an explicit yes from the user** before continuing. Never skip a phase
-silently — if you cannot run one, say so and say why.
+Takes work from a session's worktree onto `dev`. **This never touches
+production** — `promote` does that, deliberately as a separate act.
 
-## Phase 0 — Establish the contract
+`main` is PR-only and admin-enforced, so no path skips review. That is the
+mechanism; this skill is the sequence.
 
-You cannot review "alignment with the spec" without naming the spec. Collect,
-in this order, and write the result into `/tmp` scratch as `ship-contract.md`:
+## Rules that exist because something went wrong
 
-1. **Session requirements** — scroll the conversation for what the user
-   actually asked for, including mid-session corrections and things they
-   explicitly declined. Corrections outrank the original ask.
-2. **Repo docs** — `ls docs/` for a matching `PLAN-*.md`, `*-HANDOVER.md`,
-   `*-HANDOFF.md`, `REC-*.md`, or `RUNBOOK-*.md`. These are this repo's PRDs.
+1. **One worktree per session.** Not a style preference: on 9 Sept two sessions
+   shared a checkout, one switched branches and rebased mid-commit, and the
+   other's commit landed on the wrong branch. Recovery worked only because the
+   tree happened to be clean.
+2. **Never `vercel --prod`, `vercel deploy`, `--force`, or `--no-verify`.**
+   Deployment happens by git push. A production deploy once came from a dirty
+   working tree via the CLI — precisely what `check-deploy-ready.mjs` existed to
+   prevent, bypassed because it was optional.
+3. **Trust CI, not a local run.** Local gates are advisory; `verify` decides.
+4. **Squash into `dev`.** Feature branches squash; `promote` merges. The reason
+   is in that skill.
+5. **A green suite is not evidence until it identifies its target.** The E2E
+   suite twice reported "21 passed" against a Vercel page that was not the app —
+   a login wall, then a "Deployment is building" placeholder. Both have an `<h1>`
+   and log no app errors. `e2e/global-setup.ts` now refuses unless the target
+   says "Stellr".
+
+## Phase 0 — Isolate the session
+
+Skip only if already in a dedicated worktree for this work.
+
+```bash
+git fetch origin
+git worktree add -b <type>/<slug> ../stellr-web-<name> origin/dev
+cd ../stellr-web-<name>
+npm ci                                   # worktrees do NOT share node_modules
+cp ../stellr-web/.env.local .env.local   # `npm run dev` then claims a free port
+```
+
+`npm ci` is easy to forget and its failure is unrecognisable: `vitest`, `tsx`
+and `next` are simply absent, which reads as a broken repo.
+
+Branch names follow the repo: `feat/`, `fix/`, `chore/`, `docs/`.
+
+## Phase 1 — Establish the contract
+
+You cannot check "does this match the spec" without naming the spec.
+
+1. **The session itself** — what was actually asked, including mid-session
+   corrections and anything explicitly declined. **Corrections outrank the
+   original ask.**
+2. **`docs/`** — a matching `PLAN-*`, `REC-*`, `*-HANDOVER*`, `RUNBOOK-*`. These
+   are this repo's PRDs.
 3. **Project rules** — `CLAUDE.md` (Design System V2, tokens, `@stellr/web-ui`,
-   no raw hex/fonts) and `VOICE.md` (all user-facing copy).
+   `@stellr/icons`, no raw hex or font names) and `VOICE.md` for user-facing
+   copy.
 
-Produce a numbered **requirement checklist**. Each line must be checkable
-against the diff. If the session had no stated spec, say so and derive the
-checklist from the user's messages — do not invent scope.
+Produce a numbered checklist where every line is checkable against the diff. If
+there was no stated spec, say so and derive it from the user's messages — do not
+invent scope.
 
-⛔ Show the checklist and ask: "Is this the full scope, or is anything missing?"
+⛔ Show the checklist. Ask whether anything is missing.
 
-## Phase 1 — Preflight
+## Phase 2 — Migrations, if the change has any
 
-```bash
-git status --short && git branch --show-current
-```
-
-- If on `main`, create a branch: `git checkout -b <type>/<short-slug>`
-  (`feat/`, `fix/`, `chore/` — match recent history: `git log --oneline -10`).
-- Stage and review your own diff before anything else: `git diff --stat` then
-  read the full `git diff` for debug code, stray `console.log`, secrets,
-  `.env*` files, and unrelated churn.
-
-Run the gates (in one background command, then read the output once):
+Database work leads the code, and the order is not negotiable.
 
 ```bash
-npx tsc --noEmit && npm run lint:tokens && npm run test && npm run build
+npm run migration:new -- <name>     # timestamped; sequential numbers collide
+npm run db:status                   # what dev actually has
 ```
 
-`npm run build` runs `prebuild` (token build, DS lint, watermark check) — a
-green build is the real gate. Fix failures before moving on; do not proceed
-with a red gate and a promise to fix it later.
+Never hand-write `149_…`. `lint:migrations` runs in `prebuild` and fails the
+build, because two sessions both writing `149_` silently loses one — which has
+happened here.
 
-## Phase 2 — End-to-end tests (Playwright)
+**Apply to `dev` first, verify, then write the code that depends on it.** Old
+code against a new schema is safe; new code against an old schema is an outage.
+Production's migration comes later, in `promote`, before the code merges.
 
-**This repo has no Playwright yet.** On first run, read
-`references/playwright-bootstrap.md` and set it up — that is a real change to
-the repo, so ⛔ ask first. Once it exists:
+## Phase 3 — Let CI decide
 
-```bash
-npx playwright test --reporter=line
-```
-
-- Playwright starts its own dev server via `webServer` in the config. Don't
-  start one with Bash; if you need to look at the app yourself, use the Browser
-  pane (`preview_start` with `{name: "stellr-web"}`).
-- Cover the flows this change actually touches, plus the smoke path
-  (home → events → sign-in gate). Add a spec for each behaviour named in the
-  Phase 0 checklist that a user can observe in a browser.
-- On failure: read the trace (`npx playwright show-trace`), fix the **source**,
-  re-run. Never weaken an assertion or add a bare `waitForTimeout` to make a
-  test pass — if a test is genuinely wrong, say so explicitly and explain why.
-- Attach failures the user should see with `SendUserFile` (screenshots live in
-  `test-results/`).
-
-## Phase 3 — Spec-alignment review
-
-Now check the diff against the Phase 0 checklist. This is a **review, not a
-summary** — you are looking for the gap between what was asked and what was
-built.
-
-For each requirement, one row:
-
-| # | Requirement | Status | Evidence |
-|---|---|---|---|
-| 1 | … | Met / Partial / Not met / Out of scope | `app/foo/page.tsx:42`, test name, or "not implemented" |
-
-Then, separately, flag anything **built but not asked for** (scope creep) and
-anything in the diff that violates `CLAUDE.md` — hard-coded hex, off-scale
-spacing, re-implemented components instead of `@stellr/web-ui`, raw SVG instead
-of `@stellr/icons`, Norwester/Aileron in site UI, copy that ignores `VOICE.md`.
-
-Optionally run `/code-review high` for a correctness pass on top of this — it
-hunts bugs, this phase hunts spec drift. They are not substitutes.
-
-⛔ Show the table. Anything **Partial** or **Not met** is a decision for the
-user: fix now, or ship and track it. Do not decide for them.
-
-## Phase 4 — Open the PR
-
-```bash
-npm run check:deploy-ready
-```
-
-Guardrail against prod running uncommitted code (especially
-`supabase/migrations/`). Must pass.
-
-Commit in coherent units — do not squash unrelated work into one commit:
-
-```bash
-git add <paths> && git commit -m "$(cat <<'EOF'
-<type>: <imperative summary>
-
-<what changed and why; reference the docs/ plan if there is one>
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
-EOF
-)"
-```
-
-⛔ **Pushing and opening a PR is outward-facing — confirm before you push.**
+Push early and read `verify`:
 
 ```bash
 git push -u origin HEAD
-gh pr create --base main --title "<title>" --body "$(cat <<'EOF'
-## What
-<one paragraph>
-
-## Spec
-Implements `docs/<PLAN>.md` / the session requirements below.
-
-## Requirement coverage
-<the Phase 3 table>
-
-## Testing
-- `npx tsc --noEmit` ✅
-- `npm run lint:tokens` ✅
-- `npm run test` ✅ (<n> tests)
-- `npx playwright test` ✅ (<n> tests)
-- `npm run build` ✅
-
-## Known gaps
-<anything Partial / Not met, or "none">
-
-## Risk
-<migrations, cron changes in vercel.json, env vars needed, external services touched>
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-EOF
-)"
+gh pr create --base dev --title "<title>" --body-file <file>
+gh pr checks <n> --watch
 ```
 
-Call out in the PR body, every time they appear in the diff: new
-`supabase/migrations/`, changes to `vercel.json` crons, new env vars, and
-anything touching Clerk, Sanity, HubSpot, or DocuSign.
+`verify` runs typecheck, design-system lint, migration-name lint, the unit
+suite, and a full build.
 
-## Phase 5 — Land and verify
-
-⛔ **Merging deploys to production. Confirm explicitly — every time.**
+For anything a browser can observe:
 
 ```bash
-gh pr checks --watch
-gh pr merge --squash --delete-branch
+npm run test:e2e:smoke
 ```
 
-After merge:
+Against a deployment, pass `E2E_BASE_URL` **and** set
+`VERCEL_AUTOMATION_BYPASS_SECRET` — the dev project is behind Vercel
+Authentication, and without it every request lands on a login page.
+
+**Never weaken a test to make it pass.** If the app does not do what the spec
+says, that is a finding to report, not a test to soften.
+
+## Phase 4 — Review against the contract
+
+A summary is not a review. For each requirement:
+
+| # | Requirement | Met / Partial / Not met | Evidence |
+|---|---|---|---|
+
+Then separately: anything built that was **not** asked for, and anything
+breaching `CLAUDE.md` — hard-coded hex, off-scale spacing, re-implemented
+components, raw SVG, Norwester or Aileron in site UI, copy ignoring `VOICE.md`.
+
+`/code-review high` complements this: it hunts bugs, this hunts spec drift.
+Neither substitutes for the other.
+
+⛔ Anything Partial or Not met is the user's call — fix now, or land and track.
+
+## Phase 5 — Land on `dev`
 
 ```bash
-git checkout main && git pull
+gh pr merge <n> --squash --delete-branch
 ```
 
-- Watch the Vercel deployment (Vercel MCP tools: `list_deployments`,
-  `get_deployment_build_logs`, `get_runtime_errors`).
-- If the change touched services, run `npm run verify:prod`.
-- If it included a migration, confirm it actually applied — the repo has been
-  burned by prod/main divergence before.
-- Smoke the deployed URL in the Browser pane and screenshot the changed
-  surface for the user.
-- Report plainly: what shipped, what deployed, what is still open. If anything
-  failed, say so with the output — do not round a partial success up to done.
+If GitHub reports `BEHIND` (protection is strict), update rather than rebase:
 
-## Never
+```bash
+gh pr update-branch <n>
+```
 
-- Merge, push, or deploy without the user saying yes in this session.
-- Report a phase as passing that you did not run.
-- `--force`, `--no-verify`, or `--admin` to get past a gate.
-- Deploy with a dirty tree — `check:deploy-ready` exists because that has
-  already caused a prod incident here.
+Then tidy up:
+
+```bash
+git worktree remove ../stellr-web-<name>   # --force if node_modules remain
+```
+
+`git worktree remove` refuses on ignored files, and `git branch -d` compares
+against the branch's **upstream**, not `main` — both have wasted time here. If
+`-d` refuses, confirm with `git merge-base --is-ancestor <branch> origin/main`
+before reaching for `-D`.
+
+## Phase 6 — Hand over
+
+State plainly: what landed on `dev`, what CI proved, what is still open, and
+whether it is ready to `promote`. If a phase was skipped, say which and why.
+
+**Do not promote from this skill.** Production is a separate, deliberate act.

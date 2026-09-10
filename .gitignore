@@ -17,3 +17,9 @@ storybook-static/
 # per-machine. Tracking it made every session that linked a project produce a
 # spurious diff, and two sessions linking different projects conflict.
 supabase/.temp/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/e2e/.auth/

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 1pWmPfhidCh8gDTPwyckUVIIUnzofSyVbHL6cgF5wZQg0yXla9MrzY8Zap2jsMC
+\restrict XwGn1zVO1hXSn7NADH84dp55IsiUPHjInhYDKWi7075NuvWdhYKKIgUCdZKEf3x
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.6
@@ -20,6 +20,13 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- Name: entitlements; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA entitlements;
+
+
+--
 -- Name: public; Type: SCHEMA; Schema: -; Owner: -
 --
 
@@ -31,6 +38,93 @@ CREATE SCHEMA public;
 --
 
 COMMENT ON SCHEMA public IS 'standard public schema';
+
+
+--
+-- Name: booking_status; Type: TYPE; Schema: entitlements; Owner: -
+--
+
+CREATE TYPE entitlements.booking_status AS ENUM (
+    'reserved',
+    'attended',
+    'no_show',
+    'cancelled'
+);
+
+
+--
+-- Name: credit_reason; Type: TYPE; Schema: entitlements; Owner: -
+--
+
+CREATE TYPE entitlements.credit_reason AS ENUM (
+    'cohort_cancellation',
+    'refund',
+    'goodwill',
+    'adjustment',
+    'redemption'
+);
+
+
+--
+-- Name: entitlement_kind; Type: TYPE; Schema: entitlements; Owner: -
+--
+
+CREATE TYPE entitlements.entitlement_kind AS ENUM (
+    'coaching_session',
+    'cohort_access',
+    'call_series',
+    'training_access',
+    'generic'
+);
+
+
+--
+-- Name: entitlement_status; Type: TYPE; Schema: entitlements; Owner: -
+--
+
+CREATE TYPE entitlements.entitlement_status AS ENUM (
+    'active',
+    'consumed',
+    'expired',
+    'refunded'
+);
+
+
+--
+-- Name: grant_source; Type: TYPE; Schema: entitlements; Owner: -
+--
+
+CREATE TYPE entitlements.grant_source AS ENUM (
+    'purchased',
+    'competition_auto',
+    'award_auto',
+    'volunteer_unlock',
+    'admin',
+    'tier_grant'
+);
+
+
+--
+-- Name: offering_type; Type: TYPE; Schema: entitlements; Owner: -
+--
+
+CREATE TYPE entitlements.offering_type AS ENUM (
+    'coaching_session',
+    'mentoring_cohort',
+    'call_series',
+    'training_content'
+);
+
+
+--
+-- Name: scope_type; Type: TYPE; Schema: entitlements; Owner: -
+--
+
+CREATE TYPE entitlements.scope_type AS ENUM (
+    'specific_offering',
+    'offering_type',
+    'generic'
+);
 
 
 --
@@ -146,6 +240,749 @@ CREATE TYPE public.tshirt_size_type AS ENUM (
     '3XL_plus',
     '3XL (or larger)'
 );
+
+
+--
+-- Name: fn_active_tier(uuid); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_active_tier(p_member uuid) RETURNS text
+    LANGUAGE sql STABLE
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+  select t.code
+  from public.member_memberships mm
+  join entitlements.tiers t on t.membership_tier_id = mm.tier_id
+  where mm.member_id = p_member
+    and (mm.expires_at is null or mm.expires_at >= current_date)
+  order by mm.started_at desc limit 1;
+$$;
+
+
+--
+-- Name: fn_allocation_balance(uuid, entitlements.entitlement_kind, uuid, entitlements.offering_type); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_allocation_balance(p_member uuid, p_kind entitlements.entitlement_kind, p_offering uuid DEFAULT NULL::uuid, p_offering_type entitlements.offering_type DEFAULT NULL::entitlements.offering_type) RETURNS integer
+    LANGUAGE sql STABLE
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+  select coalesce(sum(quantity_remaining),0)::int
+  from entitlements.entitlements
+  where member_id = p_member and kind = p_kind and status = 'active'
+    and valid_from <= now() and (expires_at is null or expires_at > now())
+    and ( scope_type = 'generic'
+       or (scope_type = 'specific_offering' and offering_id = p_offering)
+       or (scope_type = 'offering_type'     and offering_type = p_offering_type) );
+$$;
+
+
+--
+-- Name: fn_base_price_cents(uuid); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_base_price_cents(p_offering uuid) RETURNS integer
+    LANGUAGE plpgsql STABLE
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare o entitlements.offerings%rowtype; v integer;
+begin
+  select * into o from entitlements.offerings where id = p_offering;
+  select amount_cents into v from entitlements.prices
+   where offering_id = p_offering and valid_from <= now() and (valid_to is null or valid_to > now())
+   order by valid_from desc limit 1;
+  if v is not null then return v; end if;
+  select amount_cents into v from entitlements.prices
+   where offering_type = o.type and segment = o.segment and valid_from <= now() and (valid_to is null or valid_to > now())
+   order by valid_from desc limit 1;
+  if v is not null then return v; end if;
+  select amount_cents into v from entitlements.prices
+   where offering_type = o.type and segment is null and valid_from <= now() and (valid_to is null or valid_to > now())
+   order by valid_from desc limit 1;
+  return v;
+end $$;
+
+
+--
+-- Name: fn_book_from_allocation(uuid, uuid, uuid); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_book_from_allocation(p_member uuid, p_offering uuid, p_participant uuid DEFAULT NULL::uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare
+  o entitlements.offerings%rowtype;
+  v_kind entitlements.entitlement_kind;
+  v_needed int := 1;
+  v_left int;
+  v_take int;
+  v_ids uuid[] := '{}';
+  v_takes int[] := '{}';
+  lot record;
+  b_id uuid;
+  i int;
+begin
+  select * into o from entitlements.offerings where id = p_offering for update;
+  if o.status <> 'open' then raise exception 'Offering % not open', p_offering; end if;
+  v_kind := case o.type
+              when 'coaching_session' then 'coaching_session'::entitlements.entitlement_kind
+              when 'mentoring_cohort' then 'cohort_access'::entitlements.entitlement_kind
+              when 'call_series'      then 'call_series'::entitlements.entitlement_kind
+              when 'training_content' then 'training_access'::entitlements.entitlement_kind
+            end;
+  if o.type = 'mentoring_cohort' then
+    select greatest(1, coalesce(mc.planned_sessions, 1)) into v_needed from public.mentoring_cohorts mc where mc.id = o.cohort_id;
+  else
+    v_needed := 1;
+  end if;
+
+  -- Collect eligible lots FIFO until the needed quantity is covered (locks each
+  -- lot; a concurrent draw on the same lots is skipped, not blocked).
+  v_left := v_needed;
+  for lot in
+    select id, quantity_remaining from entitlements.entitlements
+     where member_id = p_member and kind = v_kind and status = 'active'
+       and quantity_remaining > 0 and valid_from <= now() and (expires_at is null or expires_at > now())
+       and ( scope_type = 'generic'
+          or (scope_type = 'specific_offering' and offering_id = p_offering)
+          or (scope_type = 'offering_type' and offering_type = o.type) )
+     order by expires_at nulls last, created_at
+     for update skip locked
+  loop
+    v_take := least(lot.quantity_remaining, v_left);
+    v_ids := v_ids || lot.id;
+    v_takes := v_takes || v_take;
+    v_left := v_left - v_take;
+    exit when v_left = 0;
+  end loop;
+  if v_left > 0 then raise exception 'No included allocation available'; end if;
+
+  if o.type = 'mentoring_cohort' and o.capacity is not null then
+    if o.seats_taken >= o.capacity then raise exception 'Cohort full'; end if;
+    update entitlements.offerings set seats_taken = seats_taken + 1,
+           status = case when seats_taken + 1 >= capacity then 'full' else status end
+     where id = p_offering;
+  end if;
+
+  for i in 1..coalesce(array_length(v_ids, 1), 0) loop
+    update entitlements.entitlements
+       set quantity_remaining = quantity_remaining - v_takes[i],
+           status = case when quantity_remaining - v_takes[i] <= 0 then 'consumed' else status end
+     where id = v_ids[i];
+  end loop;
+
+  insert into entitlements.bookings(member_id, offering_id, consumed_entitlement_id, amount_charged_cents, status)
+  values (p_member, p_offering, v_ids[1], 0, 'reserved')
+  returning id into b_id;
+  return b_id;
+end $$;
+
+
+--
+-- Name: fn_cancel_cohort(uuid); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_cancel_cohort(p_offering uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare b entitlements.bookings%rowtype; o entitlements.offerings%rowtype; v_restore int;
+begin
+  select * into o from entitlements.offerings where id = p_offering;
+  if o.type = 'mentoring_cohort' then
+    select greatest(1, coalesce(mc.planned_sessions, 1)) into v_restore
+      from public.mentoring_cohorts mc where mc.id = o.cohort_id;
+  else
+    v_restore := 1;
+  end if;
+  for b in select * from entitlements.bookings where offering_id = p_offering and status = 'reserved'
+  loop
+    -- Restore drawn allocations only (free/included bookings). PAID bookings
+    -- (amount or credit > 0) are refunded to public.account_credits by the caller.
+    if coalesce(b.amount_charged_cents, 0) = 0 and coalesce(b.credit_applied_cents, 0) = 0
+       and b.consumed_entitlement_id is not null then
+      update entitlements.entitlements
+         set quantity_remaining = quantity_remaining + v_restore, status = 'active',
+             expires_at = greatest(coalesce(expires_at, now()), now() + interval '90 days')
+       where id = b.consumed_entitlement_id;
+    end if;
+    update entitlements.bookings set status = 'cancelled' where id = b.id;
+  end loop;
+  update entitlements.offerings set seats_taken = 0, status = 'cancelled' where id = p_offering;
+end $$;
+
+
+--
+-- Name: fn_claim_event(text, text); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_claim_event(p_event_id text, p_type text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare v_new integer;
+begin
+  insert into entitlements.processed_events(event_id, type) values (p_event_id, p_type)
+  on conflict (event_id) do nothing;
+  get diagnostics v_new = row_count;
+  return v_new = 1;
+end $$;
+
+
+--
+-- Name: fn_confirm_paid_booking(uuid, uuid, text, integer, integer, uuid); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_confirm_paid_booking(p_member uuid, p_offering uuid, p_stripe_payment text, p_amount_charged_cents integer, p_credit_applied_cents integer, p_participant uuid DEFAULT NULL::uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare o entitlements.offerings%rowtype; v_kind entitlements.entitlement_kind; ent_id uuid; b_id uuid;
+begin
+  select * into o from entitlements.offerings where id = p_offering for update;
+  if o.status <> 'open' then raise exception 'Offering % not open', p_offering; end if;
+  if p_credit_applied_cents > 0 and p_credit_applied_cents > entitlements.fn_credit_balance(p_member) then
+    raise exception 'Insufficient account credit';
+  end if;
+  v_kind := case o.type
+              when 'coaching_session' then 'coaching_session'::entitlements.entitlement_kind
+              when 'mentoring_cohort' then 'cohort_access'::entitlements.entitlement_kind
+              when 'call_series'      then 'call_series'::entitlements.entitlement_kind
+              when 'training_content' then 'training_access'::entitlements.entitlement_kind
+            end;
+  if o.type = 'mentoring_cohort' and o.capacity is not null then
+    if o.seats_taken >= o.capacity then raise exception 'Cohort full'; end if;
+    update entitlements.offerings set seats_taken = seats_taken + 1,
+           status = case when seats_taken + 1 >= capacity then 'full' else status end
+     where id = p_offering;
+  end if;
+  insert into entitlements.entitlements(member_id, kind, scope_type, offering_id, quantity_total, quantity_remaining, source, source_ref, refundable, status, expires_at)
+  values (p_member, v_kind, 'specific_offering', p_offering, 1, 0, 'purchased', p_stripe_payment, true, 'consumed', entitlements.fn_purchase_expiry())
+  returning id into ent_id;
+  if p_credit_applied_cents > 0 then
+    insert into entitlements.account_credit_ledger(member_id, amount_cents, reason) values (p_member, -p_credit_applied_cents, 'redemption');
+  end if;
+  insert into entitlements.bookings(member_id, offering_id, consumed_entitlement_id, amount_charged_cents, credit_applied_cents, stripe_payment_id, status)
+  values (p_member, p_offering, ent_id, p_amount_charged_cents, p_credit_applied_cents, p_stripe_payment, 'reserved')
+  returning id into b_id;
+  return b_id;
+end $$;
+
+
+--
+-- Name: fn_credit_balance(uuid); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_credit_balance(p_member uuid) RETURNS integer
+    LANGUAGE sql STABLE
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+  select coalesce(sum(amount_cents),0)::int
+  from entitlements.account_credit_ledger where member_id = p_member;
+$$;
+
+
+--
+-- Name: fn_expire_lapsed_grants(); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_expire_lapsed_grants() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare v_n integer;
+begin
+  with lapsed as (
+    update entitlements.entitlements e set status = 'expired'
+    from public.member_memberships mm
+    where e.status = 'active' and e.source = 'tier_grant'
+      and mm.id = nullif(split_part(e.source_ref, ':', 1), '')::uuid
+      and (mm.renewal_status <> 'active'
+           or (mm.expires_at is not null and mm.expires_at < current_date))
+    returning e.id
+  )
+  select count(*)::int into v_n from lapsed;
+  return v_n;
+end $$;
+
+
+--
+-- Name: fn_grant_adhoc(uuid, entitlements.entitlement_kind, integer, text, timestamp with time zone); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_grant_adhoc(p_member uuid, p_kind entitlements.entitlement_kind, p_quantity integer, p_source_ref text, p_expires_at timestamp with time zone DEFAULT NULL::timestamp with time zone) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare v_id uuid;
+begin
+  if p_quantity <= 0 then return 0; end if;
+  if exists (
+    select 1 from entitlements.entitlements
+     where member_id = p_member and kind = p_kind and source = 'admin' and source_ref = p_source_ref
+  ) then
+    return 0;
+  end if;
+  insert into entitlements.entitlements(
+    member_id, kind, scope_type, offering_type,
+    quantity_total, quantity_remaining, source, source_ref,
+    refundable, status, valid_from, expires_at)
+  values (
+    p_member, p_kind, 'offering_type', entitlements.fn_kind_to_offering(p_kind),
+    p_quantity, p_quantity, 'admin', p_source_ref,
+    false, 'active', now(), p_expires_at)
+  returning id into v_id;
+  return p_quantity;
+end $$;
+
+
+--
+-- Name: fn_grant_member_benefits(uuid, timestamp with time zone); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_grant_member_benefits(p_membership uuid, p_as_of timestamp with time zone DEFAULT now()) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare
+  mm      record;
+  v_tier  text;
+  tb      entitlements.tier_benefits%rowtype;
+  v_period date;
+  v_new    integer;
+  v_ent    uuid;
+  v_count  integer := 0;
+begin
+  select member_id, tier_id, started_at, expires_at, renewal_status
+    into mm from public.member_memberships where id = p_membership;
+  if mm.member_id is null then raise exception 'membership % not found', p_membership; end if;
+  if mm.renewal_status <> 'active' then return 0; end if;
+
+  select code into v_tier from entitlements.tiers where membership_tier_id = mm.tier_id;
+  if v_tier is null then return 0; end if;
+
+  for tb in
+    select * from entitlements.tier_benefits where tier_code = v_tier and kind is not null
+  loop
+    v_period := entitlements.fn_period_start(tb.period, p_as_of, mm.started_at::timestamptz);
+
+    insert into entitlements.member_grant_runs(member_id, membership_id, tier_benefit_id, period_start)
+    values (mm.member_id, p_membership, tb.id, v_period)
+    on conflict (membership_id, tier_benefit_id, period_start) do nothing;
+    get diagnostics v_new = row_count;
+    if v_new = 0 then continue; end if;
+
+    insert into entitlements.entitlements(
+      member_id, kind, scope_type, offering_type,
+      quantity_total, quantity_remaining, source, source_ref,
+      refundable, status, valid_from, expires_at)
+    values (
+      mm.member_id, tb.kind, 'offering_type', entitlements.fn_kind_to_offering(tb.kind),
+      tb.quantity, tb.quantity, 'tier_grant',
+      p_membership::text || ':' || tb.id::text || ':' || v_period::text,
+      false, 'active', now(),
+      case when tb.validity_days is not null then now() + (tb.validity_days || ' days')::interval
+           when mm.expires_at is not null then mm.expires_at::timestamptz
+           else null end)
+    returning id into v_ent;
+
+    update entitlements.member_grant_runs set entitlement_id = v_ent
+      where membership_id = p_membership and tier_benefit_id = tb.id and period_start = v_period;
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end $$;
+
+
+--
+-- Name: fn_grant_purchased(uuid, entitlements.entitlement_kind, integer, text, timestamp with time zone); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_grant_purchased(p_member uuid, p_kind entitlements.entitlement_kind, p_quantity integer, p_stripe_session text, p_expires_at timestamp with time zone DEFAULT NULL::timestamp with time zone) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare v_id uuid; v_exp timestamptz;
+begin
+  if p_quantity <= 0 then return 0; end if;
+  if exists (
+    select 1 from entitlements.entitlements
+     where member_id = p_member and kind = p_kind and source = 'purchased' and source_ref = p_stripe_session
+  ) then
+    return 0;
+  end if;
+  v_exp := coalesce(p_expires_at, entitlements.fn_purchase_expiry());
+  insert into entitlements.entitlements(
+    member_id, kind, scope_type, offering_type,
+    quantity_total, quantity_remaining, source, source_ref,
+    refundable, status, valid_from, expires_at)
+  values (
+    p_member, p_kind, 'offering_type', entitlements.fn_kind_to_offering(p_kind),
+    p_quantity, p_quantity, 'purchased', p_stripe_session,
+    true, 'active', now(), v_exp)
+  returning id into v_id;
+  return p_quantity;
+end $$;
+
+
+--
+-- Name: fn_kind_to_offering(entitlements.entitlement_kind); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_kind_to_offering(p_kind entitlements.entitlement_kind) RETURNS entitlements.offering_type
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+  select case p_kind
+           when 'coaching_session' then 'coaching_session'::entitlements.offering_type
+           when 'cohort_access'    then 'mentoring_cohort'::entitlements.offering_type
+           when 'call_series'      then 'call_series'::entitlements.offering_type
+           when 'training_access'  then 'training_content'::entitlements.offering_type
+           else null
+         end;
+$$;
+
+
+--
+-- Name: fn_mark_no_show(uuid); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_mark_no_show(p_booking uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+begin
+  update entitlements.bookings set status = 'no_show' where id = p_booking and status = 'reserved';
+end $$;
+
+
+--
+-- Name: fn_period_start(text, timestamp with time zone, timestamp with time zone); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_period_start(p_period text, p_as_of timestamp with time zone, p_started timestamp with time zone) RETURNS date
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+  select case p_period
+           when 'one_off'   then p_started::date
+           when 'monthly'   then date_trunc('month',   p_as_of)::date
+           when 'quarterly' then date_trunc('quarter', p_as_of)::date
+           when 'per_term'  then date_trunc('quarter', p_as_of)::date
+           else p_started::date
+         end;
+$$;
+
+
+--
+-- Name: fn_purchase_expiry(); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_purchase_expiry() RETURNS timestamp with time zone
+    LANGUAGE sql STABLE
+    SET search_path TO 'entitlements', 'public'
+    AS $$ select null::timestamptz; $$;
+
+
+--
+-- Name: fn_quote(uuid, uuid, text); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_quote(p_member uuid, p_offering uuid, p_coupon text DEFAULT NULL::text) RETURNS TABLE(included_available boolean, base_cents integer, tier_discount_pct numeric, after_tier_cents integer, coupon_code text, coupon_applied boolean, coupon_discount_cents integer, net_cents integer, credit_available integer, payable_cents integer)
+    LANGUAGE plpgsql STABLE
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare
+  o entitlements.offerings%rowtype;
+  v_kind entitlements.entitlement_kind;
+  v_base int; v_tier numeric; v_after int;
+  c entitlements.discounts; v_coupon_cut int := 0; v_applied boolean := false;
+  v_net int; v_credit int;
+begin
+  select * into o from entitlements.offerings where id = p_offering;
+  v_kind := case o.type
+              when 'coaching_session' then 'coaching_session'::entitlements.entitlement_kind
+              when 'mentoring_cohort' then 'cohort_access'::entitlements.entitlement_kind
+              when 'call_series'      then 'call_series'::entitlements.entitlement_kind
+              when 'training_content' then 'training_access'::entitlements.entitlement_kind
+            end;
+
+  if entitlements.fn_allocation_balance(p_member, v_kind, p_offering, o.type) > 0 then
+    return query select true, 0, 0::numeric, 0, null::text, false, 0, 0,
+                        entitlements.fn_credit_balance(p_member), 0;
+    return;
+  end if;
+
+  v_base  := coalesce(entitlements.fn_base_price_cents(p_offering), 0);
+  v_tier  := entitlements.fn_tier_discount_pct(p_member, o.type);
+  v_after := round(v_base * (1 - v_tier/100.0))::int;
+
+  if p_coupon is not null then
+    c := entitlements.fn_validate_coupon(p_coupon, o.type);
+    if c.id is not null then
+      v_applied := true;
+      if c.discount_type = 'percent' then
+        v_coupon_cut := round(v_after * (c.percent/100.0))::int;
+      else
+        v_coupon_cut := least(c.amount_cents, v_after);
+      end if;
+    end if;
+  end if;
+
+  v_net    := greatest(v_after - v_coupon_cut, 0);
+  v_credit := entitlements.fn_credit_balance(p_member);
+  return query select false, v_base, v_tier, v_after,
+                      case when v_applied then c.code else null end, v_applied, v_coupon_cut,
+                      v_net, v_credit, greatest(v_net - v_credit, 0);
+end $$;
+
+
+--
+-- Name: fn_redeem_coupon(text, uuid, uuid, integer); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_redeem_coupon(p_code text, p_member uuid, p_booking uuid, p_amount_cents integer) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare d entitlements.discounts;
+begin
+  select * into d from entitlements.discounts
+   where kind='coupon' and lower(code)=lower(p_code) and is_active for update;
+  if d.id is null then return; end if;
+  insert into entitlements.coupon_redemptions(discount_id, member_id, booking_id, amount_cents)
+  values (d.id, p_member, p_booking, p_amount_cents);
+  update entitlements.discounts set times_redeemed = times_redeemed + 1 where id = d.id;
+end $$;
+
+
+--
+-- Name: fn_refund_entitlement(uuid, text, integer); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_refund_entitlement(p_entitlement uuid, p_mode text, p_amount_cents integer) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare e entitlements.entitlements%rowtype;
+begin
+  select * into e from entitlements.entitlements where id = p_entitlement;
+  if e.id is null then raise exception 'Entitlement not found'; end if;
+  if not e.refundable then raise exception 'Granted entitlement % is not refundable', p_entitlement; end if;
+  update entitlements.entitlements set status = 'refunded', quantity_remaining = 0 where id = p_entitlement;
+  if p_mode = 'credit' then
+    insert into entitlements.account_credit_ledger(member_id, amount_cents, reason, note)
+    values (e.member_id, p_amount_cents, 'refund', 'Refund to account credit');
+  end if;
+end $$;
+
+
+--
+-- Name: fn_regrant_periodic(); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_regrant_periodic() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare r record; v_n integer := 0;
+begin
+  for r in
+    select id from public.member_memberships
+     where renewal_status = 'active' and (expires_at is null or expires_at >= current_date)
+  loop
+    v_n := v_n + entitlements.fn_grant_member_benefits(r.id, now());
+  end loop;
+  return v_n;
+end $$;
+
+
+--
+-- Name: fn_release_one_booking(uuid, uuid); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_release_one_booking(p_member uuid, p_offering uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare b entitlements.bookings%rowtype;
+begin
+  select * into b from entitlements.bookings
+   where member_id = p_member and offering_id = p_offering and status = 'reserved'
+     and coalesce(amount_charged_cents, 0) = 0 and coalesce(credit_applied_cents, 0) = 0
+   order by created_at desc
+   for update skip locked limit 1;
+  if b.id is null then return false; end if;
+  if b.consumed_entitlement_id is not null then
+    update entitlements.entitlements
+       set quantity_remaining = quantity_remaining + 1,
+           status = case when status = 'consumed' then 'active' else status end
+     where id = b.consumed_entitlement_id;
+  end if;
+  update entitlements.bookings set status = 'cancelled' where id = b.id;
+  return true;
+end $$;
+
+
+--
+-- Name: fn_sync_cohort_offerings(); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_sync_cohort_offerings() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare v_n integer;
+begin
+  with ins as (
+    insert into entitlements.offerings (type, cohort_id, title, capacity, status)
+    select case c.container_type
+             when 'mentoring' then 'mentoring_cohort'::entitlements.offering_type
+             when 'coaching'  then 'coaching_session'::entitlements.offering_type
+             when 'workshop'  then 'coaching_session'::entitlements.offering_type
+           end,
+           c.id, c.name, null,
+           case when c.is_active and c.archived_at is null then 'open' else 'completed' end
+    from public.mentoring_cohorts c
+    where c.container_type in ('mentoring', 'coaching', 'workshop')
+      and not exists (select 1 from entitlements.offerings o where o.cohort_id = c.id)
+    returning 1
+  )
+  select count(*)::int into v_n from ins;
+  return v_n;
+end $$;
+
+
+--
+-- Name: fn_tier_discount_pct(uuid, entitlements.offering_type); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_tier_discount_pct(p_member uuid, p_type entitlements.offering_type) RETURNS numeric
+    LANGUAGE sql STABLE
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+  select coalesce(max(d.percent),0)
+  from entitlements.discounts d
+  where d.kind = 'tier'
+    and d.discount_type = 'percent'
+    and d.is_active
+    and d.tier_code = entitlements.fn_active_tier(p_member)
+    and (d.applies_to is null or d.applies_to = p_type)
+    and (d.valid_from is null or d.valid_from <= now())
+    and (d.valid_to   is null or d.valid_to   >  now());
+$$;
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: discounts; Type: TABLE; Schema: entitlements; Owner: -
+--
+
+CREATE TABLE entitlements.discounts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    kind text NOT NULL,
+    tier_code text,
+    code text,
+    label text,
+    discount_type text NOT NULL,
+    percent numeric(5,2),
+    amount_cents integer,
+    applies_to entitlements.offering_type,
+    valid_from timestamp with time zone,
+    valid_to timestamp with time zone,
+    max_redemptions integer,
+    times_redeemed integer DEFAULT 0 NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT discounts_check CHECK (((kind = 'coupon'::text) OR (tier_code IS NOT NULL))),
+    CONSTRAINT discounts_check1 CHECK (((kind = 'tier'::text) OR (code IS NOT NULL))),
+    CONSTRAINT discounts_check2 CHECK (((discount_type = 'fixed'::text) OR (percent IS NOT NULL))),
+    CONSTRAINT discounts_check3 CHECK (((discount_type = 'percent'::text) OR (amount_cents IS NOT NULL))),
+    CONSTRAINT discounts_discount_type_check CHECK ((discount_type = ANY (ARRAY['percent'::text, 'fixed'::text]))),
+    CONSTRAINT discounts_kind_check CHECK ((kind = ANY (ARRAY['tier'::text, 'coupon'::text])))
+);
+
+
+--
+-- Name: fn_validate_coupon(text, entitlements.offering_type); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.fn_validate_coupon(p_code text, p_type entitlements.offering_type) RETURNS entitlements.discounts
+    LANGUAGE sql STABLE
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+  select d.* from entitlements.discounts d
+  where d.kind = 'coupon'
+    and d.is_active
+    and lower(d.code) = lower(p_code)
+    and (d.applies_to is null or d.applies_to = p_type)
+    and (d.valid_from is null or d.valid_from <= now())
+    and (d.valid_to   is null or d.valid_to   >  now())
+    and (d.max_redemptions is null or d.times_redeemed < d.max_redemptions)
+  limit 1;
+$$;
+
+
+--
+-- Name: project_tier(); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.project_tier() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+begin
+  if tg_op = 'DELETE' then
+    delete from entitlements.tiers where membership_tier_id = old.id;
+    return old;
+  end if;
+  insert into entitlements.tiers
+    (code, membership_tier_id, name, annual_price_cents, store_discount_pct, stripe_price_id, stripe_price_id_monthly, is_free)
+  values (
+    lower(regexp_replace(new.name, '[^A-Za-z0-9]+', '_', 'g')), new.id, new.name, new.annual_cost_cents,
+    coalesce((select percent_off from public.store_tier_discounts d where d.tier_id = new.id and d.scope = 'all' limit 1), 0),
+    new.stripe_price_id, new.stripe_price_id_monthly, new.is_free)
+  on conflict (membership_tier_id) do update set
+    code = excluded.code, name = excluded.name, annual_price_cents = excluded.annual_price_cents,
+    store_discount_pct = excluded.store_discount_pct, stripe_price_id = excluded.stripe_price_id,
+    stripe_price_id_monthly = excluded.stripe_price_id_monthly, is_free = excluded.is_free;
+  return new;
+end $$;
+
+
+--
+-- Name: trg_booking_guard(); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.trg_booking_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'entitlements', 'public'
+    AS $$
+declare ent entitlements.entitlements%rowtype;
+begin
+  if new.consumed_entitlement_id is not null then
+    select * into ent from entitlements.entitlements where id = new.consumed_entitlement_id;
+    if ent.member_id <> new.member_id then
+      raise exception 'Entitlement % does not belong to this member (no cross-member use)', ent.id;
+    end if;
+  end if;
+  return new;
+end $$;
+
+
+--
+-- Name: trg_touch_updated_at(); Type: FUNCTION; Schema: entitlements; Owner: -
+--
+
+CREATE FUNCTION entitlements.trg_touch_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'entitlements', 'public'
+    AS $$ begin new.updated_at = now(); return new; end $$;
 
 
 --
@@ -665,9 +1502,179 @@ CREATE FUNCTION public.tier_space_slug(p_name text) RETURNS text
 $$;
 
 
-SET default_tablespace = '';
+--
+-- Name: account_credit_ledger; Type: TABLE; Schema: entitlements; Owner: -
+--
 
-SET default_table_access_method = heap;
+CREATE TABLE entitlements.account_credit_ledger (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    member_id uuid NOT NULL,
+    amount_cents integer NOT NULL,
+    reason entitlements.credit_reason NOT NULL,
+    related_booking_id uuid,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: bookings; Type: TABLE; Schema: entitlements; Owner: -
+--
+
+CREATE TABLE entitlements.bookings (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    member_id uuid NOT NULL,
+    offering_id uuid NOT NULL,
+    consumed_entitlement_id uuid,
+    amount_charged_cents integer DEFAULT 0 NOT NULL,
+    credit_applied_cents integer DEFAULT 0 NOT NULL,
+    stripe_payment_id text,
+    status entitlements.booking_status DEFAULT 'reserved'::entitlements.booking_status NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: coupon_redemptions; Type: TABLE; Schema: entitlements; Owner: -
+--
+
+CREATE TABLE entitlements.coupon_redemptions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    discount_id uuid NOT NULL,
+    member_id uuid NOT NULL,
+    booking_id uuid,
+    amount_cents integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: entitlements; Type: TABLE; Schema: entitlements; Owner: -
+--
+
+CREATE TABLE entitlements.entitlements (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    member_id uuid NOT NULL,
+    kind entitlements.entitlement_kind NOT NULL,
+    scope_type entitlements.scope_type NOT NULL,
+    offering_id uuid,
+    offering_type entitlements.offering_type,
+    quantity_total integer NOT NULL,
+    quantity_remaining integer NOT NULL,
+    source entitlements.grant_source NOT NULL,
+    source_ref text,
+    refundable boolean DEFAULT false NOT NULL,
+    status entitlements.entitlement_status DEFAULT 'active'::entitlements.entitlement_status NOT NULL,
+    valid_from timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT entitlements_check CHECK ((quantity_remaining <= quantity_total)),
+    CONSTRAINT entitlements_quantity_remaining_check CHECK ((quantity_remaining >= 0)),
+    CONSTRAINT entitlements_quantity_total_check CHECK ((quantity_total > 0))
+);
+
+
+--
+-- Name: member_grant_runs; Type: TABLE; Schema: entitlements; Owner: -
+--
+
+CREATE TABLE entitlements.member_grant_runs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    member_id uuid NOT NULL,
+    membership_id uuid NOT NULL,
+    tier_benefit_id uuid NOT NULL,
+    period_start date NOT NULL,
+    entitlement_id uuid,
+    granted_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: offerings; Type: TABLE; Schema: entitlements; Owner: -
+--
+
+CREATE TABLE entitlements.offerings (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    type entitlements.offering_type NOT NULL,
+    cohort_id uuid,
+    provider_member_id uuid,
+    title text NOT NULL,
+    segment text,
+    duration_min integer,
+    capacity integer,
+    seats_taken integer DEFAULT 0 NOT NULL,
+    starts_at timestamp with time zone,
+    ends_at timestamp with time zone,
+    status text DEFAULT 'open'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT offerings_check CHECK (((capacity IS NULL) OR (seats_taken <= capacity))),
+    CONSTRAINT offerings_status_check CHECK ((status = ANY (ARRAY['open'::text, 'full'::text, 'cancelled'::text, 'completed'::text])))
+);
+
+
+--
+-- Name: prices; Type: TABLE; Schema: entitlements; Owner: -
+--
+
+CREATE TABLE entitlements.prices (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    offering_id uuid,
+    offering_type entitlements.offering_type,
+    segment text,
+    amount_cents integer NOT NULL,
+    currency text DEFAULT 'USD'::text NOT NULL,
+    valid_from timestamp with time zone DEFAULT now() NOT NULL,
+    valid_to timestamp with time zone,
+    CONSTRAINT prices_check CHECK (((offering_id IS NOT NULL) OR (offering_type IS NOT NULL)))
+);
+
+
+--
+-- Name: processed_events; Type: TABLE; Schema: entitlements; Owner: -
+--
+
+CREATE TABLE entitlements.processed_events (
+    event_id text NOT NULL,
+    type text,
+    received_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: tier_benefits; Type: TABLE; Schema: entitlements; Owner: -
+--
+
+CREATE TABLE entitlements.tier_benefits (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tier_code text NOT NULL,
+    kind entitlements.entitlement_kind,
+    quantity integer,
+    period text DEFAULT 'one_off'::text NOT NULL,
+    validity_days integer,
+    discount_pct numeric(5,2),
+    applies_to entitlements.offering_type,
+    extra_stripe_price_id text,
+    CONSTRAINT tier_benefits_check CHECK ((((kind IS NOT NULL) AND (quantity IS NOT NULL)) OR (discount_pct IS NOT NULL))),
+    CONSTRAINT tier_benefits_period_check CHECK ((period = ANY (ARRAY['one_off'::text, 'monthly'::text, 'quarterly'::text, 'per_term'::text])))
+);
+
+
+--
+-- Name: tiers; Type: TABLE; Schema: entitlements; Owner: -
+--
+
+CREATE TABLE entitlements.tiers (
+    code text NOT NULL,
+    membership_tier_id uuid,
+    name text NOT NULL,
+    member_group text,
+    annual_price_cents integer,
+    store_discount_pct numeric(5,2) DEFAULT 0 NOT NULL,
+    stripe_price_id text,
+    stripe_price_id_monthly text,
+    is_free boolean DEFAULT false NOT NULL
+);
+
 
 --
 -- Name: member_roles; Type: TABLE; Schema: public; Owner: -
@@ -2776,6 +3783,110 @@ CREATE TABLE public.volunteer_event_interest (
 
 
 --
+-- Name: account_credit_ledger account_credit_ledger_pkey; Type: CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.account_credit_ledger
+    ADD CONSTRAINT account_credit_ledger_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: bookings bookings_pkey; Type: CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.bookings
+    ADD CONSTRAINT bookings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: coupon_redemptions coupon_redemptions_pkey; Type: CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.coupon_redemptions
+    ADD CONSTRAINT coupon_redemptions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: discounts discounts_pkey; Type: CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.discounts
+    ADD CONSTRAINT discounts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: entitlements entitlements_pkey; Type: CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.entitlements
+    ADD CONSTRAINT entitlements_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: member_grant_runs member_grant_runs_membership_id_tier_benefit_id_period_star_key; Type: CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.member_grant_runs
+    ADD CONSTRAINT member_grant_runs_membership_id_tier_benefit_id_period_star_key UNIQUE (membership_id, tier_benefit_id, period_start);
+
+
+--
+-- Name: member_grant_runs member_grant_runs_pkey; Type: CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.member_grant_runs
+    ADD CONSTRAINT member_grant_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: offerings offerings_pkey; Type: CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.offerings
+    ADD CONSTRAINT offerings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: prices prices_pkey; Type: CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.prices
+    ADD CONSTRAINT prices_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: processed_events processed_events_pkey; Type: CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.processed_events
+    ADD CONSTRAINT processed_events_pkey PRIMARY KEY (event_id);
+
+
+--
+-- Name: tier_benefits tier_benefits_pkey; Type: CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.tier_benefits
+    ADD CONSTRAINT tier_benefits_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: tiers tiers_membership_tier_id_key; Type: CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.tiers
+    ADD CONSTRAINT tiers_membership_tier_id_key UNIQUE (membership_tier_id);
+
+
+--
+-- Name: tiers tiers_pkey; Type: CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.tiers
+    ADD CONSTRAINT tiers_pkey PRIMARY KEY (code);
+
+
+--
 -- Name: account_credits account_credits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3925,6 +5036,97 @@ ALTER TABLE ONLY public.volunteer_event_interest
 
 ALTER TABLE ONLY public.volunteer_event_interest
     ADD CONSTRAINT volunteer_event_interest_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: account_credit_ledger_member_id_idx; Type: INDEX; Schema: entitlements; Owner: -
+--
+
+CREATE INDEX account_credit_ledger_member_id_idx ON entitlements.account_credit_ledger USING btree (member_id);
+
+
+--
+-- Name: bookings_member_id_idx; Type: INDEX; Schema: entitlements; Owner: -
+--
+
+CREATE INDEX bookings_member_id_idx ON entitlements.bookings USING btree (member_id);
+
+
+--
+-- Name: bookings_offering_id_idx; Type: INDEX; Schema: entitlements; Owner: -
+--
+
+CREATE INDEX bookings_offering_id_idx ON entitlements.bookings USING btree (offering_id) WHERE (status = 'reserved'::entitlements.booking_status);
+
+
+--
+-- Name: coupon_redemptions_discount_id_idx; Type: INDEX; Schema: entitlements; Owner: -
+--
+
+CREATE INDEX coupon_redemptions_discount_id_idx ON entitlements.coupon_redemptions USING btree (discount_id);
+
+
+--
+-- Name: coupon_redemptions_member_id_idx; Type: INDEX; Schema: entitlements; Owner: -
+--
+
+CREATE INDEX coupon_redemptions_member_id_idx ON entitlements.coupon_redemptions USING btree (member_id);
+
+
+--
+-- Name: entitlements_member_id_kind_idx; Type: INDEX; Schema: entitlements; Owner: -
+--
+
+CREATE INDEX entitlements_member_id_kind_idx ON entitlements.entitlements USING btree (member_id, kind) WHERE (status = 'active'::entitlements.entitlement_status);
+
+
+--
+-- Name: entitlements_offering_id_idx; Type: INDEX; Schema: entitlements; Owner: -
+--
+
+CREATE INDEX entitlements_offering_id_idx ON entitlements.entitlements USING btree (offering_id);
+
+
+--
+-- Name: idx_discounts_tier; Type: INDEX; Schema: entitlements; Owner: -
+--
+
+CREATE INDEX idx_discounts_tier ON entitlements.discounts USING btree (tier_code) WHERE (kind = 'tier'::text);
+
+
+--
+-- Name: prices_offering_id_idx; Type: INDEX; Schema: entitlements; Owner: -
+--
+
+CREATE INDEX prices_offering_id_idx ON entitlements.prices USING btree (offering_id);
+
+
+--
+-- Name: prices_offering_type_segment_idx; Type: INDEX; Schema: entitlements; Owner: -
+--
+
+CREATE INDEX prices_offering_type_segment_idx ON entitlements.prices USING btree (offering_type, segment);
+
+
+--
+-- Name: tier_benefits_tier_code_idx; Type: INDEX; Schema: entitlements; Owner: -
+--
+
+CREATE INDEX tier_benefits_tier_code_idx ON entitlements.tier_benefits USING btree (tier_code);
+
+
+--
+-- Name: uq_discounts_coupon_code; Type: INDEX; Schema: entitlements; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_discounts_coupon_code ON entitlements.discounts USING btree (lower(code)) WHERE (kind = 'coupon'::text);
+
+
+--
+-- Name: uq_offerings_cohort; Type: INDEX; Schema: entitlements; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_offerings_cohort ON entitlements.offerings USING btree (cohort_id) WHERE (cohort_id IS NOT NULL);
 
 
 --
@@ -5090,6 +6292,20 @@ CREATE INDEX volunteer_event_interest_member_idx ON public.volunteer_event_inter
 
 
 --
+-- Name: bookings booking_guard; Type: TRIGGER; Schema: entitlements; Owner: -
+--
+
+CREATE TRIGGER booking_guard BEFORE INSERT OR UPDATE ON entitlements.bookings FOR EACH ROW EXECUTE FUNCTION entitlements.trg_booking_guard();
+
+
+--
+-- Name: discounts touch_discounts; Type: TRIGGER; Schema: entitlements; Owner: -
+--
+
+CREATE TRIGGER touch_discounts BEFORE UPDATE ON entitlements.discounts FOR EACH ROW EXECUTE FUNCTION entitlements.trg_touch_updated_at();
+
+
+--
 -- Name: event_settings event_settings_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -5164,6 +6380,150 @@ CREATE TRIGGER trg_project_tier AFTER INSERT OR DELETE OR UPDATE ON public.membe
 --
 
 CREATE TRIGGER trg_schools_updated_at BEFORE UPDATE ON public.schools FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: account_credit_ledger account_credit_ledger_member_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.account_credit_ledger
+    ADD CONSTRAINT account_credit_ledger_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id) ON DELETE CASCADE;
+
+
+--
+-- Name: account_credit_ledger account_credit_ledger_related_booking_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.account_credit_ledger
+    ADD CONSTRAINT account_credit_ledger_related_booking_id_fkey FOREIGN KEY (related_booking_id) REFERENCES entitlements.bookings(id);
+
+
+--
+-- Name: bookings bookings_consumed_entitlement_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.bookings
+    ADD CONSTRAINT bookings_consumed_entitlement_id_fkey FOREIGN KEY (consumed_entitlement_id) REFERENCES entitlements.entitlements(id);
+
+
+--
+-- Name: bookings bookings_member_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.bookings
+    ADD CONSTRAINT bookings_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id);
+
+
+--
+-- Name: bookings bookings_offering_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.bookings
+    ADD CONSTRAINT bookings_offering_id_fkey FOREIGN KEY (offering_id) REFERENCES entitlements.offerings(id);
+
+
+--
+-- Name: coupon_redemptions coupon_redemptions_booking_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.coupon_redemptions
+    ADD CONSTRAINT coupon_redemptions_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES entitlements.bookings(id);
+
+
+--
+-- Name: coupon_redemptions coupon_redemptions_discount_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.coupon_redemptions
+    ADD CONSTRAINT coupon_redemptions_discount_id_fkey FOREIGN KEY (discount_id) REFERENCES entitlements.discounts(id) ON DELETE CASCADE;
+
+
+--
+-- Name: coupon_redemptions coupon_redemptions_member_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.coupon_redemptions
+    ADD CONSTRAINT coupon_redemptions_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id) ON DELETE CASCADE;
+
+
+--
+-- Name: discounts discounts_tier_code_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.discounts
+    ADD CONSTRAINT discounts_tier_code_fkey FOREIGN KEY (tier_code) REFERENCES entitlements.tiers(code) ON DELETE CASCADE;
+
+
+--
+-- Name: entitlements entitlements_member_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.entitlements
+    ADD CONSTRAINT entitlements_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id) ON DELETE CASCADE;
+
+
+--
+-- Name: entitlements entitlements_offering_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.entitlements
+    ADD CONSTRAINT entitlements_offering_id_fkey FOREIGN KEY (offering_id) REFERENCES entitlements.offerings(id);
+
+
+--
+-- Name: member_grant_runs member_grant_runs_entitlement_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.member_grant_runs
+    ADD CONSTRAINT member_grant_runs_entitlement_id_fkey FOREIGN KEY (entitlement_id) REFERENCES entitlements.entitlements(id);
+
+
+--
+-- Name: member_grant_runs member_grant_runs_member_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.member_grant_runs
+    ADD CONSTRAINT member_grant_runs_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id) ON DELETE CASCADE;
+
+
+--
+-- Name: member_grant_runs member_grant_runs_membership_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.member_grant_runs
+    ADD CONSTRAINT member_grant_runs_membership_id_fkey FOREIGN KEY (membership_id) REFERENCES public.member_memberships(id) ON DELETE CASCADE;
+
+
+--
+-- Name: member_grant_runs member_grant_runs_tier_benefit_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.member_grant_runs
+    ADD CONSTRAINT member_grant_runs_tier_benefit_id_fkey FOREIGN KEY (tier_benefit_id) REFERENCES entitlements.tier_benefits(id) ON DELETE CASCADE;
+
+
+--
+-- Name: offerings offerings_provider_member_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.offerings
+    ADD CONSTRAINT offerings_provider_member_id_fkey FOREIGN KEY (provider_member_id) REFERENCES public.members(id);
+
+
+--
+-- Name: prices prices_offering_id_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.prices
+    ADD CONSTRAINT prices_offering_id_fkey FOREIGN KEY (offering_id) REFERENCES entitlements.offerings(id) ON DELETE CASCADE;
+
+
+--
+-- Name: tier_benefits tier_benefits_tier_code_fkey; Type: FK CONSTRAINT; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE ONLY entitlements.tier_benefits
+    ADD CONSTRAINT tier_benefits_tier_code_fkey FOREIGN KEY (tier_code) REFERENCES entitlements.tiers(code) ON DELETE CASCADE;
 
 
 --
@@ -6463,6 +7823,72 @@ ALTER TABLE ONLY public.volunteer_event_interest
 
 
 --
+-- Name: account_credit_ledger; Type: ROW SECURITY; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE entitlements.account_credit_ledger ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: bookings; Type: ROW SECURITY; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE entitlements.bookings ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: coupon_redemptions; Type: ROW SECURITY; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE entitlements.coupon_redemptions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: discounts; Type: ROW SECURITY; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE entitlements.discounts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: entitlements; Type: ROW SECURITY; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE entitlements.entitlements ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: member_grant_runs; Type: ROW SECURITY; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE entitlements.member_grant_runs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: offerings; Type: ROW SECURITY; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE entitlements.offerings ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: prices; Type: ROW SECURITY; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE entitlements.prices ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: processed_events; Type: ROW SECURITY; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE entitlements.processed_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: tier_benefits; Type: ROW SECURITY; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE entitlements.tier_benefits ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: tiers; Type: ROW SECURITY; Schema: entitlements; Owner: -
+--
+
+ALTER TABLE entitlements.tiers ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: account_credits; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -7760,6 +9186,15 @@ ALTER TABLE public.video_watermark_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.volunteer_event_interest ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: SCHEMA entitlements; Type: ACL; Schema: -; Owner: -
+--
+
+GRANT USAGE ON SCHEMA entitlements TO service_role;
+GRANT USAGE ON SCHEMA entitlements TO anon;
+GRANT USAGE ON SCHEMA entitlements TO authenticated;
+
+
+--
 -- Name: SCHEMA public; Type: ACL; Schema: -; Owner: -
 --
 
@@ -7767,6 +9202,202 @@ GRANT USAGE ON SCHEMA public TO postgres;
 GRANT USAGE ON SCHEMA public TO anon;
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT USAGE ON SCHEMA public TO service_role;
+
+
+--
+-- Name: FUNCTION fn_active_tier(p_member uuid); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_active_tier(p_member uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_allocation_balance(p_member uuid, p_kind entitlements.entitlement_kind, p_offering uuid, p_offering_type entitlements.offering_type); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_allocation_balance(p_member uuid, p_kind entitlements.entitlement_kind, p_offering uuid, p_offering_type entitlements.offering_type) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_base_price_cents(p_offering uuid); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_base_price_cents(p_offering uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_book_from_allocation(p_member uuid, p_offering uuid, p_participant uuid); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_book_from_allocation(p_member uuid, p_offering uuid, p_participant uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_cancel_cohort(p_offering uuid); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_cancel_cohort(p_offering uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_claim_event(p_event_id text, p_type text); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_claim_event(p_event_id text, p_type text) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_confirm_paid_booking(p_member uuid, p_offering uuid, p_stripe_payment text, p_amount_charged_cents integer, p_credit_applied_cents integer, p_participant uuid); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_confirm_paid_booking(p_member uuid, p_offering uuid, p_stripe_payment text, p_amount_charged_cents integer, p_credit_applied_cents integer, p_participant uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_credit_balance(p_member uuid); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_credit_balance(p_member uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_expire_lapsed_grants(); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_expire_lapsed_grants() TO service_role;
+
+
+--
+-- Name: FUNCTION fn_grant_adhoc(p_member uuid, p_kind entitlements.entitlement_kind, p_quantity integer, p_source_ref text, p_expires_at timestamp with time zone); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_grant_adhoc(p_member uuid, p_kind entitlements.entitlement_kind, p_quantity integer, p_source_ref text, p_expires_at timestamp with time zone) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_grant_member_benefits(p_membership uuid, p_as_of timestamp with time zone); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_grant_member_benefits(p_membership uuid, p_as_of timestamp with time zone) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_grant_purchased(p_member uuid, p_kind entitlements.entitlement_kind, p_quantity integer, p_stripe_session text, p_expires_at timestamp with time zone); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_grant_purchased(p_member uuid, p_kind entitlements.entitlement_kind, p_quantity integer, p_stripe_session text, p_expires_at timestamp with time zone) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_kind_to_offering(p_kind entitlements.entitlement_kind); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_kind_to_offering(p_kind entitlements.entitlement_kind) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_mark_no_show(p_booking uuid); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_mark_no_show(p_booking uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_period_start(p_period text, p_as_of timestamp with time zone, p_started timestamp with time zone); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_period_start(p_period text, p_as_of timestamp with time zone, p_started timestamp with time zone) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_purchase_expiry(); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_purchase_expiry() TO service_role;
+
+
+--
+-- Name: FUNCTION fn_quote(p_member uuid, p_offering uuid, p_coupon text); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_quote(p_member uuid, p_offering uuid, p_coupon text) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_redeem_coupon(p_code text, p_member uuid, p_booking uuid, p_amount_cents integer); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_redeem_coupon(p_code text, p_member uuid, p_booking uuid, p_amount_cents integer) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_refund_entitlement(p_entitlement uuid, p_mode text, p_amount_cents integer); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_refund_entitlement(p_entitlement uuid, p_mode text, p_amount_cents integer) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_regrant_periodic(); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_regrant_periodic() TO service_role;
+
+
+--
+-- Name: FUNCTION fn_release_one_booking(p_member uuid, p_offering uuid); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_release_one_booking(p_member uuid, p_offering uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION fn_sync_cohort_offerings(); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_sync_cohort_offerings() TO service_role;
+
+
+--
+-- Name: FUNCTION fn_tier_discount_pct(p_member uuid, p_type entitlements.offering_type); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_tier_discount_pct(p_member uuid, p_type entitlements.offering_type) TO service_role;
+
+
+--
+-- Name: TABLE discounts; Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE entitlements.discounts TO service_role;
+
+
+--
+-- Name: FUNCTION fn_validate_coupon(p_code text, p_type entitlements.offering_type); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.fn_validate_coupon(p_code text, p_type entitlements.offering_type) TO service_role;
+
+
+--
+-- Name: FUNCTION project_tier(); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.project_tier() TO service_role;
+
+
+--
+-- Name: FUNCTION trg_booking_guard(); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.trg_booking_guard() TO service_role;
+
+
+--
+-- Name: FUNCTION trg_touch_updated_at(); Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT ALL ON FUNCTION entitlements.trg_touch_updated_at() TO service_role;
 
 
 --
@@ -7925,6 +9556,76 @@ GRANT ALL ON FUNCTION public.tg_ensure_tier_space() TO service_role;
 GRANT ALL ON FUNCTION public.tier_space_slug(p_name text) TO anon;
 GRANT ALL ON FUNCTION public.tier_space_slug(p_name text) TO authenticated;
 GRANT ALL ON FUNCTION public.tier_space_slug(p_name text) TO service_role;
+
+
+--
+-- Name: TABLE account_credit_ledger; Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE entitlements.account_credit_ledger TO service_role;
+
+
+--
+-- Name: TABLE bookings; Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE entitlements.bookings TO service_role;
+
+
+--
+-- Name: TABLE coupon_redemptions; Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE entitlements.coupon_redemptions TO service_role;
+
+
+--
+-- Name: TABLE entitlements; Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE entitlements.entitlements TO service_role;
+
+
+--
+-- Name: TABLE member_grant_runs; Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE entitlements.member_grant_runs TO service_role;
+
+
+--
+-- Name: TABLE offerings; Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE entitlements.offerings TO service_role;
+
+
+--
+-- Name: TABLE prices; Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE entitlements.prices TO service_role;
+
+
+--
+-- Name: TABLE processed_events; Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE entitlements.processed_events TO service_role;
+
+
+--
+-- Name: TABLE tier_benefits; Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE entitlements.tier_benefits TO service_role;
+
+
+--
+-- Name: TABLE tiers; Type: ACL; Schema: entitlements; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE entitlements.tiers TO service_role;
 
 
 --
@@ -8855,6 +10556,20 @@ GRANT ALL ON TABLE public.volunteer_event_interest TO service_role;
 
 
 --
+-- Name: DEFAULT PRIVILEGES FOR FUNCTIONS; Type: DEFAULT ACL; Schema: entitlements; Owner: -
+--
+
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA entitlements GRANT ALL ON FUNCTIONS TO service_role;
+
+
+--
+-- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: entitlements; Owner: -
+--
+
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA entitlements GRANT SELECT,INSERT,DELETE,UPDATE ON TABLES TO service_role;
+
+
+--
 -- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: -
 --
 
@@ -8918,5 +10633,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 1pWmPfhidCh8gDTPwyckUVIIUnzofSyVbHL6cgF5wZQg0yXla9MrzY8Zap2jsMC
+\unrestrict XwGn1zVO1hXSn7NADH84dp55IsiUPHjInhYDKWi7075NuvWdhYKKIgUCdZKEf3x
 

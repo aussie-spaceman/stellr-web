@@ -75,7 +75,13 @@ export function attachConsoleGuard(page: Page): string[] {
     // The CORS message names the blocked URL in its text; the paired
     // ERR_FAILED names it only in the message location.
     if (isThirdParty(text) || isThirdParty(message.location()?.url)) return
-    errors.push(text)
+
+    // Report WHERE, not just what. Chrome's "Failed to load resource: the
+    // server responded with a status of 400" carries no URL in its text, so a
+    // failure named only by that string cannot be acted on — you cannot tell an
+    // app route from a third-party asset without re-running to reproduce.
+    const url = message.location()?.url
+    errors.push(url ? `${text} [${url}]` : text)
   })
 
   // An uncaught exception never reaches page.on('console') but is strictly

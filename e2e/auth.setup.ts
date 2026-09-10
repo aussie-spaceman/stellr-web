@@ -2,6 +2,7 @@ import { test as setup } from '@playwright/test'
 import { clerk, setupClerkTestingToken } from '@clerk/testing/playwright'
 import { mkdirSync } from 'node:fs'
 import { FIXTURES, storageStatePath, type FixtureRole } from './fixtures/users'
+import { applyVercelBypass } from './fixtures/vercel-bypass'
 
 /**
  * Sign each fixture user in once and save the session.
@@ -51,6 +52,14 @@ for (const role of Object.keys(FIXTURES) as FixtureRole[]) {
     // Must precede the first navigation: it installs the token the Clerk client
     // picks up on load.
     await setupClerkTestingToken({ page })
+
+    // Against a protected deployment every request is redirected to Vercel's
+    // SSO page unless the bypass header rides along. Clerk then never loads and
+    // the only symptom is the waitForFunction below timing out — which says
+    // nothing about the cause. This setup does not use e2e/fixtures/test.ts (it
+    // needs Playwright's own `test` to write storage state), so it applies the
+    // same origin-scoped routing itself.
+    await applyVercelBypass(page, baseURL)
 
     // The app's own pages, not /sign-in: clerk.signIn drives the Clerk client
     // directly and the sign-in route's own component competes with it.

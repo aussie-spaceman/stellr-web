@@ -95,7 +95,25 @@ export default defineConfig({
         // free port per worktree via scripts/dev.mjs.
         command: process.env.CI ? 'npm start' : 'npm run dev',
         port: PORT,
-        reuseExistingServer: !process.env.CI,
+        // Never reuse a server this run did not start.
+        //
+        // WHY (10 Sept 2026): the obvious version of this — reuse only when the
+        // worktree has claimed a PORT — does not work, because the claimed port
+        // is usually 3000, which is exactly the port a sibling worktree's server
+        // is already on. Playwright attached to it and the whole suite ran
+        // against another branch's code with another branch's environment. On
+        // the run that exposed this, localhost:3000 was serving a pk_live_
+        // Clerk build: the specs were talking to PRODUCTION credentials.
+        //
+        // There is no way to ask Playwright "is this server mine?", so the only
+        // safe answer is to always start our own. If the port is occupied the
+        // run fails immediately with a port-in-use error, which is a good
+        // outcome: loud, instant, and impossible to mistake for a test result.
+        //
+        // Cost is a few seconds of startup per run. The alternative cost is a
+        // green suite that proves nothing, which this repo has now paid three
+        // times.
+        reuseExistingServer: false,
         timeout: 180_000,
       },
 })

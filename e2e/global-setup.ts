@@ -61,8 +61,18 @@ export default async function globalSetup() {
 
 async function assertServingTheApp(url: URL) {
   const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+
+  // Header only — deliberately NOT 'x-vercel-set-bypass-cookie'.
+  //
+  // That header makes Vercel answer 307 -> '/' so it can set the _vercel_jwt
+  // cookie on the redirect. A browser keeps the cookie and the second request
+  // succeeds; `fetch` does not, so it re-requests '/', is redirected again, and
+  // loops until Node gives up with "redirect count exceeded" — which this file
+  // then reported as "the deployment never built". The target was healthy the
+  // whole time. The cookie is only useful where something retains it, which is
+  // the browser context in e2e/fixtures/test.ts, not these probes.
   const headers: Record<string, string> = bypass
-    ? { 'x-vercel-protection-bypass': bypass, 'x-vercel-set-bypass-cookie': 'true' }
+    ? { 'x-vercel-protection-bypass': bypass }
     : {}
 
   let response: Response
@@ -106,17 +116,50 @@ async function assertServingTheApp(url: URL) {
   // positively identify as this app before any spec runs.
   let body: string
   try {
-    body = await (await fetch(url.toString(), { headers, redirect: 'follow' })).text()
+    const followed = await fetch(url.toString(), { headers, redirect: 'follow' })
+
+    // Did we stay on the host we were asked to test?
+    //
+    // WHY (10 Sept 2026): with NEXT_PUBLIC_SITE_URL unset, lib/env.ts falls back
+    // to the production origins and proxy.ts correctly redirects localhost's
+    // public routes to www.stellreducation.org. The smoke suite followed the
+    // redirect and asserted a non-error status and one <h1> — both true of the
+    // live site — so it passed while never loading local code at all.
+    //
+    // Nothing above catches that: the target is reachable, is not a Vercel
+    // placeholder, is not a login page, and DOES contain "Stellr". It is simply
+    // the wrong deployment. Identity has to include the host, not just the app.
+    const landed = new URL(followed.url)
+    if (landed.host !== url.host) {
+      throw new Error(
+        `\n${url.host} redirects to ${landed.host} — the suite would test that\n` +
+          'instead, and report a green for a deployment nobody asked about.\n\n' +
+          (/stellreducation\.org$/.test(landed.host)
+            ? 'That is PRODUCTION. Almost always NEXT_PUBLIC_SITE_URL and\n' +
+              'NEXT_PUBLIC_AUTH_APP_URL are unset, so lib/env.ts falls back to the\n' +
+              'production origins and proxy.ts redirects off localhost.\n\n' +
+              `Fix: set both to http://${url.host} in .env.local — \`npm run dev\`\n` +
+              'now writes them for you.\n'
+            : 'Set NEXT_PUBLIC_SITE_URL and NEXT_PUBLIC_AUTH_APP_URL to match the\n' +
+              'host actually being tested.\n'),
+      )
+    }
+
+    body = await followed.text()
   } catch (error) {
+    // Our own diagnostics are already phrased for a human; only transport
+    // failures need interpreting below.
+    if (error instanceof Error && error.message.startsWith('\n')) throw error
+
     const cause = (error as { cause?: Error }).cause?.message ?? (error as Error).message
     if (/redirect count exceeded/i.test(cause)) {
       throw new Error(
         `\n${url.host} is stuck in a redirect loop.\n\n` +
-          'Usually one of two things:\n' +
-          '  · the deployment never built, so the alias points at nothing;\n' +
-          '  · NEXT_PUBLIC_SITE_URL and NEXT_PUBLIC_AUTH_APP_URL disagree with\n' +
-          '    the host actually serving the request, so proxy.ts redirects a\n' +
-          '    public route to itself.\n',
+          'NEXT_PUBLIC_SITE_URL and NEXT_PUBLIC_AUTH_APP_URL most likely disagree\n' +
+          'with the host actually serving the request, so proxy.ts redirects a\n' +
+          'public route to itself. Compare all three.\n\n' +
+          'Note this is NOT how an unbuilt deployment presents — that serves a\n' +
+          'Vercel placeholder and is reported separately below.\n',
       )
     }
     throw new Error(`\nCould not read ${url.host}: ${cause}\n`)

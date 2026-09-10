@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -10,8 +10,9 @@ import { useSignIn } from '@clerk/nextjs/legacy'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import FieldError from '@/components/forms/FieldError'
 import { SchoolSearchInput, SchoolSelection, schoolSelectionState } from '@/components/member/SchoolSearchInput'
-import { T_SHIRT_SIZES, GENDERS, GRADES, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, deriveAgeBracket } from '@/lib/registration-constants'
-import { inferHighSchoolGrade } from '@/lib/grade-logic'
+import { T_SHIRT_SIZES, GENDERS, COLLEGE_GRADES, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, deriveAgeBracket } from '@/lib/registration-constants'
+import { inferStudentGrade, DEFAULT_GRADE_BAND } from '@/lib/grade-logic'
+import { gradeOptions } from '@/lib/grade-band'
 import { resolveSchoolPayload } from '@/lib/school-utils'
 import { MemberIdLookup, type MemberMatch } from '@/components/forms/MemberIdLookup'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
@@ -276,11 +277,13 @@ function AdultAccordion({ index, data, onChange, onAccept, onUnlink, expanded, o
 }
 
 // ── Student accordion ─────────────────────────────────────────────────────────
-function StudentAccordion({ index, displayNumber, data, onChange, onAccept, onUnlink, expanded, onToggle, status }: {
+function StudentAccordion({ index, displayNumber, data, onChange, onAccept, onUnlink, expanded, onToggle, status, band }: {
   index: number; displayNumber?: number; data: StudentData
   onChange: (field: keyof StudentData, value: string | string[]) => void
   onAccept: (m: MemberMatch) => void; onUnlink: () => void
   expanded: boolean; onToggle: () => void; status: SlotStatus
+  /** The event's eligible grade range — school grades offered in this slot. */
+  band: { min: number; max: number }
 }) {
   const label = data.first_name && data.last_name ? `${data.first_name} ${data.last_name}` : `Student ${displayNumber ?? index + 1}`
   return (
@@ -314,7 +317,7 @@ function StudentAccordion({ index, displayNumber, data, onChange, onAccept, onUn
                 <div>
                   <label className="label-text">Grade *</label>
                   <select value={data.grade} onChange={e => onChange('grade', e.target.value)} className="input-field">
-                    <option value="">Select…</option>{GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                    <option value="">Select…</option>{[...gradeOptions(band), ...COLLEGE_GRADES].map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
                 </div>
                 <div>
@@ -417,7 +420,18 @@ function StudentManagerCard({ data, onEdit }: { data: StudentManagerFormData; on
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, isCampaign = false, isFree = false }: { eventSlug: string; eventTitle: string; prefill?: RegistrationPrefill | null; isCampaign?: boolean; isFree?: boolean }) {
+export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, isCampaign = false, isFree = false, gradeMin = DEFAULT_GRADE_BAND.min, gradeMax = DEFAULT_GRADE_BAND.max }: {
+  eventSlug: string; eventTitle: string; prefill?: RegistrationPrefill | null
+  isCampaign?: boolean; isFree?: boolean
+  /**
+   * The event's eligible grade range, as primitives so the memoised band below
+   * stays referentially stable — an inline `band={{...}}` object would be a new
+   * value every render and re-run the DOB inference effect on each one.
+   * Defaults to 9–12.
+   */
+  gradeMin?: number; gradeMax?: number
+}) {
+  const band = useMemo(() => ({ min: gradeMin, max: gradeMax }), [gradeMin, gradeMax])
   const router = useRouter()
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn()
   const { isSignedIn } = useAuth()
@@ -475,16 +489,16 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
   const [smSchool, setSmSchool] = useState<SchoolSelection | null>(initialSchool)
   const [schoolError, setSchoolError] = useState<string | null>(null)
 
-  // Student-Manager registers as a High-School student themselves — pre-fill
-  // their own Grade from DOB + their school's State (editable), mirroring the
-  // per-student inference above.
+  // Student-Manager registers as a school student themselves — pre-fill their
+  // own Grade from DOB + their school's State (editable), clamped into the
+  // event's band, mirroring the per-student inference above.
   const smDob = sf.watch('date_of_birth')
   const smSchoolState = schoolSelectionState(smSchool)
   useEffect(() => {
     if (registrantRole !== 'student_manager') return
-    const inferred = inferHighSchoolGrade(smDob, smSchoolState)
+    const inferred = inferStudentGrade(smDob, smSchoolState, undefined, { band })
     if (inferred) sf.setValue('grade', inferred)
-  }, [smDob, smSchoolState, registrantRole, sf])
+  }, [smDob, smSchoolState, registrantRole, band, sf])
 
   // For teacher: adultCount includes teacher themselves (min=1)
   // For SM: adultCount = PoC + optional second adult (min=1; PoC always required as participant)
@@ -547,16 +561,17 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
     setAdditionalAdults(prev => prev.map((a, idx) => idx === i ? { ...a, [field]: value } : a))
   }
 
-  // Group students are school students (High School). When a DOB is entered,
-  // pre-fill their Grade from DOB + the group school's State (Sep 1 default when
-  // unknown), re-inferring on later DOB edits. The Grade select stays editable.
+  // Group students are school students. When a DOB is entered, pre-fill their
+  // Grade from DOB + the group school's State (Sep 1 default when unknown),
+  // clamped into the event's band and re-inferred on later DOB edits. The Grade
+  // select stays editable.
   function updateStudent(i: number, field: keyof StudentData, value: string | string[]) {
     setStudents(prev => prev.map((s, idx) => {
       if (idx !== i) return s
       const next = { ...s, [field]: value }
       if (field === 'date_of_birth' && typeof value === 'string') {
         const groupSchool = registrantRole === 'student_manager' ? smSchool : teacherSchool
-        const inferred = inferHighSchoolGrade(value, schoolSelectionState(groupSchool))
+        const inferred = inferStudentGrade(value, schoolSelectionState(groupSchool), undefined, { band })
         if (inferred) next.grade = inferred
       }
       return next
@@ -905,7 +920,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
                 <div>
                   <label className="label-text">Grade *</label>
                   <select {...sf.register('grade')} className="input-field">
-                    <option value="">Select…</option>{['9','10','11','12'].map(g => <option key={g} value={g}>Grade {g}</option>)}
+                    <option value="">Select…</option>{gradeOptions(band).map(g => <option key={g} value={g}>Grade {g}</option>)}
                   </select>
                   <FieldError message={sf.formState.errors.grade?.message} />
                 </div>
@@ -1095,7 +1110,8 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
                 status={studentStatus(student)}
                 onChange={(field, value) => updateStudent(i, field, value)}
                 onAccept={(m) => acceptStudent(i, m)} onUnlink={() => unlinkStudent(i)}
-                expanded={expandedStudent === i} onToggle={() => setExpandedStudent(expandedStudent === i ? null : i)} />
+                expanded={expandedStudent === i} onToggle={() => setExpandedStudent(expandedStudent === i ? null : i)}
+                band={band} />
             ))}
           </div>
         </>

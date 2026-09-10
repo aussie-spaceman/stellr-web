@@ -21,24 +21,25 @@
 // serialised into FAQPage JSON-LD. Keep the two in step — schema that disagrees
 // with the visible copy is treated as spam by search and answer engines.
 
+import { gradeBand, type GradeBandInput } from './grade-band'
+
 /**
- * Standard eligibility wording. The audience clause is derived from the
- * campaign's grade level, exactly as on the event page, so a middle school
- * campaign cannot inherit the high school range. Everything after it is
+ * Standard eligibility wording. The audience clause comes from the campaign's
+ * grade band (lib/grade-band.ts), exactly as on the event page, so a middle
+ * school campaign cannot inherit the high school range. Everything after it is
  * constant — and differs from the event copy on both counts that matter:
  * groups only, and a student manager may be the one who registers.
+ *
+ * Takes the document rather than its `gradeLevel` alone: the band can be an
+ * explicit `gradeMin`/`gradeMax` override, and passing one field would silently
+ * drop it.
  */
-export function campaignEligibilityCopy(gradeLevel?: string): string {
-  const audience =
-    gradeLevel === 'Middle School'
-      ? 'middle school students (grades 6–8)'
-      : gradeLevel === 'Both'
-        ? 'middle and high school students (grades 6–12)'
-        : 'high school students (grades 9–12)'
+
+export function campaignEligibilityCopy(campaign: GradeBandInput): string {
   return (
-    `Open to all ${audience}. Campaigns are entered as a group rather than by individual ` +
-    'students — a teacher, mentor or student manager registers the group, and schools can ' +
-    'enter as many groups as they like.'
+    `Open to all ${gradeBand(campaign).audience}. Campaigns are entered as a group rather than ` +
+    'by individual students — a teacher, mentor or student manager registers the group, and ' +
+    'schools can enter as many groups as they like.'
   )
 }
 

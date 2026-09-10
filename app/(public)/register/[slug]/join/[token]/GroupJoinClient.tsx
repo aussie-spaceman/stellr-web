@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useSignIn } from '@clerk/nextjs/legacy'
 import Link from 'next/link'
-import { inferHighSchoolGrade } from '@/lib/grade-logic'
+import { inferStudentGrade, DEFAULT_GRADE_BAND } from '@/lib/grade-logic'
+import { gradeOptions } from '@/lib/grade-band'
 import { ageFromDob } from '@/lib/utils'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 
@@ -20,11 +21,19 @@ interface Props {
   isAuthenticated: boolean
   /** Signed-in member's record, resolved server-side. Null when signed out. */
   prefill?: RegistrationPrefill | null
+  /**
+   * The event's eligible grade range, resolved from Sanity by the page. Passed
+   * as primitives so the derived list is cheap and stable. Defaults to 9–12.
+   */
+  gradeMin?: number
+  gradeMax?: number
 }
 
 const GENDERS = ['Male', 'Female', 'Other']
 const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
-const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
+// School grades come from the event's band (an invitee to a 7–12 event may be
+// in seventh grade); the college year levels are constant.
+const COLLEGE_GRADES = ['College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
 const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
 const ETHNICITIES = ['Pacific Islander', 'Hispanic', 'White (Caucasian)', 'Black', 'Native American', 'Asian', 'Prefer Not To Say']
 const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
@@ -90,7 +99,10 @@ const inputClass = 'w-full border border-line rounded-lg px-3 py-2 text-sm focus
 
 export default function GroupJoinClient({
   token, eventTitle, eventSlug, organiserName, organiserRole, schoolName, schoolState, memberPaysIndividually, isAuthenticated, prefill,
+  gradeMin = DEFAULT_GRADE_BAND.min, gradeMax = DEFAULT_GRADE_BAND.max,
 }: Props) {
+  const band = { min: gradeMin, max: gradeMax }
+  const grades = [...gradeOptions(band), ...COLLEGE_GRADES]
   const { isSignedIn } = useAuth()
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn()
 
@@ -137,14 +149,15 @@ export default function GroupJoinClient({
   // Students get their Grade pre-filled from DOB + the group school's State
   // (Sep 1 default when unknown), editable — matching the individual and
   // group-organiser forms. Re-infers on DOB edits and when switching to Student.
-  // clampToBand:false so a college-aged student (grade would fall outside 9–12)
-  // is NOT snapped to "12" and a manually chosen college grade isn't overwritten
-  // on a later DOB edit — the Grade list here runs from HS up to Grad/PhD.
+  // clampToBand:false so a college-aged student (grade falls outside the event's
+  // band) is NOT snapped to its top and a manually chosen college grade isn't
+  // overwritten on a later DOB edit — the Grade list here runs from the band's
+  // lowest school grade up to Grad/PhD.
   function setDateOfBirth(value: string) {
     setForm(prev => {
       const next = { ...prev, date_of_birth: value }
       if (prev.type === 'Student') {
-        const inferred = inferHighSchoolGrade(value, schoolState, undefined, { clampToBand: false })
+        const inferred = inferStudentGrade(value, schoolState, undefined, { band, clampToBand: false })
         if (inferred) next.grade = inferred
       }
       return next
@@ -155,7 +168,7 @@ export default function GroupJoinClient({
     setForm(prev => {
       const next = { ...prev, type: t }
       if (t === 'Student') {
-        const inferred = inferHighSchoolGrade(prev.date_of_birth, schoolState, undefined, { clampToBand: false })
+        const inferred = inferStudentGrade(prev.date_of_birth, schoolState, undefined, { band, clampToBand: false })
         if (inferred) next.grade = inferred
       }
       return next
@@ -419,7 +432,7 @@ export default function GroupJoinClient({
               <label className="block text-sm font-medium text-content-body mb-1">Grade</label>
               <select className={inputClass} value={form.grade} onChange={e => set('grade', e.target.value)}>
                 <option value="">Select…</option>
-                {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                {grades.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
               <p className="mt-1 text-xs text-content-faint">Auto-filled from your date of birth — change it if needed.</p>
             </div>

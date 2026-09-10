@@ -8,23 +8,29 @@ import {
 
 describe('campaignEligibilityCopy', () => {
   it('derives the grade range from the campaign grade level', () => {
-    expect(campaignEligibilityCopy('High School')).toContain('grades 9–12')
-    expect(campaignEligibilityCopy('Middle School')).toContain('grades 6–8')
-    expect(campaignEligibilityCopy('Both')).toContain('grades 6–12')
-    expect(campaignEligibilityCopy(undefined)).toContain('grades 9–12')
+    expect(campaignEligibilityCopy({ gradeLevel: 'High School' })).toContain('grades 9–12')
+    expect(campaignEligibilityCopy({ gradeLevel: 'Middle School' })).toContain('grades 6–8')
+    expect(campaignEligibilityCopy({ gradeLevel: 'Both' })).toContain('grades 6–12')
+    expect(campaignEligibilityCopy({})).toContain('grades 9–12')
+  })
+
+  it('prefers an explicit grade band over the bracket', () => {
+    const copy = campaignEligibilityCopy({ gradeLevel: 'Both', gradeMin: 7, gradeMax: 12 })
+    expect(copy).toContain('grades 7–12')
+    expect(copy).not.toContain('grades 6–12')
   })
 
   // The two rules that differ from live events, and the reason this copy is not
   // shared with the event page: campaigns are group-only, and the group can be
   // registered by a student manager rather than a teacher.
   it('states that campaigns are group-only, not individual', () => {
-    const copy = campaignEligibilityCopy('High School')
+    const copy = campaignEligibilityCopy({ gradeLevel: 'High School' })
     expect(copy).toContain('as a group rather than by individual')
     expect(copy).not.toContain('register individually')
   })
 
   it('names the student manager as a registering role', () => {
-    expect(campaignEligibilityCopy('High School')).toContain('student manager')
+    expect(campaignEligibilityCopy({ gradeLevel: 'High School' })).toContain('student manager')
   })
 })
 

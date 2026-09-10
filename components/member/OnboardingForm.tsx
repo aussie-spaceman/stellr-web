@@ -42,6 +42,11 @@ const ROLES = [
 const ADULT_ROLE_VALUES = ['teacher', 'mentor', 'parent']
 
 const GRADES = [
+  // 6–8 exist because some events open below high school (Colorado 2027 runs
+  // grades 7–12). The filter below still splits on the `grade_` prefix.
+  { value: 'grade_6', label: 'Grade 6' },
+  { value: 'grade_7', label: 'Grade 7' },
+  { value: 'grade_8', label: 'Grade 8' },
   { value: 'grade_9', label: 'Grade 9' },
   { value: 'grade_10', label: 'Grade 10' },
   { value: 'grade_11', label: 'Grade 11' },

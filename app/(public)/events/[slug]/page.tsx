@@ -16,6 +16,7 @@ import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { participationTypeFor } from '@/lib/analytics'
 import { buildEventJsonLd, buildCampaignJsonLd, buildFaqJsonLd } from '@/lib/structured-data'
 import { getEventPrice, eventPriceLabel } from '@/lib/event-pricing'
+import { gradeBand } from '@/lib/grade-band'
 import { getSeriesMembers } from '@/lib/schema-series'
 import { CAMPAIGN_FAQS } from '@/lib/campaign-content'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
@@ -42,10 +43,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     : event.setting === 'virtual'
     ? 'Virtual STEM Competition'
     : 'In-Person STEM Competition'
-  const audience = event.gradeLevel === 'Middle School' ? 'Middle School' : 'High School'
+  const audience = gradeBand(event).audienceShort
   const description =
     event.tagline ??
-    `A Stellr ${event.type ?? 'design competition'} — a ${kind.toLowerCase()} for ${audience.toLowerCase()} students.`
+    `A Stellr ${event.type ?? 'design competition'} — a ${kind.toLowerCase()} for ${audience} students.`
   return {
     title: `${event.title} — ${kind}`,
     description,
@@ -98,24 +99,18 @@ const HOW_IT_WORKS: string[] = [
 ]
 
 /**
- * Standard eligibility wording, shown on every event. The audience clause is
- * derived from the event's grade level so a middle school event never inherits
- * the high school grade range — everything after it is constant.
+ * Standard eligibility wording, shown on every event. The audience clause comes
+ * from the event's grade band (lib/grade-band.ts) so a middle school event never
+ * inherits the high school grade range — everything after it is constant.
  *
  * This deliberately ignores the per-event Sanity `eligibility` note, which is
  * retired: hand-authored copy had already drifted from the current rules (one
  * event still promised "Teams of 4–6 students").
  */
-function eligibilityCopy(gradeLevel?: string): string {
-  const audience =
-    gradeLevel === 'Middle School'
-      ? 'middle school students (grades 6–8)'
-      : gradeLevel === 'Both'
-        ? 'middle and high school students (grades 6–12)'
-        : 'high school students (grades 9–12)'
+function eligibilityCopy(event: EventData): string {
   return (
-    `Open to all ${audience}. Students can register individually, or register as part of a ` +
-    'group (from 2–12 students). Schools can register multiple teams.'
+    `Open to all ${gradeBand(event).audience}. Students can register individually, or register ` +
+    'as part of a group (from 2–12 students). Schools can register multiple teams.'
   )
 }
 
@@ -302,7 +297,7 @@ export default async function EventDetailPage({ params }: PageProps) {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 pt-8">
           {/* Standardised three-pill row (Event · Grade · Theme) + status */}
           <div className="flex flex-wrap items-center gap-2 mb-4">
-            <CardPills kind="event" gradeLevel={event.gradeLevel} type={event.type} size="md" />
+            <CardPills kind="event" gradeLevel={gradeBand(event).label} type={event.type} size="md" />
             {lifecycle && (
               <span
                 className={`text-sm font-semibold px-3 py-1.5 rounded-full border ${lifecycleConfig[lifecycle].className}`}
@@ -524,7 +519,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                   <Users size={18} className="text-brand-blue mt-0.5 shrink-0" />
                   <div>
                     <p className="text-sm font-semibold text-brand-blue-dark">Eligibility</p>
-                    <p className="text-sm text-brand-grey-dark">{eligibilityCopy(event.gradeLevel)}</p>
+                    <p className="text-sm text-brand-grey-dark">{eligibilityCopy(event)}</p>
                   </div>
                 </div>
               </div>

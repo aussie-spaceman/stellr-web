@@ -40,21 +40,18 @@ test('no admin sidebar link 404s', async ({ page }) => {
   //
   // A 404 is a DEAD LINK — the defect this spec exists for, always a hard fail.
   //
-  // A 500 is the page erroring. One is currently expected and its cause is not
-  // in this repo, so it is listed rather than silently tolerated: the dev
-  // Supabase project does not expose the `entitlements` schema over PostgREST
-  // (`listTiers`/`listDiscounts` fail with "Invalid schema: entitlements"), so
-  // /admin/members/access 500s in dev and works in production.
+  // A 500 is the page erroring. There are none today. If one ever has a cause
+  // outside this repo, list it here WITH that cause rather than loosening the
+  // assertion, and note that the list is self-cleaning: an entry that starts
+  // passing also fails this spec, so it must be deleted rather than left
+  // sitting here granting cover to a regression that arrives later.
   //
-  // Fix: Supabase dashboard -> dev project -> Settings -> API -> Exposed
-  // schemas -> add `entitlements`.
-  //
-  // The list is self-cleaning: an entry that starts PASSING also fails this
-  // spec, so a stale exemption cannot sit here quietly granting cover to a
-  // regression that arrives later.
-  const KNOWN_SERVER_ERRORS = new Map([
-    ['/admin/members/access', 'dev Supabase does not expose the `entitlements` schema'],
-  ])
+  // That is not hypothetical. /admin/members/access was listed on 10 Sept
+  // because the dev Supabase project did not expose the `entitlements` schema
+  // over PostgREST (`listTiers`/`listDiscounts` failed with "Invalid schema:
+  // entitlements") while production did. The schema was exposed the same day,
+  // this spec failed demanding the removal, and the entry came out.
+  const KNOWN_SERVER_ERRORS = new Map<string, string>([])
 
   const deadLinks: string[] = []
   const unexpectedErrors: string[] = []

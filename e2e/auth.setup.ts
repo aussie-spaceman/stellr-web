@@ -56,6 +56,18 @@ for (const role of Object.keys(FIXTURES) as FixtureRole[]) {
     // directly and the sign-in route's own component competes with it.
     await page.goto('/')
 
+    // Wait for the Clerk client explicitly before signing in.
+    //
+    // clerk.signIn() waits internally via page.waitForFunction, which inherits
+    // the config's 15s actionTimeout — enough locally, not enough on a cold CI
+    // runner fetching Clerk's script from accounts.dev. All three fixtures
+    // failed that way on the first real CI run while every smoke test passed.
+    //
+    // A longer wait on the RIGHT condition, rather than a longer blanket
+    // actionTimeout: this waits for Clerk to be ready and still fails fast if
+    // it never is, instead of slowing every action in the suite.
+    await clerk.loaded({ page })
+
     await clerk.signIn({
       page,
       signInParams: { strategy: 'password', identifier: fixture.email, password },

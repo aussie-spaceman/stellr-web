@@ -84,6 +84,9 @@ export interface StellarEvent {
   slug: { current: string }
   type?: string
   gradeLevel?: string
+  /** Explicit grade band. Both set = the band; unset = derived from gradeLevel. */
+  gradeMin?: number
+  gradeMax?: number
   date?: string
   endDate?: string
   setting?: 'in_person' | 'virtual'
@@ -128,7 +131,7 @@ export async function getFeaturedEvents() {
   // The !defined(activityType) guard keeps existing documents visible before migration.
   return client.fetch(`
     *[_type == "event" && featured == true && (activityType == "live_event" || !defined(activityType))] | order(date asc) [0...3] {
-      _id, title, slug, type, gradeLevel, date, endDate, activityType, setting,
+      _id, title, slug, type, gradeLevel, gradeMin, gradeMax, date, endDate, activityType, setting,
       venue, city, state, tagline, image, registrationOpen,
       registrationOpenDate, registrationCloseDate
     }
@@ -140,7 +143,7 @@ export async function getAllEvents() {
   // Excludes campaigns — those are fetched via getAllCampaigns().
   return client.fetch(`
     *[_type == "event" && defined(slug.current) && (activityType == "live_event" || !defined(activityType))] | order(date asc) {
-      _id, title, slug, type, gradeLevel, date, endDate, activityType, setting,
+      _id, title, slug, type, gradeLevel, gradeMin, gradeMax, date, endDate, activityType, setting,
       venue, city, state, tagline, image, registrationOpen,
       registrationOpenDate, registrationCloseDate, featured
     }
@@ -154,7 +157,7 @@ export async function getAllCampaigns() {
   // Fall Aug–Dec of the prior calendar year, then Spring Jan–Apr).
   return client.fetch(`
     *[_type == "event" && activityType == "campaign" && defined(slug.current)] | order(campaignYear asc, season asc) {
-      _id, title, slug, type, gradeLevel, season, campaignYear, deadline, deliverable,
+      _id, title, slug, type, gradeLevel, gradeMin, gradeMax, season, campaignYear, deadline, deliverable,
       activityType, registrationOpen, tagline, image
     }
   `)
@@ -164,7 +167,7 @@ export async function getEventBySlug(slug: string) {
   if (!client) return null
   return client.fetch(
     `*[_type == "event" && slug.current == $slug][0] {
-      _id, title, slug, type, gradeLevel, date, endDate, activityType, setting, term,
+      _id, title, slug, type, gradeLevel, gradeMin, gradeMax, date, endDate, activityType, setting, term,
       season, campaignYear, deadline, deliverable,
       venue, city, state, tagline, description, image,
       // Flyers resolve the file asset inline — the page only ever needs the URL,
@@ -190,7 +193,7 @@ export async function getEventsForSchema(): Promise<StellarEvent[] | null> {
   return client.fetch(`
     *[_type == "event" && defined(slug.current) && defined(date)
       && (activityType == "live_event" || !defined(activityType))] | order(date asc) {
-      _id, title, slug, type, gradeLevel, date, endDate, startTime, endTime,
+      _id, title, slug, type, gradeLevel, gradeMin, gradeMax, date, endDate, startTime, endTime,
       activityType, setting, venue, city, state, country, latitude, longitude,
       tagline, image, registrationOpen, registrationOpenDate, registrationCloseDate,
       capacity, stripePriceId, status, previousStartDate

@@ -28,8 +28,10 @@ export const VALID_AGE_BRACKETS = ['adult', 'high_school', 'college'] as const
 export const VALID_EVENT_ROLES = [
   'teacher', 'participant', 'school_student_manager', 'mentor', 'subscriber', 'parent', 'adult', 'volunteer',
 ] as const
+// 'grade_6'..'grade_8' require the grade_type_add_middle_school migration to
+// exist in the enum — added when Colorado 2027 opened to grades 7–12.
 export const VALID_GRADES = [
-  'grade_9', 'grade_10', 'grade_11', 'grade_12',
+  'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12',
   'college_freshman', 'college_sophomore', 'college_junior', 'college_senior', 'grad_phd',
 ] as const
 // '3XL (or larger)' requires migration 016 to exist in the enum.
@@ -87,7 +89,7 @@ export function denormalizeGender(v: unknown): string | undefined {
 
 export function denormalizeGrade(v: unknown): string | undefined {
   const c = canon(v)
-  const m = c.match(/^grade_(9|10|11|12)$/)
+  const m = c.match(/^grade_(6|7|8|9|10|11|12)$/)
   if (m) return m[1]
   return {
     college_freshman: 'College Freshman',

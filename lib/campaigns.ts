@@ -1,5 +1,6 @@
 import type { StellarEvent } from './sanity'
 import { todayInAppZone } from './utils'
+import { gradeBand } from './grade-band'
 
 export type CampaignSeason = 'fall' | 'spring'
 
@@ -216,7 +217,9 @@ export function toCampaignCardData(e: StellarEvent): CampaignCardData {
     theme,
     themeLabel: THEME_META[theme].label,
     seasonLabel: seasonLabel(e.season, e.campaignYear),
-    gradeLevel: e.gradeLevel ?? null,
+    // Pill text, not the raw bracket — an event with an explicit band shows
+    // "Grades 7–12" rather than "Both". See lib/grade-band.ts.
+    gradeLevel: gradeBand(e).label,
     tagline: e.tagline ?? null,
     deadlineLabel: deadlineInfo(e.deadline)?.label ?? '',
   }

@@ -207,7 +207,9 @@ const COL_EC_END = 17 // exclusive — includes Relationship (col 16)
 const COL_EC_RELATIONSHIP = 16
 
 const PARTICIPANT_TYPES = ['Student', 'Adult', 'Mentor', 'Teacher']
-const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
+// School grades run from 6 because some events open below high school
+// (Colorado 2027 runs grades 7–12). Mirrors GRADES in lib/registration-constants.
+const GRADES = ['6', '7', '8', '9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
 const GENDERS = ['Male', 'Female', 'Other']
 const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
 const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Vegetarian', 'Vegan', 'Other']

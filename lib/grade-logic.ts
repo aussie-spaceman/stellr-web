@@ -141,38 +141,45 @@ export function estimateSchoolGrade(dob: string | Date, opts: GradeEstimateOptio
   }
 }
 
-export type HighSchoolGrade = '9' | '10' | '11' | '12'
+/** The band assumed when an event doesn't state one — high school, as it always was. */
+export const DEFAULT_GRADE_BAND = { min: 9, max: 12 }
 
 /**
- * Pre-fill value for the High-School Grade dropdown (options 9–12).
+ * Pre-fill value for the student Grade dropdown.
  *
  * Uses the state entry-cutoff table when the registrant's school State is known
- * (defaults to Sep 1 otherwise), then clamps to the 9–12 band — a registrant in
- * the "High School" bracket younger than a freshman defaults to 9, older than a
- * senior defaults to 12. Returns '' when the DOB is missing/unparseable so the
- * caller leaves the field untouched. Always user-editable.
+ * (defaults to Sep 1 otherwise), then clamps into the EVENT'S band — a
+ * registrant younger than the lowest eligible grade defaults to it, older than
+ * the highest defaults to that. Returns '' when the DOB is missing/unparseable
+ * so the caller leaves the field untouched. Always user-editable.
+ *
+ * The band is a parameter rather than a constant because it is per-event:
+ * Colorado 2027 runs 7–12, so clamping a 12-year-old up to 9 would put a wrong
+ * grade in front of a middle-schooler who is genuinely eligible. Events that
+ * say nothing still get 9–12. See lib/grade-band.ts.
  */
-export function inferHighSchoolGrade(
+export function inferStudentGrade(
   dob: string,
   state?: string | null,
   asOf?: string | Date,
-  opts?: { clampToBand?: boolean }
-): HighSchoolGrade | '' {
+  opts?: { band?: { min: number; max: number }; clampToBand?: boolean }
+): string {
   if (!dob) return ''
+  const band = opts?.band ?? DEFAULT_GRADE_BAND
   try {
     const { grade } = estimateSchoolGrade(dob, { state: state ?? undefined, asOf })
-    // Default (HS-bracket forms): clamp into 9–12 — the registrant is known to be
-    // in high school, so a value just outside the band snaps to the nearest edge.
+    // Default (student-bracket forms): clamp into the band — the registrant is
+    // known to be a school student, so a value just outside it snaps to the
+    // nearest edge.
     // clampToBand:false (forms where the student may be college-aged, e.g. the
     // group-join form whose Grade list runs up to Grad/PhD): return '' when the
-    // computed grade is outside 9–12, so the caller does NOT overwrite a manually
-    // chosen college grade on a later DOB edit.
+    // computed grade is outside the band, so the caller does NOT overwrite a
+    // manually chosen college grade on a later DOB edit.
     if (opts?.clampToBand === false) {
-      if (grade < 9 || grade > 12) return ''
-      return String(grade) as HighSchoolGrade
+      if (grade < band.min || grade > band.max) return ''
+      return String(grade)
     }
-    const clamped = Math.min(12, Math.max(9, grade))
-    return String(clamped) as HighSchoolGrade
+    return String(Math.min(band.max, Math.max(band.min, grade)))
   } catch {
     return ''
   }

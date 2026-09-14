@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -9,8 +9,9 @@ import { useAuth } from '@clerk/nextjs'
 import { useSignIn } from '@clerk/nextjs/legacy'
 import FieldError from '@/components/forms/FieldError'
 import { SchoolSearchInput, SchoolSelection, schoolSelectionState } from '@/components/member/SchoolSearchInput'
-import { HS_GRADES, COLLEGE_GRADES, T_SHIRT_SIZES, GENDERS, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, registrantTypeToAgeBracket, type RegistrantType } from '@/lib/registration-constants'
-import { inferHighSchoolGrade } from '@/lib/grade-logic'
+import { COLLEGE_GRADES, T_SHIRT_SIZES, GENDERS, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, registrantTypeToAgeBracket, type RegistrantType } from '@/lib/registration-constants'
+import { inferStudentGrade, DEFAULT_GRADE_BAND } from '@/lib/grade-logic'
+import { gradeOptions } from '@/lib/grade-band'
 import { resolveSchoolPayload } from '@/lib/school-utils'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 
@@ -55,9 +56,19 @@ export default function IndividualRegistrationForm({
   eventTitle,
   prefill,
   addons = [],
+  gradeMin = DEFAULT_GRADE_BAND.min,
+  gradeMax = DEFAULT_GRADE_BAND.max,
 }: {
   eventSlug: string
   eventTitle: string
+  /**
+   * The event's eligible grade range, as primitives so the memoised band below
+   * stays referentially stable — an inline `band={{...}}` object would be a new
+   * value every render and re-run the DOB inference effect on each one.
+   * Defaults to 9–12.
+   */
+  gradeMin?: number
+  gradeMax?: number
   prefill?: RegistrationPrefill | null
   addons?: { variantId: string; name: string; unitCents: number }[]
 }) {
@@ -128,21 +139,31 @@ export default function IndividualRegistrationForm({
   const dob = watch('date_of_birth')
   const schoolStateValue = schoolSelectionState(schoolSelection)
 
-  // High-School bracket: pre-fill Grade from DOB + the selected school's State
-  // (Sep 1 cutoff when the state is unknown). Re-runs when DOB or school change;
-  // the field stays fully user-editable — this only sets the default.
+  // Grade options and the bracket's own label both come from the event's band.
+  // "High School" is the right label for a 9–12 event and a wrong one for a
+  // 7–12 event, where it would tell an eligible seventh-grader they don't
+  // qualify — so name the grades outright whenever the band reaches below 9.
+  const band = useMemo(() => ({ min: gradeMin, max: gradeMax }), [gradeMin, gradeMax])
+  const studentGrades = gradeOptions(band)
+  const studentTypeLabel =
+    band.min >= 9 ? 'High School' : `School Student (Grades ${band.min}–${band.max})`
+
+  // Student bracket: pre-fill Grade from DOB + the selected school's State
+  // (Sep 1 cutoff when the state is unknown), clamped into the event's band.
+  // Re-runs when DOB or school change; the field stays fully user-editable —
+  // this only sets the default.
   useEffect(() => {
     if (registrantType !== 'high_school') return
-    const inferred = inferHighSchoolGrade(dob, schoolStateValue)
+    const inferred = inferStudentGrade(dob, schoolStateValue, undefined, { band })
     if (inferred) setValue('grade', inferred)
-  }, [dob, schoolStateValue, registrantType, setValue])
+  }, [dob, schoolStateValue, registrantType, band, setValue])
 
   // Switch bracket: HS re-infers Grade, College/Adult clear it (their option
   // lists differ, so a stale value must not linger).
   function chooseRegistrantType(t: RegistrantType) {
     setRegistrantType(t)
     clearErrors('grade')
-    setValue('grade', t === 'high_school' ? inferHighSchoolGrade(getValues('date_of_birth'), schoolStateValue) : '')
+    setValue('grade', t === 'high_school' ? inferStudentGrade(getValues('date_of_birth'), schoolStateValue, undefined, { band }) : '')
   }
 
   function toggleMulti(field: 'ethnicity' | 'dietary_requirements', value: string) {
@@ -275,7 +296,7 @@ export default function IndividualRegistrationForm({
                 <label className="label-text">I am registering as *</label>
                 <div className="flex flex-wrap gap-x-6 gap-y-2 mt-1">
                   {([
-                    { value: 'high_school', label: 'High School' },
+                    { value: 'high_school', label: studentTypeLabel },
                     { value: 'college', label: 'College' },
                     { value: 'adult', label: 'Adult (not a student)' },
                   ] as { value: RegistrantType; label: string }[]).map((opt) => (
@@ -337,7 +358,7 @@ export default function IndividualRegistrationForm({
             </div>
 
             {/* School is captured before DOB/Grade so its State can drive the
-                High-School grade cutoff used to pre-fill the Grade field. */}
+                entry cutoff used to pre-fill the Grade field. */}
             <div>
               <label className="label-text">School *</label>
               <SchoolSearchInput
@@ -363,7 +384,7 @@ export default function IndividualRegistrationForm({
                   <label className="label-text">{registrantType === 'college' ? 'Year Level *' : 'Grade *'}</label>
                   <select {...register('grade')} className="input-field">
                     <option value="">Select…</option>
-                    {(registrantType === 'college' ? COLLEGE_GRADES : HS_GRADES).map((g) => (
+                    {(registrantType === 'college' ? COLLEGE_GRADES : studentGrades).map((g) => (
                       <option key={g} value={g}>{registrantType === 'college' ? g : `Grade ${g}`}</option>
                     ))}
                   </select>

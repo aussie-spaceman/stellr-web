@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { getEventBySlug } from '@/lib/sanity'
+import { gradeBand } from '@/lib/grade-band'
 import { formatDateRange } from '@/lib/utils'
 import { getRegistrationPrefill } from '@/lib/registration-prefill'
 import { supabaseServer } from '@/lib/supabase'
@@ -20,6 +21,8 @@ export default async function IndividualRegistrationPage({ params }: PageProps) 
 
   const prefill = await getRegistrationPrefill().catch(() => null)
   const addons = await listEventAddons(supabaseServer(), slug).catch(() => [])
+  // Grade options follow the event's eligible range, not a fixed 9–12.
+  const band = gradeBand(event)
 
   return (
     <div className="min-h-screen bg-surface">
@@ -70,6 +73,8 @@ export default async function IndividualRegistrationPage({ params }: PageProps) 
           eventTitle={event.title}
           prefill={prefill}
           addons={addons}
+          gradeMin={band.min}
+          gradeMax={band.max}
         />
         <MissionFundingNote className="mt-10" />
       </div>

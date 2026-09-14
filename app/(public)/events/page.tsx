@@ -8,6 +8,7 @@ import { CampaignGridCard } from '@/components/campaigns/CampaignGridCard'
 import { EventCard } from '@/components/ui/EventCard'
 import { EventsFilterBar } from '@/components/sections/EventsFilterBar'
 import { getMemberCampaignContext } from '@/lib/campaign-registrations'
+import { matchesGradeFilter } from '@/lib/grade-band'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/events' },
@@ -46,7 +47,7 @@ export default async function EventsPage({ searchParams }: PageProps) {
     .filter((e) => {
       if (location === 'campaign') return false
       if (theme && themeFromType(e.type) !== theme) return false
-      if (grade && e.gradeLevel !== grade) return false
+      if (!matchesGradeFilter(e, grade ?? '')) return false
       return true
     })
     .map((e) => ({ kind: 'event', sortKey: e.date ?? NO_DATE, event: e }))
@@ -57,7 +58,7 @@ export default async function EventsPage({ searchParams }: PageProps) {
       if (location === 'event') return false
       if (theme && themeFromType(c.type) !== theme) return false
       // Campaigns without a grade level are school-wide — keep them visible.
-      if (grade && c.gradeLevel && c.gradeLevel !== grade) return false
+      if (c.gradeLevel && !matchesGradeFilter(c, grade ?? '')) return false
       return true
     })
     .map((c) => ({

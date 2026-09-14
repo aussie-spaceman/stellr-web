@@ -36,7 +36,9 @@ const HEADERS = [
 
 const GENDERS = ['Male', 'Female', 'Other']
 const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
-const GRADES = ['9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
+// School grades run from 6 because some events open below high school
+// (Colorado 2027 runs grades 7–12). Mirrors GRADES in lib/registration-constants.
+const GRADES = ['6', '7', '8', '9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
 const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
 const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
 

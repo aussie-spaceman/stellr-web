@@ -77,6 +77,20 @@ Matched triggers + not fired = consent or firing limit, never trigger config.
 
 ---
 
+### 4. Verify responsive layouts at a genuinely resized viewport
+
+`resize_window` on the preview pane reports success while leaving
+`window.innerWidth` pinned at ~685px on some tabs. At exactly 685px the old
+broken footer fitted, so two rounds of automated checks reported "no horizontal
+scroll" for a viewport that was never narrow. **Assert `window.innerWidth` after
+resizing.** A fresh tab — create, navigate, then resize — did work.
+
+Cloning a component into a narrow container does *not* simulate a breakpoint:
+Tailwind responsive classes are viewport media queries, so the clone still
+renders at the viewport's breakpoint. That produced a confident false negative.
+
+---
+
 ## Architecture notes
 
 ### Lead capture (`lib/hubspot.ts`)
@@ -135,27 +149,38 @@ the submitted values, so the no-PII rule holds by construction.
 Full table with a completion column is in the Google Doc:
 **"Tracking Close-Out — HubSpot, Meta, LinkedIn (13 Aug 2026)"**.
 
-**Highest value first:**
+**All four items from the first close-out are done.** LinkedIn's History Change
+trigger is live and verified both directions; the privacy-policy note, the mobile
+check and the chat-widget/cron questions are all closed. What remains:
 
-1. **LinkedIn misses b2b pages reached by client-side navigation.** Measured on
-   production: land on `/` (non-b2b), click through to `/educators`, and `lintrk`
-   is still undefined with zero LinkedIn requests. `PV — b2b pages` is a Page
-   View trigger, so it only fires on a full page load — anyone arriving via the
-   homepage and clicking through is invisible to LinkedIn.
-   **Fix:** add a **History Change** trigger (Triggers → New → Page View →
-   *History Change*) with the same Page Hostname + Page Path conditions as
-   `PV — b2b pages`, as a *third* trigger on `LinkedIn — Insight Base`. Safe now
-   the tag is Unlimited + internally guarded.
-2. **Consent banner below 640px** never verified — the browser pane would not go
-   under ~685px, tried twice. Fine at 685px (44px tap targets, no horizontal
-   scroll, 9% of viewport); the stacked layout is untested.
-3. `NEXT_PUBLIC_HUBSPOT_PORTAL_ID` is a Vercel *Sensitive* var and cannot be read
+1. **First scheduled cron run unobserved.** The endpoint is proven — invoked
+   manually against production, returned `{"scanned":0,"corrected":0,"failed":0}`
+   — so prod env vars and the Vercel runtime are correct. Only the 04:00 UTC
+   schedule itself is unwatched. Glance at one run.
+2. `NEXT_PUBLIC_HUBSPOT_PORTAL_ID` is a Vercel *Sensitive* var and cannot be read
    back, despite being public in page source.
-4. Pre-existing GTM tags (Sign Up Conversion tags, Linker, GA4) never audited.
-5. **Watch:** `js.hs-banner.com` loads from HubSpot's tracking script — that is
-   HubSpot's own cookie-banner loader. Nothing renders today, but enabling a
-   banner in HubSpot portal settings would put a *second* cookie banner on the
-   site alongside ours.
+3. Pre-existing GTM tags (Sign Up Conversion tags, Linker, GA4) never audited.
+4. `lead_capture_failures` is unmonitored. A failure emails `CONTACT_EMAIL`, but
+   nothing routinely checks the table.
+5. **Footer orphan on phones** — five link columns in a two-column grid leaves
+   "About" alone on the last row (1 / 2 / 2 / 1). Conventional and left-aligned,
+   so judged acceptable; flagged because it is a judgement call, not a
+   measurement.
+6. **Watch:** `js.hs-banner.com` loads from HubSpot's tracking script — that is
+   HubSpot's own cookie-banner loader. Nothing renders today, but enabling one in
+   HubSpot portal settings would put a second banner on the site alongside ours.
+
+### Verified on production at close-out
+
+- **LinkedIn History Change trigger.** `/` → `/educators` by client-side
+  navigation now loads LinkedIn (`lintrk` a function, 5 requests, single page
+  load). Negative test `/` → `/competitions` leaves it undefined with 0 requests,
+  so the page conditions were carried onto the trigger and LinkedIn has not
+  leaked onto student-facing pages.
+- **Footer.** 375 / 390 / 768 / 1280 with `window.innerWidth` asserted each time:
+  2 / 2 / 3 / 6 columns, no overflow, no page horizontal scroll, Cookie settings
+  link inside the viewport. Desktop template unchanged at `200px 171px ×5`.
+- **Privacy policy note** live and describing the right revision.
 
 ### Corrected — claimed as a gap during the session, then measured and disproved
 
@@ -165,19 +190,12 @@ GTM's Page View triggers do not fire on history change — true — without chec
 what happens downstream. Measured across two navigations on production: three
 GA4 `page_view` hits and three Meta `PageView` hits for three pages, on one page
 load. GA4's Google Tag sends page views on history change by default, and
-`fbevents.js` does its own SPA detection. Neither needs a History Change trigger.
+`fbevents.js` does its own SPA detection. Only LinkedIn's base tag, which
+depended solely on a Page View trigger, actually had the gap — now fixed.
 
 A first measurement did appear to show GA4 missing it — that was a 6-second
 window closing before the request landed. **Measure with a generous window, and
 twice, before asserting anything here.**
-
-**Closed during close-out:** stray `CE — consent_granted (b2b)` trigger removed
-from `Meta — Base Pixel`; no HubSpot chat widget is published
-(`HubSpotConversations` undefined, no iframe); the privacy policy "Recent update"
-banner now describes the cookie changes; and the deployed cron endpoint was
-invoked against production, returning `{"scanned":0,"corrected":0,"failed":0}` —
-so it runs correctly in the Vercel runtime with prod env vars. Only the scheduled
-04:00 UTC trigger is unobserved.
 
 **Deliberately not done:** Meta CAPI (defer until iOS signal loss bites);
 `CompleteRegistration` not mapped (keeps an ad pixel off a minor's completed

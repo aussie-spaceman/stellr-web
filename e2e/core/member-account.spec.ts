@@ -62,6 +62,10 @@ test('signing out ends the session', async ({ page, context }) => {
   // rejects the request rather than the browser merely forgetting.
   await context.clearCookies()
 
+  // Wait for the redirect rather than asserting a negative on a fixed window.
+  // Session revocation is asynchronous server-side; on PR #73 this stayed on
+  // /account for the full 5s and passed on retry. A test that flakes gets
+  // ignored, which is worse than one that fails.
   await page.goto('/account')
-  await expect(page).not.toHaveURL(/\/account$/)
+  await page.waitForURL((url) => !/\/account$/.test(url.pathname), { timeout: 15_000 })
 })

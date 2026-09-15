@@ -12,7 +12,7 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
-## Session 4 — 15 Sept 2026 (open-items pass; PRs #78–#81)
+## Session 4 — 15 Sept 2026 (open-items pass; PRs #78–#83, #85–#88; promoted #87)
 
 | # | Item | State | Next | Done |
 |---|---|---|---|---|
@@ -25,6 +25,8 @@ tick, not a promise. **Next** is the smallest step that closes the row.
 | 4.7 | Verify the first Production build on the dev project | **Closed 15 Sept 18:0xZ.** `ece9909` (#83) → `dpl_E2CkumXGEyskyWweMNRgahx18k86`, `target: production`, `ref: dev`, READY; aliases `stellr-web-dev-stellreducation.vercel.app` + `…-git-dev-…`. Home page is the app (127 KB, "Stellr", no placeholder). `/account` and `/about` 307 to the **dev** Clerk instance (`brief-ox-79`) with `redirect_url` on the same host — no hop to `stellreducation.org`. `APP_ENV=dev` in Production scope is the same variable record Preview proved today (`[dev → …]` subject prefix); the first scheduled cron will log `skipped … APP_ENV=dev`. | Optional: read that cron log line once a schedule has fired. | ☑ |
 | 4.8 | Production migration ledger names | `db:status --prod` reports `20260910140426/27` as pending; they were applied 10 Sept and are recorded under MCP timestamps `20260910230533/…0740`. Cosmetic, but every promotion now re-explains it. | Realign the two `supabase_migrations.schema_migrations` rows to the file versions (read the 10 Sept release record first). | ☐ |
 | 4.9 | Two sessions in one checkout, again | At 17:59Z another session committed to local `dev` in the main checkout and switched it to `feat/checkout-promo-codes` (#84) while this session was running Playwright there. No loss — same commit as #84's branch — but the checkout was reset to `dev` by this session; that session must `git checkout feat/checkout-promo-codes` before continuing. | Enforce ship rule 1: a session that is not the main checkout's owner works in a worktree. | ☐ |
+| 4.10 | `guardCron` exercised on the dev project | Crons enabled 15 Sept 17:55Z; all 13 are daily between 04:00 and 13:00 UTC, so none had fired by close (19:20Z). **Unverified.** | After 04:00Z 16 Sept: Vercel → stellr-web-dev → Logs, or the MCP `get_runtime_logs`, filter `/api/cron/hubspot-lifecycle` — expect `{"skipped":true,"reason":"APP_ENV=dev"}`. Any other body means Production scope's `APP_ENV` is wrong and a dev cron did real work. | ☐ |
+| 4.11 | Session-3 Google Doc tracker Complete column | Never ticked — the Drive connector edits titles only. The ticks are in this file (rows 3.*) and in section D of the session-4 Doc. | Maintainer, if wanted: tick them by hand; otherwise treat this file as canonical and the Doc as historical. | ☐ |
 
 ## Session 3 — 15 Sept 2026 (deploy confirmation, worktree and branch audit; PRs #70–#77)
 

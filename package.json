@@ -26,7 +26,7 @@
     "seed:dev": "tsx scripts/seed-dev.ts",
     "backfill:members": "tsx scripts/backfill-members.ts",
     "backfill:member-roles": "tsx scripts/backfill-member-roles.ts",
-    "seed:teacher-drip": "tsx scripts/seed-teacher-drip.ts",
+    "seed:welcome-drips": "tsx scripts/seed-welcome-drips.ts",
     "set-admin": "tsx scripts/set-admin.ts",
     "verify:prod": "tsx scripts/verify-prod-services.ts",
     "docusign:templates": "tsx scripts/docusign-templates.ts",

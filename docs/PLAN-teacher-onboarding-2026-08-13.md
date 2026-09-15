@@ -1,13 +1,24 @@
 # Teacher onboarding — gap review & plan
 
-> **Status, 13 Aug 2026.** Phases 1 and 2 are **built and committed** on branch
-> `feat/teacher-onboarding-2026-08-13` (`aefee2a`) — not merged, not deployed.
-> 192 tests pass; migration 136 dry-run applied and rolled back cleanly on prod.
-> Phase 3 copy is drafted in `docs/teacher-drip-copy-2026-08-13.md`.
-> **Outstanding and needing you:** run the role backfill
-> (`docs/backfill-member-roles-2026-08-13.sql` — my prod write was blocked), create
-> the templates/campaigns in `/admin/email`, and email the two existing teachers
-> personally. See §7 for the exact hand-off list.
+> **Status, 14 Aug 2026 — the diagnosis below stands; the drip shape has moved on.**
+>
+> All four code phases are **merged to main and live** (PRs #20/#21, migration 136
+> applied). The `member_roles` backfill ran against production.
+>
+> The drip is no longer four teacher emails at +2/+7/+14/+30. It is now three
+> marketing emails at **+5/+14/+23** plus a transactional day-0 confirmation,
+> extended to all three tier families, and seeded by
+> `npm run seed:welcome-drips`. See
+> [RUNBOOK-tier-welcome-drips.md](./RUNBOOK-tier-welcome-drips.md) for the current
+> shape and [HANDOVER-teacher-onboarding-2026-08-14.md](./handovers/HANDOVER-teacher-onboarding-2026-08-14.md)
+> for what is still open.
+>
+> Two files this plan referenced have been deleted, both because they became
+> divergent second copies of something the code already holds:
+> `docs/backfill-member-roles-2026-08-13.sql` (replaced by
+> `scripts/backfill-member-roles.ts`) and `docs/teacher-drip-copy-2026-08-13.md`
+> (replaced by the copy in `scripts/seed-welcome-drips.ts`, with David's Word doc
+> as the upstream source).
 
 **Date:** 13 Aug 2026
 **Trigger:** first real teacher registration — `mmmatlock@wcpss.net` (Wake STEM ECHS), 10 Aug 2026.

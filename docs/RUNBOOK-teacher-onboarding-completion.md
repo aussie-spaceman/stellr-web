@@ -1,5 +1,12 @@
 # Runbook — finishing teacher onboarding
 
+> **Superseded for the drip (14 Aug 2026).** The teacher sequence is now part of
+> the all-families welcome drip — three campaigns at +5/+14/+23 days, not the four
+> at +2/+7/+14/+30 described below, and seeded by `npm run seed:welcome-drips`.
+> See [RUNBOOK-tier-welcome-drips.md](./RUNBOOK-tier-welcome-drips.md). Task 1
+> (the `member_roles` backfill) and Task 3 (the two personal emails) below still
+> stand.
+
 **As at 13 Aug 2026.** Migration 136 applied, PR #20 merged, commit `634c2af` live
 in production.
 
@@ -81,9 +88,9 @@ DELETE FROM member_roles WHERE member_id IN (
 ## Task 2 — create the drip ✅ done (as drafts)
 
 ```bash
-npm run seed:teacher-drip                        # dry run — prints the plan
-npm run seed:teacher-drip -- --apply             # create as drafts
-npm run seed:teacher-drip -- --apply --activate  # create AND arm
+npm run seed:welcome-drips                        # dry run — prints the plan
+npm run seed:welcome-drips -- --apply             # create as drafts
+npm run seed:welcome-drips -- --apply --activate  # create AND arm
 ```
 
 Creates four templates and four campaigns on `member.created` at +2/+7/+14/+30

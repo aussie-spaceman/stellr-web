@@ -168,4 +168,24 @@ before reaching for `-D`.
 State plainly: what landed on `dev`, what CI proved, what is still open, and
 whether it is ready to `promote`. If a phase was skipped, say which and why.
 
+**A written handover goes on the branch BEFORE Phase 5, or on its own PR that
+is merged before this skill ends — never left open, never on a merged branch.**
+
+WHY (15 Sept 2026): an audit of every local branch found four handover
+documents that had never reached `dev`. All four were committed to the feature
+branch *after* its PR had squash-merged — a branch nobody would ever open again.
+Phase 5 now deletes that branch, which closes that path; what it does not close
+is the docs PR that `close-out` opens and then nobody merges. #67 sat open for
+five days before it was found by accident. A handover that is not on `dev` does
+not exist for the next session.
+
+So, in order:
+1. If the handover exists when you reach Phase 4, it is on this branch and
+   ships with the code. This is the normal case.
+2. If it is written afterwards (`close-out` does this), it is a new branch from
+   `dev`, a docs-only PR, and **that PR is merged before close-out reports
+   done.** CI gates it like anything else; docs-only PRs take ~8 minutes.
+3. Check before finishing: `gh pr list --state open --search "handover"` should
+   be empty. If it is not, the session is not closed.
+
 **Do not promote from this skill.** Production is a separate, deliberate act.

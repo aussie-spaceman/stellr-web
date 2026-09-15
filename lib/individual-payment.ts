@@ -171,6 +171,8 @@ async function chargePerson(
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      // Surfaces the "Add promotion code" field for codes set up in Stripe.
+      allow_promotion_codes: true,
       line_items: [{ price: stripePriceId, quantity: 1 }],
       customer_email: person.email,
       // The webhook matches on these to mark the right participant paid.

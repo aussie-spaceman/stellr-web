@@ -92,6 +92,8 @@ describe('ensureIndividualPayments', () => {
 
     expect(result).toEqual({ charged: 2, waived: 0, skipped: 0 })
     expect(checkoutCreate).toHaveBeenCalledTimes(2)
+    // Promo codes set up in Stripe only appear on Checkout when this flag is sent.
+    expect(checkoutCreate).toHaveBeenCalledWith(expect.objectContaining({ allow_promotion_codes: true }))
     expect(sendEmail).toHaveBeenCalledTimes(2)
     expect(sendEmail.mock.calls.every(([a]) => (a as { subject: string }).subject.startsWith('pay:'))).toBe(true)
     // 'pending' so the webhook's "has the whole group paid?" check sees them.

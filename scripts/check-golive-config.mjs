@@ -1,7 +1,9 @@
 // Throwaway functional checks for the go-live prerequisites.
 // Runs the exact API calls the app makes, then cleans up. Safe to delete.
 import 'dotenv/config'
-import { google } from 'googleapis'
+import { sheets as sheetsApi } from '@googleapis/sheets'
+import { drive as driveApi } from '@googleapis/drive'
+import { JWT } from 'google-auth-library'
 import { createClerkClient } from '@clerk/backend'
 
 const OWNER_EMAIL = process.env.GOOGLE_SHEET_OWNER_EMAIL ?? 'david.shaw@insimeducation.com'
@@ -11,7 +13,7 @@ function googleAuth() {
   const key = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n')
   const subject = process.env.GOOGLE_IMPERSONATE_USER ?? OWNER_EMAIL
   if (!email || !key) return null
-  return new google.auth.JWT({
+  return new JWT({
     email, key,
     scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'],
     subject,
@@ -22,8 +24,8 @@ async function checkGoogleAnyoneSharing() {
   console.log('\n=== #1 Google Drive: anyone-with-link sharing ===')
   const auth = googleAuth()
   if (!auth) { console.log('❌ Google service account env vars missing'); return }
-  const sheets = google.sheets({ version: 'v4', auth })
-  const drive = google.drive({ version: 'v3', auth })
+  const sheets = sheetsApi({ version: 'v4', auth })
+  const drive = driveApi({ version: 'v3', auth })
   let fileId
   try {
     const created = await sheets.spreadsheets.create({

@@ -49,6 +49,9 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.2",
+    "@googleapis/calendar": "^20.0.0",
+    "@googleapis/drive": "^26.0.0",
+    "@googleapis/sheets": "^18.0.0",
     "@hookform/resolvers": "^3.4.0",
     "@sanity/icons": "^3.0.0",
     "@sanity/image-url": "^2.1.1",
@@ -62,7 +65,7 @@
     "@tiptap/starter-kit": "^3.26.0",
     "@tiptap/suggestion": "3.26.0",
     "@vercel/analytics": "^1.3.1",
-    "googleapis": "^173.0.0",
+    "google-auth-library": "^11.0.2",
     "lucide-react": "^0.577.0",
     "next": "^16.2.9",
     "next-sanity": "^13.1.0",

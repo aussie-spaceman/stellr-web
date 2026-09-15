@@ -1,5 +1,5 @@
 import { ImageResponse } from 'next/og'
-import { getLandingPage, LANDING_PAGE_SLUGS } from '@/content/lp'
+import { getLandingPage } from '@/content/lp'
 import { tokens } from '@/lib/tokens'
 
 /**
@@ -16,13 +16,17 @@ import { tokens } from '@/lib/tokens'
  * top anyway.
  */
 
+// Edge, not Node. On Node, `ImageResponse` drags sharp's 15 MB libvips binary and
+// the og runtime into the lambda that also serves /lp/[slug] — ~35 MB of function
+// storage per deployment for eight PNGs. The edge build carries its own small
+// resvg renderer and nothing else here needs Node APIs. Edge rules out
+// `generateStaticParams`, so the card renders on first request and the CDN
+// caches it; an unknown slug falls through to the generic headline below.
+export const runtime = 'edge'
+
 export const alt = 'Stellr Education — Space Design Competitions'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
-
-export function generateStaticParams() {
-  return LANDING_PAGE_SLUGS.map((slug) => ({ slug }))
-}
 
 export default async function Image({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params

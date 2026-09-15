@@ -1,4 +1,9 @@
-import { google } from 'googleapis'
+// Per-API packages, not the `googleapis` monolith: that one bundles every Google
+// API into a ~12 MB server chunk on every route that touches Sheets. These three
+// expose the same `sheets({ version, auth })` surface for a fraction of the size.
+import { sheets as sheetsApi } from '@googleapis/sheets'
+import { drive as driveApi } from '@googleapis/drive'
+import { JWT } from 'google-auth-library'
 
 // A Google account identity for Drive file ownership/sharing — NOT a mail
 // sender, so it is intentionally exempt from the stellreducation.org email
@@ -11,7 +16,7 @@ function getAuth() {
   const key = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n')
   const subject = process.env.GOOGLE_IMPERSONATE_USER ?? OWNER_EMAIL
   if (!email || !key) return null
-  return new google.auth.JWT({
+  return new JWT({
     email,
     key,
     scopes: [
@@ -52,7 +57,7 @@ export async function readSheetParticipants(spreadsheetId: string): Promise<Shee
   const auth = getAuth()
   if (!auth) throw new Error('Google service account not configured')
 
-  const sheets = google.sheets({ version: 'v4', auth })
+  const sheets = sheetsApi({ version: 'v4', auth })
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: 'Participants!A2:Q',
@@ -156,7 +161,7 @@ export async function watchSheet(spreadsheetId: string, channelId: string): Prom
   if (!auth) throw new Error('Google service account not configured')
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
-  const drive = google.drive({ version: 'v3', auth })
+  const drive = driveApi({ version: 'v3', auth })
 
   const expirationMs = Date.now() + 6 * 24 * 60 * 60 * 1000 // 6 days (Google max is 7)
 
@@ -181,7 +186,7 @@ export async function stopWatchChannel(channelId: string, resourceId: string): P
   const auth = getAuth()
   if (!auth) return
 
-  const drive = google.drive({ version: 'v3', auth })
+  const drive = driveApi({ version: 'v3', auth })
   await drive.channels.stop({ requestBody: { id: channelId, resourceId } }).catch(() => {
     // best-effort — channel may have already expired
   })
@@ -266,8 +271,8 @@ export async function createGroupRegistrationSheet({
   const auth = getAuth()
   if (!auth) throw new Error('Google service account not configured')
 
-  const sheets = google.sheets({ version: 'v4', auth })
-  const drive = google.drive({ version: 'v3', auth })
+  const sheets = sheetsApi({ version: 'v4', auth })
+  const drive = driveApi({ version: 'v3', auth })
 
   const enteredCount = enteredParticipants.length
   const blankDataRows = additionalAdultCount + studentCount

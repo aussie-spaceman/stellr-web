@@ -21,6 +21,7 @@ import { execFileSync } from 'node:child_process'
 import { createServer } from 'node:net'
 import { existsSync, readFileSync, appendFileSync } from 'node:fs'
 import { join, basename } from 'node:path'
+import { OVERRIDE_VAR, productionCredentialIn, refusalMessage } from './production-guard.mjs'
 
 const BASE_PORT = 3000
 const MAX_PORT = 3100
@@ -64,6 +65,8 @@ function ownPort(here) {
 
 async function main() {
   const here = process.cwd()
+
+  refuseProductionCredentials(here)
 
   // An explicit PORT in the environment always wins — this script allocates a
   // default, it does not overrule a deliberate choice.
@@ -112,6 +115,35 @@ async function main() {
 }
 
 main()
+
+/**
+ * Refuse to start on production credentials.
+ *
+ * WHY (15 Sept 2026): the main checkout's .env.local named the production
+ * Supabase project (with its service_role key) and the production Clerk
+ * instance, so `npm run dev` was a local server with full write access to
+ * production member data — the server found serving a pk_live_ build on port
+ * 3000 during the E2E work. It got that way by being copied from
+ * .env.local.example, which carried the production ref. The template is fixed,
+ * but a template is a convention; this is the control. The check itself lives
+ * in production-guard.mjs so it can be unit-tested without starting a server.
+ *
+ * ALLOW_PROD_LOCALLY=1 overrides, for a deliberate read-only look. It is a
+ * shell variable, not a .env.local line, so it cannot be copied into a
+ * template and forgotten.
+ */
+function refuseProductionCredentials(here) {
+  if (process.env[OVERRIDE_VAR] === '1') {
+    console.warn(`dev: ${OVERRIDE_VAR}=1 — production credentials will NOT be refused.`)
+    return
+  }
+  const envFile = join(here, '.env.local')
+  if (!existsSync(envFile)) return // nothing to judge; main() reports the missing file
+  const hit = productionCredentialIn(readFileSync(envFile, 'utf8'))
+  if (!hit) return
+  console.error(refusalMessage(hit))
+  process.exit(1)
+}
 
 /**
  * Point NEXT_PUBLIC_SITE_URL and NEXT_PUBLIC_AUTH_APP_URL at this worktree.

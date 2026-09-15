@@ -77,6 +77,8 @@ export async function POST(
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
+    // Surfaces the "Add promotion code" field for codes set up in Stripe.
+    allow_promotion_codes: true,
     line_items: [{ price: stripePriceId, quantity: 1 }],
     customer_email: member.email,
     metadata: {

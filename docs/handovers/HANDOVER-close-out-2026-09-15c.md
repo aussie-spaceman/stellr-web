@@ -107,3 +107,43 @@ pending maintainer ☐ · C4 ☑.
   (it deletes the local branch, and the worktree went with it). Harmless here
   — nothing was left uncommitted — but do not rely on it: `git worktree
   remove` explicitly, as the `ship` skill says.
+
+## Addendum — 15 Sept, later the same day (#81)
+
+**Finding.** The dev database had **zero** `tier_grant_rules`. Dev was built
+from `supabase/baseline.sql` (schema only) + `seed.sql`, so nothing any
+migration *inserted* exists there — 025/094/121's grant rules included. A
+sign-up on the dev deployment therefore got no tier and `NEUTRAL_COPY`, which
+would have looked like a defect in #73's copy that was not there. `seed.sql`
+now carries all 13 rules (8 signup, 5 event-driven), idempotent by name;
+applied to dev 15 Sept (`INSERT 0 13`, re-run `INSERT 0 0`), and verified by
+query. Tracker row 4.6 covers the wider class.
+
+**How to make a registration on the dev deployment** (item 4's real-email
+check). You are a member of the Vercel team, so Vercel Authentication lets your
+browser through; no bypass token needed.
+
+1. Open `https://stellr-web-dev-git-dev-stellreducation.vercel.app/sign-up`.
+2. Email: `hs-check+clerk_test@example.com` (any local part; the `+clerk_test`
+   subaddress is what makes Clerk's dev instance accept the fixed code). Any
+   password. Verification code: **424242**.
+3. On *Complete Your Profile*: choose **Student (High School)**, DOB that makes
+   you 18+ (e.g. 2008-01-01 — a minor adds guardian fields you don't need),
+   Grade 12, any school, and fill the required fields. Submit.
+4. Repeat from 1 with `college-check+clerk_test@example.com`, choosing
+   **Mentor / Volunteer** (adult DOB). That role carries the `college` bracket
+   and no mentor-specific signup rule matches, so the `college → Alumni` rule
+   grants Alumni — the College family.
+5. In `hello@stellreducation.org`, find two messages with subjects starting
+   `[dev → hs-check+clerk_test@example.com]` and `[dev → college-check+…]`.
+   The HS one must say "your **Explorer** membership" and carry the
+   high-school Space/Community paragraphs; the College one "your **Alumni**
+   membership" with the college paragraphs. If either reads the neutral
+   "membership Space" copy, `tierContext()` found no active membership —
+   check `member_memberships` for that member in dev.
+6. Both fixtures are on `example.com` (no MX) and in Clerk's dev instance;
+   leave them or delete them from Clerk — nothing routes to them.
+
+**Process change (your point 5).** The canonical close-out tracker is now
+`docs/handovers/TRACKER.md` in the repo; the Google Doc is a per-session
+snapshot the connector can create. `close-out` step 4c updated to match.

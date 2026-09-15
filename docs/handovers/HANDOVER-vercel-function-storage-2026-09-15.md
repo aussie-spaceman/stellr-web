@@ -136,7 +136,7 @@ https://docs.google.com/document/d/1JVlQ_-Y2wM9BNHIG-rQVVrHD76HxKbU3axW_8DKmUDM/
 **Promoted.** #93 → `bf0cb24` 22:51Z; production `dpl_Gw8vgHxmo3p71vtrpAy14sNtEwoy`
 READY — the first `main` build under the ignore rule. www 200 · app 307 →
 /sign-in · cron guard 401 · OG card 200 on the edge, byte-identical to local.
-Record: `.claude/releases/promote-2026-09-15c.md` (#94).
+Record: `.claude/releases/promote-2026-09-15d.md` (#94; renamed from -15c in #96 — session 5's #91 was the third promotion).
 
 ### What was asked and not done, or done narrower than it reads
 

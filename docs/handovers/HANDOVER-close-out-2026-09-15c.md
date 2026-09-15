@@ -147,3 +147,45 @@ browser through; no bypass token needed.
 **Process change (your point 5).** The canonical close-out tracker is now
 `docs/handovers/TRACKER.md` in the repo; the Google Doc is a per-session
 snapshot the connector can create. `close-out` step 4c updated to match.
+
+
+## Close-out — final, 15 Sept 19:20Z
+
+Everything after the addendum above, in order. Rows refer to `TRACKER.md`.
+
+- **4.1 closed.** Maintainer put the dev secrets in `.env.local`; verified by
+  type and by the anon key's JWT `ref`; `npx playwright test` locally against
+  a server the run started → 45 passed / 1 skipped.
+- **4.2 closed — with a correction.** The handover's prescribed `waitForURL`
+  fix (#79) did not cure the flake; #81's CI run showed `/account` rendered
+  signed in after "sign-out". Root cause: `window.Clerk?.signOut()` was a
+  silent no-op before Clerk's script loaded, and a Clerk dev instance re-mints
+  cookies from localStorage. #82 uses `clerk.signOut({ page })` and asserts
+  `/sign-in` positively. 10/10 locally.
+- **4.3 half closed.** Dev had zero grant rules (#81). Maintainer registered
+  one HS account on the dev deployment and confirmed the family copy. College
+  (Mentor / Volunteer → Alumni) still to read.
+- **4.4 / 4.7 closed.** All 20 dev-project variables extended to
+  Preview+Production via `vercel api` (targets only); maintainer set Production
+  Branch `dev` (it lives under Settings → Environments → Production → Branch
+  Tracking) and enabled crons. First Production build `dpl_E2CkumXGEyskyWweMNRgahx18k86`
+  verified: the app, on its own origin, dev Clerk.
+- **4.5 closed — promoted.** #87 → `87f7ccb` 18:53Z; production
+  `dpl_EucPmzWQLytAWDVFPZEgMgnZN5dN`; www 200 / app 307 / cron guard 401;
+  `dev` fast-forwarded after `main`'s own CI (required now that `dev`
+  enforces admins). #88 and this PR are docs on `dev` for the next promotion.
+- **4.9 — incident.** At 17:59Z another session committed to local `dev` in
+  the main checkout and switched it to `feat/checkout-promo-codes` (#84)
+  while this session was running Playwright there. Nothing lost; the checkout
+  was put back on `dev`, and that session must `git checkout
+  feat/checkout-promo-codes` before continuing. Third time this hazard has
+  bitten; `ship` rule 1 is not enforced by anything.
+
+**Still open, in order:** 4.10 (cron guard log, after 04:00Z 16 Sept) ·
+4.3 College email · 4.6 dev's migration-inserted data audit · 4.8 prod ledger
+names · 4.11 session-3 Doc ticks · 3.C3 rego→DocuSign registration-form spec ·
+#84 is the other session's to land.
+
+**Process changes this session:** `close-out` step 4c (tracker canonical in
+repo, Doc is a snapshot) and step 5 (handover PR merged before step 6);
+`promote` skill text (records are committed); `dev` `enforce_admins: true`.

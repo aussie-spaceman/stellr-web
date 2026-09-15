@@ -56,6 +56,39 @@ on conflict (id) do update set
   annual_cost_cents = excluded.annual_cost_cents,
   default_grant_months = excluded.default_grant_months;
 
+-- Tier grant rules — the 'signup' rules decide which free tier a new member
+-- gets on profile completion (app/api/members/onboarding → applyGrantTrigger),
+-- and therefore which tier-FAMILY welcome copy lib/registration-notify.ts
+-- sends. These were inserted by migrations 025 / 094 / 121 — but dev was
+-- built from baseline.sql (schema only), so nothing a migration INSERTED
+-- exists here unless this file carries it. Found 15 Sept 2026: dev had zero
+-- rules, so every dev sign-up got no tier and the neutral welcome, which
+-- would have read as a bug in #73's copy that was not there.
+--
+-- Same names, conditions, tiers and priorities as those migrations after the
+-- 094 renames. Idempotent by name, like the option tables above.
+insert into public.tier_grant_rules (name, trigger_type, conditions, grant_tier_id, duration_kind, duration_months, replaces_free, priority)
+select v.name, v.trigger_type, v.conditions::jsonb, t.id, v.duration_kind, v.duration_months, v.replaces_free, v.priority
+from (values
+  -- signup: highest matching priority wins; the empty-conditions Subscriber row is the catch-all
+  ('Signup: high-school → Explorer',                'signup', '{"age_bracket":"high_school"}',                       'Explorer',        'lifetime', null, false, 30),
+  ('Signup: college → Alumni',                      'signup', '{"age_bracket":"college"}',                           'Alumni',          'lifetime', null, false, 30),
+  ('Signup: teacher → Educator',                    'signup', '{"age_bracket":"adult","event_role":"teacher"}',      'Educator',        'lifetime', null, false, 40),
+  ('Signup: adult mentor → Subscriber (interim)',   'signup', '{"age_bracket":"adult","event_role":"mentor"}',       'Subscriber',      'lifetime', null, false, 40),
+  ('Signup: parent → Parent/Guardian',              'signup', '{"age_bracket":"adult","event_role":"parent"}',       'Parent/Guardian', 'lifetime', null, false, 40),
+  ('Signup: volunteer (college) → Alumni',          'signup', '{"age_bracket":"college","event_role":"volunteer"}',  'Alumni',          'lifetime', null, false, 50),
+  ('Signup: volunteer (adult) → Educator',          'signup', '{"age_bracket":"adult","event_role":"volunteer"}',    'Educator',        'lifetime', null, false, 50),
+  ('Signup: default → Subscriber',                  'signup', '{}',                                                  'Subscriber',      'lifetime', null, false,  0),
+  -- event-driven
+  ('Student attends event → Pathfinder (1yr)',      'event_attendance', '{"event_role":"participant"}',              'Pathfinder',      'months',   12,   true,  10),
+  ('Award winner → Scholar (1yr)',                  'event_award',      '{"event_role":"participant"}',              'Scholar',         'months',   12,   true,  50),
+  ('Mentor at event → Contributor (1yr)',           'mentor_at_event',  '{"event_role":"mentor"}',                   'Contributor',     'months',   12,   true,  10),
+  ('Teacher attends event → Innovator (1yr)',       'event_attendance', '{"event_role":"teacher"}',                  'Innovator',       'months',   12,   true,  10),
+  ('Graduation → Alumni (July 1)',                  'graduation',       '{}',                                        'Alumni',          'until_grad_july1', null, true, 10)
+) as v(name, trigger_type, conditions, tier_name, duration_kind, duration_months, replaces_free, priority)
+join public.membership_tiers t on t.name = v.tier_name
+where not exists (select 1 from public.tier_grant_rules r where r.name = v.name);
+
 insert into public.ethnicity_options (name)
 select v from (values ('Asian'), ('Black'), ('Hispanic'), ('Native American'),
                       ('Pacific Islander'), ('Prefer Not To Say'), ('White (Caucasian)')) t(v)

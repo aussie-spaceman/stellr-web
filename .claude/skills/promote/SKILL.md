@@ -37,9 +37,13 @@ carry a stale tree:
 git checkout dev && git merge origin/main --no-edit && git push origin dev
 ```
 
-Write the state to `.claude/releases/promote-<YYYY-MM-DD>.md` (gitignored) and
-keep it current after every step. A promotion spans async gaps and `dev` keeps
-moving; the doc is the source of truth for "where are we", not the conversation.
+Write the state to `.claude/releases/promote-<YYYY-MM-DD>.md` and keep it
+current after every step. It is committed — on a normal branch → PR → `dev`,
+never straight to `dev` — so the rollback target outlives the checkout that
+wrote it (the 10 Sept record survived only because it was rescued from a
+worktree minutes before that worktree was deleted). A promotion spans async
+gaps and `dev` keeps moving; the doc is the source of truth for "where are
+we", not the conversation.
 
 ## Step 2 — Name the blast radius
 

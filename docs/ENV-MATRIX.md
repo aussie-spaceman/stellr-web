@@ -15,10 +15,23 @@ the code is worse than none, because it is believed.
 | | Production | Dev |
 |---|---|---|
 | Vercel project | `stellr-web` (`prj_wMlZwzDocSUrQ5sFZMngrNBeoUvx`) | `stellr-web-dev` (`prj_Nd2kmpMj3bBuXbSjc6teUdwh9gPO`) |
-| Tracked branch | `main` | `dev` |
+| Tracked branch | `main` | `dev` (since 15 Sept 2026 — see note below) |
 | Domains | www / app / apex `.stellreducation.org` | TBD — `dev.` / `app-dev.` |
 | Supabase | `hwtzpfrnksksxlwwabqz` "Stellr Registrations" | `xvxlhbxtiwxpopoqjygm` "stellr-web-dev" |
-| Crons | run | **decline** — `guardCron()` sees `APP_ENV=dev` |
+| Crons | run | **decline** — `guardCron()` sees `APP_ENV=dev`. The dev project's crons are enabled in Vercel (re-enabled 15 Sept) precisely so that guard is exercised on every schedule |
+
+**Dev project branch tracking.** `stellr-web-dev`'s Production Branch was
+`main` until 15 Sept 2026, deliberately: switching it makes `dev` pushes a
+*Production* deployment, which reads the project's **Production** scope, and
+that scope was empty. On 15 Sept every variable's target was extended to
+Preview + Production (via `vercel api`, values untouched), then the branch was
+switched to `dev` (Settings → Environments → Production → Branch Tracking) and
+the project's crons re-enabled. `dev` pushes now deploy as Production on this
+project at `stellr-web-dev-stellreducation.vercel.app` (the
+`…-git-dev-…` alias still resolves). The Ignored Build Step stays:
+`if [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 0; else exit 1; fi` —
+`main` pushes must not build here. Preview scope is kept in step with
+Production so a feature-branch preview on this project behaves the same way.
 
 ## 1. The variable that decides everything
 

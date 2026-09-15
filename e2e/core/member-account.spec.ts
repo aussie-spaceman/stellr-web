@@ -1,3 +1,4 @@
+import { clerk } from '@clerk/testing/playwright'
 import { expect, test } from '../fixtures/test'
 import { storageStatePath } from '../fixtures/users'
 import { attachConsoleGuard } from '../fixtures/console-guard'
@@ -54,14 +55,27 @@ test('signing out ends the session', async ({ page, context }) => {
   await page.goto('/account')
   await expect(page).toHaveURL(/\/account/)
 
-  await page.evaluate(async () => {
-    await (window as { Clerk?: { signOut: () => Promise<void> } }).Clerk?.signOut()
-  })
+  // Sign out through Clerk's testing helper, which waits for the Clerk client
+  // to load and for the sign-out to complete.
+  //
+  // WHY (15 Sept 2026): this test used to call `window.Clerk?.signOut()` from
+  // page.evaluate. On a page served from storageState the HTML arrives before
+  // Clerk's script does, so that optional chain was sometimes a silent no-op —
+  // nothing was signed out. Clearing cookies did not save it: on a Clerk
+  // development instance the client keeps its dev-browser token in
+  // localStorage and the middleware handshake re-mints the cookies, so the
+  // next /account rendered fully signed in as Ada. That is what the failure
+  // snapshot on #81 showed. The flake was never revocation timing; the
+  // assertion was waiting for a sign-out that had not happened.
+  await clerk.signOut({ page })
 
-  // Clear cookies too: signOut revokes server-side, and this proves the app
-  // rejects the request rather than the browser merely forgetting.
+  // Belt to braces: the request must be rejected because the SESSION is gone,
+  // not because the browser happened to forget it.
   await context.clearCookies()
 
+  // proxy.ts protects /account(.*) with auth.protect(), which sends a guest to
+  // sign-in. Assert that destination positively — a negative on a fixed window
+  // is how the earlier version passed while proving nothing.
   await page.goto('/account')
-  await expect(page).not.toHaveURL(/\/account$/)
+  await expect(page).toHaveURL(/\/sign-in/, { timeout: 15_000 })
 })

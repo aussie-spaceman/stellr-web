@@ -28,10 +28,18 @@ Preview + Production (via `vercel api`, values untouched), then the branch was
 switched to `dev` (Settings → Environments → Production → Branch Tracking) and
 the project's crons re-enabled. `dev` pushes now deploy as Production on this
 project at `stellr-web-dev-stellreducation.vercel.app` (the
-`…-git-dev-…` alias still resolves). The Ignored Build Step stays:
-`if [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 0; else exit 1; fi` —
-`main` pushes must not build here. Preview scope is kept in step with
-Production so a feature-branch preview on this project behaves the same way.
+`…-git-dev-…` alias still resolves). Preview scope is kept in step with
+Production.
+
+**Which pushes build (since 15 Sept 2026).** `vercel.json` sets
+`ignoreCommand: bash scripts/vercel-ignore-build.sh`, which overrides the
+dashboard Ignored Build Step on both projects and keys on `VERCEL_PROJECT_ID`:
+`stellr-web` builds **`main` only**; `stellr-web-dev` builds **`dev` only**.
+Feature-branch pushes build nowhere — CI is the gate, and the `dev` alias is
+the place to look after a merge. Before this, every push to every branch built
+in both projects (six deployments per PR) and Function Storage reached 75% of
+the Hobby limit; see `docs/handovers/HANDOVER-vercel-function-storage-2026-09-15.md`.
+The older dashboard command on `stellr-web-dev` is now inert and can stay.
 
 ## 1. The variable that decides everything
 

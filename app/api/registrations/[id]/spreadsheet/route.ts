@@ -3,7 +3,9 @@ import { auth as clerkAuth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isGoogleSheetsConfigured } from '@/lib/google-sheets'
 import { ownsTeam } from '@/lib/team-access'
-import { google } from 'googleapis'
+import { sheets as sheetsApi } from '@googleapis/sheets' // not the `googleapis` monolith — see lib/google-sheets.ts
+import { drive as driveApi } from '@googleapis/drive'
+import { JWT } from 'google-auth-library'
 import { impersonatedMemberId } from '@/lib/impersonation'
 
 function getAuth() {
@@ -11,7 +13,7 @@ function getAuth() {
   const key = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n')
   const subject = process.env.GOOGLE_IMPERSONATE_USER ?? OWNER_EMAIL
   if (!email || !key) return null
-  return new google.auth.JWT({
+  return new JWT({
     email,
     key,
     scopes: [
@@ -171,8 +173,8 @@ export async function GET(
       console.error('[spreadsheet] getAuth() returned null despite isGoogleSheetsConfigured() passing')
       return NextResponse.json({ error: 'Google auth configuration error' }, { status: 503 })
     }
-    const sheets = google.sheets({ version: 'v4', auth })
-    const drive = google.drive({ version: 'v3', auth })
+    const sheets = sheetsApi({ version: 'v4', auth })
+    const drive = driveApi({ version: 'v3', auth })
 
     const title = `${reg.event_title} — ${reg.school_name ?? 'Group'} Participants`
 

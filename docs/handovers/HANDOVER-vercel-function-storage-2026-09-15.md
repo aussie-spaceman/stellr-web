@@ -126,3 +126,61 @@ Hobby offers; the inventory + delete scripts are trivial to recreate from §3.
 - **PR previews** are gone by design. If they are wanted back, that is a Pro
   question (retention policies + more Function Storage), not a repo change.
 - The `docs/promote-2026-09-15c` branch and PR #90 were left as found.
+
+## 6. Close-out (session 6, 15 Sept 2026, ~23:15Z)
+
+**Tracker:** `docs/handovers/TRACKER.md` § Session 6 is canonical. Google Doc
+snapshot (a copy, never the source):
+https://docs.google.com/document/d/1JVlQ_-Y2wM9BNHIG-rQVVrHD76HxKbU3axW_8DKmUDM/edit
+
+**Promoted.** #93 → `bf0cb24` 22:51Z; production `dpl_Gw8vgHxmo3p71vtrpAy14sNtEwoy`
+READY — the first `main` build under the ignore rule. www 200 · app 307 →
+/sign-in · cron guard 401 · OG card 200 on the edge, byte-identical to local.
+Record: `.claude/releases/promote-2026-09-15c.md` (#94).
+
+### What was asked and not done, or done narrower than it reads
+
+1. **The after-figure for Function Storage was not measured.** Verification
+   step 5 of the plan said "dashboard before and after". The Chrome extension
+   was not connected and the usage page needs a signed-in browser; the "cannot
+   exceed ~0.8 GB" in §3 is arithmetic (13 deployments × ≤ 63 MB), not a
+   reading. → Tracker 6.1.
+2. **The Sheets API itself was not exercised through the new package.** The
+   pre-merge smoke test authenticated (JWT), listed Drive files and listed
+   calendars — all 200 through `@googleapis/*`. It created a Sheets client but
+   made no `spreadsheets.*` call because the bare service account owns no
+   sheets (production impersonates the owner account). The PR body's "JWT /
+   Drive / Calendar exercised" is accurate; read it as "Sheets not exercised".
+   → Tracker 6.2. This is the one runtime path changed today that no test or
+   curl has touched since the swap.
+3. **The plan's OG-image step was delivered differently from how it was
+   written.** The plan said edge runtime "still pre-renders the known slugs at
+   build"; Next refuses `generateStaticParams` on an edge route, so it was
+   removed and the card renders on first request (CDN-cached). Verified on
+   production; the difference is one cold render per slug, not a behaviour
+   change. Said at the time; recorded here so the plan file is not read as
+   what shipped.
+4. **Old rollback ids are gone.** The purge kept the 10 newest `main` builds
+   (oldest 10 Sept). Release records older than that name deployment ids that
+   no longer exist. Deleted with consent; noted so nobody plans a rollback
+   around a record without checking. → Tracker 6.3.
+5. **`scripts/check-golive-config.mjs`** got the client swap and a syntax
+   check only. → Tracker 6.7.
+6. **Not asked, but observed and left:** the required `Vercel – stellr-web`
+   check on `main` now passes for skipped builds. Documented in three places;
+   whether to keep it required is a maintainer decision. → Tracker 6.4.
+
+### Recommendations
+
+- **Read the usage figure** and put it in §3 — one number closes the headline
+  question of the session.
+- **Watch the first real Sheets call**: the next group registration creates a
+  spreadsheet via `register/group`; a `sheet-sync` from any team page reads
+  one. Either proves 6.2. `cron/motion-bookings` runs 12:00 UTC; its runtime
+  log on 16 Sept proves the Calendar path in production.
+- **Decide on the required Vercel check** (6.4). Keeping it is harmless;
+  dropping it stops it being mistaken for a build proof.
+- **Sanity Studio hosting** (6.5) only if usage climbs again — at ~48 MB per
+  deployment and two deployments per PR, it should not.
+- Session 5's close-out (#90) was still open at this close. Its handover is
+  not on `dev` until it merges.

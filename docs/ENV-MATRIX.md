@@ -15,10 +15,22 @@ the code is worse than none, because it is believed.
 | | Production | Dev |
 |---|---|---|
 | Vercel project | `stellr-web` (`prj_wMlZwzDocSUrQ5sFZMngrNBeoUvx`) | `stellr-web-dev` (`prj_Nd2kmpMj3bBuXbSjc6teUdwh9gPO`) |
-| Tracked branch | `main` | `dev` |
+| Tracked branch | `main` | **`main`, for now** — see note below |
 | Domains | www / app / apex `.stellreducation.org` | TBD — `dev.` / `app-dev.` |
 | Supabase | `hwtzpfrnksksxlwwabqz` "Stellr Registrations" | `xvxlhbxtiwxpopoqjygm` "stellr-web-dev" |
-| Crons | run | **decline** — `guardCron()` sees `APP_ENV=dev` |
+| Crons | run | **decline** — `guardCron()` sees `APP_ENV=dev`; the dev project's crons are also switched off in Vercel (10 Sept) |
+
+**Dev project branch tracking (as of 15 Sept 2026).** `stellr-web-dev`'s
+Production Branch is still `main`, deliberately: switching it makes `dev`
+pushes a *Production* deployment, which reads the project's **Production**
+scope — and that scope is empty. Until it is populated, `dev` pushes deploy as
+**Preview** (reading Preview scope; the URL is
+`stellr-web-dev-git-dev-stellreducation.vercel.app`) and an Ignored Build Step
+cancels `main` builds on that project:
+`if [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 0; else exit 1; fi`.
+The switch was decided on 15 Sept; the steps, in the only safe order, are in
+`docs/handovers/HANDOVER-close-out-2026-09-15c.md` §Open. When it is done,
+change the cell above back to `dev` in the same PR.
 
 ## 1. The variable that decides everything
 

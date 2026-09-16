@@ -2,6 +2,23 @@
 const nextConfig = {
   // Workspace UI packages ship TS source — let Next transpile them.
   transpilePackages: ['@stellr/web-ui', '@stellr/icons'],
+  // Function Storage is metered on every retained deployment, so what each
+  // function traces matters. Keys are route globs (picomatch, `contains`).
+  outputFileTracingExcludes: {
+    // ffmpeg-static is a devDependency for the local video-watermark scripts,
+    // but Vercel installs devDependencies too. If any route ever imports
+    // lib/watermark/video.ts, the tracer would ship the ~70 MB Linux binary.
+    '*': ['./node_modules/ffmpeg-static/**'],
+    // A page whose segment has an opengraph-image sibling is traced with the
+    // og runtime and sharp's 15 MB libvips even though the page never renders
+    // the card — the card is its own edge route. /api/img, which does use
+    // sharp, is not under /lp and keeps it.
+    '/lp/**': [
+      './node_modules/sharp/**',
+      './node_modules/@img/**',
+      './node_modules/next/dist/compiled/@vercel/og/**',
+    ],
+  },
   async redirects() {
     return [
       { source: '/login', destination: '/sign-in', permanent: true },

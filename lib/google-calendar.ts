@@ -14,7 +14,8 @@
 //     client acts as that user — which requires `calendar.readonly` to be
 //     authorised for this service account's client ID in the Workspace admin
 //     console. Only worth it if you would rather not share the calendar.
-import { google } from 'googleapis'
+import { calendar as calendarApi } from '@googleapis/calendar' // not the `googleapis` monolith — see lib/google-sheets.ts
+import { JWT } from 'google-auth-library'
 import type { CalendarEventLike } from './motion-bookings'
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
@@ -32,7 +33,7 @@ function getAuth() {
   const key = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n')
   if (!email || !key) return null
   const subject = process.env.GOOGLE_CALENDAR_IMPERSONATE || undefined
-  return new google.auth.JWT({ email, key, scopes: SCOPES, ...(subject ? { subject } : {}) })
+  return new JWT({ email, key, scopes: SCOPES, ...(subject ? { subject } : {}) })
 }
 
 export interface CalendarQuery {
@@ -70,7 +71,7 @@ export async function listUpdatedEvents({
   const calendarId = process.env.MOTION_CALENDAR_ID
   if (!auth || !calendarId) return []
 
-  const calendar = google.calendar({ version: 'v3', auth })
+  const calendar = calendarApi({ version: 'v3', auth })
   const events: CalendarEventLike[] = []
   let pageToken: string | undefined
 

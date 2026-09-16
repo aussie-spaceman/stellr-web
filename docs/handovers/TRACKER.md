@@ -12,6 +12,29 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 6 — 15 Sept 2026 (Vercel Function Storage; PRs #92–#94; promoted #93)
+
+Handover: `HANDOVER-vercel-function-storage-2026-09-15.md` (§6 is the close-out).
+Session 5 (#90, Stripe promotion codes close-out) was still open at this close and is
+not represented here.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 6.1 | Function Storage after-figure | **Not measured.** Chrome extension not connected; the Vercel usage page needs a browser session. Before: 7.5 GB (75%). 13 deployments retained after the purge, ≤ 63 MB each — arithmetic says < 0.8 GB, but that is inference. | Maintainer: read https://vercel.com/stellreducation/~/usage (may lag deletions by a day) and write the number into the handover §3. | ☐ |
+| 6.2 | Google client swap exercised in production | Pre-merge: JWT, Drive `files.list`, Calendar `calendarList.list` all 200 against the real service account through the new packages. **Sheets API calls (`spreadsheets.values.get/update`, `create`) not executed** — the bare service account owns no sheets; production impersonates the owner. Type-checked identical; not run. | The next group registration (`register/group` creates a sheet) or a `sheet-sync` from a team page — confirm the sheet appears and rows land. Also `cron/motion-bookings` runtime log after its 12:00 UTC run 16 Sept. | ☐ |
+| 6.3 | Rollback targets in older release records | The purge kept the 10 newest `main` builds (oldest 10 Sept). Any deployment id in a release record older than that (e.g. the 10 Sept record's `8e22017` build if it predates the kept set) **no longer exists** — deleted with consent, but the records still name them. | When reading an older record, treat its rollback id as historical; roll back by redeploying the commit instead. | ☐ (accepted) |
+| 6.4 | Required `Vercel – stellr-web` check on `main` | Passes for a skipped build (`Canceled by Ignored Build Step` → SUCCESS, observed #92/#93/#94). Promotions are not blocked, but the check no longer proves a production build *before* the merge; the post-merge `main` build is the gate. Documented in ENV-MATRIX, promote skill, memory. | Decide whether to keep it required (harmless, informational) or drop it from `main`'s ruleset so nobody reads it as a build proof. | ☐ |
+| 6.5 | Sanity Studio in the function bundle | `/studio/[[...tool]]` traces 10 MB, the largest remaining route after `/api/img` (17.5 MB, sharp — needed). Deferred. | If Function Storage climbs again: host Studio via `sanity deploy` and drop the route. | ☐ |
+| 6.6 | Dashboard Ignored Build Step on `stellr-web-dev` | Superseded by `vercel.json` `ignoreCommand` (proven: dev project skipped a feature push and built `dev`). Left in place; inert. | Optional: clear it in the dashboard so the only rule is the one in git. | ☐ |
+| 6.7 | `scripts/check-golive-config.mjs` after the swap | Edited to the per-API packages; `node --check` only. Manual-run utility, not in any script or cron. | Run it once before the next go-live check. | ☐ |
+| 6.8 | Build rule live on both projects | **Closed 15 Sept.** Feature push: Canceled on both projects. `dev` merge (#92, #94): one build each, `stellr-web-dev`, READY. `main` merge (#93): one build, `stellr-web`, READY, `dpl_Gw8vgHxmo3p71vtrpAy14sNtEwoy`. 6 deployments per PR → 2. | — | ☑ |
+| 6.9 | Purge | **Closed 15 Sept.** 34 branches deleted (each proven landed by content). Deployments: prod 229 → 10, dev 127 → 3; live ids asserted safe before and after; www 200 throughout. | — | ☑ |
+| 6.10 | Bundle size | **Closed 15 Sept.** Local nft-trace union 62.7 → 47.6 MB; routes > 4 MB 9 → 2. OG card 200 on production, 1200×630, byte-identical to local. | — | ☑ |
+
+Earlier rows closed by this session: grades-7-12 handover open item 2 ("Stop `dev`/feature
+pushes building on the production Vercel project") — closed by 6.8. TRACKER rows 4.9
+(worktree discipline: this session used one; the rule is unchanged) and 4.10 (`guardCron`
+on the dev project: 04:00Z has not passed) remain open.
 ## Session 5 — 15 Sept 2026 (Stripe promotion codes; PRs #84, #90, #91; promoted #91)
 
 Handover: `HANDOVER-stripe-promo-codes-2026-09-15.md`. Google Doc snapshot (copy, not source): https://docs.google.com/document/d/1T2jbfiZIX0zfw4XTP9k54MiZaR0XZBuTk06yRwAxJXc/edit

@@ -108,7 +108,11 @@ For anything a browser can observe:
 npm run test:e2e:smoke
 ```
 
-Against a deployment, pass `E2E_BASE_URL` **and** set
+Feature branches do not get a Vercel preview (since 15 Sept 2026 —
+`scripts/vercel-ignore-build.sh` skips them on both projects; each preview was
+a retained function bundle nobody used). Verify locally and let CI gate. The
+first deployment of the work is the `dev` alias after the squash-merge; to run
+the suite against it, pass `E2E_BASE_URL` **and** set
 `VERCEL_AUTOMATION_BYPASS_SECRET` — the dev project is behind Vercel
 Authentication, and without it every request lands on a login page.
 

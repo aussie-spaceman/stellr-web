@@ -104,8 +104,11 @@ rebase:
 gh pr update-branch <n>
 ```
 
-Vercel's bot posts a deployment-status comment on every PR. It is not review
-feedback; do not treat it as something to address.
+The promotion PR gets no preview build (`scripts/vercel-ignore-build.sh`:
+the production project builds `main` only). The Vercel signal to watch is the
+production deployment that the merge itself triggers — Step 7. Any Vercel bot
+comment on the PR is not review feedback; do not treat it as something to
+address.
 
 ## Step 6 — Merge
 

@@ -3,6 +3,7 @@
 
 import { supabaseServer } from '@/lib/supabase'
 import { getSyncProduct } from './printful'
+import { slugify as baseSlugify } from '@/lib/utils'
 import type {
   ProductStatus,
   ProductType,
@@ -13,13 +14,9 @@ import type {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/** Store slugs are capped at 60 characters (product URLs and Printful sync names). */
 export function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
+  return baseSlugify(input).slice(0, 60)
 }
 
 export async function listProducts(): Promise<StoreProductWithVariants[]> {

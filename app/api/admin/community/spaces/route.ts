@@ -3,14 +3,12 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { ensureSpaceContainer } from '@/lib/container-sync'
 import { isAdminClaims } from '@/lib/admin-auth'
+import { slugify } from '@/lib/utils'
 
 // Admin CRUD for community Spaces (Spaces design — list / create / delete).
 // Per-space config (channels, tiers, members, resources, training, announcements,
 // moderation) is handled by /api/admin/community/spaces/[id].
 
-function slugify(s: string) {
-  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-}
 const ACCESS = new Set(['open', 'private', 'secret'])
 const THEME = new Set(['space', 'enviro', 'campaign', 'college'])
 

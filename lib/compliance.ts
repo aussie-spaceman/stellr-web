@@ -92,9 +92,6 @@ function licenseExpired(l: TeacherLicense, ref: Date): boolean {
   return new Date(l.expiry_date) < ref
 }
 
-function fmtDate(iso: string): string {
-  return formatDateShort(iso)
-}
 
 /**
  * Compute the single current compliance state for a member from their current
@@ -130,7 +127,7 @@ export function deriveCompliance(
 
   if (bcValid) {
     const base = check!.expires_at
-      ? `Background check valid until ${fmtDate(check!.expires_at)}`
+      ? `Background check valid until ${formatDateShort(check!.expires_at)}`
       : 'Background check passed'
     return {
       state: 'valid_bc',
@@ -142,7 +139,7 @@ export function deriveCompliance(
   if (licenseValid) {
     return {
       state: 'valid_license',
-      detail: `Verified license expires ${fmtDate(license!.expiry_date)}`,
+      detail: `Verified license expires ${formatDateShort(license!.expiry_date)}`,
       license,
       check,
     }
@@ -171,9 +168,9 @@ export function deriveCompliance(
 
   // Otherwise genuinely invalid: missing, expired clearance, or flagged for review.
   let detail = 'No valid clearance on file'
-  if (license && licenseExpired(license, ref)) detail = `License expired ${fmtDate(license.expiry_date)}`
+  if (license && licenseExpired(license, ref)) detail = `License expired ${formatDateShort(license.expiry_date)}`
   else if (check?.status === 'referred') detail = 'Background check flagged for review'
-  else if (check?.status === 'passed' && check.expires_at) detail = `Background check expired ${fmtDate(check.expires_at)}`
+  else if (check?.status === 'passed' && check.expires_at) detail = `Background check expired ${formatDateShort(check.expires_at)}`
   return { state: 'invalid', detail, license, check }
 }
 

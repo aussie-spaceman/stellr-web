@@ -329,7 +329,7 @@ export async function createGroupRegistrationSheet({
   }
 
   // ── Batch formatting ────────────────────────────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- sheets_v4.Schema$Request is a 40-way union; the helpers below build plain objects
   const requests: any[] = []
 
   // Header row style

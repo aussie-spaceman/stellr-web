@@ -20,7 +20,7 @@ export function ProductCard({ product }: { product: StoreProductWithVariants }) 
     >
       <div className="relative flex h-52 items-center justify-center bg-gradient-to-br from-brand-blue-dark to-blue-900">
         {img ? (
-          // eslint-disable-next-line @next/next/no-img-element
+          // eslint-disable-next-line @next/next/no-img-element -- Printful CDN URL; host is not in images.remotePatterns
           <img src={img} alt={product.name} className="h-full w-full object-cover" />
         ) : (
           <ShoppingBag size={40} className="text-blue-300 opacity-60" />

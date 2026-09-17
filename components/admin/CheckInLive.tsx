@@ -102,7 +102,7 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
 
         {state.checkInOpen && qrDataUrl ? (
           <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {/* eslint-disable-next-line @next/next/no-img-element -- data: URL from the QR encoder; nothing to optimise */}
             <img src={qrDataUrl} alt="Event check-in QR code" className="w-full rounded-lg border border-brand-hairline" />
             <p className="text-xs text-brand-muted-soft break-all">{checkInUrl}</p>
           </>

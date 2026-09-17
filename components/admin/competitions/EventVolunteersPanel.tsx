@@ -61,7 +61,7 @@ export function EventVolunteersPanel({ slug }: { slug: string }) {
   }
   useEffect(() => {
     load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch when the slug changes; load() reads nothing else
   }, [slug])
 
   const post = async (method: 'POST' | 'DELETE', memberId: string) => {

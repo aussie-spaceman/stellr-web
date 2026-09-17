@@ -38,7 +38,7 @@ export function EventMerchandiseEditor({ eventSlug }: { eventSlug: string }) {
   }
   useEffect(() => {
     load()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- fetch once on mount; load() only reads the eventSlug prop
 
   const product = products.find((p) => p.id === productId)
   const variants = (product?.variants ?? []).filter((v) => v.active)

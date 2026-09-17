@@ -111,7 +111,9 @@ removed **Access map** and **Delegations**.
 3. **Wire member-side object-anchored rules** (seed stories r14–r18): the schema,
    editor and storage exist, but the registration-time matcher does NOT read
    `roster_add`/tier object-anchored rules yet. Extend `lib/auto-membership-grant.ts`
-   + `app/api/admin/events/[slug]/roster/route.ts` (and the volunteer nomination path)
+   + `app/api/admin/access/objects/[id]/roster/route.ts` (the event-level
+   `events/[slug]/roster` route it originally named was superseded by the access
+   console and removed Sept 2026) and the volunteer nomination path
    to query `tier_grant_rules` where `trigger_type='object_created'` +
    `object_anchor_ref`/`object_type` matches, then apply roster adds via
    `community_space_members`/`cohort_members` and tier grants via `grantTier`.

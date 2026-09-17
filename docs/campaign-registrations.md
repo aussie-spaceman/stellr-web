@@ -36,24 +36,22 @@ submit a **proposal** before a **deadline**. Content is authored in Sanity.
 | app My competitions | `/campaigns` | `app/(member)/campaigns/page.tsx` |
 | app workspace | `/campaigns/[slug]` | `app/(member)/campaigns/[slug]/page.tsx` |
 | app submit | `/campaigns/[slug]/submit` | + `SubmitProposalForm` |
-| app signup step | `/register-campaign` | entry point A (chrome-less) |
 | admin | `/admin/campaigns/[slug]` | teams, stats, Email everyone |
 
-Shared: `components/campaigns/CampaignRegistrationModal.tsx` (3 steps, no payment;
-`regContext = 'member' | 'signup' | 'events'`), `CampaignCard`, `CampaignsBoard`,
-`CampaignRegisterButton`. Server helpers in `lib/campaign-registrations.ts` and
-view/date/theme helpers in `lib/campaigns.ts`.
+Shared: `CampaignCard`, `CampaignGridCard`, `CampaignDetail`, `DashboardCampaigns`,
+`SubmitProposalForm` under `components/campaigns/`. Server helpers in
+`lib/campaign-registrations.ts` and view/date/theme helpers in `lib/campaigns.ts`.
+
+> The chrome-less signup step (`/register-campaign`, "entry point A") was designed but
+> never wired to onboarding; removed in the Sept 2026 cleanup. Members register from
+> `/campaigns` or the event page instead.
 
 ## APIs & emails
-- `POST /api/campaigns/register` — create/idempotent-update a campaign registration → email (1).
 - `POST /api/campaigns/[slug]/submit` — multipart upload (watermarks PDFs) → email (2).
 - `POST /api/admin/campaigns/[slug]/email` — bulk email all registrants → email (3).
-- Templates in `lib/email.ts`: `campaignRegistrationEmail`, `campaignProposalReceivedEmail`,
-  `campaignBroadcastEmail`.
+- Templates in `lib/email.ts`: `campaignProposalReceivedEmail`, `campaignBroadcastEmail`.
 
 ## Ops before go-live
 1. Apply migration `120_campaign_registrations.sql`.
 2. Author Campaigns in Sanity (`activityType = campaign`, theme, season, year,
    **deadline**, deliverable).
-4. Optional: point the educator signup/onboarding completion redirect at
-   `/register-campaign` to surface entry point A.

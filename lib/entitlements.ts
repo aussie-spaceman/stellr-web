@@ -300,18 +300,6 @@ export async function setTierCoachingAllocation(tierId: string, freeSessions: nu
   }
 }
 
-/** Stripe price id for buying an EXTRA session at the member's tier (tier_benefits.
- *  extra_stripe_price_id; replaces the session_entitlements lookup). Returns the
- *  first configured price across the member's active tiers, or null. */
-export async function getTierExtraPriceId(tierIds: string[], kind: 'coaching_session' | 'cohort_access'): Promise<string | null> {
-  if (!tierIds.length) return null
-  const { data: tiers } = await ent().from('tiers').select('code').in('membership_tier_id', tierIds)
-  const codes = ((tiers ?? []) as Array<{ code: string }>).map((t) => t.code)
-  if (!codes.length) return null
-  const { data } = await ent().from('tier_benefits').select('extra_stripe_price_id').eq('kind', kind).in('tier_code', codes)
-  return ((data ?? []) as Array<{ extra_stripe_price_id: string | null }>).map((d) => d.extra_stripe_price_id).find((p): p is string => !!p) ?? null
-}
-
 // ── Booking (write) — server-side; called from APIs / the webhook ──────────────
 
 /** Consume an included allocation for a free booking. Returns the booking id. */

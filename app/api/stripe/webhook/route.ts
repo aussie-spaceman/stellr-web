@@ -386,14 +386,6 @@ export async function POST(req: NextRequest) {
             actorType: 'stripe',
           })
         }
-      } else if (session.metadata?.type === 'extra_session') {
-        // Purchased extra coaching/mentoring session → purchased ledger lot
-        // (FR-COM-11/12). The booking engine draws it like any other allocation.
-        const { memberId, sessionType } = session.metadata
-        if (memberId && (sessionType === 'coaching' || sessionType === 'mentoring')) {
-          const kind = sessionType === 'coaching' ? 'coaching_session' : 'cohort_access'
-          await grantPurchasedLot(memberId, kind, 1, session.id)
-        }
       } else if (session.metadata?.type === 'mentoring_topup') {
         // Purchased extra mentoring credits (top-up pack) → purchased cohort_access
         // lot (one lot of N), idempotent on the Stripe session.

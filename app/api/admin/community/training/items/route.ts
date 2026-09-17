@@ -1,4 +1,3 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
@@ -6,6 +5,7 @@ import { claimUpload } from '@/lib/uploads'
 import { watermarkIfPdf } from '@/lib/resource-finalise'
 import { enqueueVideoWatermark } from '@/lib/watermark/video-queue'
 import { isInteractiveKey } from '@/lib/interactive-lessons-meta'
+import { currentUserIsAdmin } from '@/lib/admin-auth'
 
 // Claiming a stored upload re-reads and may rewrite it (watermark).
 export const maxDuration = 60
@@ -27,13 +27,8 @@ export const maxDuration = 60
 // PATCH (JSON) updates an existing lesson: { id, title?, body?, status?, sectionId?, displayOrder? }
 // DELETE (?id=) removes a lesson.
 
-async function requireAdmin() {
-  const { sessionClaims } = await auth()
-  return (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
-}
-
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // JSON only. Lesson media (a document, or a VIDEO) is uploaded straight to
   // storage via /api/uploads/sign and arrives here as a path: the platform caps
@@ -126,7 +121,7 @@ export async function POST(req: Request) {
 // to 'interactive' requires a registered interactiveKey; to 'live' clears both
 // (the room is derived from the item id).
 export async function PATCH(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const db = supabaseServer()
 
   const fields = (await req.json().catch(() => ({}))) as Record<string, unknown>
@@ -201,7 +196,7 @@ export async function PATCH(req: Request) {
 
 // DELETE — remove a lesson. Query: ?id=
 export async function DELETE(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 

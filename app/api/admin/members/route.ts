@@ -4,15 +4,12 @@ import { supabaseServer } from '@/lib/supabase'
 import { grantTierAllocations } from '@/lib/entitlements'
 import { DEFAULT_ROLE_FOR_BRACKET } from '@/lib/membership-rules'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
-
-function isAdmin(sessionClaims: unknown) {
-  return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
-}
+import { isAdminClaims } from '@/lib/admin-auth'
 
 // POST /api/admin/members — admin manually creates a new member record
 export async function POST(req: Request) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
   const {

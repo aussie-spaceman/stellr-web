@@ -2,14 +2,12 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { ensureSpaceContainer } from '@/lib/container-sync'
+import { isAdminClaims } from '@/lib/admin-auth'
 
 // Admin CRUD for community Spaces (Spaces design — list / create / delete).
 // Per-space config (channels, tiers, members, resources, training, announcements,
 // moderation) is handled by /api/admin/community/spaces/[id].
 
-function isAdmin(sessionClaims: unknown) {
-  return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
-}
 function slugify(s: string) {
   return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 }
@@ -18,7 +16,7 @@ const THEME = new Set(['space', 'enviro', 'campaign', 'college'])
 
 export async function GET() {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const db = supabaseServer()
   const { data } = await db
     .from('community_spaces')
@@ -29,7 +27,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const { userId, sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const b = await req.json().catch(() => ({}))
   if (!b.name?.trim()) return NextResponse.json({ error: 'name required' }, { status: 400 })
@@ -83,7 +81,7 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const b = await req.json().catch(() => ({}))
   if (!b.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -109,7 +107,7 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const b = await req.json().catch(() => ({}))
   if (!b.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const db = supabaseServer()

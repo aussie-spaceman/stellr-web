@@ -1,6 +1,5 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { currentUserIsAdmin } from '@/lib/admin-auth'
 import { inviteMembersToCohort, resendCohortInvites } from '@/lib/sessions'
 import { supabaseServer } from '@/lib/supabase'
 import {
@@ -16,13 +15,8 @@ import type { CohortTheme } from '@/lib/mentoring-format'
 // Admin actions for the Mentoring redesign that the legacy /api/admin/community/
 // cohorts route doesn't cover: make-mentor (global), reassign mentor, cohort
 // settings + access, and the Membership & access tier config.
-async function requireAdmin() {
-  const { sessionClaims } = await auth()
-  return isAdminClaims(sessionClaims)
-}
-
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const b = await req.json().catch(() => ({}))
 
   switch (b.action) {

@@ -11,6 +11,7 @@ import {
 } from '@/lib/access-objects'
 import { getSignedInMember } from '@/lib/community'
 import { getAllEvents, getAllCampaigns } from '@/lib/sanity'
+import { isAdminClaims } from '@/lib/admin-auth'
 
 // /api/admin/access/objects/[id]/contents — the Contents tab of the unified
 // container detail. Contents live in two stores:
@@ -18,10 +19,6 @@ import { getAllEvents, getAllCampaigns } from '@/lib/sanity'
 //   community_space_sources (Spaces attached to an object — migration 123;
 //     the design models these as the object's Space contents)
 // Every POST is gated by the object_type_relations matrix (closed by default).
-
-function isAdmin(sessionClaims: unknown) {
-  return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
-}
 
 /** container_contents.content_type → design object type. */
 const CONTENT_TYPE_TO_OBJECT: Record<string, AccessObjectType> = {
@@ -34,7 +31,7 @@ const CONTENT_TYPE_TO_OBJECT: Record<string, AccessObjectType> = {
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const object = await resolveAccessObject(decodeURIComponent(id))
@@ -164,7 +161,7 @@ const postSchema = z.object({
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const object = await resolveAccessObject(decodeURIComponent(id))
@@ -233,7 +230,7 @@ const deleteSchema = z.object({
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const object = await resolveAccessObject(decodeURIComponent(id))

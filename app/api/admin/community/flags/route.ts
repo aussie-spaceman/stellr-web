@@ -4,16 +4,12 @@ import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember } from '@/lib/community'
 import { logActivity } from '@/lib/activity-log'
-
-function requireAdmin(sessionClaims: Record<string, unknown> | null | undefined) {
-  const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
-  return role === 'admin'
-}
+import { isAdminClaims } from '@/lib/admin-auth'
 
 // GET /api/admin/community/flags — list flags (default: pending only)
 export async function GET(req: Request) {
   const { sessionClaims } = await auth()
-  if (!requireAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status') ?? 'pending'
@@ -42,7 +38,7 @@ const resolveSchema = z.object({
 // PATCH /api/admin/community/flags — resolve or dismiss a flag (FR-COM-07)
 export async function PATCH(req: Request) {
   const { sessionClaims } = await auth()
-  if (!requireAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const parsed = resolveSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })

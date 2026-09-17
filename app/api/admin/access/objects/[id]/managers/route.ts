@@ -6,6 +6,7 @@ import { resolveAccessObject } from '@/lib/access-objects'
 import { grantObjectRole } from '@/lib/object-roles'
 import { getSignedInMember } from '@/lib/community'
 import { MANAGE_ROLES, type MemberRole } from '@/lib/member-roles'
+import { isAdminClaims } from '@/lib/admin-auth'
 
 // /api/admin/access/objects/[id]/managers — the manage axis for any object.
 // Managers come from three sources today (all surfaced by GET):
@@ -15,13 +16,9 @@ import { MANAGE_ROLES, type MemberRole } from '@/lib/member-roles'
 // POST/DELETE write the object_roles grant — same write path as the legacy
 // /api/admin/object-roles route (which stays as a proxy during migration).
 
-function isAdmin(sessionClaims: unknown) {
-  return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
-}
-
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const object = await resolveAccessObject(decodeURIComponent(id))
@@ -75,7 +72,7 @@ const bodySchema = z.object({ memberId: z.string().uuid() })
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const object = await resolveAccessObject(decodeURIComponent(id))
@@ -92,7 +89,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const object = await resolveAccessObject(decodeURIComponent(id))

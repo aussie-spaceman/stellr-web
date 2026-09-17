@@ -6,6 +6,7 @@ import { resolveAccessObject, type AccessObject } from '@/lib/access-objects'
 import { getEventRoster } from '@/lib/event-admin'
 import { checkSingletonRoleAvailable } from '@/lib/object-roles'
 import { roleAllowedForBracket, ROLE_LABELS, MANAGE_ROLES, type MemberRole } from '@/lib/member-roles'
+import { isAdminClaims } from '@/lib/admin-auth'
 
 // /api/admin/access/objects/[id]/roster — one roster API for every object type
 // (convergence step 3). Dispatches on the resolved object type:
@@ -17,17 +18,13 @@ import { roleAllowedForBracket, ROLE_LABELS, MANAGE_ROLES, type MemberRole } fro
 // cohort) and ROLES_BY_BRACKET before touching the tables. The legacy per-type
 // roster routes stay as proxies for one release (RETIREMENT-DIFF Phase 4).
 
-function isAdmin(sessionClaims: unknown) {
-  return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
-}
-
 async function resolve(id: string): Promise<AccessObject | null> {
   return resolveAccessObject(decodeURIComponent(id))
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const object = await resolve(id)
@@ -63,7 +60,7 @@ const postSchema = z.object({
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const object = await resolve(id)
@@ -163,7 +160,7 @@ const deleteSchema = z.object({ memberId: z.string().uuid() })
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const object = await resolve(id)

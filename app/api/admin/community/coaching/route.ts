@@ -1,6 +1,5 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { currentUserIsAdmin } from '@/lib/admin-auth'
 import {
   createWorkshop,
   updateWorkshop,
@@ -16,13 +15,8 @@ import {
 // Admin actions for Coaching workshops (1-on-1): create + invite, settings,
 // coach reassignment, member invite/replace/remove, archive/delete, and the
 // Membership & access coaching allowance config.
-async function requireAdmin() {
-  const { sessionClaims } = await auth()
-  return isAdminClaims(sessionClaims)
-}
-
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const b = await req.json().catch(() => ({}))
 
   switch (b.action) {

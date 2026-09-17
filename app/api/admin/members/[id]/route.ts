@@ -2,10 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
-
-function isAdmin(sessionClaims: unknown) {
-  return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
-}
+import { isAdminClaims } from '@/lib/admin-auth'
 
 function humanizeFields(keys: string[]): string {
   return keys.map((k) => k.replace(/^ec_/, 'emergency ').replace(/_/g, ' ')).join(', ')
@@ -28,7 +25,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const body = await req.json()
@@ -124,7 +121,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const db = supabaseServer()

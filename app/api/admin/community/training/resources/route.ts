@@ -1,9 +1,9 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { RESOURCES_BUCKET } from '@/lib/community'
 import { claimUpload } from '@/lib/uploads'
 import { watermarkIfPdf } from '@/lib/resource-finalise'
+import { currentUserIsAdmin } from '@/lib/admin-auth'
 
 // Claiming a stored upload re-reads and may rewrite it (watermark).
 export const maxDuration = 60
@@ -11,14 +11,9 @@ export const maxDuration = 60
 // Admin CRUD for per-lesson attached resources (files / links) shown beneath a
 // lesson's primary content in the member Course detail.
 
-async function requireAdmin() {
-  const { sessionClaims } = await auth()
-  return (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
-}
-
 // GET ?itemId= — list a lesson's resources.
 export async function GET(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const itemId = new URL(req.url).searchParams.get('itemId')
   if (!itemId) return NextResponse.json({ error: 'itemId required' }, { status: 400 })
   const db = supabaseServer()
@@ -36,7 +31,7 @@ export async function GET(req: Request) {
 //   existing: { itemId, kind:'existing', resourceId, title? }  ← reference a
 //             Global Resources Catalogue binary without re-uploading it.
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const db = supabaseServer()
   // JSON only. An uploaded file arrives as a storagePath from /api/uploads/sign;
   // the bytes never pass through here, because the platform caps a request body
@@ -114,7 +109,7 @@ export async function POST(req: Request) {
 
 // DELETE ?id=
 export async function DELETE(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const db = supabaseServer()

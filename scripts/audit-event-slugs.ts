@@ -23,7 +23,7 @@
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 import * as fs from 'fs'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseServer } from '../lib/supabase'
 
 // ESM hoists static imports above this call, so nothing imported above may read
 // env at module scope — Sanity is queried over raw fetch for that reason.
@@ -64,7 +64,7 @@ async function sanitySlugs(): Promise<Set<string>> {
 }
 
 async function main() {
-  const db = createClient(supabaseUrl!, serviceKey!, { auth: { persistSession: false } })
+  const db = supabaseServer()
   const [live, { data, error }] = await Promise.all([
     sanitySlugs(),
     db.rpc('event_slug_inventory'),

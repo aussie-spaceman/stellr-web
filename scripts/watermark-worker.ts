@@ -20,9 +20,10 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { watermarkVideoFile } from '../lib/watermark/video'
 import { sleep } from '../lib/utils'
+import { supabaseServer } from '../lib/supabase'
 
 const envPath = path.resolve(process.cwd(), '.env.local')
 if (fs.existsSync(envPath)) dotenv.config({ path: envPath })
@@ -119,7 +120,7 @@ async function drain(db: SupabaseClient): Promise<number> {
 }
 
 async function main() {
-  const db = createClient(url!, serviceKey!, { auth: { persistSession: false } })
+  const db = supabaseServer()
   const once = process.argv.includes('--once')
 
   if (once) {

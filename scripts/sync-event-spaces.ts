@@ -32,7 +32,7 @@
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 import * as fs from 'fs'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseServer } from '../lib/supabase'
 
 // ESM hoists static imports above this call, so nothing imported above may read
 // env at module scope. lib/supabase reads it lazily inside its functions, and
@@ -80,7 +80,7 @@ async function main() {
   console.log(`${events.length} published event(s) in Sanity\n`)
   if (events.length === 0) return
 
-  const db = createClient(supabaseUrl!, serviceKey!, { auth: { persistSession: false } })
+  const db = supabaseServer()
 
   // Preflight. Without migration 144 the sanity_event_id column does not exist,
   // every lookup below errors, and PostgREST hands back an empty result — which

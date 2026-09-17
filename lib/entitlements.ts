@@ -97,13 +97,6 @@ export async function getQuote(memberId: string, offeringId: string, coupon?: st
   }
 }
 
-/** Active tier code for a member (read from member_memberships), or null. */
-export async function getActiveTierCode(memberId: string): Promise<string | null> {
-  const { data, error } = await ent().rpc('fn_active_tier', { p_member: memberId })
-  if (error) throw new Error(`getActiveTierCode: ${error.message}`)
-  return (data as string | null) ?? null
-}
-
 /** Remaining included allocation of a kind for a member. */
 export async function getAllocationBalance(
   memberId: string,
@@ -160,14 +153,6 @@ export async function getMemberEntitlementSummary(memberId: string): Promise<Ent
 }
 
 // ── Offerings (read) ────────────────────────────────────────────────────────────
-
-export async function listOfferings(type?: OfferingType): Promise<Offering[]> {
-  let q = ent().from('offerings').select('id, type, title, capacity, seats_taken, status, starts_at').eq('status', 'open')
-  if (type) q = q.eq('type', type)
-  const { data, error } = await q.order('starts_at', { ascending: true, nullsFirst: false })
-  if (error) throw new Error(`listOfferings: ${error.message}`)
-  return (data ?? []) as Offering[]
-}
 
 // ── Tiers (canonical) ───────────────────────────────────────────────────────────
 

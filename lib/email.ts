@@ -326,37 +326,6 @@ export function groupRegisteredNoPaymentEmail({
   return { subject, html, text }
 }
 
-export function groupJoinLinkEmail({
-  registrantFirstName, registrantLastName, eventTitle, joinUrl,
-}: {
-  registrantFirstName: string; registrantLastName: string
-  eventTitle: string; joinUrl: string
-}) {
-  const subject = `Share with your group — ${eventTitle} registration link`
-  const html = emailLayout({
-    heading: 'Your Group Registration Link',
-    bodyHtml: `
-        <p>Hi ${registrantFirstName},</p>
-        <p>Your group registration for <strong>${eventTitle}</strong> has been submitted. Forward the link below to your group members so they can complete their registration details.</p>
-        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:20px;margin:24px 0">
-          <p style="margin:0 0 12px;font-weight:600;color:#1e3a5f;font-size:14px">Group Registration Link</p>
-          <p style="margin:0 0 16px;font-size:13px;color:#374151">Each group member should click this link, sign in (or create a free account), and confirm their participation.</p>
-          <a href="${joinUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-size:14px;font-weight:600">Open Registration Link →</a>
-          <p style="margin:12px 0 0;font-size:11px;color:#6b7280;word-break:break-all">${joinUrl}</p>
-        </div>
-        <p style="font-weight:600;color:#374151;margin-bottom:8px">How it works:</p>
-        <ul style="color:#6b7280;font-size:14px;line-height:1.8;padding-left:20px">
-          <li>Share this email (or just the link) with each member of your group</li>
-          <li>Each member clicks the link and signs in or creates a free Stellr account</li>
-          <li>They confirm they're joining your group for ${eventTitle}</li>
-          <li>You'll receive a notification each time a member completes their registration</li>
-        </ul>
-        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
-  })
-  const text = `Hi ${registrantFirstName} ${registrantLastName},\n\nForward this link to your group members for ${eventTitle}:\n\n${joinUrl}\n\nEach member should click the link, sign in or create an account, and confirm their participation. You'll be notified when each member completes their registration.\n\n— Stellr Education`
-  return { subject, html, text }
-}
-
 export function groupMemberJoinedEmail({
   registrantFirstName, memberFirstName, memberLastName, memberEmail, eventTitle, memberCount, totalExpected,
 }: {
@@ -744,63 +713,7 @@ export function communityReplyEmail({
   return { subject, html, text }
 }
 
-export function communityAnnouncementEmail({
-  recipientFirstName,
-  title,
-  body,
-  url,
-}: {
-  recipientFirstName: string
-  title: string
-  body: string
-  url: string
-}) {
-  const subject = `New announcement: ${title} — Stellr Community`
-  const html = `
-    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px">
-      <p style="font-size:16px;color:#111827">Hi ${recipientFirstName},</p>
-      <h2 style="font-size:18px;color:#111827;margin:0 0 8px">${title}</h2>
-      <p style="color:#374151">${body}</p>
-      <a href="${url}" style="display:inline-block;margin:16px 0;padding:10px 20px;background:#111827;color:#fff;border-radius:6px;text-decoration:none;font-size:14px">Read in community</a>
-    </div>
-  `
-  const text = `Hi ${recipientFirstName},\n\nNew announcement: ${title}\n\n${body}\n\nRead it here: ${url}\n\n— Stellr Community`
-  return { subject, html, text }
-}
-
 // ── Campaign Registrations ───────────────────────────────────────────────────
-
-// (1) Sent when a group is registered for a Campaign. Campaigns are free — there
-// is no payment step, so this simply confirms the registration and the deadline.
-export function campaignRegistrationEmail({
-  contactFirstName, groupName, campaignTitle, seasonLabel, deadlineLabel, workspaceUrl,
-}: {
-  contactFirstName: string
-  groupName: string
-  campaignTitle: string
-  seasonLabel: string
-  deadlineLabel: string
-  workspaceUrl: string
-}) {
-  const subject = `You're registered — ${campaignTitle}`
-  const html = emailLayout({
-    heading: `You're registered`,
-    bodyHtml: `
-        <p>Hi ${contactFirstName},</p>
-        <p><strong>${groupName}</strong> is registered for <strong>${campaignTitle}</strong>. Campaigns are asynchronous and included with your membership — there's no payment and no fixed event date. Your group works at its own pace and submits a proposal before the deadline.</p>
-        <table style="border-collapse:collapse;width:100%;margin:24px 0;background:#f9fafb;border-radius:8px">
-          <tr><td style="padding:12px 16px;font-weight:600;color:#374151;width:40%">Campaign</td><td style="padding:12px 16px">${campaignTitle}</td></tr>
-          <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">Group</td><td style="padding:12px 16px">${groupName}</td></tr>
-          <tr><td style="padding:12px 16px;font-weight:600;color:#374151">Season</td><td style="padding:12px 16px">${seasonLabel}</td></tr>
-          <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">Proposal deadline</td><td style="padding:12px 16px">${deadlineLabel}</td></tr>
-        </table>
-        <p>Proposals are due <strong>${deadlineLabel}</strong>. You'll find the brief, workshop material and your team workspace in the app.</p>
-        <a href="${workspaceUrl}" style="display:inline-block;margin:8px 0 4px;padding:11px 22px;background:#3C6DF6;color:#fff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">Open your campaign</a>
-        <p style="color:#6b7280;font-size:14px;margin-top:24px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
-  })
-  const text = `Hi ${contactFirstName},\n\n${groupName} is registered for ${campaignTitle}. Campaigns are free with your membership — no payment, no fixed date.\n\nSeason: ${seasonLabel}\nProposal deadline: ${deadlineLabel}\n\nOpen your campaign: ${workspaceUrl}\n\n— The Stellr team`
-  return { subject, html, text }
-}
 
 // (2) Sent when a group submits its proposal. Copy mirrors the in-app preview.
 export function campaignProposalReceivedEmail({

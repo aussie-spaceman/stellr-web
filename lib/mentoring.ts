@@ -33,18 +33,6 @@ export interface MentoringCredits {
   total: number
 }
 
-/**
- * Idempotently materialise each active membership's annual mentoring-credit
- * allowance as `session_credits` rows. Keying on the membership id means a grant
- * is created exactly once per membership period; because we never expire allowance
- * rows, unused credits simply roll over into the next period (decision D3).
- */
-export async function syncMentoringAllowance(member: CommunityMember): Promise<void> {
-  // Entitlements cutover: the mentoring allowance is the cohort_access lot, materialised
-  // from tier_benefits when a membership is granted; ensure it exists before a read.
-  await ensureMemberGrants(member.id)
-}
-
 /** The member's mentoring-session balance (cohort_access allocation; ensures grant first). */
 export async function getMentoringCredits(member: CommunityMember): Promise<MentoringCredits> {
   await ensureMemberGrants(member.id)

@@ -19,7 +19,7 @@ function getStripe() {
 //   PATCH { returnId, action }           — admin approves (Stripe refund) or denies
 export async function POST(req: Request) {
   const member = await currentStoreMember()
-  if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   const body = await req.json().catch(() => ({}))
   const { orderId, reason } = body
   if (!orderId) return NextResponse.json({ error: 'orderId required' }, { status: 400 })

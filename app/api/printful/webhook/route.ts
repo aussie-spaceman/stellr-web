@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 // direct storefront orders (event-batch tracking lands in Phase 4).
 export async function POST(req: Request) {
   if (!verifyPrintfulWebhook(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   }
 
   const body = (await req.json().catch(() => null)) as

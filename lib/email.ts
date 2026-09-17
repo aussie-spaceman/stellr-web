@@ -94,7 +94,7 @@ interface SendEmailOptions {
 
 export async function sendEmail({ to, from, cc, replyTo, subject, html, text, attachments }: SendEmailOptions) {
   if (!RESEND_API_KEY) {
-    console.log('[email] No RESEND_API_KEY — would have sent to:', to, subject)
+    console.log('[email] No RESEND_API_KEY — would have sent to:', to?.replace(/^.*@/, '…@'), subject)
     return
   }
 

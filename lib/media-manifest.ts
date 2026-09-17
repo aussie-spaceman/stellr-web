@@ -1,6 +1,7 @@
 // Media-rollout manifest — single source of truth for the media components
 // (T1–T6) across the public site. Mirrors the approved Drive sources locked on
-// 2026-06-30 (see design_handoff_media_rollout + the "Photo Deployment" doc).
+// 2026-06-30 (the "Photo Deployment" Google Doc; the handoff folder it came
+// with is not in the repo).
 //
 // Components read assets from here. An asset whose bytes are not yet hosted is
 // marked `pending: true` (or has an empty `src`); components render a labelled

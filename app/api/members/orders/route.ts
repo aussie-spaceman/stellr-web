@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 // for the account "Orders" view. A member only ever sees their own.
 export async function GET() {
   const member = await currentStoreMember()
-  if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
   const db = supabaseServer()
   const { data, error } = await db

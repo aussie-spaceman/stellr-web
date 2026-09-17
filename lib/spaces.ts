@@ -3,7 +3,7 @@ import { normalizeEmail } from '@/lib/member-enums'
 import { getGlobalRoleNames, type MemberRole } from '@/lib/member-roles'
 import type { CommunityMember } from '@/lib/community'
 
-// ─── Spaces access + directory model (design_handoff_spaces) ─────────────────
+// ─── Spaces access + directory model ─────────────────────────────────────────
 //
 // A Space has one of three access types:
 //   open    — visible to everyone, any member can enter

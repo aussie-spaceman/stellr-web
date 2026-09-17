@@ -64,7 +64,9 @@ type Props = Record<string, string>
 
 /* ── Low-level transport ─────────────────────────────────────────────────── */
 
-async function hubspot(path: string, method: 'GET' | 'POST' | 'PATCH', body?: unknown) {
+// The one HubSpot transport. hubspot-deals and hubspot-companies import it
+// rather than carrying their own copy of the same eight lines.
+export async function hubspotFetch(path: string, method: 'GET' | 'POST' | 'PATCH' | 'PUT', body?: unknown) {
   return fetch(`${BASE}${path}`, {
     method,
     headers: {
@@ -95,7 +97,7 @@ export async function getContactByEmail(
   if (!HUBSPOT_ACCESS_TOKEN) return null
   try {
     const query = properties.length ? `&properties=${properties.join(',')}` : ''
-    const res = await hubspot(
+    const res = await hubspotFetch(
       `/crm/v3/objects/contacts/${encodeURIComponent(email)}?idProperty=email${query}`,
       'GET',
     )
@@ -129,7 +131,7 @@ export async function searchContacts(
 ): Promise<SearchedContact[]> {
   if (!HUBSPOT_ACCESS_TOKEN) return []
   try {
-    const res = await hubspot('/crm/v3/objects/contacts/search', 'POST', {
+    const res = await hubspotFetch('/crm/v3/objects/contacts/search', 'POST', {
       filterGroups,
       properties,
       limit,
@@ -166,14 +168,14 @@ export async function setLifecycleStage(
 ): Promise<{ ok: boolean; error?: string }> {
   if (!HUBSPOT_ACCESS_TOKEN) return { ok: false, error: 'no-token' }
   try {
-    const clear = await hubspot(`/crm/v3/objects/contacts/${contactId}`, 'PATCH', {
+    const clear = await hubspotFetch(`/crm/v3/objects/contacts/${contactId}`, 'PATCH', {
       properties: { [HS.lifecycleStage]: '' },
     })
     if (!clear.ok) {
       return { ok: false, error: `clear-failed:${clear.status}` }
     }
 
-    const set = await hubspot(`/crm/v3/objects/contacts/${contactId}`, 'PATCH', {
+    const set = await hubspotFetch(`/crm/v3/objects/contacts/${contactId}`, 'PATCH', {
       properties: { [HS.lifecycleStage]: stage },
     })
     if (!set.ok) {
@@ -253,13 +255,13 @@ export async function upsertContact(
   const emailId = encodeURIComponent(input.email)
 
   async function write(props: Props): Promise<Response> {
-    const updated = await hubspot(
+    const updated = await hubspotFetch(
       `/crm/v3/objects/contacts/${emailId}?idProperty=email`,
       'PATCH',
       { properties: props },
     )
     if (updated.status !== 404) return updated
-    return hubspot('/crm/v3/objects/contacts', 'POST', { properties: props })
+    return hubspotFetch('/crm/v3/objects/contacts', 'POST', { properties: props })
   }
 
   const dropped: string[] = []
@@ -409,7 +411,7 @@ export async function createNote(
 ): Promise<{ ok: boolean }> {
   if (!HUBSPOT_ACCESS_TOKEN) return { ok: false }
   try {
-    const res = await hubspot('/crm/v3/objects/notes', 'POST', {
+    const res = await hubspotFetch('/crm/v3/objects/notes', 'POST', {
       properties: {
         hs_timestamp: new Date().toISOString(),
         hs_note_body: body,

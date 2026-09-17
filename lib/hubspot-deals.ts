@@ -14,8 +14,9 @@
 // Scopes: crm.objects.deals.read, crm.objects.deals.write, plus the contacts
 // scopes already granted.
 
+import { hubspotFetch } from '@/lib/hubspot'
+
 const HUBSPOT_ACCESS_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN
-const BASE = 'https://api.hubapi.com'
 
 /** deal → contact, HubSpot-defined association type. */
 const ASSOCIATION_DEAL_TO_CONTACT = 3
@@ -110,17 +111,6 @@ export function decideDealAction(
 
 /* ── HubSpot I/O ─────────────────────────────────────────────────────────── */
 
-async function hubspot(path: string, method: 'GET' | 'POST' | 'PATCH', body?: unknown) {
-  return fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${HUBSPOT_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  })
-}
-
 /**
  * Every deal already associated with a contact.
  *
@@ -133,7 +123,7 @@ async function hubspot(path: string, method: 'GET' | 'POST' | 'PATCH', body?: un
 export async function dealsForContact(contactId: string): Promise<DealSnapshot[]> {
   if (!HUBSPOT_ACCESS_TOKEN) return []
   try {
-    const assoc = await hubspot(
+    const assoc = await hubspotFetch(
       `/crm/v4/objects/contacts/${contactId}/associations/deals?limit=100`,
       'GET',
     )
@@ -144,7 +134,7 @@ export async function dealsForContact(contactId: string): Promise<DealSnapshot[]
       .filter(Boolean)
     if (ids.length === 0) return []
 
-    const read = await hubspot('/crm/v3/objects/deals/batch/read', 'POST', {
+    const read = await hubspotFetch('/crm/v3/objects/deals/batch/read', 'POST', {
       properties: ['pipeline', 'dealstage'],
       inputs: ids.map((id) => ({ id })),
     })
@@ -173,7 +163,7 @@ export async function createDeal(input: {
     return { ok: false }
   }
   try {
-    const res = await hubspot('/crm/v3/objects/deals', 'POST', {
+    const res = await hubspotFetch('/crm/v3/objects/deals', 'POST', {
       properties: {
         dealname: input.name,
         pipeline: PARTICIPANT_PIPELINE_ID,
@@ -209,7 +199,7 @@ export async function moveDealToStage(
 ): Promise<{ ok: boolean }> {
   if (!HUBSPOT_ACCESS_TOKEN) return { ok: false }
   try {
-    const res = await hubspot(`/crm/v3/objects/deals/${dealId}`, 'PATCH', {
+    const res = await hubspotFetch(`/crm/v3/objects/deals/${dealId}`, 'PATCH', {
       properties: { dealstage: stage },
     })
     if (!res.ok) {

@@ -326,42 +326,6 @@ export async function getMyTraining(member: CommunityMember): Promise<MyTraining
 
 /* ─── Certificates ───────────────────────────────────────────────────────── */
 
-export interface Certificate {
-  id: string
-  moduleId: string
-  title: string
-  material_kind: MaterialKind
-  theme: CourseTheme | null
-  type: TrainingType
-  certNumber: string
-  issuer: string
-  issuedAt: string
-}
-
-export async function getCertificates(member: CommunityMember): Promise<Certificate[]> {
-  const db = supabaseServer()
-  const { data } = await db
-    .from('training_certificates')
-    .select('id, module_id, cert_number, issuer, issued_at, training_modules(title, material_kind, theme)')
-    .eq('member_id', member.id)
-    .order('issued_at', { ascending: false })
-  return (data ?? []).map((r) => {
-    const m = Array.isArray(r.training_modules) ? r.training_modules[0] : r.training_modules
-    const kind = (m?.material_kind as MaterialKind) ?? 'general'
-    return {
-      id: r.id as string,
-      moduleId: r.module_id as string,
-      title: (m?.title as string) ?? 'Course',
-      material_kind: kind,
-      theme: (m?.theme as CourseTheme | null) ?? null,
-      type: deriveType(kind),
-      certNumber: r.cert_number as string,
-      issuer: (r.issuer as string) ?? courseIssuer(kind),
-      issuedAt: r.issued_at as string,
-    }
-  })
-}
-
 /**
  * Idempotently issue a completion certificate when a member has completed every
  * PUBLISHED lesson of a course. Called from the progress API after a completion.

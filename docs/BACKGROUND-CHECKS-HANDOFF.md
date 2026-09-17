@@ -58,7 +58,7 @@ Mid-session the provider moved off Certn onto Checkr. The compliance layer (stat
 - `components/admin/MemberCompliancePanel.tsx` — admin member sidebar (verify license, order check).
 - `components/admin/ComplianceAuditTable.tsx` + `app/(admin)/admin/compliance/page.tsx` — audit dashboard.
 - `components/admin/EventRoster.tsx` + `lib/event-admin.ts` — "Background" roster column, 4-state pill, filter.
-- `components/admin/AdminNav.tsx` — "Background checks" link under Operations.
+- `components/admin/AdminSidebar.tsx` — "Background checks" link under Operations (was `AdminNav.tsx`, removed Sept 2026).
 - `app/(member)/account/page.tsx`, `app/(admin)/admin/members/[id]/page.tsx` — wiring.
 - `.env.local.example` — `CERTN_*` block replaced with `BACKGROUND_PROVIDER` + `CHECKR_*`.
 

@@ -527,7 +527,13 @@ export async function archiveWorkshop(workshopId: string): Promise<void> {
   // Release one drawn allocation per cancelled upcoming session (count is what matters;
   // bookings aren't session-linked — see fn_release_one_booking).
   for (const s of (upcoming ?? []) as Array<{ member_id: string | null }>) {
-    if (s.member_id) await releaseCoachingBooking(s.member_id, workshopId).catch(() => {})
+    if (s.member_id) {
+      // Best-effort per session: a failed release is a member charged for a
+      // session that was cancelled, so it must at least be visible in the logs.
+      await releaseCoachingBooking(s.member_id, workshopId).catch((e) => {
+        console.error('[coaching] releaseCoachingBooking failed:', { memberId: s.member_id, workshopId, error: e instanceof Error ? e.message : e })
+      })
+    }
   }
 }
 

@@ -364,7 +364,11 @@ export async function ensureMemberGrants(memberId: string): Promise<void> {
     .eq('renewal_status', 'active')
   for (const m of (ms ?? []) as Array<{ id: string; expires_at: string | null }>) {
     if (m.expires_at && m.expires_at < today) continue
-    await grantTierAllocations(m.id).catch(() => {})
+    // Best-effort per membership: one bad row must not block the others, but a
+    // silent failure here is a member who never sees their included sessions.
+    await grantTierAllocations(m.id).catch((e) => {
+      console.error('[entitlements] grantTierAllocations failed:', { membershipId: m.id, error: e instanceof Error ? e.message : e })
+    })
   }
 }
 

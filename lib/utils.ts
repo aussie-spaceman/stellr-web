@@ -19,8 +19,8 @@ export function formatDate(dateStr: string): string {
 // Stellr is a US (Utah) organisation, so dates render in US format + Mountain
 // Time. Change this single constant if the organisation operates in another
 // timezone.
-export const APP_TIME_ZONE = 'America/Denver'
-export const APP_LOCALE = 'en-US'
+const APP_TIME_ZONE = 'America/Denver'
+const APP_LOCALE = 'en-US'
 
 /** Month-day-year for a timestamp/ISO string, e.g. "Jun 20, 2026".
  *

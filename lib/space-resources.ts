@@ -35,7 +35,7 @@ export function fileLabel(name: string, mime: string): string {
  * uploads store the label. Normalise to the label so a catalogue file badges as
  * "PDF" rather than "application/pdf".
  */
-export function normaliseFileType(raw: string | null, title: string): string | null {
+function normaliseFileType(raw: string | null, title: string): string | null {
   const v = (raw ?? '').trim()
   if (!v) return null
   if (v.toLowerCase() === 'link') return 'LINK'

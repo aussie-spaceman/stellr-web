@@ -8,12 +8,6 @@ export type MaterialKind = 'general' | 'event' | 'campaign' | 'cte' | 'curriculu
 /** How a course's content is paced/released (Circle-style course types). */
 export type CourseType = 'self_paced' | 'structured' | 'scheduled'
 
-export const COURSE_TYPE_LABELS: Record<CourseType, string> = {
-  self_paced: 'Self-paced',
-  structured: 'Structured',
-  scheduled: 'Scheduled',
-}
-
 /**
  * Visual/content theme of a course (Training Scope domain model). Distinct from
  * material_kind (which controls WHERE a course surfaces): theme drives the accent
@@ -28,7 +22,7 @@ export const THEME_META: Record<CourseTheme, { label: string; color: string; tin
 }
 
 /** Neutral fallback accent for courses with no theme set yet. */
-export const NO_THEME_ACCENT = { label: '', color: '#3C6DF6', tint: '#EAF0FE', ink: '#2C53C6' }
+const NO_THEME_ACCENT = { label: '', color: '#3C6DF6', tint: '#EAF0FE', ink: '#2C53C6' }
 
 export function themeAccent(theme: CourseTheme | null | undefined) {
   return theme ? THEME_META[theme] : NO_THEME_ACCENT

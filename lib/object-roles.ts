@@ -8,8 +8,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
-import { isAdminClaims } from '@/lib/admin-auth'
-import { MANAGE_ROLES, type MemberRole } from '@/lib/member-roles'
+import type { MemberRole } from '@/lib/member-roles'
 
 // Legacy vocabulary ('event' slug / 'group' / 'container' uuid) plus the seven
 // canonical admin/access object types (migration 125 widened the DB constraint).
@@ -21,46 +20,6 @@ export interface ObjectRole {
   object_type: ObjectType
   object_id: string
   role: string
-}
-
-/**
- * Whether the current Clerk user may manage (objectType, objectId). Returns true
- * for platform admins (source 1) or holders of an explicit grant (source 2).
- */
-export async function currentUserCanManage(
-  objectType: ObjectType,
-  objectId: string,
-): Promise<boolean> {
-  const { userId, sessionClaims } = await auth()
-  if (!userId) return false
-  if (isAdminClaims(sessionClaims)) return true // source 1: staff manage everything
-
-  const db = supabaseServer()
-  const { data: member } = await db
-    .from('members')
-    .select('id')
-    .eq('clerk_user_id', userId)
-    .maybeSingle()
-  if (!member) return false
-
-  const { data } = await db
-    .from('object_roles')
-    .select('id')
-    .eq('member_id', member.id)
-    .eq('object_type', objectType)
-    .eq('object_id', objectId)
-    .limit(1)
-  if (data?.length) return true // source 2: generic object_roles manager grant
-
-  // source 3 (complementary): an object-scoped canonical MANAGE role on this object
-  // in the unified member_roles table (e.g. Moderator/Mentor/Coach).
-  const { data: roles } = await db
-    .from('member_roles')
-    .select('role')
-    .eq('member_id', member.id)
-    .eq('object_type', objectType)
-    .eq('object_id', objectId)
-  return (roles ?? []).some((r) => MANAGE_ROLES.has((r as { role: MemberRole }).role))
 }
 
 // ─── Singleton object roles (admin/access convergence) ──────────────────────
@@ -76,7 +35,7 @@ export type AccessObjectType =
   | 'space' | 'course' | 'workshop' | 'cohort' | 'event' | 'campaign' | 'resource'
 
 /** The singleton role for an object type ('coach' | 'mentor'), or null. */
-export async function singletonRoleForType(objectType: string): Promise<MemberRole | null> {
+async function singletonRoleForType(objectType: string): Promise<MemberRole | null> {
   const db = supabaseServer()
   const { data } = await db
     .from('object_type_singleton_roles')
@@ -122,16 +81,6 @@ export async function checkSingletonRoleAvailable(
     }
   }
   return { ok: true }
-}
-
-/** Every object a member manages — powers a member's "what I manage" view. */
-export async function memberObjectRoles(memberId: string): Promise<ObjectRole[]> {
-  const db = supabaseServer()
-  const { data } = await db
-    .from('object_roles')
-    .select('object_type, object_id, role')
-    .eq('member_id', memberId)
-  return (data ?? []) as ObjectRole[]
 }
 
 /** Grant a member manager rights over an object. Idempotent on the unique key. */

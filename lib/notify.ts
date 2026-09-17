@@ -82,7 +82,7 @@ export async function notifyMembers(memberIds: string[], input: NotifyInput): Pr
  * 'community'. Used to route member-raised issues (e.g. a flagged unavailable
  * training resource) to the people who can fix them.
  */
-export async function communityAdminMemberIds(): Promise<string[]> {
+async function communityAdminMemberIds(): Promise<string[]> {
   const db = supabaseServer()
   const { data } = await db
     .from('staff_roles')

@@ -44,7 +44,7 @@ function norm(v: string | null | undefined): string | null {
 
 // True when the member is the registrant of this group (teacher or student
 // manager) — by member id or by the email the group was registered under.
-export function isTeamRegistrant(member: TeamOwnerMember, registration: TeamOwnerRegistration): boolean {
+function isTeamRegistrant(member: TeamOwnerMember, registration: TeamOwnerRegistration): boolean {
   if (registration.teacher_member_id && registration.teacher_member_id === member.id) return true
   const regEmail = norm(registration.teacher_email)
   const memberEmail = norm(member.email)
@@ -52,7 +52,7 @@ export function isTeamRegistrant(member: TeamOwnerMember, registration: TeamOwne
 }
 
 // True when the member is the nominated Teacher Point of Contact for this group.
-export function isTeamPoc(member: TeamOwnerMember, registration: TeamOwnerRegistration): boolean {
+function isTeamPoc(member: TeamOwnerMember, registration: TeamOwnerRegistration): boolean {
   const pocEmail = norm(registration.teacher_poc_email)
   const memberEmail = norm(member.email)
   return Boolean(pocEmail && memberEmail && pocEmail === memberEmail)

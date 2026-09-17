@@ -26,7 +26,7 @@ function normalizeName(name: string): string {
 // form so registrations don't spawn near-duplicate schools. Returns null when
 // nothing was given or the lookup/insert fails (callers treat school linking as
 // non-fatal — the registration must never fail because of it).
-export async function resolveSchoolId(
+async function resolveSchoolId(
   db: SupabaseClient,
   school: SchoolDetails
 ): Promise<string | null> {
@@ -77,7 +77,7 @@ export async function resolveSchoolId(
 // current link is demoted (is_current=false) and the target school is set current
 // for every member. Used by the group-join flow, where the group's school wins
 // over whatever the joining member had on file (W7 school clash).
-export async function linkMembersToSchool(
+async function linkMembersToSchool(
   db: SupabaseClient,
   memberIds: (string | null | undefined)[],
   schoolId: string,

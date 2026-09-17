@@ -14,7 +14,7 @@ export const WATERMARK_TEXT = '© Stellr Education'
 // fresh one without re-stamping it.
 export const WATERMARK_MARKER = 'stellr-watermarked'
 
-export const WATERMARK_STYLE = {
+const WATERMARK_STYLE = {
   /** Fraction of the shorter edge used for the glyph height. */
   fontScale: 0.03,
   /** Clamp the computed font size (px / pt) so it stays legible but unobtrusive. */

@@ -14,19 +14,6 @@
 //   photos  /media/<subject>-<width>.<ext>   (avif/webp/jpg @ 480/768/1200/1920)
 //   pdfs    /files/<name>.pdf  (+ /files/<name>-preview.pdf for gated previews)
 
-export type MediaPage =
-  | '/'
-  | '/competitions'
-  | '/membership'
-  | '/events'
-  | '/about'
-  | '/students'
-  | '/educators'
-  | '/mentors'
-  | '/why-stellr'
-  | '/curriculum'
-  | '/academy'
-
 /** Voice colour-coding for the T6 pull-quote wall (token classes, not hex). */
 export type Audience = 'student' | 'educator' | 'mentor' | 'parent'
 
@@ -95,7 +82,7 @@ const PHOTO_WIDTHS = [480, 768, 1200, 1920]
 const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ?? '').replace(/\/+$/, '')
 
 /** Prefix a /public-relative media path with the configured host (if any). */
-export function mediaUrl(path: string): string {
+function mediaUrl(path: string): string {
   return MEDIA_BASE ? `${MEDIA_BASE}${path}` : path
 }
 

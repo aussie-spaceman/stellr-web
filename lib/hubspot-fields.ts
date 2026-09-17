@@ -104,7 +104,7 @@ export type LeadSource = keyof typeof LEAD_SOURCES
  * before the forms exist in the portal — it just loses conversion attribution
  * until they do.
  */
-export const FORM_ENV_VARS: Record<LeadSource, string> = {
+const FORM_ENV_VARS: Record<LeadSource, string> = {
   event_notify: 'HUBSPOT_FORM_EVENT_NOTIFY',
   newsletter: 'HUBSPOT_FORM_NEWSLETTER',
   white_paper: 'HUBSPOT_FORM_WHITE_PAPER',

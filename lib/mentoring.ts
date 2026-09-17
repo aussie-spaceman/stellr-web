@@ -16,7 +16,6 @@ import type { CommunityMember } from '@/lib/community'
 import type { AccessKind, CohortTheme } from '@/lib/mentoring-format'
 import { notifyMembers } from '@/lib/notify'
 import { linkCohortTraining, inviteMembersToCohort } from '@/lib/sessions'
-import { logActivity } from '@/lib/activity-log'
 import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 import { ensureMemberGrants, getKindBalance, bookCohortFromAllocation, cancelCohortViaLedger } from '@/lib/entitlements'
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
@@ -41,7 +40,7 @@ export async function getMentoringCredits(member: CommunityMember): Promise<Ment
 }
 
 /** True if any of the member's active tiers includes free mentoring (the toggle). */
-export async function memberHasFreeMentoring(member: CommunityMember): Promise<boolean> {
+async function memberHasFreeMentoring(member: CommunityMember): Promise<boolean> {
   if (member.isAdmin) return true
   if (member.activeTierIds.length === 0) return false
   const db = supabaseServer()

@@ -799,7 +799,7 @@ export async function isCohortMentor(cohortId: string, memberId: string): Promis
 }
 
 /** True when the member moderates a channel (cohort mentor, or coaching host). */
-export async function isChannelModerator(channelId: string, memberId: string): Promise<boolean> {
+async function isChannelModerator(channelId: string, memberId: string): Promise<boolean> {
   const db = supabaseServer()
   const { data: ch } = await db
     .from('chat_channels')
@@ -933,7 +933,7 @@ export async function scheduleMentoringSeries(
  * session paid-extra; the member's "free sessions left" reflects scheduled
  * coaching sessions, and cancelling one returns it to the allowance.
  */
-export async function scheduleCoachingSession(
+async function scheduleCoachingSession(
   coachId: string,
   workshopId: string,
   startIso: string,

@@ -80,10 +80,6 @@ export const PILL_CLASSES: Record<DocusignPill, string> = {
   on_file:      'bg-teal-100 text-teal-700',
 }
 
-export function pillLabel(pill: DocusignPill): string {
-  return PILL_LABELS[pill]
-}
-
 /** Human wording for a DocuSign template role. */
 export function roleLabel(roleName: string | null | undefined): string {
   switch ((roleName ?? '').toLowerCase()) {

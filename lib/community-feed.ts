@@ -30,45 +30,6 @@ export interface SpacePreview {
   total: number
 }
 
-// Recent distinct post authors per space — drives the member avatar stack on the
-// Spaces cards. `total` is the count of distinct recent authors (a lightweight
-// "members active here" signal; spaces have no membership table — access is by tier).
-export async function getSpaceAuthorPreviews(
-  spaceIds: string[],
-  perSpace = 4,
-): Promise<Record<string, SpacePreview>> {
-  if (spaceIds.length === 0) return {}
-  const db = supabaseServer()
-  const { data } = await db
-    .from('community_posts')
-    .select('space_id, author_member_id, created_at, members:author_member_id(first_name, last_name)')
-    .in('space_id', spaceIds)
-    .eq('status', 'published')
-    .order('created_at', { ascending: false })
-    .limit(400)
-
-  type Rel = { first_name: string | null; last_name: string | null }
-  type Row = { space_id: string; author_member_id: string | null; members: Rel | Rel[] | null }
-  const acc: Record<string, { people: { id: string; name: string }[]; seen: Set<string>; total: number }> = {}
-  for (const id of spaceIds) acc[id] = { people: [], seen: new Set(), total: 0 }
-
-  for (const row of (data ?? []) as Row[]) {
-    const bucket = acc[row.space_id]
-    const aid = row.author_member_id
-    if (!bucket || !aid || bucket.seen.has(aid)) continue
-    bucket.seen.add(aid)
-    bucket.total++
-    if (bucket.people.length < perSpace) {
-      const m = Array.isArray(row.members) ? row.members[0] : row.members
-      bucket.people.push({ id: aid, name: [m?.first_name, m?.last_name].filter(Boolean).join(' ') || 'Member' })
-    }
-  }
-
-  const out: Record<string, SpacePreview> = {}
-  for (const id of spaceIds) out[id] = { people: acc[id].people, total: acc[id].total }
-  return out
-}
-
 export interface FeedPost {
   id: string
   title: string

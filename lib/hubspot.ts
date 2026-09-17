@@ -342,7 +342,7 @@ export function readHubspotCookie(req: Request): string | undefined {
  * Fields not present on the form definition are rejected with a 400, so a
  * failure here falls back to a property write rather than dropping the lead.
  */
-export async function submitForm(
+async function submitForm(
   formId: string,
   fields: Props,
   context: FormSubmissionContext = {},

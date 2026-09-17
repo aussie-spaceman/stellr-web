@@ -1,23 +1,17 @@
 import { NextResponse } from 'next/server'
-import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { currentStoreMember } from '@/lib/store/auth'
 import { createPendingOrder, STORE_FLAT_SHIPPING_CENTS } from '@/lib/store/orders'
+import { stripeClient } from '@/lib/stripe'
 
 export const dynamic = 'force-dynamic'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
 
 // Reship uncollected event merch to the member's home address, at their cost
 // (PRD §12 — non-attendance). The merch itself is already paid (event fee / add-on
 // payment), so the member pays only the reship fee; on payment the existing
 // store-order webhook places a direct Printful order to the collected address.
 export async function POST(req: Request) {
-  const stripe = getStripe()
+  const stripe = stripeClient()
   if (!stripe) return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
 
   const member = await currentStoreMember()

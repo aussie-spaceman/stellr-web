@@ -29,6 +29,7 @@ import { autoWorkshopName } from '@/lib/coaching-format'
 import { ensureMemberGrants, getKindBalanceSplit, getCoachingTierLabel, cancelCohortViaLedger, releaseCoachingBooking, getCoachingAllocationByTier, setTierCoachingAllocation } from '@/lib/entitlements'
 import Stripe from 'stripe'
 import { ALL_TIER_NAMES, tierGroupOf, type TierGroupKey } from '@/lib/tiers'
+import { stripeClient } from '@/lib/stripe'
 
 const CONTAINER = 'coaching' as const
 
@@ -766,11 +767,6 @@ export async function listWorkshopAccessRows(): Promise<WorkshopAccessRow[]> {
 }
 
 // ─── Membership tiers (Membership & access admin) ────────────────────────────
-
-function stripeClient(): Stripe | null {
-  const key = process.env.STRIPE_SECRET_KEY
-  return key ? new Stripe(key, { apiVersion: '2026-05-27.dahlia' }) : null
-}
 
 export interface CoachingTier {
   id: string

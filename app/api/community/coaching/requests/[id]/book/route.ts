@@ -6,14 +6,9 @@ import { getRequestById, scheduleFromRequest } from '@/lib/coaching-requests'
 import { getAcademyDiscountPercent, discountCents } from '@/lib/academy-discount'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { stripeClient } from '@/lib/stripe'
 
 const SESSION_PRICE_CENTS = Number(process.env.COACHING_SESSION_PRICE_CENTS) || 4000
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
 
 // Book (schedule) a matched coaching request at a chosen time. Included/award
 // eligibility draws the member's allocation and books immediately; paid eligibility
@@ -51,7 +46,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   // Paid path → Stripe Checkout. The webhook (type coaching_request_pay) grants the
   // purchased lot and completes the booking.
-  const stripe = getStripe()
+  const stripe = stripeClient()
   if (!stripe) return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
 
   const db = supabaseServer()

@@ -2,17 +2,12 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { voidEnvelope } from '@/lib/docusign'
 import type { EntityDef, ExternalCleanupKind, ExternalResult } from './types'
+import { stripeClient } from '@/lib/stripe'
 
 // Best-effort cleanup of records that also live in external systems (Stripe,
 // DocuSign). Failures are collected and returned — they never abort the local
 // delete, since the admin's intent is to remove the data from Stellr. The UI
 // surfaces partial failures so an admin can follow up in the external console.
-
-function stripeClient(): Stripe | null {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
 
 async function cleanupStripeForMember(memberId: string): Promise<ExternalResult> {
   try {

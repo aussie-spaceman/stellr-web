@@ -2,7 +2,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import { notifyMember } from '@/lib/notify'
 import { logActivity } from '@/lib/activity-log'
-import { stripeClient } from './stripe'
+import { stripeClient } from '@/lib/stripe'
 import { resolvePolicy, applicableTier, computeRefundOptions, daysOut } from './policy'
 import { assertLiveCredentials } from '@/lib/env-guards'
 

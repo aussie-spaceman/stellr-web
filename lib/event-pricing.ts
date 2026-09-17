@@ -1,5 +1,6 @@
 import { unstable_cache } from 'next/cache'
 import Stripe from 'stripe'
+import { stripeClient } from '@/lib/stripe'
 
 // ─── Live event registration pricing (single source of truth) ────────────────
 //
@@ -45,11 +46,6 @@ export type EventPrice =
   | { kind: 'priced'; cents: number; currency: string }
   /** Price ID present but missing, inactive, or unreadable — show nothing. */
   | { kind: 'unavailable' }
-
-function stripeClient(): Stripe | null {
-  const key = process.env.STRIPE_SECRET_KEY
-  return key ? new Stripe(key, { apiVersion: '2026-05-27.dahlia' }) : null
-}
 
 /**
  * Resolve one event's per-participant fee from Stripe. Cached per price ID so a

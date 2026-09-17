@@ -5,12 +5,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { buildCreditDiscount } from '@/lib/refunds/redeem'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) throw new Error('STRIPE_SECRET_KEY not set')
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
+import { requireStripe } from '@/lib/stripe'
 
 export async function POST(req: Request) {
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
@@ -64,7 +59,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   }
 
-  const stripe = getStripe()
+  const stripe = requireStripe()
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
   try {

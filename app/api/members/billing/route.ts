@@ -3,12 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { resolveRequestMember } from '@/lib/impersonation'
 import { registrationPaid } from '@/lib/payment-status'
 import Stripe from 'stripe'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) throw new Error('STRIPE_SECRET_KEY not set')
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
+import { requireStripe } from '@/lib/stripe'
 
 // GET /api/members/billing — returns Stripe invoices + participation payment history
 // Admins may pass ?memberId= to read another member's billing (view-as).
@@ -27,7 +22,7 @@ export async function GET(req: Request) {
   let invoices: object[] = []
   if (member.stripe_customer_id) {
     try {
-      const stripe = getStripe()
+      const stripe = requireStripe()
       const invoiceList = await stripe.invoices.list({
         customer: member.stripe_customer_id,
         limit: 100,

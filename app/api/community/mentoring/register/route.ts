@@ -7,12 +7,7 @@ import { getOrCreateCohortOffering } from '@/lib/entitlements'
 import { getAcademyDiscountPercent, academyLineItemFromPrice, discountCents } from '@/lib/academy-discount'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
+import { stripeClient } from '@/lib/stripe'
 
 // Self-register for an open mentoring cohort: free-with-membership, with a
 // mentoring credit, or via a one-off Stripe payment.
@@ -57,7 +52,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'This cohort has no one-off payment option' }, { status: 400 })
   }
 
-  const stripe = getStripe()
+  const stripe = stripeClient()
   if (!stripe) return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
 
   const db = supabaseServer()

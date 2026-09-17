@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import type Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
-import { stripeClient } from '@/lib/refunds/stripe'
+import { stripeClient } from '@/lib/stripe'
 import { impersonatedMemberId } from '@/lib/impersonation'
 
 // GET /api/members/billing/receipt?participation=<participant_id>

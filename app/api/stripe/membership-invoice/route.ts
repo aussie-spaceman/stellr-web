@@ -4,12 +4,7 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) throw new Error('STRIPE_SECRET_KEY not set')
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
+import { requireStripe } from '@/lib/stripe'
 
 // Pay-by-invoice is offered only on the educator / school-district tiers, where
 // purchase orders are normal. Student tiers are card-only.
@@ -60,7 +55,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   }
 
-  const stripe = getStripe()
+  const stripe = requireStripe()
 
   try {
     // Resolve a valid Stripe customer (self-heals a stale/missing stored id).

@@ -6,12 +6,7 @@ import { CREDIT_PACK_PRICE_CENTS } from '@/lib/mentoring-format'
 import { getAcademyDiscountPercent, discountCents } from '@/lib/academy-discount'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
+import { stripeClient } from '@/lib/stripe'
 
 // Buy extra mentoring SESSION credits (top-up beyond the tier allowance). Mentoring
 // is accounted per session — a cohort enrollment draws its planned 4/6/8 sessions
@@ -31,7 +26,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
   const quantity = Math.max(1, Math.min(20, Math.floor(Number(body?.quantity) || 1)))
 
-  const stripe = getStripe()
+  const stripe = stripeClient()
   if (!stripe) return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
 
   const unit0 = Number(process.env.MENTORING_CREDIT_PRICE_CENTS) || CREDIT_PACK_PRICE_CENTS

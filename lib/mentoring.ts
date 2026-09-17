@@ -21,6 +21,7 @@ import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 import { ensureMemberGrants, getKindBalance, bookCohortFromAllocation, cancelCohortViaLedger } from '@/lib/entitlements'
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 import { addGlobalRole } from '@/lib/member-roles'
+import { stripeClient } from '@/lib/stripe'
 
 // ─── Credits ────────────────────────────────────────────────────────────────
 
@@ -762,11 +763,6 @@ export async function listAllMentoringSessions(): Promise<CalendarSession[]> {
 
 import Stripe from 'stripe'
 import { ALL_TIER_NAMES, tierGroupOf, type TierGroupKey } from '@/lib/tiers'
-
-function stripeClient(): Stripe | null {
-  const key = process.env.STRIPE_SECRET_KEY
-  return key ? new Stripe(key, { apiVersion: '2026-05-27.dahlia' }) : null
-}
 
 export interface MentoringTier {
   id: string

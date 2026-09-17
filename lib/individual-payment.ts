@@ -8,14 +8,9 @@ import {
 } from '@/lib/email'
 import { notifyCommunityAdmins } from '@/lib/notify'
 import { assertLiveCredentials } from '@/lib/env-guards'
+import { stripeClient } from '@/lib/stripe'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
-
-function getStripe(): Stripe | null {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
 
 export interface IndividualPaymentPerson {
   participantId: string
@@ -106,7 +101,7 @@ export async function ensureIndividualPayments(
   // recorded. Waiving on a blip would tell paying participants they owe nothing.
   const event = await getEventBySlug(eventSlug).catch(() => null)
   const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId ?? null
-  const stripe = getStripe()
+  const stripe = stripeClient()
   let unitAmount: number | null = null
   if (stripePriceId && stripe) {
     try {

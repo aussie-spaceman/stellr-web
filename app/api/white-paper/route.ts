@@ -3,6 +3,7 @@ import { sendEmail, MARKETING_FROM } from '@/lib/email'
 import { LEAD_SOURCE_LIFECYCLE } from '@/lib/hubspot-fields'
 import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
+import { isEmailLike } from '@/lib/utils'
 
 const PDF_FILE = 'Stellr-STEM-Power-Skills-White-Paper.pdf'
 const PDF_PUBLIC_PATH = `/files/${PDF_FILE}`
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
 
     const cleanName = typeof name === 'string' ? name.trim() : ''
     const cleanEmail = typeof email === 'string' ? email.trim() : ''
-    if (!cleanName || !/\S+@\S+\.\S+/.test(cleanEmail)) {
+    if (!cleanName || !isEmailLike(cleanEmail)) {
       return NextResponse.json({ error: 'A name and valid email are required.' }, { status: 400 })
     }
 

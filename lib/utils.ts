@@ -144,3 +144,11 @@ export function slugify(input: string): string {
 }
 
 export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/** The loose "looks like an address" check the lead gates use before a form
+ *  posts — something@something.something. Server routes then let HubSpot /
+ *  Resend be the authority; this only stops obvious typos client-side and
+ *  rejects junk server-side. Not RFC 5322, deliberately. */
+export function isEmailLike(value: string): boolean {
+  return /\S+@\S+\.\S+/.test(value)
+}

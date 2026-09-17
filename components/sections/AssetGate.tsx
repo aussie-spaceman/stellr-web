@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, FileText, X } from 'lucide-react'
 import { usePrefillNameEmail } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
+import { isEmailLike } from '@/lib/utils'
 
 type AssetGateProps = {
   /** Asset key registered in /api/asset-request. */
@@ -54,7 +55,7 @@ export function AssetGate({
   const dialogRef = useRef<HTMLDivElement>(null)
   const lastFocused = useRef<HTMLElement | null>(null)
 
-  const emailValid = /\S+@\S+\.\S+/.test(email)
+  const emailValid = isEmailLike(email)
   const valid = emailValid && (emailOnly || name.trim().length > 0)
   const greeting = name.trim().split(/\s+/)[0] || 'there'
 

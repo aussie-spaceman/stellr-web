@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Check, X } from 'lucide-react'
 import { usePrefillNameEmail } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
+import { isEmailLike } from '@/lib/utils'
 
 const PDF_URL = '/files/Stellr-STEM-Power-Skills-White-Paper.pdf'
 const PAPER_TITLE = 'From “Soft Skills” to STEM Power Skills'
@@ -33,7 +34,7 @@ export function WhitePaperGate() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
 
-  const valid = name.trim().length > 0 && /\S+@\S+\.\S+/.test(email)
+  const valid = name.trim().length > 0 && isEmailLike(email)
   const greeting = name.trim().split(/\s+/)[0] || 'there'
 
   function close() {

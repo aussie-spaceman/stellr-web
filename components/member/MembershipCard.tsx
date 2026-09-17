@@ -40,7 +40,6 @@ function MemberIdRow({ membershipId }: { membershipId?: string | null }) {
   )
 }
 
-const formatDate = formatDateShort
 
 export function MembershipCard({ membership, member, membershipId }: Props) {
   if (!membership) {
@@ -90,13 +89,13 @@ export function MembershipCard({ membership, member, membershipId }: Props) {
       <dl className="space-y-2 text-sm">
         <div className="flex justify-between">
           <dt className="text-brand-muted-soft">Since</dt>
-          <dd className="text-brand-blue-dark">{formatDate(membership.started_at)}</dd>
+          <dd className="text-brand-blue-dark">{formatDateShort(membership.started_at)}</dd>
         </div>
         {membership.expires_at && (
           <div className="flex justify-between">
             <dt className="text-brand-muted-soft">Expires</dt>
             <dd className={isExpiring ? 'text-brand-gold-ink font-medium' : 'text-brand-blue-dark'}>
-              {formatDate(membership.expires_at)}
+              {formatDateShort(membership.expires_at)}
             </dd>
           </div>
         )}

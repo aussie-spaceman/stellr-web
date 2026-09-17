@@ -33,6 +33,7 @@
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 import * as fs from 'fs'
+import { sleep } from '../lib/utils'
 
 const envPath = path.resolve(process.cwd(), '.env.local')
 if (fs.existsSync(envPath)) dotenv.config({ path: envPath })
@@ -90,8 +91,6 @@ if (!process.env.HUBSPOT_ACCESS_TOKEN) {
   console.error(`HUBSPOT_ACCESS_TOKEN is not set. Add it to ${envPath}.`)
   process.exit(1)
 }
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function emailBody(escapeHtml: Deps['escapeHtml'], firstName: string, eventTitle: string, slug: string) {
   const greeting = firstName || 'there'

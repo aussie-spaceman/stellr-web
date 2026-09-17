@@ -25,6 +25,7 @@ import {
   type Engagement,
 } from '@/lib/hubspot-deals'
 import { associateDefault, ensureCompany } from '@/lib/hubspot-companies'
+import { sleep } from '@/lib/utils'
 
 const APOLLO_URL = 'https://api.apollo.io/api/v1/emailer_messages/search'
 const PER_PAGE = 100
@@ -53,8 +54,6 @@ export interface ReconcileResult {
   /** Only the records that changed — what an alert or a log line should name. */
   changes: { email: string; engagement: Engagement; action: string; dealId?: string }[]
 }
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /* ── Apollo ──────────────────────────────────────────────────────────────── */
 

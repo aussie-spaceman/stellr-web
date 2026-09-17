@@ -22,6 +22,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { watermarkVideoFile } from '../lib/watermark/video'
+import { sleep } from '../lib/utils'
 
 const envPath = path.resolve(process.cwd(), '.env.local')
 if (fs.existsSync(envPath)) dotenv.config({ path: envPath })
@@ -44,10 +45,6 @@ interface Job {
   storage_path: string
   kind: string
   attempts: number
-}
-
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms))
 }
 
 /** Atomically claim a pending job by flipping it to 'processing' (skip if lost the race). */

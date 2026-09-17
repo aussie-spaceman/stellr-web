@@ -126,3 +126,21 @@ export function ageFromDob(dob: string | Date): number {
   if (tm < bm || (tm === bm && td < bd)) age -= 1
   return age
 }
+
+/** Compact relative time for feeds and notifications: "just now", "5m ago",
+ *  "3h ago", "2d ago". */
+export function timeAgo(iso: string): string {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
+/** Lower-case, hyphen-separated URL slug with no leading/trailing hyphens. */
+export function slugify(input: string): string {
+  return input.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))

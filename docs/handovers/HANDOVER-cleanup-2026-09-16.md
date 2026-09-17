@@ -82,15 +82,26 @@ decisions — see "Kept on purpose" below.
   `/admin/access?tab=` redirect forwards its query, the six removed paths 404,
   kept media/fonts/logo serve, `coaching/topup` survives, `/studio` renders.
 
+## T3 — landed 17 Sept (eight PRs, #100–#107)
+
+Each on its own branch from `dev`, squash-merged after CI; every e2e run was
+confirmed to have actually executed (45 passed) rather than soft-skipped.
+
+| PR | What | Scoped down? |
+|---|---|---|
+| #100 | 37 local `isAdmin`/`requireAdmin` copies → `lib/admin-auth` (`isAdminClaims`, new `currentUserIsAdmin`). `lib/admin-auth.test.ts`. | Skipped 6 routes on the July "retire later" list, `proxy.ts` (would drag `lib/supabase` into middleware), `community/posts` (a space role, not the claim). |
+| #101 | `lib/refunds/stripe.ts` → `lib/stripe.ts`; 26 `new Stripe()` sites → `stripeClient()` / `requireStripe()`. `lib/stripe.test.ts`. | No. |
+| #102 | `hubspotFetch` exported from `lib/hubspot`; `-deals`/`-companies` import it. `lib/hubspot-fetch.test.ts`. | Scripts kept their own `BASE`: they `dotenv.config()` after imports, so importing `lib/hubspot` reads the token too early. |
+| #103 | `timeAgo`, `slugify`, `sleep` into `lib/utils`; two aliases inlined. | **Yes.** Of 17 same-name helpers, only 5 were true duplicates; four money and four date formats produce different output and were left. |
+| #104 | `isEmailLike` in `lib/utils` for the five lead gates. | **Yes.** No `emailSchema`: the 15 `z.string().email()` sites already share zod's one implementation; the two anchored regexes guard external data. |
+| #105 | `ensureMemberGrants` and `cancelWorkshop` log their per-row failures instead of `.catch(() => {})`. `lib/entitlements.test.ts`. | No. |
+| #106 | Seven scripts → `supabaseServer()`. | `upload-event-flyers` (Sanity's `createClient`) and the `.mjs` script stay. |
+| #107 | 14 more dead exports deleted; 60 internal-only functions/consts un-exported. | **Yes.** ~190 internal-only interfaces/types keep `export`; `resetCompanyCache` kept (named as the seam in the Apollo/HubSpot handover). |
+
+Net across T1–T3: **−3,178** (#99) **−830** (#100–#107) lines; test suite 65/593 → 70/611.
+
 ## Still open / for the next session
 
-- **T3 dedupe refactors** (owner-approved, not started): admin claim check →
-  `lib/admin-auth.ts` (46 files, skip the 5 on the July "retire later" list);
-  26 inline `new Stripe()` → one client; 3 HubSpot fetch wrappers → one; 17
-  duplicate date/money/slug helpers; one `emailSchema`; log the swallowed
-  failures at `lib/entitlements.ts` grantTierAllocations and `lib/coaching.ts`
-  releaseCoachingBooking; scripts → `lib/supabase.ts`; drop `export` from 42
-  internal-only symbols. One PR each.
 - `docs/campaign-registrations.md` still describes routes and components more
   broadly than exist; only the lines this PR touched were corrected.
 - `next-env.d.ts` is tracked and `next dev` rewrites it (`.next/types` ↔

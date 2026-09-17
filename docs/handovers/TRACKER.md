@@ -18,7 +18,7 @@ Handover: `HANDOVER-cleanup-2026-09-16.md`.
 
 | # | Item | State | Next | Done |
 |---|---|---|---|---|
-| 7.1 | T3 dedupe refactors | **Not started.** Owner approved eight items (admin-auth helper, Stripe client, HubSpot fetch, date/money/slug helpers, `emailSchema`, two swallowed errors, scripts' Supabase client, internal-only exports). List and constraints in the handover. | One PR per item, admin-auth first; skip the 5 routes on the July "retire later" list. | ☐ |
+| 7.1 | T3 dedupe refactors | **Closed 17 Sept.** Eight PRs, one per item, each squash-merged to `dev` after `verify` + a real `e2e` run (45 passed every time): #100 admin-auth (`8700422`), #101 Stripe client (`13c6224`), #102 HubSpot fetch (`605efe5`), #103 helpers (`34811d9`), #104 `isEmailLike` (`f38258c`), #105 logged failures (`5165f86`), #106 scripts→`lib/supabase` (`7cd331b`), #107 export surface (`7a400cc`). Three were scoped down on inspection — see handover §T3. | — | ☑ |
 | 7.2 | `next-env.d.ts` churn | Tracked file that `next dev` rewrites on every run; dirtied the tree during smoke. | Decide whether to gitignore it (Next 16 default). | ☐ |
 | 7.3 | `docs/campaign-registrations.md` | Lists components (`CampaignRegistrationModal`, `CampaignsBoard`) and `/api/campaigns/register` that no longer exist; only the entry-point-A lines were fixed. | Rewrite the Routes/APIs tables against the tree. | ☐ |
 | 7.4 | `/admin/campaigns/[slug]` unreachable from nav | Documented admin surface; no `AdminSidebar` link; reachable by typed URL only. | Add a link under Competitions, or remove the page. | ☐ |

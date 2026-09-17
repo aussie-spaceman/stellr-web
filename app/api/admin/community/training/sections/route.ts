@@ -1,19 +1,14 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { currentUserIsAdmin } from '@/lib/admin-auth'
 
 // Admin: manage the sections (lesson groups) of a training module (FR-COM-10).
 //   POST   (JSON) create a section:  { moduleId, title, displayOrder?, dripDays? }
 //   PATCH  (JSON) rename/reorder:    { id, title?, displayOrder?, dripDays? }
 //   DELETE (?id=) remove a section — its lessons fall back to ungrouped (section_id NULL).
 
-async function requireAdmin() {
-  const { sessionClaims } = await auth()
-  return (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
-}
-
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   const moduleId = (body.moduleId as string | undefined)?.trim()
   const title = (body.title as string | undefined)?.trim()
@@ -41,7 +36,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   const { id } = body
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -62,7 +57,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 

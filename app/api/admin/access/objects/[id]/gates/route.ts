@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { resolveAccessObject } from '@/lib/access-objects'
 import { accessGatesEnforced } from '@/lib/access-gates'
+import { isAdminClaims } from '@/lib/admin-auth'
 
 // /api/admin/access/objects/[id]/gates — the object's gate profile (payment ∧
 // DocuSign, the only enforced gates per decision D-F). Gates are DERIVED, not
@@ -11,13 +12,9 @@ import { accessGatesEnforced } from '@/lib/access-gates'
 // profile the Objects-tab gate pills render; per-member gate state comes from
 // lib/access-gates.ts via the roster rows.
 
-function isAdmin(sessionClaims: unknown) {
-  return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
-}
-
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const object = await resolveAccessObject(decodeURIComponent(id))

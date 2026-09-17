@@ -1,19 +1,14 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember } from '@/lib/community'
 import { ensureTrainingContainer } from '@/lib/container-sync'
+import { currentUserIsAdmin } from '@/lib/admin-auth'
 
 // Admin: create / list / update training modules (FR-COM-10).
 
-async function requireAdmin() {
-  const { sessionClaims } = await auth()
-  return (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
-}
-
 // GET — modules with item counts for the admin manager.
 export async function GET() {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const db = supabaseServer()
   const { data } = await db
     .from('training_modules')
@@ -25,7 +20,7 @@ export async function GET() {
 // POST — create a module.
 // Body: { title, description?, materialKind?, courseType?, startDate?, eventRef?, minTierRank?, displayOrder? }
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   const title = (body.title as string | undefined)?.trim()
   if (!title) return NextResponse.json({ error: 'title required' }, { status: 400 })
@@ -59,7 +54,7 @@ export async function POST(req: Request) {
 
 // PATCH — update a module (e.g. publish toggle). Body: { id, ...fields }
 export async function PATCH(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   const { id } = body
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })

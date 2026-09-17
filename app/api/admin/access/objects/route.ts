@@ -4,14 +4,11 @@ import { supabaseServer } from '@/lib/supabase'
 import { CONTAINER_TYPE_TO_OBJECT, type AccessObjectType } from '@/lib/access-objects'
 import { fireObjectCreatedRules } from '@/lib/object-created-rules'
 import { getAllEvents, getAllCampaigns } from '@/lib/sanity'
+import { isAdminClaims } from '@/lib/admin-auth'
 
 // GET /api/admin/access/objects — every object in the converged model, across
 // all seven types, for the Objects-tab list. Content metadata for events stays
 // in Sanity (source of truth for event CONTENT); everything else is Supabase.
-
-function isAdmin(sessionClaims: unknown) {
-  return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
-}
 
 export interface AccessObjectListItem {
   objectType: AccessObjectType
@@ -22,7 +19,7 @@ export interface AccessObjectListItem {
 
 export async function GET() {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const db = supabaseServer()
   const [containers, spaces, modules, resources, liveEvents, campaigns] = await Promise.all([
@@ -119,7 +116,7 @@ export async function GET() {
 // truth) and arrive via the event-sync webhook instead.
 export async function POST(req: Request) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const b = await req.json().catch(() => ({}))
   const objectType = b.objectType as AccessObjectType

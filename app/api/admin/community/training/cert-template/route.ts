@@ -1,19 +1,14 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { claimUpload } from '@/lib/uploads'
+import { currentUserIsAdmin } from '@/lib/admin-auth'
 
 // Upload (or clear) a per-course certificate template PDF. When set, the member's
 // certificate download overlays their details onto this PDF (see the certificate
 // pdf route); otherwise a default Stellr certificate is generated.
 
-async function requireAdmin() {
-  const { sessionClaims } = await auth()
-  return (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
-}
-
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   // The PDF went browser → storage via /api/uploads/sign; only the path lands
   // here, and claimUpload verifies the object that actually arrived.
   const b = await req.json().catch(() => ({}))
@@ -45,7 +40,7 @@ export async function POST(req: Request) {
 
 // DELETE ?moduleId= — clear the template (revert to the generated certificate).
 export async function DELETE(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const moduleId = new URL(req.url).searchParams.get('moduleId')
   if (!moduleId) return NextResponse.json({ error: 'moduleId required' }, { status: 400 })
   const db = supabaseServer()

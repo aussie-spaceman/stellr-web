@@ -8,14 +8,12 @@ import { logActivity, actorFromAuth } from '@/lib/activity-log'
 import { attachSpaceResource, ensureSpaceContainer } from '@/lib/container-sync'
 import { sanitizeBracketRequirements, anyBracketMandatory } from '@/lib/space-training'
 import { syncSpaceSourceRoster } from '@/lib/space-inheritance'
+import { isAdminClaims } from '@/lib/admin-auth'
 
 // Per-space admin config actions (Spaces design, screens 11–17 + modals 19/21/22).
 // One JSON action router keeps the (many) small mutations in one place. Resource
 // uploads (multipart) live in ./resources.
 
-function isAdmin(sessionClaims: unknown) {
-  return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
-}
 const RESERVED = new Set(['general', 'resources', 'training', 'announcements', 'members'])
 function slugify(s: string) {
   return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -23,7 +21,7 @@ function slugify(s: string) {
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { userId, sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { id: spaceId } = await params
   const b = await req.json().catch(() => ({}))
   const action = b.action as string

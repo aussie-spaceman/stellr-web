@@ -80,7 +80,7 @@ function toRow(r: RawRow): MemberRoleRow {
 }
 
 /** All role rows held by a member (global + object-scoped). */
-export async function getMemberRoles(memberId: string): Promise<MemberRoleRow[]> {
+async function getMemberRoles(memberId: string): Promise<MemberRoleRow[]> {
   const db = supabaseServer()
   const { data } = await db
     .from('member_roles')
@@ -111,23 +111,6 @@ export async function memberHasRole(
     : q.eq('scope', 'global')
   const { data } = await q.limit(1)
   return (data?.length ?? 0) > 0
-}
-
-/** Batch: member_id → role rows, for lists (member grids, rosters). */
-export async function getRolesByMember(memberIds: string[]): Promise<Map<string, MemberRoleRow[]>> {
-  const out = new Map<string, MemberRoleRow[]>()
-  if (memberIds.length === 0) return out
-  const db = supabaseServer()
-  const { data } = await db
-    .from('member_roles')
-    .select('member_id, role, scope, object_type, object_id')
-    .in('member_id', memberIds)
-  for (const r of (data ?? []) as Array<RawRow & { member_id: string }>) {
-    const arr = out.get(r.member_id) ?? []
-    arr.push(toRow(r))
-    out.set(r.member_id, arr)
-  }
-  return out
 }
 
 /**
@@ -166,7 +149,7 @@ export async function addGlobalRole(
  * Exported so a backfill can preview what the sync would write without
  * re-deriving the mapping and drifting from it.
  */
-export function classificationRolesFor(eventRole: string): MemberRole[] {
+function classificationRolesFor(eventRole: string): MemberRole[] {
   switch (eventRole) {
     case 'teacher': return ['teacher']
     case 'participant': return ['participant']

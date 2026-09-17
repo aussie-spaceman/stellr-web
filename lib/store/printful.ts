@@ -111,16 +111,6 @@ export interface PrintfulShippingRate {
   maxDeliveryDays?: number
 }
 
-export function getShippingRates(args: {
-  recipient: PrintfulRecipient
-  items: PrintfulItem[]
-}): Promise<PrintfulShippingRate[]> {
-  return pf<PrintfulShippingRate[]>('/shipping/rates', {
-    method: 'POST',
-    body: JSON.stringify(args),
-  })
-}
-
 export interface PrintfulOrder {
   id: number
   external_id: string | null

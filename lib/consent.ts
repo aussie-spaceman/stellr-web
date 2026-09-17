@@ -40,7 +40,7 @@ export function isStrictRegion(country: string | null | undefined): boolean {
 }
 
 /** Bump when the meaning of a stored decision changes, to re-ask everyone. */
-export const CONSENT_VERSION = 1
+const CONSENT_VERSION = 1
 
 export const CONSENT_STORAGE_KEY = `stellr_consent_v${CONSENT_VERSION}`
 

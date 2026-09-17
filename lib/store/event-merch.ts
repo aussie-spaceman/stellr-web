@@ -30,7 +30,7 @@ interface VariantLite {
 }
 
 // Pick the variant of an included product that matches a participant's size.
-export function resolveVariantForSize(variants: VariantLite[], size: unknown): VariantLite | null {
+function resolveVariantForSize(variants: VariantLite[], size: unknown): VariantLite | null {
   const s = normSize(size)
   if (!s) return null
   for (const v of variants) {
@@ -234,7 +234,7 @@ export async function addRegistrationAddons(
 
 // Allocate the included shirt(s) to every participant — idempotent at the item
 // level so it coexists with add-ons in the same order.
-export async function allocateIncludedShirts(db: SupabaseClient, registrationId: string): Promise<void> {
+async function allocateIncludedShirts(db: SupabaseClient, registrationId: string): Promise<void> {
   const orderId = await ensureEventMerchOrder(db, registrationId)
   if (!orderId) return
 

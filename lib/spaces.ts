@@ -159,7 +159,7 @@ export function resolveSpaceAccess(
  * Rows whose expires_at has passed are treated as lifted but left in the table,
  * so the record of who suspended whom (and why) survives.
  */
-export async function loadSpaceSuspensions(opts: {
+async function loadSpaceSuspensions(opts: {
   spaceIds?: string[]
   memberIds?: string[]
 } = {}): Promise<Map<string, SpaceSuspensions>> {
@@ -193,7 +193,7 @@ export async function loadSpaceSuspensions(opts: {
 }
 
 /** One member's live suspensions on one space. */
-export async function loadSuspension(spaceId: string, memberId: string): Promise<SpaceSuspensions> {
+async function loadSuspension(spaceId: string, memberId: string): Promise<SpaceSuspensions> {
   const map = await loadSpaceSuspensions({ spaceIds: [spaceId], memberIds: [memberId] })
   return map.get(`${spaceId}:${memberId}`) ?? NO_SUSPENSIONS
 }
@@ -232,7 +232,7 @@ export interface PendingInvite {
 // all of them share cannot drift.
 
 /** Space ids whose access is owned by a linked Event. */
-export async function loadEventLinkedSpaceIds(spaceIds?: string[]): Promise<Set<string>> {
+async function loadEventLinkedSpaceIds(spaceIds?: string[]): Promise<Set<string>> {
   if (spaceIds && spaceIds.length === 0) return new Set()
   const db = supabaseServer()
   let q = db.from('community_space_sources').select('space_id').eq('object_type', 'event')
@@ -245,7 +245,7 @@ export async function loadEventLinkedSpaceIds(spaceIds?: string[]): Promise<Set<
  * Blank the tier/role grants of every event-linked Space in a spaceId→grants
  * map. Callers keep using `.get(id) ?? []`, so a dropped key reads as no grant.
  */
-export function withoutEventLinkedGrants<T>(
+function withoutEventLinkedGrants<T>(
   bySpace: Map<string, T[]>,
   eventLinked: Set<string>
 ): Map<string, T[]> {
@@ -360,7 +360,7 @@ export async function getSpacesDirectory(member: CommunityMember): Promise<Space
 }
 
 /** Pending admin invites for a member (roster rows with status='invited'). */
-export async function getPendingInvites(member: CommunityMember): Promise<PendingInvite[]> {
+async function getPendingInvites(member: CommunityMember): Promise<PendingInvite[]> {
   const db = supabaseServer()
   const { data } = await db
     .from('community_space_members')

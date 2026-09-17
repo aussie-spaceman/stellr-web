@@ -74,7 +74,7 @@ export interface Offering {
  * invalid/expired/exhausted coupon is silently ignored (couponApplied=false) so
  * the UI can show "code not valid" without the quote failing.
  */
-export async function getQuote(memberId: string, offeringId: string, coupon?: string | null): Promise<Quote> {
+async function getQuote(memberId: string, offeringId: string, coupon?: string | null): Promise<Quote> {
   const { data, error } = await ent().rpc('fn_quote', {
     p_member: memberId,
     p_offering: offeringId,
@@ -98,7 +98,7 @@ export async function getQuote(memberId: string, offeringId: string, coupon?: st
 }
 
 /** Remaining included allocation of a kind for a member. */
-export async function getAllocationBalance(
+async function getAllocationBalance(
   memberId: string,
   kind: EntitlementKind,
   offeringType?: OfferingType,
@@ -114,7 +114,7 @@ export async function getAllocationBalance(
 }
 
 /** A member's store-credit balance (cents). */
-export async function getCreditBalanceCents(memberId: string): Promise<number> {
+async function getCreditBalanceCents(memberId: string): Promise<number> {
   const { data, error } = await ent().rpc('fn_credit_balance', { p_member: memberId })
   if (error) throw new Error(`getCreditBalanceCents: ${error.message}`)
   return Number(data ?? 0)
@@ -288,7 +288,7 @@ export async function setTierCoachingAllocation(tierId: string, freeSessions: nu
 // ── Booking (write) — server-side; called from APIs / the webhook ──────────────
 
 /** Consume an included allocation for a free booking. Returns the booking id. */
-export async function bookFromAllocation(memberId: string, offeringId: string, participantId?: string | null): Promise<string> {
+async function bookFromAllocation(memberId: string, offeringId: string, participantId?: string | null): Promise<string> {
   const { data, error } = await ent().rpc('fn_book_from_allocation', {
     p_member: memberId,
     p_offering: offeringId,

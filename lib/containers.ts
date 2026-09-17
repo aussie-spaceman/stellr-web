@@ -7,7 +7,7 @@
 import { supabaseServer } from '@/lib/supabase'
 
 /** Whether the container (cohort) has been archived. */
-export async function containerIsArchived(cohortId: string): Promise<boolean> {
+async function containerIsArchived(cohortId: string): Promise<boolean> {
   const db = supabaseServer()
   const { data } = await db
     .from('mentoring_cohorts')
@@ -36,7 +36,7 @@ export async function containerAccessPersists(cohortId: string): Promise<boolean
  *
  * Returns true = the item stays open to the (former) roster member.
  */
-export async function persistenceAllows(
+async function persistenceAllows(
   targetType: string,
   targetRef: string,
   containerArchived: boolean,

@@ -35,7 +35,7 @@ import { stripeClient } from '@/lib/stripe'
 // Server-only.
 
 /** Cache tag for resolved event pricing (for optional on-demand revalidation). */
-export const EVENT_PRICES_TAG = 'event-prices'
+const EVENT_PRICES_TAG = 'event-prices'
 
 export type EventPrice =
   /** No Stripe price ID on the event — the fee hasn't been set yet. */

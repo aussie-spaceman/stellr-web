@@ -18,7 +18,7 @@ import { stripeClient } from '@/lib/stripe'
 // it instantly if we ever wire one up. Server-only.
 
 /** Cache tag for the resolved pricing (for optional on-demand revalidation). */
-export const MEMBERSHIP_PRICES_TAG = 'membership-prices'
+const MEMBERSHIP_PRICES_TAG = 'membership-prices'
 
 export interface TierPrice {
   name: string

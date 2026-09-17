@@ -28,8 +28,8 @@ import { memberManagesContainer } from '@/lib/resource-upload'
 //           anything is recorded. A signed URL alone never makes a file reachable:
 //           the buckets are private and nothing is served without a row.
 
-export const PROPOSALS_BUCKET = 'campaign-proposals'
-export const LICENSES_BUCKET = 'teacher-licenses'
+const PROPOSALS_BUCKET = 'campaign-proposals'
+const LICENSES_BUCKET = 'teacher-licenses'
 
 const MB = 1024 * 1024
 

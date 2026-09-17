@@ -32,7 +32,7 @@ export const AGREEMENT_LABEL: Record<AgreementType, string> = {
 }
 
 // Signed paperwork is valid for this long, across all Stellr events.
-export const AGREEMENT_VALIDITY_YEARS = 3
+const AGREEMENT_VALIDITY_YEARS = 3
 
 export function agreementExpiry(completedAt: string): Date {
   const d = new Date(completedAt)

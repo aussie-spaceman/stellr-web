@@ -10,12 +10,7 @@ import { fireTierPurchased, grantTier } from '@/lib/membership-grants'
 import { rosterAfterPaidBooking } from '@/lib/mentoring'
 import { scheduleFromRequest } from '@/lib/coaching-requests'
 import { confirmPaidBooking, redeemCoupon, grantTierAllocations, grantPurchasedLot, getOfferingTarget } from '@/lib/entitlements'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) throw new Error('STRIPE_SECRET_KEY not set')
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
+import { requireStripe } from '@/lib/stripe'
 
 // Formats a Stripe minor-unit amount as " ($60.00)" for activity-log summaries.
 function fmtMoney(amount: number | null | undefined, currency: string | null | undefined): string {
@@ -337,7 +332,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing webhook signature or secret' }, { status: 400 })
   }
 
-  const stripe = getStripe()
+  const stripe = requireStripe()
 
   let event: Stripe.Event
   try {
@@ -445,7 +440,7 @@ export async function POST(req: NextRequest) {
             })
           } catch (err) {
             console.error('[stripe/webhook] entitlement_booking confirm failed, refunding:', err)
-            if (intent) await getStripe().refunds.create({ payment_intent: intent })
+            if (intent) await requireStripe().refunds.create({ payment_intent: intent })
           }
         }
       } else if (

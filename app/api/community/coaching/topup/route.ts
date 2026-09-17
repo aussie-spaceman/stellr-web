@@ -6,12 +6,7 @@ import { getAcademyDiscountPercent, discountCents } from '@/lib/academy-discount
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
+import { stripeClient } from '@/lib/stripe'
 
 const SESSION_PRICE_CENTS = Number(process.env.COACHING_SESSION_PRICE_CENTS) || 4000
 
@@ -31,7 +26,7 @@ export async function POST(req: Request) {
   const quantity = Number(body?.quantity) === 3 ? 3 : 1
   const workshopId = typeof body?.workshopId === 'string' ? body.workshopId : null
 
-  const stripe = getStripe()
+  const stripe = stripeClient()
   if (!stripe) return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
 
   // 3-pack: 10% off per session.

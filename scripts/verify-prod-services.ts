@@ -18,7 +18,7 @@ import * as dotenv from 'dotenv'
 import * as path from 'path'
 import * as fs from 'fs'
 import { createSign } from 'crypto'
-import Stripe from 'stripe'
+import { requireStripe } from '../lib/stripe'
 import { createClient } from '@supabase/supabase-js'
 
 const envPath = path.resolve(process.cwd(), '.env.local')
@@ -37,7 +37,7 @@ async function checkStripe() {
 
   const mode = key.startsWith('sk_live') ? 'LIVE' : key.startsWith('sk_test') ? 'TEST' : 'UNKNOWN'
   console.log(`key mode: ${mode}`)
-  const stripe = new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
+  const stripe = requireStripe()
 
   // Validate the key works at all.
   try {

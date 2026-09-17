@@ -20,6 +20,7 @@ import * as dotenv from 'dotenv'
 import * as path from 'path'
 import * as fs from 'fs'
 import Stripe from 'stripe'
+import { requireStripe } from '../lib/stripe'
 
 // ESM hoists every static import above this call, so nothing imported here may
 // read env at module scope — that's why Sanity is queried over raw fetch below
@@ -103,7 +104,7 @@ async function verdictFor(stripe: Stripe, priceId: string | null): Promise<Verdi
 }
 
 async function main() {
-  const stripe = new Stripe(stripeKey!, { apiVersion: '2026-05-27.dahlia' })
+  const stripe = requireStripe()
   const events = await fetchEvents()
   console.log(`\nEvent registration fees — ${events.length} live events (${dataset})\n`)
 

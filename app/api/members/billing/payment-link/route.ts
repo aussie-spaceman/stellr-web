@@ -5,14 +5,9 @@ import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
+import { stripeClient } from '@/lib/stripe'
 
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
 
 // POST /api/members/billing/payment-link  { registrationId }
 // Creates a Stripe checkout for an outstanding event payment the SIGNED-IN
@@ -65,7 +60,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No payment is due from you for this registration.' }, { status: 400 })
   }
 
-  const stripe = getStripe()
+  const stripe = stripeClient()
   if (!stripe) return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
 
   const event = await getEventBySlug(registration.event_slug)

@@ -43,13 +43,14 @@
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 import * as fs from 'fs'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClerkClient } from '@clerk/backend'
 import {
   VALID_AGE_BRACKETS,
   VALID_EVENT_ROLES,
 } from '../lib/member-enums'
 import { syncMemberClassificationRole, addGlobalRole, type MemberRole } from '../lib/member-roles'
+import { supabaseServer } from '../lib/supabase'
 
 // ── env ────────────────────────────────────────────────────────────────────────
 const envPath = path.resolve(process.cwd(), '.env.local')
@@ -91,7 +92,7 @@ if (APPLY && !PASSWORD) {
   process.exit(1)
 }
 
-const db: SupabaseClient = createClient(url, serviceKey, { auth: { persistSession: false } })
+const db: SupabaseClient = supabaseServer()
 const clerk = createClerkClient({ secretKey: clerkSecret })
 
 // ── personas ─────────────────────────────────────────────────────────────────

@@ -19,7 +19,7 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { createSign } from 'crypto'
 import { requireStripe } from '../lib/stripe'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseServer } from '../lib/supabase'
 
 const envPath = path.resolve(process.cwd(), '.env.local')
 if (fs.existsSync(envPath)) dotenv.config({ path: envPath })
@@ -51,7 +51,7 @@ async function checkStripe() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const svc = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !svc) { console.log(warn('Supabase env missing — cannot read DB price IDs')); return }
-  const db = createClient(url, svc, { auth: { persistSession: false } })
+  const db = supabaseServer()
 
   // Gather every price ID referenced in the DB.
   const priceRefs: { label: string; id: string }[] = []

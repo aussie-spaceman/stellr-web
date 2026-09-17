@@ -23,7 +23,7 @@
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 import * as fs from 'fs'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseServer } from '../lib/supabase'
 
 // ESM hoists static imports above this call, so nothing imported above may read
 // env at module scope — Sanity is queried over raw fetch for that reason.
@@ -80,7 +80,7 @@ async function existsInSanity(slug: string): Promise<boolean | null> {
 }
 
 async function main() {
-  const db = createClient(supabaseUrl!, serviceKey!, { auth: { persistSession: false } })
+  const db = supabaseServer()
 
   const { data: before, error: countErr } = await db.rpc('event_slug_row_counts', { p_slug: from })
   if (countErr) throw new Error(`event_slug_row_counts failed: ${countErr.message}`)

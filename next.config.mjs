@@ -68,6 +68,8 @@ const nextConfig = {
       { source: '/admin/operations', destination: '/admin/activity-log', permanent: false },
       // Volunteers now lives under Members.
       { source: '/admin/volunteers', destination: '/admin/members/volunteers', permanent: false },
+      // Access console moved under Members; the query string (?tab=) is forwarded.
+      { source: '/admin/access', destination: '/admin/members/access', permanent: false },
       // Gates folded into the Training console (Reminders & escalation tab).
       { source: '/admin/community/gates', destination: '/admin/academy/training?tab=reminders', permanent: false },
     ]

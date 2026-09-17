@@ -92,7 +92,7 @@ mentoring, resources, search, sessions/room, training).
 admin = `components/admin/AdminSidebar.tsx`. Per-screen components in
 `components/member/**` (12) and `components/admin/**` (31).
 
-> The IA/structure from the earlier `design_handoff_app_redesign/` package is still
+> The IA/structure from the earlier June package (now `docs/archive/design-handoff-app-redesign/`) is still
 > valid — but its **tokens are superseded by V2**. Treat its layout/flows as a starting
 > point, its colours/fonts as replaced.
 

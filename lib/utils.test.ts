@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { formatDateShort, formatDate, formatDateRange, ageFromDob, registrationStatus, timeAgo, slugify } from './utils'
+import { formatDateShort, formatDate, formatDateRange, ageFromDob, registrationStatus, timeAgo, slugify, isEmailLike } from './utils'
 
 describe('formatDateShort', () => {
   it('renders a bare calendar date without shifting a day (W6.7 regression)', () => {
@@ -103,5 +103,16 @@ describe('slugify', () => {
   it('lower-cases, hyphenates runs of non-alphanumerics and trims the ends', () => {
     expect(slugify('  Colorado STEM Academy — Fall 2026! ')).toBe('colorado-stem-academy-fall-2026')
     expect(slugify('already-a-slug')).toBe('already-a-slug')
+  })
+})
+
+describe('isEmailLike', () => {
+  // The lead-gate check that five forms used to carry as a literal regex.
+  it('accepts anything shaped like an address and rejects the obvious typos', () => {
+    expect(isEmailLike('teacher@school.org')).toBe(true)
+    expect(isEmailLike('first.last+tag@sub.example.co')).toBe(true)
+    expect(isEmailLike('teacher@school')).toBe(false)
+    expect(isEmailLike('teacher.school.org')).toBe(false)
+    expect(isEmailLike('')).toBe(false)
   })
 })

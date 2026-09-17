@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Bell, Check, X } from 'lucide-react'
 import { usePrefillNameEmail } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
+import { isEmailLike } from '@/lib/utils'
 
 type RegStatus = 'open' | 'coming-soon' | 'closed'
 
@@ -43,7 +44,7 @@ function EventNotifyModal({
   const [error, setError] = useState(false)
   const dialogRef = useRef<HTMLDivElement>(null)
 
-  const valid = name.trim().length > 0 && /\S+@\S+\.\S+/.test(email)
+  const valid = name.trim().length > 0 && isEmailLike(email)
   const greeting = name.trim().split(/\s+/)[0] || 'there'
 
   function close() {

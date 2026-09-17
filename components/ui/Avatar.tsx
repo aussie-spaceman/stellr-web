@@ -45,7 +45,7 @@ export function Avatar({
   const ringClass = ring ? 'ring-2 ring-white' : ''
 
   if (src) {
-    // eslint-disable-next-line @next/next/no-img-element
+    // eslint-disable-next-line @next/next/no-img-element -- avatar hosts vary (Clerk, Supabase storage); a 40px image is not worth the optimizer hop
     return (
       <img
         src={src}

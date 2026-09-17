@@ -44,7 +44,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
           <div className="flex h-80 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-brand-blue-dark to-blue-900 lg:h-[28rem]">
             {img ? (
-              // eslint-disable-next-line @next/next/no-img-element
+              // eslint-disable-next-line @next/next/no-img-element -- Printful CDN URL; host is not in images.remotePatterns
               <img src={img} alt={product.name} className="h-full w-full object-cover" />
             ) : (
               <ShoppingBag size={56} className="text-blue-300 opacity-60" />

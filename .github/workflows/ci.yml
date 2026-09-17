@@ -44,8 +44,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           # Matches the Vercel project's runtime (nodeVersion 24.x), which is
-          # the thing this job exists to predict. Note .nvmrc says 22 — see the
-          # PR description; worth reconciling separately.
+          # the thing this job exists to predict; .nvmrc and engines.node agree.
           node-version: 24.x
           cache: npm
 

@@ -6,7 +6,7 @@ vi.mock('next/navigation', () => ({ redirect: vi.fn() }))
 vi.mock('next/image', () => ({
   default: (props: Record<string, unknown>) => {
     const { src, alt } = props as { src: string; alt: string }
-    // eslint-disable-next-line @next/next/no-img-element
+    // eslint-disable-next-line @next/next/no-img-element -- stand-in for the mocked next/image
     return <img src={src} alt={alt} />
   },
 }))

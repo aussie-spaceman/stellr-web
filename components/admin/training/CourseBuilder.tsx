@@ -275,7 +275,7 @@ function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => 
   const [dragId, setDragId] = useState<string | null>(null)
 
   const idsKey = sections.map((s) => s.id).join(',')
-  useEffect(() => setOrderIds(sections.map((s) => s.id)), [idsKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setOrderIds(sections.map((s) => s.id)), [idsKey]) // eslint-disable-line react-hooks/exhaustive-deps -- `sections` is rebuilt every render; the joined id string is the stable identity
 
   const byId = new Map(sections.map((s) => [s.id, s]))
   const ordered = orderIds.map((id) => byId.get(id)).filter((s): s is AdminSection => !!s)

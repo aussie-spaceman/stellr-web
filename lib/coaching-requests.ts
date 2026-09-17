@@ -183,13 +183,6 @@ export async function listCoachOptions(): Promise<CoachOption[]> {
     .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
 }
 
-/** Suggest an eligibility for the admin: included if the member has free coaching
- *  allowance left this period, otherwise paid. (award is always a manual choice.) */
-export async function suggestEligibility(member: CommunityMember): Promise<CoachingEligibility> {
-  const allowance = await getCoachingAllowance(member)
-  return allowance.remaining + allowance.extraCredits > 0 ? 'included' : 'paid'
-}
-
 /** Same suggestion keyed by member id (for the admin queue, which has no full
  *  CommunityMember per row). Materialises tier grants first so the ledger balance
  *  is accurate, then reads the combined coaching_session pool. */

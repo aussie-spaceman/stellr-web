@@ -86,7 +86,7 @@ function EventNotifyModal({
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prevOverflow
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs on open/close only; the handler reads the dialog through refs
   }, [open])
 
   async function submit(e: React.FormEvent) {

@@ -239,25 +239,6 @@ export async function getFeaturedTestimonials() {
   `)
 }
 
-export async function getTestimonialsByRole(role: string) {
-  if (!client) return null
-  return client.fetch(
-    `*[_type == "testimonial" && role == $role] {
-      _id, quote, author, role, event, videoUrl, photo
-    }`,
-    { role }
-  )
-}
-
-export async function getTeamMembers() {
-  if (!client) return null
-  return client.fetch(`
-    *[_type == "teamMember"] | order(order asc) {
-      _id, name, role, bio, photo, linkedIn
-    }
-  `)
-}
-
 export async function getAllNewsPosts() {
   if (!client) return null
   return client.fetch(`
@@ -286,9 +267,4 @@ export async function getRelatedNewsPosts(category: string, excludeId: string) {
     }`,
     { category, excludeId }
   )
-}
-
-export async function getSiteSettings() {
-  if (!client) return null
-  return client.fetch(`*[_type == "siteSettings"][0]`)
 }

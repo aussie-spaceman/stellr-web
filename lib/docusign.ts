@@ -405,16 +405,6 @@ export async function createVolunteerAgreementEnvelope(p: VolunteerAgreementPara
   return { envelopeId: data.envelopeId, signerCount }
 }
 
-// Per-signer progress for an in-flight envelope, used by the Connect webhook
-// to keep signers_total / signers_completed current. Carbon copies and other
-// non-signing recipients are excluded.
-export async function getEnvelopeSignerProgress(
-  envelopeId: string,
-): Promise<{ total: number; completed: number }> {
-  const { total, completed } = summariseSigners(await getEnvelopeRecipients(envelopeId))
-  return { total, completed }
-}
-
 /** One DocuSign signer, as stored in docusign_envelope_recipients. */
 export interface EnvelopeRecipient {
   recipientId:  string

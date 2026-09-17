@@ -41,7 +41,8 @@ application's own code rather than reimplementing it in SQL.
 
 `docs/backfill-member-roles-2026-08-13.sql` has been **deleted** — it carried the
 stale count and duplicated the mapping. `scripts/backfill-member-roles.ts`
-replaces it.
+replaced it, ran (Task 1 below), and was itself removed in the Sept 2026 cleanup
+once the onboarding route called `syncMemberClassificationRole` directly.
 
 ---
 

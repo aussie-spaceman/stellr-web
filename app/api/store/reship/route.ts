@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   if (!stripe) return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
 
   const member = await currentStoreMember()
-  if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
   const body = await req.json().catch(() => ({}))
   const orderId = body?.orderId

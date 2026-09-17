@@ -236,7 +236,7 @@ export async function upsertContact(
   input: UpsertContactInput,
 ): Promise<{ ok: boolean; id?: string; status?: number; dropped?: string[] }> {
   if (!HUBSPOT_ACCESS_TOKEN) {
-    console.log('[hubspot] No HUBSPOT_ACCESS_TOKEN — would have upserted contact:', input.email)
+    console.log('[hubspot] No HUBSPOT_ACCESS_TOKEN — would have upserted contact:', input.email.replace(/^.*@/, '…@'))
     return { ok: false }
   }
 
@@ -616,7 +616,7 @@ export async function captureLead(input: LeadCaptureInput): Promise<LeadCaptureR
   // A form GUID alone is enough to record the conversion — the public submit
   // endpoint needs no credentials. Only give up when there is no route at all.
   if (!HUBSPOT_ACCESS_TOKEN && !formId) {
-    console.log('[hubspot] No token and no form configured — would have captured:', input.email)
+    console.log('[hubspot] No token and no form configured — would have captured:', input.email.replace(/^.*@/, '…@'))
     return { ok: false, via: 'none', noteLogged: false, warnings: ['not-configured'] }
   }
 

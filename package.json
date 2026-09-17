@@ -22,20 +22,17 @@
     "watermark:all": "tsx scripts/watermark-pdfs.ts && tsx scripts/watermark-media.ts && tsx scripts/watermark-videos.ts",
     "watermark:check": "tsx scripts/check-watermarks.ts",
     "watermark:worker": "tsx scripts/watermark-worker.ts",
-    "seed": "tsx scripts/seed-events.ts",
     "seed:dev": "tsx scripts/seed-dev.ts",
-    "backfill:members": "tsx scripts/backfill-members.ts",
-    "backfill:member-roles": "tsx scripts/backfill-member-roles.ts",
     "seed:welcome-drips": "tsx scripts/seed-welcome-drips.ts",
     "set-admin": "tsx scripts/set-admin.ts",
     "verify:prod": "tsx scripts/verify-prod-services.ts",
     "docusign:templates": "tsx scripts/docusign-templates.ts",
-    "docusign:remediate": "tsx scripts/docusign-remediate-sandbox.ts",
     "audit:event-prices": "tsx scripts/audit-event-prices.ts",
     "verify:apollo-hubspot": "tsx scripts/verify-apollo-hubspot.ts",
     "probe:apollo": "tsx scripts/probe-apollo-engagement.ts",
     "backfill:apollo": "tsx scripts/backfill-apollo-engagement.ts",
     "audit:event-slugs": "tsx scripts/audit-event-slugs.ts",
+    "notify:event-waitlist": "tsx scripts/notify-event-waitlist.ts",
     "sync:event-spaces": "tsx scripts/sync-event-spaces.ts",
     "upload:event-flyers": "tsx scripts/upload-event-flyers.ts",
     "fix:event-slug": "tsx scripts/fix-event-slug.ts",
@@ -53,9 +50,7 @@
     "@googleapis/drive": "^26.0.0",
     "@googleapis/sheets": "^18.0.0",
     "@hookform/resolvers": "^3.4.0",
-    "@sanity/icons": "^3.0.0",
     "@sanity/image-url": "^2.1.1",
-    "@sanity/ui": "^3.2.0",
     "@sanity/vision": "^6.0.0",
     "@supabase/supabase-js": "^2.108.1",
     "@tiptap/extension-image": "3.26.0",
@@ -74,7 +69,6 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-hook-form": "^7.51.0",
-    "react-is": "^19.2.7",
     "sanity": "^6.0.0",
     "sharp": "^0.34.5",
     "stripe": "^22.2.0",
@@ -107,6 +101,6 @@
     "vitest": "^4.1.9"
   },
   "engines": {
-    "node": ">=22.12"
+    "node": ">=24"
   }
 }

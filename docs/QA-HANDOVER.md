@@ -60,7 +60,7 @@ Each has a decision-ready doc; several of the original findings turned out **sma
 | **F-17** form hardening | `docs/REC-public-form-hardening.md` | `lib/rate-limit.ts` exists (1 route); Phase 1 = 3-line guard × 9 routes. Also: attacker-supplied emails, unescaped contact HTML | S+ |
 | **F-23** a11y | `docs/REC-a11y-wcag.md` | 3 P1 keyboard blockers (Navbar dropdowns, white-paper modal focus) + 4 contrast fails | S (P1s) |
 | **F-24** SEO/AEO | `docs/REC-seo-aeo.md` | Healthy; gaps = sitemap omits ~15 pages, no default OG image, no canonicals; FAQPage JSON-LD = top AEO win | S |
-| **F-18/F-19** delete dead code | `docs/PLAN-verify-before-delete.md` | 18 uncalled API routes + ~24 orphaned files; per-item verify protocol. NEW orphan: `components/campaigns/CampaignsBoard.tsx` (Phase D superseded it) | M |
+| **F-18/F-19** delete dead code | `docs/archive/PLAN-verify-before-delete.md` | 18 uncalled API routes + ~24 orphaned files; per-item verify protocol. NEW orphan: `components/campaigns/CampaignsBoard.tsx` (Phase D superseded it) | M |
 
 **Owner is personally handling next week:** **F-01** (mentor free event registration — REG-22) and **F-21** (Student-Manager group management UI). **Deferred:** F-12 (staff overhaul), F-20 (educator bulk merch), F-28 (store Sanity discount dropdown). **Closed/no-action:** F-03, F-05, F-07, F-10 (keep moderation), F-11, F-16, F-22, F-26, F-27, F-31.
 

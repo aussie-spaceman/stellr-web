@@ -31,9 +31,9 @@ Handover: `HANDOVER-cleanup-2026-09-16.md`.
 | # | Item | State | Next | Done |
 |---|---|---|---|---|
 | 7.1 | T3 dedupe refactors | **Closed 17 Sept.** Eight PRs, one per item, each squash-merged to `dev` after `verify` + a real `e2e` run (45 passed every time): #100 admin-auth (`8700422`), #101 Stripe client (`13c6224`), #102 HubSpot fetch (`605efe5`), #103 helpers (`34811d9`), #104 `isEmailLike` (`f38258c`), #105 logged failures (`5165f86`), #106 scripts→`lib/supabase` (`7cd331b`), #107 export surface (`7a400cc`). Three were scoped down on inspection — see handover §T3. | — | ☑ |
-| 7.2 | `next-env.d.ts` churn | Tracked file that `next dev` rewrites on every run; dirtied the tree during smoke. | Decide whether to gitignore it (Next 16 default). | ☐ |
-| 7.3 | `docs/campaign-registrations.md` | Lists components (`CampaignRegistrationModal`, `CampaignsBoard`) and `/api/campaigns/register` that no longer exist; only the entry-point-A lines were fixed. | Rewrite the Routes/APIs tables against the tree. | ☐ |
-| 7.4 | `/admin/campaigns/[slug]` unreachable from nav | Documented admin surface; no `AdminSidebar` link; reachable by typed URL only. | Add a link under Competitions, or remove the page. | ☐ |
+| 7.2 | `next-env.d.ts` churn | **Closed 18 Sept.** Gitignored and untracked; `tsc --noEmit` verified clean with the file absent and no `.next/`, which is what CI's fresh clone sees. `next build`/`dev` regenerate it. | — | ☑ |
+| 7.3 | `docs/campaign-registrations.md` | **Closed 18 Sept.** Routes/APIs tables rewritten from the tree: registration goes through `/register/[slug]/group` → `POST /api/register/group` (`type = 'campaign'`), submit and broadcast endpoints as they are, the *email*-campaign crons called out as a different feature, go-live section replaced by a done note. | — | ☑ |
+| 7.4 | `/admin/campaigns/[slug]` unreachable from nav | **Closed 18 Sept.** Kept: it is the only proposals + broadcast-email surface. `/admin/competitions/[slug]` now shows a **Proposals & email** header button for campaign rows, mirroring the Check-In Console button live events get. | — | ☑ |
 | 7.5 | Externally referenced `public/` assets | Three logo SVGs, `Bill.jpeg`, two poster JPGs removed on zero in-repo references; HubSpot/Sanity references are invisible from here. | If anything 404s on a marketing surface, restore from `68ac4ef^`. | ☐ (accepted) |
 
 Rows touched from earlier sessions: none closed. 6.7 (`check-golive-config.mjs`)

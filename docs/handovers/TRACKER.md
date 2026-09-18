@@ -18,7 +18,7 @@ Handover: `HANDOVER-registration-resume-2026-09-17.md`.
 
 | # | Item | State | Next | Done |
 |---|---|---|---|---|
-| 8.1 | Migration `20260917160000_registration_pay_token` on production | Applied to dev via MCP, ledger realigned. Not yet on prod. | `promote` applies it before the merge; verify `registrations.pay_token` exists. | ☐ |
+| 8.1 | Migration `20260917160000_registration_pay_token` on production | **Closed 18 Sept.** Applied to prod via MCP before #113 merged, ledger row realigned to `20260917160000`, both columns confirmed in `information_schema`; `db:status --prod` clean bar the cosmetic 4.8 pair. Promoted as `481c40c` (`.claude/releases/promote-2026-09-18.md`). | — | ☑ |
 | 8.2 | Daniel Ahaiwe's pay link (`98f623e4…`, Colorado, $75) | Registration pending; parent waiting on a reply since 16 Sept. | After 8.1: roster → Send pay link; confirm recipients include `glo.ahaiwe@gmail.com`; reply to the thread. | ☐ |
 | 8.3 | Free individual registrations left `pending` | Pre-existing (`individual/route.ts` `nothing_to_pay` branch); pay-link email refuses them. | Confirm at insert like the group route, or accept. | ☐ |
 | 8.4 | Browser draft of the registration form | Deferred by the owner (privacy on shared machines). | Revisit only if pre-submit interruptions are reported. | ☐ (accepted) |

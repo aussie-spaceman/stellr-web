@@ -31,6 +31,9 @@ export interface RegistrationRow {
   // == total participants. NULL on registrations created before migration 037.
   adult_count: number | null
   student_count: number | null
+  // Pay-later capability (see lib/registration-checkout.ts). NULL until minted.
+  pay_token: string | null
+  pay_link_sent_at: string | null
 }
 
 export type RegistrationInsert = Omit<RegistrationRow, 'id' | 'created_at' | 'updated_at'>

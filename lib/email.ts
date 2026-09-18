@@ -172,13 +172,16 @@ export function individualConfirmationEmail({
 export function groupConfirmationEmail({
   teacherFirstName, teacherLastName, schoolName, eventTitle,
   participantCount, registrationId, paymentMethod, detailsMethod, spreadsheetUrl, joinUrl,
-  remainingCount = 0,
+  remainingCount = 0, payUrl,
 }: {
   teacherFirstName: string; teacherLastName: string; schoolName: string
   eventTitle: string; participantCount: number; registrationId: string
   paymentMethod: 'invoice' | 'card' | 'individual'
   detailsMethod: 'add_now' | 'spreadsheet' | 'email_link'
   spreadsheetUrl?: string; joinUrl?: string
+  // Card payments: the durable pay page for this registration. This email goes
+  // out at submission, BEFORE Stripe — it must not claim the card was charged.
+  payUrl?: string
   // For a partial add_now: how many declared people were left for later. 0 means
   // either a complete add_now (nothing left) or a spreadsheet/email-link roster.
   remainingCount?: number
@@ -186,9 +189,10 @@ export function groupConfirmationEmail({
   const subject = `Group Registration Received — ${eventTitle}`
 
   // ── "What happens next" — dynamic on how payment & registration were chosen ──
+  const seats = `${participantCount} participant${participantCount !== 1 ? 's' : ''}`
   const paymentNote =
     paymentMethod === 'card'
-      ? `<li style="margin-bottom:8px"><strong>Payment:</strong> Your card payment for all ${participantCount} participant${participantCount !== 1 ? 's' : ''} has been processed — your group registration is confirmed.</li>`
+      ? `<li style="margin-bottom:8px"><strong>Payment:</strong> Your group is confirmed once the card payment for all ${seats} goes through.${payUrl ? ` If you didn't finish paying, use this link whenever you're ready: <a href="${payUrl}" style="color:#1e3a5f;font-weight:600">Pay now →</a>` : ''} Already paid? Your confirmation is on its way — nothing more to do.</li>`
     : paymentMethod === 'individual'
       ? '<li style="margin-bottom:8px"><strong>Payment:</strong> Each group member will receive their own payment link by email. Each member\'s spot is confirmed once they complete their individual payment.</li>'
       : `<li style="margin-bottom:8px"><strong>Payment:</strong> An invoice for all ${participantCount} participant${participantCount !== 1 ? 's' : ''} will be emailed to you within 1–2 business days. Registration is confirmed once payment is received.</li>`
@@ -263,7 +267,7 @@ export function groupConfirmationEmail({
   const joinText = joinUrl ? `\n\nOption 2 — Registration Link: ${joinUrl}` : ''
   const paymentText =
     paymentMethod === 'card'
-      ? `Payment: card payment for all ${participantCount} participant${participantCount !== 1 ? 's' : ''} processed — registration confirmed.`
+      ? `Payment: your group is confirmed once the card payment for all ${seats} goes through.${payUrl ? ` Didn't finish paying? Pay here whenever you're ready: ${payUrl}` : ''}`
     : paymentMethod === 'individual'
       ? 'Payment: each group member will receive their own payment link by email; each spot is confirmed once that member pays.'
       : `Payment: an invoice for all ${participantCount} participant${participantCount !== 1 ? 's' : ''} will be emailed within 1–2 business days; registration is confirmed once paid.`
@@ -274,6 +278,42 @@ export function groupConfirmationEmail({
       ? `Member details: ${remainingCount} still to provide — finish them using either the Google Sheet or the registration link below.`
       : 'Member details: complete your group\'s details using either the Google Sheet or the registration link below (whichever you prefer).'
   const text = `Hi ${teacherFirstName},\n\nGroup registration received for ${eventTitle}.\n\nSchool: ${schoolName}\nParticipants: ${participantCount}\nReference #: ${registrationId}\n\n${paymentText}\n${registrationText}${sheetText}${joinText}\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
+// "Your registration is saved — pay when you're ready." Sent the moment a paid
+// registration is created (before Stripe), re-sent when someone resubmits the
+// form for a pending registration, and on demand from the admin roster. The
+// link is the durable pay page, not a Stripe session URL — those expire in 24h.
+export function registrationPaymentLinkEmail({
+  firstName, eventTitle, amountCents, seats, payUrl, registrationId,
+}: {
+  firstName: string
+  eventTitle: string
+  amountCents: number
+  /** Group card registrations: how many places the payment covers. */
+  seats?: number
+  payUrl: string
+  registrationId: string
+}) {
+  const amount = `$${(amountCents / 100).toFixed(2)}`
+  const what = seats && seats > 1 ? `your group of ${seats}` : 'your place'
+  const subject = `Complete your registration — ${eventTitle}`
+  const html = emailLayout({
+    heading: 'Your registration is saved',
+    preheader: `Pay when you're ready — ${what} at ${eventTitle} is held.`,
+    bodyHtml: `
+        <p>Hi ${firstName},</p>
+        <p>${seats && seats > 1 ? 'Your group registration' : 'Your registration'} for <strong>${eventTitle}</strong> is saved but not yet confirmed — payment of <strong>${amount}</strong> is still needed.</p>
+        <p>Use the button below whenever you're ready. The link keeps working until registration for the event closes, so it's fine to come back to it later.</p>
+        <div style="margin:28px 0;text-align:center">
+          <a href="${payUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600">Pay now →</a>
+        </div>
+        <p style="color:#6b7280;font-size:14px">Already paid? A confirmation email is on its way — nothing more to do.</p>
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
+        <p style="color:#6b7280;font-size:12px">Reference: <span style="font-family:monospace">${registrationId}</span></p>`,
+  })
+  const text = `Hi ${firstName},\n\nYour registration for ${eventTitle} is saved but not yet confirmed — payment of ${amount} is still needed.\n\nPay whenever you're ready (the link works until registration closes):\n${payUrl}\n\nAlready paid? A confirmation is on its way — nothing more to do.\n\nReference: ${registrationId}\n\n— Stellr Education`
   return { subject, html, text }
 }
 
@@ -639,8 +679,10 @@ export function outstandingItemsReminderEmail({
 }: {
   firstName: string
   eventTitle: string
-  /** Set when payment is outstanding; method drives the copy. */
-  payment?: { method: 'invoice' | 'link' }
+  /** Set when payment is outstanding; method drives the copy. `payUrl` is the
+   *  durable pay page for card registrations — without it the copy can only
+   *  point at "the link previously emailed", which for individuals never existed. */
+  payment?: { method: 'invoice' | 'link'; payUrl?: string }
   /** Set when DocuSign paperwork is outstanding. */
   docusign?: { minor: boolean; guardianName?: string | null }
 }) {
@@ -650,8 +692,14 @@ export function outstandingItemsReminderEmail({
     const html =
       payment.method === 'invoice'
         ? 'Our records show the invoice issued for your registration has not yet been paid. Registration is only confirmed once payment is received — please arrange payment of the invoice, or reply to this email if it hasn\'t arrived or you have questions.'
+      : payment.payUrl
+        ? `Our records show your registration fee has not yet been paid. Registration is only confirmed once payment is received — <a href="${payment.payUrl}" style="color:#1e3a5f;font-weight:600">pay now →</a>, or reply to this email if you have questions.`
         : 'Our records show your registration fee has not yet been paid. Please complete payment using the payment link previously emailed to you — or reply to this email if you need the link re-sent.'
-    items.push({ heading: 'Payment outstanding', html, text: html })
+    const text =
+      payment.method !== 'invoice' && payment.payUrl
+        ? `Our records show your registration fee has not yet been paid. Pay here: ${payment.payUrl}`
+        : html
+    items.push({ heading: 'Payment outstanding', html, text })
   }
 
   if (docusign) {

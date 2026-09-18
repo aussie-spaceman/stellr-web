@@ -1,11 +1,11 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
+import { createRegistrationCheckout, RegistrationCheckoutError } from '@/lib/registration-checkout'
 
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   // Only the member's OWN outstanding payment is payable here.
   const isIndividual = registration.type === 'individual'
   const selfPayable = isIndividual
-    ? registration.status !== 'confirmed' && registration.status !== 'cancelled'
+    ? registration.status === 'pending'
     : registration.member_pays_individually && participant.individual_payment_status === 'pending'
   if (!selfPayable) {
     return NextResponse.json({ error: 'No payment is due from you for this registration.' }, { status: 400 })
@@ -63,16 +63,34 @@ export async function POST(req: NextRequest) {
   const stripe = stripeClient()
   if (!stripe) return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
 
+  // Individual: the same checkout the registration form and pay page build —
+  // fee plus any pending merch add-ons, metadata the webhook already matches.
+  if (isIndividual) {
+    try {
+      const { url } = await createRegistrationCheckout(db, stripe, registrationId, {
+        customerEmail: member.email,
+        successUrl: `${APP_URL}/account?tab=billing&paid=1`,
+        cancelUrl: `${APP_URL}/account?tab=billing`,
+      })
+      return NextResponse.json({ url })
+    } catch (e) {
+      if (e instanceof RegistrationCheckoutError) {
+        const status = e.code === 'no_price' ? 503 : 400
+        return NextResponse.json({ error: e.code === 'nothing_to_pay' ? 'No payment is due from you for this registration.' : e.message }, { status })
+      }
+      throw e
+    }
+  }
+
   const event = await getEventBySlug(registration.event_slug)
   const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId
   if (!stripePriceId) return NextResponse.json({ error: 'No price configured for this event' }, { status: 400 })
 
-  // Metadata mirrors the registration checkouts so the existing Stripe webhook
-  // settles the right thing: individual → confirmRegistration (registrationId /
-  // client_reference_id); member-pays-individually → markIndividualPayment.
-  const metadata: Record<string, string> = isIndividual
-    ? { registrationId, eventSlug: registration.event_slug }
-    : { registrationId, eventSlug: registration.event_slug, participantEmail: member.email, isIndividualGroupPayment: 'true' }
+  // Member-pays-individually: metadata mirrors lib/individual-payment so the
+  // webhook's markIndividualPayment settles this member's seat.
+  const metadata: Record<string, string> = {
+    registrationId, eventSlug: registration.event_slug, participantEmail: member.email, isIndividualGroupPayment: 'true',
+  }
 
   // Refuse to take money on a production deployment holding TEST keys. A test-mode
   // charge looks successful and settles nothing — the Stripe equivalent of the

@@ -72,6 +72,14 @@ export interface RosterGroup {
   invoiceRequested: boolean
   /** When the invoice was marked paid by an admin (null = outstanding). */
   invoicePaidAt: string | null
+  /** Each member pays their own seat (per-person links, not one checkout). */
+  memberPaysIndividually: boolean
+  /**
+   * An unpaid card registration the admin can send the durable pay link for:
+   * pending, and settled by a single Stripe checkout rather than invoice or
+   * per-member links.
+   */
+  payLinkSendable: boolean
   participants: RosterParticipant[]
 }
 
@@ -257,6 +265,9 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       teacherEmail: (reg.teacher_email as string | null) || null,
       invoiceRequested: !!reg.invoice_requested,
       invoicePaidAt: (reg.invoice_paid_at as string | null) ?? null,
+      memberPaysIndividually: !!reg.member_pays_individually,
+      payLinkSendable:
+        reg.status === 'pending' && !reg.invoice_requested && !reg.member_pays_individually && reg.type !== 'campaign',
       participants,
     }
   })

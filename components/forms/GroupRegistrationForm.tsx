@@ -511,7 +511,10 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
   const [expandedAdult, setExpandedAdult] = useState<number | null>(null)
   const [expandedStudent, setExpandedStudent] = useState<number | null>(0)
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // Submit outcome. 'info' is the "we've emailed you a link" answer to an
+  // unfinished registration — not a failure, so it isn't painted red.
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const setError = (text: string | null) => setNotice(text ? { kind: 'error', text } : null)
   const [dpaAgreed, setDpaAgreed] = useState(false)
   const [dpaError, setDpaError] = useState(false)
 
@@ -780,12 +783,22 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         }),
       })
 
+      const payload = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const body = await res.json()
-        throw new Error(body.error ?? 'Registration failed')
+        if (payload.code === 'unfinished_registration') {
+          setNotice({ kind: 'info', text: payload.error })
+          setSubmitting(false)
+          return
+        }
+        throw new Error(payload.error ?? 'Registration failed')
       }
 
-      const { registrationId, checkoutUrl, spreadsheetUrl, joinUrl, signInToken } = await res.json()
+      const { registrationId, checkoutUrl, spreadsheetUrl, joinUrl, signInToken, resume } = payload
+      // The organiser's own unfinished card registration — straight back to checkout.
+      if (resume && checkoutUrl) {
+        window.location.href = checkoutUrl
+        return
+      }
       // Slots the organiser chose to provide later (blank now) — drives the
       // "complete the rest via Sheet / link" prompt on the confirmation page.
       const remaining = deferredCount()
@@ -1189,7 +1202,18 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         </div>
       )}
 
-      {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">{error}</div>}
+      {notice && (
+        <div
+          role={notice.kind === 'error' ? 'alert' : 'status'}
+          className={
+            notice.kind === 'error'
+              ? 'bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700'
+              : 'bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800'
+          }
+        >
+          {notice.text}
+        </div>
+      )}
 
       <div className="flex gap-3">
         <button type="button" onClick={() => setStep(1)} className="btn-outline flex-1 py-3">← Back</button>

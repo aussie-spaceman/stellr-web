@@ -186,40 +186,57 @@ on conflict (id) do update set role = excluded.role;
 -- database pointed at the production Sanity dataset would otherwise attach
 -- fixture registrations to a real event in every admin view.
 
+-- The pending individual registration carries a fixed pay_token so the pay
+-- page (/register/[slug]/pay/[token]) can be exercised end-to-end without
+-- minting one; the token is only honoured while status = 'pending'.
+
 insert into public.registrations (
   id, event_slug, event_title, type, status,
   teacher_first_name, teacher_last_name, teacher_email, school_name,
-  school_address_city, school_address_state
+  school_address_city, school_address_state, amount_due_cents, pay_token
 ) values
   ('00000000-0000-4000-d000-000000000001', 'seed-regional-challenge',
    'Seed Regional Challenge (fixture)', 'group', 'confirmed',
    'Grace', 'Teacher', 'grace.teacher+clerk_test@example.com', 'Fixture High School',
-   'Denver', 'CO'),
+   'Denver', 'CO', null, null),
 
   ('00000000-0000-4000-d000-000000000002', 'seed-regional-challenge',
    'Seed Regional Challenge (fixture)', 'individual', 'pending',
-   null, null, null, 'Fixture High School', 'Denver', 'CO')
+   null, null, null, 'Fixture High School', 'Denver', 'CO', 7500,
+   repeat('0123456789abcdef', 4))
 on conflict (id) do update set
   status = excluded.status,
-  event_title = excluded.event_title;
+  event_title = excluded.event_title,
+  amount_due_cents = excluded.amount_due_cents,
+  pay_token = excluded.pay_token;
 
 insert into public.participants (
   id, registration_id, first_name, last_name, email, phone, date_of_birth,
-  gender, t_shirt_size, school_name, age_bracket, event_role, grade
+  gender, t_shirt_size, school_name, age_bracket, event_role, grade,
+  emergency_contact_first_name, emergency_contact_email
 ) values
   ('00000000-0000-4000-e000-000000000001', '00000000-0000-4000-d000-000000000001',
    'Ada', 'Student', 'ada.student+clerk_test@example.com', '+15550100',
    (current_date - interval '16 years')::date, 'female', 'M',
-   'Fixture High School', 'high_school', 'participant', 'grade_11'),
+   'Fixture High School', 'high_school', 'participant', 'grade_11', null, null),
 
   ('00000000-0000-4000-e000-000000000002', '00000000-0000-4000-d000-000000000001',
    'Ravi', 'Teammate', 'ravi.teammate@example.com', '+15550101',
    (current_date - interval '17 years')::date, 'male', 'L',
-   'Fixture High School', 'high_school', 'participant', 'grade_12')
+   'Fixture High School', 'high_school', 'participant', 'grade_12', null, null),
+
+  -- The unpaid registrant — a minor, so the pay link also goes to the parent.
+  ('00000000-0000-4000-e000-000000000003', '00000000-0000-4000-d000-000000000002',
+   'Mia', 'Unpaid', 'mia.unpaid@example.com', '+15550102',
+   (current_date - interval '14 years')::date, 'female', 'S',
+   'Fixture High School', 'high_school', 'participant', 'grade_9',
+   'Pat', 'pat.parent@example.com')
 on conflict (id) do update set
   first_name = excluded.first_name,
   last_name = excluded.last_name,
-  email = excluded.email;
+  email = excluded.email,
+  emergency_contact_first_name = excluded.emergency_contact_first_name,
+  emergency_contact_email = excluded.emergency_contact_email;
 
 -- ── A community space ────────────────────────────────────────────────────────
 

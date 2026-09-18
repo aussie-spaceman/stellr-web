@@ -181,6 +181,14 @@ export default async function AdminEventDetailPage({
               Check-In Console
             </Link>
           )}
+          {isCampaign && tab === 'overview' && (
+            <Link
+              href={`/admin/campaigns/${slug}`}
+              className="ml-auto text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5"
+            >
+              Proposals &amp; email
+            </Link>
+          )}
           <span
             className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${
               isCampaign ? 'bg-purple-100 text-purple-700' : 'bg-brand-blue/10 text-brand-blue'

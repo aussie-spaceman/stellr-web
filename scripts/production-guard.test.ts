@@ -28,6 +28,15 @@ describe('productionCredentialIn', () => {
     expect(productionCredentialIn(text)?.name).toBe('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY')
   })
 
+  it('trips on an sk_live_ Stripe secret key', () => {
+    const text = dev + '\nSTRIPE_SECRET_KEY=sk_live_abc'
+    expect(productionCredentialIn(text)?.name).toBe('STRIPE_SECRET_KEY')
+  })
+
+  it('passes an sk_test_ Stripe secret key', () => {
+    expect(productionCredentialIn(dev + '\nSTRIPE_SECRET_KEY=sk_test_abc')).toBeNull()
+  })
+
   it('reports Supabase first when both are production', () => {
     const text = dev
       .replace('xvxlhbxtiwxpopoqjygm', PRODUCTION_SUPABASE_REF)

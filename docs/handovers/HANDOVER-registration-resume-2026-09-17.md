@@ -136,3 +136,49 @@ logged as `billing/payment_link_sent`. The bulk reminder now carries the link
   success URL — is consumed by nothing in `app/(member)`. Unrelated, noted.
 - Pre-existing React warnings on the individual form (`SchoolSearchInput`
   setState-in-render; a `<script>` inside a component) — not touched.
+
+## 6. Close-out — 18 Sept 2026
+
+Shipped as #111 → `dev` (`2473e5a`), promoted as #113 → `main` (`481c40c`,
+production `dpl_FkuJSHMkbwCVtBc3ojzEkG1miepK`); record
+`.claude/releases/promote-2026-09-18.md`. Daniel's pay link was sent from the
+production roster at 16:58Z (both recipients; DB stamped).
+
+Google Doc snapshot of the tracker rows below:
+https://docs.google.com/document/d/1KW07VlAtVQCvml89b9Ai7r8D-gpcyiIP0qFRGhDV-rg/edit
+— read-only export; `docs/handovers/TRACKER.md` §8 is the copy that gets ticked.
+
+### What was asked, and where it stands
+
+| Asked | State |
+|---|---|
+| Review Gloria's email and Daniel's registration | Done — §1; pending row `98f623e4…` confirmed in production. |
+| Recommend a fix | Done — plan approved 17 Sept; built, shipped, promoted. |
+| Parent can come back to an interrupted registration | Done — pay page + email at submission + resume-on-resubmit. |
+| Same for a teacher's group | Done for the card path (organiser resume / email link; false "processed" email fixed). Invoice and members-pay-individually were already resumable. **Not browser-verified** (8.7). |
+| Immediate email at submission (owner decision) | Done. |
+| Defer form draft persistence (owner decision) | Not built, by decision (8.4). |
+| Remediate Daniel via the admin button, no interim script (owner decision) | Done (8.2). |
+
+### Nothing was skipped that was asked for. What was inferred but not proven
+
+- **A real Stripe Checkout has never been created through the new
+  `createRegistrationCheckout`** — every checkout in this session was a
+  mocked Stripe. Read-only pre-checks all pass (live key, Colorado price
+  livemode/active/$75, registration open) and the params match the retired
+  inline code. Gloria's click is the first real one (8.6).
+- The group form's resume / info-panel branch is tsc + unit-tested only (8.7).
+- `verify:prod` was not run as part of `promote` Step 7; run at close-out
+  instead. Stripe ✅; the DocuSign ❌ it prints is the LOCAL `.env.local`
+  (sandbox hosts), not production (8.8).
+
+### Recommended next steps
+
+1. Watch `98f623e4…` — `status='confirmed'` + `stripe_payment_intent_id` set
+   proves the whole path in production. If Gloria reports "Payment could not
+   be started", Vercel runtime logs for `[register/pay]` will say why (8.6).
+2. Reply to Gloria (8.2 Next).
+3. 8.7 group-form browser pass on dev, one sitting.
+4. Decide 8.3 (free individual registrations left `pending`) and 8.9 (dead
+   `/community?registered=1` flag) — both small, both pre-existing.
+5. 8.8 — swap the main checkout's `.env.local` Stripe key to `sk_test_`.

@@ -91,7 +91,9 @@ export default function IndividualRegistrationForm({
   const [step, setStep] = useState(1)
   const [merchQty, setMerchQty] = useState<Record<string, number>>({})
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // Submit outcome. 'info' is the "we've emailed you a link" answer to an
+  // unfinished registration — not a failure, so it isn't painted red.
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [schoolSelection, setSchoolSelection] = useState<SchoolSelection | null>(
     prefill?.school ? { type: 'existing', id: prefill.school.id, name: prefill.school.name } : null
   )
@@ -202,7 +204,7 @@ export default function IndividualRegistrationForm({
       return
     }
     setSubmitting(true)
-    setError(null)
+    setNotice(null)
     try {
       // Adult registrants carry no grade — any value left over from toggling
       // must not leak into the payload. Bracket comes straight from the explicit
@@ -234,12 +236,22 @@ export default function IndividualRegistrationForm({
         }),
       })
 
+      const payload = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const body = await res.json()
-        throw new Error(body.error ?? 'Registration failed')
+        if (payload.code === 'unfinished_registration') {
+          setNotice({ kind: 'info', text: payload.error })
+          setSubmitting(false)
+          return
+        }
+        throw new Error(payload.error ?? 'Registration failed')
       }
 
-      const { registrationId, checkoutUrl, signInToken } = await res.json()
+      const { registrationId, checkoutUrl, signInToken, resume } = payload
+      // Their own unfinished registration — straight back to checkout.
+      if (resume && checkoutUrl) {
+        window.location.href = checkoutUrl
+        return
+      }
 
       // Silently sign a brand-new registrant in (Clerk ticket flow) so they land
       // in the member portal already authenticated. Non-fatal — if it fails they
@@ -269,7 +281,7 @@ export default function IndividualRegistrationForm({
         router.push(`/register/${eventSlug}/confirmation?id=${registrationId}&type=individual`)
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.')
+      setNotice({ kind: 'error', text: e instanceof Error ? e.message : 'Something went wrong. Please try again.' })
       setSubmitting(false)
     }
   }
@@ -539,9 +551,16 @@ export default function IndividualRegistrationForm({
             </div>
           )}
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-              {error}
+          {notice && (
+            <div
+              role={notice.kind === 'error' ? 'alert' : 'status'}
+              className={
+                notice.kind === 'error'
+                  ? 'bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700'
+                  : 'bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800'
+              }
+            >
+              {notice.text}
             </div>
           )}
 

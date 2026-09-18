@@ -26,8 +26,17 @@ import { getCurrentMember } from '@/lib/community'
 import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
 import type { RegistrationRow } from '@/lib/database.types'
 import { assertNotImpersonating } from '@/lib/impersonation'
-import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
+import { maskEmail } from '@/lib/utils'
+import { findExistingRegistrations, resolveDuplicate } from '@/lib/registration-duplicates'
+import {
+  createRegistrationCheckout,
+  RegistrationCheckoutError,
+  ensurePayToken,
+  mintPayToken,
+  payPageUrl,
+} from '@/lib/registration-checkout'
+import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -172,50 +181,88 @@ export async function POST(req: NextRequest) {
       await resolveLinked(students)
     }
 
-    // Duplicate check: registrant email
-    const { data: existingRegistrant } = await db
-      .from('participants')
-      .select('registration_id')
-      .eq('email', teacher.email)
-      .maybeSingle()
+    // Duplicate checks — one lookup for the organiser and everyone entered,
+    // filtered to this event and ignoring withdrawn rows (see
+    // lib/registration-duplicates.ts for why the inline version was wrong).
+    const addNowEmails: string[] = details_method === 'add_now'
+      ? [
+          ...(additional_adults ?? []).map((a: ParticipantPayload) => a.email),
+          ...(students ?? []).map((st: ParticipantPayload) => st.email),
+        ]
+      : []
+    const existing = await findExistingRegistrations(db, [teacher.email, ...addNowEmails], event_slug)
 
-    if (existingRegistrant) {
-      const { data: reg } = await db.from('registrations').select('event_slug')
-        .eq('id', (existingRegistrant as { registration_id: string }).registration_id).maybeSingle()
-      if (reg && (reg as Pick<RegistrationRow, 'event_slug'>).event_slug === event_slug) {
-        return NextResponse.json({ error: 'This email address is already registered for this event.' }, { status: 409 })
+    // Organiser: an unpaid card registration of their own is resumed, not
+    // refused — them (session matches) straight to a fresh checkout, anyone
+    // else gets the pay link by email.
+    const dup = resolveDuplicate(existing.get(teacher.email), {
+      sessionMatches: !!sessionMember?.email && normalizeEmail(sessionMember.email) === teacher.email,
+    })
+    if (dup.kind !== 'none') {
+      const existingRegId = dup.registration.registrationId
+      // An unfinished INDIVIDUAL registration isn't resumed from the group form.
+      if ((dup.kind === 'resume' || dup.kind === 'email_link') && dup.registration.type !== 'group') {
+        return NextResponse.json(
+          { code: 'already_registered', error: `${teacher.email} already has an individual registration for this event. Complete its payment from the link in your email, or under Account → Billing.` },
+          { status: 409 },
+        )
       }
-    }
-
-    // Duplicate check: participant emails (add_now only) — two batched queries
-    if (details_method === 'add_now') {
-      const allEmails: string[] = [
-        ...(additional_adults ?? []).map((a: ParticipantPayload) => a.email),
-        ...(students ?? []).map((s: ParticipantPayload) => s.email),
-      ]
-      if (allEmails.length > 0) {
-        const { data: existingParticipants } = await db
-          .from('participants')
-          .select('email, registration_id')
-          .in('email', allEmails)
-        const regIds = [...new Set((existingParticipants ?? []).map(p => p.registration_id))]
-        if (regIds.length > 0) {
-          const { data: sameEventRegs } = await db
-            .from('registrations')
-            .select('id')
-            .in('id', regIds)
-            .eq('event_slug', event_slug)
-          const conflictRegIds = new Set((sameEventRegs ?? []).map(r => r.id))
-          const duplicates = [...new Set(
-            (existingParticipants ?? [])
-              .filter(p => conflictRegIds.has(p.registration_id))
-              .map(p => p.email)
-          )]
-          if (duplicates.length > 0) {
-            return NextResponse.json({ error: `Already registered for this event: ${duplicates.join(', ')}` }, { status: 409 })
+      if (dup.kind === 'resume') {
+        const stripe = stripeClient()
+        if (stripe) {
+          try {
+            const { url } = await createRegistrationCheckout(db, stripe, existingRegId, {
+              event: eventForGate as { stripePriceId?: string } | null,
+              customerEmail: teacher.email,
+              successUrl: `${SITE_URL}/register/${event_slug}/confirmation?id=${existingRegId}&type=group&payment=success`,
+              cancelUrl: payPageUrl(event_slug, await ensurePayToken(db, existingRegId), { cancelled: true }),
+            })
+            return NextResponse.json({ resume: true, registrationId: existingRegId, checkoutUrl: url }, { status: 200 })
+          } catch (e) {
+            if (!(e instanceof RegistrationCheckoutError)) console.error('[register/group] resume checkout failed:', e)
           }
         }
       }
+      if (dup.kind === 'email_link') {
+        const sent = await sendPayLinkEmail(db, existingRegId).catch((e) => {
+          console.error('[register/group] pay-link resend failed (non-fatal):', e)
+          return { sent: false, reason: undefined, recipients: [] as string[] }
+        })
+        const where = sent.recipients.length > 0 ? sent.recipients.map(maskEmail) : [maskEmail(teacher.email)]
+        // Inside the resend cooldown nothing went out just now — say so, rather
+        // than promising an email that isn't coming.
+        const verb = sent.reason === 'cooldown' ? 'We recently emailed' : 'We’ve emailed'
+        return NextResponse.json(
+          {
+            code: 'unfinished_registration',
+            error: `This email already has an unfinished group registration for this event. ${verb} a link to complete payment to ${where.join(' and ')} — check spam if it hasn’t arrived in a few minutes.`,
+          },
+          { status: 409 },
+        )
+      }
+      if (dup.kind === 'invoice_pending') {
+        return NextResponse.json(
+          { code: 'invoice_pending', error: `An invoice for this group was already sent to ${maskEmail(teacher.email)}. Pay from that email, or reply to it if you need it re-sent.` },
+          { status: 409 },
+        )
+      }
+      if (dup.kind === 'in_group') {
+        return NextResponse.json(
+          { code: 'in_group', error: `${teacher.email} is already part of a group registration for this event.` },
+          { status: 409 },
+        )
+      }
+      return NextResponse.json(
+        { code: 'already_registered', error: `${teacher.email} is already registered for this event. If that’s you, sign in to see it under Account → Teams.` },
+        { status: 409 },
+      )
+    }
+
+    // Participants entered now: anyone already on this event (any status but
+    // withdrawn) is a conflict — they'd end up on two rosters.
+    const duplicates = addNowEmails.filter((e) => (existing.get(e) ?? []).length > 0)
+    if (duplicates.length > 0) {
+      return NextResponse.json({ error: `Already registered for this event: ${[...new Set(duplicates)].join(', ')}` }, { status: 409 })
     }
 
     const poc = teacher_poc as TeacherPoC | null
@@ -350,6 +397,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create registration record
+    const payToken = payment_method === 'card' && !nothingToCollect && !is_campaign ? mintPayToken() : null
     const { data: registration, error: regError } = await db.from('registrations').insert({
       event_slug, event_title,
       // Campaign group registrations are stored as type 'campaign' so they
@@ -372,6 +420,8 @@ export async function POST(req: NextRequest) {
       school_address_state: teacher.school_address_state,
       school_address_zip: teacher.school_address_zip,
       invoice_requested: payment_method === 'invoice',
+      // Pay-later capability for card payments — see lib/registration-checkout.ts.
+      pay_token: payToken,
       registrant_role,
       teacher_poc_first_name: poc?.first_name ?? null,
       teacher_poc_last_name: poc?.last_name ?? null,
@@ -890,29 +940,10 @@ export async function POST(req: NextRequest) {
       // point, so we surface the failure and let the confirmation/billing flow
       // recover rather than orphaning silently.
       try {
-        // Refuse to take money on a production deployment holding TEST keys. A test-mode
-        // charge looks successful and settles nothing — the Stripe equivalent of the
-        // DocuSign sandbox envelopes that were not binding signatures. Reads are
-        // deliberately not gated: a wrong price is visible, a phantom payment is not.
-        assertLiveCredentials('stripe')
-
-        const session = await stripe.checkout.sessions.create({
-          mode: 'payment',
-          // Surfaces the "Add promotion code" field for codes set up in Stripe.
-          allow_promotion_codes: true,
-          line_items: [{ price: stripePriceId, quantity: total_participants }],
-          client_reference_id: regId,
-          customer_email: teacher.email,
-          // Always mint a Customer so the receipt is retrievable in the billing tab
-          // (the webhook persists session.customer onto the member row).
-          customer_creation: 'always',
-          metadata: {
-            registrationId: regId,
-            eventSlug: event_slug,
-            isGroup: 'true',
-            teacherName: `${teacher.first_name} ${teacher.last_name}`,
-          },
-          success_url: (() => {
+        const session = await createRegistrationCheckout(db, stripe, regId, {
+          event: eventForGate as { stripePriceId?: string } | null,
+          customerEmail: teacher.email,
+          successUrl: (() => {
             const u = new URL(`${SITE_URL}/register/${event_slug}/confirmation`)
             u.searchParams.set('id', regId); u.searchParams.set('type', 'group'); u.searchParams.set('payment', 'success')
             if (promptSpreadsheetUrl) u.searchParams.set('spreadsheet', promptSpreadsheetUrl)
@@ -920,7 +951,8 @@ export async function POST(req: NextRequest) {
             if (remainingCount > 0) u.searchParams.set('remaining', String(remainingCount))
             return u.toString()
           })(),
-          cancel_url: `${SITE_URL}/register/${event_slug}/group?cancelled=true`,
+          // Abandoned checkout lands on the pay page, not a blank form.
+          cancelUrl: payPageUrl(event_slug, payToken ?? (await ensurePayToken(db, regId)), { cancelled: true }),
         })
         checkoutUrl = session.url
       } catch (checkoutErr) {
@@ -992,8 +1024,15 @@ export async function POST(req: NextRequest) {
         spreadsheetUrl: spreadsheetUrl ?? undefined,
         joinUrl: joinUrl ?? undefined,
         remainingCount,
+        // The way back if the card redirect is never completed.
+        payUrl: payment_method === 'card' && checkoutUrl && payToken ? payPageUrl(event_slug, payToken) : undefined,
       })
       await sendEmail({ to: teacher.email, cc: ccEmails, ...emailContent })
+      // The confirmation email now carries the pay link, so the separate
+      // pay-link email isn't sent here — just stamp the send for the cooldown.
+      if (payment_method === 'card' && checkoutUrl && payToken) {
+        await db.from('registrations').update({ pay_link_sent_at: new Date().toISOString() }).eq('id', regId)
+      }
     } catch (emailErr) {
       console.error('Confirmation email failed (non-fatal):', emailErr)
     }

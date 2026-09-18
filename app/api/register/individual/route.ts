@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
-import { ageFromDob } from '@/lib/utils'
+import { ageFromDob, maskEmail } from '@/lib/utils'
 import { registrationIsOpen } from '@/lib/registration'
-import type { RegistrationRow, ParticipantRow } from '@/lib/database.types'
+import type { RegistrationRow } from '@/lib/database.types'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt, normalizeEmail } from '@/lib/member-enums'
 import { resolveAndLinkSchool } from '@/lib/school-link'
@@ -15,10 +14,17 @@ import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { prepareRegistrationAddons, addRegistrationAddons } from '@/lib/store/event-merch'
 import { assertNotImpersonating } from '@/lib/impersonation'
-import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
+import { findExistingRegistrations, resolveDuplicate } from '@/lib/registration-duplicates'
+import {
+  createRegistrationCheckout,
+  RegistrationCheckoutError,
+  ensurePayToken,
+  mintPayToken,
+  payPageUrl,
+} from '@/lib/registration-checkout'
+import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 // Where a registrant lands afterwards — the member portal, with a flag the
 // /community page reads to pop the "registration submitted" modal.
@@ -72,26 +78,72 @@ export async function POST(req: NextRequest) {
 
     const db = supabaseServer()
 
-    // Duplicate check: same email for the same event
-    const { data: existing } = await db
-      .from('participants')
-      .select('id, registration_id')
-      .eq('email', email)
-      .maybeSingle()
-
-    if (existing) {
-      const { data: reg } = await db
-        .from('registrations')
-        .select('event_slug')
-        .eq('id', (existing as Pick<ParticipantRow, 'id' | 'registration_id'>).registration_id)
-        .maybeSingle()
-
-      if (reg && (reg as Pick<RegistrationRow, 'event_slug'>).event_slug === event_slug) {
+    // Duplicate check: same email on this event. An unpaid 'pending' row is
+    // not a duplicate to refuse — it's the same person coming back (17 Sept
+    // 2026: a parent closed the Stripe tab and was locked out by this check).
+    // The registrant themselves (session email matches) goes straight to a
+    // fresh checkout; anyone else gets the pay link by email, never in the
+    // response, so knowing an address alone reveals nothing.
+    const existing = await findExistingRegistrations(db, [email], event_slug)
+    const dup = resolveDuplicate(existing.get(email), {
+      sessionMatches: !!sessionMember?.email && normalizeEmail(sessionMember.email) === email,
+    })
+    if (dup.kind !== 'none') {
+      const regId = dup.registration.registrationId
+      // An unfinished GROUP registration isn't resumed from the individual form
+      // — the organiser has the pay link in their confirmation email and under
+      // Account → Teams.
+      if ((dup.kind === 'resume' || dup.kind === 'email_link') && dup.registration.type !== 'individual') {
         return NextResponse.json(
-          { error: 'This email address is already registered for this event.' },
-          { status: 409 }
+          { code: 'already_registered', error: `${email} already has a group registration for this event. Complete its payment from the link in your confirmation email, or under Account → Teams.` },
+          { status: 409 },
         )
       }
+      if (dup.kind === 'resume') {
+        const stripe = stripeClient()
+        if (stripe) {
+          try {
+            const { url } = await createRegistrationCheckout(db, stripe, regId, {
+              event: eventForGate as { stripePriceId?: string } | null,
+              customerEmail: email,
+              successUrl: `${POST_REGISTER_URL}&payment=success`,
+              cancelUrl: payPageUrl(event_slug, await ensurePayToken(db, regId), { cancelled: true }),
+            })
+            return NextResponse.json({ resume: true, registrationId: regId, checkoutUrl: url }, { status: 200 })
+          } catch (e) {
+            // Nothing to collect (free event left pending) or a Stripe hiccup —
+            // fall through to the plain "already registered" answer.
+            if (!(e instanceof RegistrationCheckoutError)) console.error('[register/individual] resume checkout failed:', e)
+          }
+        }
+      }
+      if (dup.kind === 'email_link') {
+        const sent = await sendPayLinkEmail(db, regId).catch((e) => {
+          console.error('[register/individual] pay-link resend failed (non-fatal):', e)
+          return { sent: false, reason: undefined, recipients: [] as string[] }
+        })
+        const where = sent.recipients.length > 0 ? sent.recipients.map(maskEmail) : [maskEmail(email)]
+        // Inside the resend cooldown nothing went out just now — say so, rather
+        // than promising an email that isn't coming.
+        const verb = sent.reason === 'cooldown' ? 'We recently emailed' : 'We’ve emailed'
+        return NextResponse.json(
+          {
+            code: 'unfinished_registration',
+            error: `This email already has an unfinished registration for this event. ${verb} a link to complete payment to ${where.join(' and ')} — check spam if it hasn’t arrived in a few minutes.`,
+          },
+          { status: 409 },
+        )
+      }
+      if (dup.kind === 'in_group') {
+        return NextResponse.json(
+          { code: 'in_group', error: `${email} is already part of a group registration for this event. Ask your teacher or group organiser if anything needs changing.` },
+          { status: 409 },
+        )
+      }
+      return NextResponse.json(
+        { code: 'already_registered', error: `${email} is already registered for this event. If that’s you, sign in to see it under Account → Events.` },
+        { status: 409 },
+      )
     }
 
     // Campaigns are entered as a GROUP, never by an individual student — the
@@ -136,6 +188,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create registration record
+    const payToken = mintPayToken()
     const { data: registration, error: regError } = await db
       .from('registrations')
       .insert({
@@ -145,6 +198,8 @@ export async function POST(req: NextRequest) {
         status: 'pending',
         amount_due_cents: amountDueCents,
         invoice_requested: false,
+        // Pay-later capability — see lib/registration-checkout.ts.
+        pay_token: payToken,
         teacher_first_name: null,
         teacher_last_name: null,
         teacher_email: null,
@@ -298,66 +353,54 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Look up Stripe Price ID from Sanity + price any merch add-ons selected.
+    // Price any merch add-ons selected — validated + persisted as pending items
+    // on the registration's event-merch order until payment clears.
     const event = await getEventBySlug(event_slug)
-    const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId
     const stripe = stripeClient()
-
-    // Validate + persist paid add-ons (pending until payment clears; activated
-    // into the event batch on confirmation).
     const addonLines = await prepareRegistrationAddons(db, event_slug, body.merch_addons ?? [])
     if (addonLines.length > 0) {
       await addRegistrationAddons(db, regId, addonLines, memberId)
     }
 
-    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = []
-    // A $0 price object — how free events are configured — must not become a
-    // line item. Stripe can't create a payment session for a zero total, so the
-    // registrant would be handed a checkout that errors instead of being sent
-    // straight through as free. Add-ons below can still make a session payable.
-    if (stripePriceId && amountDueCents > 0) lineItems.push({ price: stripePriceId, quantity: 1 })
-    for (const l of addonLines) {
-      lineItems.push({
-        quantity: l.qty,
-        price_data: { currency: 'usd', unit_amount: l.unitCents, product_data: { name: l.name } },
-      })
-    }
-
-    if (!stripe || lineItems.length === 0) {
+    if (!stripe) {
       // No payment due — sign in (client) and go straight to /community.
       return NextResponse.json({ registrationId: regId, checkoutUrl: null, signInToken }, { status: 201 })
     }
 
-    // Create Stripe Checkout session (event fee + any add-ons)
-    // Refuse to take money on a production deployment holding TEST keys. A test-mode
-    // charge looks successful and settles nothing — the Stripe equivalent of the
-    // DocuSign sandbox envelopes that were not binding signatures. Reads are
-    // deliberately not gated: a wrong price is visible, a phantom payment is not.
-    assertLiveCredentials('stripe')
+    // Stripe Checkout (event fee + any add-ons), built from the registration
+    // row by the same helper the pay page uses — so the checkout can be
+    // rebuilt later if this one is abandoned. Cancel lands on the pay page,
+    // not a blank form.
+    let checkoutUrl: string | null = null
+    try {
+      const session = await createRegistrationCheckout(db, stripe, regId, {
+        event: event as { stripePriceId?: string } | null,
+        customerEmail: email,
+        // After payment, land in the member portal with the registration modal —
+        // the client signs the registrant in before redirecting to Stripe, so the
+        // session cookie is already set when they return here.
+        successUrl: `${POST_REGISTER_URL}&payment=success`,
+        cancelUrl: payPageUrl(event_slug, payToken, { cancelled: true }),
+      })
+      checkoutUrl = session.url
+    } catch (e) {
+      if (e instanceof RegistrationCheckoutError && e.code === 'nothing_to_pay') {
+        // Free event (and no add-ons) — nothing to collect.
+        return NextResponse.json({ registrationId: regId, checkoutUrl: null, signInToken }, { status: 201 })
+      }
+      throw e
+    }
 
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      // Surfaces the "Add promotion code" field for codes set up in Stripe.
-      allow_promotion_codes: true,
-      line_items: lineItems,
-      client_reference_id: regId,
-      customer_email: email,
-      // Always mint a Customer so the receipt is retrievable in the billing tab
-      // (the webhook persists session.customer onto the member row).
-      customer_creation: 'always',
-      metadata: {
-        registrationId: regId,
-        eventSlug: event_slug,
-        participantName: `${first_name} ${last_name}`,
-      },
-      // After payment, land in the member portal with the registration modal —
-      // the client signs the registrant in before redirecting to Stripe, so the
-      // session cookie is already set when they return here.
-      success_url: `${POST_REGISTER_URL}&payment=success`,
-      cancel_url: `${SITE_URL}/register/${event_slug}/individual?cancelled=true`,
-    })
+    // The way back if the redirect below is never completed: the registrant
+    // (and their emergency contact — for a minor, the parent who is usually the
+    // one paying) get the durable pay link now. Non-fatal.
+    try {
+      await sendPayLinkEmail(db, regId, { force: true })
+    } catch (emailErr) {
+      console.error('[register/individual] pay-link email failed (non-fatal):', emailErr)
+    }
 
-    return NextResponse.json({ registrationId: regId, checkoutUrl: session.url, signInToken }, { status: 201 })
+    return NextResponse.json({ registrationId: regId, checkoutUrl, signInToken }, { status: 201 })
   } catch (e) {
     console.error('Individual registration error:', e)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

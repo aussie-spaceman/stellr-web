@@ -56,6 +56,25 @@ export function productionCredentialIn(text) {
     }
   }
 
+  // WHY (18 Sept 2026): the main checkout's .env.local was found carrying a
+  // live Stripe secret next to dev Supabase/Clerk. This guard let it start:
+  // a local checkout on that key creates real Stripe sessions and real
+  // charges, which is the same class of harm as the two checks above.
+  const stripe = valueOf(text, 'STRIPE_SECRET_KEY')
+  if (stripe && stripe.startsWith('sk_live_')) {
+    return {
+      name: 'STRIPE_SECRET_KEY',
+      reason: 'is an sk_live_ key — the PRODUCTION Stripe account (real charges)',
+    }
+  }
+  const stripePk = valueOf(text, 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY')
+  if (stripePk && stripePk.startsWith('pk_live_')) {
+    return {
+      name: 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
+      reason: 'is a pk_live_ key — the PRODUCTION Stripe account',
+    }
+  }
+
   return null
 }
 
@@ -78,6 +97,7 @@ export function refusalMessage(hit) {
     '       SUPABASE_SERVICE_ROLE_KEY        dev project service_role key',
     '       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY pk_test_… (brief-ox-79.clerk.accounts.dev)',
     '       CLERK_SECRET_KEY                 sk_test_…',
+    '       STRIPE_SECRET_KEY                sk_test_… (Stripe → Developers → API keys, Test mode)',
     '       NEXT_PUBLIC_SITE_URL             http://localhost:<PORT>',
     '       NEXT_PUBLIC_AUTH_APP_URL         http://localhost:<PORT>  (same value)',
     '       NEXT_PUBLIC_APP_ENV              dev',

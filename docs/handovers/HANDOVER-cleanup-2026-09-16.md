@@ -98,7 +98,7 @@ confirmed to have actually executed (45 passed) rather than soft-skipped.
 | #106 | Seven scripts → `supabaseServer()`. | `upload-event-flyers` (Sanity's `createClient`) and the `.mjs` script stay. |
 | #107 | 14 more dead exports deleted; 60 internal-only functions/consts un-exported. | **Yes.** ~190 internal-only interfaces/types keep `export`; `resetCompanyCache` kept (named as the seam in the Apollo/HubSpot handover). |
 
-Net across T1–T3: **−3,178** (#99) **−830** (#100–#107) lines; test suite 65/593 → 70/611.
+Net across T1–T3: **−2,995** (#99: +183 / −3,178) and **−228** (#100–#107: +538 / −766) lines; test suite 65/593 → 70/611. (An earlier revision of this line said −830 for T3 — that figure was never measured; corrected 18 Sept.)
 
 ## Still open / for the next session
 
@@ -115,3 +115,37 @@ Net across T1–T3: **−3,178** (#99) **−830** (#100–#107) lines; test suit
   template or Sanity document, which the repo cannot see. If a logo or headshot
   goes missing on a marketing surface, the bytes are in git history before
   `68ac4ef`.
+
+## Close-out — 18 Sept 2026
+
+Promoted to production 17 Sept 04:32Z as `e8d3904` (#110); record
+`.claude/releases/promote-2026-09-17.md`. TRACKER 7.1–7.5 closed on `dev`
+(#108, #115, #116). Session 8 (registration resume) promoted in parallel.
+
+**What the close-out review found that the session had inferred or skipped:**
+
+1. `npm run verify:prod` was not run at promotion for a change that touched 26
+   Stripe call sites. Run at close-out: the live key works through
+   `lib/stripe.ts`; but this checkout's `.env.local` points Supabase and DocuSign
+   at dev/sandbox, so the price-ID and DocuSign sections did not exercise
+   production (TRACKER 7.7). Vercel reports no production runtime errors in the
+   48 h across the deploy.
+2. The same `.env.local` holds a **live** Stripe secret key next to dev
+   Supabase/Clerk; `production-guard.mjs` does not check Stripe (TRACKER 7.6).
+3. CLAUDE.md's icon rule was rewritten on an assumption the owner never
+   explicitly confirmed (TRACKER 7.8).
+4. The T3 line count in this document was a guess (−830); the measured figure is
+   −228 (TRACKER 7.9). The plan's "stop if a commit adds more than it removes"
+   rule was set aside for #103–#106 with a note rather than a stop.
+5. The plan's browser smoke named `/community/coaching`; the run checked the
+   `coaching/topup` route by request, not the page render. Low risk — the page
+   is covered by the e2e `member-account` spec — but it is not what was written.
+6. ESLint was never run: the repo has no lint script and CI does not run it, so
+   the 16 suppression reasons (#99) were written without confirming each
+   suppression is still needed.
+
+**Next steps (not code pushes):** 7.6 (swap the local Stripe key, extend the
+guard), 7.7 (a `verify:prod` run from a production-pointed env), 7.8 (icon rule:
+confirm or enforce). The T4 list in "Still open" stands.
+
+Google Doc snapshot of TRACKER §7 at close-out (copy, never the source): https://docs.google.com/document/d/1jteiOjw7mjcDLqcNZC2zuWFZ6Oej217Knbf_cp2d3BQ/edit

@@ -341,7 +341,7 @@ function PostCard({
                 rel="noopener noreferrer"
                 className="mt-2 block w-fit"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed storage URL; the optimizer would cache a link that expires */}
                 <img
                   src={post.attachment.previewUrl}
                   alt={post.attachment.name}

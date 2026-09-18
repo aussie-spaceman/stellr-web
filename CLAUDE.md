@@ -27,8 +27,11 @@ Norwester system is retired.
   (`packages/web-ui`). Don't re-implement: `Button`, `Eyebrow`, `Badge`,
   `SectionHeading`, `InfoPill`, `Hero`, `CtaBand`, `StepCard`, `PathwayCard`,
   `ThemeCard`, `TierCard`, `ProgressionGraphic`.
-- Icons: import from **`@stellr/icons`** (`packages/icons`) — the 24px line set,
-  `currentColor`, ~1.8px stroke. Don't paste raw SVG.
+- Icons: the brand set (`Orbit`, `Satellite`, `Telescope`, `Award`, …) comes from
+  **`@stellr/icons`** (`packages/icons`) — 24px line, `currentColor`, ~1.8px stroke.
+  General UI icons (`Check`, `X`, `ArrowRight`, …) come from **`lucide-react`**, which
+  matches that weight. Don't paste raw SVG, and don't redraw a lucide icon in
+  `@stellr/icons`.
 - Components are framework-light: pass the router's link via `as`/`linkAs`
   (e.g. `<Button href="/events" as={Link}>`), don't hard-wire `next/link`.
 - New UI extends the library; it does not fork it. Browse it in Storybook:
@@ -64,6 +67,7 @@ Norwester system is retired.
 
 ## Reference
 - Storybook (`npm run storybook`) is the living component reference.
-- Handoff source: `design_handoff_competitions_page V2/` — `Stellr — Design
-  System.dc.html` (visual reference) and `Competitions — Redesign v2.dc.html`
-  (a full page built in the system).
+- The V2 handoff package (`Stellr — Design System.dc.html`, `Competitions —
+  Redesign v2.dc.html`) is not in the repo; `design/tokens.json` and Storybook
+  are the source of truth. The June member-app IA package is archived at
+  `docs/archive/design-handoff-app-redesign/` (tokens superseded, flows still valid).

@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
+import { isAdminClaims } from '@/lib/admin-auth'
 
 // PATCH  /api/admin/members/[id]/memberships/[membershipId] — edit one membership
 //        (expiry, status, complimentary flag).
@@ -10,10 +11,6 @@ import { actorFromAuth, logActivity } from '@/lib/activity-log'
 //
 // Both are admin-only and scoped to the member, so an admin can't edit another
 // member's membership by guessing an id.
-
-function isAdmin(sessionClaims: unknown) {
-  return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
-}
 
 const STATUSES = ['active', 'expired', 'canceled', 'revoked'] as const
 
@@ -35,7 +32,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string; membershipId: string }> },
 ) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id: memberId, membershipId } = await params
   const body = await req.json().catch(() => ({}))
@@ -100,7 +97,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; membershipId: string }> },
 ) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id: memberId, membershipId } = await params
   const db = supabaseServer()

@@ -27,14 +27,9 @@ import { autoGrantBaseMembership } from '@/lib/auto-membership-grant'
 import type { RegistrationRow } from '@/lib/database.types'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
+import { stripeClient } from '@/lib/stripe'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
 
 // The "minor → participant" override must never strip an organiser of their
 // role. A teacher / student-manager keeps it regardless of DOB — a test or
@@ -253,7 +248,7 @@ export async function POST(req: NextRequest) {
     let amountDueCents = 0
     let feeUnitAmount: number | null = null // null = price never resolved (no price / lookup failed)
     const feePriceId = (eventForGate as { stripePriceId?: string } | null)?.stripePriceId
-    const feeStripe = getStripe()
+    const feeStripe = stripeClient()
     if (feePriceId && feeStripe) {
       try {
         const pr = await feeStripe.prices.retrieve(feePriceId)
@@ -805,7 +800,7 @@ export async function POST(req: NextRequest) {
     // ── Look up Stripe Price ID ───────────────────────────────────────────────
     const event = await getEventBySlug(event_slug)
     const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId
-    const stripe = getStripe()
+    const stripe = stripeClient()
 
     let checkoutUrl: string | null = null
 

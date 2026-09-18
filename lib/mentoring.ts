@@ -16,11 +16,11 @@ import type { CommunityMember } from '@/lib/community'
 import type { AccessKind, CohortTheme } from '@/lib/mentoring-format'
 import { notifyMembers } from '@/lib/notify'
 import { linkCohortTraining, inviteMembersToCohort } from '@/lib/sessions'
-import { logActivity } from '@/lib/activity-log'
 import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 import { ensureMemberGrants, getKindBalance, bookCohortFromAllocation, cancelCohortViaLedger } from '@/lib/entitlements'
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 import { addGlobalRole } from '@/lib/member-roles'
+import { stripeClient } from '@/lib/stripe'
 
 // ─── Credits ────────────────────────────────────────────────────────────────
 
@@ -33,18 +33,6 @@ export interface MentoringCredits {
   total: number
 }
 
-/**
- * Idempotently materialise each active membership's annual mentoring-credit
- * allowance as `session_credits` rows. Keying on the membership id means a grant
- * is created exactly once per membership period; because we never expire allowance
- * rows, unused credits simply roll over into the next period (decision D3).
- */
-export async function syncMentoringAllowance(member: CommunityMember): Promise<void> {
-  // Entitlements cutover: the mentoring allowance is the cohort_access lot, materialised
-  // from tier_benefits when a membership is granted; ensure it exists before a read.
-  await ensureMemberGrants(member.id)
-}
-
 /** The member's mentoring-session balance (cohort_access allocation; ensures grant first). */
 export async function getMentoringCredits(member: CommunityMember): Promise<MentoringCredits> {
   await ensureMemberGrants(member.id)
@@ -52,7 +40,7 @@ export async function getMentoringCredits(member: CommunityMember): Promise<Ment
 }
 
 /** True if any of the member's active tiers includes free mentoring (the toggle). */
-export async function memberHasFreeMentoring(member: CommunityMember): Promise<boolean> {
+async function memberHasFreeMentoring(member: CommunityMember): Promise<boolean> {
   if (member.isAdmin) return true
   if (member.activeTierIds.length === 0) return false
   const db = supabaseServer()
@@ -774,11 +762,6 @@ export async function listAllMentoringSessions(): Promise<CalendarSession[]> {
 
 import Stripe from 'stripe'
 import { ALL_TIER_NAMES, tierGroupOf, type TierGroupKey } from '@/lib/tiers'
-
-function stripeClient(): Stripe | null {
-  const key = process.env.STRIPE_SECRET_KEY
-  return key ? new Stripe(key, { apiVersion: '2026-05-27.dahlia' }) : null
-}
 
 export interface MentoringTier {
   id: string

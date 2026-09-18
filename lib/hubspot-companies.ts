@@ -12,8 +12,9 @@
 //
 // Required env: HUBSPOT_ACCESS_TOKEN with crm.objects.companies.read/write.
 
+import { hubspotFetch } from '@/lib/hubspot'
+
 const HUBSPOT_ACCESS_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN
-const BASE = 'https://api.hubapi.com'
 
 /**
  * Consumer mailbox providers. A prospect writing from gmail.com must not create
@@ -65,17 +66,6 @@ export function resetCompanyCache() {
 
 /* ── HubSpot I/O ─────────────────────────────────────────────────────────── */
 
-async function hubspot(path: string, method: 'GET' | 'POST' | 'PUT', body?: unknown) {
-  return fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${HUBSPOT_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  })
-}
-
 export type CompanyLookup =
   | { status: 'found'; id: string }
   | { status: 'absent' }
@@ -93,7 +83,7 @@ export type CompanyLookup =
 export async function findCompanyByDomain(domain: string): Promise<CompanyLookup> {
   if (!HUBSPOT_ACCESS_TOKEN) return { status: 'error' }
   try {
-    const res = await hubspot('/crm/v3/objects/companies/search', 'POST', {
+    const res = await hubspotFetch('/crm/v3/objects/companies/search', 'POST', {
       filterGroups: [{ filters: [{ propertyName: 'domain', operator: 'EQ', value: domain }] }],
       properties: ['domain'],
       limit: 1,
@@ -117,7 +107,7 @@ export async function createCompany(input: {
 }): Promise<{ ok: boolean; id?: string }> {
   if (!HUBSPOT_ACCESS_TOKEN) return { ok: false }
   try {
-    const res = await hubspot('/crm/v3/objects/companies', 'POST', {
+    const res = await hubspotFetch('/crm/v3/objects/companies', 'POST', {
       properties: { domain: input.domain, name: input.name || input.domain },
     })
     if (!res.ok) {
@@ -149,7 +139,7 @@ export async function associateDefault(
 ): Promise<boolean> {
   if (!HUBSPOT_ACCESS_TOKEN) return false
   try {
-    const res = await hubspot(
+    const res = await hubspotFetch(
       `/crm/v4/objects/${fromType}/${fromId}/associations/default/${toType}/${toId}`,
       'PUT',
     )

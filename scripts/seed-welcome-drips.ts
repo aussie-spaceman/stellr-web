@@ -63,10 +63,10 @@
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 import * as fs from 'fs'
-import { createClient } from '@supabase/supabase-js'
 import { renderCampaignEmail } from '../lib/email-render'
 import { memberMergeVars } from '../lib/email-vars'
 import { TIER_GROUPS, type TierGroupKey } from '../lib/tiers'
+import { supabaseServer } from '../lib/supabase'
 
 // ── env ──────────────────────────────────────────────────────────────────────
 const envPath = path.resolve(process.cwd(), '.env.local')
@@ -388,7 +388,7 @@ async function main() {
     console.error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY (.env.local).')
     process.exit(1)
   }
-  const db = createClient(url, serviceKey, { auth: { persistSession: false } })
+  const db = supabaseServer()
 
   console.log(`\nMembership welcome drips — ${APPLY ? 'APPLY' : 'DRY RUN'}${ACTIVATE ? ' + ACTIVATE' : ''}`)
   console.log(`Target:   ${url}`)

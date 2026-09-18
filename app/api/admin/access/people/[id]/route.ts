@@ -5,19 +5,16 @@ import { supabaseServer } from '@/lib/supabase'
 import { getMemberAccessSummary } from '@/lib/member-access'
 import { addGlobalRole, getGlobalRoleNames, ROLES_BY_BRACKET, type MemberRole } from '@/lib/member-roles'
 import { TIERS_BY_BRACKET, type AgeBracket } from '@/lib/tiers'
+import { isAdminClaims } from '@/lib/admin-auth'
 
 // /api/admin/access/people/[id] — everything the Person 360 renders in one
 // call: profile + bracket, tier memberships, global roles, and the resolved
 // Effective Access rows (lib/member-access.ts). POST/DELETE manage the global
 // role chips; tier chips write through the existing memberships routes.
 
-function isAdmin(sessionClaims: unknown) {
-  return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
-}
-
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const db = supabaseServer()
@@ -57,7 +54,7 @@ const roleSchema = z.object({ role: z.string() })
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const parsed = roleSchema.safeParse(await req.json().catch(() => null))
@@ -71,7 +68,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const parsed = roleSchema.safeParse(await req.json().catch(() => null))

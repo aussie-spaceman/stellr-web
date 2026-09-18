@@ -157,6 +157,6 @@ The Guggino envelope is live proof of the distinction we built: Guardian **`deli
 - `/admin` → *Integration environments* — the only honest answer to "are we live?", because it runs
   inside the deployment.
 - `npm run docusign:templates export|import --apply` — copies templates between accounts verbatim.
-- `npm run docusign:remediate void|reissue --apply` — dry-run by default; void runs against the
+- `npm run docusign:remediate void|reissue --apply` (script removed Sept 2026 after the cutover) — dry-run by default; void runs against the
   sandbox, reissue against production, **in that order**.
 - Connect delivery logs live in DocuSign Admin → Settings → Connect → Logs, config `21769859`.

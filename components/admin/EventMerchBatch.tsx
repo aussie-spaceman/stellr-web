@@ -40,7 +40,7 @@ export function EventMerchBatch({
   }
   useEffect(() => {
     load()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- fetch once on mount; load() only reads the eventSlug prop
 
   const commit = async () => {
     if (!confirm('Commit one bulk Printful order to the venue? Event merch is non-refundable after this.')) return

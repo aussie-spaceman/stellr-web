@@ -3,14 +3,9 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { currentStoreMember } from '@/lib/store/auth'
 import { canManageStoreCatalog } from '@/lib/store/auth'
+import { stripeClient } from '@/lib/stripe'
 
 export const dynamic = 'force-dynamic'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
 
 // DTC returns (PRD §12): general store merch is refundable per Printful policy;
 // event/campaign batch merch is NOT (locked once committed). Members request;
@@ -19,7 +14,7 @@ function getStripe() {
 //   PATCH { returnId, action }           — admin approves (Stripe refund) or denies
 export async function POST(req: Request) {
   const member = await currentStoreMember()
-  if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   const body = await req.json().catch(() => ({}))
   const { orderId, reason } = body
   if (!orderId) return NextResponse.json({ error: 'orderId required' }, { status: 400 })
@@ -68,7 +63,7 @@ export async function PATCH(req: Request) {
   // Approve → refund the order's payment intent via Stripe.
   const { data: order } = await db.from('store_orders').select('stripe_payment_intent_id').eq('id', r.order_id).maybeSingle()
   const pi = (order as { stripe_payment_intent_id?: string | null } | null)?.stripe_payment_intent_id
-  const stripe = getStripe()
+  const stripe = stripeClient()
   let refundId: string | null = null
   if (stripe && pi) {
     try {

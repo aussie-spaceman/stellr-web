@@ -88,7 +88,7 @@ function renderNode(node: TipTapNode, key: number): React.ReactNode {
       const src = typeof node.attrs?.src === 'string' ? node.attrs.src : null
       if (!src) return <Fragment key={key} />
       const alt = typeof node.attrs?.alt === 'string' ? node.attrs.alt : ''
-      // eslint-disable-next-line @next/next/no-img-element
+      // eslint-disable-next-line @next/next/no-img-element -- served by the access-gated /api/community/media proxy, which the optimizer cannot call with the viewer's cookies
       return <img key={key} src={src} alt={alt} loading="lazy" className="my-2 max-h-80 rounded-lg" />
     }
     default:

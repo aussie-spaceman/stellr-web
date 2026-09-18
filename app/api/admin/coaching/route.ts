@@ -3,20 +3,17 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { ensureCoachingContainer } from '@/lib/container-sync'
 import { getCoachingChannel } from '@/lib/sessions'
+import { isAdminClaims } from '@/lib/admin-auth'
 
 // Admin direct-grant for coaching (convergence P3). Create a coaching workshop —
 // a coach + coachee pairing — as a container + roster, and provision its chat so
 // access works immediately. Mirrors what booking a session now does, but admin-led
 // ("assign a coach to a member") per the requirements doc.
 
-function isAdmin(sessionClaims: unknown) {
-  return (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role === 'admin'
-}
-
 // GET — existing coaching workshops (coach + coachee), for the admin list.
 export async function GET() {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const db = supabaseServer()
   const { data } = await db
@@ -45,7 +42,7 @@ export async function GET() {
 // POST { coachId, coacheeId } — create / ensure a coaching workshop for the pair.
 export async function POST(req: Request) {
   const { sessionClaims } = await auth()
-  if (!isAdmin(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!isAdminClaims(sessionClaims)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { coachId, coacheeId } = await req.json().catch(() => ({}))
   if (!coachId || !coacheeId) {

@@ -1,20 +1,15 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember, signedDownloadUrl } from '@/lib/community'
 import { courseIssuer, type MaterialKind, type CourseTheme } from '@/lib/training-display'
 import { renderCertificatePdf } from '@/lib/certificate'
+import { currentUserIsAdmin } from '@/lib/admin-auth'
 
 // GET /api/admin/training/cert-preview?moduleId=
 // Admin-only sample certificate for a course, so the admin can verify how the
 // member/course fields land on an uploaded template before going live.
-async function requireAdmin() {
-  const { sessionClaims } = await auth()
-  return (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
-}
-
 export async function GET(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const moduleId = new URL(req.url).searchParams.get('moduleId')
   if (!moduleId) return NextResponse.json({ error: 'moduleId required' }, { status: 400 })
 

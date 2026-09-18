@@ -11,7 +11,7 @@ const FIELDS = ['label', 'line1', 'line2', 'city', 'state', 'postcode', 'country
 
 export async function GET() {
   const member = await currentStoreMember()
-  if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   const db = supabaseServer()
   const { data, error } = await db
     .from('member_addresses')
@@ -31,7 +31,7 @@ async function clearDefault(memberId: string, exceptId?: string) {
 
 export async function POST(req: Request) {
   const member = await currentStoreMember()
-  if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   const body = await req.json().catch(() => ({}))
   if (!body?.line1 || !body?.city || !body?.state || !body?.postcode) {
     return NextResponse.json({ error: 'line1, city, state and postcode are required' }, { status: 400 })
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   const member = await currentStoreMember()
-  if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   const body = await req.json().catch(() => ({}))
   if (!body?.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const db = supabaseServer()
@@ -62,7 +62,7 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   const member = await currentStoreMember()
-  if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const db = supabaseServer()

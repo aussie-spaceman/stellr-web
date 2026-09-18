@@ -663,7 +663,7 @@ function Curriculum({
   const idsKey = sections.map((s) => s.id).join(',')
   useEffect(() => {
     setOrderIds(sections.map((s) => s.id))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `sections` is rebuilt every render; the joined id string is the stable identity
   }, [idsKey])
 
   const byId = new Map(sections.map((s) => [s.id, s]))

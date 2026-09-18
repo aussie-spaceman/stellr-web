@@ -6,12 +6,7 @@ import { computeUnitPrice } from '@/lib/store/pricing'
 import { createPendingOrder, STORE_FLAT_SHIPPING_CENTS, type CheckoutLine } from '@/lib/store/orders'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
+import { stripeClient } from '@/lib/stripe'
 
 // Storefront checkout. Re-derives every price server-side (tier discount applied
 // for logged-in members), creates a pending order, and returns a Stripe Checkout
@@ -22,7 +17,7 @@ export async function POST(req: Request) {
   const impersonationBlock = await assertNotImpersonating()
   if (impersonationBlock) return impersonationBlock
 
-  const stripe = getStripe()
+  const stripe = stripeClient()
   if (!stripe) return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
 
   const body = await req.json().catch(() => ({}))

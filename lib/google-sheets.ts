@@ -182,16 +182,6 @@ export async function watchSheet(spreadsheetId: string, channelId: string): Prom
   }
 }
 
-export async function stopWatchChannel(channelId: string, resourceId: string): Promise<void> {
-  const auth = getAuth()
-  if (!auth) return
-
-  const drive = driveApi({ version: 'v3', auth })
-  await drive.channels.stop({ requestBody: { id: channelId, resourceId } }).catch(() => {
-    // best-effort — channel may have already expired
-  })
-}
-
 const HEADERS = [
   'Membership ID', 'Type', 'First Name', 'Last Name', 'Email', 'Phone',
   'Date of Birth', 'Gender', 'T-Shirt Size', 'Grade',
@@ -339,7 +329,7 @@ export async function createGroupRegistrationSheet({
   }
 
   // ── Batch formatting ────────────────────────────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- sheets_v4.Schema$Request is a 40-way union; the helpers below build plain objects
   const requests: any[] = []
 
   // Header row style

@@ -27,7 +27,7 @@ Live values found in production:
 | Campaign | `registrationOpen` was |
 |---|---|
 | Space Design Campaign - Fall (`5ee61f20-…`) | `null` — the field had never been touched |
-| Environmental Design Campaign - Fall (`b5b4f28c-…`) | `false` — the value `scripts/seed-events.ts` seeds |
+| Environmental Design Campaign - Fall (`b5b4f28c-…`) | `false` — the value the (since-removed) `scripts/seed-events.ts` seeded |
 
 Both are falsy → both read Closed. **Set to `true` on both documents.** This was a
 content edit, not a deploy: the app client is `useCdn: false` and the page is

@@ -47,7 +47,7 @@ export function stripeEnvironment(): IntegrationEnvironment {
   return key.startsWith('sk_live_') ? 'production' : 'sandbox'
 }
 
-export function clerkEnvironment(): IntegrationEnvironment {
+function clerkEnvironment(): IntegrationEnvironment {
   const key = process.env.CLERK_SECRET_KEY ?? ''
   if (!key) return 'unconfigured'
   return key.startsWith('sk_live_') ? 'production' : 'sandbox'

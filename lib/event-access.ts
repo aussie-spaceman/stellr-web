@@ -6,7 +6,7 @@ import { isAdminClaims, isEventManagerClaims } from '@/lib/admin-auth'
 // Admins manage all events; Event Managers only events they're assigned to
 // via event_manager_assignments (PRD 6.7).
 
-export async function getAssignedEventSlugs(clerkUserId: string): Promise<string[]> {
+async function getAssignedEventSlugs(clerkUserId: string): Promise<string[]> {
   const db = supabaseServer()
   const { data, error } = await db
     .from('event_manager_assignments')

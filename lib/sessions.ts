@@ -396,38 +396,6 @@ export async function toggleAction(actionId: string, memberId: string, done: boo
   return !error
 }
 
-export interface MemberAction {
-  id: string
-  title: string
-  is_done: boolean
-  session_id: string
-  due_date: string | null
-  training_module_id: string | null
-  module_title: string | null
-}
-
-export async function getMemberActions(memberId: string): Promise<MemberAction[]> {
-  const db = supabaseServer()
-  const { data } = await db
-    .from('session_actions')
-    .select('id, title, is_done, session_id, due_date, training_module_id')
-    .eq('member_id', memberId)
-    .order('created_at', { ascending: false })
-  if (!data || data.length === 0) return []
-  interface RawAction { id: string; title: string; is_done: boolean; session_id: string; due_date: string | null; training_module_id: string | null }
-  const rows = data as RawAction[]
-  const moduleIds = [...new Set(rows.map((r) => r.training_module_id).filter(Boolean))] as string[]
-  let moduleMap: Record<string, string> = {}
-  if (moduleIds.length > 0) {
-    const { data: mods } = await db.from('training_modules').select('id, title').in('id', moduleIds)
-    moduleMap = Object.fromEntries((mods ?? []).map((m) => [m.id, m.title as string]))
-  }
-  return rows.map((r) => ({
-    ...r,
-    module_title: r.training_module_id ? moduleMap[r.training_module_id] ?? null : null,
-  }))
-}
-
 export async function autoCompleteTrainingAction(memberId: string, moduleId: string): Promise<void> {
   const db = supabaseServer()
   await db
@@ -560,24 +528,6 @@ export async function postMessage(channelId: string, authorId: string, body: str
     .from('chat_messages')
     .insert({ channel_id: channelId, author_member_id: authorId, body: body.trim() })
   return !error
-}
-
-/** Get-or-create the single discussion channel for a community space (Phase 4). */
-export async function getSpaceChannel(spaceId: string): Promise<string> {
-  const db = supabaseServer()
-  const { data: existing } = await db
-    .from('chat_channels')
-    .select('id')
-    .eq('kind', 'space')
-    .eq('space_id', spaceId)
-    .maybeSingle()
-  if (existing) return existing.id
-  const { data } = await db
-    .from('chat_channels')
-    .insert({ kind: 'space', space_id: spaceId })
-    .select('id')
-    .single()
-  return data!.id
 }
 
 /** Whether the member may read/write a channel (cohort member, coaching pair, or space viewer). */
@@ -737,50 +687,6 @@ export interface CohortCard {
   memberCount: number
 }
 
-export async function listMemberCohorts(memberId: string): Promise<CohortCard[]> {
-  const db = supabaseServer()
-  const [{ data: asMember }, { data: asMentor }] = await Promise.all([
-    db
-      .from('cohort_members')
-      .select('mentoring_cohorts!inner(id, name, lifecycle, mentor_member_id, container_type, cohort_members(member_id))')
-      .eq('member_id', memberId)
-      .eq('status', 'active')
-      .eq('mentoring_cohorts.container_type', 'mentoring'),
-    db
-      .from('mentoring_cohorts')
-      .select('id, name, lifecycle, mentor_member_id, cohort_members(member_id)')
-      .eq('mentor_member_id', memberId)
-      .eq('container_type', 'mentoring'),
-  ])
-
-  type CohortRow = {
-    id: string
-    name: string
-    lifecycle: string | null
-    mentor_member_id: string | null
-    cohort_members: { member_id: string }[] | null
-  }
-  const rows: CohortRow[] = []
-  for (const r of asMember ?? []) {
-    const c = (Array.isArray(r.mentoring_cohorts) ? r.mentoring_cohorts[0] : r.mentoring_cohorts) as CohortRow | null
-    if (c) rows.push(c)
-  }
-  for (const c of (asMentor ?? []) as unknown as CohortRow[]) rows.push(c)
-
-  const byId = new Map<string, CohortCard>()
-  for (const c of rows) {
-    if (byId.has(c.id)) continue
-    byId.set(c.id, {
-      id: c.id,
-      name: c.name,
-      lifecycle: ((c.lifecycle as string) ?? 'active') as 'active' | 'archived',
-      isMentor: c.mentor_member_id === memberId,
-      memberCount: Array.isArray(c.cohort_members) ? c.cohort_members.length : 0,
-    })
-  }
-  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
-}
-
 // ─── Cohort invites (PRD §11 — "accept an invite into a Cohort") ──────────────
 
 /**
@@ -829,30 +735,6 @@ export async function inviteMembersToCohort(cohortId: string, memberIds: string[
     })
   }
   return pendingIds.length
-}
-
-export interface CohortInvite {
-  cohortId: string
-  name: string
-  invitedAt: string | null
-}
-
-/** Pending cohort invites awaiting this member's response. */
-export async function listCohortInvites(memberId: string): Promise<CohortInvite[]> {
-  const db = supabaseServer()
-  const { data } = await db
-    .from('cohort_members')
-    .select('cohort_id, invited_at, mentoring_cohorts(name)')
-    .eq('member_id', memberId)
-    .eq('status', 'invited')
-  return (data ?? []).map((r) => {
-    const c = Array.isArray(r.mentoring_cohorts) ? r.mentoring_cohorts[0] : r.mentoring_cohorts
-    return {
-      cohortId: r.cohort_id as string,
-      name: ((c as { name?: string } | null)?.name) ?? 'Cohort',
-      invitedAt: (r.invited_at as string | null) ?? null,
-    }
-  })
 }
 
 /** A member accepts (→ active) or declines (→ removed) a pending invite. */
@@ -917,7 +799,7 @@ export async function isCohortMentor(cohortId: string, memberId: string): Promis
 }
 
 /** True when the member moderates a channel (cohort mentor, or coaching host). */
-export async function isChannelModerator(channelId: string, memberId: string): Promise<boolean> {
+async function isChannelModerator(channelId: string, memberId: string): Promise<boolean> {
   const db = supabaseServer()
   const { data: ch } = await db
     .from('chat_channels')
@@ -1051,7 +933,7 @@ export async function scheduleMentoringSeries(
  * session paid-extra; the member's "free sessions left" reflects scheduled
  * coaching sessions, and cancelling one returns it to the allowance.
  */
-export async function scheduleCoachingSession(
+async function scheduleCoachingSession(
   coachId: string,
   workshopId: string,
   startIso: string,

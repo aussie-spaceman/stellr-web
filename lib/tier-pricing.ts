@@ -1,6 +1,7 @@
 import { unstable_cache } from 'next/cache'
 import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
+import { stripeClient } from '@/lib/stripe'
 
 // ─── Membership tier pricing (single source of truth) ────────────────────────
 //
@@ -17,7 +18,7 @@ import { supabaseServer } from '@/lib/supabase'
 // it instantly if we ever wire one up. Server-only.
 
 /** Cache tag for the resolved pricing (for optional on-demand revalidation). */
-export const MEMBERSHIP_PRICES_TAG = 'membership-prices'
+const MEMBERSHIP_PRICES_TAG = 'membership-prices'
 
 export interface TierPrice {
   name: string
@@ -32,11 +33,6 @@ export interface ResolvedTierPricing {
   annualCents: number
   monthlyCents: number | null
   isFree: boolean
-}
-
-function stripeClient(): Stripe | null {
-  const key = process.env.STRIPE_SECRET_KEY
-  return key ? new Stripe(key, { apiVersion: '2026-05-27.dahlia' }) : null
 }
 
 /** A Stripe price's unit amount in minor units (cents), or null on any failure. */

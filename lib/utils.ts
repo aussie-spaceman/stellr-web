@@ -19,8 +19,8 @@ export function formatDate(dateStr: string): string {
 // Stellr is a US (Utah) organisation, so dates render in US format + Mountain
 // Time. Change this single constant if the organisation operates in another
 // timezone.
-export const APP_TIME_ZONE = 'America/Denver'
-export const APP_LOCALE = 'en-US'
+const APP_TIME_ZONE = 'America/Denver'
+const APP_LOCALE = 'en-US'
 
 /** Month-day-year for a timestamp/ISO string, e.g. "Jun 20, 2026".
  *
@@ -125,4 +125,30 @@ export function ageFromDob(dob: string | Date): number {
   let age = ty - by
   if (tm < bm || (tm === bm && td < bd)) age -= 1
   return age
+}
+
+/** Compact relative time for feeds and notifications: "just now", "5m ago",
+ *  "3h ago", "2d ago". */
+export function timeAgo(iso: string): string {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
+/** Lower-case, hyphen-separated URL slug with no leading/trailing hyphens. */
+export function slugify(input: string): string {
+  return input.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/** The loose "looks like an address" check the lead gates use before a form
+ *  posts — something@something.something. Server routes then let HubSpot /
+ *  Resend be the authority; this only stops obvious typos client-side and
+ *  rejects junk server-side. Not RFC 5322, deliberately. */
+export function isEmailLike(value: string): boolean {
+  return /\S+@\S+\.\S+/.test(value)
 }

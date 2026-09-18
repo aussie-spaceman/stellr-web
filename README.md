@@ -1,67 +1,74 @@
-# Stellr Education — Public Website
+# Stellr Education — web
 
-**Stack:** Next.js 14 (App Router) · Sanity CMS · Tailwind CSS · TypeScript  
-**Domain:** www.stellreducation.org
+**Stack:** Next.js 16 (App Router) · React 19 · TypeScript · Tailwind (Design System V2 tokens)
+· Clerk (auth) · Supabase (data) · Sanity (public-site content) · Stripe · Resend · DocuSign ·
+HubSpot · Vercel
 
-## Quick Start
+One codebase serves three surfaces, split by host in `proxy.ts`:
 
-### 1. Install dependencies
+| Surface | Host | Route group |
+|---|---|---|
+| Public site | `www.stellreducation.org` | `app/(public)` |
+| Member app | `app.stellreducation.org` | `app/(member)`, `app/(auth)` |
+| Admin console | `app.stellreducation.org/admin` | `app/(admin)` |
+
+Plus `app/api` (webhooks, crons, member/admin APIs), `/studio` (embedded Sanity Studio),
+and the shared component library in `packages/` (`@stellr/web-ui`, `@stellr/icons`).
+
+## Before you write UI
+
+Read [`CLAUDE.md`](CLAUDE.md) (design system, tokens, component library) and
+[`VOICE.md`](VOICE.md) (copy). Both are binding.
+
+## Quick start
+
 ```bash
-npm install
+npm ci
+cp .env.local.example .env.local   # then fill in the DEV values — see docs/ENV-MATRIX.md
+npm run dev                         # scripts/dev.mjs claims a free port per worktree
 ```
 
-### 2. Configure environment
-```bash
-cp .env.local.example .env.local
-# Fill in your Sanity project ID, dataset, and API token
-```
+`.env.local.example` documents every variable and which service it belongs to. Local
+development points at the **dev** Supabase and Clerk instances; `scripts/dev.mjs` refuses
+to start with production credentials (`scripts/production-guard.mjs`).
 
-### 3. Initialise Sanity project (first time only)
-```bash
-npx sanity@latest init --env .env.local
-# Choose "Use existing project" if you already created one in sanity.io
-```
+Several sessions work on this repo at once. Each one uses its own git worktree —
+see [`docs/CONCURRENT-SESSIONS.md`](docs/CONCURRENT-SESSIONS.md).
 
-### 4. Run dev server
-```bash
-npm run dev
-# → http://localhost:3000
-# → Sanity Studio at http://localhost:3000/studio
-```
+## Checks
 
-## Build Order Progress
+| Command | What it gates |
+|---|---|
+| `npx tsc --noEmit` | types |
+| `npm run lint:tokens` | no pre-V2 brand hex / font names in UI code |
+| `npm test` | vitest unit tests |
+| `npm run test:e2e` | Playwright, against a dev deployment (`e2e/`) |
+| `npm run build` | `prebuild` regenerates tokens, then runs the token lint, migration-name lint and watermark check before `next build` |
 
-| Step | Task | Status |
-|------|------|--------|
-| 1 | Scaffolding + dependencies | ✅ |
-| 2 | Tailwind config + tokens | ✅ |
-| 3 | Sanity schemas | ✅ |
-| 4 | Global layout: nav + footer | ✅ |
-| 5 | Marketing pixel component | ⬜ |
-| 6 | Home page (Sanity-wired) | ⬜ static only |
-| 7 | Events listing + detail | ⬜ stub |
-| 8 | Why Stellr page | ⬜ stub |
-| 9 | Membership page | ⬜ stub |
-| 10 | About page | ⬜ stub |
-| 11 | News listing + article | ⬜ stub |
-| 12 | Contact page + /api/contact | ⬜ stub |
-| 13 | Donate page | ⬜ stub |
-| 14 | Privacy policy | ✅ placeholder |
-| 15 | SEO: metadata, JSON-LD, sitemap | ⬜ |
-| 16 | Seed Sanity content | ⬜ |
-| 17 | Vercel deploy + DNS | ⬜ |
+CI (`.github/workflows/ci.yml`) runs typecheck → token lint → unit tests → build on every
+PR to `dev` and `main`, and the E2E suite when its secrets are configured.
 
-## Placeholder Brand Tokens
+## Branches and deploys
 
-Colours are centralised in `tailwind.config.ts` and `styles/globals.css`.  
-Swap for final brand colours when design assets arrive — it's a 15-minute change.
+`dev` is the integration branch and deploys to the dev Vercel project; `main` is
+production. Session work goes worktree → PR → `dev` (`.claude/skills/ship`), and `dev` →
+`main` is a deliberate promotion (`.claude/skills/promote`). Environments, variables and
+what is applied where: [`docs/ENV-MATRIX.md`](docs/ENV-MATRIX.md). Handovers and the
+rolling open-items list: [`docs/handovers/TRACKER.md`](docs/handovers/TRACKER.md).
 
-| Token | Placeholder value | Purpose |
-|-------|------------------|---------|
-| `brand-navy` | `#0A0F1E` | Primary backgrounds, headings |
-| `brand-blue` | `#2563EB` | Accent, CTAs, links |
-| `brand-grey-light` | `#F3F4F6` | Section backgrounds |
-| `brand-grey-dark` | `#374151` | Body text |
+## Database
+
+Supabase migrations live in `supabase/migrations/` (timestamped names; `npm run
+lint:migrations` rejects the old sequential form). `npm run db:status` shows what is
+applied where. The schema of record for a fresh environment is `supabase/baseline.sql` +
+`supabase/seed.sql` — see [`docs/SCHEMA-BASELINE.md`](docs/SCHEMA-BASELINE.md) for why the
+chain does not replay from zero.
+
+## Sanity Studio
+
+Embedded at `/studio`. Access requires a Sanity account with write permission on the
+project. Public-site content (events, news, team, testimonials, planned locations) is
+authored there; the `event` document's slug is the join key to Supabase registrations.
 
 ## Audience landing pages (`/lp/[slug]`)
 

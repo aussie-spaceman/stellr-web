@@ -1,22 +1,17 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { currentUserIsAdmin } from '@/lib/admin-auth'
 
 // Admin CRUD for the Phase 5 gates: prerequisites (content_prerequisites) and the
 // persistence policy (content_persistence). Both are read by lib/community.ts /
 // lib/containers.ts at access time. Scoped here to training modules — the common
 // case in the PRD; the resolver supports any target type.
 
-async function requireAdmin() {
-  const { sessionClaims } = await auth()
-  return (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
-}
-
 // POST — add a prerequisite, or set a persistence policy. Body:
 //   { type:'prereq', targetRef, requiresRef }   (both training_module ids)
 //   { type:'persistence', targetRef, policy }   (policy: keep_open | re_gate)
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   const db = supabaseServer()
 
@@ -63,7 +58,7 @@ export async function POST(req: Request) {
 
 // DELETE — remove a prerequisite row. Body: { id }
 export async function DELETE(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { id } = await req.json().catch(() => ({}))
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const db = supabaseServer()

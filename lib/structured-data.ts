@@ -25,8 +25,8 @@ import { registrationStatus, todayInAppZone } from '@/lib/utils'
 const WWW = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
 /** Stable node ids so every graph on the site resolves to one entity. */
-export const ORG_ID = `${WWW}/#organization`
-export const SITE_ID = `${WWW}/#website`
+const ORG_ID = `${WWW}/#organization`
+const SITE_ID = `${WWW}/#website`
 
 /**
  * Reference to the Organization node declared in the root layout. Carries

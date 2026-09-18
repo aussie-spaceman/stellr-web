@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { formatDateShort, formatDate, formatDateRange, ageFromDob, registrationStatus } from './utils'
+import { formatDateShort, formatDate, formatDateRange, ageFromDob, registrationStatus, timeAgo, slugify, isEmailLike } from './utils'
 
 describe('formatDateShort', () => {
   it('renders a bare calendar date without shifting a day (W6.7 regression)', () => {
@@ -84,5 +84,35 @@ describe('registrationStatus (date-only bounds in app timezone)', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-07-09T12:00:00Z'))
     expect(registrationStatus('2026-07-10', undefined)).toBe('coming-soon')
+  })
+})
+
+describe('timeAgo', () => {
+  // The copy the community feed and the notification bell used to carry each.
+  it('steps from "just now" through minutes, hours and days', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-10T12:00:00Z'))
+    expect(timeAgo('2026-07-10T11:59:30Z')).toBe('just now')
+    expect(timeAgo('2026-07-10T11:55:00Z')).toBe('5m ago')
+    expect(timeAgo('2026-07-10T09:00:00Z')).toBe('3h ago')
+    expect(timeAgo('2026-07-08T12:00:00Z')).toBe('2d ago')
+  })
+})
+
+describe('slugify', () => {
+  it('lower-cases, hyphenates runs of non-alphanumerics and trims the ends', () => {
+    expect(slugify('  Colorado STEM Academy — Fall 2026! ')).toBe('colorado-stem-academy-fall-2026')
+    expect(slugify('already-a-slug')).toBe('already-a-slug')
+  })
+})
+
+describe('isEmailLike', () => {
+  // The lead-gate check that five forms used to carry as a literal regex.
+  it('accepts anything shaped like an address and rejects the obvious typos', () => {
+    expect(isEmailLike('teacher@school.org')).toBe(true)
+    expect(isEmailLike('first.last+tag@sub.example.co')).toBe(true)
+    expect(isEmailLike('teacher@school')).toBe(false)
+    expect(isEmailLike('teacher.school.org')).toBe(false)
+    expect(isEmailLike('')).toBe(false)
   })
 })

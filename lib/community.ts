@@ -175,7 +175,7 @@ export type EntitlementTargetType =
  *   - null  → NO entitlement rows configured for this target; caller should fall
  *             back to legacy min_tier_rank gating (memberMeetsTier)
  */
-export async function memberHasEntitlement(
+async function memberHasEntitlement(
   member: CommunityMember,
   targetType: EntitlementTargetType,
   targetRef: string
@@ -225,7 +225,7 @@ export async function memberCanAccess(
  * Space the member is an *active* roster member of. Such courses are open to the
  * space's members regardless of their membership tier.
  */
-export async function memberHasSpaceTrainingGrant(
+async function memberHasSpaceTrainingGrant(
   memberId: string,
   moduleId: string
 ): Promise<boolean> {
@@ -273,7 +273,7 @@ export async function memberCanAccessSpace(
  * Returns true when no prerequisites are configured. Supports requirements on a
  * training module (all its items completed) — the common case in the PRD.
  */
-export async function prerequisitesMet(
+async function prerequisitesMet(
   member: CommunityMember,
   targetType: EntitlementTargetType,
   targetRef: string

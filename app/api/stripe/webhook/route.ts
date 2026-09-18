@@ -10,12 +10,7 @@ import { fireTierPurchased, grantTier } from '@/lib/membership-grants'
 import { rosterAfterPaidBooking } from '@/lib/mentoring'
 import { scheduleFromRequest } from '@/lib/coaching-requests'
 import { confirmPaidBooking, redeemCoupon, grantTierAllocations, grantPurchasedLot, getOfferingTarget } from '@/lib/entitlements'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) throw new Error('STRIPE_SECRET_KEY not set')
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
+import { requireStripe } from '@/lib/stripe'
 
 // Formats a Stripe minor-unit amount as " ($60.00)" for activity-log summaries.
 function fmtMoney(amount: number | null | undefined, currency: string | null | undefined): string {
@@ -337,7 +332,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing webhook signature or secret' }, { status: 400 })
   }
 
-  const stripe = getStripe()
+  const stripe = requireStripe()
 
   let event: Stripe.Event
   try {
@@ -385,14 +380,6 @@ export async function POST(req: NextRequest) {
             metadata: { kind: 'membership', tierId, amount: session.amount_total, currency: session.currency },
             actorType: 'stripe',
           })
-        }
-      } else if (session.metadata?.type === 'extra_session') {
-        // Purchased extra coaching/mentoring session → purchased ledger lot
-        // (FR-COM-11/12). The booking engine draws it like any other allocation.
-        const { memberId, sessionType } = session.metadata
-        if (memberId && (sessionType === 'coaching' || sessionType === 'mentoring')) {
-          const kind = sessionType === 'coaching' ? 'coaching_session' : 'cohort_access'
-          await grantPurchasedLot(memberId, kind, 1, session.id)
         }
       } else if (session.metadata?.type === 'mentoring_topup') {
         // Purchased extra mentoring credits (top-up pack) → purchased cohort_access
@@ -453,7 +440,7 @@ export async function POST(req: NextRequest) {
             })
           } catch (err) {
             console.error('[stripe/webhook] entitlement_booking confirm failed, refunding:', err)
-            if (intent) await getStripe().refunds.create({ payment_intent: intent })
+            if (intent) await requireStripe().refunds.create({ payment_intent: intent })
           }
         }
       } else if (

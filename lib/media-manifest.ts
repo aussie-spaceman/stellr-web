@@ -1,6 +1,7 @@
 // Media-rollout manifest — single source of truth for the media components
 // (T1–T6) across the public site. Mirrors the approved Drive sources locked on
-// 2026-06-30 (see design_handoff_media_rollout + the "Photo Deployment" doc).
+// 2026-06-30 (the "Photo Deployment" Google Doc; the handoff folder it came
+// with is not in the repo).
 //
 // Components read assets from here. An asset whose bytes are not yet hosted is
 // marked `pending: true` (or has an empty `src`); components render a labelled
@@ -12,19 +13,6 @@
 //   videos  /videos/testimonial-<person>.mp4 · .poster.jpg · .en.vtt
 //   photos  /media/<subject>-<width>.<ext>   (avif/webp/jpg @ 480/768/1200/1920)
 //   pdfs    /files/<name>.pdf  (+ /files/<name>-preview.pdf for gated previews)
-
-export type MediaPage =
-  | '/'
-  | '/competitions'
-  | '/membership'
-  | '/events'
-  | '/about'
-  | '/students'
-  | '/educators'
-  | '/mentors'
-  | '/why-stellr'
-  | '/curriculum'
-  | '/academy'
 
 /** Voice colour-coding for the T6 pull-quote wall (token classes, not hex). */
 export type Audience = 'student' | 'educator' | 'mentor' | 'parent'
@@ -94,7 +82,7 @@ const PHOTO_WIDTHS = [480, 768, 1200, 1920]
 const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ?? '').replace(/\/+$/, '')
 
 /** Prefix a /public-relative media path with the configured host (if any). */
-export function mediaUrl(path: string): string {
+function mediaUrl(path: string): string {
   return MEDIA_BASE ? `${MEDIA_BASE}${path}` : path
 }
 
@@ -308,7 +296,6 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   'competitions-3': photo('competitions-3', 'DSC_5501', 'Teams at the competition'),
   'competitions-ksc': photo('competitions-ksc', 'Drive 1dkLNSN9', 'Exploring Kennedy Space Center before an event'),
   // Membership
-  'membership-hero': photo('membership-hero', 'DSC_5526', 'The room, full — the Stellr community'),
   'membership-mentor-review': photo('membership-mentor-review', 'DSC_5479', 'A mentor reviewing work with a participant'),
   'membership-room-full': photo('membership-room-full', 'IMG_7758', 'The room, full — a Stellr competition'),
   // Events (gallery)
@@ -334,10 +321,6 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   'mentors-2': photo('mentors-2', 'IMG_2213', 'Mentors judging participant presentations'),
   'mentors-3': photo('mentors-3', 'IMG_2260', 'Mentor reviewing a team submission'),
   // Why-Stellr
-  'why-1': photo('why-1', 'DSC_5544', 'The scale of the competition floor'),
-  'why-2': photo('why-2', 'DSC_5529', 'Participants and mentors together'),
-  'why-3': photo('why-3', 'IMG_4014', 'Award-winner banner'),
-  'why-4': photo('why-4', 'IMG_4015', 'Washington Achievement banner'),
   'why-auditorium': {
     // Source is 1440px wide — no 1920 derivative exists.
     ...photo('why-auditorium', 'Drive 484027872', 'A full auditorium at a design briefing'),
@@ -346,7 +329,6 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   'why-biosphere-tour': photo('why-biosphere-tour', 'BS2 Friday Tour 3', 'Touring Biosphere 2 in Arizona'),
   'why-teams-working': photo('why-teams-working', 'IMG_9395', 'Teams working through a design problem'),
   // Curriculum
-  'curriculum-1': photo('curriculum-1', 'IMG_9215', '3D modelling on laptops', 'Participant team \u00B7 \u00A9 Stellr Education'),
   'curriculum-2': photo('curriculum-2', 'IMG_9052', 'Preparing to pitch', 'Participant team \u00B7 \u00A9 Stellr Education'),
   'curriculum-3': photo('curriculum-3', 'IMG_2283', 'Requirements analysis'),
   'curriculum-group-work': {
@@ -357,9 +339,6 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   'curriculum-ty-white': photo('curriculum-ty-white', 'Drive 1plUOEjF', 'Mr Ty White with participants at a competition'),
   // Academy · Training
   'academy-mentoring-cohort': photo('academy-mentoring-cohort', 'IMG_9061', 'A Stellr mentoring cohort collaborating'),
-  'academy-1': photo('academy-1', 'IMG_7700', 'Team delegation at the whiteboard'),
-  'academy-2': photo('academy-2', 'IMG_7702', 'Structural-board design session'),
-  'academy-3': photo('academy-3', 'DSC_5776', 'Mentors and participants collaborating'),
   // Audience landing pages (/lp/[slug]) — client event photography supplied with
   // the 2026-09 landing-page handoff. The two heroes are per-audience and must
   // never appear in the gallery, or a page shows the same photograph twice.

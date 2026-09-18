@@ -22,13 +22,13 @@ import type { CommunityMember } from '@/lib/community'
 import { notifyMember, notifyMembers } from '@/lib/notify'
 import { linkCohortTraining } from '@/lib/sessions'
 import { logActivity } from '@/lib/activity-log'
-import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 import { addGlobalRole } from '@/lib/member-roles'
 import { DEFAULT_TZ } from '@/lib/mentoring-format'
 import { autoWorkshopName } from '@/lib/coaching-format'
 import { ensureMemberGrants, getKindBalanceSplit, getCoachingTierLabel, cancelCohortViaLedger, releaseCoachingBooking, getCoachingAllocationByTier, setTierCoachingAllocation } from '@/lib/entitlements'
 import Stripe from 'stripe'
 import { ALL_TIER_NAMES, tierGroupOf, type TierGroupKey } from '@/lib/tiers'
+import { stripeClient } from '@/lib/stripe'
 
 const CONTAINER = 'coaching' as const
 
@@ -479,7 +479,7 @@ export async function updateWorkshop(workshopId: string, patch: UpdateWorkshopIn
 }
 
 /** Grant the platform-wide coach capability (only entry point is the workshop UI). */
-export async function grantCoachRole(memberId: string): Promise<void> {
+async function grantCoachRole(memberId: string): Promise<void> {
   const db = supabaseServer()
   await db.from('session_hosts').upsert({ member_id: memberId, can_coach: true }, { onConflict: 'member_id' })
   await addGlobalRole(db, memberId, 'coach')
@@ -526,7 +526,13 @@ export async function archiveWorkshop(workshopId: string): Promise<void> {
   // Release one drawn allocation per cancelled upcoming session (count is what matters;
   // bookings aren't session-linked — see fn_release_one_booking).
   for (const s of (upcoming ?? []) as Array<{ member_id: string | null }>) {
-    if (s.member_id) await releaseCoachingBooking(s.member_id, workshopId).catch(() => {})
+    if (s.member_id) {
+      // Best-effort per session: a failed release is a member charged for a
+      // session that was cancelled, so it must at least be visible in the logs.
+      await releaseCoachingBooking(s.member_id, workshopId).catch((e) => {
+        console.error('[coaching] releaseCoachingBooking failed:', { memberId: s.member_id, workshopId, error: e instanceof Error ? e.message : e })
+      })
+    }
   }
 }
 
@@ -766,11 +772,6 @@ export async function listWorkshopAccessRows(): Promise<WorkshopAccessRow[]> {
 }
 
 // ─── Membership tiers (Membership & access admin) ────────────────────────────
-
-function stripeClient(): Stripe | null {
-  const key = process.env.STRIPE_SECRET_KEY
-  return key ? new Stripe(key, { apiVersion: '2026-05-27.dahlia' }) : null
-}
 
 export interface CoachingTier {
   id: string

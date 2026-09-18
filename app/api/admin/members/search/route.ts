@@ -1,17 +1,12 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { currentUserIsAdmin } from '@/lib/admin-auth'
 
 // Admin member search for pickers (cohorts, delegations, staff roles, …).
 // Returns a small set of matches by name or email so admins reference the real
 // member database instead of typing an exact email that silently misses.
-async function requireAdmin() {
-  const { sessionClaims } = await auth()
-  return (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
-}
-
 export async function GET(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const q = (new URL(req.url).searchParams.get('q') ?? '').trim()
   if (q.length < 2) return NextResponse.json({ members: [] })

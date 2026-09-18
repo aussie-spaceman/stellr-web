@@ -40,7 +40,7 @@ export default async function AdminSchoolDetailPage({
   if (!school) notFound()
 
   const allMembers = (members ?? [])
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- supabase-js types the joined `members` row as an array; it is one object here
     .map((ms) => ({ ...(ms.members as any), is_current_school: ms.is_current }))
     .filter((m) => m.is_active !== false)
     .sort((a, b) =>

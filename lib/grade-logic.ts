@@ -24,7 +24,7 @@ export interface StateCutoff {
  * start Kindergarten that fall. September 1 is the safe default (29 states).
  * District-level cutoffs frequently override these; treat as a starting point.
  */
-export const STATE_CUTOFFS: Record<string, StateCutoff> = {
+const STATE_CUTOFFS: Record<string, StateCutoff> = {
   Alabama:               { month: 9,  day: 1,  confidence: 'high',   note: '' },
   Alaska:                { month: 8,  day: 31, confidence: 'medium', note: 'Nominal Sep 1; source lists Aug 31' },
   Arizona:               { month: 9,  day: 1,  confidence: 'high',   note: 'Early-entrance testing available' },

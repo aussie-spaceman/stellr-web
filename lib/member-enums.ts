@@ -20,7 +20,7 @@ export function normalizeEmail(email: unknown): string {
   return typeof email === 'string' ? email.trim().toLowerCase() : ''
 }
 
-export const VALID_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'] as const
+const VALID_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'] as const
 export const VALID_AGE_BRACKETS = ['adult', 'high_school', 'college'] as const
 // 'adult' and 'school_student_manager' require migration 016 to exist in the enum;
 // 'volunteer' requires migration 121.
@@ -35,7 +35,7 @@ export const VALID_GRADES = [
   'college_freshman', 'college_sophomore', 'college_junior', 'college_senior', 'grad_phd',
 ] as const
 // '3XL (or larger)' requires migration 016 to exist in the enum.
-export const VALID_TSHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)'] as const
+const VALID_TSHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)'] as const
 
 function canon(v: unknown): string {
   return (v ?? '').toString().trim().toLowerCase().replace(/[\s/-]+/g, '_')

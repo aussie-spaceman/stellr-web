@@ -1,6 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
-import { stripeClient } from './stripe'
+import { stripeClient } from '@/lib/stripe'
 import { resolvePolicy, applicableTier, computeRefundOptions, daysOut, type RefundOptions } from './policy'
 
 export interface RefundPreview {

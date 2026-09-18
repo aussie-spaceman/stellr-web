@@ -5,14 +5,9 @@ import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
+import { stripeClient } from '@/lib/stripe'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
 
 // POST /api/members/teams/[id]/payment-link
 // Creates a fresh Stripe checkout session for a member with a pending individual payment.
@@ -62,7 +57,7 @@ export async function POST(
 
   if (!registration) return NextResponse.json({ error: 'Registration not found' }, { status: 404 })
 
-  const stripe = getStripe()
+  const stripe = stripeClient()
   if (!stripe) return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
 
   const event = await getEventBySlug(registration.event_slug)

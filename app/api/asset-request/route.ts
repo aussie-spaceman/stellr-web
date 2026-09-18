@@ -3,6 +3,7 @@ import { sendEmail, MARKETING_FROM } from '@/lib/email'
 import { LEAD_SOURCE_LIFECYCLE } from '@/lib/hubspot-fields'
 import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
+import { isEmailLike } from '@/lib/utils'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 // Where the gated files live. Empty → self-hosted on the site (SITE_URL/files).
@@ -73,7 +74,7 @@ export async function POST(req: Request) {
     const cleanName = typeof name === 'string' ? name.trim() : ''
     const cleanEmail = typeof email === 'string' ? email.trim() : ''
     // Name is optional (README §8 one-field gate); only a valid email is required.
-    if (!/\S+@\S+\.\S+/.test(cleanEmail)) {
+    if (!isEmailLike(cleanEmail)) {
       return NextResponse.json({ error: 'A valid email is required.' }, { status: 400 })
     }
 

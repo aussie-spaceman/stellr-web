@@ -48,7 +48,3 @@ export function clearCart() {
   if (typeof window === 'undefined') return
   save([])
 }
-
-export function cartCount(): number {
-  return getCart().reduce((n, i) => n + i.qty, 0)
-}

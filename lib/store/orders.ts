@@ -71,7 +71,7 @@ export async function createPendingOrder(input: {
 // Defensive shipping-address read — Stripe moved the field between API versions
 // (shipping_details → collected_information.shipping_details); fall back to the
 // billing/customer address.
-export function recipientFromSession(session: Stripe.Checkout.Session): PrintfulRecipient | null {
+function recipientFromSession(session: Stripe.Checkout.Session): PrintfulRecipient | null {
   const loose = session as unknown as {
     shipping_details?: { name?: string | null; address?: Stripe.Address | null }
     collected_information?: { shipping_details?: { name?: string | null; address?: Stripe.Address | null } }

@@ -45,7 +45,7 @@ www↔app experience and is the critical path.
 - [ ] Confirm the recently-added migrations are applied: `014` (emergency-contact relationship), `015` (Adult/Mentor DocuSign agreements), `016` (member enum values).
 - [ ] **Member enum drift / backfill** (known open item):
   - [ ] Apply migration `016` (run the 3 `ALTER TYPE … ADD VALUE` statements **individually** — they can't run in a transaction) so enums match what `lib/member-enums.ts` sends.
-  - [ ] Run the backfill for members dropped before the fix: `npx tsx scripts/backfill-members.ts` (dry run) → review output → `npx tsx scripts/backfill-members.ts --apply`. It finds `participants` with `member_id IS NULL`, creates the missing members (skipping any that already exist), and relinks them. **Requires migration 016 applied first**, and `.env.local` pointed at the prod DB.
+  - [x] Backfill for members dropped before the migration-016 enum fix — run in June 2026; `scripts/backfill-members.ts` removed in the Sept 2026 cleanup.
 - [ ] RLS / tier-gating: community access is enforced in server code (not RLS) — spot-check that gated routes reject non-members in production.
 
 ---
@@ -93,11 +93,9 @@ www↔app experience and is the critical path.
 > - `npm run docusign:templates export` / `import --apply` — copies the templates
 >   verbatim between accounts, so step 7's "recreate them and match every tab label
 >   exactly" is not done by hand.
-> - `npm run docusign:remediate void --apply` (against sandbox), then
->   `reissue --apply` (against production) — voids the demo envelopes and re-issues
->   them for real. **Order matters**, and a completed row must be voided first or
->   `findValidAgreement()` treats the person as covered for 3 years and silently
->   swallows the re-issue.
+> - The sandbox→production envelope remediation (`docusign:remediate void|reissue`)
+>   ran 9 Sept 2026 (see `docs/handovers/HANDOVER-docusign-2026-09-09.md`); the
+>   script was removed in the Sept 2026 cleanup.
 
 ### 4a. Go-Live promotion — step by step
 

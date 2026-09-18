@@ -12,9 +12,6 @@ export const DEFAULT_ROLE_FOR_BRACKET: Record<string, string> = {
   adult: 'teacher',
 }
 
-// Roles that have group management permissions (same as Teacher)
-export const GROUP_MANAGER_ROLES = ['teacher', 'school_student_manager']
-
 // Roles that count as a student participant. A Student Manager is a student who
 // also organises the group, so they belong here alongside plain school students —
 // used by event Companies auto-assign and participation certificates.

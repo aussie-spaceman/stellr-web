@@ -7,10 +7,11 @@ import { getCurrentMember } from '@/lib/community'
 import { getImpersonation } from '@/lib/impersonation'
 import { supabaseServer } from '@/lib/supabase'
 import { getHostCaps } from '@/lib/sessions'
+import { isAdminClaims } from '@/lib/admin-auth'
 
 export default async function MemberLayout({ children }: { children: React.ReactNode }) {
   const { sessionClaims } = await auth()
-  const isAdmin = (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
+  const isAdmin = isAdminClaims(sessionClaims)
 
   const member = await getCurrentMember()
 

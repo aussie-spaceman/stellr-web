@@ -123,7 +123,7 @@ export interface SendResult {
  * Send `template` to `members` for `campaignId`, recording each in the ledger.
  * Idempotent: members already present for (campaignId, dedupKey) are skipped.
  */
-export async function sendToMembers(
+async function sendToMembers(
   campaignId: string,
   template: Template,
   members: AudienceMember[],

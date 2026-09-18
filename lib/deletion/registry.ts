@@ -19,7 +19,7 @@ const ISO = () => new Date().toISOString()
 // hint can't drift from what preflight actually counts.
 export const TERMINAL_SESSION_STATUSES = ['cancelled', 'declined', 'completed']
 
-export const ENTITIES: Record<string, EntityDef> = {
+const ENTITIES: Record<string, EntityDef> = {
   // ---- Members -----------------------------------------------------------
   member: {
     type: 'member',

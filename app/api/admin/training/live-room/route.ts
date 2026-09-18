@@ -1,8 +1,8 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember } from '@/lib/community'
 import { getVideoProvider, getEmbedConfig, trainingRoomName } from '@/lib/video-provider'
+import { currentUserIsAdmin } from '@/lib/admin-auth'
 
 // GET /api/admin/training/live-room?itemId=
 // Mints a HOST (moderator/recorder) token for a 'live' (Record) lesson's JaaS
@@ -10,13 +10,8 @@ import { getVideoProvider, getEmbedConfig, trainingRoomName } from '@/lib/video-
 // builder. The room name is derived from the item id (same as the member player
 // + recording webhook), so the recording attaches to this lesson.
 
-async function requireAdmin() {
-  const { sessionClaims } = await auth()
-  return (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
-}
-
 export async function GET(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const itemId = new URL(req.url).searchParams.get('itemId')
   if (!itemId) return NextResponse.json({ error: 'itemId required' }, { status: 400 })
 

@@ -23,12 +23,6 @@ export interface CreditDiscount {
   allocations: CreditAllocation[]
 }
 
-// Sum of usable credit for a member in a given currency.
-export async function availableCreditCents(memberId: string, currency: string): Promise<number> {
-  const credits = await usableCredits(memberId, currency)
-  return credits.reduce((sum, c) => sum + c.remaining_cents, 0)
-}
-
 async function usableCredits(memberId: string, currency: string): Promise<CreditRow[]> {
   const db = supabaseServer()
   const nowIso = new Date().toISOString()

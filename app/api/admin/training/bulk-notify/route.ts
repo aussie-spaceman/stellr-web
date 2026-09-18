@@ -1,19 +1,14 @@
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { notifyMember } from '@/lib/notify'
+import { currentUserIsAdmin } from '@/lib/admin-auth'
 
 // POST /api/admin/training/bulk-notify
 // Body: { memberIds: string[], objectLabel?: string, channels?: { email?, sms? } }
 // Sends a training reminder to selected incomplete participants. Delivery honours
 // each member's notification prefs across in-app / email / SMS; the channels hint
 // records the admin's intent in the message.
-async function requireAdmin() {
-  const { sessionClaims } = await auth()
-  return (sessionClaims?.metadata as { role?: string } | undefined)?.role === 'admin'
-}
-
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await currentUserIsAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const b = await req.json().catch(() => ({}))
   const memberIds: string[] = Array.isArray(b.memberIds) ? b.memberIds : []
   if (memberIds.length === 0) return NextResponse.json({ error: 'memberIds required' }, { status: 400 })

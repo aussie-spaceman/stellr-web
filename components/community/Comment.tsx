@@ -6,6 +6,7 @@ import { CommentForm } from './CommentForm'
 import { ReactionBar } from './ReactionBar'
 import { FlagButton } from './FlagButton'
 import { Avatar } from '@/components/ui/Avatar'
+import { timeAgo } from '@/lib/utils'
 
 export interface CommentNode {
   id: string
@@ -15,17 +16,6 @@ export interface CommentNode {
   bodyJson: unknown
   reactions: { emoji: string; count: number; reactedByMe: boolean }[]
   replies: CommentNode[]
-}
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  const days = Math.floor(hrs / 24)
-  return `${days}d ago`
 }
 
 // Single comment with reactions and a one-level reply affordance (FR-COM-02).

@@ -25,6 +25,14 @@ export function isEventManagerClaims(sessionClaims: Claims): boolean {
   return roleFromClaims(sessionClaims) === 'event_manager'
 }
 
+// The current request's user is a platform admin. The one-liner most
+// /api/admin routes need; the claims variants above are for callers that
+// already hold a session.
+export async function currentUserIsAdmin(): Promise<boolean> {
+  const { sessionClaims } = await auth()
+  return isAdminClaims(sessionClaims)
+}
+
 // Anyone allowed into the admin portal shell (nav varies by role).
 export function hasAdminPortalAccess(sessionClaims: Claims): boolean {
   return isAdminClaims(sessionClaims) || isEventManagerClaims(sessionClaims)

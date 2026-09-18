@@ -74,7 +74,7 @@ export interface Offering {
  * invalid/expired/exhausted coupon is silently ignored (couponApplied=false) so
  * the UI can show "code not valid" without the quote failing.
  */
-export async function getQuote(memberId: string, offeringId: string, coupon?: string | null): Promise<Quote> {
+async function getQuote(memberId: string, offeringId: string, coupon?: string | null): Promise<Quote> {
   const { data, error } = await ent().rpc('fn_quote', {
     p_member: memberId,
     p_offering: offeringId,
@@ -97,15 +97,8 @@ export async function getQuote(memberId: string, offeringId: string, coupon?: st
   }
 }
 
-/** Active tier code for a member (read from member_memberships), or null. */
-export async function getActiveTierCode(memberId: string): Promise<string | null> {
-  const { data, error } = await ent().rpc('fn_active_tier', { p_member: memberId })
-  if (error) throw new Error(`getActiveTierCode: ${error.message}`)
-  return (data as string | null) ?? null
-}
-
 /** Remaining included allocation of a kind for a member. */
-export async function getAllocationBalance(
+async function getAllocationBalance(
   memberId: string,
   kind: EntitlementKind,
   offeringType?: OfferingType,
@@ -121,7 +114,7 @@ export async function getAllocationBalance(
 }
 
 /** A member's store-credit balance (cents). */
-export async function getCreditBalanceCents(memberId: string): Promise<number> {
+async function getCreditBalanceCents(memberId: string): Promise<number> {
   const { data, error } = await ent().rpc('fn_credit_balance', { p_member: memberId })
   if (error) throw new Error(`getCreditBalanceCents: ${error.message}`)
   return Number(data ?? 0)
@@ -160,14 +153,6 @@ export async function getMemberEntitlementSummary(memberId: string): Promise<Ent
 }
 
 // ── Offerings (read) ────────────────────────────────────────────────────────────
-
-export async function listOfferings(type?: OfferingType): Promise<Offering[]> {
-  let q = ent().from('offerings').select('id, type, title, capacity, seats_taken, status, starts_at').eq('status', 'open')
-  if (type) q = q.eq('type', type)
-  const { data, error } = await q.order('starts_at', { ascending: true, nullsFirst: false })
-  if (error) throw new Error(`listOfferings: ${error.message}`)
-  return (data ?? []) as Offering[]
-}
 
 // ── Tiers (canonical) ───────────────────────────────────────────────────────────
 
@@ -300,22 +285,10 @@ export async function setTierCoachingAllocation(tierId: string, freeSessions: nu
   }
 }
 
-/** Stripe price id for buying an EXTRA session at the member's tier (tier_benefits.
- *  extra_stripe_price_id; replaces the session_entitlements lookup). Returns the
- *  first configured price across the member's active tiers, or null. */
-export async function getTierExtraPriceId(tierIds: string[], kind: 'coaching_session' | 'cohort_access'): Promise<string | null> {
-  if (!tierIds.length) return null
-  const { data: tiers } = await ent().from('tiers').select('code').in('membership_tier_id', tierIds)
-  const codes = ((tiers ?? []) as Array<{ code: string }>).map((t) => t.code)
-  if (!codes.length) return null
-  const { data } = await ent().from('tier_benefits').select('extra_stripe_price_id').eq('kind', kind).in('tier_code', codes)
-  return ((data ?? []) as Array<{ extra_stripe_price_id: string | null }>).map((d) => d.extra_stripe_price_id).find((p): p is string => !!p) ?? null
-}
-
 // ── Booking (write) — server-side; called from APIs / the webhook ──────────────
 
 /** Consume an included allocation for a free booking. Returns the booking id. */
-export async function bookFromAllocation(memberId: string, offeringId: string, participantId?: string | null): Promise<string> {
+async function bookFromAllocation(memberId: string, offeringId: string, participantId?: string | null): Promise<string> {
   const { data, error } = await ent().rpc('fn_book_from_allocation', {
     p_member: memberId,
     p_offering: offeringId,
@@ -391,7 +364,11 @@ export async function ensureMemberGrants(memberId: string): Promise<void> {
     .eq('renewal_status', 'active')
   for (const m of (ms ?? []) as Array<{ id: string; expires_at: string | null }>) {
     if (m.expires_at && m.expires_at < today) continue
-    await grantTierAllocations(m.id).catch(() => {})
+    // Best-effort per membership: one bad row must not block the others, but a
+    // silent failure here is a member who never sees their included sessions.
+    await grantTierAllocations(m.id).catch((e) => {
+      console.error('[entitlements] grantTierAllocations failed:', { membershipId: m.id, error: e instanceof Error ? e.message : e })
+    })
   }
 }
 

@@ -20,11 +20,11 @@ import { logActivity, type Actor } from '@/lib/activity-log'
 
 /** Slug of the community space that acts as the Volunteer Hub (created via the
  *  admin Spaces UI; role grants no-op gracefully until it exists). */
-export const VOLUNTEER_SPACE_SLUG = process.env.VOLUNTEER_SPACE_SLUG ?? 'volunteer-hub'
+const VOLUNTEER_SPACE_SLUG = process.env.VOLUNTEER_SPACE_SLUG ?? 'volunteer-hub'
 
 // Program-level context the Volunteer Agreement is recorded under. Not an event:
 // the agreement covers all volunteer activity for its 3-year validity window.
-export const VOLUNTEER_PROGRAM_SLUG = 'volunteer-program'
+const VOLUNTEER_PROGRAM_SLUG = 'volunteer-program'
 export const VOLUNTEER_PROGRAM_TITLE = 'Stellr Volunteer Program'
 
 export async function isVolunteer(memberId: string): Promise<boolean> {
@@ -36,7 +36,7 @@ export async function isVolunteer(memberId: string): Promise<boolean> {
  * No-op when the space hasn't been created yet — the hub is configuration, not a
  * schema dependency.
  */
-export async function addToVolunteerSpace(db: SupabaseClient, memberId: string): Promise<void> {
+async function addToVolunteerSpace(db: SupabaseClient, memberId: string): Promise<void> {
   const { data: space } = await db
     .from('community_spaces')
     .select('id')

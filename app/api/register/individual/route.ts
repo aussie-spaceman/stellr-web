@@ -16,18 +16,13 @@ import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { prepareRegistrationAddons, addRegistrationAddons } from '@/lib/store/event-merch'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { assertLiveCredentials } from '@/lib/env-guards'
+import { stripeClient } from '@/lib/stripe'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 // Where a registrant lands afterwards — the member portal, with a flag the
 // /community page reads to pop the "registration submitted" modal.
 const POST_REGISTER_URL = `${APP_URL}/community?registered=1&type=individual`
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  return new Stripe(key, { apiVersion: '2026-05-27.dahlia' })
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -120,7 +115,7 @@ export async function POST(req: NextRequest) {
     // Drives the payment access gate, and the line item further down.
     let amountDueCents = 0
     const feePriceId = (eventForGate as { stripePriceId?: string } | null)?.stripePriceId
-    const feeStripe = getStripe()
+    const feeStripe = stripeClient()
     if (feePriceId && feeStripe) {
       try {
         const pr = await feeStripe.prices.retrieve(feePriceId)
@@ -306,7 +301,7 @@ export async function POST(req: NextRequest) {
     // Look up Stripe Price ID from Sanity + price any merch add-ons selected.
     const event = await getEventBySlug(event_slug)
     const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId
-    const stripe = getStripe()
+    const stripe = stripeClient()
 
     // Validate + persist paid add-ons (pending until payment clears; activated
     // into the event batch on confirmation).

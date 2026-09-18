@@ -289,7 +289,7 @@ export async function GET(
     const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`
     return NextResponse.redirect(url, { status: 302 })
   } catch (err) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- googleapis errors carry an untyped `cause` with code/status/errors
     const cause = (err as any)?.cause
     console.error('[spreadsheet] Unhandled error:', JSON.stringify({
       message: err instanceof Error ? err.message : String(err),

@@ -152,3 +152,12 @@ export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(r
 export function isEmailLike(value: string): boolean {
   return /\S+@\S+\.\S+/.test(value)
 }
+
+/** `dan.ahaiwe@gmail.com` → `d***@gmail.com`. For telling someone which
+ *  address a link went to without handing the full address to whoever typed
+ *  it into a public form. */
+export function maskEmail(email: string): string {
+  const at = email.indexOf('@')
+  if (at <= 0) return '***'
+  return `${email[0]}***${email.slice(at)}`
+}

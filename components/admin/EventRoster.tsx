@@ -7,6 +7,7 @@ import { PILL_CLASSES as DOCUSIGN_PILL_CLASSES } from '@/lib/docusign-status'
 import type { ComplianceState } from '@/lib/compliance'
 import type { CompanyRow } from '@/components/admin/EventCompanies'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
+import { SendPayLinkButton } from '@/components/admin/SendPayLinkButton'
 import { displayEventRole } from '@/lib/member-enums'
 
 const PAYMENT_PILLS: Record<PaymentPill, { label: string; className: string }> = {
@@ -275,6 +276,9 @@ export default function EventRoster({
                       )}
                     </span>
                   )}
+                  {group.type === 'group' && group.payLinkSendable && (
+                    <SendPayLinkButton eventSlug={eventSlug} registrationId={group.registrationId} className="normal-case" />
+                  )}
                   {group.type === 'group' && (
                     <DeleteEntityButton
                       entity="registration"
@@ -367,7 +371,10 @@ export default function EventRoster({
                           <Pill label="Registered" className="bg-orange-100 text-orange-700" />
                         )}
                       </td>
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="px-4 py-2.5 text-right space-x-3">
+                        {group.type === 'individual' && group.payLinkSendable && (
+                          <SendPayLinkButton eventSlug={eventSlug} registrationId={group.registrationId} />
+                        )}
                         <DeleteEntityButton
                           entity="participant"
                           id={p.id}

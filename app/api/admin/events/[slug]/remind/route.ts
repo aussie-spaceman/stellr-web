@@ -3,6 +3,8 @@ import { requireEventAccess } from '@/lib/event-access'
 import { getEventRoster } from '@/lib/event-admin'
 import { getEventBySlug, type StellarEvent } from '@/lib/sanity'
 import { sendEmail, outstandingItemsReminderEmail } from '@/lib/email'
+import { supabaseServer } from '@/lib/supabase'
+import { ensurePayToken, payPageUrl } from '@/lib/registration-checkout'
 
 // POST /api/admin/events/[slug]/remind — one-click reminder emails for the
 // participants matching the roster filters (admins + assigned event managers).
@@ -29,9 +31,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
 
   const roster = await getEventRoster(slug, event.date)
 
+  const db = supabaseServer()
   let sent = 0
   let failed = 0
   for (const group of roster.groups) {
+    // Card registrations get the durable pay page in the reminder. Before this
+    // the copy pointed at "the link previously emailed", which for individual
+    // registrations had never existed.
+    let payUrl: string | undefined
+    if (payment && group.payLinkSendable) {
+      payUrl = payPageUrl(slug, await ensurePayToken(db, group.registrationId))
+    }
     for (const p of group.participants) {
       if (payment && p.paid) continue
       if (docusign && p.docusign !== 'outstanding') continue
@@ -40,7 +50,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       const content = outstandingItemsReminderEmail({
         firstName: p.first_name,
         eventTitle: event.title,
-        payment: payment ? { method: p.payment_pill.startsWith('invoice') ? 'invoice' : 'link' } : undefined,
+        payment: payment ? { method: p.payment_pill.startsWith('invoice') ? 'invoice' : 'link', payUrl } : undefined,
         docusign: docusign ? { minor: p.minor, guardianName: p.emergency_contact_name } : undefined,
       })
 

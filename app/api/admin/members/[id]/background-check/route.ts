@@ -5,6 +5,7 @@ import { isAdminClaims } from '@/lib/admin-auth'
 import { getBackgroundProvider } from '@/lib/background-provider'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { requiresBackgroundCheck } from '@/lib/compliance'
+import { assertLiveCredentials, SandboxCredentialsError } from '@/lib/env-guards'
 
 // POST /api/admin/members/[id]/background-check
 // Admin orders a background check for an adult member via the hosted-invite flow
@@ -47,6 +48,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       { error: `Background-check provider (${provider.name}) is not configured` },
       { status: 503 },
     )
+  }
+
+  // A production deployment on staging credentials would "clear" a real adult
+  // against Checkr's mock data. Refuse before we create anything on their side.
+  try {
+    assertLiveCredentials('checkr')
+  } catch (err) {
+    if (err instanceof SandboxCredentialsError) {
+      console.error('[admin] background-check refused:', err.message)
+      return NextResponse.json({ error: err.message }, { status: 503 })
+    }
+    throw err
   }
 
   const actor = await actorFromAuth()

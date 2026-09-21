@@ -67,20 +67,20 @@ Mid-session the provider moved off Certn onto Checkr. The compliance layer (stat
 **Migrations**
 - `059_background_checks.sql` — **applied to prod** (verified: 2 tables, 16 BC columns, 6 indexes, activity-log CHECK includes `compliance`).
 - `060_checkr_provider.sql` — **applied to prod** (verified 2026-06-25 via migration history). Drops `certn_application_id`; adds `provider_candidate_ref` / `provider_invitation_ref` / `provider_report_ref` / `invitation_url`; provider default → `checkr`; reconciliation indexes.
-- `092_checkr_certification.sql` — **NOT yet applied.** Adds `assessment` + `includes_canceled`; widens status CHECK to add `expired`.
+- `092_checkr_certification.sql` — **applied to prod 2026-06-25** (confirmed again 2026-09-21 against `supabase/baseline.sql`). Adds `assessment` + `includes_canceled`; widens status CHECK to add `expired`.
 
 ---
 
 ## 5. Database state (prod project `hwtzpfrnksksxlwwabqz`)
 
-- Migrations **059 + 060 are live**. Prod migration history is at **090** (verified 2026-06-25); 091 (entitlements_lifecycle, unrelated) and **092** (this work) are unapplied in the repo.
+- Migrations **059 + 060 + 092 are live** on both prod (`hwtzpfrnksksxlwwabqz`) and dev (`xvxlhbxtiwxpopoqjygm`). As of 2026-09-21 both `member_background_checks` tables hold **zero rows** — the June test data was cleaned up and the feature has never been used for a real member.
 - Apply with **`supabase db push`** from the repo root (keeps CLI migration history in sync; do not apply via MCP/dashboard or it drifts).
 
 ---
 
 ## 6. Ops checklist before go-live (Checkr)
 
-1. `supabase db push` (applies 092 — 060 is already live); commit + deploy (`npx vercel deploy --prod --yes` per Hobby-plan cron gotcha).
+1. ~~Apply 092~~ — done. Deploys now go through the `promote` skill (`dev` → `main`), not `vercel deploy`.
 2. In the Checkr dashboard: create a **criminal + identity package** → put its **slug** in `CHECKR_PACKAGE_SLUG`.
 3. Set `CHECKR_API_KEY` + `CHECKR_BASE_URL` (prod `https://api.checkr.com/v1`) in Vercel.
 4. Register webhook URL **`/api/webhooks/background`** in Checkr Developer Settings.
@@ -95,7 +95,10 @@ Until keys are set: ordering returns a clean **503** (`provider not configured`)
 
 - **Package slug has no sensible default** — order route 503s until step 2 is done (intentional; no guessing a slug).
 - **Webhook contract unverified against live Checkr** — `parseWebhook` / `mapReport` read defensively but should be confirmed on staging (Checkr's full status matrix isn't fully public).
-- **Role scope is broad** — requirement currently covers *all* non-student 18+ roles incl. `subscriber`. To exempt subscribers, change `STUDENT_ROLES` / the role set in `lib/compliance.ts` (one line).
+- ~~**Role scope is broad**~~ — **narrowed 2026-09-21.** `requiresBackgroundCheck` is now opt-in by role via `BC_REQUIRED_ROLES = teacher / mentor / volunteer / adult` (`lib/compliance.ts`). `subscriber`, `parent`, and any unrecognised role are exempt. The audit-page prefilter (`lib/compliance-admin.ts`) uses the same constant.
+- ~~**Webhook-only, no reconciliation**~~ — **closed 2026-09-21.** `lib/background-sync.ts` is the single writer for vendor outcomes (the webhook route calls it too). `GET /api/cron/background-sync` (daily, skips rows touched < 1 h ago) and the admin **Sync with Checkr** button on `/admin/compliance` (`POST /api/admin/compliance/sync`, no threshold) re-poll every `invited`/`in_progress` row via `provider.fetchStatus()` (`GET /invitations/{id}` → `GET /reports/{id}`). A missed webhook is now recovered within a day, or on demand. Note the cron declines on the dev deployment (`guardCron` → `APP_ENV=dev`), so on dev use the button.
+- **Production sandbox guard added 2026-09-21** — `lib/env-guards.ts` now knows `checkr` (`unconfigured` / `sandbox` / `production`, keyed on `CHECKR_BASE_URL`, defaulting to sandbox exactly as DocuSign does). The order route calls `assertLiveCredentials('checkr')` and returns 503 on a production deployment holding staging keys; `/api/admin/health/integrations` reports it. **Until Checkr authorises production, the prod Vercel project should hold NO `CHECKR_API_KEY`** — `unconfigured` is the correct state, `sandbox` is a flagged defect.
+- **Tests added 2026-09-21** — `lib/background-provider/checkr.test.ts` (the runbook's mock matrix as fixtures, lifecycle events, signature fail-closed, polling), `lib/compliance.test.ts`, `lib/background-sync.test.ts`, Checkr cases in `lib/env-guards.test.ts`.
 - **`report_pdf_url` not populated** — no PDF retrieval wired (Checkr's human-readable report lives in their dashboard); add later if needed.
 - **`tsc` stale-validator gotcha** — after deleting a route, clear `.next/types` before `tsc`; a fresh `build` regenerates them.
 
@@ -137,15 +140,21 @@ Assess-on → we map to `referred`; assess-off → `passed` + canceled indicator
 
 ## 9. Remaining certification path
 
-1. `supabase db push` to apply **092** (060 is already live in prod — verified via
-   migration history; prod is at 090, so push also carries 091 from the entitlements
-   work). Deploy to a staging/preview env.
-2. Set staging `CHECKR_*` env + create the criminal+identity package slug; register
-   the webhook URL `/api/webhooks/background` in Checkr Developer Settings.
+1. ~~Apply 092~~ — done. The certification run happens on the **dev deployment**
+   (`stellr-web-dev`, tracks `dev`) against the hardened code (see §7, 2026-09-21).
+2. Set staging `CHECKR_*` on the **dev** Vercel project (`stellr_crimid` package slug,
+   `CHECKR_WORK_LOCATION_STATE=UT`, leave `CHECKR_WEBHOOK_SECRET` unset); re-point the
+   staging webhook (id `8b0393fb769341844c1f62be`) at
+   `https://stellr-web-dev.vercel.app/api/webhooks/background` with `include_object=true`.
+   Confirm `/api/admin/health/integrations` on dev says `checkr: sandbox` and on prod
+   `checkr: unconfigured`.
 3. **Run the full mock-candidate matrix** (Bud Richman=Clear, Vito=Canceled, Alex
    Taylor=Clear-with-Canceled [needs a crim+MVR package], the Consider candidates,
    Remy Gonz / Jen Kasp=Pending via bad-then-good SSN). The pass criterion is that
    the status shown in our app **matches the Checkr dashboard** for each candidate.
+   Also prove the sync path: for one candidate, break the webhook (or complete the
+   report while the dev deployment is unreachable), then press **Sync with Checkr**
+   and confirm the row reconciles.
 4. **Name an adjudicator (REQUIRED-process)** — Checkr won't authorize prod until at
    least one team member is identified as responsible for reviewing "consider /
    needs review" reports.
@@ -156,5 +165,5 @@ Assess-on → we map to `referred`; assess-off → `passed` + canceled indicator
 
 ## 10. How to resume
 
-Memory: `project_background_checks.md` (full detail) + MEMORY.md index line are current.
-Everything above is staged in the working tree to commit and push (manual git workflow).
+- **2026-09-21 state:** code hardening landed (see §7); nothing on the Checkr side has moved since June. Next is §9 step 2 (env wiring on dev), then the matrix. Tracked in `docs/handovers/TRACKER.md` session 9.
+- Runbook: `docs/CHECKR-TESTING-RUNBOOK.md`. Checklist answers: `docs/CHECKR-CHECKLIST-ANSWERS.md` (three bracketed items still to fill). Seed: `docs/checkr-test-seed.sql` — run it against **dev**, not prod.

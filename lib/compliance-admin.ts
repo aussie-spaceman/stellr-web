@@ -6,7 +6,7 @@ import { supabaseServer } from '@/lib/supabase'
 import {
   deriveCompliance,
   requiresBackgroundCheck,
-  STUDENT_ROLES,
+  BC_REQUIRED_ROLES,
   type ComplianceState,
   type TeacherLicense,
   type BackgroundCheck,
@@ -56,8 +56,8 @@ const STATE_ORDER: Record<ComplianceState, number> = {
 export async function getComplianceAudit(): Promise<ComplianceAudit> {
   const db = supabaseServer()
 
-  // Candidate set: active members in a non-student role. Age (18+) is applied in
-  // JS via requiresBackgroundCheck so the rule stays in one place.
+  // Candidate set: active members in an event-facing role. Age (18+) is applied
+  // in JS via requiresBackgroundCheck so the rule stays in one place.
   const { data } = await db
     .from('members')
     .select(`
@@ -65,7 +65,7 @@ export async function getComplianceAudit(): Promise<ComplianceAudit> {
       member_teacher_licenses!member_id(id, license_number, licensing_state, expiry_date, verified_at, verified_label),
       member_background_checks!member_id(id, status, result, assessment, includes_canceled, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url)
     `)
-    .not('event_role', 'in', `(${STUDENT_ROLES.join(',')})`)
+    .in('event_role', [...BC_REQUIRED_ROLES])
     .or('is_active.is.null,is_active.eq.true')
 
   const rows: ComplianceAuditRow[] = []

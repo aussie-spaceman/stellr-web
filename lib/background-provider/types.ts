@@ -53,6 +53,13 @@ export interface BackgroundWebhookResult {
   includesCanceled?: boolean
 }
 
+/** The vendor refs we hold for one of our rows, used to poll its current state. */
+export interface BackgroundRefs {
+  candidateRef: string | null
+  invitationRef: string | null
+  reportRef: string | null
+}
+
 export interface BackgroundProvider {
   readonly name: string
   /** Whether the provider has the credentials it needs to place orders. */
@@ -63,4 +70,10 @@ export interface BackgroundProvider {
   verifyWebhook(rawBody: string, headers: Headers): boolean
   /** Parse a webhook body into our reconciliation shape, or null to ignore. */
   parseWebhook(rawBody: string): BackgroundWebhookResult | null
+  /**
+   * Ask the vendor for the current state of an order we hold refs for, in the
+   * same shape a webhook would deliver — so a missed webhook can be recovered
+   * by polling. Returns null when there is nothing new to apply (still pending).
+   */
+  fetchStatus(refs: BackgroundRefs): Promise<BackgroundWebhookResult | null>
 }

@@ -10,6 +10,8 @@ import {
   type CourseTheme,
   type TrainingType,
 } from '@/lib/training'
+import { issueCredential, shareConsentFor, canShare, credentialUrl } from '@/lib/credentials'
+import { sendEmail, credentialIssuedEmail } from '@/lib/email'
 
 // Data layer for the redesigned Training portal (member + admin). Sits on top of
 // lib/training.ts and reconciles the two assignment sources:
@@ -246,9 +248,10 @@ export async function getMyTraining(member: CommunityMember): Promise<MyTraining
     getAssignedCourses(member),
     listModules(member),
     db
-      .from('training_certificates')
+      .from('credentials')
       .select('id', { count: 'exact', head: true })
-      .eq('member_id', member.id),
+      .eq('member_id', member.id)
+      .is('tombstoned_at', null),
   ])
 
   const required = assigned
@@ -327,15 +330,18 @@ export async function getMyTraining(member: CommunityMember): Promise<MyTraining
 /* ─── Certificates ───────────────────────────────────────────────────────── */
 
 /**
- * Idempotently issue a completion certificate when a member has completed every
+ * Idempotently issue a completion credential when a member has completed every
  * PUBLISHED lesson of a course. Called from the progress API after a completion.
- * Returns the cert number if one is (or was already) issued, else null.
+ * Returns the credential number if one is (or was already) issued, else null.
+ *
+ * The record lives in `credentials` (public page, LinkedIn, wallet — see
+ * lib/credentials.ts); the name is kept because the progress route calls it.
  */
 export async function ensureCertificate(memberId: string, moduleId: string): Promise<string | null> {
   const db = supabaseServer()
   const { data: mod } = await db
     .from('training_modules')
-    .select('id, material_kind, is_published')
+    .select('id, title, theme, material_kind, is_published, credential_title, credential_description, credential_criteria, credential_skills')
     .eq('id', moduleId)
     .maybeSingle()
   if (!mod || !mod.is_published) return null
@@ -356,29 +362,58 @@ export async function ensureCertificate(memberId: string, moduleId: string): Pro
     .in('item_id', itemIds)
   if ((done ?? 0) < itemIds.length) return null
 
-  // Already issued?
-  const { data: existing } = await db
-    .from('training_certificates')
-    .select('cert_number')
-    .eq('member_id', memberId)
-    .eq('module_id', moduleId)
+  const { data: member } = await db
+    .from('members')
+    .select('first_name, last_name, date_of_birth, email, ec_first_name, ec_email')
+    .eq('id', memberId)
     .maybeSingle()
-  if (existing) return existing.cert_number as string
+  if (!member) return null
 
-  const year = new Date().getFullYear()
-  const certNumber = `STL-${year}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`
-  const { error } = await db.from('training_certificates').insert({
-    member_id: memberId,
-    module_id: moduleId,
-    cert_number: certNumber,
-    issuer: courseIssuer(mod.material_kind as MaterialKind),
-  })
-  // Unique-violation = a concurrent request issued it first; treat as success.
-  if (error && !String(error.message).includes('duplicate')) {
-    console.error('[training] certificate issue error:', error)
+  let issued: Awaited<ReturnType<typeof issueCredential>>
+  try {
+    issued = await issueCredential(db, {
+      source:      'course',
+      memberId,
+      moduleId,
+      recipient:   { firstName: member.first_name, lastName: member.last_name, dateOfBirth: member.date_of_birth },
+      title:       (mod.credential_title as string | null) ?? (mod.title as string),
+      description: mod.credential_description as string | null,
+      criteria:    mod.credential_criteria as string | null,
+      skills:      (mod.credential_skills as string[] | null) ?? [],
+      issuer:      courseIssuer(mod.material_kind as MaterialKind),
+      theme:       (mod.theme as CourseTheme | null) ?? null,
+    })
+  } catch (err) {
+    console.error('[training] credential issue error:', err)
     return null
   }
-  return certNumber
+
+  // Tell them once, on first issue. Non-fatal: a mail outage must not undo a
+  // completion, and the wallet shows the credential regardless.
+  if (issued.created) {
+    try {
+      const consent = await shareConsentFor(db, issued.row)
+      const toGuardian = issued.row.is_minor && !!member.ec_email && !!member.ec_first_name
+      const mail = credentialIssuedEmail({
+        recipientFirstName: member.first_name,
+        guardianFirstName:  toGuardian ? member.ec_first_name : null,
+        title:    issued.row.title,
+        issuer:   issued.row.issuer,
+        url:      credentialUrl(issued.row.number),
+        isMinor:  issued.row.is_minor,
+        canShare: canShare(issued.row, consent).ok,
+      })
+      await sendEmail({
+        to: (toGuardian ? member.ec_email : member.email) as string,
+        cc: toGuardian && member.email ? [member.email] : undefined,
+        ...mail,
+      })
+    } catch (err) {
+      console.error('[training] credential email failed:', err)
+    }
+  }
+
+  return issued.row.number
 }
 
 /* ─── Group progress (Teacher) ───────────────────────────────────────────── */

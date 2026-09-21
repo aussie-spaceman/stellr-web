@@ -805,3 +805,54 @@ export function campaignBroadcastEmail({
   const text = `${body}\n\n— Stellr Education (${campaignTitle})`
   return { subject, html, text }
 }
+
+// ── Credentials ───────────────────────────────────────────────────────────────
+
+// Sent when a credential is issued (course completion, event participation).
+// No attachment: the link IS the credential. For a minor the guardian is the
+// addressee — the same split the DocuSign notices use — and the copy speaks to
+// them about the student; the caller Cc's the earner when they have an address.
+export function credentialIssuedEmail({
+  recipientFirstName, guardianFirstName, title, issuer, url, isMinor, canShare,
+}: {
+  recipientFirstName: string
+  guardianFirstName?: string | null
+  title: string
+  issuer: string
+  url: string
+  isMinor: boolean
+  /** Whether the earner can make the page public today (age/consent). */
+  canShare: boolean
+}) {
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const toGuardian = isMinor && !!guardianFirstName
+  const who = toGuardian ? esc(guardianFirstName!) : esc(recipientFirstName)
+  const subject = toGuardian
+    ? `${recipientFirstName} has earned a Stellr credential — ${title}`
+    : `You've earned a Stellr credential — ${title}`
+
+  const sharingLine = canShare
+    ? `It's private until ${toGuardian ? `${esc(recipientFirstName)} chooses` : 'you choose'} to make it public. From the credential page ${toGuardian ? 'they' : 'you'} can turn that on, copy the link, and add it to LinkedIn (16+).`
+    : toGuardian
+      ? 'It stays private for now. Making it public is covered by the Stellr consent form signed at registration — there is no separate step.'
+      : 'It stays private for now. You can turn on sharing from the credential page once the paperwork on file allows it.'
+
+  const html = emailLayout({
+    heading: 'Credential issued',
+    preheader: `${title} · ${issuer}`,
+    bodyHtml: `
+        <p>Hi ${who},</p>
+        <p>${toGuardian ? `<strong>${esc(recipientFirstName)}</strong> has` : 'You have'} earned a verified credential from <strong>${esc(issuer)}</strong>:</p>
+        <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:16px;margin:24px 0">
+          <p style="margin:0 0 4px;font-size:18px;font-weight:600;color:#1e1b4b">${esc(title)}</p>
+          <p style="margin:0;font-size:14px;color:#4c1d95">Issued by ${esc(issuer)}</p>
+        </div>
+        <p style="margin:24px 0"><a href="${url}" style="display:inline-block;background:#3C6DF6;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">View the credential</a></p>
+        <p style="color:#6b7280;font-size:14px">${sharingLine}</p>
+        <p style="color:#6b7280;font-size:14px">Anyone with the link can check it is genuine at <a href="${url}">${url}</a>.</p>
+        <p style="color:#6b7280;font-size:14px">Questions? Reply to this email.</p>`,
+  })
+  const text = `Hi ${toGuardian ? guardianFirstName : recipientFirstName},\n\n${toGuardian ? `${recipientFirstName} has` : 'You have'} earned a verified credential from ${issuer}: ${title}.\n\nView it: ${url}\n\n${sharingLine.replace(/<[^>]+>/g, '')}\n\n— Stellr Education`
+  return { subject, html, text }
+}

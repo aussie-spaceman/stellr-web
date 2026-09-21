@@ -1,6 +1,6 @@
 # PLAN — Verifiable credentials + LinkedIn sharing
 
-**Date:** 21 Sept 2026 · **Status:** in progress on `feat/credentials-linkedin` · **Owner:** David Shaw
+**Date:** 21 Sept 2026 · **Status:** built 21 Sept 2026 on `feat/credentials-linkedin` — see §9 · **Owner:** David Shaw
 
 Replaces the need for a paid badge platform (VerifyEd / Accredible / Sertifier /
 CertifyMe). Everything those platforms do for LinkedIn reduces to: a credential
@@ -357,3 +357,44 @@ promotion is safe.
 - **Edge OG route and Node PDF route share nothing** — by design (see the
   comment in `lp/[slug]/opengraph-image.tsx` on bundle size). Keep the badge
   renderer edge-only.
+
+## 9. What shipped (21 Sept 2026) and what is left
+
+Built and verified in one session — phases 1–4 of §4:
+
+- Migration `20260921120000_credentials.sql` (applied to **dev** via the
+  Supabase MCP; ledger realigned to the filename; explicit `service_role`
+  grants added after the MCP path left the table unreadable). **Not yet on
+  prod** — `promote` applies it.
+- `lib/credentials-core.ts` (edge-safe helpers), `lib/credentials.ts`
+  (issue / revoke / visibility / consent / reads / tombstone),
+  `lib/credentials-notify.ts` (issued email + addressee), `lib/linkedin.ts`.
+- `/credentials/[number]` page with the five states, edge OG card and badge
+  PNG, owner action bar, `proxy.ts` rate limit and www-only routing.
+- `/community/credentials` wallet + sidebar entry.
+- Course auto-issue now writes `credentials`; PDF route moved to
+  `/api/credentials/[number]/pdf`; course builder gains credential defaults.
+- Event issuance (`POST /api/admin/events/[slug]/credentials`, D2 modes),
+  admin panel on the competition Settings tab, revoke + re-send routes.
+- Admin Consent forms table: guardian opt-out checkbox (D1) +
+  `/api/admin/docusigns/[id]/credential-sharing`.
+- Erasure: `lib/deletion/execute.ts` tombstones a person's credentials.
+- Privacy policy 7.4; `LINKEDIN_ORGANIZATION_ID` in `.env.local.example` and
+  `docs/ENV-MATRIX.md`.
+- Tests: 24 unit (credentials, linkedin), 11 e2e (`e2e/core/credentials.spec.ts`)
+  on the two seeded fixtures; full suites green (702 unit, 57 e2e); prod build OK.
+
+Still open:
+
+1. **Phase 0 spikes** — confirm LinkedIn prefill with a real account, and
+   obtain the Page ID for `LINKEDIN_ORGANIZATION_ID` (D3). The UI works either
+   way; this decides whether the "copy these details" panel is the primary or
+   the fallback.
+2. **Follow-on:** `docs/handovers/FOLLOW-ON-docusign-minor-credential-optout.md`.
+3. `training_certificates` is still in place (read by nothing). Drop it in a
+   later migration once prod has been verified.
+4. Later stories: B-04, B-06, B-09, B-13, B-17 (PDF with QR, PNG download),
+   B-18, B-21, B-23 (the `credential_events` rows are already being written),
+   B-24.
+5. D5: disconnect the Certifier-style connector.
+

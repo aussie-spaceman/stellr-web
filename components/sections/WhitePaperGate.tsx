@@ -5,8 +5,9 @@ import { Check, X } from 'lucide-react'
 import { usePrefillNameEmail } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 import { isEmailLike } from '@/lib/utils'
+import { mediaDownloadUrl } from '@/lib/media-manifest'
 
-const PDF_URL = '/files/Stellr-STEM-Power-Skills-White-Paper.pdf'
+const PDF_URL = mediaDownloadUrl('/files/Stellr-STEM-Power-Skills-White-Paper.pdf')
 const PAPER_TITLE = 'From “Soft Skills” to STEM Power Skills'
 
 /* Mock PDF cover thumbnail (navy gradient) shared by the card + modal header. */

@@ -4,6 +4,7 @@ import { LEAD_SOURCE_LIFECYCLE } from '@/lib/hubspot-fields'
 import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 import { isEmailLike } from '@/lib/utils'
+import { mediaDownloadUrl } from '@/lib/media-manifest'
 
 const PDF_FILE = 'Stellr-STEM-Power-Skills-White-Paper.pdf'
 const PDF_PUBLIC_PATH = `/files/${PDF_FILE}`
@@ -26,7 +27,9 @@ export async function POST(req: Request) {
 
     const [firstName, ...rest] = cleanName.split(/\s+/)
     const lastName = rest.join(' ')
-    const downloadUrl = `${SITE_URL}${PDF_PUBLIC_PATH}`
+    // Absolute on the media host when one is set; otherwise the site serves it.
+    const hosted = mediaDownloadUrl(PDF_PUBLIC_PATH)
+    const downloadUrl = hosted.startsWith('http') ? hosted : `${SITE_URL}${hosted}`
 
     // ── 1. Capture the lead in HubSpot (best-effort) ──────────────────────
     // Form submission + note engagement, so this shows up under Recent

@@ -68,22 +68,38 @@ export interface CompetitionAsset extends BaseAsset {
 const PHOTO_WIDTHS = [480, 768, 1200, 1920]
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Media host base. Empty (the default) → assets are self-hosted from the
- * Next.js /public dir via relative paths (/videos, /media, /files), served by
- * Vercel. To move bytes off Vercel later (Supabase public bucket, Cloudflare
- * R2, etc.): upload /public/{videos,media,files} to the bucket *preserving
- * those paths*, then set NEXT_PUBLIC_MEDIA_BASE_URL to its root — every video,
- * poster, caption, photo, PDF, cover and preview URL then points there. No
- * component changes (raw <picture>/<video>/<a> take absolute URLs directly, so
- * no next.config image-domain config is needed either).
- *   e.g. NEXT_PUBLIC_MEDIA_BASE_URL="https://media.stellreducation.org"
- * NEXT_PUBLIC_ so it inlines into client + server bundles alike.
+ * Media host base. The bytes for /videos, /media and /files live in the
+ * `stellr-media` public Vercel Blob store (since 21 Sept 2026 — they used to
+ * ship in /public, 515 MB per deployment, which is what filled the Hobby
+ * team's 10 GB Deployment Storage). The store mirrors the old /public paths,
+ * and NEXT_PUBLIC_MEDIA_BASE_URL is its root, so every video, poster, caption,
+ * photo, PDF, cover and preview URL below resolves there. Upload with
+ * `scripts/upload-media.ts`; the raw files are not versioned in this repo.
+ *
+ * Empty (local dev without the var) → relative paths, which only work if the
+ * files are also present in /public. Set it in .env.local.
+ *
+ * Raw <picture>/<video>/<a> take absolute URLs directly, so no next.config
+ * image-domain config is needed. NEXT_PUBLIC_ so it inlines into client +
+ * server bundles alike.
  * ───────────────────────────────────────────────────────────────────────── */
 const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ?? '').replace(/\/+$/, '')
 
 /** Prefix a /public-relative media path with the configured host (if any). */
-function mediaUrl(path: string): string {
+export function mediaUrl(path: string): string {
   return MEDIA_BASE ? `${MEDIA_BASE}${path}` : path
+}
+
+/**
+ * Same, for links that should save rather than open. Browsers ignore the
+ * `download` attribute on cross-origin URLs, so once the host is external the
+ * link itself has to ask for `Content-Disposition: attachment` — Vercel Blob
+ * does that for `?download=1`. Self-hosted, the attribute still works and the
+ * plain path is returned. Absolute either way when a host is set, so it is
+ * safe to put straight into an email.
+ */
+export function mediaDownloadUrl(path: string): string {
+  return MEDIA_BASE ? `${MEDIA_BASE}${path}?download=1` : path
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -248,7 +264,7 @@ export const COMPETITION: Record<string, CompetitionAsset> = {
 for (const c of Object.values(COMPETITION)) {
   c.thumbnail = mediaUrl(c.thumbnail)
   c.previewHref = mediaUrl(c.previewHref)
-  c.fileHref = mediaUrl(c.fileHref)
+  c.fileHref = mediaDownloadUrl(c.fileHref) // <a download> + AssetGate, never opened inline
 }
 
 /* ─────────────────────────────────────────────────────────────────────────

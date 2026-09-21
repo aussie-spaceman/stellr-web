@@ -7,7 +7,7 @@ import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 import { JoinNetworkForm } from '@/components/forms/JoinNetworkForm'
 import { AssetGate } from '@/components/sections/AssetGate'
 import { PageMedia } from '@/components/sections/PageMedia'
-import { PHOTOS, COMPETITION } from '@/lib/media-manifest'
+import { PHOTOS, COMPETITION, mediaDownloadUrl } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/network' },
@@ -256,7 +256,7 @@ export default function NetworkPage() {
                   <AssetGate
                     asset="sponsorship-prospectus"
                     title="Sponsorship Prospectus"
-                    fileUrl="/files/Stellr-Sponsorship-Prospectus.pdf"
+                    fileUrl={mediaDownloadUrl('/files/Stellr-Sponsorship-Prospectus.pdf')}
                     triggerLabel="Download Our Prospectus ↓"
                     eyebrow="Partner prospectus"
                     helper="Full packages, reach statistics and impact data — sent straight to your inbox."

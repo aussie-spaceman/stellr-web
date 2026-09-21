@@ -1,6 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { APP_HOST, SITE_URL } from '@/lib/env'
+import { checkRateLimit, clientIp } from '@/lib/rate-limit'
 
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
@@ -22,7 +23,13 @@ const isPublicOnlyRoute = createRouteMatcher([
   '/why-stellr(.*)',
   '/register(.*)',
   '/privacy(.*)',
+  // The credential URL on a LinkedIn profile must be the www one, always.
+  '/credentials(.*)',
 ])
+// Public credential pages: unauthenticated, keyed by a number. Numbers are
+// unguessable and pages default to private, so enumeration yields nothing —
+// but it should not be free either. Same per-instance limiter as the forms.
+const isCredentialRoute = createRouteMatcher(['/credentials/(.*)'])
 
 const WWW = SITE_URL
 
@@ -61,6 +68,16 @@ export default clerkMiddleware(async (auth, req) => {
     }
     if (isPublicOnlyRoute(req)) {
       return NextResponse.redirect(new URL(url.pathname + url.search, WWW), 308)
+    }
+  }
+
+  if (isCredentialRoute(req)) {
+    const rl = checkRateLimit(`credentials:${clientIp(req)}`, { limit: 60, windowMs: 60_000 })
+    if (!rl.ok) {
+      return new NextResponse('Too many requests', {
+        status: 429,
+        headers: { 'Retry-After': String(rl.retryAfterSeconds) },
+      })
     }
   }
 

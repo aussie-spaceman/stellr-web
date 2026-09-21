@@ -3,7 +3,7 @@ import { THEME_META, type CourseTheme } from '@/lib/training-display'
 import { stampPdfDocument } from '@/lib/watermark/pdf'
 
 // Shared certificate PDF renderer — used by the member download
-// (/api/community/training/certificates/[id]/pdf) and the admin preview
+// (/api/credentials/[number]/pdf) and the admin preview
 // (/api/admin/training/cert-preview). When a template PDF is supplied we overlay
 // the member/course fields onto it (positioned by page-relative percentages so it
 // adapts to the template's size); otherwise a default Stellr certificate is drawn.

@@ -54,6 +54,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS credentials_event_once
 CREATE INDEX IF NOT EXISTS credentials_member_idx     ON public.credentials (member_id);
 CREATE INDEX IF NOT EXISTS credentials_event_slug_idx ON public.credentials (event_slug);
 
+-- Explicit grant: a migration applied through the Supabase MCP runs without
+-- the CLI's default privileges, and the table came up unreadable even to
+-- service_role on dev (21 Sept 2026). RLS below is what actually gates access.
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.credentials TO service_role;
 ALTER TABLE public.credentials ENABLE ROW LEVEL SECURITY;
 DO $$ BEGIN
   CREATE POLICY "service role full access credentials"
@@ -74,6 +78,8 @@ CREATE TABLE IF NOT EXISTS public.credential_events (
 CREATE INDEX IF NOT EXISTS credential_events_credential_idx
   ON public.credential_events (credential_id, kind);
 
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.credential_events TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.credential_events_id_seq TO service_role;
 ALTER TABLE public.credential_events ENABLE ROW LEVEL SECURITY;
 DO $$ BEGIN
   CREATE POLICY "service role full access credential_events"

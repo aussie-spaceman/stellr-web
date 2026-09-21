@@ -24,6 +24,7 @@ import type {
   BackgroundProvider,
   BackgroundOrder,
   BackgroundOrderInput,
+  BackgroundRefs,
   BackgroundWebhookResult,
   MappedStatus,
 } from '@/lib/background-provider/types'
@@ -56,6 +57,15 @@ async function checkrPost<T>(
     body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error(`Checkr ${path} failed: ${res.status} ${await res.text()}`)
+  return (await res.json()) as T
+}
+
+async function checkrGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${ENV.baseUrl}${path}`, {
+    headers: { Authorization: authHeader() },
+    cache: 'no-store',
+  })
+  if (!res.ok) throw new Error(`Checkr GET ${path} failed: ${res.status} ${await res.text()}`)
   return (await res.json()) as T
 }
 
@@ -108,6 +118,46 @@ function mapReport(
   if (a) return a === 'eligible' ? 'passed' : 'referred'
   // Complete with nothing usable: surface for review rather than silently passing.
   return includesCanceled ? 'cancelled' : 'referred'
+}
+
+// A Checkr report object as returned by GET /reports/{id} and inside report.*
+// webhook envelopes. Only the fields we read.
+interface CheckrReport {
+  id?: string
+  candidate_id?: string
+  status?: string // pending | complete | suspended | dispute | canceled
+  result?: string | null // clear | consider | null
+  assessment?: string | null
+  includes_canceled?: boolean
+  adjudication?: string | null // engaged | pre_adverse_action | post_adverse_action | null
+}
+
+interface CheckrInvitation {
+  id?: string
+  candidate_id?: string
+  status?: string // pending | completed | expired | deleted
+  report_id?: string | null
+}
+
+// Map a report OBJECT (not an event) onto our status. Used when polling, where
+// there is no event type to key off: the report's own status/adjudication
+// fields carry the same information the report.* events do.
+function mapReportObject(r: CheckrReport): BackgroundWebhookResult {
+  const base = {
+    candidateRef: r.candidate_id ?? null,
+    invitationRef: null,
+    reportRef: r.id ?? null,
+    result: r.result ?? null,
+    assessment: r.assessment ?? null,
+    includesCanceled: r.includes_canceled === true,
+  }
+  const status = (r.status ?? '').toLowerCase()
+  const adjudication = (r.adjudication ?? '').toLowerCase()
+  if (status === 'canceled') return { ...base, status: 'cancelled', result: base.result ?? 'canceled' }
+  if (status === 'dispute') return { ...base, status: 'referred' }
+  if (adjudication === 'engaged') return { ...base, status: 'passed' }
+  if (adjudication === 'pre_adverse_action' || adjudication === 'post_adverse_action') return { ...base, status: 'referred' }
+  return { ...base, status: mapReport(r.status, base.result, base.assessment, base.includesCanceled) }
 }
 
 export const checkrProvider: BackgroundProvider = {
@@ -231,6 +281,40 @@ export const checkrProvider: BackgroundProvider = {
 
     // Other events (candidate.*, invitation.created — we already record 'invited'
     // at order time, report.created without a useful delta, etc.) are ignored.
+    return null
+  },
+
+  // Poll the current state of an order. Checkr does not replay webhooks, so a
+  // delivery that failed (wrong URL, deploy in progress, our 5xx) would otherwise
+  // leave the row at 'invited' forever — which happened in June 2026 when the
+  // webhook was registered against a misspelled domain.
+  async fetchStatus(refs: BackgroundRefs): Promise<BackgroundWebhookResult | null> {
+    if (!configured()) throw new Error('Checkr not configured (CHECKR_API_KEY / CHECKR_PACKAGE_SLUG)')
+
+    // A report ref is the most direct handle: its status is the outcome.
+    if (refs.reportRef) {
+      const report = await checkrGet<CheckrReport>(`/reports/${refs.reportRef}`)
+      const mapped = mapReportObject(report)
+      return { ...mapped, candidateRef: mapped.candidateRef ?? refs.candidateRef, invitationRef: refs.invitationRef }
+    }
+
+    if (!refs.invitationRef) return null
+    const invitation = await checkrGet<CheckrInvitation>(`/invitations/${refs.invitationRef}`)
+    const status = (invitation.status ?? '').toLowerCase()
+    const candidateRef = invitation.candidate_id ?? refs.candidateRef
+
+    if (status === 'expired') {
+      return { candidateRef, invitationRef: refs.invitationRef, reportRef: null, status: 'expired', result: 'expired' }
+    }
+    if (status === 'deleted') {
+      return { candidateRef, invitationRef: refs.invitationRef, reportRef: null, status: 'cancelled', result: 'canceled' }
+    }
+    if (status === 'completed' && invitation.report_id) {
+      const report = await checkrGet<CheckrReport>(`/reports/${invitation.report_id}`)
+      const mapped = mapReportObject(report)
+      return { ...mapped, candidateRef: mapped.candidateRef ?? candidateRef, invitationRef: refs.invitationRef }
+    }
+    // Still pending — nothing to apply.
     return null
   },
 }

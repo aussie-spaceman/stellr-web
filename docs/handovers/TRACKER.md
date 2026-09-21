@@ -12,6 +12,22 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 9 — 21 Sept 2026 (Checkr hardening; fell off the tracker in September)
+
+Handover: `HANDOVER-checkr-2026-09-21.md`. The June build (`docs/BACKGROUND-CHECKS-HANDOFF.md`) was complete but never certified, never used (0 rows on prod and dev), and appeared in no tracker row until now.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 9.1 | Role scope narrowed to event-facing roles | `BC_REQUIRED_ROLES = teacher/mentor/volunteer/adult` (`lib/compliance.ts`); subscriber/parent/unknown exempt. Prod roles in use are participant/teacher/mentor/adult, so no real member changes state. Unit-tested. | — | ☑ |
+| 9.2 | Checkr in the production sandbox guard | `checkrEnvironment()` in `lib/env-guards.ts`; order route calls `assertLiveCredentials('checkr')`; health endpoint reports it. Unit-tested. | — | ☑ |
+| 9.3 | Missed-webhook reconciliation | `lib/background-sync.ts` single writer; `provider.fetchStatus()`; daily cron `/api/cron/background-sync` (06:30 UTC) + admin **Sync with Checkr** button. Unit-tested; **not yet exercised against Checkr staging.** | Prove it in the certification run (9.6). | ☐ |
+| 9.4 | Staging `CHECKR_*` on the dev Vercel project | Unknown — this session's Vercel token cannot list env vars (403). June testing was done against the **prod** project's URL, so staging creds may be sitting on `stellr-web` Production scope. | Maintainer: set the six vars on `stellr-web-dev` (values in `docs/ENV-MATRIX.md` §3); **remove any `CHECKR_*` from `stellr-web`** until Checkr authorises production. Verify with `/api/admin/health/integrations` on both. | ☐ |
+| 9.5 | Staging webhook points at prod | Webhook `8b0393fb769341844c1f62be` was registered to `app.stellreducation.org` in June. | Checkr staging dashboard → re-point to `https://stellr-web-dev.vercel.app/api/webhooks/background`, `include_object=true`. | ☐ |
+| 9.6 | Certification run | Never completed after the June webhook-domain fix. | On dev: `docs/checkr-test-seed.sql`, then `docs/CHECKR-TESTING-RUNBOOK.md` §4–§6 incl. the new sync case; record the video. | ☐ |
+| 9.7 | API Authorization Review submission | Adjudicator named in `docs/CHECKR-CHECKLIST-ANSWERS.md`; three bracketed fields empty; Smartsheet `c1284692a0be4d0eb73bacdffc66df32` never sent. | Fill and submit after 9.6; email clients@checkr.com to enable live reports. | ☐ |
+| 9.8 | Production cut-over | Blocked on 9.7. | Production key + `api.checkr.com` on `stellr-web`, production webhook, health endpoint `checkr: production`, one real order. | ☐ |
+| 9.9 | Local `npm test` reports ~130 failing files | Vitest's `**/*.test.*` glob sweeps `.claude/worktrees/*/node_modules`. Zero repo tests fail; CI is unaffected. | Add `**/node_modules/**` and `.claude/worktrees/**` to `vitest.config.ts` `exclude`. | ☐ |
+
 ## Session 8 — 17 Sept 2026 (resumable registration payment)
 
 Handover: `HANDOVER-registration-resume-2026-09-17.md`.

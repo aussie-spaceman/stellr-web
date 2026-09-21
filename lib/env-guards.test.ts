@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
   assertLiveCredentials,
+  checkrEnvironment,
   docusignEnvironment,
   stripeEnvironment,
   integrationEnvironments,
@@ -34,7 +35,13 @@ const SANDBOX_DOCUSIGN = {
 
 beforeEach(() => {
   for (const k of Object.keys(process.env)) {
-    if (k.startsWith('DOCUSIGN_') || k === 'VERCEL_ENV' || k === 'STRIPE_SECRET_KEY' || k === 'CLERK_SECRET_KEY') {
+    if (
+      k.startsWith('DOCUSIGN_') ||
+      k.startsWith('CHECKR_') ||
+      k === 'VERCEL_ENV' ||
+      k === 'STRIPE_SECRET_KEY' ||
+      k === 'CLERK_SECRET_KEY'
+    ) {
       delete process.env[k]
     }
   }
@@ -104,6 +111,40 @@ describe('assertLiveCredentials', () => {
   })
 })
 
+describe('checkrEnvironment', () => {
+  it('is unconfigured without both a key and a package slug', () => {
+    expect(checkrEnvironment()).toBe('unconfigured')
+    process.env.CHECKR_API_KEY = 'key'
+    expect(checkrEnvironment()).toBe('unconfigured')
+  })
+
+  it('reports a MISSING base URL as sandbox, not unknown', () => {
+    // lib/background-provider/checkr.ts defaults CHECKR_BASE_URL to the staging
+    // host, so a production deployment with a key and no URL is on staging.
+    process.env.CHECKR_API_KEY = 'key'
+    process.env.CHECKR_PACKAGE_SLUG = 'stellr_crimid'
+    expect(checkrEnvironment()).toBe('sandbox')
+  })
+
+  it('detects the explicit staging and production hosts', () => {
+    process.env.CHECKR_API_KEY = 'key'
+    process.env.CHECKR_PACKAGE_SLUG = 'stellr_crimid'
+    process.env.CHECKR_BASE_URL = 'https://api.checkr-staging.com/v1'
+    expect(checkrEnvironment()).toBe('sandbox')
+    process.env.CHECKR_BASE_URL = 'https://api.checkr.com/v1'
+    expect(checkrEnvironment()).toBe('production')
+  })
+
+  it('blocks a production deployment from ordering staging background checks', () => {
+    process.env.VERCEL_ENV = 'production'
+    process.env.CHECKR_API_KEY = 'key'
+    process.env.CHECKR_PACKAGE_SLUG = 'stellr_crimid'
+    expect(() => assertLiveCredentials('checkr')).toThrow(SandboxCredentialsError)
+    process.env.CHECKR_BASE_URL = 'https://api.checkr.com/v1'
+    expect(() => assertLiveCredentials('checkr')).not.toThrow()
+  })
+})
+
 describe('integrationEnvironments', () => {
   it('reports every integration at once for the admin health check', () => {
     Object.assign(process.env, SANDBOX_DOCUSIGN)
@@ -112,6 +153,7 @@ describe('integrationEnvironments', () => {
       docusign: 'sandbox',
       stripe: 'production',
       clerk: 'unconfigured',
+      checkr: 'unconfigured',
     })
   })
 })

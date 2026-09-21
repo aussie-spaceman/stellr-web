@@ -81,7 +81,7 @@ dev writes to production.
 | Variable | Note |
 |---|---|
 | `DOCUSIGN_*` (11 vars) | `.env.local.example` already defaults to demo (`account-d` / `demo.docusign.net`). `lib/env-guards.ts` refuses to issue from a production deployment on sandbox credentials; dev on sandbox is the intended state |
-| `CHECKR_BASE_URL`, `CHECKR_API_KEY`, `CHECKR_PACKAGE_SLUG` | Already `checkr-staging` by default |
+| `CHECKR_BASE_URL`, `CHECKR_API_KEY`, `CHECKR_PACKAGE_SLUG`, `CHECKR_WORK_LOCATION_STATE`, `NEXT_PUBLIC_CHECKR_DASHBOARD_URL` | **Dev:** staging key + `stellr_crimid` (defaults are already `checkr-staging`). **Prod:** leave `CHECKR_API_KEY` **unset** until Checkr authorises production — `lib/env-guards.ts` treats a key with the staging host as a defect on a production deployment and the order route refuses (503). Once authorised: production key, `CHECKR_BASE_URL=https://api.checkr.com/v1`, `NEXT_PUBLIC_CHECKR_DASHBOARD_URL=https://dashboard.checkr.com`. `CHECKR_WEBHOOK_SECRET` stays unset everywhere (Checkr signs with the API key) |
 | `NEXT_PUBLIC_SANITY_*` | Same CMS content is fine in dev — it is read-mostly. `SANITY_API_TOKEN` (write) should be omitted from dev |
 | `NEXT_PUBLIC_GTM_ID` | **Omit on dev.** Otherwise dev traffic lands in GA4 |
 | `NEXT_PUBLIC_BOOKING_URL`, `NEXT_PUBLIC_DONATION_URL` | Plain links, safe |

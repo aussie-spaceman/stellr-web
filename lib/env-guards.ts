@@ -23,7 +23,7 @@ import { isProductionDeployment } from './env'
 
 export type IntegrationEnvironment = 'production' | 'sandbox' | 'unconfigured'
 
-export type Integration = 'docusign' | 'stripe' | 'clerk'
+export type Integration = 'docusign' | 'stripe' | 'clerk' | 'checkr'
 
 // DocuSign's sandbox is a distinct host pair: account-d.docusign.com for OAuth
 // and demo.docusign.net for the API. Production is account.docusign.com plus a
@@ -53,11 +53,23 @@ function clerkEnvironment(): IntegrationEnvironment {
   return key.startsWith('sk_live_') ? 'production' : 'sandbox'
 }
 
+// Checkr has the same trap as DocuSign: lib/background-provider/checkr.ts
+// DEFAULTS an unset CHECKR_BASE_URL to api.checkr-staging.com, so a production
+// deployment holding a key but no base URL is ordering staging checks — which
+// return canned results for mock candidates and prove nothing about a real
+// person working with minors. 'unconfigured' is reserved for "no key at all".
+export function checkrEnvironment(): IntegrationEnvironment {
+  if (!process.env.CHECKR_API_KEY || !process.env.CHECKR_PACKAGE_SLUG) return 'unconfigured'
+  const base = process.env.CHECKR_BASE_URL ?? 'https://api.checkr-staging.com/v1'
+  return base.includes('checkr-staging.com') ? 'sandbox' : 'production'
+}
+
 export function integrationEnvironments(): Record<Integration, IntegrationEnvironment> {
   return {
     docusign: docusignEnvironment(),
     stripe:   stripeEnvironment(),
     clerk:    clerkEnvironment(),
+    checkr:   checkrEnvironment(),
   }
 }
 

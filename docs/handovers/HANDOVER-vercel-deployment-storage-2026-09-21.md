@@ -98,7 +98,7 @@ bytes are in git history at `9fcabb8` if a re-cut is ever needed.
   through raw `<picture>/<img>` (`ResponsivePhoto.tsx`), not `next/image`.
 
 **Docs.** `ENV-MATRIX.md` §3 row + a Deployment Storage note under the build
-rule; `.env.local.example`; this file; TRACKER § Session 9;
+rule; `.env.local.example`; this file; TRACKER § Session 10;
 `WATERMARKING-HANDOVER.md` gap #6 closed.
 
 ## 4. Numbers to expect

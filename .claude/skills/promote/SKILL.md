@@ -120,6 +120,24 @@ gh pr merge <n> --merge
 
 `--merge`, not `--squash`. See rule 2.
 
+**Then confirm a deployment exists.** A merge to `main` is not a deployment.
+Within a minute, the Vercel API (`list_deployments`, `since` = merge time) must
+show one with `target: production` and `githubCommitSha` = the merge SHA. The
+shell equivalent is the commit status:
+
+```bash
+gh api repos/aussie-spaceman/stellr-web/commits/<merge-sha>/status \
+  --jq '.statuses[] | select(.context=="Vercel – stellr-web") | "\(.state) \(.description)"'
+```
+
+WHY (18 Sept 2026): #121 merged six minutes into a Vercel incident. CI
+passed, `gh` said MERGED, and production kept serving the previous commit
+for 18 hours — no deployment, no status, no error anywhere. If nothing
+appears in ~2 minutes, check vercel-status.com; the re-trigger is another
+git push to `main` (a promotion PR carrying only the release record, #122),
+with its own yes. Not the GitHub *deployments* endpoint (Vercel does not
+populate it) and not a `vercel` CLI watcher (not installed on this Mac).
+
 ## Step 7 — Verify production
 
 Not optional, and not "the deploy went green". Check the site:

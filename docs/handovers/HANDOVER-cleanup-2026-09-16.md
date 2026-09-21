@@ -149,3 +149,33 @@ guard), 7.7 (a `verify:prod` run from a production-pointed env), 7.8 (icon rule:
 confirm or enforce). The T4 list in "Still open" stands.
 
 Google Doc snapshot of TRACKER §7 at close-out (copy, never the source): https://docs.google.com/document/d/1jteiOjw7mjcDLqcNZC2zuWFZ6Oej217Knbf_cp2d3BQ/edit
+
+## Close-out 2 — 21 Sept 2026
+
+Everything from the first close-out is now on production (`main` @ `89fe9af`,
+`dpl_GBYKgTZpwGEcWFT9PW1XSdvHNgX9`). Since 18 Sept:
+
+- **7.6 closed** — guard extended to Stripe live keys (#119); owner swapped the
+  local key to `sk_test` on 21 Sept; guard reports clean. **7.8 closed** — owner
+  confirmed the icon rule.
+- **Two promotions.** #121 (18 Sept) merged but Vercel, mid-incident, never
+  created a deployment; #122 (19 Sept, record only) re-triggered it. #126
+  (21 Sept, docs only) went normally — deployment confirmed within a second of
+  the merge, which is now a written step in `promote` (7.10).
+- **Skipped / inferred, second review:**
+  1. The first #121 report said "merged" as if that were "deployed". It was not
+     — for 18 hours. The skill text now separates the two; this is the one
+     process change this session should be remembered for.
+  2. Three background watchers were written around tools that do not exist or
+     are not populated here (`vercel` CLI; GitHub's deployments endpoint). Each
+     cost a silent 15–30 min wait. The skill amendment names the working check.
+  3. `dev`'s `enforce_admins` rejected the Step 8 fast-forward until `main`'s
+     own CI on the merge commit was green — already in memory from 15 Sept;
+     re-learned rather than remembered. Now also in the 21 Sept record.
+  4. 7.7 (`verify:prod` from a production-pointed env) remains open by design;
+     nothing shipped since needed it.
+- **Recorded:** no test-mode Stripe webhook endpoints exist (7.11) — local
+  webhook-driven flows cannot complete until one does. Stray session-5 branch
+  deleted after a patch-id match (7.12).
+
+Google Doc snapshot of TRACKER §7 at this close-out (copy, never the source): https://docs.google.com/document/d/1uTuoJAb5z5SN_MB3toyMzLK4BtqdswoOSu6gYRYjplM/edit

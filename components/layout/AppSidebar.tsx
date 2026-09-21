@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   Home, Trophy, MessageSquare, FolderOpen, Users,
-  GraduationCap, Heart, Star, Radio, ClipboardList,
+  GraduationCap, Heart, Star, Radio, ClipboardList, Award,
 } from 'lucide-react'
 
 type NavItem = { label: string; href: string; icon: typeof Home }
@@ -26,6 +26,8 @@ const ACADEMY_ITEMS: NavItem[] = [
   { label: 'Mentoring', href: '/community/mentoring', icon: Heart         },
   { label: 'Coaching',  href: '/community/coaching',  icon: Star          },
   { label: 'Hosting',   href: '/community/hosting',   icon: Radio         },
+  // Course completions and event participation, with the LinkedIn share flow.
+  { label: 'Credentials', href: '/community/credentials', icon: Award       },
 ]
 
 // Role-scoped sections (Spaces design). Teachers additionally see Teacher Tools.
@@ -47,7 +49,7 @@ const NON_SPACE_PREFIXES = [
   '/community/resources', '/community/members', '/community/training',
   '/community/mentoring', '/community/workshops', '/community/coaching', '/community/hosting',
   '/community/events', '/community/sessions', '/community/search',
-  '/community/teacher',
+  '/community/teacher', '/community/credentials',
 ]
 
 export function AppSidebar({

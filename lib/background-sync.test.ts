@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { BackgroundProvider } from '@/lib/background-provider'
 
-const logActivity = vi.fn(async () => {})
-vi.mock('@/lib/activity-log', () => ({ logActivity: (...a: unknown[]) => logActivity(...a) }))
+const { logActivity } = vi.hoisted(() => ({
+  logActivity: vi.fn(async (_input: unknown, _db?: unknown) => {}),
+}))
+vi.mock('@/lib/activity-log', () => ({ logActivity }))
 
 import { applyCheckOutcome, syncStaleChecks } from './background-sync'
 

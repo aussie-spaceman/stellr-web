@@ -12,6 +12,17 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 10 — 21 Sept 2026 (Vercel Deployment Storage; media → Blob)
+
+Handover: `HANDOVER-vercel-deployment-storage-2026-09-21.md`.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 10.1 | Deployment Storage before/after figures | **Not measured.** The Usage page needs a signed-in browser (same gap as 6.1). Per-deployment static output is the number this session owns: 515 MB → ~15 MB, proven by `du -sh public` (3.4 MB) and the deployment Resources view once `dev` builds. | Maintainer: read https://vercel.com/stellreducation/~/usage → Deployment Storage → Projects; write both numbers into the handover §6.1. Expect the team figure to fall only as the 15 Sept purge leaves the 30-day window (~15 Oct). | ☐ |
+| 10.2 | Deployment cleanup (7 CANCELED + 3 superseded dev builds) | **Not run** — auto-mode refused the delete. Command with live ids asserted out is in handover §6.2. Marginal: Vercel's 16 Sept retention floor (3+3) takes the READY ones itself. | Run it or leave it. | ☐ |
+| 10.3 | Blob transfer (10 GB/month, 30-day cutoff on overage) | New meter introduced by this session. Store 238 MB; click-to-play with `preload="none"` so only plays count. | Check Observability → Blob monthly; R2 or YouTube if it climbs. | ☐ (watch) |
+| 10.4 | Captions on a cross-origin `<track>` | `crossOrigin="anonymous"` added; Blob sends `access-control-allow-origin: *` (curl). Browser-verified on the local build (see handover §3). | — | ☑ |
+| 10.5 | Plan fit (Hobby fair use vs. a commercial site with Stripe/Clerk/crons) | Raised in handover §6.3; not this session's call. | Maintainer decision. | ☐ |
 ## Session 9 — 21 Sept 2026 (Checkr hardening; fell off the tracker in September)
 
 Handover: `HANDOVER-checkr-2026-09-21.md`. The June build (`docs/BACKGROUND-CHECKS-HANDOFF.md`) was complete but never certified, never used (0 rows on prod and dev), and appeared in no tracker row until now.
@@ -77,7 +88,7 @@ not represented here.
 
 | # | Item | State | Next | Done |
 |---|---|---|---|---|
-| 6.1 | Function Storage after-figure | **Not measured.** Chrome extension not connected; the Vercel usage page needs a browser session. Before: 7.5 GB (75%). 13 deployments retained after the purge, ≤ 63 MB each — arithmetic says < 0.8 GB, but that is inference. | Maintainer: read https://vercel.com/stellreducation/~/usage (may lag deletions by a day) and write the number into the handover §3. | ☐ |
+| 6.1 | Function Storage after-figure | **Still not measured** (21 Sept: folded into 10.1 — same browser gap). Chrome extension not connected; the Vercel usage page needs a browser session. Before: 7.5 GB (75%). 13 deployments retained after the purge, ≤ 63 MB each — arithmetic says < 0.8 GB, but that is inference. | Maintainer: read https://vercel.com/stellreducation/~/usage (may lag deletions by a day) and write the number into the handover §3. | ☐ |
 | 6.2 | Google client swap exercised in production | Pre-merge: JWT, Drive `files.list`, Calendar `calendarList.list` all 200 against the real service account through the new packages. **Sheets API calls (`spreadsheets.values.get/update`, `create`) not executed** — the bare service account owns no sheets; production impersonates the owner. Type-checked identical; not run. | The next group registration (`register/group` creates a sheet) or a `sheet-sync` from a team page — confirm the sheet appears and rows land. Also `cron/motion-bookings` runtime log after its 12:00 UTC run 16 Sept. | ☐ |
 | 6.3 | Rollback targets in older release records | The purge kept the 10 newest `main` builds (oldest 10 Sept). Any deployment id in a release record older than that (e.g. the 10 Sept record's `8e22017` build if it predates the kept set) **no longer exists** — deleted with consent, but the records still name them. | When reading an older record, treat its rollback id as historical; roll back by redeploying the commit instead. | ☐ (accepted) |
 | 6.4 | Required `Vercel – stellr-web` check on `main` | Passes for a skipped build (`Canceled by Ignored Build Step` → SUCCESS, observed #92/#93/#94). Promotions are not blocked, but the check no longer proves a production build *before* the merge; the post-merge `main` build is the gate. Documented in ENV-MATRIX, promote skill, memory. | Decide whether to keep it required (harmless, informational) or drop it from `main`'s ruleset so nobody reads it as a build proof. | ☐ |

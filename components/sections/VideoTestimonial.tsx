@@ -10,7 +10,10 @@ import { Play } from 'lucide-react'
  *   • poster-first — a still + play affordance, no autoload
  *   • WebVTT captions track present (required for accessibility / sound-off)
  *
- * Files live in /public/videos (web-optimized H.264 MP4 + .poster.jpg + .en.vtt).
+ * Files live in the `stellr-media` Blob store under videos/ (720p H.264 MP4 +
+ * .poster.jpg + .en.vtt), resolved via lib/media-manifest `mediaUrl()`. The
+ * host is cross-origin, so the <video> is `crossOrigin="anonymous"` — without
+ * it browsers refuse to load the captions <track>.
  * `captionsSrc` is strongly recommended; if absent the component still renders
  * but logs a dev warning so a caption-less clip never ships unnoticed.
  */
@@ -59,6 +62,7 @@ export function VideoTestimonial({
         </button>
       ) : (
         <video
+          crossOrigin="anonymous"
           controls
           autoPlay
           preload="none"

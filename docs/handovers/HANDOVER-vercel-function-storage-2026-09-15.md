@@ -38,6 +38,11 @@ still holding previews.
 Not contributors: `public/` (523 MB of video) and the fonts — static, not in
 any function trace.
 
+> **21 Sept addendum:** true for *Function* Storage only. `public/` is exactly
+> what fills **Deployment Storage** (build output + static assets, a separate
+> 10 GB meter), which hit 100% six days later. The media now lives in Vercel
+> Blob — see `HANDOVER-vercel-deployment-storage-2026-09-21.md`.
+
 ## 2. What changed (PR: `chore/vercel-function-storage`)
 
 **Build rule, in git.** `vercel.json` → `ignoreCommand: bash

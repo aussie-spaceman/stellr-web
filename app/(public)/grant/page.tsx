@@ -6,7 +6,7 @@ import { Button, Eyebrow, InfoPill } from '@stellr/web-ui'
 import TeacherGrantForm from '@/components/forms/TeacherGrantForm'
 import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
-import { VIDEOS, QUOTES } from '@/lib/media-manifest'
+import { VIDEOS, QUOTES, mediaUrl } from '@/lib/media-manifest'
 import { getRegistrationPrefill } from '@/lib/registration-prefill'
 import { buildFaqJsonLd } from '@/lib/structured-data'
 import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   description: `Stellr pays US high school teachers to bring a team to a live Challenge or run a Campaign at their own school — up to ${grantAmount(GRANT_AMOUNTS.annualMaximum)} a year, plus documented PD contact hours and free Catalyst membership. ${GRANT_PLACES} places for ${GRANT_PROGRAM_YEAR}.`,
 }
 
-const ONE_PAGER = '/files/Stellr-Teacher-Grant-Overview.pdf'
+const ONE_PAGER = mediaUrl('/files/Stellr-Teacher-Grant-Overview.pdf')
 
 export default async function GrantPage() {
   // Tier prices are resolved live from Stripe — a marketing surface must never

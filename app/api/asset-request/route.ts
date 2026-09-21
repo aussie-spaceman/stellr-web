@@ -4,12 +4,9 @@ import { LEAD_SOURCE_LIFECYCLE } from '@/lib/hubspot-fields'
 import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 import { isEmailLike } from '@/lib/utils'
+import { mediaDownloadUrl } from '@/lib/media-manifest'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
-// Where the gated files live. Empty → self-hosted on the site (SITE_URL/files).
-// Set NEXT_PUBLIC_MEDIA_BASE_URL (same var the manifest uses) once /files moves
-// to a bucket/CDN, and the emailed download links follow automatically.
-const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ?? '').replace(/\/+$/, '')
 
 /**
  * Registry of gated marketing assets. Each entry is emailed to the requester
@@ -80,7 +77,10 @@ export async function POST(req: Request) {
 
     const [firstName, ...rest] = cleanName.split(/\s+/)
     const lastName = rest.join(' ')
-    const downloadUrl = `${MEDIA_BASE || SITE_URL}${config.file}`
+    // Absolute on the media host (lib/media-manifest) when one is set; otherwise
+    // the site serves it from /public.
+    const hosted = mediaDownloadUrl(config.file)
+    const downloadUrl = hosted.startsWith('http') ? hosted : `${SITE_URL}${hosted}`
 
     // ── 1. Capture the lead in HubSpot as a subscriber (best-effort) ──────
     // Form submission + note engagement, so the request is visible under

@@ -70,6 +70,13 @@ export async function PATCH(req: Request) {
   if (typeof body.minTierRank === 'number') patch.min_tier_rank = body.minTierRank
   if ('eventRef' in body) patch.event_ref = body.eventRef || null
   if ('certTemplatePath' in body) patch.cert_template_path = body.certTemplatePath || null
+  // Credential defaults — what a completion credential says (lib/credentials).
+  if ('credentialTitle' in body) patch.credential_title = (body.credentialTitle as string | null)?.trim() || null
+  if ('credentialDescription' in body) patch.credential_description = (body.credentialDescription as string | null)?.trim() || null
+  if ('credentialCriteria' in body) patch.credential_criteria = (body.credentialCriteria as string | null)?.trim() || null
+  if (Array.isArray(body.credentialSkills)) {
+    patch.credential_skills = (body.credentialSkills as unknown[]).filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => x.trim())
+  }
   // Per-course reminder & escalation settings (Reminders & escalation tab).
   const reminderCols: Record<string, string> = {
     remindInapp: 'remind_inapp',

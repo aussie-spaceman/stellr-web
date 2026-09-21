@@ -3,6 +3,7 @@ import { getEntityDef } from './registry'
 import { deletionPreflight } from './preflight'
 import { runExternalCleanup } from './external'
 import { archiveEntity } from './archive'
+import { tombstoneCredentialsFor } from '@/lib/credentials'
 import { executeRefund, type RefundChoice } from '@/lib/refunds/execute'
 import type { DeleteMode, DeletionResult, EntityDef } from './types'
 
@@ -58,6 +59,12 @@ export async function executeDeletion(
   }
 
   const externalResults = await runExternalCleanup(def, id)
+
+  // A person's credentials outlive them only as tombstones: number resolves,
+  // name gone. Must run before the FK nulls the link on a hard purge.
+  if (def.type === 'member' || def.type === 'participant') {
+    await tombstoneCredentialsFor(db, def.type, id)
+  }
 
   if (mode === 'soft') {
     const { error } = await db.from(def.table).update(resolveSoftSet(def)).eq(def.pk, id)

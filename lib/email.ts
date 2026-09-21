@@ -856,3 +856,34 @@ export function credentialIssuedEmail({
   const text = `Hi ${toGuardian ? guardianFirstName : recipientFirstName},\n\n${toGuardian ? `${recipientFirstName} has` : 'You have'} earned a verified credential from ${issuer}: ${title}.\n\nView it: ${url}\n\n${sharingLine.replace(/<[^>]+>/g, '')}\n\n— Stellr Education`
   return { subject, html, text }
 }
+
+// Sent when an admin revokes a credential. Plain about what happened and
+// what to do if it is on a LinkedIn profile; the reason is quoted as given.
+export function credentialRevokedEmail({
+  recipientFirstName, guardianFirstName, title, number, reason,
+}: {
+  recipientFirstName: string
+  guardianFirstName?: string | null
+  title: string
+  number: string
+  reason: string
+}) {
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const toGuardian = !!guardianFirstName
+  const who = esc(toGuardian ? guardianFirstName! : recipientFirstName)
+  const subject = `Credential withdrawn — ${title}`
+  const html = emailLayout({
+    heading: 'Credential withdrawn',
+    bodyHtml: `
+        <p>Hi ${who},</p>
+        <p>The Stellr credential <strong>${esc(title)}</strong> (${esc(number)})${toGuardian ? ` issued to <strong>${esc(recipientFirstName)}</strong>` : ''} has been withdrawn and is no longer valid.</p>
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;margin:24px 0">
+          <p style="margin:0;font-size:14px;color:#7f1d1d"><strong>Reason:</strong> ${esc(reason)}</p>
+        </div>
+        <p style="color:#6b7280;font-size:14px">Its page now shows it as revoked. If it was added to a LinkedIn profile, please remove it there — LinkedIn does not update entries automatically.</p>
+        <p style="color:#6b7280;font-size:14px">If you think this is a mistake, reply to this email.</p>`,
+  })
+  const text = `Hi ${toGuardian ? guardianFirstName : recipientFirstName},\n\nThe Stellr credential ${title} (${number})${toGuardian ? ` issued to ${recipientFirstName}` : ''} has been withdrawn and is no longer valid.\n\nReason: ${reason}\n\nIts page now shows it as revoked. If it was added to a LinkedIn profile, please remove it there.\n\nIf you think this is a mistake, reply to this email.\n\n— Stellr Education`
+  return { subject, html, text }
+}

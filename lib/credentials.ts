@@ -270,3 +270,28 @@ export async function recordCredentialEvent(db: SupabaseClient, credentialId: st
   const { error } = await db.from('credential_events').insert({ credential_id: credentialId, kind })
   if (error) console.error('[credentials] event write failed:', error.message)
 }
+
+// ── Erasure ──────────────────────────────────────────────────────────────────
+
+/**
+ * Right-to-erasure hook, called from lib/deletion before the person's row goes.
+ * The number keeps resolving — a verifier holding a CV gets "withdrawn", not a
+ * 404 that looks like a forgery — but the name is gone and the page is private.
+ * Runs before the FK nulls the link, or the rows could not be found.
+ */
+export async function tombstoneCredentialsFor(
+  db: SupabaseClient,
+  who: 'member' | 'participant',
+  id: string,
+): Promise<number> {
+  const col = who === 'member' ? 'member_id' : 'participant_id'
+  const now = new Date().toISOString()
+  const { data, error } = await db
+    .from('credentials')
+    .update({ tombstoned_at: now, recipient_name: '', visibility: 'private', updated_at: now })
+    .eq(col, id)
+    .is('tombstoned_at', null)
+    .select('id')
+  if (error) console.error('[credentials] tombstone failed:', error.message)
+  return data?.length ?? 0
+}

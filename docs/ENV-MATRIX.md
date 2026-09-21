@@ -79,6 +79,7 @@ dev writes to production.
 | `NEXT_PUBLIC_SANITY_*` | Same CMS content is fine in dev — it is read-mostly. `SANITY_API_TOKEN` (write) should be omitted from dev |
 | `NEXT_PUBLIC_GTM_ID` | **Omit on dev.** Otherwise dev traffic lands in GA4 |
 | `NEXT_PUBLIC_BOOKING_URL`, `NEXT_PUBLIC_DONATION_URL` | Plain links, safe |
+| `LINKEDIN_ORGANIZATION_ID` | Numeric ID of Stellr's LinkedIn Page (from `linkedin.com/company/<id>/admin/`). Public knowledge, same value everywhere. `lib/linkedin.ts` falls back to `organizationName` when unset, so dev works without it; set on prod so profile entries link to the Page |
 
 ## 4. No sandbox exists — dev must be inert
 

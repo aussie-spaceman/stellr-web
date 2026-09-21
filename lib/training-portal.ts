@@ -10,8 +10,8 @@ import {
   type CourseTheme,
   type TrainingType,
 } from '@/lib/training'
-import { issueCredential, shareConsentFor, canShare, credentialUrl } from '@/lib/credentials'
-import { sendEmail, credentialIssuedEmail } from '@/lib/email'
+import { issueCredential } from '@/lib/credentials'
+import { sendCredentialIssuedEmail } from '@/lib/credentials-notify'
 
 // Data layer for the redesigned Training portal (member + admin). Sits on top of
 // lib/training.ts and reconciles the two assignment sources:
@@ -388,29 +388,14 @@ export async function ensureCertificate(memberId: string, moduleId: string): Pro
     return null
   }
 
-  // Tell them once, on first issue. Non-fatal: a mail outage must not undo a
-  // completion, and the wallet shows the credential regardless.
+  // Tell them once, on first issue. Non-fatal; the wallet shows it regardless.
   if (issued.created) {
-    try {
-      const consent = await shareConsentFor(db, issued.row)
-      const toGuardian = issued.row.is_minor && !!member.ec_email && !!member.ec_first_name
-      const mail = credentialIssuedEmail({
-        recipientFirstName: member.first_name,
-        guardianFirstName:  toGuardian ? member.ec_first_name : null,
-        title:    issued.row.title,
-        issuer:   issued.row.issuer,
-        url:      credentialUrl(issued.row.number),
-        isMinor:  issued.row.is_minor,
-        canShare: canShare(issued.row, consent).ok,
-      })
-      await sendEmail({
-        to: (toGuardian ? member.ec_email : member.email) as string,
-        cc: toGuardian && member.email ? [member.email] : undefined,
-        ...mail,
-      })
-    } catch (err) {
-      console.error('[training] credential email failed:', err)
-    }
+    await sendCredentialIssuedEmail(db, issued.row, {
+      firstName: member.first_name,
+      email: member.email,
+      guardianFirstName: member.ec_first_name,
+      guardianEmail: member.ec_email,
+    })
   }
 
   return issued.row.number

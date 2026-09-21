@@ -122,6 +122,12 @@ dashboard shows clear but we show referred.
 - **Invitation expired:** cancel/expire a pending invitation in the dashboard (or let a
   throwaway one hit the 7-day expiry) → `invitation.expired` → Stellr `expired`
   ("invitation expired — re-order required"). *(Previously dropped; confirm it updates.)*
+- **Missed webhook → sync (added 2026-09-21):** for one candidate, disable the webhook
+  in the Checkr dashboard before completing the hosted flow. The row stays `invited`.
+  On `/admin/compliance` press **Sync with Checkr** → the row reconciles to the
+  dashboard status and a `compliance` activity-log line with `metadata.source = "sync"`
+  appears. Re-enable the webhook afterwards. (The daily cron does the same on prod;
+  it declines on dev because `APP_ENV=dev`.)
 
 ---
 

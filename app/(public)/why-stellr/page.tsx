@@ -5,7 +5,7 @@ import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 import { AssetGate } from '@/components/sections/AssetGate'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { WorkCard } from '@/components/sections/WorkCard'
-import { VIDEOS, QUOTES, COMPETITION, PHOTOS } from '@/lib/media-manifest'
+import { VIDEOS, QUOTES, COMPETITION, PHOTOS, mediaDownloadUrl } from '@/lib/media-manifest'
 import { ProofStrip } from '@/components/sections/ProofStrip'
 
 export const metadata: Metadata = {
@@ -369,7 +369,7 @@ export default function WhyStellrPage() {
             <AssetGate
               asset="sponsorship-prospectus"
               title="Sponsorship Prospectus"
-              fileUrl="/files/Stellr-Sponsorship-Prospectus.pdf"
+              fileUrl={mediaDownloadUrl('/files/Stellr-Sponsorship-Prospectus.pdf')}
               triggerLabel="Request prospectus ↓"
               eyebrow="Partner prospectus"
               triggerClassName="inline-flex items-center justify-center gap-2 rounded-control px-6 py-3 font-subheading font-semibold text-sm text-ink bg-surface border border-line hover:border-primary hover:text-primary transition-colors"

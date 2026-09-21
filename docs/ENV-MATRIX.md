@@ -41,6 +41,12 @@ in both projects (six deployments per PR) and Function Storage reached 75% of
 the Hobby limit; see `docs/handovers/HANDOVER-vercel-function-storage-2026-09-15.md`.
 The older dashboard command on `stellr-web-dev` is now inert and can stay.
 
+That fixed Function Storage; **Deployment Storage** (build output + static
+assets, a separate 10 GB meter) hit 100% on 21 Sept because every build still
+shipped 515 MB of `/public` media. The media now lives in Vercel Blob — see
+`NEXT_PUBLIC_MEDIA_BASE_URL` in §3 and
+`docs/handovers/HANDOVER-vercel-deployment-storage-2026-09-21.md`.
+
 ## 1. The variable that decides everything
 
 | Variable | Production | Dev | Notes |
@@ -75,11 +81,12 @@ dev writes to production.
 | Variable | Note |
 |---|---|
 | `DOCUSIGN_*` (11 vars) | `.env.local.example` already defaults to demo (`account-d` / `demo.docusign.net`). `lib/env-guards.ts` refuses to issue from a production deployment on sandbox credentials; dev on sandbox is the intended state |
-| `CHECKR_BASE_URL`, `CHECKR_API_KEY`, `CHECKR_PACKAGE_SLUG` | Already `checkr-staging` by default |
+| `CHECKR_BASE_URL`, `CHECKR_API_KEY`, `CHECKR_PACKAGE_SLUG`, `CHECKR_WORK_LOCATION_STATE`, `NEXT_PUBLIC_CHECKR_DASHBOARD_URL` | **Dev:** staging key + `stellr_crimid` (defaults are already `checkr-staging`). **Prod:** leave `CHECKR_API_KEY` **unset** until Checkr authorises production — `lib/env-guards.ts` treats a key with the staging host as a defect on a production deployment and the order route refuses (503). Once authorised: production key, `CHECKR_BASE_URL=https://api.checkr.com/v1`, `NEXT_PUBLIC_CHECKR_DASHBOARD_URL=https://dashboard.checkr.com`. `CHECKR_WEBHOOK_SECRET` stays unset everywhere (Checkr signs with the API key) |
 | `NEXT_PUBLIC_SANITY_*` | Same CMS content is fine in dev — it is read-mostly. `SANITY_API_TOKEN` (write) should be omitted from dev |
 | `NEXT_PUBLIC_GTM_ID` | **Omit on dev.** Otherwise dev traffic lands in GA4 |
 | `NEXT_PUBLIC_BOOKING_URL`, `NEXT_PUBLIC_DONATION_URL` | Plain links, safe |
 | `LINKEDIN_ORGANIZATION_ID` | Numeric ID of Stellr's LinkedIn Page (from `linkedin.com/company/<id>/admin/`). Public knowledge, same value everywhere. `lib/linkedin.ts` falls back to `organizationName` when unset, so dev works without it; set on prod so profile entries link to the Page |
+| `NEXT_PUBLIC_MEDIA_BASE_URL` | **Same value everywhere, and required** (since 21 Sept 2026): `https://l3zabozgfpz3vahd.public.blob.vercel-storage.com`, the `stellr-media` public Blob store. Marketing media is not environment-specific; an empty value 404s every testimonial video, photo and gated PDF because they no longer ship in `/public`. Baked in at build time (`NEXT_PUBLIC_`), so set it before the build, not after. `BLOB_READ_WRITE_TOKEN` is local-only (`scripts/upload-media.ts`) and belongs on no deployment. See `docs/handovers/HANDOVER-vercel-deployment-storage-2026-09-21.md` |
 
 ## 4. No sandbox exists — dev must be inert
 

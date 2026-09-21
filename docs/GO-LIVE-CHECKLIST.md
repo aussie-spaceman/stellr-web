@@ -159,6 +159,7 @@ Then complete the env + webhook items below.
 
 - [ ] **FERPA / School DPA**: group (school) registration must capture school DPA / School Official agreement acceptance before going live (migration `011_school_dpa.sql`). Confirm the flow blocks completion without it.
 - [ ] Privacy policy live at `/privacy` and linked from footer.
+- [ ] **Background checks (Checkr)** — production is `unconfigured` as of 2026-09-21 (correct until Checkr authorises live reports; staging keys on prod would be flagged by `/api/admin/health/integrations`). To go live: pass the API Authorization Review (`docs/BACKGROUND-CHECKS-HANDOFF.md` §9), set production `CHECKR_*` on `stellr-web`, register the production webhook, confirm the health endpoint reports `checkr: production`. Until then adults are cleared via the verified-teacher-license path only.
 
 ---
 

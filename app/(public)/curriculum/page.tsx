@@ -8,7 +8,7 @@ import { StudentWorkHero } from '@/components/sections/StudentWorkHero'
 import { PageMedia } from '@/components/sections/PageMedia'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
-import { PHOTOS, VIDEOS } from '@/lib/media-manifest'
+import { PHOTOS, VIDEOS, mediaDownloadUrl } from '@/lib/media-manifest'
 import { getAllCampaigns } from '@/lib/sanity'
 import { getCampaignDates, campaignStatusFromDates, type CampaignSeason } from '@/lib/campaigns'
 
@@ -300,7 +300,7 @@ export default async function CampaignsPage() {
             <AssetGate
               asset="student-rfp"
               title="Example Student RFP"
-              fileUrl="/files/Stellr-Example-Student-RFP.pdf"
+              fileUrl={mediaDownloadUrl('/files/Stellr-Example-Student-RFP.pdf')}
               triggerLabel="See a student Request for Proposal ↓"
               eyebrow="Free · example RFP"
               helper="A real student RFP, sent straight to your inbox."

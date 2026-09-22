@@ -131,7 +131,7 @@ DocuSign demo emails are real — use your controlled test inbox as the signer.
 | Service | Env | Sandbox note |
 |---|---|---|
 | **Clerk** | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`=`pk_test_…`, `CLERK_SECRET_KEY`=`sk_test_…`, `CLERK_WEBHOOK_SECRET`=`whsec_…` | Dev instance. Emails with `+clerk_test` auto-verify (code **424242**) — the seed script's `SEED_CLERK_TEST=1` uses this. Point the Clerk webhook at `/api/webhooks/clerk`. |
-| **Checkr** (background checks) | `CHECKR_BASE_URL`=`https://api.checkr-staging.com/v1`, `CHECKR_API_KEY`, `CHECKR_WEBHOOK_SECRET`, `NEXT_PUBLIC_CHECKR_DASHBOARD_URL`=`https://dashboard.checkr-staging.com` | Already defaults to **staging**. |
+| **Checkr** (background checks) | `CHECKR_BASE_URL`=`https://api.checkr-staging.com/v1`, `CHECKR_API_KEY`, `CHECKR_WEBHOOK_SECRET`, `NEXT_PUBLIC_CHECKR_DASHBOARD_URL`=`https://dashboard.checkrhq-staging.net` | Already defaults to **staging**. |
 | **Printful** (store) | `PRINTFUL_API_KEY`, `PRINTFUL_STORE_ID`, `PRINTFUL_WEBHOOK_SECRET` | Use a test store; reuses Stripe test mode for payment. |
 | **JaaS / Jitsi** (video) | `VIDEO_PROVIDER`=`jaas`, `JAAS_APP_ID`, `JAAS_KID`, `JAAS_PRIVATE_KEY`, `JAAS_WEBHOOK_SECRET`, `RECORDING_WEBHOOK_SECRET` | JaaS dev app; webhook → `/api/webhooks/recording`. |
 | **Google** | `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `GOOGLE_PLACES_API_KEY` | Service account for Sheets/Calendar; Places (New) for school autofill. |

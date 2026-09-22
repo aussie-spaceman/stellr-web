@@ -13,7 +13,7 @@ recruiting + adjudication; admins have dashboard access). Companion files:
 ## 0 · Pre-flight (once, before any candidate)
 
 - [ ] Env points at **staging**: `CHECKR_BASE_URL=https://api.checkr-staging.com/v1`,
-      `NEXT_PUBLIC_CHECKR_DASHBOARD_URL=https://dashboard.checkr-staging.com`,
+      `NEXT_PUBLIC_CHECKR_DASHBOARD_URL=https://dashboard.checkrhq-staging.net`,
       `CHECKR_API_KEY` = staging secret key.
 - [ ] `CHECKR_PACKAGE_SLUG` = a staging **criminal + identity** package slug
       (Dashboard → Packages).

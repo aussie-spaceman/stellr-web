@@ -160,6 +160,11 @@ YouTube unlisted, not another re-encode.
 
 ## 7. Close-out addendum (22 Sept 2026)
 
+**Tracker:** `docs/handovers/TRACKER.md` § Session 10 is canonical. Google Doc
+snapshot (a copy, never the source — the Drive connector cannot edit an
+existing document's body):
+https://docs.google.com/document/d/1B4lyRP9-20Y2VvFhW6zEUz8q5V29L8WlAiXyZAoSYZE/edit
+
 Everything below happened after §1–§6 were written. §6's "not done" list is
 superseded by this section.
 

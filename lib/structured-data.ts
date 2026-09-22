@@ -492,7 +492,7 @@ export function buildCompetitionSeriesJsonLd(members: readonly SeriesMember[] = 
 export function buildEventJsonLd(
   event: SchemaEvent,
   slug: string,
-  opts: { price?: EventPrice; series?: readonly SeriesMember[] } = {},
+  opts: { price?: EventPrice; series?: readonly SeriesMember[]; description?: string } = {},
 ) {
   const url = eventUrl(slug)
   const startDate = dateTime(event.date, event.startTime)
@@ -503,7 +503,8 @@ export function buildEventJsonLd(
     '@type': 'Event',
     '@id': `${url}#event`,
     name: event.title,
-    description: event.tagline,
+    // The caller's fallback is the page's own meta description, not new copy.
+    description: event.tagline ?? opts.description,
     startDate,
     endDate: dateTime(event.endDate ?? event.date, event.endTime),
     // Google shows the original date on a rescheduled event, and only then.
@@ -536,7 +537,7 @@ export function buildEventJsonLd(
 export function buildCampaignJsonLd(
   event: SchemaEvent,
   slug: string,
-  opts: { series?: readonly SeriesMember[] } = {},
+  opts: { series?: readonly SeriesMember[]; description?: string } = {},
 ) {
   const url = eventUrl(slug)
   const dates =
@@ -550,7 +551,8 @@ export function buildCampaignJsonLd(
     '@type': 'Event',
     '@id': `${url}#event`,
     name: event.title,
-    description: event.tagline,
+    // The caller's fallback is the page's own meta description, not new copy.
+    description: event.tagline ?? opts.description,
     startDate: dates.startDate,
     endDate: dates.endDate,
     eventStatus: eventStatusUrl(event.status),

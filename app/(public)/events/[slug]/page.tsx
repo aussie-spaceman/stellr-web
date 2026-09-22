@@ -33,23 +33,33 @@ interface PageProps {
   params: Promise<{ slug: string }>
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { slug } = await params
-  const event: EventData | null = await getEventBySlug(slug).catch(() => null)
-  if (!event) return { title: 'Event Not Found' }
-  const isCampaign = event.activityType === 'campaign'
-  const kind = isCampaign
+function eventKind(event: EventData): string {
+  return event.activityType === 'campaign'
     ? 'Online STEM Campaign'
     : event.setting === 'virtual'
     ? 'Virtual STEM Competition'
     : 'In-Person STEM Competition'
+}
+
+/**
+ * One-line summary for an event with no tagline yet. Used as both the meta
+ * description and the JSON-LD `description`, so Search sees one sentence.
+ */
+function eventSummary(event: EventData): string {
   const audience = gradeBand(event).audienceShort
-  const description =
-    event.tagline ??
-    `A Stellr ${event.type ?? 'design competition'} — a ${kind.toLowerCase()} for ${audience} students.`
+  // Title-case kind → sentence case, keeping the acronym: "an in-person STEM competition".
+  const kind = eventKind(event).toLowerCase().replace('stem', 'STEM')
+  const article = /^[aeiou]/.test(kind) ? 'an' : 'a'
+  return `A Stellr ${event.type ?? 'design competition'} — ${article} ${kind} for ${audience} students.`
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug } = await params
+  const event: EventData | null = await getEventBySlug(slug).catch(() => null)
+  if (!event) return { title: 'Event Not Found' }
   return {
-    title: `${event.title} — ${kind}`,
-    description,
+    title: `${event.title} — ${eventKind(event)}`,
+    description: event.tagline ?? eventSummary(event),
     alternates: { canonical: `/events/${slug}` },
     openGraph: event.image
       ? { images: [{ url: urlFor(event.image).width(1200).height(630).url() }] }
@@ -218,7 +228,10 @@ export default async function EventDetailPage({ params }: PageProps) {
             // has no valid Event node — the FAQ block still stands alone.
             __html: JSON.stringify(
               [
-                buildCampaignJsonLd(event, slug, { series: seriesMembers }),
+                buildCampaignJsonLd(event, slug, {
+                  series: seriesMembers,
+                  description: eventSummary(event),
+                }),
                 buildFaqJsonLd(CAMPAIGN_FAQS),
               ].filter(Boolean),
             ),
@@ -261,7 +274,11 @@ export default async function EventDetailPage({ params }: PageProps) {
   // visible price or status is treated as spam. An event with no date yet
   // builds no Event node at all; the FAQ block is published on its own.
   const jsonLd = [
-    buildEventJsonLd(event, slug, { price, series: seriesMembers }),
+    buildEventJsonLd(event, slug, {
+      price,
+      series: seriesMembers,
+      description: eventSummary(event),
+    }),
     buildFaqJsonLd(FAQS),
   ].filter(Boolean)
 

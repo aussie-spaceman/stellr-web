@@ -174,6 +174,16 @@ describe('buildEventJsonLd', () => {
     expect(node.maximumAttendeeCapacity).toBe(120)
   })
 
+  it('falls back to the caller\'s description only when there is no tagline', () => {
+    const summary = 'A Stellr Space Design Challenge — an in-person STEM competition.'
+    const untagged = buildEventJsonLd({ ...colorado, tagline: undefined }, colorado.slug.current, {
+      description: summary,
+    })!
+    expect(untagged.description).toBe(summary)
+    const tagged = buildEventJsonLd(colorado, colorado.slug.current, { description: summary })!
+    expect(tagged.description).toBe(colorado.tagline)
+  })
+
   it('normalises a US state to its USPS code and keeps the venue geo', () => {
     const node = buildEventJsonLd(colorado, colorado.slug.current)! as Node
     const location = node.location as Node
@@ -370,6 +380,13 @@ describe('buildCampaignJsonLd', () => {
       validThrough: '2026-11-30',
     })
     for (const field of [...REQUIRED, ...RECOMMENDED]) expect(node[field]).toBeDefined()
+  })
+
+  it('falls back to the caller\'s description when the campaign has no tagline', () => {
+    const node = buildCampaignJsonLd({ ...campaign, tagline: undefined }, 'x', {
+      description: 'A Stellr campaign.',
+    })!
+    expect(node.description).toBe('A Stellr campaign.')
   })
 
   it('closes the offer when registration is switched off', () => {

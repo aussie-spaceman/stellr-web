@@ -155,3 +155,70 @@ YouTube unlisted, not another re-encode.
    not urgent.
 5. **Sanity Studio** (TRACKER 6.5, 10 MB/deployment) stays deferred — 2% of
    the problem.
+
+---
+
+## 7. Close-out addendum (22 Sept 2026)
+
+Everything below happened after §1–§6 were written. §6's "not done" list is
+superseded by this section.
+
+### 7.1 It shipped and it is live
+
+`9782de5` (#129) → `dev`; promoted as `3ea4d59` (#133); production
+`dpl_F2C5snFhgjeuZEvDGvpNCaRJzgwF` READY. Record:
+`.claude/releases/promote-2026-09-21b.md` (marked Promoted in #135).
+
+Production verified after the deploy: www 200, app 307 → `/sign-in`, cron guard
+401, every media URL on the Blob host with no relative `/videos|/media|/files`
+left in the HTML, **`/videos/testimonial-david-shaw.mp4` → 404** (the proof the
+bytes are out of the deployment), MP4 206 `video/mp4`, PDF `?download=1` 200
+`application/pdf`, `/students` AVIF srcset resolving, kept `public/` asset 200,
+OG card 200 `image/png`.
+
+The promotion also carried three PRs from other sessions that were already on
+`dev` — #128 Checkr hardening, #130 vitest glob, #131 verifiable credentials +
+LinkedIn (which needed migration `20260921120000_credentials`, applied to
+production before the merge). That was not planned work for this session; it
+came with the branch.
+
+### 7.2 §6.2's cleanup command was wrong by the time it ran
+
+It was rebuilt from a live listing and run on 22 Sept (TRACKER 10.2): **27
+deployments deleted**, not 10. The written list had gone stale in ~16 hours —
+several ids no longer existed, and it **missed the six superseded READY `dev`
+builds, which were the only ones still holding pre-Blob output**. The CANCELED
+ones it did list carry no output at all, so the command as written would have
+freed nothing.
+
+**Lesson for the next person: never run a stored deployment-id list.** Re-list,
+rebuild the set, assert the live/rollback ids out of it, then delete.
+
+### 7.3 §6.1 failed a third time
+
+The Usage figures still are not read. On 22 Sept the Claude-in-Chrome connector
+was tried (the user's own Chrome carries the Vercel session) and reported **not
+connected**. No Claude surface available here can load a signed-in vercel.com
+page. This is a maintainer action, not an agent one — see TRACKER 10.1.
+
+### 7.4 New, found during close-out
+
+- **A stray production ledger row** (`20260922142559`) — the credentials
+  migration was applied twice because a parallel session's record claimed it was
+  applied while `db:status --prod` still reported it pending. Idempotent SQL, no
+  duplicate rows; cosmetic. TRACKER 10.6.
+- **`NEXT_PUBLIC_MEDIA_BASE_URL` was never added to any local `.env.local`** —
+  §Phase 4 of the plan said to and only Vercel + CI were done. `npm run dev`
+  would 404 all media. Fixed in the main checkout; TRACKER 10.7.
+- **The original master MP4s were not archived to Drive** as the plan said —
+  they exist only in git history at `9fcabb8`, which couples them to never
+  rewriting that history. TRACKER 10.8, blocking 10.9.
+- **Two sessions promoted the same `dev` at once.** TRACKER 10.10.
+
+### 7.5 What to watch now
+
+Blob transfer, not Deployment Storage: 10 GB/month on Hobby and a **30-day
+cutoff** on overage, which would 404 every testimonial on the public site.
+Store is 238 MB of a 1 GB allowance. Videos are click-to-play with
+`preload="none"`, so only real plays count (~600/month of an average 15 MB
+clip). Observability → Blob, monthly.

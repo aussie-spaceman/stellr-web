@@ -11,7 +11,7 @@ Companion: `docs/CHECKR-TESTING-RUNBOOK.md` (how to test) ·
 
 ## Account & integration profile
 
-- **Company / account:** Stellr (InSim Education) — staging account **[Checkr account name/ID]**
+- **Company / account:** Stellr (InSim Education) — staging account **`9f700773fc2d10d465427d83`** ("Industry Simulation Education")
 - **Integration type:** **Checkr-Hosted Flow** (API-initiated). We create a Candidate
   then an Invitation; Checkr emails the candidate a hosted apply page where they enter
   PII and give FCRA disclosure & authorization. Checkr (the CRA) owns consent capture;
@@ -23,9 +23,12 @@ Companion: `docs/CHECKR-TESTING-RUNBOOK.md` (how to test) ·
   acceptable clearances; the other is a verified teaching license.
 - **Geography:** **US only.**
 - **Who pays:** Stellr is billed per report; the candidate is never charged.
-- **Packages:** one **Criminal + SSN-trace/identity** package (production default).
-  A **Criminal + MVR** package is used only to demonstrate the partial-cancellation
-  (`includes_canceled`) scenario during testing.
+- **Packages:** one **Criminal + SSN-trace/identity** package — `stellr_crimid`
+  (global watchlist, national criminal, sex offender, SSN trace). This is the
+  production default and the only package on the account; Stellr orders against a
+  single configured package slug. No Criminal + MVR package exists, so the
+  partial-cancellation (`includes_canceled`) scenario was not run — see the test
+  results document.
 
 ## Report initiation
 
@@ -82,14 +85,32 @@ as eligible, the member is not cleared to participate.
 
 ## Demonstration
 
-- **End-to-end video link:** **[paste after recording]** — covers Clear, Consider,
-  Canceled, Pending→resume, and includes-canceled, showing the Stellr status matching
-  the Checkr dashboard for each candidate.
+- **Test results:** `docs/CHECKR-CERTIFICATION-RESULTS-2026-09-22.md` — full matrix,
+  timings and evidence from the 22 Sept 2026 run against staging account
+  `9f700773fc2d10d465427d83`.
+- **Demonstrated:** Clear (Bud Richman), Consider → human adjudication (Judge Judy),
+  and Pending → resume → Clear twice over (Remy Gonz, Jen Kasp), plus duplicate-order
+  rejection, out-of-scope rejection and webhook signature rejection. In every case the
+  Stellr status matched the Checkr dashboard.
+- **Not demonstrated, with reasons:** the **Canceled** scenario (Vito Andolini) could
+  not be forced — his mock SSN suspends the report within ~30 seconds and
+  `POST /v1/reports/{id}/complete` then half-applies without reaching a terminal state;
+  and **Clear-with-Canceled** (Alex Taylor) requires a Criminal + MVR package, which
+  does not exist on this account. Both mappings are covered by unit tests. Happy to
+  run either if Checkr can advise on forcing a cancellation past a suspended screening,
+  or if an MVR package is added to the staging account.
+- **End-to-end video link:** **[paste after recording]** — recommend recording Bud
+  Richman: order → candidate email → hosted apply page → webhook → cleared pill, the
+  full loop in about a minute.
 
 ---
 
 ### Before you submit — outstanding [bracketed] items
 
-1. Checkr staging account name/ID.
+1. ~~Checkr staging account name/ID~~ — `9f700773fc2d10d465427d83`.
 2. Confirm billing/payment is configured in the dashboard.
 3. Record and paste the end-to-end video link.
+
+Also worth doing before recording: Checkr's staging mail (`checkrhq-dev.net`) was
+being auto-filed to Trash, so the invitation email — which the video is meant to
+show — never appeared in the inbox. Add a filter first.

@@ -5,12 +5,36 @@ been closed. **This file is canonical.** Each close-out appends its own
 section and ticks any earlier row it closed — in the same docs PR as the
 session handover, so a tick is reviewed and lands on `dev` like everything
 else. A Google Doc snapshot may be created per session for reading away from
-the repo; it is a copy, never the source (the Drive connector cannot edit an
-existing document's body, which is why this file exists — 15 Sept 2026).
+the repo; it is a copy, never the source. The Drive connector cannot edit an
+*existing* document's body (15 Sept 2026) — but it **can** create one with a
+body: `create_file` takes `mimeType`, `title` and `content` as base64, and
+uploading base64 HTML with `mimeType: text/html` converts to a real Doc with
+real tables (22 Sept 2026).
 
 Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
+
+## Session 11 — 21–22 Sept 2026 (verifiable credentials + LinkedIn sharing)
+
+Handover: `docs/handovers/HANDOVER-credentials-linkedin-2026-09-22.md`.
+Plan: `docs/PLAN-credentials-linkedin-2026-09-21.md` (§9 = what shipped).
+Doc snapshot: `14Pk3_D68tXxnSlhytlaFUyJW8oFCrJr1FcWP9ztk8ck`.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 11.1 | LinkedIn org ID unconfirmed | `LINKEDIN_ORGANIZATION_ID=66274777` set on Vercel Production 22 Sept and live in the build serving `main`. Never confirmed to be Stellr's own Page; the builder only validates that it is numeric, so a wrong ID fails silently. `Stellr`, `STELR` and `Stellar Education` are separate pages. | Open a credential page as its owner → "Add to LinkedIn profile" → the form must name **Stellr Education**. Needs a LinkedIn login. If wrong, change the variable, redeploy, and tell anyone who already added an entry — theirs does not update. | ☐ |
+| 11.2 | Phase 0 prefill spike not run | Unknown whether LinkedIn still pre-fills the Licenses & certifications form. Help page says retired; 2026 third-party builders say it works. UI ships a copy-details panel either way, so nothing is broken. | Same sitting as 11.1 — one real click answers both. If prefill is gone, make the copy-details panel the primary affordance in the copy. | ☐ |
+| 11.3 | First real event issuance unexercised | `POST /api/admin/events/[slug]/credentials` has never run against real participants. Shares the course path; unit-tested for idempotency. | Run on one small event with someone watching outbound mail; check the issued list, one page, one email. | ☐ |
+| 11.4 | Erasure wired but unproven | `tombstoneCredentialsFor()` is called from `lib/deletion/execute.ts` for member and participant deletes. Only the *reading* of `tombstoned_at` is unit-tested; the write has no test and has never run. | Add a unit test, then delete a throwaway dev member holding a credential and confirm the page shows "withdrawn" with no name. | ☐ |
+| 11.5 | DocuSign minor opt-out not on the form | Code ships the agreed opt-out model (default = opted in). A guardian's "no" can currently only be recorded by an admin checkbox on the Consent forms table. | `docs/handovers/FOLLOW-ON-docusign-minor-credential-optout.md`: template clause + checkbox tab, read back via `form_data`. Needs a copy/legal pass. | ☐ |
+| 11.6 | Two backfilled prod credentials, holders never told | 2 rows on production from August course completions, private, both adults. The backfill was a SQL insert; the issued-email only fires on a fresh issue. | Decide: leave dormant, or re-send via `POST /api/admin/credentials/[id]/resend`. | ☐ |
+| 11.7 | `training_certificates` still present | Kept deliberately until the new table was proven in prod. Read by nothing now. | Drop in a follow-up migration. | ☐ |
+| 11.8 | Training "certificates" stat widened | The count was repointed from `training_certificates` to `credentials`, so it now counts course **and** event credentials. Arguably better; not called out at the time. | Confirm the wider meaning is wanted; otherwise filter to `source='course'` in `lib/training-portal.ts`. | ☐ |
+| 11.9 | Org ID absent on the dev project | Deliberate — dev exercises the `organizationName` fallback. | Decide whether dev should carry it for realistic testing. Low priority. | ☐ |
+| 11.10 | MCP migrations arrive with no grants | `credentials` was unreadable even to `service_role` until explicit `GRANT`s were added; symptom is `permission denied for table` from a server route. Fixed in `20260921120000_credentials.sql`. | None — but put GRANT lines beside the RLS policy in any future migration that might be applied via MCP. | ☑ |
+| 11.11 | A promotion PR grows under you | PR #145 was approved as four docs commits and became seven — including a migration and compliance runtime code — when a parallel session moved `dev`. Caught only because branch protection refused the merge. It was then merged by that other session while this one waited for approval. | Re-read `origin/main..origin/dev` immediately before merging, not only when opening the PR; check `gh pr view <n> --json state` before assuming your own merge is the one that happens. Recorded in memory. | ☑ |
+| 11.12 | Vercel CLI is authenticated here | Contrary to an earlier memory note, `npx vercel` is logged in as `aussie-spaceman` and linked to `stellr-web`. It reads/writes env vars where the MCP connector 403s. Reading a value needs `vercel env pull`, which writes every secret for that environment to disk. | None — memory corrected. Acceptable to pull on the dev project; avoid on production. | ☑ |
 
 ## Session 10 — 21–22 Sept 2026 (Vercel Deployment Storage; media → Blob)
 

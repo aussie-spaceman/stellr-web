@@ -61,10 +61,19 @@ async function checkrPost<T>(
 }
 
 async function checkrGet<T>(path: string): Promise<T> {
+  const got = await checkrGetMaybe<T>(path)
+  if (got === null) throw new Error(`Checkr GET ${path} failed: 404 (not found)`)
+  return got
+}
+
+// Returns null on 404 rather than throwing. A 404 is an ANSWER — "this object is
+// gone" — not a transport failure, and the caller has to be able to act on it.
+async function checkrGetMaybe<T>(path: string): Promise<T | null> {
   const res = await fetch(`${ENV.baseUrl}${path}`, {
     headers: { Authorization: authHeader() },
     cache: 'no-store',
   })
+  if (res.status === 404) return null
   if (!res.ok) throw new Error(`Checkr GET ${path} failed: ${res.status} ${await res.text()}`)
   return (await res.json()) as T
 }
@@ -299,7 +308,24 @@ export const checkrProvider: BackgroundProvider = {
     }
 
     if (!refs.invitationRef) return null
-    const invitation = await checkrGet<CheckrInvitation>(`/invitations/${refs.invitationRef}`)
+    const invitation = await checkrGetMaybe<CheckrInvitation>(`/invitations/${refs.invitationRef}`)
+
+    // Deleting an invitation removes it outright: the GET 404s and — as seen on
+    // 22 Sept 2026 — no `invitation.deleted` webhook necessarily arrives. Treated
+    // as an error, that left the row at 'invited' for ever, recoverable by
+    // neither path, which is precisely what this polling exists to prevent. An
+    // invitation we hold a reference to that Checkr no longer has can never
+    // complete, so it maps exactly as the webhook maps `invitation.deleted`.
+    if (invitation === null) {
+      return {
+        candidateRef: refs.candidateRef,
+        invitationRef: refs.invitationRef,
+        reportRef: null,
+        status: 'cancelled',
+        result: 'deleted',
+      }
+    }
+
     const status = (invitation.status ?? '').toLowerCase()
     const candidateRef = invitation.candidate_id ?? refs.candidateRef
 

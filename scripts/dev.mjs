@@ -67,6 +67,7 @@ async function main() {
   const here = process.cwd()
 
   refuseProductionCredentials(here)
+  warnMissingMediaHost(here)
 
   // An explicit PORT in the environment always wins — this script allocates a
   // default, it does not overrule a deliberate choice.
@@ -143,6 +144,34 @@ function refuseProductionCredentials(here) {
   if (!hit) return
   console.error(refusalMessage(hit))
   process.exit(1)
+}
+
+/**
+ * Warn when NEXT_PUBLIC_MEDIA_BASE_URL is missing.
+ *
+ * WHY (22 Sept 2026): the testimonial videos, photos and gated PDFs left
+ * /public for the `stellr-media` Vercel Blob store, so lib/media-manifest.ts
+ * composes every media URL from this variable. Without it the manifest falls
+ * back to relative paths — /videos/x.mp4 — which no longer exist in the repo,
+ * so every video, photo and PDF 404s. It fails quietly: posters and layout
+ * still render, and the clip only dies when someone clicks it. Both Vercel
+ * projects and CI were set on the day; every local .env.local was missed,
+ * including the main checkout's.
+ *
+ * A warning, not a refusal: unlike production credentials this breaks nothing
+ * outside the laptop, and someone working on non-media pages should not be
+ * stopped. The value is public and identical everywhere — see
+ * .env.local.example.
+ */
+function warnMissingMediaHost(here) {
+  const envFile = join(here, '.env.local')
+  if (!existsSync(envFile)) return // main() reports the missing file
+  if (/^\s*NEXT_PUBLIC_MEDIA_BASE_URL\s*=\s*\S/m.test(readFileSync(envFile, 'utf8'))) return
+  console.warn(
+    'dev: NEXT_PUBLIC_MEDIA_BASE_URL is not set in .env.local — every video,\n' +
+      '     photo and PDF will 404 (they live in the stellr-media Blob store,\n' +
+      '     not /public). Copy the line from .env.local.example.\n',
+  )
 }
 
 /**

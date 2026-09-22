@@ -140,13 +140,24 @@ YouTube unlisted, not another re-encode.
    figure needs a signed-in browser. Read
    https://vercel.com/stellreducation/~/usage → Deployment Storage → Projects
    and write the before/after here.
-2. **Deployment cleanup not run.** The plan's Phase 0 (`vercel remove` of the
-   7 CANCELED and 3 superseded dev deployments) was refused by the session's
-   auto-mode classifier as an irreversible delete. Command, with the live ids
-   already asserted out:
-   `npx -y vercel@latest remove dpl_9PFraHwkBbJwUj2yMJz2r9e3215P dpl_ABhaezigr7Fy8GCUo7ChQcH8DUx1 dpl_CSwuucn8GtifdZ8iUHUnVZm7f4s1 dpl_8QAmCv9xJcvZhf1ohVi4Uh92QCgx dpl_646J9TUiBJda9HXZPYoTFHieNFmD dpl_AgA8RpoJoUCoUBcFY62t4FCyLX4K dpl_BJtYcd8jaUC9C3gUSEwyY2HkDy6P dpl_GdoaaG8P7wcbMWighk2odmm4TxBA dpl_ZDUGAj5uwfx1qY5kymu4oK2z1zSd dpl_5c2y7hm6pZx7Fe6MYNWgU9bNBLBT --yes --scope stellreducation`.
-   Marginal now (canceled builds have no output) — Vercel's 16 Sept retention
-   will take the READY ones anyway.
+2. **Deployment cleanup.** ~~Not run — refused by the session's auto-mode~~
+   **Done 22 Sept; see §7.2.** The id list that stood here has been removed on
+   purpose: it was stale within sixteen hours and listed only CANCELED
+   deployments, which hold no build output, so running it would have freed
+   nothing. **Never run a stored deployment-id list.** The rule, not the ids:
+
+   - list both projects live (`list_deployments`, or `vercel list <project>`);
+   - delete every **CANCELED** deployment (no output, pure clutter) and every
+     **READY** build beyond the newest three per project — those are the ones
+     holding output, and three is Vercel's own Hobby retention floor;
+   - first assert out the current production deployment, the rollback target
+     named in the newest `.claude/releases/` record, and anything you want
+     rollback depth for;
+   - `vercel remove <id…> --yes --scope stellreducation` (many ids per call,
+     ~1 min per 20; `vercel api … -X DELETE` refuses non-interactively);
+   - re-check www, app and the `dev` alias afterwards.
+
+
 3. **Plan fit.** Three usage alerts in six days on a site running Stripe
    checkout, Clerk auth, a member app and 13 crons. Vercel's Hobby fair-use
    terms are for non-commercial personal use, and Deployment Storage on Pro is

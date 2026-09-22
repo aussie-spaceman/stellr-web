@@ -308,7 +308,7 @@ still resolves (§3.5). `participants` cascade already nulls `participant_id`.
 | **2 — Public page** | `/credentials/[number]` page + states · OG card · badge PNG · `lib/linkedin.ts` · proxy rate limit · view events · e2e for the four states | 1–1.5 days |
 | **3 — Consent + owner actions + wallet** | `credential_sharing_opt_out` column + admin toggle · `consentForMinor` · `canShare`/`canUseLinkedIn` · action bar · copy-details panel · wallet page + nav · tests | 1 day |
 | **4 — Events + admin** | Event issue endpoint + admin card · revoke/resend endpoints · activity log · privacy copy · erasure registry | 1 day |
-| **5 — Ship** | `ship` to dev · `LINKEDIN_ORGANIZATION_ID` on Vercel prod · `promote` · verify one real credential end-to-end on LinkedIn | ½ day |
+| **5 — Ship** | `ship` to dev · `LINKEDIN_ORGANIZATION_ID` on Vercel prod ✅ · `promote` ✅ · verify one real credential end-to-end on LinkedIn | ½ day |
 
 **≈ 5 working days.** Phases 1–2 can ship to dev independently of 3–4; nothing
 is user-visible until the wallet/nav entry lands (Phase 3), so partial
@@ -334,7 +334,7 @@ promotion is safe.
 |---|---|---|
 | D1 | Consent mechanism in the DocuSign | **Decided 21 Sept: opt-out.** Guardian automatically opts the child in unless noted on the form. Template update is a follow-on (see §3.4). |
 | D2 | Event credentials for all non-withdrawn participants, or checked-in only | **Decided: checked-in when the event used check-in, else all.** |
-| D3 | Stellr's LinkedIn Page numeric ID | **Decided: from the Page admin URL.** Value still to be set as `LINKEDIN_ORGANIZATION_ID`; builder falls back to `organizationName` until then. |
+| D3 | Stellr's LinkedIn Page numeric ID | **Done 22 Sept 2026:** `66274777`, set on `stellr-web` Production. Not set on the dev project; builder falls back to `organizationName` there. |
 | D4 | `noindex` on all credential pages (MVP) vs indexable for adults who opt in | **Decided: noindex for MVP.** |
 | D5 | The Certifier-style `credentials-*` MCP connector attached to this workspace | **Decided: not used; disconnect once this ships.** |
 
@@ -386,10 +386,26 @@ Built and verified in one session — phases 1–4 of §4:
 
 Still open:
 
-1. **Phase 0 spikes** — confirm LinkedIn prefill with a real account, and
-   obtain the Page ID for `LINKEDIN_ORGANIZATION_ID` (D3). The UI works either
-   way; this decides whether the "copy these details" panel is the primary or
-   the fallback.
+1. **Phase 0 spike** — confirm LinkedIn prefill with a real account. The UI
+   works either way; this decides whether the "copy these details" panel is the
+   primary or the fallback. Do it on the same pass as the org-ID check below.
+
+   `LINKEDIN_ORGANIZATION_ID` (D3) is **done**: set to `66274777` on the
+   `stellr-web` Production environment on 22 Sept 2026 (confirmed by David from
+   the Page admin URL). It is **not** on the `stellr-web-dev` project, so dev
+   deployments still fall back to `organizationName`. Vercel env changes only
+   apply to new deployments, so it takes effect on the next `dev` → `main`
+   promotion — the production deployment at the time of writing (`b9418ad` /
+   `dpl_GkEowoaY4U5Gj9yypsRcfHcwxe2k`) was built before it existed.
+
+   **Still to confirm:** the stored value has not been read back — `vercel env
+   ls` shows it hidden, and `vercel env pull` would write every production
+   secret to disk. The natural check is the first real add-to-profile click
+   after the next deployment: LinkedIn's form should name **Stellr Education**
+   as the issuing organisation. If it names a different company, the ID is
+   wrong (`Stellr`, `STELR` and `Stellar Education` are all separate LinkedIn
+   pages) — fix the variable and redeploy, and note that profile entries
+   already added by members do not update retroactively.
 2. **Follow-on:** `docs/handovers/FOLLOW-ON-docusign-minor-credential-optout.md`.
 3. `training_certificates` is still in place (read by nothing). Drop it in a
    later migration once prod has been verified.

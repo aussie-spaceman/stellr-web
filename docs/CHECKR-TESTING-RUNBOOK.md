@@ -35,6 +35,19 @@ Narrate this in the video.
 
 ---
 
+## 0 · Before you start: let the mail through
+
+Checkr's staging mail comes from `checkrhq-dev.net`. On 22 Sept every invitation
+("Start your … background check") and the result notification were auto-filed to
+**Trash** unread, while one "paused" notice reached the inbox — so the tester
+believed no mail had been sent at all. Add a filter (`from:checkrhq-dev.net` ->
+never spam, always inbox) before the run, and certainly before recording the
+video, which is supposed to show the email step.
+
+Invitation mail can also simply be slow in staging: Bud's arrived in seconds,
+Judy's had not arrived several minutes after a 200 from the order route. The
+apply page does not depend on it — `invitation_url` on our row is the same link.
+
 ## 1 · Seed the test members
 
 Edit the inbox line in `docs/checkr-test-seed.sql`, run it in the test DB's Supabase
@@ -144,6 +157,31 @@ dashboard shows clear but we show referred.
   `provider_report_ref` on our row, or the last path segment of the dashboard URL.
   Note the dashboard may hold candidates of the same name from earlier rounds —
   check the candidate id against `provider_candidate_ref` before acting.
+
+  **The window is ~30 seconds, and the constraint is not what it looks like.**
+  Vito's mock SSN raises an SSN-trace verification exception, which SUSPENDS the
+  report and emails the candidate ("Background check paused: more information
+  needed"). On 22 Sept the report was created at 16:16:52 and that email went at
+  16:17:21. Once suspended, `complete` **half-applies and gives no error**: a
+  re-read of the report showed `includes_canceled` flipped `false` -> `true`
+  while `status` stayed `pending`, and it never reached a terminal state. Our
+  row correctly sat at `in_progress` — there is nothing to fix on our side, the
+  report genuinely never completes.
+
+  So "before any screening completes" understates it: you must beat the
+  exception. Start this BEFORE submitting the form — it watches for the new
+  report and completes it the moment it exists:
+
+  ```bash
+  CAND=<provider_candidate_ref>
+  until R=$(curl -s -u "$CHECKR_KEY:" "https://api.checkr-staging.com/v1/reports?candidate_id=$CAND" \
+      | python3 -c "import sys,json;d=json.load(sys.stdin).get('data',[]);print(sorted(d,key=lambda r:r['created_at'])[-1]['id'] if d else '')"); \
+    [ -n "$R" ]; do sleep 2; done
+  curl -s -u "$CHECKR_KEY:" -X POST "https://api.checkr-staging.com/v1/reports/$R/complete" \
+    | python3 -c "import sys,json;d=json.load(sys.stdin);print(d['status'], d['includes_canceled'])"
+  ```
+
+  A report left stuck this way cannot be rescued — delete our row and re-order.
 - **Includes-canceled (Alex, partial cancel):** with the crim+MVR package, once the SSN
   trace + criminal complete (clear) but MVR is still pending, click **Complete Now**
   → `report.completed` with `includes_canceled=true`, `result=clear` → Stellr BC Passed

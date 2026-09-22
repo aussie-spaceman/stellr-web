@@ -103,7 +103,9 @@ function consentDocBase64(minor: string, guardian: string, event: string): strin
 // signature — which is exactly what happened to real families between June and
 // September 2026. Reads and resends are deliberately NOT gated: remediating the
 // sandbox envelopes that already exist requires being able to inspect and void
-// them. Outside production this is a no-op, so dev/preview keep using the sandbox.
+// them. This is a no-op outside the real production app — local, preview, and
+// the stellr-web-dev project's own production target all keep using the sandbox
+// (see isRealProductionApp in lib/env-guards).
 function assertCanIssueEnvelopes(): void {
   assertLiveCredentials('docusign')
 }

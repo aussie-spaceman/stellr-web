@@ -86,18 +86,41 @@ export class SandboxCredentialsError extends Error {
 }
 
 /**
- * Throws when a production deployment is about to perform a real-world side
- * effect (issue a legal agreement, take a payment) using sandbox credentials.
+ * Is this deployment the real Stellr production app?
  *
- * Deliberately a no-op outside production, so local dev and preview deployments
- * keep working against the sandbox exactly as before.
+ * VERCEL_ENV alone is not enough. Every Vercel project has its own production
+ * target, and since 15 Sept 2026 the `stellr-web-dev` project builds the `dev`
+ * branch as ITS production — so VERCEL_ENV=production is true on a deployment
+ * whose whole purpose is to run against sandboxes.
  *
- * Gated on isProductionDeployment() (VERCEL_ENV), not isProd() (APP_ENV),
- * because this check exists to catch what nobody remembered to configure — and
- * APP_ENV is itself something you can forget to set. See lib/env.ts.
+ * So a deployment must OPT OUT by declaring NEXT_PUBLIC_APP_ENV=dev. Anything
+ * else — 'prod', a typo, or the variable missing entirely — counts as the real
+ * thing and keeps the guard armed. That ordering matters: the failure this
+ * module exists to prevent came from a variable nobody had set, so "unset" must
+ * never be the answer that disables the check.
+ */
+export function isRealProductionApp(): boolean {
+  if (!isProductionDeployment()) return false
+  return process.env.NEXT_PUBLIC_APP_ENV !== 'dev'
+}
+
+/**
+ * Throws when the real production app is about to perform a real-world side
+ * effect (issue a legal agreement, take a payment, clear an adult to work with
+ * minors) using sandbox credentials.
+ *
+ * A no-op on local dev, on preview deployments, and on the dev project's own
+ * production target — all three are meant to run against sandboxes.
+ *
+ * WHY the APP_ENV half (22 Sept 2026): with VERCEL_ENV alone this threw on the
+ * `stellr-web-dev` deployment for all four integrations, because they are
+ * sandbox there by design. It surfaced as a 503 on the Checkr order route —
+ * the one environment where background-check certification has to run — and
+ * the same trap was sitting under Stripe checkout, Clerk user provisioning and
+ * DocuSign issuance on that deployment.
  */
 export function assertLiveCredentials(integration: Integration): void {
-  if (!isProductionDeployment()) return
+  if (!isRealProductionApp()) return
   const env = integrationEnvironments()[integration]
   if (env === 'sandbox') throw new SandboxCredentialsError(integration)
 }

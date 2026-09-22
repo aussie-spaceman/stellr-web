@@ -71,6 +71,11 @@ function check(over: Partial<BackgroundCheck>): BackgroundCheck {
     completed_at: null,
     expires_at: null,
     report_pdf_url: null,
+    adjudicated_at: null,
+    adjudication_outcome: null,
+    adjudicated_label: null,
+    adjudication_notes: null,
+    provider_adjudication: null,
     ...over,
   }
 }
@@ -130,10 +135,69 @@ describe('deriveCompliance', () => {
     const at = (status: BackgroundCheck['status']) => deriveCompliance(null, [check({ status })], 'mentor', ADULT).state
     expect(at('invited')).toBe('in_process')
     expect(at('in_progress')).toBe('in_process')
-    expect(at('referred')).toBe('invalid')
+    expect(at('referred')).toBe('flagged')
     expect(at('cancelled')).toBe('cancelled')
     expect(at('expired')).toBe('expired')
     expect(at('error')).toBe('invalid')
+  })
+
+  it('a flagged (Consider) check is NOT cleared and is its own state', () => {
+    const s = deriveCompliance(null, [check({ status: 'referred' })], 'mentor', ADULT)
+    expect(s.state).toBe('flagged')
+    expect(s.detail).toMatch(/awaiting review/i)
+  })
+
+  it('adjudicated cleared makes them compliant, using the expiry on the row', () => {
+    const s = deriveCompliance(
+      null,
+      [check({
+        status: 'referred',
+        adjudicated_at: '2026-09-22T00:00:00Z',
+        adjudication_outcome: 'cleared',
+        adjudicated_label: 'David Shaw',
+        expires_at: inYears(3),
+      })],
+      'mentor',
+      ADULT,
+    )
+    expect(s.state).toBe('valid_bc')
+    expect(s.detail).toMatch(/cleared on review by David Shaw/i)
+  })
+
+  it('adjudicated cleared but past its expiry is not compliant', () => {
+    const s = deriveCompliance(
+      null,
+      [check({ status: 'referred', adjudicated_at: '2020-01-01T00:00:00Z', adjudication_outcome: 'cleared', expires_at: inYears(-1) })],
+      'mentor',
+      ADULT,
+    )
+    expect(s.state).toBe('invalid')
+  })
+
+  it('adjudicated not_cleared is invalid and says who decided', () => {
+    const s = deriveCompliance(
+      null,
+      [check({
+        status: 'referred',
+        adjudicated_at: '2026-09-22T00:00:00Z',
+        adjudication_outcome: 'not_cleared',
+        adjudicated_label: 'David Shaw',
+      })],
+      'mentor',
+      ADULT,
+    )
+    expect(s.state).toBe('invalid')
+    expect(s.detail).toMatch(/not cleared on review by David Shaw/i)
+  })
+
+  it('a verified license still clears someone whose check is flagged', () => {
+    const s = deriveCompliance(
+      license({ verified_at: '2026-01-01T00:00:00Z' }),
+      [check({ status: 'referred' })],
+      'teacher',
+      ADULT,
+    )
+    expect(s.state).toBe('valid_license')
   })
 
   it('a valid clearance beats an in-process item, which beats a lapsed one', () => {

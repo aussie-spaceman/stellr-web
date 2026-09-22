@@ -96,8 +96,13 @@ export default async function AdminMemberPage({
           license: summary.license,
           check: summary.check
             ? {
+                id: summary.check.id,
                 status: summary.check.status,
                 ordered_at: summary.check.ordered_at,
+                adjudicated_at: summary.check.adjudicated_at,
+                adjudication_outcome: summary.check.adjudication_outcome,
+                adjudicated_label: summary.check.adjudicated_label,
+                adjudication_notes: summary.check.adjudication_notes,
                 expires_at: summary.check.expires_at,
                 provider_report_ref: summary.check.provider_report_ref,
                 includes_canceled: summary.check.includes_canceled,

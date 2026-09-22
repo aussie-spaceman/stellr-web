@@ -295,7 +295,7 @@ export function VolunteersConsole({ rows, events }: { rows: VolunteerConsoleRow[
                   {r.compliance === 'in_process' && (
                     <Pill tone="amber" label="In progress" title={r.complianceDetail ?? undefined} />
                   )}
-                  {!['valid_bc', 'valid_license', 'in_process'].includes(r.compliance) && (
+                  {!['valid_bc', 'valid_license', 'in_process', 'flagged'].includes(r.compliance) && (
                     <Pill tone="red" label="Not cleared" title={r.complianceDetail ?? undefined} />
                   )}
                 </td>

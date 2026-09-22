@@ -26,7 +26,7 @@ export interface ComplianceAuditRow {
 export interface ComplianceAudit {
   rows: ComplianceAuditRow[]
   counts: Record<ComplianceState, number>
-  /** Members with a license submitted but not yet verified (review queue). */
+  /** Waiting on a human: an unverified license, or a flagged check needing adjudication. */
   reviewQueue: ComplianceAuditRow[]
 }
 
@@ -42,8 +42,10 @@ interface MemberRow {
   member_background_checks: BackgroundCheck[] | null
 }
 
-// Sort: things needing attention first (invalid, then in_process), then cleared.
+// Sort: things needing attention first, then cleared. A flagged check outranks
+// everything — somebody is waiting on a decision that only a human can make.
 const STATE_ORDER: Record<ComplianceState, number> = {
+  flagged: -1,
   invalid: 0,
   cancelled: 0,
   expired: 0,
@@ -94,11 +96,15 @@ export async function getComplianceAudit(): Promise<ComplianceAudit> {
   rows.sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state] || a.name.localeCompare(b.name))
 
   const counts: Record<ComplianceState, number> = {
-    not_required: 0, valid_bc: 0, valid_license: 0, in_process: 0, cancelled: 0, expired: 0, invalid: 0,
+    not_required: 0, valid_bc: 0, valid_license: 0, in_process: 0, cancelled: 0, expired: 0, invalid: 0, flagged: 0,
   }
   for (const r of rows) counts[r.state]++
 
-  const reviewQueue = rows.filter((r) => r.license && !r.license.verified_at)
+  // Everything waiting on a human decision: an unverified licence, and — since
+  // 22 Sept 2026 — a flagged background check. The queue used to be licences
+  // only, so a Consider result appeared in no queue at all and was visible only
+  // as a red pill somebody had to go looking for.
+  const reviewQueue = rows.filter((r) => (r.license && !r.license.verified_at) || r.state === 'flagged')
 
   return { rows, counts, reviewQueue }
 }

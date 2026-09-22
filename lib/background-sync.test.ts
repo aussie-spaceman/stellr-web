@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { BackgroundProvider } from '@/lib/background-provider'
 
-const { logActivity } = vi.hoisted(() => ({
+const { logActivity, notifyCommunityAdmins } = vi.hoisted(() => ({
   logActivity: vi.fn(async (_input: unknown, _db?: unknown) => {}),
+  notifyCommunityAdmins: vi.fn(async (_input: unknown) => {}),
 }))
 vi.mock('@/lib/activity-log', () => ({ logActivity }))
+vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins }))
 
 import { applyCheckOutcome, syncStaleChecks } from './background-sync'
 
@@ -26,6 +28,7 @@ function fakeDb(openRows: Record<string, unknown>[] = []) {
       updates.push({ id: '', patch })
       return chain
     },
+    maybeSingle: () => Promise.resolve({ data: { first_name: 'Mae', last_name: 'Mentor', email: 'mae@example.com' } }),
   }
   const db = { from: () => chain }
   return { db: db as never, updates }
@@ -33,7 +36,10 @@ function fakeDb(openRows: Record<string, unknown>[] = []) {
 
 const row = { id: 'row1', member_id: 'mem1', status: 'invited' }
 
-beforeEach(() => logActivity.mockClear())
+beforeEach(() => {
+  logActivity.mockClear()
+  notifyCommunityAdmins.mockClear()
+})
 
 describe('applyCheckOutcome', () => {
   it('passed: stamps completed_at and a 3-year expires_at, logs once', async () => {
@@ -80,6 +86,45 @@ describe('applyCheckOutcome', () => {
     const r = await applyCheckOutcome(db, { ...row, status: 'passed' }, { candidateRef: 'c', invitationRef: null, reportRef: 'rep', status: 'passed', result: 'clear' }, 'webhook')
     expect(r.changed).toBe(false)
     expect(logActivity).not.toHaveBeenCalled()
+  })
+})
+
+describe('flagged results are announced', () => {
+  // WHY: a Consider cannot resolve itself — somebody has to decide. Until
+  // 22 Sept 2026 nothing announced it, so a person waiting on clearance could
+  // sit unnoticed behind a red pill on a page nobody had reason to open.
+  it('notifies admins when a check becomes referred', async () => {
+    const { db } = fakeDb()
+    await applyCheckOutcome(db, row, { candidateRef: 'c', invitationRef: null, reportRef: 'rep', status: 'referred', result: 'consider' }, 'webhook')
+    expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
+    const arg = notifyCommunityAdmins.mock.calls[0][0] as { body: string; referenceId: string; type: string }
+    expect(arg.type).toBe('action')
+    expect(arg.body).toMatch(/Mae Mentor/)
+    expect(arg.body).toMatch(/NOT cleared/)
+    expect(arg.referenceId).toBe('mem1')
+  })
+
+  it('does not re-announce an outcome the row already had', async () => {
+    const { db } = fakeDb()
+    await applyCheckOutcome(db, { ...row, status: 'referred' }, { candidateRef: 'c', invitationRef: null, reportRef: 'rep', status: 'referred', result: 'consider' }, 'webhook')
+    expect(notifyCommunityAdmins).not.toHaveBeenCalled()
+  })
+
+  it('does not announce a pass', async () => {
+    const { db } = fakeDb()
+    await applyCheckOutcome(db, row, { candidateRef: 'c', invitationRef: null, reportRef: 'rep', status: 'passed', result: 'clear' }, 'webhook')
+    expect(notifyCommunityAdmins).not.toHaveBeenCalled()
+  })
+
+  it('a notification failure never loses the outcome', async () => {
+    notifyCommunityAdmins.mockRejectedValueOnce(new Error('smtp down'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { db, updates } = fakeDb()
+    await expect(
+      applyCheckOutcome(db, row, { candidateRef: 'c', invitationRef: null, reportRef: 'rep', status: 'referred', result: 'consider' }, 'webhook'),
+    ).resolves.toMatchObject({ changed: true })
+    expect(updates[0].patch).toMatchObject({ status: 'referred' })
+    expect(logActivity).toHaveBeenCalledTimes(1)
   })
 })
 

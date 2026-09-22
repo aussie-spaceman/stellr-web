@@ -13,7 +13,7 @@ recruiting + adjudication; admins have dashboard access). Companion files:
 ## 0 · Pre-flight (once, before any candidate)
 
 - [ ] Env points at **staging**: `CHECKR_BASE_URL=https://api.checkr-staging.com/v1`,
-      `NEXT_PUBLIC_CHECKR_DASHBOARD_URL=https://dashboard.checkr-staging.com`,
+      `NEXT_PUBLIC_CHECKR_DASHBOARD_URL=https://dashboard.checkrhq-staging.net`,
       `CHECKR_API_KEY` = staging secret key.
 - [ ] `CHECKR_PACKAGE_SLUG` = a staging **criminal + identity** package slug
       (Dashboard → Packages).
@@ -34,6 +34,19 @@ when you reach Alex, temporarily point it at the crim+MVR package, order, then r
 Narrate this in the video.
 
 ---
+
+## 0 · Before you start: let the mail through
+
+Checkr's staging mail comes from `checkrhq-dev.net`. On 22 Sept every invitation
+("Start your … background check") and the result notification were auto-filed to
+**Trash** unread, while one "paused" notice reached the inbox — so the tester
+believed no mail had been sent at all. Add a filter (`from:checkrhq-dev.net` ->
+never spam, always inbox) before the run, and certainly before recording the
+video, which is supposed to show the email step.
+
+Invitation mail can also simply be slow in staging: Bud's arrived in seconds,
+Judy's had not arrived several minutes after a 200 from the order route. The
+apply page does not depend on it — `invitation_url` on our row is the same link.
 
 ## 1 · Seed the test members
 
@@ -82,18 +95,32 @@ order by c.ordered_at desc;
 
 ## 4 · Mock-candidate matrix (crim+identity package)
 
-| Candidate | SSN to enter | Checkr dashboard | Stellr `check.status` | Pill |
-|---|---|---|---|---|
-| Bud Richman | 544-25-5544 | Clear | `passed` | BC Passed |
-| Judge Judy | 667-68-6677 | Consider | `referred` | Invalid (flagged) |
-| Lady GaGa | 223-24-2233 | Consider | `referred` | Invalid |
-| Samuel Adams | 556-58-5566 | Consider | `referred` | Invalid |
-| Little John | 011-02-0011 | Consider | `referred` | Invalid |
-| Roll Tide | 112-14-1122 | Consider | `referred` | Invalid |
-| Vito Andolini | 494-24-7562 | Canceled | `cancelled` | Invalid (re-order) |
-| Remy Gonz | bad 223-23-2239 → good 223-23-2230 | Pending → Clear | `in_progress` → `passed` | In Process → BC Passed |
-| Jen Kasp | bad 110-10-7777 → good 110-10-1110 | Pending → Clear | `in_progress` → `passed` | In Process → BC Passed |
-| Alex Taylor (crim+MVR) | 544-21-5544, DL CA/A2315179 | Clear w/ Canceled | `passed` + `includes_canceled=true` ¹ | BC Passed "(completed with canceled screenings)" |
+**Enter the PII exactly.** Checkr's docs: staging data that does not match the
+mocked-candidate sheet leaves the report *"in pending status indefinitely"*. It
+does not error — the row just sits at `in_progress` for ever, which looks
+identical to a slow report. On 22 Sept Vito was ordered with the seed's blanket
+DOB `1983-02-10`; **his mock DOB is `1954-12-07`** and the report never resolved.
+DOB and address below are verbatim from `API_Mock_Candidates__1_.xlsx` in Drive
+(`Shared drives/InSimEd/Stellr Web App - Resources/Teck Stack/Checkr/`), and
+`docs/checkr-test-seed.sql` now carries them in each member's nickname.
+
+| Candidate | DOB | SSN to enter | City / State / Zip | Checkr dashboard | Stellr `check.status` | Pill |
+|---|---|---|---|---|---|---|
+| Bud Richman | 1983-02-10 | 544-25-5544 | New York, NY 10080 | Clear | `passed` | BC Passed |
+| Judge Judy | 1983-02-10 | 667-68-6677 | Miami, FL 33145 | Consider | `referred` | Invalid (flagged) |
+| Lady GaGa | 1983-02-10 | 223-24-2233 | 11055 Delano, Detroit, MI 48242 | Consider | `referred` | Invalid |
+| Samuel Adams | 1983-02-10 | 556-58-5566 | 1280 25th St., Denver, CO 80205 | Consider | `referred` | Invalid |
+| Little John | 1983-02-10 | 011-02-0011 | 2634 Worldgateway Pl, Detroit, MI 48242 | Consider | `referred` | Invalid |
+| Roll Tide | 1983-02-10 | 112-14-1122 | 195 S Murphy Ave, San Jose, CA 94088 | Consider | `referred` | Invalid |
+| **Vito Andolini** | **1954-12-07** | 494-24-7562 | Newark, NJ 07103 | Canceled | `cancelled` | Invalid (re-order) |
+| Remy Gonz | 1983-02-10 | bad 223-23-2239 → good 223-23-2230 | Romulus, MI 48242 | Pending → Clear | `in_progress` → `passed` | In Process → BC Passed |
+| Jen Kasp | 1983-02-10 | bad 110-10-7777 → good 110-10-1110 | San Jose, CA 94088 | Pending → Clear | `in_progress` → `passed` | In Process → BC Passed |
+| Alex Taylor (crim+MVR) | 1983-02-10 | 544-21-5544, DL CA/A2315179 | New York, NY 10133 | Clear w/ Canceled | `passed` + `includes_canceled=true` ¹ | BC Passed "(completed with canceled screenings)" |
+
+Optional extras, same shape: Requisition Tester (445-46-4455, Honolulu HI 96795),
+Tom Brady (001-02-0011, Omaha NE 68101), Peter Griffin (667-69-6677, 3622 Coral
+Way Apt 0702, Miami FL 33145), Camo Time (011-02-0012, 41-168 Poliala St,
+Honolulu HI 96795) — all Consider, all DOB 1983-02-10.
 
 The `**` candidates (Judy, GaGa, Adams, John, Tide, Remy, Jen, Richman) are
 deterministic. Requisition Tester / Tom Brady / Peter Griffin / Camo Time also return
@@ -112,9 +139,49 @@ dashboard shows clear but we show referred.
 - **Pending → resume (Remy / Jen):** enter the **bad SSN first** → SSN-trace exception
   → report suspended → Stellr `in_progress`. Re-complete with the **correct SSN**
   → `report.resumed` then `report.completed` → Stellr `passed`.
-- **Canceled (Vito, `report.canceled`):** if it doesn't auto-cancel, open the in-flight
-  report and click **Complete Now** before any screening completes → fully canceled
-  → Stellr `cancelled`.
+- **Canceled (Vito, `report.canceled`):** if it doesn't auto-cancel, force it before
+  any screening completes → fully canceled → Stellr `cancelled`. The dashboard's
+  **Complete Now** is a wrapper around `POST /v1/reports/{id}/complete`, which is
+  easier to drive and works when the button is not on screen:
+
+  ```bash
+  read -rs "CHECKR_KEY?Checkr staging key: " && export CHECKR_KEY
+  curl -s -u "$CHECKR_KEY:" -X POST \
+    https://api.checkr-staging.com/v1/reports/<report_id>/complete | python3 -m json.tool
+  ```
+
+  It cancels all pending/suspended screenings: `status` comes back `canceled` **iff
+  every** screening was canceled, otherwise `complete` with `includes_canceled: true`
+  (which is the Alex Taylor case). The response is the pre-update report — the
+  terminal state arrives by webhook a moment later. The report id is
+  `provider_report_ref` on our row, or the last path segment of the dashboard URL.
+  Note the dashboard may hold candidates of the same name from earlier rounds —
+  check the candidate id against `provider_candidate_ref` before acting.
+
+  **The window is ~30 seconds, and the constraint is not what it looks like.**
+  Vito's mock SSN raises an SSN-trace verification exception, which SUSPENDS the
+  report and emails the candidate ("Background check paused: more information
+  needed"). On 22 Sept the report was created at 16:16:52 and that email went at
+  16:17:21. Once suspended, `complete` **half-applies and gives no error**: a
+  re-read of the report showed `includes_canceled` flipped `false` -> `true`
+  while `status` stayed `pending`, and it never reached a terminal state. Our
+  row correctly sat at `in_progress` — there is nothing to fix on our side, the
+  report genuinely never completes.
+
+  So "before any screening completes" understates it: you must beat the
+  exception. Start this BEFORE submitting the form — it watches for the new
+  report and completes it the moment it exists:
+
+  ```bash
+  CAND=<provider_candidate_ref>
+  until R=$(curl -s -u "$CHECKR_KEY:" "https://api.checkr-staging.com/v1/reports?candidate_id=$CAND" \
+      | python3 -c "import sys,json;d=json.load(sys.stdin).get('data',[]);print(sorted(d,key=lambda r:r['created_at'])[-1]['id'] if d else '')"); \
+    [ -n "$R" ]; do sleep 2; done
+  curl -s -u "$CHECKR_KEY:" -X POST "https://api.checkr-staging.com/v1/reports/$R/complete" \
+    | python3 -c "import sys,json;d=json.load(sys.stdin);print(d['status'], d['includes_canceled'])"
+  ```
+
+  A report left stuck this way cannot be rescued — delete our row and re-order.
 - **Includes-canceled (Alex, partial cancel):** with the crim+MVR package, once the SSN
   trace + criminal complete (clear) but MVR is still pending, click **Complete Now**
   → `report.completed` with `includes_canceled=true`, `result=clear` → Stellr BC Passed

@@ -17,6 +17,7 @@ interface ComplianceData {
 const STATE_PILL: Record<ComplianceState, { label: string; cls: string }> = {
   not_required:  { label: 'Not required',  cls: 'bg-brand-hairline text-brand-muted-soft' },
   valid_bc:      { label: 'BC Passed',     cls: 'bg-emerald-100 text-emerald-700' },
+  flagged:       { label: 'Under review',  cls: 'bg-orange-100 text-orange-700' },
   valid_license: { label: 'License',       cls: 'bg-green-100 text-green-700' },
   in_process:    { label: 'In Process',    cls: 'bg-orange-100 text-orange-700' },
   cancelled:     { label: 'Cancelled',     cls: 'bg-amber-100 text-amber-700' },

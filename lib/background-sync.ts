@@ -14,6 +14,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { BackgroundProvider, BackgroundWebhookResult, MappedStatus } from '@/lib/background-provider'
 import { BC_VALIDITY_YEARS } from '@/lib/compliance'
 import { logActivity } from '@/lib/activity-log'
+import { notifyCommunityAdmins } from '@/lib/notify'
 
 export interface CheckRowRef {
   id: string
@@ -65,6 +66,41 @@ export async function applyCheckOutcome(
   await db.from('member_background_checks').update(update).eq('id', row.id)
 
   const changed = row.status !== outcome.status
+
+  // A flagged report is the one outcome that CANNOT resolve itself: somebody has
+  // to look at what was found and decide. Until 22 Sept 2026 nothing announced
+  // it — the only trace was an activity-log row and a red pill on a page nobody
+  // had reason to open, so a person waiting on clearance could sit unnoticed.
+  if (changed && outcome.status === 'referred') {
+    try {
+      const { data: member } = await db
+        .from('members')
+        .select('first_name, last_name, email')
+        .eq('id', row.member_id)
+        .maybeSingle()
+      const who =
+        [member?.first_name, member?.last_name].filter(Boolean).join(' ') || member?.email || 'A member'
+      const body =
+        `${who}'s background check came back flagged for review (result: ${outcome.result ?? 'consider'}). ` +
+        `They are NOT cleared to take part until the adjudicator reviews the report in the provider dashboard ` +
+        `and records the decision in Stellr.`
+      await notifyCommunityAdmins({
+        type: 'action',
+        body,
+        referenceType: 'member',
+        referenceId: row.member_id,
+        email: {
+          subject: `Background check needs review — ${who}`,
+          html: `<p>${body}</p><p><a href="${process.env.NEXT_PUBLIC_AUTH_APP_URL ?? ''}/admin/members/${row.member_id}">Open their compliance panel</a></p>`,
+          text: body,
+        },
+      })
+    } catch (err) {
+      // Never let a notification failure lose the outcome we just wrote.
+      console.error('[background-sync] referred notification failed:', err)
+    }
+  }
+
   const audit = TERMINAL_AUDIT[outcome.status]
   if (changed && audit) {
     await logActivity(

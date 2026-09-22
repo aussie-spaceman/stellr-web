@@ -34,6 +34,7 @@ export type ComplianceState =
   | 'valid_bc' // a passed, non-expired background check is on file
   | 'valid_license' // a verified, non-expired teacher license is on file
   | 'in_process' // a check is invited/running, or a license awaits verification
+  | 'flagged' // a Consider result nobody has adjudicated yet — NOT cleared
   | 'cancelled' // the check was canceled before completing — just needs re-ordering
   | 'expired' // the invitation expired without completion — just needs re-ordering
   | 'invalid' // required but nothing valid on file (missing, expired, or flagged)
@@ -59,6 +60,15 @@ export interface BackgroundCheck {
   includes_canceled: boolean
   /** Vendor report id (Checkr) — the handle for a "view report" link. */
   provider_report_ref: string | null
+  /** When a human decided on a flagged (Consider) report; null = nobody has. */
+  adjudicated_at: string | null
+  /** 'cleared' = may participate despite the records found; 'not_cleared' = may not. */
+  adjudication_outcome: 'cleared' | 'not_cleared' | null
+  /** Who decided, captured at decision time. */
+  adjudicated_label: string | null
+  adjudication_notes: string | null
+  /** Checkr's own adjudication field, for comparison with ours. */
+  provider_adjudication: string | null
   ordered_at: string
   completed_at: string | null
   expires_at: string | null
@@ -130,17 +140,30 @@ export function deriveCompliance(
   const licenseValid = !!license && !!license.verified_at && !licenseExpired(license, ref)
   const licensePending = !!license && !license.verified_at && !licenseExpired(license, ref)
 
-  const bcValid =
-    !!check && check.status === 'passed' && !!check.expires_at && new Date(check.expires_at) > ref
+  // A Consider that a human has adjudicated as 'cleared' clears the person just
+  // as a clear report does. The check's own `status` stays 'referred' — it
+  // mirrors the vendor's report status, which is what the Checkr certification
+  // compares — so the decision lives alongside it rather than overwriting it.
+  const bcCleared =
+    !!check && (check.status === 'passed' || (check.status === 'referred' && check.adjudication_outcome === 'cleared'))
+  const bcValid = bcCleared && !!check!.expires_at && new Date(check!.expires_at) > ref
   const bcInProcess = !!check && (check.status === 'invited' || check.status === 'in_progress')
+  // Flagged and nobody has looked at it yet. Distinct from 'invalid' because the
+  // action is "someone must decide", not "order a check" — and because an admin
+  // needs to be able to count and filter the ones awaiting a decision.
+  const bcFlagged = !!check && check.status === 'referred' && !check.adjudicated_at
 
   if (bcValid) {
     const base = check!.expires_at
       ? `Background check valid until ${formatDateShort(check!.expires_at)}`
       : 'Background check passed'
+    const withCanceled = check!.includes_canceled ? `${base} (completed with canceled screenings)` : base
     return {
       state: 'valid_bc',
-      detail: check!.includes_canceled ? `${base} (completed with canceled screenings)` : base,
+      detail:
+        check!.status === 'referred'
+          ? `${withCanceled} — cleared on review${check!.adjudicated_label ? ` by ${check!.adjudicated_label}` : ''}`
+          : withCanceled,
       license,
       check,
     }
@@ -161,6 +184,14 @@ export function deriveCompliance(
       check,
     }
   }
+  if (bcFlagged) {
+    return {
+      state: 'flagged',
+      detail: 'Background check flagged — awaiting review by the adjudicator',
+      license,
+      check,
+    }
+  }
   if (licensePending) {
     return { state: 'in_process', detail: 'License awaiting verification', license, check }
   }
@@ -177,9 +208,13 @@ export function deriveCompliance(
 
   // Otherwise genuinely invalid: missing, expired clearance, or flagged for review.
   let detail = 'No valid clearance on file'
-  if (license && licenseExpired(license, ref)) detail = `License expired ${formatDateShort(license.expiry_date)}`
+  if (check?.status === 'referred' && check.adjudication_outcome === 'not_cleared') {
+    detail = `Not cleared on review${check.adjudicated_label ? ` by ${check.adjudicated_label}` : ''}${
+      check.adjudicated_at ? ` (${formatDateShort(check.adjudicated_at)})` : ''
+    }`
+  } else if (license && licenseExpired(license, ref)) detail = `License expired ${formatDateShort(license.expiry_date)}`
   else if (check?.status === 'referred') detail = 'Background check flagged for review'
-  else if (check?.status === 'passed' && check.expires_at) detail = `Background check expired ${formatDateShort(check.expires_at)}`
+  else if (bcCleared && check?.expires_at) detail = `Background check expired ${formatDateShort(check.expires_at)}`
   return { state: 'invalid', detail, license, check }
 }
 
@@ -198,7 +233,7 @@ interface MemberComplianceRow {
 const COMPLIANCE_SELECT = `
   id, email, event_role, date_of_birth,
   member_teacher_licenses!member_id(id, license_number, licensing_state, expiry_date, verified_at, verified_label, document_path),
-  member_background_checks!member_id(id, status, result, assessment, includes_canceled, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url)
+  member_background_checks!member_id(id, status, result, assessment, includes_canceled, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url, adjudicated_at, adjudication_outcome, adjudicated_label, adjudication_notes, provider_adjudication)
 `
 
 export interface ComplianceRecords {

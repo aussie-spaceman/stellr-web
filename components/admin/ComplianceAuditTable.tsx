@@ -12,6 +12,7 @@ type Filter = 'attention' | 'all' | ComplianceState
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'attention', label: 'Needs attention' },
+  { key: 'flagged', label: 'Needs review' },
   { key: 'invalid', label: 'Invalid' },
   { key: 'in_process', label: 'In Process' },
   { key: 'valid_bc', label: 'BC Passed' },
@@ -36,7 +37,7 @@ export function ComplianceAuditTable({
 
   const filtered = useMemo(() => {
     if (filter === 'all') return rows
-    if (filter === 'attention') return rows.filter((r) => r.state === 'invalid' || r.state === 'in_process')
+    if (filter === 'attention') return rows.filter((r) => r.state === 'invalid' || r.state === 'in_process' || r.state === 'flagged')
     return rows.filter((r) => r.state === filter)
   }, [rows, filter])
 

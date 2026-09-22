@@ -12,6 +12,7 @@ export const COMPLIANCE_PILL: Record<ComplianceState, { label: string; cls: stri
   valid_bc:      { label: 'BC Passed',     cls: 'bg-emerald-100 text-emerald-700' },
   valid_license: { label: 'License',       cls: 'bg-green-100 text-green-700' },
   in_process:    { label: 'In Process',    cls: 'bg-orange-100 text-orange-700' },
+  flagged:       { label: 'Needs review',  cls: 'bg-red-100 text-red-700 ring-1 ring-red-300' },
   cancelled:     { label: 'Cancelled',     cls: 'bg-amber-100 text-amber-700' },
   expired:       { label: 'Expired',       cls: 'bg-amber-100 text-amber-700' },
   invalid:       { label: 'Invalid',       cls: 'bg-red-100 text-red-700' },
@@ -22,11 +23,16 @@ export interface MemberCompliance {
   detail: string | null
   license: TeacherLicense | null
   check: {
+    id: string
     status: string
     ordered_at: string
     expires_at: string | null
     provider_report_ref: string | null
     includes_canceled?: boolean
+    adjudicated_at?: string | null
+    adjudication_outcome?: 'cleared' | 'not_cleared' | null
+    adjudicated_label?: string | null
+    adjudication_notes?: string | null
   } | null
 }
 
@@ -52,6 +58,8 @@ export function MemberCompliancePanel({
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [adjudicating, setAdjudicating] = useState(false)
+  const [notes, setNotes] = useState('')
 
   if (!compliance || compliance.state === 'not_required') return null
 
@@ -169,6 +177,88 @@ export function MemberCompliancePanel({
                   View report in Checkr ↗
                 </a>
               </div>
+            )}
+            {check.adjudicated_at ? (
+              <div className="mt-2 rounded-lg bg-brand-hairline/40 px-3 py-2 text-xs">
+                <p className="font-medium text-brand-blue-dark">
+                  {check.adjudication_outcome === 'cleared' ? 'Cleared on review' : 'Not cleared on review'}
+                </p>
+                <p className="text-brand-muted-soft">
+                  {check.adjudicated_label ? `${check.adjudicated_label} · ` : ''}
+                  {fmt(check.adjudicated_at)}
+                </p>
+                {check.adjudication_notes && (
+                  <p className="text-brand-muted-soft mt-1 whitespace-pre-wrap">{check.adjudication_notes}</p>
+                )}
+              </div>
+            ) : (
+              check.status === 'referred' && (
+                <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                  <p className="text-xs font-medium text-red-700">Needs a decision</p>
+                  <p className="text-xs text-red-600 mt-0.5">
+                    Records were found. Review the report in Checkr, then record the decision here. The
+                    member is not cleared until you do.
+                  </p>
+                  {adjudicating ? (
+                    <div className="mt-2 space-y-2">
+                      <textarea
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        rows={3}
+                        placeholder="What was found, and why it does or does not disqualify them."
+                        className="w-full text-xs rounded-lg border border-brand-border px-2 py-1.5"
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() =>
+                            post(`/api/admin/members/${memberId}/background-check/adjudicate`, {
+                              outcome: 'cleared',
+                              notes,
+                              checkId: check.id,
+                            })
+                          }
+                          disabled={busy}
+                          className="text-xs font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg px-3 py-1.5"
+                        >
+                          Clear to participate
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm('Record that this member is NOT cleared to take part?'))
+                              post(`/api/admin/members/${memberId}/background-check/adjudicate`, {
+                                outcome: 'not_cleared',
+                                notes,
+                                checkId: check.id,
+                              })
+                          }}
+                          disabled={busy}
+                          className="text-xs font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg px-3 py-1.5"
+                        >
+                          Not cleared
+                        </button>
+                        <button
+                          onClick={() => setAdjudicating(false)}
+                          disabled={busy}
+                          className="text-xs font-medium text-brand-muted-soft hover:text-brand-muted"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-brand-muted-soft">
+                        Clearing someone requires a short rationale. Adverse action itself is run from the
+                        Checkr dashboard.
+                      </p>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setAdjudicating(true)}
+                      className="mt-2 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg px-3 py-1.5"
+                    >
+                      Record decision
+                    </button>
+                  )}
+                </div>
+              )
             )}
           </>
         ) : (

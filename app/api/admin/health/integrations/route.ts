@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { isProductionDeployment, vercelTarget } from '@/lib/env'
-import { integrationEnvironments } from '@/lib/env-guards'
+import { vercelTarget } from '@/lib/env'
+import { integrationEnvironments, isRealProductionApp } from '@/lib/env-guards'
 
 // GET /api/admin/health/integrations
 //
@@ -20,9 +20,13 @@ export async function GET() {
 
   const environments = integrationEnvironments()
   const deployment = vercelTarget()
-  const production = isProductionDeployment()
+  // The REAL production app, not merely a Vercel production target — the dev
+  // project builds `dev` as its own production and is meant to be on sandboxes.
+  // `problems` must list what would actually be refused, or it cries wolf on
+  // every dev deployment and nobody reads it.
+  const production = isRealProductionApp()
 
-  // On a production deployment, anything still on sandbox credentials is a
+  // On the real production app, anything still on sandbox credentials is a
   // defect, not a configuration choice.
   const problems = production
     ? Object.entries(environments)

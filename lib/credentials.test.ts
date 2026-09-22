@@ -21,6 +21,7 @@ import {
   canShare,
   consentForMinor,
   credentialUrl,
+  tombstoneCredentialsFor,
   type CredentialRow,
 } from './credentials'
 
@@ -163,3 +164,67 @@ describe('consentForMinor (opt-out model)', () => {
     expect(q.status).toBe('completed')
   })
 })
+
+// ── Erasure ──────────────────────────────────────────────────────────────────
+// The write half of right-to-erasure. Only the READING of tombstoned_at was
+// covered before (credentialState / canShare), so the call that lib/deletion
+// makes on a member or participant delete had no test at all.
+
+function makeTombstoneDb(rows: { id: string }[] | null, error: { message: string } | null = null) {
+  const calls: Record<string, unknown>[] = []
+  const db = {
+    calls,
+    from(table: string) {
+      const f: Record<string, unknown> = { table }
+      const chain = {
+        update: (payload: Record<string, unknown>) => { f.payload = payload; return chain },
+        eq: (k: string, v: unknown) => { f[k] = v; return chain },
+        is: (k: string, v: unknown) => { f[`is:${k}`] = v; return chain },
+        select: async () => { calls.push({ ...f }); return { data: rows, error } },
+      }
+      return chain
+    },
+  }
+  return db as unknown as Parameters<typeof tombstoneCredentialsFor>[0] & { calls: Record<string, unknown>[] }
+}
+
+describe('tombstoneCredentialsFor', () => {
+  it('blanks the name and makes the page private, keeping the number resolvable', async () => {
+    const db = makeTombstoneDb([{ id: 'c1' }, { id: 'c2' }])
+    const n = await tombstoneCredentialsFor(db, 'member', 'm1')
+    expect(n).toBe(2)
+
+    const q = (db as unknown as { calls: Record<string, unknown>[] }).calls[0]
+    const payload = q.payload as Record<string, unknown>
+    expect(q.table).toBe('credentials')
+    expect(payload.recipient_name).toBe('')
+    expect(payload.visibility).toBe('private')
+    expect(typeof payload.tombstoned_at).toBe('string')
+    // The number is deliberately NOT cleared: a verifier holding a CV must get
+    // "withdrawn" rather than a 404 that looks like a forgery.
+    expect(payload).not.toHaveProperty('number')
+    expect(payload).not.toHaveProperty('status')
+  })
+
+  it('targets the right column for each kind of holder', async () => {
+    const asMember = makeTombstoneDb([])
+    await tombstoneCredentialsFor(asMember, 'member', 'm1')
+    expect((asMember as unknown as { calls: Record<string, unknown>[] }).calls[0].member_id).toBe('m1')
+
+    const asParticipant = makeTombstoneDb([])
+    await tombstoneCredentialsFor(asParticipant, 'participant', 'p1')
+    expect((asParticipant as unknown as { calls: Record<string, unknown>[] }).calls[0].participant_id).toBe('p1')
+  })
+
+  it('never re-tombstones a row that already carries a timestamp', async () => {
+    const db = makeTombstoneDb([])
+    await tombstoneCredentialsFor(db, 'member', 'm1')
+    expect((db as unknown as { calls: Record<string, unknown>[] }).calls[0]['is:tombstoned_at']).toBeNull()
+  })
+
+  it('reports zero and does not throw when the write fails — a delete must not be blocked by this', async () => {
+    const db = makeTombstoneDb(null, { message: 'permission denied' })
+    await expect(tombstoneCredentialsFor(db, 'member', 'm1')).resolves.toBe(0)
+  })
+})
+

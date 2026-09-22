@@ -99,17 +99,24 @@ as eligible, the member is not cleared to participate.
   does not exist on this account. Both mappings are covered by unit tests. Happy to
   run either if Checkr can advise on forcing a cancellation past a suspended screening,
   or if an MVR package is added to the staging account.
-- **End-to-end video link:** **[paste after recording]** — recommend recording Bud
-  Richman: order → candidate email → hosted apply page → webhook → cleared pill, the
-  full loop in about a minute.
+- **End-to-end video link:**
+  <https://drive.google.com/file/d/1yK7T-_-aNKXO0YYFq0aYbCLGRLA95k5L/view?usp=sharing>
+  (link sharing is open to anyone with the link — no Google account needed).
+  Recorded 22 Sept 2026 on Judge Judy: order from the admin compliance panel →
+  Checkr emails the candidate → hosted apply page (SSN entered there, never by
+  Stellr) → report completes as **Consider** in the Checkr dashboard → Stellr shows
+  **Needs review** and the member is not cleared → the adjudicator opens the report
+  from Stellr's deep link → records the decision with a rationale → the member
+  becomes compliant with a 3-year expiry.
 
 ---
 
 ### Before you submit — outstanding [bracketed] items
 
 1. ~~Checkr staging account name/ID~~ — `9f700773fc2d10d465427d83`.
-2. Confirm billing/payment is configured in the dashboard.
-3. Record and paste the end-to-end video link.
+2. Confirm billing/payment is configured in the dashboard. **← the only one left**
+3. ~~Record and paste the end-to-end video link~~ — recorded 22 Sept, linked above,
+   sharing verified as open to anyone with the link.
 
 Also worth doing before recording: Checkr's staging mail (`checkrhq-dev.net`) was
 being auto-filed to Trash, so the invitation email — which the video is meant to

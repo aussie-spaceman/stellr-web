@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
   assertLiveCredentials,
   checkrEnvironment,
+  isRealProductionApp,
   docusignEnvironment,
   stripeEnvironment,
   integrationEnvironments,
@@ -39,6 +40,7 @@ beforeEach(() => {
       k.startsWith('DOCUSIGN_') ||
       k.startsWith('CHECKR_') ||
       k === 'VERCEL_ENV' ||
+      k === 'NEXT_PUBLIC_APP_ENV' ||
       k === 'STRIPE_SECRET_KEY' ||
       k === 'CLERK_SECRET_KEY'
     ) {
@@ -142,6 +144,55 @@ describe('checkrEnvironment', () => {
     expect(() => assertLiveCredentials('checkr')).toThrow(SandboxCredentialsError)
     process.env.CHECKR_BASE_URL = 'https://api.checkr.com/v1'
     expect(() => assertLiveCredentials('checkr')).not.toThrow()
+  })
+})
+
+describe('the dev project builds its own "production" target', () => {
+  // WHY (22 Sept 2026): stellr-web-dev builds the `dev` branch as ITS
+  // production, so VERCEL_ENV=production is true on a deployment that is meant
+  // to run against sandboxes. Keyed on VERCEL_ENV alone, this guard threw on
+  // every integration there — it surfaced as a 503 on the Checkr order route,
+  // the one place background-check certification can run, and the same trap sat
+  // under Stripe checkout, Clerk provisioning and DocuSign issuance.
+  beforeEach(() => {
+    process.env.VERCEL_ENV = 'production'
+    Object.assign(process.env, SANDBOX_DOCUSIGN)
+    process.env.STRIPE_SECRET_KEY = 'sk_test_abc'
+    process.env.CHECKR_API_KEY = 'key'
+    process.env.CHECKR_PACKAGE_SLUG = 'stellr_crimid'
+  })
+
+  it('lets the dev deployment use every sandbox when it declares APP_ENV=dev', () => {
+    process.env.NEXT_PUBLIC_APP_ENV = 'dev'
+    expect(isRealProductionApp()).toBe(false)
+    for (const i of ['docusign', 'stripe', 'checkr'] as const) {
+      expect(() => assertLiveCredentials(i), i).not.toThrow()
+    }
+  })
+
+  it('still guards the real production app', () => {
+    process.env.NEXT_PUBLIC_APP_ENV = 'prod'
+    expect(isRealProductionApp()).toBe(true)
+    expect(() => assertLiveCredentials('checkr')).toThrow(SandboxCredentialsError)
+  })
+
+  it('treats a MISSING or misspelt APP_ENV as production — unset must never disarm the guard', () => {
+    // The incident this module exists for came from a variable nobody had set.
+    delete process.env.NEXT_PUBLIC_APP_ENV
+    expect(isRealProductionApp()).toBe(true)
+    expect(() => assertLiveCredentials('docusign')).toThrow(SandboxCredentialsError)
+
+    process.env.NEXT_PUBLIC_APP_ENV = 'develop' // not the magic word
+    expect(isRealProductionApp()).toBe(true)
+    expect(() => assertLiveCredentials('docusign')).toThrow(SandboxCredentialsError)
+  })
+
+  it('APP_ENV=dev does not arm anything on a preview or local run either', () => {
+    process.env.VERCEL_ENV = 'preview'
+    process.env.NEXT_PUBLIC_APP_ENV = 'dev'
+    expect(isRealProductionApp()).toBe(false)
+    delete process.env.VERCEL_ENV
+    expect(isRealProductionApp()).toBe(false)
   })
 })
 

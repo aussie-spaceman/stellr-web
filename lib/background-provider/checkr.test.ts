@@ -204,6 +204,24 @@ describe('fetchStatus — polling a missed webhook', () => {
     expect(await at('sus')).toBe('in_progress')
   })
 
+  it('a DELETED invitation (404) resolves to cancelled, it does not throw', async () => {
+    // WHY (22 Sept 2026): deleting an invitation returned 200, no
+    // `invitation.deleted` webhook arrived, and the 404 on the follow-up GET was
+    // treated as a transport error — so the row sat at 'invited' for ever,
+    // recoverable by neither the webhook nor the sync.
+    mockGet({}) // every path 404s
+    const p = await load()
+    const out = await p.fetchStatus({ candidateRef: 'cand_1', invitationRef: 'inv_gone', reportRef: null })
+    expect(out).toMatchObject({ status: 'cancelled', result: 'deleted', invitationRef: 'inv_gone', candidateRef: 'cand_1' })
+  })
+
+  it('still surfaces a non-404 vendor error rather than guessing', async () => {
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => { calls.push(url); return new Response('boom', { status: 500 }) }))
+    const p = await load()
+    await expect(p.fetchStatus({ candidateRef: null, invitationRef: 'inv_1', reportRef: null })).rejects.toThrow(/500/)
+  })
+
   it('surfaces a vendor error rather than guessing', async () => {
     mockGet({})
     const p = await load()

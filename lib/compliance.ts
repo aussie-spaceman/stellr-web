@@ -6,23 +6,31 @@
 //   requiresBackgroundCheck(role, dob) — does this person need clearance?
 //   deriveCompliance(license, checks, role, dob) — what's their current state?
 //
-// The rule keys off ROLE, not age: clearance is required for any NON-student who
-// is 18+. That naturally exempts the PRD edge case — a school student who has
-// turned 18 is still treated as a minor and needs no check — because the student
-// roles are excluded regardless of age.
+// The rule keys off ROLE, not age: clearance is required for an adult (18+) in an
+// EVENT-FACING role — one that puts them in a room with students. Student roles
+// are exempt regardless of age (a school student who has turned 18 is still
+// treated as a minor), and so are roles that never attend: subscriber and parent.
+// The original June 2026 rule required every non-student adult, which put every
+// newsletter subscriber on the audit page; narrowed 21 Sept 2026.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { formatDateShort } from '@/lib/utils'
 
-// Student roles never require a background check (even at 18+). Everyone else
-// (teacher / mentor / adult / parent / subscriber) does once they are 18.
+// Student roles never require a background check (even at 18+). Kept as an
+// export because the roster and volunteer code use it to mean "is a student".
 export const STUDENT_ROLES = ['participant', 'school_student_manager'] as const
+
+// Roles that DO require clearance once the person is 18: the ones that attend
+// events alongside students. An empty or unrecognised role does not qualify —
+// the requirement is opt-in by role, so a member we cannot place is not put on
+// the audit page or offered a check.
+export const BC_REQUIRED_ROLES = ['teacher', 'mentor', 'volunteer', 'adult'] as const
 
 // Background-check validity: 3 years from completion (Stellr-enforced).
 export const BC_VALIDITY_YEARS = 3
 
 export type ComplianceState =
-  | 'not_required' // student, or under 18 — no clearance needed
+  | 'not_required' // student, non-event role, or under 18 — no clearance needed
   | 'valid_bc' // a passed, non-expired background check is on file
   | 'valid_license' // a verified, non-expired teacher license is on file
   | 'in_process' // a check is invited/running, or a license awaits verification
@@ -75,8 +83,9 @@ function isMinor(dateOfBirth: string | null | undefined, ref: Date = new Date())
 
 /**
  * Does this member need a background check or a verified license to take part?
- * True for non-student roles aged 18+. `eventDate` lets the roster evaluate the
- * person's age as of the event (matching lib/event-admin.isMinor).
+ * True for an event-facing role (BC_REQUIRED_ROLES) aged 18+. `eventDate` lets
+ * the roster evaluate the person's age as of the event (matching
+ * lib/event-admin.isMinor).
  */
 export function requiresBackgroundCheck(
   eventRole: string | null | undefined,
@@ -84,7 +93,7 @@ export function requiresBackgroundCheck(
   eventDate?: string,
 ): boolean {
   const role = (eventRole ?? '').toLowerCase()
-  if ((STUDENT_ROLES as readonly string[]).includes(role)) return false
+  if (!(BC_REQUIRED_ROLES as readonly string[]).includes(role)) return false
   return !isMinor(dateOfBirth, eventDate ? new Date(eventDate) : new Date())
 }
 

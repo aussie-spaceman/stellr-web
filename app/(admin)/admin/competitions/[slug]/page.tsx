@@ -11,6 +11,7 @@ import EventManagerAssignments from '@/components/admin/EventManagerAssignments'
 import { EventVolunteersPanel } from '@/components/admin/competitions/EventVolunteersPanel'
 import EventCompanies, { type CompanyRow } from '@/components/admin/EventCompanies'
 import EventBadges from '@/components/admin/EventBadges'
+import EventCredentials from '@/components/admin/EventCredentials'
 import { RefundPolicyEditor } from '@/components/admin/RefundPolicyEditor'
 import { EventMerchandiseEditor } from '@/components/admin/EventMerchandiseEditor'
 import { EventMerchBatch } from '@/components/admin/EventMerchBatch'
@@ -360,6 +361,8 @@ export default async function AdminEventDetailPage({
             hasCertificateArtwork={Boolean(eventSettings?.certificate_artwork_path)}
             certificateFormat={(eventSettings?.certificate_format as 'us_letter' | 'a4') ?? 'us_letter'}
           />
+
+          <EventCredentials eventSlug={slug} eventTitle={event.title} />
         </div>
       )}
     </div>

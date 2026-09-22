@@ -12,6 +12,33 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 10 — 21 Sept 2026 (Vercel Deployment Storage; media → Blob)
+
+Handover: `HANDOVER-vercel-deployment-storage-2026-09-21.md`.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 10.1 | Deployment Storage before/after figures | **Not measured.** The Usage page needs a signed-in browser (same gap as 6.1). Per-deployment static output is the number this session owns: 515 MB → ~15 MB, proven by `du -sh public` (3.4 MB) and the deployment Resources view once `dev` builds. | Maintainer: read https://vercel.com/stellreducation/~/usage → Deployment Storage → Projects; write both numbers into the handover §6.1. Expect the team figure to fall only as the 15 Sept purge leaves the 30-day window (~15 Oct). | ☐ |
+| 10.2 | Deployment cleanup (7 CANCELED + 3 superseded dev builds) | **Not run** — auto-mode refused the delete. Command with live ids asserted out is in handover §6.2. Marginal: Vercel's 16 Sept retention floor (3+3) takes the READY ones itself. | Run it or leave it. | ☐ |
+| 10.3 | Blob transfer (10 GB/month, 30-day cutoff on overage) | New meter introduced by this session. Store 238 MB; click-to-play with `preload="none"` so only plays count. | Check Observability → Blob monthly; R2 or YouTube if it climbs. | ☐ (watch) |
+| 10.4 | Captions on a cross-origin `<track>` | `crossOrigin="anonymous"` added; Blob sends `access-control-allow-origin: *` (curl). Browser-verified on the local build (see handover §3). | — | ☑ |
+| 10.5 | Plan fit (Hobby fair use vs. a commercial site with Stripe/Clerk/crons) | Raised in handover §6.3; not this session's call. | Maintainer decision. | ☐ |
+## Session 9 — 21 Sept 2026 (Checkr hardening; fell off the tracker in September)
+
+Handover: `HANDOVER-checkr-2026-09-21.md`. The June build (`docs/BACKGROUND-CHECKS-HANDOFF.md`) was complete but never certified, never used (0 rows on prod and dev), and appeared in no tracker row until now.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 9.1 | Role scope narrowed to event-facing roles | `BC_REQUIRED_ROLES = teacher/mentor/volunteer/adult` (`lib/compliance.ts`); subscriber/parent/unknown exempt. Prod roles in use are participant/teacher/mentor/adult, so no real member changes state. Unit-tested. | — | ☑ |
+| 9.2 | Checkr in the production sandbox guard | `checkrEnvironment()` in `lib/env-guards.ts`; order route calls `assertLiveCredentials('checkr')`; health endpoint reports it. Unit-tested. | — | ☑ |
+| 9.3 | Missed-webhook reconciliation | `lib/background-sync.ts` single writer; `provider.fetchStatus()`; daily cron `/api/cron/background-sync` (06:30 UTC) + admin **Sync with Checkr** button. Unit-tested; **not yet exercised against Checkr staging.** | Prove it in the certification run (9.6). | ☐ |
+| 9.4 | Staging `CHECKR_*` on the dev Vercel project | Unknown — this session's Vercel token cannot list env vars (403). June testing was done against the **prod** project's URL, so staging creds may be sitting on `stellr-web` Production scope. | Maintainer: set the six vars on `stellr-web-dev` (values in `docs/ENV-MATRIX.md` §3); **remove any `CHECKR_*` from `stellr-web`** until Checkr authorises production. Verify with `/api/admin/health/integrations` on both. | ☐ |
+| 9.5 | Staging webhook points at prod | Webhook `8b0393fb769341844c1f62be` was registered to `app.stellreducation.org` in June. | Checkr staging dashboard → re-point to `https://stellr-web-dev.vercel.app/api/webhooks/background`, `include_object=true`. | ☐ |
+| 9.6 | Certification run | Never completed after the June webhook-domain fix. | On dev: `docs/checkr-test-seed.sql`, then `docs/CHECKR-TESTING-RUNBOOK.md` §4–§6 incl. the new sync case; record the video. | ☐ |
+| 9.7 | API Authorization Review submission | Adjudicator named in `docs/CHECKR-CHECKLIST-ANSWERS.md`; three bracketed fields empty; Smartsheet `c1284692a0be4d0eb73bacdffc66df32` never sent. | Fill and submit after 9.6; email clients@checkr.com to enable live reports. | ☐ |
+| 9.8 | Production cut-over | Blocked on 9.7. | Production key + `api.checkr.com` on `stellr-web`, production webhook, health endpoint `checkr: production`, one real order. | ☐ |
+| 9.9 | Local `npm test` reports ~130 failing files | Vitest's `**/*.test.*` glob sweeps `.claude/worktrees/*/node_modules`. Zero repo tests fail; CI is unaffected. | Add `**/node_modules/**` and `.claude/worktrees/**` to `vitest.config.ts` `exclude`. | ☐ |
+
 ## Session 8 — 17 Sept 2026 (resumable registration payment)
 
 Handover: `HANDOVER-registration-resume-2026-09-17.md`.
@@ -43,8 +70,12 @@ Handover: `HANDOVER-cleanup-2026-09-16.md`.
 | 7.7 | `verify:prod` from a dev-pointed checkout | Run at close-out (Stripe via the new `lib/stripe.ts` — key valid, account resolved; GTM on both hosts). But the price-ID sweep read the **dev** DB and the DocuSign section reported the local sandbox config, so neither proved production. Production runtime errors: none in the 48 h across the deploy. | Run `npm run verify:prod` from a checkout whose `.env.local` is the production set (or add a `--prod` flag that reads Vercel's env), the next time Stripe/DocuSign code is promoted. | ☐ |
 | 7.8 | CLAUDE.md icon rule changed by inference | **Closed 18 Sept — confirmed by the owner:** `lucide-react` for UI icons, `@stellr/icons` for the brand set, as CLAUDE.md now states. | — | ☑ |
 | 7.9 | Handover line-count for T3 was wrong | `HANDOVER-cleanup-2026-09-16.md` said T3 was "−830" lines; the eight PRs sum to **+538 / −766 = −228**. Corrected in this close-out. The plan's "a commit that adds more than it removes stops the run" rule was also not honoured for #103–#106 (tests and doc comments outweighed removed copies); proceeded with a note instead of stopping. | — (recorded) | ☑ |
+| 7.10 | A merge to `main` is not a deployment | **Recorded 21 Sept.** #121 (18 Sept 20:38Z) merged during Vercel's "Elevated Errors Triggering Deployments" incident; no deployment was created and nothing errored — production served the prior commit for 18 h. Re-triggered by #122 (19 Sept). `promote` SKILL.md now has a post-merge "confirm a deployment exists" check with the shell command; memory `merge-is-not-a-deployment`. | — | ☑ |
+| 7.11 | No test-mode Stripe webhook endpoints | **Recorded 21 Sept** (owner checked the dashboard). `.env.local` keeps the live `STRIPE_WEBHOOK_SECRET` because no test secret exists; a local dev server can create test Checkout Sessions but `checkout.session.completed` never arrives, so membership activation / purchased lots / registration-paid do not complete locally. | When a webhook-driven flow needs local testing: create a test-mode endpoint or use `stripe listen --forward-to`, put its `whsec_` in `.env.local`, note it here. | ☑ (recorded) |
+| 7.12 | Stray local branch `feat/checkout-promo-codes` | **Closed 21 Sept.** Session 5's branch was still local; its one commit has the same patch-id as `812b297` (#84) on `dev`. Deleted. No remote copy. | — | ☑ |
 
 Close-out 18 Sept: 7.1–7.5 ☑; 7.6–7.8 opened by the close-out review; 7.9 recorded.
+Close-out 21 Sept: 7.6 and 7.8 ☑ (guard #119 + owner's key swap; owner confirmed the icon rule); 7.10–7.12 recorded. Only 7.7 remains open.
 
 Rows touched from earlier sessions: none closed. 6.7 (`check-golive-config.mjs`)
 was a deletion candidate and was **kept** because this row is open.
@@ -57,7 +88,7 @@ not represented here.
 
 | # | Item | State | Next | Done |
 |---|---|---|---|---|
-| 6.1 | Function Storage after-figure | **Not measured.** Chrome extension not connected; the Vercel usage page needs a browser session. Before: 7.5 GB (75%). 13 deployments retained after the purge, ≤ 63 MB each — arithmetic says < 0.8 GB, but that is inference. | Maintainer: read https://vercel.com/stellreducation/~/usage (may lag deletions by a day) and write the number into the handover §3. | ☐ |
+| 6.1 | Function Storage after-figure | **Still not measured** (21 Sept: folded into 10.1 — same browser gap). Chrome extension not connected; the Vercel usage page needs a browser session. Before: 7.5 GB (75%). 13 deployments retained after the purge, ≤ 63 MB each — arithmetic says < 0.8 GB, but that is inference. | Maintainer: read https://vercel.com/stellreducation/~/usage (may lag deletions by a day) and write the number into the handover §3. | ☐ |
 | 6.2 | Google client swap exercised in production | Pre-merge: JWT, Drive `files.list`, Calendar `calendarList.list` all 200 against the real service account through the new packages. **Sheets API calls (`spreadsheets.values.get/update`, `create`) not executed** — the bare service account owns no sheets; production impersonates the owner. Type-checked identical; not run. | The next group registration (`register/group` creates a sheet) or a `sheet-sync` from a team page — confirm the sheet appears and rows land. Also `cron/motion-bookings` runtime log after its 12:00 UTC run 16 Sept. | ☐ |
 | 6.3 | Rollback targets in older release records | The purge kept the 10 newest `main` builds (oldest 10 Sept). Any deployment id in a release record older than that (e.g. the 10 Sept record's `8e22017` build if it predates the kept set) **no longer exists** — deleted with consent, but the records still name them. | When reading an older record, treat its rollback id as historical; roll back by redeploying the commit instead. | ☐ (accepted) |
 | 6.4 | Required `Vercel – stellr-web` check on `main` | Passes for a skipped build (`Canceled by Ignored Build Step` → SUCCESS, observed #92/#93/#94). Promotions are not blocked, but the check no longer proves a production build *before* the merge; the post-merge `main` build is the gate. Documented in ENV-MATRIX, promote skill, memory. | Decide whether to keep it required (harmless, informational) or drop it from `main`'s ruleset so nobody reads it as a build proof. | ☐ |

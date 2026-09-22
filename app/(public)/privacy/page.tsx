@@ -12,10 +12,13 @@ export default function PrivacyPage() {
       <h1 className="text-4xl font-bold text-brand-blue-dark mb-8">Privacy Policy</h1>
       <div className="prose prose-slate max-w-none space-y-6 text-brand-grey-dark">
         <p className="text-sm text-brand-grey-mid italic">
-          Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 17-Aug-2026
+          Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 21-Sep-2026
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
-          <strong>Recent update (17 Aug 2026):</strong> We have updated Sections 3, 5, 7 and 9 to
+          <strong>Recent update (21 Sep 2026):</strong> Section 7.4 now describes{' '}
+          <strong>credential pages</strong> — the verifiable record we issue for course completions
+          and event participation, private by default and public only if you choose. The 17 Aug 2026
+          update covered Sections 3, 5, 7 and 9 to
           describe our use of <strong>Apollo.io</strong>, a business-audience tool that identifies
           the <em>organisation</em> — not the individual — associated with visitors to our educator
           and partner pages. It runs only on those pages, only where you have accepted advertising
@@ -345,6 +348,20 @@ export default function PrivacyPage() {
           Unless you opt out, competition results, names, school affiliations, and photographs may
           be published on our website, social media channels, or press releases. We will seek
           explicit consent before publishing identifiable photographs of minors.
+        </p>
+        <p>
+          <strong>Credential pages.</strong> When you complete a Stellr course or take part in a
+          Stellr event, we issue a verifiable credential with its own web page showing your name,
+          the credential title, the issuing programme, the issue date and a credential number.
+          Every credential page is <strong>private by default</strong>. You choose whether to make it
+          public, and you can make it private again at any time from your Stellr account. Once
+          public, anyone with the link can view it, and you may share it — for example on LinkedIn,
+          which requires its users to be 16 or older. For participants under 18, the decision to
+          make a credential page public is covered by the parent or guardian consent form signed at
+          registration, which a parent or guardian may decline; no separate consent is requested per
+          credential. Credential pages are not submitted to search engines. If we revoke a credential
+          or you ask us to erase your data, the page stops showing your name and shows the
+          credential as revoked or withdrawn, so that anyone checking a copy is not misled.
         </p>
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">7.5 Legal Requirements</h3>

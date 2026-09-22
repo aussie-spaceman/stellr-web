@@ -292,6 +292,40 @@ on conflict (id) do update set
   signed_at = excluded.signed_at,
   role_name = excluded.role_name;
 
+
+-- ── Credentials ───────────────────────────────────────────────────────────────
+-- One each for the two signed-in fixtures, in the two consent states the
+-- credential page must handle. Grace is an adult: no consent needed, she can
+-- make hers public and the LinkedIn buttons show. Ada is 16 with the consent
+-- form above still 1-of-2 signed: her page stays private with the
+-- "needs a signed consent form" explanation, and that is the assertion.
+-- Numbers are fixture strings in the real format, so a spec can deep-link.
+
+insert into public.credentials (
+  id, number, source, member_id, recipient_name, title, description, criteria,
+  skills, issuer, theme, role_label, is_minor, visibility
+) values
+  ('00000000-0000-4000-e000-000000000001', 'STL-2026-E2EGRACE', 'course',
+   '00000000-0000-4000-a000-000000000002', 'Grace Teacher',
+   'Running a Space Design Competition', 'Completed the educator course on hosting a Stellr competition.',
+   'Completed every published lesson.', array['Facilitation', 'STEM pedagogy'],
+   'Stellr Academy', 'space', null, false, 'private'),
+
+  ('00000000-0000-4000-e000-000000000002', 'STL-2026-E2EADA01', 'event',
+   '00000000-0000-4000-a000-000000000001', 'Ada Student',
+   'Seed Regional Challenge — Participant', 'Took part in the fixture competition.',
+   'Registered and attended.', array['Teamwork'],
+   'Stellr Education', 'space', 'Student', true, 'private')
+on conflict (number) do update set
+  member_id = excluded.member_id,
+  recipient_name = excluded.recipient_name,
+  title = excluded.title,
+  is_minor = excluded.is_minor,
+  status = 'issued',
+  revoked_at = null,
+  tombstoned_at = null,
+  visibility = 'private';
+
 commit;
 
 -- ── After seeding: link Clerk users ──────────────────────────────────────────

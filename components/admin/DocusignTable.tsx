@@ -26,6 +26,12 @@ export interface EnvelopeRow {
   reminder_count?: number | null
   /** Per-recipient state (migration 148) — who still has to sign. */
   recipients?: RecipientLike[]
+  /**
+   * Guardian opted the minor OUT of public credential pages (D1, 21 Sept
+   * 2026: the form reads as opt-in unless noted). Set here by an admin until
+   * the form itself can record it.
+   */
+  credential_sharing_opt_out?: boolean
 }
 
 // Status text, colour and the "who is outstanding" line all come from
@@ -111,6 +117,30 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
     }
   }
 
+  const [togglingOptOut, setTogglingOptOut] = useState<string | null>(null)
+  async function handleOptOut(env: EnvelopeRow, optOut: boolean) {
+    setTogglingOptOut(env.id)
+    setMsg(null)
+    try {
+      const res  = await fetch(`/api/admin/docusigns/${env.id}/credential-sharing`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ optOut }),
+      })
+      const data = await res.json() as { error?: string; alreadyPublic?: number }
+      if (!res.ok) throw new Error(data.error ?? 'Update failed')
+      setEnvelopes(prev => prev.map(e => e.id === env.id ? { ...e, credential_sharing_opt_out: optOut } : e))
+      const alreadyPublic = data.alreadyPublic ?? 0
+      setMsg({ text: optOut
+        ? `${env.minor_name}'s credential pages will stay private.${alreadyPublic > 0 ? ` ${alreadyPublic} already public — not changed; follow up with the family.` : ''}`
+        : `${env.minor_name} may make credential pages public again.`, error: false })
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : 'Failed to update', error: true })
+    } finally {
+      setTogglingOptOut(null)
+    }
+  }
+
   const filtered = filter === 'all' ? envelopes : envelopes.filter(e => e.status === filter)
   const countFor = (s: string) => envelopes.filter(e => e.status === s).length
 
@@ -152,7 +182,7 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-brand-hairline bg-brand-canvas text-left">
-                {['Participant', 'Type', 'Event', 'Signer', 'Status', 'Sent', 'Signed', 'Expires', ''].map(h => (
+                {['Participant', 'Type', 'Event', 'Signer', 'Status', 'Sent', 'Signed', 'Expires', 'Sharing', ''].map(h => (
                   <th key={h} className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide whitespace-nowrap">
                     {h}
                   </th>
@@ -193,6 +223,26 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
                       ? (() => { const { label, cls } = fmtExpiry(env.completed_at); return <span className={cls}>{label}</span> })()
                       : <span className="text-brand-muted-soft">—</span>
                     }
+                  </td>
+                  <td className="px-4 py-3 text-xs whitespace-nowrap">
+                    {/* Minor consent only: whether the guardian opted the
+                        student out of public credential pages. Default is
+                        opted in (D1). */}
+                    {(env.envelope_type ?? 'minor') === 'minor' && env.status === 'completed' && !env.reused_from ? (
+                      <label className="inline-flex items-center gap-1.5 cursor-pointer text-brand-muted">
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 rounded border-brand-border"
+                          checked={!!env.credential_sharing_opt_out}
+                          disabled={togglingOptOut === env.id}
+                          onChange={(e) => handleOptOut(env, e.target.checked)}
+                          aria-label={`Guardian opted ${env.minor_name} out of public credential pages`}
+                        />
+                        Opted out
+                      </label>
+                    ) : (
+                      <span className="text-brand-muted-soft">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap space-x-3">
                     {env.status === 'completed' && (

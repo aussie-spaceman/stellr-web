@@ -106,6 +106,10 @@ export interface AdminModule {
   course_type: CourseType
   theme: CourseTheme | null
   cert_template_path: string | null
+  credential_title: string | null
+  credential_description: string | null
+  credential_criteria: string | null
+  credential_skills: string[]
   start_date: string | null
   event_ref: string | null
   min_tier_rank: number

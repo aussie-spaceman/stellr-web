@@ -88,5 +88,8 @@ watermark-worker.ts, recording/training wiring, `watermark:worker` script) plus 
    pre-upload tool `tsx scripts/watermark-videos.ts <file>` stays available for future uploads.
 5. Deliberate exclusions to confirm: community-space uploaded **images** (member content),
    OG/social-share images, Store/Printful product images, the 128px testimonial avatar.
-6. Video git footprint (12 MP4s, 47–57 MB) — consider Git LFS or the media CDN
-   (`NEXT_PUBLIC_MEDIA_BASE_URL`).
+6. ~~Video git footprint (12 MP4s, 47–57 MB) — consider Git LFS or the media CDN
+   (`NEXT_PUBLIC_MEDIA_BASE_URL`).~~ **Done 21 Sept 2026:** videos, photos and
+   PDFs moved to the `stellr-media` Vercel Blob store and removed from `/public`
+   (`docs/handovers/HANDOVER-vercel-deployment-storage-2026-09-21.md`). The
+   1 GB of MP4 history in the git pack remains a separate LFS/rewrite question.

@@ -26,7 +26,7 @@ async function builderContent(initialCourseId?: string) {
     db
       .from('training_modules')
       .select(
-        'id, title, description, material_kind, course_type, theme, cert_template_path, start_date, event_ref, min_tier_rank, is_published, ' +
+        'id, title, description, material_kind, course_type, theme, cert_template_path, credential_title, credential_description, credential_criteria, credential_skills, start_date, event_ref, min_tier_rank, is_published, ' +
           'training_sections(id, title, display_order, drip_days), ' +
           'training_items(id, title, content_kind, status, section_id, display_order, estimated_minutes, body, external_url, interactive_key, recording_status), ' +
           'course_object_assignments(id, object_type, object_ref, object_label, default_requirement, tier_requirements, due_at)'

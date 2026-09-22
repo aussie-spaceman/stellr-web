@@ -183,6 +183,7 @@ function CourseMetaCard({ course: m, onDone }: { course: AdminModule; onDone: ()
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <CertTemplate moduleId={m.id} hasTemplate={!!m.cert_template_path} onDone={onDone} />
           </div>
+          <CredentialFields course={m} patch={patch} busy={busy} />
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
@@ -210,6 +211,58 @@ function CourseMetaCard({ course: m, onDone }: { course: AdminModule; onDone: ()
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ─── Credential defaults ─────────────────────────────────────────────────
+ * What the completion credential says on its public page and on LinkedIn.
+ * Snapshotted onto each credential at issue, so edits only affect future
+ * completions. Title falls back to the course title. */
+function CredentialFields({ course: m, patch, busy }: { course: AdminModule; patch: (b: Record<string, unknown>) => Promise<void>; busy: boolean }) {
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState(m.credential_title ?? '')
+  const [description, setDescription] = useState(m.credential_description ?? '')
+  const [criteria, setCriteria] = useState(m.credential_criteria ?? '')
+  const [skills, setSkills] = useState((m.credential_skills ?? []).join(', '))
+  const input = 'mt-1 w-full rounded-md border border-brand-border px-2.5 py-1.5 text-sm text-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-blue'
+  const save = () =>
+    patch({
+      credentialTitle: title,
+      credentialDescription: description,
+      credentialCriteria: criteria,
+      credentialSkills: skills.split(',').map((s) => s.trim()).filter(Boolean),
+    })
+  return (
+    <div className="mt-3">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="text-xs font-medium text-brand-blue hover:underline" aria-expanded={open}>
+        {open ? 'Hide credential details' : 'Credential details (page + LinkedIn)'}
+      </button>
+      {open && (
+        <div className="mt-2 grid gap-3 rounded-lg border border-brand-border bg-brand-canvas p-3 md:grid-cols-2">
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft md:col-span-2">
+            Title on LinkedIn
+            <input className={input} value={title} placeholder={m.title} onChange={(e) => setTitle(e.target.value)} />
+          </label>
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">
+            Description
+            <textarea className={input} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </label>
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">
+            How it was earned
+            <textarea className={input} rows={3} value={criteria} onChange={(e) => setCriteria(e.target.value)} />
+          </label>
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft md:col-span-2">
+            Skills (comma-separated)
+            <input className={input} value={skills} onChange={(e) => setSkills(e.target.value)} />
+          </label>
+          <div className="md:col-span-2">
+            <button type="button" onClick={save} disabled={busy} className="rounded-lg border border-brand-border bg-white px-3 py-1.5 text-xs font-semibold text-brand-blue-dark hover:bg-brand-canvas disabled:opacity-50">
+              {busy ? 'Saving…' : 'Save credential details'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

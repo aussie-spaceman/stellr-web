@@ -8,7 +8,11 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
     include: ['**/*.test.{ts,tsx}'],
-    exclude: ['node_modules', '.next'],
+    // '**/node_modules/**' rather than 'node_modules': a git worktree under
+    // .claude/worktrees/<name>/ carries its own node_modules, and the bare
+    // pattern only matched the top-level one — so every third-party *.test.ts
+    // in there ran and reported ~130 failing files (21 Sept 2026).
+    exclude: ['**/node_modules/**', '.claude/worktrees/**', '.next'],
   },
   resolve: {
     alias: {

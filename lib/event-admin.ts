@@ -60,6 +60,12 @@ export interface RosterParticipant {
   // Background-check / license clearance for adult non-students (PRD §13).
   // 'not_required' for students and minors; the roster renders it as n/a.
   compliance_pill: ComplianceState
+  /**
+   * A refund made in the Stripe dashboard, outside the app, e.g. "Refunded
+   * 75.00 USD in Stripe". The payment pill still reads paid — the money did
+   * arrive — so this line is what tells staff it went back.
+   */
+  refund_detail: string | null
 }
 
 export interface RosterGroup {
@@ -162,6 +168,32 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
     [...envelopeByParticipant.values()].map((e) => e.id),
   )
 
+  // Refunds made in the Stripe dashboard (recorded by the charge.refunded
+  // webhook). A group payment has no single participant, so its rows carry only
+  // the registration and are shown against everyone on it.
+  const { data: externalRefunds } = await db
+    .from('event_refunds')
+    .select('participant_id, registration_id, refund_cents, currency')
+    .eq('event_slug', eventSlug)
+    .eq('source', 'stripe_external')
+    .eq('refund_type', 'cash')
+  const refundedByKey = new Map<string, { cents: number; currency: string }>()
+  for (const r of externalRefunds ?? []) {
+    const key = (r.participant_id as string | null) ?? `reg:${r.registration_id as string}`
+    const prev = refundedByKey.get(key)
+    refundedByKey.set(key, {
+      cents: (prev?.cents ?? 0) + ((r.refund_cents as number | null) ?? 0),
+      currency: ((r.currency as string | null) ?? prev?.currency ?? 'usd'),
+    })
+  }
+  const refundDetail = (participantId: string, registrationId: string): string | null => {
+    const own = refundedByKey.get(participantId)
+    const group = refundedByKey.get(`reg:${registrationId}`)
+    const r = own ?? group
+    if (!r || r.cents <= 0) return null
+    return `Refunded ${(r.cents / 100).toFixed(2)} ${r.currency.toUpperCase()} in Stripe${!own && group ? ' (group payment)' : ''}`
+  }
+
   // Compliance (background-check / license) records for every participant email,
   // in one query. Requirement is driven by the participant's role for THIS event,
   // so we derive per-participant below rather than trusting the member row's role.
@@ -244,6 +276,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
         payment_pill,
         docusign_pill,
         compliance_pill,
+        refund_detail: refundDetail(p.id as string, reg.id as string),
       }
     })
 

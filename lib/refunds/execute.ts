@@ -5,8 +5,13 @@ import { logActivity } from '@/lib/activity-log'
 import { stripeClient } from '@/lib/stripe'
 import { resolvePolicy, applicableTier, computeRefundOptions, daysOut } from './policy'
 import { assertLiveCredentials } from '@/lib/env-guards'
+import { stripeRefundState, isFullyRefunded, remainingCents } from './stripe-state'
 
-export type RefundChoice = 'cash' | 'credit'
+/**
+ * 'none' — "No refund — remove only". The admin has decided no money goes back
+ * (for example, it was already refunded by hand in Stripe). Requires a note.
+ */
+export type RefundChoice = 'cash' | 'credit' | 'none'
 
 export interface RefundResult {
   type: 'cash' | 'credit' | 'manual_required' | 'none'
@@ -14,6 +19,14 @@ export interface RefundResult {
   stripeRefundId?: string
   creditId?: string
   detail: string
+  /** Set when the refund was already made in the Stripe dashboard, outside the app. */
+  external?: boolean
+}
+
+interface AuditExtra {
+  source?: 'admin' | 'stripe_external'
+  note?: string | null
+  currency?: string
 }
 
 interface ParticipantRow {
@@ -30,10 +43,14 @@ interface ParticipantRow {
 // Issues the refund for a single paid participant per the event's refund policy.
 // Returns a no-op ('none') for unpaid/free participants. Never throws on Stripe
 // failure for the cash path — falls back to 'manual_required' and audits it.
+//
+// Before issuing anything it asks Stripe what has already been refunded, so a
+// refund made by hand in the Stripe dashboard is never repeated (23 Sept 2026).
 export async function executeRefund(
   participantId: string,
   choice: RefundChoice,
-  actorMemberId: string | null
+  actorMemberId: string | null,
+  note?: string | null
 ): Promise<RefundResult> {
   const db = supabaseServer()
 
@@ -61,14 +78,16 @@ export async function executeRefund(
   const paymentIntent = p.stripe_payment_intent_id ?? (reg.stripe_payment_intent_id as string | null)
   const isPaid = p.individual_payment_status === 'paid' || !!paymentIntent
 
-  // Idempotency: never refund the same participant twice.
+  // Idempotency: never refund the same participant twice. limit(1), not
+  // maybeSingle(): with two or more rows maybeSingle() errors, returns null,
+  // and the participant read as "not refunded".
   const { data: prior } = await db
     .from('event_refunds')
     .select('id')
     .eq('participant_id', participantId)
     .in('refund_type', ['cash', 'credit'])
-    .maybeSingle()
-  if (prior) return { type: 'none', refundCents: 0, detail: 'Already refunded' }
+    .limit(1)
+  if (prior && prior.length > 0) return { type: 'none', refundCents: 0, detail: 'Already refunded' }
 
   if (!isPaid) {
     await audit(db, p, eventSlug, { type: 'none', refundCents: 0, detail: 'Unpaid — nothing to refund' }, actorMemberId, 0, null, null)
@@ -90,14 +109,50 @@ export async function executeRefund(
     }
   }
   if (paidCents <= 0 || !event?.date) {
-    await audit(db, p, eventSlug, { type: 'none', refundCents: 0, detail: 'No fee on record' }, actorMemberId, 0, null, null)
+    await audit(db, p, eventSlug, { type: 'none', refundCents: 0, detail: 'No fee on record' }, actorMemberId, 0, null, null, undefined, { note })
     return { type: 'none', refundCents: 0, detail: 'No fee on record' }
   }
+  const d = daysOut(event.date)
+
+  // What has Stripe already given back? Catches refunds made in the dashboard,
+  // which the app's own records don't know about.
+  const stripeState = paymentIntent ? await stripeRefundState(paymentIntent) : null
+  if (isFullyRefunded(stripeState)) {
+    const amount = `${(stripeState!.refundedCents / 100).toFixed(2)} ${stripeState!.currency.toUpperCase()}`
+    const detail = `Already refunded ${amount} in Stripe — no further refund issued`
+    const result: RefundResult = { type: 'none', refundCents: 0, detail, external: true }
+    await audit(db, p, eventSlug, result, actorMemberId, paidCents, null, d, undefined, {
+      source: 'stripe_external',
+      note: [`Refunded ${amount} in Stripe outside the app`, note].filter(Boolean).join(' — '),
+      currency: stripeState!.currency,
+    })
+    return result
+  }
+
+  if (choice === 'none') {
+    const result: RefundResult = { type: 'none', refundCents: 0, detail: 'Removed without a refund' }
+    await audit(db, p, eventSlug, result, actorMemberId, paidCents, null, d, undefined, { note, currency })
+    if (p.member_id) {
+      await logActivity({
+        memberId: p.member_id,
+        category: 'billing',
+        action: 'refund_waived',
+        summary: `Registration removed without a refund${note ? ` — ${note}` : ''}`,
+        metadata: { participantId: p.id, eventSlug, paidCents },
+        actorType: 'admin',
+        actorMemberId,
+      }, db)
+    }
+    return result
+  }
+
+  // A partial refund already made in Stripe caps what's left to give back.
+  const left = remainingCents(stripeState)
+  const refundBasis = left === null ? paidCents : Math.min(paidCents, left)
 
   const tiers = await resolvePolicy(eventSlug)
   const tier = applicableTier(tiers, event.date)
-  const options = computeRefundOptions(tier, paidCents)
-  const d = daysOut(event.date)
+  const options = computeRefundOptions(tier, refundBasis)
 
   const chosen = options[choice]
   if (!chosen) {
@@ -123,9 +178,15 @@ export async function executeRefund(
       // deliberately not gated: a wrong price is visible, a phantom payment is not.
       assertLiveCredentials('stripe')
 
-      const refund = await stripe.refunds.create({ payment_intent: paymentIntent, amount: option.cents })
+      // metadata.source lets the charge.refunded webhook tell the app's own
+      // refunds from ones made in the dashboard (it can arrive before we audit).
+      const refund = await stripe.refunds.create({
+        payment_intent: paymentIntent,
+        amount: option.cents,
+        metadata: { source: 'stellr_app', participant_id: p.id },
+      })
       const result: RefundResult = { type: 'cash', refundCents: option.cents, stripeRefundId: refund.id, detail: `Refunded ${(option.cents / 100).toFixed(2)} ${currency.toUpperCase()}` }
-      await audit(db, p, eventSlug, result, actorMemberId, paidCents, null, d, option.pct)
+      await audit(db, p, eventSlug, result, actorMemberId, paidCents, null, d, option.pct, { currency })
       await notifyRefund(p, reg.event_title as string, result, currency)
       if (p.member_id) {
         await logActivity({
@@ -155,7 +216,7 @@ export async function executeRefund(
   const expiresAt = option.validityDays
     ? new Date(Date.now() + option.validityDays * 86_400_000).toISOString()
     : null
-  const { data: credit } = await db
+  const { data: credit, error: creditError } = await db
     .from('account_credits')
     .insert({
       member_id: memberId,
@@ -170,9 +231,14 @@ export async function executeRefund(
     })
     .select('id')
     .single()
+  if (creditError || !credit) {
+    const detail = `Account credit could not be issued: ${creditError?.message ?? 'no row returned'}`
+    await audit(db, p, eventSlug, { type: 'manual_required', refundCents: option.cents, detail }, actorMemberId, paidCents, option.validityDays ?? null, d, option.pct, { note: detail, currency })
+    return { type: 'manual_required', refundCents: option.cents, detail }
+  }
 
   const result: RefundResult = { type: 'credit', refundCents: option.cents, creditId: credit?.id, detail: `Issued ${(option.cents / 100).toFixed(2)} ${currency.toUpperCase()} credit` }
-  await audit(db, p, eventSlug, result, actorMemberId, paidCents, option.validityDays ?? null, d, option.pct)
+  await audit(db, p, eventSlug, result, actorMemberId, paidCents, option.validityDays ?? null, d, option.pct, { currency })
   await notifyRefund(p, reg.event_title as string, result, currency)
   await logActivity({
     memberId,
@@ -200,9 +266,10 @@ async function audit(
   paidCents: number,
   creditValidityDays: number | null,
   daysOutVal: number | null,
-  refundPct?: number
+  refundPct?: number,
+  extra: AuditExtra = {}
 ) {
-  await db.from('event_refunds').insert({
+  const { error } = await db.from('event_refunds').insert({
     participant_id: p.id,
     registration_id: p.registration_id,
     member_id: p.member_id,
@@ -216,7 +283,11 @@ async function audit(
     stripe_refund_id: result.stripeRefundId ?? null,
     account_credit_id: result.creditId ?? null,
     decided_by: actorMemberId,
+    source: extra.source ?? 'admin',
+    note: extra.note ?? (result.type === 'manual_required' ? result.detail : null),
+    currency: extra.currency ?? null,
   })
+  if (error) console.error('[refunds] audit insert failed:', error.message, { participantId: p.id })
 }
 
 async function notifyRefund(p: ParticipantRow, eventTitle: string, result: RefundResult, currency: string) {

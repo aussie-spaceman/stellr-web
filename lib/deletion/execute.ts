@@ -4,7 +4,7 @@ import { deletionPreflight } from './preflight'
 import { runExternalCleanup } from './external'
 import { archiveEntity } from './archive'
 import { tombstoneCredentialsFor } from '@/lib/credentials'
-import { executeRefund, type RefundChoice } from '@/lib/refunds/execute'
+import { executeRefund, type RefundChoice, type RefundResult } from '@/lib/refunds/execute'
 import type { DeleteMode, DeletionResult, EntityDef } from './types'
 
 export class DeletionBlockedError extends Error {
@@ -31,8 +31,8 @@ function resolveSoftSet(def: EntityDef): Record<string, unknown> {
 export async function executeDeletion(
   entity: string,
   id: string,
-  opts: { mode: DeleteMode; deletedBy?: string | null; refundChoice?: RefundChoice }
-): Promise<DeletionResult> {
+  opts: { mode: DeleteMode; deletedBy?: string | null; refundChoice?: RefundChoice; refundNote?: string | null }
+): Promise<DeletionResult & { refunds: RefundResult[] }> {
   const def = getEntityDef(entity)
   if (!def) throw new Error(`Unknown deletable entity type: ${entity}`)
 
@@ -47,13 +47,16 @@ export async function executeDeletion(
   // data + payment refs to still exist). Runs only when the admin supplied a
   // choice and the entity is a participant or a registration ("delete group"
   // refunds every paid participant).
+  // The results go back to the dialog so a failed refund (manual_required) is
+  // shown to the admin instead of only landing in event_refunds.
+  const refunds: RefundResult[] = []
   if (opts.refundChoice) {
     if (def.type === 'participant') {
-      await executeRefund(id, opts.refundChoice, opts.deletedBy ?? null)
+      refunds.push(await executeRefund(id, opts.refundChoice, opts.deletedBy ?? null, opts.refundNote))
     } else if (def.type === 'registration') {
       const { data: parts } = await db.from('participants').select('id').eq('registration_id', id)
       for (const part of parts ?? []) {
-        await executeRefund((part as { id: string }).id, opts.refundChoice, opts.deletedBy ?? null)
+        refunds.push(await executeRefund((part as { id: string }).id, opts.refundChoice, opts.deletedBy ?? null, opts.refundNote))
       }
     }
   }
@@ -69,7 +72,7 @@ export async function executeDeletion(
   if (mode === 'soft') {
     const { error } = await db.from(def.table).update(resolveSoftSet(def)).eq(def.pk, id)
     if (error) throw new Error(`Soft delete failed: ${error.message}`)
-    return { entity, id, mode, deleted: true, externalResults }
+    return { entity, id, mode, deleted: true, externalResults, refunds }
   }
 
   // Hard purge: snapshot first, then delete primary + spanned rows.
@@ -101,7 +104,7 @@ export async function executeDeletion(
       .eq('id', emptiedIndividualReg)
   }
 
-  return { entity, id, mode, deleted: true, externalResults }
+  return { entity, id, mode, deleted: true, externalResults, refunds }
 }
 
 // Returns the registration id if the given participant is the last remaining

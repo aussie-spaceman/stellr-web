@@ -2,6 +2,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import { stripeClient } from '@/lib/stripe'
 import { resolvePolicy, applicableTier, computeRefundOptions, daysOut, type RefundOptions } from './policy'
+import { stripeRefundState, isFullyRefunded, remainingCents } from './stripe-state'
 
 export interface RefundPreview {
   paid: boolean
@@ -11,13 +12,19 @@ export interface RefundPreview {
   options: RefundOptions
   hasPaymentRef: boolean // false => cash refund would need manual handling
   alreadyRefunded: boolean
+  /**
+   * A refund made in the Stripe dashboard, outside the app. When `full`, no
+   * cash/credit is offered and the delete records it; when partial, the
+   * options are already capped at what is left on the charge.
+   */
+  externalRefund: { refundedCents: number; currency: string; full: boolean } | null
 }
 
 // Read-only computation of what a participant deletion would refund, for the
 // admin delete dialog. Mirrors executeRefund's resolution without mutating.
 export async function previewRefund(participantId: string): Promise<RefundPreview> {
   const db = supabaseServer()
-  const empty: RefundPreview = { paid: false, paidCents: 0, currency: 'usd', daysOut: null, options: {}, hasPaymentRef: false, alreadyRefunded: false }
+  const empty: RefundPreview = { paid: false, paidCents: 0, currency: 'usd', daysOut: null, options: {}, hasPaymentRef: false, alreadyRefunded: false, externalRefund: null }
 
   const { data: p } = await db
     .from('participants')
@@ -38,8 +45,10 @@ export async function previewRefund(participantId: string): Promise<RefundPrevie
     .select('id')
     .eq('participant_id', participantId)
     .in('refund_type', ['cash', 'credit'])
-    .maybeSingle()
-  const alreadyRefunded = !!prior
+    .limit(1)
+  // limit(1), not maybeSingle(): two or more rows made maybeSingle() error and
+  // the participant read as "not refunded".
+  const alreadyRefunded = !!prior && prior.length > 0
 
   // Only hard payment evidence counts: a webhook-recorded per-participant
   // payment or a stored payment_intent. registrations.status='confirmed' is NOT
@@ -63,8 +72,16 @@ export async function previewRefund(participantId: string): Promise<RefundPrevie
     }
   }
   if (paidCents <= 0 || !event?.date) {
-    return { paid: true, paidCents: 0, currency, daysOut: null, options: {}, hasPaymentRef: !!paymentIntent, alreadyRefunded }
+    return { paid: true, paidCents: 0, currency, daysOut: null, options: {}, hasPaymentRef: !!paymentIntent, alreadyRefunded, externalRefund: null }
   }
+
+  // Ask Stripe directly: a refund made in the dashboard never reaches our tables.
+  const stripeState = paymentIntent && !alreadyRefunded ? await stripeRefundState(paymentIntent) : null
+  const externalRefund = stripeState && stripeState.refundedCents > 0
+    ? { refundedCents: stripeState.refundedCents, currency: stripeState.currency, full: isFullyRefunded(stripeState) }
+    : null
+  const left = remainingCents(stripeState)
+  const refundBasis = left === null ? paidCents : Math.min(paidCents, left)
 
   const tiers = await resolvePolicy(reg.event_slug as string)
   const tier = applicableTier(tiers, event.date)
@@ -73,8 +90,9 @@ export async function previewRefund(participantId: string): Promise<RefundPrevie
     paidCents,
     currency,
     daysOut: daysOut(event.date),
-    options: computeRefundOptions(tier, paidCents),
+    options: externalRefund?.full || alreadyRefunded ? {} : computeRefundOptions(tier, refundBasis),
     hasPaymentRef: !!paymentIntent,
     alreadyRefunded,
+    externalRefund,
   }
 }

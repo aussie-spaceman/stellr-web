@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { sendEmail, individualConfirmationEmail, groupPaymentConfirmedEmail } from '@/lib/email'
 import { finalizeRedemption } from '@/lib/refunds/redeem'
+import { recordExternalChargeRefunds } from '@/lib/refunds/stripe-webhook'
 import { logActivity } from '@/lib/activity-log'
 import { handleStoreOrderPaid } from '@/lib/store/orders'
 import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
@@ -555,6 +556,16 @@ export async function POST(req: NextRequest) {
     if (event.type === 'customer.subscription.deleted') {
       const subscription = event.data.object as Stripe.Subscription
       await expireMembership(subscription.id)
+    }
+
+    // ── charge.refunded (incl. refunds made in the Stripe dashboard) ─────────
+    // Records dashboard refunds against the event registration they paid for,
+    // so a later delete doesn't refund the same money again. Charges that
+    // aren't event registrations are ignored.
+    if (event.type === 'charge.refunded') {
+      const charge = event.data.object as Stripe.Charge
+      const res = await recordExternalChargeRefunds(supabaseServer(), stripe, charge)
+      if (res.recorded > 0) console.log(`[stripe/webhook] recorded ${res.recorded} external refund(s) for ${charge.id}`)
     }
   } catch (err) {
     console.error('[stripe/webhook] Handler error:', err)

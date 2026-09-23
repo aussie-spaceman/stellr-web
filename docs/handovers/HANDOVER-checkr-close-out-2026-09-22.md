@@ -11,7 +11,10 @@ Tabulated, tickable version:
 
 ## 1. Directly asked for, not delivered
 
-**A1 — the invitation-expiry case was never run.** I put it in the
+**A1 — RUN 22 Sept, and it found a bug. Partly closed; the fix is unverified.**
+See the addendum at the bottom — read that before re-testing.
+
+**A1 (as written at close-out) — the invitation-expiry case was never run.** I put it in the
 certification plan as step 5 and assigned it to myself, then never came back to
 it. `docs/CHECKR-TESTING-RUNBOOK.md` §5 lists it under the REQUIRED lifecycle
 cases, and it is **absent from the results document**, so the submission
@@ -105,3 +108,49 @@ Both are outside the repo and neither is a code problem:
   accepted, not before.
 - TRACKER session 9: 9.1–9.6, 9.9, 9.10, 9.13–9.15 closed; **9.7, 9.8, 9.11,
   9.12, 9.16 open**, plus A1/A2/A3 and B1/B2 above.
+
+
+---
+
+## Addendum — A1 was run, and found a real defect (22 Sept, later)
+
+Deleting a pending invitation (`DELETE /v1/invitations/8129e2d1b6acb6d317ae4bd1`,
+Camo Time) returned **200**. Then two things happened that should not have:
+
+1. **No `invitation.deleted` webhook arrived.** The row stayed `invited`.
+2. **The sync could not recover it either.** `GET /v1/invitations/{id}` returned
+   **404**, `fetchStatus` threw, and `syncStaleChecks` recorded a per-row error:
+
+   ```json
+   {"scanned":2,"updated":0,"unchanged":1,
+    "errors":[{"id":"00f30a29…","error":"Checkr GET /invitations/8129e2d1… failed: 404"}]}
+   ```
+
+So a deleted invitation left a row stuck at `invited` **permanently**, reachable
+by neither path — the exact failure the reconciliation exists to prevent. The
+hole was mine: I treated "Checkr says this does not exist" as a transport error
+rather than as an answer.
+
+**Fixed in #163** (`af5f9aa` on `dev`): `checkrGetMaybe` returns null on 404, and
+an invitation Checkr no longer has maps as the webhook maps `invitation.deleted`
+— `cancelled`, result `deleted`. A 404 on a *report* still throws, deliberately:
+a report that once existed should not vanish, and guessing there would mask a
+real problem. 81 files / 784 tests.
+
+**Not verified live.** Vercel hit its Hobby **daily deployment limit** right
+after the merge ("Deployment rate limited — retry in 24 hours"), so the dev app
+is still running the old code and Camo Time's row is still stuck at `invited`.
+
+**What the next session must do, in this order:**
+
+1. Once the rate limit clears (after ~22:30Z 23 Sept), confirm the dev app
+   redeployed past `af5f9aa`.
+2. Press **Sync with Checkr**. Camo Time's row should flip `invited → cancelled`
+   with result `deleted`, and the response should show **`updated: 1`** — which
+   closes **A2** as well, since that is the first real missed-webhook recovery.
+3. Only then record A1/A2 as closed, and add both to the results document.
+
+**Still open from A1:** a true `invitation.expired` (as opposed to `deleted`).
+Tom Brady's invitation `f9cbddb0ed2b777b1998e96c` was left pending on purpose and
+should hit Checkr's 7-day expiry around **29 September**. Do not submit his form
+and do not delete his row. If the webhook is missed, Sync should recover it.

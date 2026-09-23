@@ -24,6 +24,15 @@ interface RefundPreview {
   options: { cash?: RefundOption; credit?: RefundOption }
   hasPaymentRef: boolean
   alreadyRefunded: boolean
+  /** Refunded in the Stripe dashboard, outside the app. */
+  externalRefund?: { refundedCents: number; currency: string; full: boolean } | null
+}
+
+type RefundChoice = 'cash' | 'credit' | 'none'
+
+interface RefundResult {
+  type: 'cash' | 'credit' | 'manual_required' | 'none'
+  detail: string
 }
 
 function money(cents: number, currency: string) {
@@ -76,18 +85,21 @@ export function DeleteEntityButton({
   const [mode, setMode] = useState<'soft' | 'hard'>(softDeletable ? 'soft' : 'hard')
   const [confirmText, setConfirmText] = useState('')
   const [refund, setRefund] = useState<RefundPreview | null>(null)
-  const [refundChoice, setRefundChoice] = useState<'cash' | 'credit' | null>(null)
+  const [refundChoice, setRefundChoice] = useState<RefundChoice | null>(null)
+  const [refundNote, setRefundNote] = useState('')
+  const [deletedWithIssues, setDeletedWithIssues] = useState(false)
 
   async function openDialog() {
     setOpen(true)
     setError(null)
+    setDeletedWithIssues(false)
     setBlockers(null)
     setMode(softDeletable ? 'soft' : 'hard')
     setConfirmText('')
     setRefund(null)
-    // Group deletions refund every paid participant; default to credit (issued
-    // wherever the tier offers it). Per-participant deletions resolve below.
-    setRefundChoice(refundable && entity === 'registration' ? 'credit' : null)
+    // Nothing is pre-selected: the admin chooses cash, credit or no refund.
+    setRefundChoice(null)
+    setRefundNote('')
     setLoading(true)
     try {
       const calls: Promise<unknown>[] = [
@@ -104,10 +116,12 @@ export function DeleteEntityButton({
             .then((r) => r.json())
             .then((preview: RefundPreview) => {
               setRefund(preview)
-              // Pre-select the single offered option; leave null when both exist.
-              const opts = preview.options || {}
-              if (opts.cash && !opts.credit) setRefundChoice('cash')
-              else if (opts.credit && !opts.cash) setRefundChoice('credit')
+              // Already refunded in full in Stripe: the only outcome is removal
+              // with no further refund. Pre-fill the reason the audit row keeps.
+              if (preview.externalRefund?.full && !preview.alreadyRefunded) {
+                setRefundChoice('none')
+                setRefundNote('Refunded in full in Stripe')
+              }
             })
             .catch(() => setRefund(null))
         )
@@ -127,7 +141,13 @@ export function DeleteEntityButton({
       const res = await fetch('/api/admin/deletion', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entity, id, mode, refundChoice: refundChoice ?? undefined }),
+        body: JSON.stringify({
+          entity,
+          id,
+          mode,
+          refundChoice: needsRefundChoice || refundChoice === 'none' ? refundChoice ?? undefined : undefined,
+          refundNote: refundChoice === 'none' ? refundNote.trim() : undefined,
+        }),
       })
       const data = await res.json()
       if (res.status === 409 && data.blockers) {
@@ -136,10 +156,21 @@ export function DeleteEntityButton({
       }
       if (!res.ok) throw new Error(data.error || 'Delete failed')
 
-      const failures = (data.externalResults ?? []).filter((r: { ok: boolean }) => !r.ok)
-      if (failures.length > 0) {
-        setError(`Deleted, but external cleanup had issues: ${failures.map((f: { detail: string }) => f.detail).join('; ')}`)
-        setTimeout(() => finish(), 2500)
+      const failures: string[] = (data.externalResults ?? [])
+        .filter((r: { ok: boolean }) => !r.ok)
+        .map((f: { detail: string }) => f.detail)
+      // A refund that couldn't be issued is flagged for manual handling; say so
+      // rather than closing as if it went through.
+      const manual: string[] = ((data.refunds ?? []) as RefundResult[])
+        .filter((r) => r.type === 'manual_required')
+        .map((r) => r.detail)
+      if (failures.length > 0 || manual.length > 0) {
+        const parts = [
+          manual.length > 0 && `the refund needs doing by hand in Stripe (${manual.join('; ')})`,
+          failures.length > 0 && `external cleanup had issues (${failures.join('; ')})`,
+        ].filter(Boolean)
+        setError(`Deleted, but ${parts.join(', and ')}.`)
+        setDeletedWithIssues(true)
         return
       }
       finish()
@@ -161,15 +192,41 @@ export function DeleteEntityButton({
   const hardConfirmed = mode === 'soft' || typedOk
   const showModeChoice = softDeletable && allowHardDelete
 
-  // When a participant's tier offers BOTH cash and credit, the admin must pick.
+  // Whenever a refund is on offer the admin must pick one: cash, credit, or no
+  // refund at all. A fully refunded-in-Stripe participant is already 'none'.
+  const externalFull = !!refund?.externalRefund?.full && !refund.alreadyRefunded
   const needsRefundChoice =
     refundable &&
-    entity === 'participant' &&
-    !!refund?.paid &&
-    !refund.alreadyRefunded &&
-    !!refund.options.cash &&
-    !!refund.options.credit
-  const refundReady = !needsRefundChoice || refundChoice !== null
+    (entity === 'registration' ||
+      (entity === 'participant' &&
+        !!refund?.paid &&
+        !refund.alreadyRefunded &&
+        (externalFull || !!refund.options.cash || !!refund.options.credit)))
+  const refundReady =
+    !needsRefundChoice || (refundChoice !== null && (refundChoice !== 'none' || refundNote.trim().length > 0))
+
+  const reasonField = (
+    <div>
+      <label className="block text-xs text-brand-muted-soft mb-1">Reason (kept with the refund record)</label>
+      <input
+        value={refundNote}
+        onChange={(e) => setRefundNote(e.target.value)}
+        placeholder="e.g. Refunded in full in Stripe — special circumstances"
+        maxLength={500}
+        className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue"
+      />
+    </div>
+  )
+
+  const noRefundOption = (
+    <>
+      <label className="flex items-center gap-1.5 text-brand-muted">
+        <input type="radio" checked={refundChoice === 'none'} onChange={() => setRefundChoice('none')} />
+        No refund — remove only
+      </label>
+      {refundChoice === 'none' && reasonField}
+    </>
+  )
 
   return (
     <>
@@ -247,7 +304,7 @@ export function DeleteEntityButton({
                   {/* Refund step */}
                   {refundable && entity === 'registration' && (
                     <div className="rounded-lg border border-brand-border bg-brand-canvas p-3 space-y-2 text-sm">
-                      <p className="text-brand-muted">Paid participants will be refunded per the event&apos;s refund policy. Where a tier offers a choice:</p>
+                      <p className="text-brand-muted">Paid participants will be refunded per the event&apos;s refund policy. Anyone already refunded in Stripe gets nothing further. Where a tier offers a choice:</p>
                       <div className="flex gap-4">
                         <label className="flex items-center gap-1.5 text-brand-muted">
                           <input type="radio" checked={refundChoice === 'cash'} onChange={() => setRefundChoice('cash')} /> Cash
@@ -256,6 +313,7 @@ export function DeleteEntityButton({
                           <input type="radio" checked={refundChoice === 'credit'} onChange={() => setRefundChoice('credit')} /> Credit
                         </label>
                       </div>
+                      {noRefundOption}
                     </div>
                   )}
 
@@ -265,6 +323,13 @@ export function DeleteEntityButton({
                         <p className="text-brand-muted">Already refunded — no further refund will be issued.</p>
                       ) : !refund.paid ? (
                         <p className="text-brand-muted">No payment on record — nothing to refund.</p>
+                      ) : externalFull ? (
+                        <>
+                          <p className="text-brand-muted">
+                            Already refunded {money(refund.externalRefund!.refundedCents, refund.externalRefund!.currency)} in Stripe. No further refund will be issued.
+                          </p>
+                          {reasonField}
+                        </>
                       ) : Object.keys(refund.options).length === 0 ? (
                         <p className="text-brand-muted">No refund is due at this point ({refund.daysOut} days out).</p>
                       ) : (
@@ -272,6 +337,11 @@ export function DeleteEntityButton({
                           <p className="text-brand-muted">
                             Paid {money(refund.paidCents, refund.currency)} · {refund.daysOut} days out. Refund:
                           </p>
+                          {refund.externalRefund && (
+                            <p className="text-amber-700 text-xs">
+                              {money(refund.externalRefund.refundedCents, refund.externalRefund.currency)} was already refunded in Stripe. The amounts below are capped at what&apos;s left.
+                            </p>
+                          )}
                           {refund.options.cash && (
                             <label className="flex items-center justify-between gap-2 text-brand-muted">
                               <span className="flex items-center gap-1.5">
@@ -290,6 +360,7 @@ export function DeleteEntityButton({
                               <span className="font-medium">{money(refund.options.credit.cents, refund.currency)}</span>
                             </label>
                           )}
+                          {noRefundOption}
                           {refundChoice === 'cash' && !refund.hasPaymentRef && (
                             <p className="text-amber-700 text-xs">No Stripe payment reference on file — this will be flagged for a manual refund.</p>
                           )}
@@ -298,6 +369,11 @@ export function DeleteEntityButton({
                     </div>
                   )}
 
+                  {deletedWithIssues ? (
+                    <div className="flex justify-end pt-1">
+                      <button onClick={finish} className="text-sm font-medium text-brand-muted hover:text-brand-blue-dark px-3 py-1.5">Close</button>
+                    </div>
+                  ) : (
                   <div className="flex items-center justify-end gap-3 pt-1">
                     <button onClick={() => setOpen(false)} className="text-sm text-brand-muted-soft hover:text-brand-muted px-3 py-1.5">Cancel</button>
                     <button
@@ -308,6 +384,7 @@ export function DeleteEntityButton({
                       {loading ? 'Deleting…' : mode === 'hard' ? 'Permanently delete' : 'Soft-delete'}
                     </button>
                   </div>
+                  )}
                 </div>
               )
             )}

@@ -352,6 +352,11 @@ export default function EventRoster({
                       </td>
                       <td className="px-4 py-2.5">
                         <Pill {...PAYMENT_PILLS[p.payment_pill]} />
+                        {/* Refunded in the Stripe dashboard. The pill stays "paid"
+                            because the money did arrive; this says it went back. */}
+                        {p.refund_detail && (
+                          <p className="mt-1 text-[11px] leading-tight text-brand-grey-dark">{p.refund_detail}</p>
+                        )}
                       </td>
                       <td className="px-4 py-2.5">
                         <Pill label={p.docusign_label} className={DOCUSIGN_PILL_CLASSES[p.docusign_pill]} />

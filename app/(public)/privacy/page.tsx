@@ -407,7 +407,7 @@ export default function PrivacyPage() {
           </a>
           . When a parent or guardian declines, any credential pages that are already public are
           made private and we let the family know.
-</p>
+        </p>
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">7.5 Legal Requirements</h3>
         <p>

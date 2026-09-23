@@ -58,7 +58,7 @@ Done in code (`feat/credentials-policy-docs`):
 - Step 3: `getEnvelopeFormData` in `lib/docusign.ts`; parse in
   `lib/docusign-form-data.ts` (tab absent → `null`, leave stored value);
   write in `lib/docusign-optout.ts`, called from the Connect webhook.
-- Step 4: `form_data_read_at` (migration `20260923120000_docusign_form_data_read.sql`)
+- Step 4: `form_data_read_at` (migration `20260923170000_docusign_form_data_read.sql`)
   and `/api/cron/docusign-form-data` (daily 09:15 UTC, 7-day lookback).
 - Step 5: `lib/docusign-form-data.test.ts`.
 - Step 6: `docs/DOCUSIGN-CONNECT.md` updated.

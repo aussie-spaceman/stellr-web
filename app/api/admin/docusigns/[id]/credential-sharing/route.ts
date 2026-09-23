@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
+import { applyGuardianOptOut } from '@/lib/credentials-notify'
 
 // POST /api/admin/docusigns/[id]/credential-sharing  { optOut: boolean }
 // Records that a guardian opted the minor OUT of public credential pages
@@ -10,9 +11,8 @@ import { logActivity } from '@/lib/activity-log'
 // "no" is honoured. Coverage rows defer to the envelope they reuse, so the
 // flag is only settable on the original.
 //
-// Opting out does not flip pages that are already public: the student made
-// that choice with consent that was valid at the time, and silently unpublishing
-// something on their LinkedIn is its own harm. The admin is told and can act.
+// Opting out makes any page that is already public private and emails the
+// family (guardian, student Cc'd) — see applyGuardianOptOut.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { sessionClaims, userId } = await auth()
   const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
@@ -53,22 +53,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
   }
 
-  // Surface pages already public so the admin can follow up with the family.
-  let publicCount = 0
-  if (body.optOut) {
-    const filters = [
-      env.member_id ? `member_id.eq.${env.member_id}` : null,
-      env.participant_id ? `participant_id.eq.${env.participant_id}` : null,
-    ].filter(Boolean).join(',')
-    if (filters) {
-      const { count } = await db
-        .from('credentials')
-        .select('id', { count: 'exact', head: true })
-        .or(filters)
-        .eq('visibility', 'public')
-      publicCount = count ?? 0
-    }
-  }
+  // Withdrawn consent takes public pages down (decided 23 Sept 2026, reversing
+  // the original "leave them up" rule): the privacy policy and the consent form
+  // both promise a guardian can withdraw consent, so the name has to come off
+  // the open web. The family is emailed which pages changed.
+  const unpublished = body.optOut
+    ? await applyGuardianOptOut(db, { memberId: env.member_id, participantId: env.participant_id })
+    : 0
 
-  return NextResponse.json({ ok: true, optOut: body.optOut, alreadyPublic: publicCount })
+  return NextResponse.json({ ok: true, optOut: body.optOut, unpublished })
 }

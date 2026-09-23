@@ -20,6 +20,7 @@ Handler: [`app/api/webhooks/docusign/route.ts`](../app/api/webhooks/docusign/rou
 
 1. Verifies the `x-docusign-signature-1` HMAC header against `DOCUSIGN_CONNECT_HMAC_KEY` (rejects with **401** on mismatch).
 2. On **envelope** events (`envelope-sent`, `envelope-completed`, `envelope-declined`, `envelope-voided`, …) → updates the row's `status`; on `envelope-completed` sets `signers_completed = signers_total`.
+4. On `envelope-completed` for an original **minor** envelope → reads `GET /envelopes/{id}/form_data` ([`getEnvelopeFormData`](../lib/docusign.ts)) for the guardian's `CredentialSharingOptOut` checkbox ([`lib/docusign-optout.ts`](../lib/docusign-optout.ts)). Ticked → `credential_sharing_opt_out = true`, any public credential pages go private and the family is emailed. Every successful read stamps `form_data_read_at`; a failed read leaves it null and `/api/cron/docusign-form-data` retries daily for 7 days. An unticked box never clears an opt-out an admin recorded.
 3. On the **recipient** event `recipient-completed` → re-counts signers via the DocuSign recipients API ([`getEnvelopeSignerProgress`](../lib/docusign.ts)) and writes `signers_total` / `signers_completed`. Idempotent — it recounts rather than increments, so duplicate deliveries are safe.
 
 The pill arithmetic ([`lib/event-admin.ts`](../lib/event-admin.ts), and the portal's `DocusignsSection`):

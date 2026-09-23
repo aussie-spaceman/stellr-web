@@ -12,13 +12,17 @@ export default function PrivacyPage() {
       <h1 className="text-4xl font-bold text-brand-blue-dark mb-8">Privacy Policy</h1>
       <div className="prose prose-slate max-w-none space-y-6 text-brand-grey-dark">
         <p className="text-sm text-brand-grey-mid italic">
-          Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 21-Sep-2026
+          Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 23-Sep-2026
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
-          <strong>Recent update (21 Sep 2026):</strong> Section 7.4 now describes{' '}
-          <strong>credential pages</strong> — the verifiable record we issue for course completions
-          and event participation, private by default and public only if you choose. The 17 Aug 2026
-          update covered Sections 3, 5, 7 and 9 to
+          <strong>Recent update (23 Sep 2026):</strong> We now describe{' '}
+          <strong>credentials and LinkedIn sharing</strong> in full (Sections 3.11, 5, 7.4, 10, 12
+          and 13): what a credential page shows, that it is private until you choose to make it
+          public, how a parent or guardian can say no for a student under 18, and that once you
+          share a credential on LinkedIn, Stellr cannot control what LinkedIn does with it. Section
+          14 now explains that we announce changes to this policy here, on our website, rather than
+          by email. The 21 Sep 2026 update first introduced credential pages in Section 7.4. The 17
+          Aug 2026 update covered Sections 3, 5, 7 and 9 to
           describe our use of <strong>Apollo.io</strong>, a business-audience tool that identifies
           the <em>organisation</em> — not the individual — associated with visitors to our educator
           and partner pages. It runs only on those pages, only where you have accepted advertising
@@ -201,6 +205,20 @@ export default function PrivacyPage() {
           and is not shared beyond what is necessary to administer the consent process.
         </p>
 
+        <h3 className="text-lg font-semibold text-brand-blue-dark">3.11 Credentials</h3>
+        <ul className="list-disc pl-6 space-y-1">
+          <li>
+            Credentials we issue to you for completing a course or taking part in an event — the
+            credential title, issue date, credential number, your role, and any award
+          </li>
+          <li>Whether each credential page is private or public, which you control</li>
+          <li>
+            Activity on your credential pages — how many times a page was viewed, and when you used
+            the share, copy-link, or download buttons. We record the action and the time, not who
+            viewed the page
+          </li>
+        </ul>
+
         {/* 4. How We Collect */}
         <h2 className="text-xl font-bold text-brand-blue-dark">4. How We Collect Information</h2>
         <p>We collect personal information in the following ways:</p>
@@ -234,6 +252,7 @@ export default function PrivacyPage() {
                 ['Ensuring participant safety at in-person events', 'Medical and dietary requirements'],
                 ['Processing registration payments and refunds', 'Billing history'],
                 ['Publishing competition results, photos, and highlights', 'Photos, videos, name'],
+                ['Issuing verifiable credentials, and showing a credential page publicly when you choose to', 'Name, credential details, date of birth (to apply the age rules in Section 7.4), parental consent record for students under 18'],
                 ['Improving our Services through analytics', 'Technical and usage data'],
                 ['Understanding which schools and organisations are interested in partnering with us', 'Technical data and inferred organisation — educator and partner pages only, with advertising consent'],
                 ['Complying with legal obligations', 'All categories as required'],
@@ -343,7 +362,7 @@ export default function PrivacyPage() {
           registration.
         </p>
 
-        <h3 className="text-lg font-semibold text-brand-blue-dark">7.4 Public Recognition</h3>
+        <h3 id="credentials" className="text-lg font-semibold text-brand-blue-dark scroll-mt-24">7.4 Public Recognition and Credentials</h3>
         <p>
           Unless you opt out, competition results, names, school affiliations, and photographs may
           be published on our website, social media channels, or press releases. We will seek
@@ -352,17 +371,43 @@ export default function PrivacyPage() {
         <p>
           <strong>Credential pages.</strong> When you complete a Stellr course or take part in a
           Stellr event, we issue a verifiable credential with its own web page showing your name,
-          the credential title, the issuing programme, the issue date and a credential number.
-          Every credential page is <strong>private by default</strong>. You choose whether to make it
-          public, and you can make it private again at any time from your Stellr account. Once
-          public, anyone with the link can view it, and you may share it — for example on LinkedIn,
-          which requires its users to be 16 or older. For participants under 18, the decision to
-          make a credential page public is covered by the parent or guardian consent form signed at
-          registration, which a parent or guardian may decline; no separate consent is requested per
-          credential. Credential pages are not submitted to search engines. If we revoke a credential
-          or you ask us to erase your data, the page stops showing your name and shows the
-          credential as revoked or withdrawn, so that anyone checking a copy is not misled.
+          the credential title, the issuing program, the issue date, and a credential number. Every
+          credential page is <strong>private by default</strong>. You choose whether to make it
+          public, and you can make it private again at any time from your Stellr account. Once a
+          page is public, anyone with the link can view it. Credential pages are not submitted to
+          search engines.
         </p>
+        <p>
+          <strong>Sharing on LinkedIn.</strong> From a public credential page you can choose to add
+          the credential to your LinkedIn profile or share it in a LinkedIn post. Stellr does not
+          connect to your LinkedIn account and does not send your information to LinkedIn. The
+          buttons open LinkedIn with the credential details filled in, and you decide whether to
+          save or post them. When a credential page is shared, LinkedIn reads that public page,
+          including your name and the credential image. LinkedIn requires its members to be 16 or
+          older, so these buttons are not shown to anyone under 16.
+        </p>
+        <p>
+          <strong>Once shared, it is out of our hands.</strong> After you add a credential to
+          LinkedIn or share it there, what happens to that information is governed by
+          LinkedIn&rsquo;s terms and privacy policy, not ours. Stellr cannot control, change, or
+          remove what LinkedIn — or anyone who has seen or copied the post — does with it, and
+          LinkedIn may keep its own copy of the post preview. Making the page private, or asking us
+          to revoke or erase a credential, changes the page on our site: it stops showing your name
+          and shows the credential as private, revoked, or withdrawn, so that anyone checking the
+          link is not misled. To remove a LinkedIn profile entry or post, delete it on LinkedIn.
+        </p>
+        <p>
+          <strong>Students under 18.</strong> For participants under 18, permission to make a
+          credential page public is part of the parent or guardian consent form signed at
+          registration; no separate consent is requested for each credential. A parent or
+          guardian may decline by ticking the credential opt-out on the consent form, or at any
+          time by contacting{' '}
+          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+            privacy@stellreducation.org
+          </a>
+          . When a parent or guardian declines, any credential pages that are already public are
+          made private and we let the family know.
+</p>
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">7.5 Legal Requirements</h3>
         <p>
@@ -540,6 +585,8 @@ export default function PrivacyPage() {
                 ['Electronic consent records (DocuSign)', '7 years from date of signing (legal record of parental consent)'],
                 ['Parent/guardian contact information', 'Duration of account, or until the associated minor participant record is deleted'],
                 ['Photos and videos', 'Until you request removal, or indefinitely'],
+                ['Credentials', 'Duration of account. If you ask us to erase your data, the credential number is kept so a copy can be checked, but your name is removed and the page shows the credential as withdrawn'],
+                ['Credential page activity (views and share clicks)', 'Duration of the credential; deleted with it'],
                 ['Technical/usage logs', 'Generally 12 months, with minor exceptions on a platform-specific basis'],
               ].map(([type, period]) => (
                 <tr key={type} className="even:bg-surface">
@@ -582,6 +629,7 @@ export default function PrivacyPage() {
           <li><strong>Correction</strong> — request correction of inaccurate information</li>
           <li><strong>Deletion</strong> — request deletion of your information (subject to legal retention requirements)</li>
           <li><strong>Withdrawal of consent</strong> — withdraw consent for processing based on consent (e.g., for publication of photos)</li>
+          <li><strong>Credential privacy</strong> — make any credential page private at any time from your Stellr account</li>
           <li><strong>Opt-out of communications</strong> — unsubscribe from non-essential emails at any time</li>
         </ul>
 
@@ -590,6 +638,10 @@ export default function PrivacyPage() {
           <li>Review personal information collected from your child under 13</li>
           <li>Request correction or deletion of that information</li>
           <li>Refuse further collection or use of your child&rsquo;s information</li>
+          <li>
+            Decline public credential pages for your child under 18 — any pages already public are
+            made private (see Section 7.4)
+          </li>
           <li>
             Contact us at any time:{' '}
             <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
@@ -648,17 +700,19 @@ export default function PrivacyPage() {
         <h2 className="text-xl font-bold text-brand-blue-dark">13. Third-Party Links</h2>
         <p>
           Our platform may contain links to third-party websites or resources (e.g., partner
-          organisations, competition hosts). We are not responsible for the privacy practices of
-          those sites and encourage you to review their policies independently.
+          organisations, competition hosts) and to <strong>LinkedIn</strong>, where you can choose to
+          add or share a credential (see Section 7.4). We are not responsible for the privacy
+          practices of those sites and encourage you to review their policies independently.
         </p>
 
         {/* 14. Changes */}
         <h2 className="text-xl font-bold text-brand-blue-dark">14. Changes to This Policy</h2>
         <p>
           We may update this Privacy Policy from time to time. When we do, we will post the revised
-          version on our website with an updated &ldquo;Last Updated&rdquo; date. For material changes, we will
-          provide notice via email or a prominent platform notification. Continued use of our
-          Services after notice constitutes acceptance of the updated Policy.
+          version on this page with an updated &ldquo;Last Updated&rdquo; date and a notice at the top of
+          the page summarising what changed. We give notice of changes on our public website only;
+          we do not send notice by email. Please check this page from time to time. Continued use of
+          our Services after a change is posted constitutes acceptance of the updated Policy.
         </p>
 
         {/* 15. Contact */}

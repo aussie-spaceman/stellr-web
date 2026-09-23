@@ -838,6 +838,12 @@ export function credentialIssuedEmail({
       ? 'It stays private for now. Making it public is covered by the Stellr consent form signed at registration — there is no separate step.'
       : 'It stays private for now. You can turn on sharing from the credential page once the paperwork on file allows it.'
 
+  // Guardians can say no at any time; this is where most of them will first
+  // hear that credential pages exist, so the route to decline is spelled out.
+  const guardianLine = toGuardian
+    ? `If you would prefer ${esc(recipientFirstName)}'s credentials never be shown publicly, email <a href="mailto:privacy@stellreducation.org">privacy@stellreducation.org</a> — any page that is already public will be made private. Once shared on LinkedIn, a credential is governed by LinkedIn's terms, and Stellr cannot remove it there.`
+    : null
+
   const html = emailLayout({
     heading: 'Credential issued',
     preheader: `${title} · ${issuer}`,
@@ -851,9 +857,41 @@ export function credentialIssuedEmail({
         <p style="margin:24px 0"><a href="${url}" style="display:inline-block;background:#3C6DF6;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">View the credential</a></p>
         <p style="color:#6b7280;font-size:14px">${sharingLine}</p>
         <p style="color:#6b7280;font-size:14px">Anyone with the link can check it is genuine at <a href="${url}">${url}</a>.</p>
+        ${guardianLine ? `<p style="color:#6b7280;font-size:14px">${guardianLine}</p>` : ''}
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email.</p>`,
   })
-  const text = `Hi ${toGuardian ? guardianFirstName : recipientFirstName},\n\n${toGuardian ? `${recipientFirstName} has` : 'You have'} earned a verified credential from ${issuer}: ${title}.\n\nView it: ${url}\n\n${sharingLine.replace(/<[^>]+>/g, '')}\n\n— Stellr Education`
+  const text = `Hi ${toGuardian ? guardianFirstName : recipientFirstName},\n\n${toGuardian ? `${recipientFirstName} has` : 'You have'} earned a verified credential from ${issuer}: ${title}.\n\nView it: ${url}\n\n${sharingLine.replace(/<[^>]+>/g, '')}${guardianLine ? `\n\n${guardianLine.replace(/<[^>]+>/g, '')}` : ''}\n\n— Stellr Education`
+  return { subject, html, text }
+}
+
+// Sent when a guardian's opt-out takes a minor's public credential pages down.
+// Addressed like the issued email (guardian To, student Cc by the caller), so
+// the student hears why their pages changed rather than finding them private.
+export function credentialsMadePrivateEmail({
+  recipientFirstName, guardianFirstName, titles,
+}: {
+  recipientFirstName: string
+  guardianFirstName?: string | null
+  titles: string[]
+}) {
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const toGuardian = !!guardianFirstName
+  const who = esc(toGuardian ? guardianFirstName! : recipientFirstName)
+  const plural = titles.length === 1 ? 'page is' : 'pages are'
+  const subject = `${recipientFirstName}'s Stellr credential ${plural} now private`
+  const list = titles.map(t => `<li>${esc(t)}</li>`).join('')
+  const html = emailLayout({
+    heading: 'Credential pages made private',
+    bodyHtml: `
+        <p>Hi ${who},</p>
+        <p>A parent or guardian has asked that ${toGuardian ? `<strong>${esc(recipientFirstName)}</strong>'s` : 'your'} Stellr credentials not be shown publicly, so the following credential ${plural} now private:</p>
+        <ul>${list}</ul>
+        <p style="color:#6b7280;font-size:14px">The credentials are still valid and still in ${toGuardian ? `${esc(recipientFirstName)}'s` : 'your'} Stellr account. Anyone opening the link will see that the credential is private.</p>
+        <p style="color:#6b7280;font-size:14px">If a credential was added to a LinkedIn profile or shared in a post, please remove it there — Stellr cannot change or remove anything on LinkedIn.</p>
+        <p style="color:#6b7280;font-size:14px">To change this, contact <a href="mailto:privacy@stellreducation.org">privacy@stellreducation.org</a>.</p>`,
+  })
+  const text = `Hi ${toGuardian ? guardianFirstName : recipientFirstName},\n\nA parent or guardian has asked that ${toGuardian ? `${recipientFirstName}'s` : 'your'} Stellr credentials not be shown publicly, so the following credential ${plural} now private:\n\n${titles.map(t => `- ${t}`).join('\n')}\n\nThe credentials are still valid and still in the Stellr account. If a credential was added to a LinkedIn profile or shared in a post, please remove it there — Stellr cannot change or remove anything on LinkedIn.\n\nTo change this, contact privacy@stellreducation.org.\n\n— Stellr Education`
   return { subject, html, text }
 }
 

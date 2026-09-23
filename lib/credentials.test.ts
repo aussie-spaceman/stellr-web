@@ -22,6 +22,7 @@ import {
   consentForMinor,
   credentialUrl,
   tombstoneCredentialsFor,
+  unpublishCredentialsFor,
   type CredentialRow,
 } from './credentials'
 
@@ -228,3 +229,44 @@ describe('tombstoneCredentialsFor', () => {
   })
 })
 
+
+describe('unpublishCredentialsFor (guardian opt-out)', () => {
+  function makeDb(rows: unknown[] | null) {
+    const calls: Record<string, unknown>[] = []
+    const db = {
+      calls,
+      from(table: string) {
+        const f: Record<string, unknown> = { table }
+        const chain = {
+          update: (payload: Record<string, unknown>) => { f.payload = payload; return chain },
+          or: (v: string) => { f.or = v; return chain },
+          eq: (k: string, v: unknown) => { f[k] = v; return chain },
+          is: (k: string, v: unknown) => { f[`is:${k}`] = v; return chain },
+          select: async () => { calls.push({ ...f }); return { data: rows, error: null } },
+        }
+        return chain
+      },
+    }
+    return db as unknown as Parameters<typeof unpublishCredentialsFor>[0] & { calls: Record<string, unknown>[] }
+  }
+
+  it('makes only public, non-tombstoned pages private for the member or participant', async () => {
+    const db = makeDb([row({ visibility: 'private' })])
+    const out = await unpublishCredentialsFor(db, { memberId: 'm1', participantId: 'p1' })
+    expect(out).toHaveLength(1)
+    const q = db.calls[0]
+    expect(q.table).toBe('credentials')
+    expect((q.payload as Record<string, unknown>).visibility).toBe('private')
+    expect(q.or).toBe('member_id.eq.m1,participant_id.eq.p1')
+    expect(q.visibility).toBe('public')
+    expect(q['is:tombstoned_at']).toBeNull()
+    // Revoked pages are included on purpose: no status filter.
+    expect(q).not.toHaveProperty('status')
+  })
+
+  it('does nothing without a holder', async () => {
+    const db = makeDb([])
+    await expect(unpublishCredentialsFor(db, { memberId: null, participantId: null })).resolves.toEqual([])
+    expect(db.calls).toHaveLength(0)
+  })
+})

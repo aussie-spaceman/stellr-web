@@ -13,7 +13,14 @@ export default function TermsPage() {
       <h1 className="text-4xl font-bold text-brand-blue-dark mb-8">Terms of Use</h1>
       <div className="prose prose-slate max-w-none space-y-6 text-brand-grey-dark">
         <p className="text-sm text-brand-grey-mid italic">
-          Effective Date: 18-Jun-2026 &nbsp;·&nbsp; Last Updated: 18-Jun-2026
+          Effective Date: 18-Jun-2026 &nbsp;·&nbsp; Last Updated: 23-Sep-2026
+        </p>
+        <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
+          <strong>Recent update (23 Sep 2026):</strong> New Section 5.1 covers{' '}
+          <strong>credentials</strong> — the verifiable record we issue for course completions and
+          event participation — including your right to display and share them, our right to revoke
+          them, and sharing on <strong>LinkedIn</strong>. Sections 5, 11.3 and 13 were updated to
+          match.
         </p>
 
         {/* The short version */}
@@ -216,6 +223,10 @@ export default function TermsPage() {
             <strong>Resources</strong> — downloadable curriculum and educational materials.
           </li>
           <li>
+            <strong>Credentials</strong> — verifiable digital credentials for completed courses and
+            event participation (see Section 5.1).
+          </li>
+          <li>
             <strong>Donations</strong> — the ability to support our mission financially.
           </li>
         </ul>
@@ -223,6 +234,47 @@ export default function TermsPage() {
           We may add, change, suspend, or remove features of the Services at any time. We aim to keep
           the Services available but do not guarantee uninterrupted access.
         </p>
+
+        <h3 className="text-lg font-semibold text-brand-blue-dark">5.1 Credentials</h3>
+        <p>
+          When you complete a Stellr course or take part in a Stellr event, we may issue you a
+          verifiable credential with its own web page. Credentials, credential pages, and badge
+          artwork are Stellr materials under Section 12. We grant you a limited, non-exclusive,
+          revocable license to display and share your own credentials — for example on your
+          LinkedIn profile, a résumé, or an application — as a true record of what you achieved.
+        </p>
+        <ul className="list-disc pl-6 space-y-2">
+          <li>
+            <strong>Private until you choose.</strong> Every credential page is private by default.
+            You decide whether to make it public, and you can make it private again at any time.
+            For participants under 18, a page can only be made public with the consent of a parent
+            or guardian, which they may decline, as described in our{' '}
+            <Link href="/privacy" className="text-brand-blue hover:underline">
+              Privacy Policy
+            </Link>
+            .
+          </li>
+          <li>
+            <strong>Use them honestly.</strong> You may not alter a credential or its artwork,
+            claim a credential that was not issued to you, present it as something other than what
+            it records, or use it to suggest that Stellr endorses you beyond that achievement. The
+            credential page at stellreducation.org is the authoritative record; anyone can check
+            it there.
+          </li>
+          <li>
+            <strong>We may revoke a credential</strong> that was issued in error, obtained through a
+            breach of these Terms or competition rules, or that must be withdrawn for legal reasons.
+            A revoked credential&rsquo;s page shows it as revoked.
+          </li>
+          <li>
+            <strong>LinkedIn.</strong> You can choose to add a credential to LinkedIn or share it
+            there. LinkedIn requires its members to be 16 or older, and your use of LinkedIn is
+            governed by LinkedIn&rsquo;s own terms and privacy policy. Stellr does not connect to
+            your LinkedIn account, and once you have shared a credential, Stellr cannot control,
+            change, or remove what LinkedIn or others do with it. If a credential is made private,
+            revoked, or withdrawn, removing it from LinkedIn is up to you.
+          </li>
+        </ul>
 
         {/* 6. Membership */}
         <h2 id="membership" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
@@ -411,7 +463,8 @@ export default function TermsPage() {
           <Link href="/privacy" className="text-brand-blue hover:underline">
             Privacy Policy
           </Link>
-          . Some uses already published or distributed may not be fully reversible.
+          . Some uses already published or distributed may not be fully reversible. Credential pages
+          are covered separately in Section 5.1.
         </p>
         <h3 className="text-lg font-semibold text-brand-blue-dark">11.4 Your responsibilities</h3>
         <p>
@@ -450,7 +503,8 @@ export default function TermsPage() {
         </h2>
         <p>
           The Services rely on and link to third parties — for example, Stripe (payments), DocuSign
-          (parental consent), Discord (community), and our hosting and infrastructure providers — and
+          (parental consent), Discord (community), LinkedIn (where you choose to share a
+          credential), and our hosting and infrastructure providers — and
           may link to partner, sponsor, university, or host organization websites. Your use of a
           third-party service is governed by that party&rsquo;s own terms and privacy policy. We are
           not responsible for third-party services or websites, and including a link does not mean we

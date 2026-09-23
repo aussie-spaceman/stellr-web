@@ -6,6 +6,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/cron/docusign-form-data",
+      "schedule": "15 9 * * *"
+    },
+    {
       "path": "/api/cron/background-sync",
       "schedule": "30 6 * * *"
     },

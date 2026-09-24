@@ -226,7 +226,28 @@ dashboard shows clear but we show referred.
 
 ---
 
-## 8 · Cleanup
+## 8 · Production (live since 24 Sept 2026)
+
+Staging stays on `stellr-web-dev`; production is `stellr-web`, **Production scope only**:
+
+| Var | Production value |
+|---|---|
+| `CHECKR_API_KEY` | production Secret key (owner-held; never in the repo or chat) |
+| `CHECKR_BASE_URL` | `https://api.checkr.com/v1` |
+| `CHECKR_PACKAGE_SLUG` | `checkrdirect_basic_plus_criminal` (the account has only the seven standard `checkrdirect_*` packages) |
+| `CHECKR_WORK_LOCATION_STATE` | **unset, deliberately** — no assumed state; country-only orders are accepted |
+| `NEXT_PUBLIC_CHECKR_DASHBOARD_URL` | `https://dashboard.checkr.com` |
+| `BACKGROUND_PROVIDER` | `checkr` |
+
+- Webhook: `https://app.stellreducation.org/api/webhooks/background`, related object included. The production dashboard shows no webhook ID and no send-test button.
+- Add env vars from the repo directory (or pass `--cwd`); from elsewhere the CLI says the codebase "isn't linked".
+- Env changes need a redeploy; `NEXT_PUBLIC_*` is build-time.
+- Health: `/api/admin/health/integrations` → `"checkr":"production"`. Sync button: **Admin → Operations → Background checks**.
+- **Rollback:** remove `CHECKR_API_KEY` from Production and redeploy → `unconfigured`, orders refused cleanly; disable the webhook in Checkr.
+
+---
+
+## 9 · Cleanup
 
 Uncomment and run the CLEANUP block at the bottom of `docs/checkr-test-seed.sql` to
 remove the test members and their checks/licenses/activity.

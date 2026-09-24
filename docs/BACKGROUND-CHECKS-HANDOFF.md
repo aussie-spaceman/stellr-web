@@ -163,8 +163,9 @@ Assess-on → we map to `referred`; assess-off → `passed` + canceled indicator
    needs review" reports.
 5. Record an **end-to-end video** and submit the **API Authorization Review Checklist**
    (Smartsheet `c1284692a0be4d0eb73bacdffc66df32`).
-6. On approval: switch to prod keys/base URL/dashboard URL, email clients@checkr.com to
-   enable live Reports, deploy.
+6. ~~On approval: switch to prod keys/base URL/dashboard URL, email clients@checkr.com to
+   enable live Reports, deploy.~~ **Done 24 Sept 2026** — no email was needed; approval
+   enabled live reports. See TRACKER 9.8 and `docs/handovers/HANDOVER-checkr-production-2026-09-24.md`.
 
 ## 10. How to resume
 

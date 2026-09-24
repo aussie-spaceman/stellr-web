@@ -62,6 +62,54 @@ The event-roster column derives from a participant's role for a specific event;
 the mock candidates hold no event participation, so that surface was not part of
 this run.
 
+## 3a. Adjudication of a flagged report — exercised end to end (22 Sept)
+
+Added after the original write-up, which predated it.
+
+A Consider does not clear anyone. The named adjudicator reviews the report in
+the Checkr dashboard and records the decision in Stellr, and only then does the
+member become compliant:
+
+| | |
+|---|---|
+| Candidate | Judge Judy — Consider / `review` → `referred` |
+| Stellr state | **Needs review**, member NOT cleared |
+| Decision | `cleared`, by **David Shaw**, 22 Sept 19:10:34Z, rationale "No issues found" |
+| Result | compliant, expiry stamped to 2029-09-22 |
+
+The check's own `status` continues to mirror Checkr's report status; the
+decision is recorded alongside it. Shortly after the decision Checkr's own
+`report.engaged` event arrived and set `status = passed`, which is why the row
+reads `status: passed` with `result: consider` — that is the engage event
+mapping correctly, not a discrepancy.
+
+This is the path shown in the submitted video.
+
+## 3b. Missed-webhook reconciliation — proven, and it found a defect (22–23 Sept)
+
+The polling path was exercised against live Checkr on both branches
+(`GET /v1/invitations/{id}` and `GET /v1/reports/{id}`), and then tested for
+real by deleting a pending invitation:
+
+- `DELETE /v1/invitations/8129e2d1…` returned **200**.
+- **No `invitation.deleted` webhook arrived**, and the follow-up GET returned
+  **404**, which the adapter then treated as an error — leaving the row at
+  `invited` permanently, recoverable by neither path.
+- Fixed: a 404 on an invitation now maps exactly as `invitation.deleted` does.
+  A 404 on a *report* still raises, deliberately.
+- Re-run after the fix deployed: **`{"scanned":2,"updated":1,"unchanged":1,
+  "errors":[]}`** — the row moved `invited → cancelled` (result `deleted`) with
+  an audit entry tagged `source: "sync"`, proving the outcome came through
+  reconciliation rather than a webhook.
+
+So a delivery that never arrives is recovered, which is the property this
+mechanism exists to provide.
+
+**Invitation expiry proper** (`invitation.expired` → `expired`) cannot be forced
+through the API — a pending invitation must reach Checkr's 7-day expiry. One was
+left outstanding on purpose (Tom Brady, invitation `f9cbddb0ed2b777b1998e96c`,
+issued 22 Sept) and should fire around 29 Sept.
+
 ## 4. Two cases not demonstrated, and why
 
 Both are Checkr-side constraints in this staging account, not integration

@@ -15,6 +15,25 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 15 — 24 Sept 2026 (admin-created members: invite to complete account)
+
+Handover: `docs/handovers/HANDOVER-admin-member-invite-2026-09-24.md`.
+PR: #181 → `dev` as `845203b`. Promoted 24 Sept in #183 (`e2a99e3`), which was run by a separate session. Prod migration `20260924120000` is applied.
+Doc snapshot: `1WO0_cRbk_oz8i8tYYThwylZeaQOhWST4VGc8eFaBHhI`.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 15.0 | Add Member failure + invite-to-complete flow | Fixed and live. #181 → dev as 845203b, promoted in #183 (e2a99e3, separate session). Prod migration 20260924120000 applied (db:status --prod shows nothing pending). Sophie Fleck created 20:39:17Z with no DOB; login linked, invite recorded 20:39:18Z, one activity entry, 2 roles. | — | ☑ |
+| 15.1 | HIGH: member side never tested (email link → sign in → onboarding → submit) | Prod Clerk offers email code, Google and Discord sign-in (read from /v1/environment, 24 Sept), so a passwordless login can sign in. Sophie's DOB was still empty on 24 Sept. | Once Sophie has acted, read her row: date_of_birth should be filled. If it is still empty after ~3 days, press Resend invite and ask her what she saw. | ☐ |
+| 15.2 | Email delivery not confirmed | The recorded send time only proves Resend accepted the email, not that it reached the inbox. | Resend dashboard → search sophiefleck926 → check for delivered or bounced. | ☐ |
+| 15.3 | Dev migration ledger misaligned | Dev records 20260924192237 instead of 20260924120000 (MCP apply time). Renaming the row was blocked by auto mode. Prod is correct. | David runs on dev: update supabase_migrations.schema_migrations set version='20260924120000' where version='20260924192237'; then npm run db:status. | ☐ |
+| 15.4 | Main checkout has uncommitted changes | 15 files byte-identical to dev; HEAD 513eb16 is behind. Discarding them was blocked in auto mode. | git stash -u && git pull --ff-only && git stash drop, in stellr-web. | ☐ |
+| 15.5 | Dev test data left behind | Member invite-check-1790277948136@example.com (id 67edb158-7c24-43b4-977a-a2243d8c56b1) and its dev Clerk user. | Delete from /admin/members on dev and from the Clerk dev dashboard. | ☐ |
+| 15.6 | Age worked out from birth year only | Admin create route and AdminAddMember ageFromDob subtract years, so someone born in December 2008 already counts as 18 and isn't treated as a minor. | Replace with an exact-date helper shared with the isMinor helpers; add a unit test on the birthday boundary. | ☐ |
+| 15.7 | Missing DOB treated as adult; only 3 pages redirect | needsOnboarding redirects Home, Account and Community. Every isMinor helper returns false for a missing DOB, so other member pages and APIs treat an unfinished profile as an adult. | Decide: treat a missing DOB as needing a guardian (fail closed) in the isMinor helpers, or redirect at the (member) layout level (needs pathname handling for onboarding). | ☐ |
+| 15.8 | Clerk webhook insert now succeeds (side effect) | Before the migration, user.created's "no member row" insert silently failed on NOT NULL. New self-serve sign-ups now get a record before onboarding and are redirected there. Not yet seen in prod. Prod may also hold Clerk users with no member record from past failures. | On the next self-serve sign-up, confirm the record and the redirect. Count Clerk users against members.clerk_user_id to find orphans. | ☐ |
+| 15.9 | /code-review not run on #181 | The ship skill recommends it alongside the contract review; skipped. | Optional: /code-review high on 845203b. | ☐ |
+
 ## Session 14 — 24 Sept 2026 (email-signature logo lost in Outlook → Gmail drafts)
 
 Handover: `docs/handovers/HANDOVER-email-signature-logo-2026-09-24.md`.

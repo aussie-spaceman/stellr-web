@@ -15,6 +15,24 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 12 — 23–24 Sept 2026 (refunds made in Stripe; "No refund — remove only")
+
+Handover: `docs/handovers/HANDOVER-stripe-refunds-next-steps-2026-09-24.md` (and `HANDOVER-manual-stripe-refunds-2026-09-23.md`).
+Release: `.claude/releases/promote-2026-09-23.md` (#168, `420eb46`).
+Doc snapshot: `1vZW74d0TfmYKUfsLEVBWLwhbESEFoVk0rt_CWgHsqfI`.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 12.0 | Manual Stripe refund must not be repeated; admin can delete without a refund | Live in production 23 Sept (#166 via #168; migration `20260923120000` applied first). Daksha Rayana was removed from Colorado on 24 Sept; the DB shows one `none`/`stripe_external` row and no account credit. `charge.refunded` subscribed in Stripe by the maintainer. | — | ☑ |
+| 12.1 | `charge.refunded` handler not exercised live | Subscribed 24 Sept; no dashboard refund has arrived since. Unit-tested only. | Resend a `charge.refunded` event from the Stripe dashboard, or wait for a real one; check the runtime log line and the roster. | ☐ |
+| 12.2 | Refund basis is the event Price, not the charge | Discounts, promotion codes and account credit are ignored, so a credit refund can exceed what was paid. Cash is capped by Stripe's remaining balance. | Use the charge amount for per-person payments (`stripeRefundState` already fetches it). | ☐ |
+| 12.3 | Approved self-deletion: no refund, no audit row | `deletion-requests/[id]` calls `executeDeletion` without `refundChoice`. This predates the session. | Maintainer decides the policy; then pass a choice, or `'none'` with a note. | ☐ |
+| 12.4 | `entitlement_booking` auto-refund unguarded | Stripe webhook, about L441: a retry after success loops on `charge_already_refunded`. This predates the session. | Wrap it, treat that error as done, and tag `metadata.source='stellr_app'`. | ☐ |
+| 12.5 | Group delete demands a refund choice even when unpaid | "No refund" also needs a reason; the server audits "Unpaid" anyway. | Hide the step when nobody in the group paid (needs a group preview). | ☐ |
+| 12.6 | Pill stays "paid" after a full external refund | By design: the webhook only records. The roster shows a sub-line. | Decide whether a "Refunded" pill state is wanted. | ☐ |
+| 12.7 | Partial-refund and "No refund" paths unused live | Covered by unit tests. | Read the `event_refunds` row on first real use. | ☐ |
+| 12.8 | No component test for `DeleteEntityButton` | Gating is untested apart from typecheck. The seed event 404s on the admin roster, so there is no Sanity document. | Playwright spec mocking `/api/admin/refunds/preview` against a Sanity-backed seed event. | ☐ |
+
 ## Session 11 — 21–22 Sept 2026 (verifiable credentials + LinkedIn sharing)
 
 Handover: `docs/handovers/HANDOVER-credentials-linkedin-2026-09-22.md`.

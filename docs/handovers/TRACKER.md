@@ -18,16 +18,17 @@ tick, not a promise. **Next** is the smallest step that closes the row.
 ## Session 13 — 24 Sept 2026 (credentials e2e: a failure can no longer leave Grace public)
 
 Handover: `docs/handovers/HANDOVER-credentials-e2e-self-reset-2026-09-24.md`.
-PR: #176 → `dev` as `ff39554` (test-only; goes out with the next promotion).
+PRs: #176 → `dev` as `ff39554` (test-only); #178 → `dev` as `306cda6` (CI only). Both promoted 24 Sept in #183 (`e2a99e3`), which was run by a separate session.
 Doc snapshot: `1b3z7Nnr6jVvCVFsbg7fhEyKdQPO6IpY1HKXBQTh0OGw`.
 
 | # | Item | State | Next | Done |
 |---|---|---|---|---|
 | 13.0 | Publish test resets Grace to private before and after itself; 20s wait after the toggle | Merged 24 Sept. The Playwright step passed on the PR (run 36034777152, 56 passed) and on dev's post-merge run 36035688585. A read-only SQL query on dev showed `STL-2026-E2EGRACE` `private` at 17:45:23Z. | — | ☑ |
-| 13.1 | Separate CI runs share Grace's credential | **Closed by #178:** the `e2e` job has a repo-wide job-level group, `e2e-dev-supabase`, with `cancel-in-progress: false`. #178's own e2e passed with the group in place (job 107793571655). Two e2e runs waiting on each other has not been observed yet; it can only show once two branches carry the new `ci.yml`. Trade-off: GitHub keeps one pending job per group, so a third queued run cancels the waiting one, and its required e2e check must be re-run. Not covered: local runs, and the workflow-level `cancel-in-progress: true`. A new push to the same ref still kills a running suite mid-test, and afterEach does not run on cancellation. The next run's beforeEach repairs Grace's row. | Look for "Waiting for a pending job" on the first overlapping e2e. | ☑ |
+| 13.1 | Separate CI runs share Grace's credential | **Closed by #178** (`306cda6`, promoted in #183). The `e2e` job has the repo-wide group `e2e-dev-supabase`, with `cancel-in-progress: false`. **The waiting has now been observed:** runs 36048374262 → 36048486143 → 36048832343 each started e2e within 4s of the previous one finishing (19:35:32→19:35:35, 19:37:49→19:37:53), and 36052147040 → 36052174942 did the same. No e2e job has been cancelled while waiting in the group so far. Trade-off: GitHub keeps one pending job per group, so a third queued run cancels the waiting one; re-run that job. Local runs are not covered. | — | ☑ |
 | 13.2 | Why the re-render exceeded 5s | Reasoned from `CredentialActions.tsx` (POST, then `router.refresh()`), not measured. The failure is in attempt 1 of run 36031226967, which now shows success on attempt 3. | Only if it fails even with 20s: open attempt 1's video and trace, and time the credential page's server render. | ☐ |
 | 13.3 | afterEach reset has never run after a failure | Only exercised on passing runs. | Optional: a local run with a temporary throw after "Make public", then read the row. | ☐ |
-| 13.4 | Merged branch still checked out | `fix/credentials-e2e-self-reset` is in worktree `nervous-hellman-edabb9`. | Archive the session; never commit to it again. | ☐ |
+| 13.4 | Merged branch still checked out | `fix/credentials-e2e-self-reset`, `chore/e2e-serialise-dev-db` and two docs branches are in worktree `nervous-hellman-edabb9`. | Archive the session; never commit to it again. | ☐ |
+| 13.5 | Per-ref cancel kills a running e2e on `dev` | Seen 24 Sept: `dev` run 36054575597's e2e started at 20:28:03 and was cancelled at 20:29:34 by the next `dev` push, because the workflow-level group `ci-${{ github.ref }}` has `cancel-in-progress: true`. afterEach does not run on cancellation. The next run's beforeEach repairs Grace's row, and the row read `private` (20:27:47Z) afterwards. Cost: when several merges land close together, the earlier `dev` commits never get an e2e result. | Make the workflow cancel only PR runs: `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`. Pushes to `dev`/`main` then finish, and the e2e group already queues them. | ☐ |
 
 ## Session 12 — 23–24 Sept 2026 (refunds made in Stripe; "No refund — remove only")
 

@@ -145,7 +145,7 @@ is also why Alex Taylor's crim+MVR case could not be run.
 |---|---|
 | Webhook and Status Support | **Yes** — all `report.*` and `invitation.*`, `include_object: true`, HMAC-SHA256 signature verified, mapped to our own statuses |
 | Report Lifecycle and Assess Support | **Yes** — `completed / canceled / engaged / suspended / resumed / disputed / pre_adverse_action / post_adverse_action` and `invitation.completed / expired / deleted`; the `assessment` field is read (`eligible` → cleared, `review`/`escalated` → human review) |
-| Account Contacts Configured | **Cannot be answered from the repo** — it asks about the PRODUCTION dashboard, which we have never had access to. Confirm all five contacts (Support, Billing, Adverse Action, Technical, Compliance) there, or tell Checkr the production account is not provisioned yet |
+| Account Contacts Configured | **Configured 24 Sept 2026** in the production dashboard, after Checkr's approval. (At submission the production dashboard did not exist, so this could not be answered from the repo.) |
 | Payment Information Configured | **Yes**, confirmed 22 Sept 2026 |
 | Adjudication Responsibility | **Yes** — David Shaw, CIO. Since 22 Sept Stellr also records each decision (outcome, who, when, required rationale to clear) |
 | Checkr Background Check Information | **Report status** and **Link to background check report** only. **NOT** "Report ETA information" — the adapter never reads `estimated_completion_time` or `due_time`, and nothing in the UI shows an estimate. Do not use "Select All" |
@@ -168,7 +168,7 @@ carries only the decision and a pointer to it.
 3. ~~Record and paste the end-to-end video link~~ — recorded 22 Sept, linked above,
    sharing verified as open to anyone with the link.
 
-**Still blocking submission:** the form's **Account Contacts Configured** question
+**Submitted 22 Sept; approved 23 Sept 2026** (TRACKER 9.7). At the time, these were still open: the form's **Account Contacts Configured** question
 asks about the production dashboard, which we do not have. And **Package Selection
 Logic** has no applicable option (see above) — decide whether to submit with none
 selected or to ask Checkr first.

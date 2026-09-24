@@ -1,5 +1,6 @@
 import { createSign, createHmac, timingSafeEqual } from 'crypto'
 import { assertLiveCredentials } from './env-guards'
+import { formatFormDate } from './docusign-form-data'
 
 const ENV = {
   oauthUrl:       process.env.DOCUSIGN_OAUTH_URL         ?? 'https://account-d.docusign.com',
@@ -148,7 +149,7 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<CreatedE
     // template (DocuSign ignores tab values a recipient doesn't own).
     const sharedTextTabs = [
       { tabLabel: 'MinorName',        value: minorName               },
-      { tabLabel: 'MinorDateOfBirth', value: p.minorDateOfBirth ?? '' },
+      { tabLabel: 'MinorDateOfBirth', value: formatFormDate(p.minorDateOfBirth) },
       { tabLabel: 'EventTitle',       value: p.eventTitle            },
       { tabLabel: 'GuardianName',     value: p.guardianName          },
       { tabLabel: 'GuardianEmail',    value: p.guardianEmail         },

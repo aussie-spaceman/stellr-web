@@ -1,5 +1,22 @@
-// Pure parsing for values read back from a completed DocuSign envelope.
-// Kept separate from lib/docusign.ts (network + secrets) so it is unit-testable.
+// Pure formatting/parsing for values written to and read back from DocuSign
+// forms. Kept separate from lib/docusign.ts (network + secrets) so it is
+// unit-testable.
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * The minor form prints "Date of Birth (DD-MMM-YYYY)", so an ISO date from the
+ * database (2012-04-10) goes in as 10-Apr-2012 — the month spelt out so US and
+ * European readers can't swap day and month. Anything that isn't a plain ISO
+ * date is passed through untouched rather than guessed at.
+ */
+export function formatFormDate(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim())
+  if (!m) return iso
+  const month = MONTHS[Number(m[2]) - 1]
+  return month ? `${m[3]}-${month}-${m[1]}` : iso
+}
 
 /** tabLabel of the guardian's checkbox on the minor consent template. */
 export const CREDENTIAL_OPT_OUT_TAB = 'CredentialSharingOptOut'

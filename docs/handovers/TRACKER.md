@@ -15,6 +15,20 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 13 — 24 Sept 2026 (credentials e2e: a failure can no longer leave Grace public)
+
+Handover: `docs/handovers/HANDOVER-credentials-e2e-self-reset-2026-09-24.md`.
+PR: #176 → `dev` as `ff39554` (test-only; goes out with the next promotion).
+Doc snapshot: `1b3z7Nnr6jVvCVFsbg7fhEyKdQPO6IpY1HKXBQTh0OGw`.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 13.0 | Publish test resets Grace to private before and after itself; 20s wait after the toggle | Merged 24 Sept. The Playwright step passed on the PR (run 36034777152, 56 passed) and on dev's post-merge run 36035688585. A read-only SQL query on dev showed `STL-2026-E2EGRACE` `private` at 17:45:23Z. | — | ☑ |
+| 13.1 | Separate CI runs share Grace's credential | `ci.yml` concurrency is `ci-${{ github.ref }}`, so runs from different refs overlap on the dev DB (17:30/17:33 today). One run's reset can flip Grace private halfway through another run's publish test. Local runs share the same DB. | Repo-wide concurrency group on the `e2e` job (`e2e-dev-supabase`, `cancel-in-progress: false`), or a credential per run. | ☐ |
+| 13.2 | Why the re-render exceeded 5s | Reasoned from `CredentialActions.tsx` (POST, then `router.refresh()`), not measured. The failure is in attempt 1 of run 36031226967, which now shows success on attempt 3. | Only if it fails even with 20s: open attempt 1's video and trace, and time the credential page's server render. | ☐ |
+| 13.3 | afterEach reset has never run after a failure | Only exercised on passing runs. | Optional: a local run with a temporary throw after "Make public", then read the row. | ☐ |
+| 13.4 | Merged branch still checked out | `fix/credentials-e2e-self-reset` is in worktree `nervous-hellman-edabb9`. | Archive the session; never commit to it again. | ☐ |
+
 ## Session 12 — 23–24 Sept 2026 (refunds made in Stripe; "No refund — remove only")
 
 Handover: `docs/handovers/HANDOVER-stripe-refunds-next-steps-2026-09-24.md` (and `HANDOVER-manual-stripe-refunds-2026-09-23.md`).

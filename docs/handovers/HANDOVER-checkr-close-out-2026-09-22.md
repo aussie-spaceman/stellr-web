@@ -137,18 +137,23 @@ an invitation Checkr no longer has maps as the webhook maps `invitation.deleted`
 a report that once existed should not vanish, and guessing there would mask a
 real problem. 81 files / 784 tests.
 
-**Not verified live.** Vercel hit its Hobby **daily deployment limit** right
-after the merge ("Deployment rate limited — retry in 24 hours"), so the dev app
-is still running the old code and Camo Time's row is still stuck at `invited`.
+**Verified live 23 Sept**, once the deployment rate limit cleared and dev
+redeployed past `af5f9aa`: Sync returned
+`{"scanned":2,"updated":1,"unchanged":1,"errors":[]}` and Camo Time's row moved
+`invited → cancelled` (result `deleted`) with an audit entry tagged
+`source: "sync"`. That closes **A1** and — being the first real recovery of an
+outcome no webhook delivered — **A2** as well. Promoted to production 23 Sept in
+`420eb46` (#168, another session's promotion, which carried it).
 
-**What the next session must do, in this order:**
+*(The paragraph below was written before that and is kept for the record.)*
 
-1. Once the rate limit clears (after ~22:30Z 23 Sept), confirm the dev app
-   redeployed past `af5f9aa`.
-2. Press **Sync with Checkr**. Camo Time's row should flip `invited → cancelled`
-   with result `deleted`, and the response should show **`updated: 1`** — which
-   closes **A2** as well, since that is the first real missed-webhook recovery.
-3. Only then record A1/A2 as closed, and add both to the results document.
+**Not verified live at the time of writing.** Vercel hit its Hobby **daily
+deployment limit** right after the merge ("Deployment rate limited — retry in
+24 hours"), so the dev app was still running the old code.
+
+**Done 23 Sept:** dev redeployed, Sync returned `updated: 1`, the row
+reconciled, and both A1 and A2 are recorded in
+`docs/CHECKR-CERTIFICATION-RESULTS-2026-09-22.md` §3b.
 
 **Still open from A1:** a true `invitation.expired` (as opposed to `deleted`).
 Tom Brady's invitation `f9cbddb0ed2b777b1998e96c` was left pending on purpose and

@@ -80,6 +80,9 @@ Mid-session the provider moved off Certn onto Checkr. The compliance layer (stat
 
 ## 6. Ops checklist before go-live (Checkr)
 
+**Done 24 Sept 2026** — production is live on `stellr-web` (TRACKER 9.8): package `checkrdirect_basic_plus_criminal`, `CHECKR_WORK_LOCATION_STATE` deliberately unset, webhook on `app.stellreducation.org`. Step 5 turned out unnecessary: Checkr's production approval (23 Sept) enables live reports. The list below is kept as the record of what was required.
+
+
 1. ~~Apply 092~~ — done. Deploys now go through the `promote` skill (`dev` → `main`), not `vercel deploy`.
 2. In the Checkr dashboard: create a **criminal + identity package** → put its **slug** in `CHECKR_PACKAGE_SLUG`.
 3. Set `CHECKR_API_KEY` + `CHECKR_BASE_URL` (prod `https://api.checkr.com/v1`) in Vercel.
@@ -97,7 +100,7 @@ Until keys are set: ordering returns a clean **503** (`provider not configured`)
 - **Webhook contract unverified against live Checkr** — `parseWebhook` / `mapReport` read defensively but should be confirmed on staging (Checkr's full status matrix isn't fully public).
 - ~~**Role scope is broad**~~ — **narrowed 2026-09-21.** `requiresBackgroundCheck` is now opt-in by role via `BC_REQUIRED_ROLES = teacher / mentor / volunteer / adult` (`lib/compliance.ts`). `subscriber`, `parent`, and any unrecognised role are exempt. The audit-page prefilter (`lib/compliance-admin.ts`) uses the same constant.
 - ~~**Webhook-only, no reconciliation**~~ — **closed 2026-09-21.** `lib/background-sync.ts` is the single writer for vendor outcomes (the webhook route calls it too). `GET /api/cron/background-sync` (daily, skips rows touched < 1 h ago) and the admin **Sync with Checkr** button on `/admin/compliance` (`POST /api/admin/compliance/sync`, no threshold) re-poll every `invited`/`in_progress` row via `provider.fetchStatus()` (`GET /invitations/{id}` → `GET /reports/{id}`). A missed webhook is now recovered within a day, or on demand. Note the cron declines on the dev deployment (`guardCron` → `APP_ENV=dev`), so on dev use the button.
-- **Production sandbox guard added 2026-09-21** — `lib/env-guards.ts` now knows `checkr` (`unconfigured` / `sandbox` / `production`, keyed on `CHECKR_BASE_URL`, defaulting to sandbox exactly as DocuSign does). The order route calls `assertLiveCredentials('checkr')` and returns 503 on a production deployment holding staging keys; `/api/admin/health/integrations` reports it. **Until Checkr authorises production, the prod Vercel project should hold NO `CHECKR_API_KEY`** — `unconfigured` is the correct state, `sandbox` is a flagged defect.
+- **Production sandbox guard added 2026-09-21** — `lib/env-guards.ts` now knows `checkr` (`unconfigured` / `sandbox` / `production`, keyed on `CHECKR_BASE_URL`, defaulting to sandbox exactly as DocuSign does). The order route calls `assertLiveCredentials('checkr')` and returns 503 on a production deployment holding staging keys; `/api/admin/health/integrations` reports it. Checkr authorised production on 23 Sept 2026 and the prod project now holds the production key (24 Sept), so `production` is the correct state there; `sandbox` or `unconfigured` on prod is now a defect.
 - **Tests added 2026-09-21** — `lib/background-provider/checkr.test.ts` (the runbook's mock matrix as fixtures, lifecycle events, signature fail-closed, polling), `lib/compliance.test.ts`, `lib/background-sync.test.ts`, Checkr cases in `lib/env-guards.test.ts`.
 - **`report_pdf_url` not populated** — no PDF retrieval wired (Checkr's human-readable report lives in their dashboard); add later if needed.
 - **`tsc` stale-validator gotcha** — after deleting a route, clear `.next/types` before `tsc`; a fresh `build` regenerates them.
@@ -165,5 +168,6 @@ Assess-on → we map to `referred`; assess-off → `passed` + canceled indicator
 
 ## 10. How to resume
 
+- **2026-09-24 state:** production cut-over done (TRACKER 9.7 ☑, 9.8 config done); one real order on a live mentor account remains.
 - **2026-09-21 state:** code hardening landed (see §7); nothing on the Checkr side has moved since June. Next is §9 step 2 (env wiring on dev), then the matrix. Tracked in `docs/handovers/TRACKER.md` session 9.
 - Runbook: `docs/CHECKR-TESTING-RUNBOOK.md`. Checklist answers: `docs/CHECKR-CHECKLIST-ANSWERS.md` (three bracketed items still to fill). Seed: `docs/checkr-test-seed.sql` — run it against **dev**, not prod.

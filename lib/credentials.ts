@@ -226,6 +226,33 @@ export async function setVisibility(
   return { ok: true, row: data as CredentialRow }
 }
 
+/**
+ * A guardian's opt-out withdraws consent, so every public page the minor holds
+ * goes private — including revoked ones, whose page would otherwise still show
+ * the name. Unlike revocation, the verifier's answer changing to "private" is
+ * the intended outcome here: the family has asked for the name to come down.
+ * Returns the rows that changed so the caller can tell the family.
+ */
+export async function unpublishCredentialsFor(
+  db: SupabaseClient,
+  who: { memberId: string | null; participantId: string | null },
+): Promise<CredentialRow[]> {
+  const filters = [
+    who.memberId ? `member_id.eq.${who.memberId}` : null,
+    who.participantId ? `participant_id.eq.${who.participantId}` : null,
+  ].filter(Boolean).join(',')
+  if (!filters) return []
+  const { data, error } = await db
+    .from('credentials')
+    .update({ visibility: 'private', updated_at: new Date().toISOString() })
+    .or(filters)
+    .eq('visibility', 'public')
+    .is('tombstoned_at', null)
+    .select(CREDENTIAL_COLUMNS)
+  if (error) console.error('[credentials] unpublish failed:', error.message)
+  return (data ?? []) as CredentialRow[]
+}
+
 // ── Reads ────────────────────────────────────────────────────────────────────
 
 export interface CredentialView extends CredentialRow {

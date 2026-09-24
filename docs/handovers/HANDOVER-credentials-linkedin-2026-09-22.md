@@ -47,6 +47,14 @@ issue).
 - **Minor consent is opt-OUT** (21 Sept): a valid parental consent envelope
   grants sharing unless `credential_sharing_opt_out` is set. Never a
   per-credential prompt.
+- **A guardian opt-out takes public pages down** (23 Sept, reverses the 21 Sept
+  "leave them up" rule): `applyGuardianOptOut` makes them private and emails the
+  family. Runbook: `docs/RUNBOOK-credential-optout.md`.
+- **No credential number in the dataLayer** (23 Sept): the number resolves to a
+  named page, so it must not reach Google. `credential_events` still records it
+  server-side.
+- **Policy changes are announced on the website only** (23 Sept): Privacy
+  Policy §14 — banner at the top of the page, no email.
 - **LinkedIn buttons are hidden under 16** regardless of consent — LinkedIn's
   own minimum age.
 - **B-19 removed** (wallet passes, X/Facebook/WhatsApp). Copy-link covers it.

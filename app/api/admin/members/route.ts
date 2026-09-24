@@ -5,6 +5,8 @@ import { grantTierAllocations } from '@/lib/entitlements'
 import { DEFAULT_ROLE_FOR_BRACKET } from '@/lib/membership-rules'
 import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 import { isAdminClaims } from '@/lib/admin-auth'
+import { getSignedInMember } from '@/lib/community'
+import { sendAccountInvite } from '@/lib/member-invite'
 
 // POST /api/admin/members — admin manually creates a new member record
 export async function POST(req: Request) {
@@ -24,6 +26,7 @@ export async function POST(req: Request) {
     ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship,
     health_conditions, discord_handle,
     tier_id,
+    send_invite,
   } = body
 
   if (!first_name || !last_name || !email) {
@@ -153,5 +156,13 @@ export async function POST(req: Request) {
     if (mm?.id) await grantTierAllocations(mm.id).catch((e) => console.error('[admin/members] grantTierAllocations (non-fatal):', e))
   }
 
-  return NextResponse.json({ member: { id: member.id } }, { status: 201 })
+  // DOB and gender are left for the member to supply. Invite them to finish
+  // their profile unless the admin opted out (or already entered both).
+  let invite = null
+  if (send_invite !== false && !(date_of_birth && gender)) {
+    const actor = await getSignedInMember()
+    invite = await sendAccountInvite(db, member.id, { actorMemberId: actor?.id ?? null })
+  }
+
+  return NextResponse.json({ member: { id: member.id }, invite }, { status: 201 })
 }

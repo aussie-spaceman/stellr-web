@@ -61,7 +61,9 @@ export default async function AccountPage({
     db.from('allergy_options').select('id, name').order('name'),
   ])
 
-  if (!member) redirect('/account/onboarding')
+  // Profile not finished (hand-created or webhook-created row) — send them to
+  // onboarding. Not while an admin views as them: they can't submit it for them.
+  if (!member || (!viewAsId && (!member.date_of_birth || !member.gender))) redirect('/account/onboarding')
 
   // The avatar comes from Clerk. currentUser() is the ADMIN mid-view-as, so
   // resolve the viewed member's own image instead — otherwise the page shows the

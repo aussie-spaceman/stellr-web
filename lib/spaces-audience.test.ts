@@ -136,6 +136,7 @@ const memberStub = (over: Partial<{ id: string; isAdmin: boolean; activeTierIds:
   activeTierIds: [] as string[],
   event_role: null,
   age_bracket: null,
+  needsOnboarding: false,
   ...over,
 })
 

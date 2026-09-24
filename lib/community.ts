@@ -51,6 +51,13 @@ export interface CommunityMember {
   /** Age bracket ('adult' | 'high_school' | 'college'), or null when unset.
    *  Drives per-bracket training requirements (community_space_training). */
   age_bracket: string | null
+  /**
+   * DOB or gender is missing — a hand-created or webhook-created row whose owner
+   * has not been through /account/onboarding yet. Member surfaces redirect there,
+   * so the under-18 gates never run against an unknown DOB. Always false while an
+   * admin is viewing as the member: they cannot submit onboarding for them.
+   */
+  needsOnboarding: boolean
 }
 
 /**
@@ -89,7 +96,7 @@ async function resolveMember(allowImpersonation: boolean): Promise<CommunityMemb
   const query = db
     .from('members')
     .select(`
-      id, first_name, last_name, email, event_role, age_bracket,
+      id, first_name, last_name, email, event_role, age_bracket, date_of_birth, gender,
       member_memberships(renewal_status, started_at, expires_at, tier_id, membership_tiers(name, is_free))
     `)
   const { data: member } = viewAsId
@@ -142,6 +149,7 @@ async function resolveMember(allowImpersonation: boolean): Promise<CommunityMemb
     hasPaidTier,
     activeTierName: primaryTier?.name ?? null,
     activeTierIds,
+    needsOnboarding: !viewAsId && (!member.date_of_birth || !member.gender),
   } satisfies CommunityMember
 }
 

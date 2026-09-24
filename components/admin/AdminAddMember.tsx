@@ -75,6 +75,7 @@ export function AdminAddMember({ tiers }: Props) {
   })
 
   const [schoolSelection, setSchoolSelection] = useState<SchoolSelection | null>(null)
+  const [sendInvite, setSendInvite] = useState(true)
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }))
@@ -131,7 +132,7 @@ export function AdminAddMember({ tiers }: Props) {
     const res = await fetch('/api/admin/members', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, ...schoolPayload }),
+      body: JSON.stringify({ ...form, ...schoolPayload, send_invite: sendInvite }),
     })
     setSaving(false)
     if (!res.ok) {
@@ -152,7 +153,7 @@ export function AdminAddMember({ tiers }: Props) {
           </Link>
           <h1 className="font-heading uppercase text-title text-brand-blue-dark">Add member</h1>
           <p className="text-sm text-brand-muted-soft mt-0.5">
-            Manually create a member record. They can log in later using the email below.
+            Manually create a member record. They finish their own profile from the invitation email.
           </p>
         </div>
         <button
@@ -438,11 +439,23 @@ export function AdminAddMember({ tiers }: Props) {
             )}
           </div>
 
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-700 space-y-1.5">
-            <p className="font-medium">No Clerk account needed</p>
-            <p>
-              This member record will be created without a login. When the member signs up
-              using the email above, their account will be linked automatically.
+          <div className="bg-white rounded-xl border border-brand-border p-5 space-y-3">
+            <h2 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide">
+              Invitation
+            </h2>
+            <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sendInvite}
+                onChange={(e) => setSendInvite(e.target.checked)}
+                className="mt-0.5 text-brand-blue"
+              />
+              <span>Email them a link to complete their account</span>
+            </label>
+            <p className="text-xs text-brand-muted-soft">
+              A login is set up for the email above. The link takes them to complete their
+              profile — date of birth, gender and phone — before they can use the app. You can
+              resend it from their member page.
             </p>
           </div>
         </div>

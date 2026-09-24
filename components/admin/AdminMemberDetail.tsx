@@ -22,8 +22,9 @@ interface Member {
   nickname: string | null
   email: string
   phone: string | null
-  date_of_birth: string
-  gender: string
+  date_of_birth: string | null
+  gender: string | null
+  account_invite_sent_at: string | null
   age_bracket: string
   event_role: string
   grade: string | null
@@ -130,6 +131,11 @@ function label(val: string) {
 export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, sessions, membershipId, activity, compliance }: Props) {
   const router = useRouter()
   const [enteringPortal, setEnteringPortal] = useState(false)
+  const [inviteSentAt, setInviteSentAt] = useState(member.account_invite_sent_at)
+  const [inviting, setInviting] = useState(false)
+  const [inviteError, setInviteError] = useState('')
+  // Hand-created members supply DOB + gender themselves, via the invite.
+  const profileIncomplete = !member.date_of_birth || !member.gender
   const [form, setForm] = useState({
     first_name: member.first_name,
     last_name: member.last_name,
@@ -226,6 +232,19 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
     }
   }
 
+  async function handleSendInvite() {
+    setInviting(true)
+    setInviteError('')
+    const res = await fetch(`/api/admin/members/${member.id}/invite`, { method: 'POST' })
+    setInviting(false)
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}))
+      setInviteError(j.error ?? 'Could not send the invite')
+      return
+    }
+    setInviteSentAt(new Date().toISOString())
+  }
+
   async function handleDeactivate() {
     const res = await fetch(`/api/admin/members/${member.id}`, { method: 'DELETE' })
     if (res.ok) router.push('/admin/members')
@@ -254,8 +273,27 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           {member.member_code && (
             <p className="text-sm text-brand-muted-soft mt-0.5">{member.member_code}</p>
           )}
+          {profileIncomplete && (
+            <p className="text-xs text-amber-700 mt-1">
+              Profile incomplete — waiting on the member.{' '}
+              {inviteSentAt
+                ? `Invite sent ${new Date(inviteSentAt).toLocaleString()}.`
+                : 'No invite sent yet.'}
+              {inviteError && <span className="text-red-600"> {inviteError}</span>}
+            </p>
+          )}
         </div>
         <div className="flex gap-3">
+          {profileIncomplete && (
+            <button
+              onClick={handleSendInvite}
+              disabled={inviting}
+              title="Email the member a link to complete their account"
+              className="border border-brand-border text-brand-muted px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-canvas disabled:opacity-50"
+            >
+              {inviting ? 'Sending…' : inviteSentAt ? 'Resend invite' : 'Send invite'}
+            </button>
+          )}
           <button
             onClick={handleEnterPortalAs}
             disabled={enteringPortal}

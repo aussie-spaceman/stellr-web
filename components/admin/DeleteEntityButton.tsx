@@ -290,6 +290,12 @@ export function DeleteEntityButton({
                     </p>
                   )}
 
+                  {mode === 'hard' && entity === 'member' && (
+                    <p className="text-sm text-brand-muted">
+                      Their sign-in account is deleted too, so they can&apos;t log back in and start a new profile. Staff accounts are left in place.
+                    </p>
+                  )}
+
                   {mode === 'hard' && requireTypedConfirm && (
                     <div>
                       <label className="block text-xs text-brand-muted-soft mb-1">Type DELETE to confirm</label>

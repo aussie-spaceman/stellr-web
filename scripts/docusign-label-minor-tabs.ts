@@ -96,6 +96,13 @@ async function main() {
     console.log('❌ DocuSign credentials or DOCUSIGN_TEMPLATE_ID missing')
     process.exit(1)
   }
+  // `vercel env pull` writes this placeholder for Sensitive variables.
+  const placeholders = Object.entries({ ...ENV, templateId: TEMPLATE_ID })
+    .filter(([, v]) => v.includes('[SENSITIVE]')).map(([k]) => k)
+  if (placeholders.length) {
+    console.log(`❌ ${placeholders.join(', ')} still "[SENSITIVE]" — Vercel does not export Sensitive values; fill them in by hand`)
+    process.exit(1)
+  }
   console.log(`Environment: ${ENV.basePath.includes('demo.docusign.net') ? 'SANDBOX / DEMO' : 'PRODUCTION'}`)
   console.log(`Template:    ${TEMPLATE_ID}`)
   console.log(`Mode:        ${APPLY ? 'APPLY' : 'dry run (pass --apply to change the template)'}\n`)

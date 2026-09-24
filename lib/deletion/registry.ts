@@ -28,7 +28,10 @@ const ENTITIES: Record<string, EntityDef> = {
     pk: 'id',
     keyType: 'uuid',
     softDelete: { set: { is_active: false, deleted_at: ISO, clerk_user_id: null } },
-    external: ['stripe', 'docusign'],
+    // 'clerk' runs on hard delete only: a soft-deleted row keeps its email, so a
+    // later sign-in relinks to it, but a purged row leaves the login pointing at
+    // nothing and the next sign-in onboards a brand-new duplicate member.
+    external: ['stripe', 'docusign', 'clerk'],
     // Most member-linked tables are ON DELETE CASCADE / SET NULL in the DB, so
     // a member can generally be removed. We still surface heavy linkages so an
     // admin understands the blast radius before a hard purge.

@@ -61,7 +61,7 @@ export async function executeDeletion(
     }
   }
 
-  const externalResults = await runExternalCleanup(def, id)
+  const externalResults = await runExternalCleanup(def, id, mode)
 
   // A person's credentials outlive them only as tombstones: number resolves,
   // name gone. Must run before the FK nulls the link on a hard purge.

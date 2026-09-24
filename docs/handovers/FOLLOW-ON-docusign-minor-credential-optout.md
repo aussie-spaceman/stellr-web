@@ -1,6 +1,6 @@
 # FOLLOW-ON — DocuSign minor consent: credential-sharing opt-out
 
-**Raised:** 21 Sept 2026 · **From:** `docs/PLAN-credentials-linkedin-2026-09-21.md` §3.4 · **Status:** open
+**Raised:** 21 Sept 2026 · **From:** `docs/PLAN-credentials-linkedin-2026-09-21.md` §3.4 · **Status:** code done 23 Sept 2026 (`feat/credentials-policy-docs`); **template edit (steps 1–2) outstanding**
 
 ## Decision it implements (D1, 21 Sept 2026)
 
@@ -50,3 +50,31 @@ The template lives in the DocuSign dashboard, not the repo, and changing a
 legal document the guardian signs needs a copy/legal pass. Nothing in the
 credentials build depends on it: the default already matches the decided
 model, and the admin toggle covers a guardian who opts out by email meanwhile.
+
+## Progress — 23 Sept 2026
+
+Done in code (`feat/credentials-policy-docs`):
+
+- Step 3: `getEnvelopeFormData` in `lib/docusign.ts`; parse in
+  `lib/docusign-form-data.ts` (tab absent → `null`, leave stored value);
+  write in `lib/docusign-optout.ts`, called from the Connect webhook.
+- Step 4: `form_data_read_at` (migration `20260923170000_docusign_form_data_read.sql`)
+  and `/api/cron/docusign-form-data` (daily 09:15 UTC, 7-day lookback).
+- Step 5: `lib/docusign-form-data.test.ts`.
+- Step 6: `docs/DOCUSIGN-CONNECT.md` updated.
+- **Decision changed 23 Sept:** an opt-out (form or admin toggle) now takes any
+  already-public pages private and emails the family
+  (`applyGuardianOptOut` in `lib/credentials-notify.ts`). The previous
+  "leave them up" rule is reversed.
+
+Still to do by hand:
+
+1. Final clause wording — the draft copy of the Participation Agreement in
+   Drive carries it; legal review first.
+2. Add the `CredentialSharingOptOut` checkbox (Guardian role, unticked, not
+   required) to the minor template in the **sandbox** account, edit in place,
+   then carry to production with `scripts/docusign-templates.ts`.
+3. Sandbox check: sign one envelope with the box ticked and confirm the row
+   gets `credential_sharing_opt_out = true` and `form_data_read_at` set. The
+   checked value is assumed to come back as `"X"`; the parser also accepts
+   `true`/`on`, but confirm on the first real read.

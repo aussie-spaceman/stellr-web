@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { sendEmail, credentialIssuedEmail } from '@/lib/email'
-import { shareConsentFor, canShare, credentialUrl, type CredentialRow } from '@/lib/credentials'
+import { sendEmail, credentialIssuedEmail, credentialsMadePrivateEmail } from '@/lib/email'
+import { shareConsentFor, canShare, credentialUrl, unpublishCredentialsFor, type CredentialRow } from '@/lib/credentials'
 
 // The "you've earned a credential" email, addressed the way the DocuSign
 // notices are: an adult hears directly; a minor's guardian is the addressee
@@ -45,6 +45,36 @@ export async function sendCredentialIssuedEmail(
     console.error('[credentials] issued email failed:', err)
     return false
   }
+}
+
+/**
+ * Honour a guardian's opt-out: take every public page down, then tell the
+ * family which ones changed. Shared by the admin toggle and the DocuSign
+ * completion webhook. Mail failure is logged, never thrown — the pages are
+ * already private, which is the part that matters.
+ */
+export async function applyGuardianOptOut(
+  db: SupabaseClient,
+  who: { memberId: string | null; participantId: string | null },
+): Promise<number> {
+  const rows = await unpublishCredentialsFor(db, who)
+  if (rows.length === 0) return 0
+  try {
+    const to = await recipientForCredential(db, rows[0])
+    const toGuardian = !!to?.guardianEmail && !!to?.guardianFirstName
+    const address = toGuardian ? to!.guardianEmail : to?.email
+    if (to && address) {
+      const mail = credentialsMadePrivateEmail({
+        recipientFirstName: to.firstName,
+        guardianFirstName:  toGuardian ? to.guardianFirstName : null,
+        titles: rows.map(r => r.title),
+      })
+      await sendEmail({ to: address, cc: toGuardian && to.email ? [to.email] : undefined, ...mail })
+    }
+  } catch (err) {
+    console.error('[credentials] made-private email failed:', err)
+  }
+  return rows.length
 }
 
 /** Resolve the addressee for a stored credential from its member or participant. */

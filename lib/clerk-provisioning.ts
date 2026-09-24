@@ -27,34 +27,46 @@ export async function ensureClerkUserAndSignInToken(
   firstName: string,
   lastName: string,
 ): Promise<ProvisionedClerkUser> {
+  const { clerkUserId, created } = await ensureClerkUser(email, firstName, lastName)
+
+  // 1 hour is plenty for the registration → confirmation hop (and survives a
+  // detour through Stripe checkout for card payments).
+  const client = await clerkClient()
+  const { token } = await client.signInTokens.createSignInToken({
+    userId: clerkUserId,
+    expiresInSeconds: 60 * 60,
+  })
+
+  return { clerkUserId, signInToken: token, created }
+}
+
+/**
+ * Find-or-create a passwordless Clerk user for `email`, without signing them in.
+ * Also used when an admin invites a hand-created member, so the invite's
+ * "sign in with this address" works even while public sign-up is closed.
+ */
+export async function ensureClerkUser(
+  email: string,
+  firstName: string,
+  lastName: string,
+): Promise<{ clerkUserId: string; created: boolean }> {
   const client = await clerkClient()
 
   // Reuse an existing Clerk account for this email if there is one.
   const existing = await client.users.getUserList({ emailAddress: [email] })
-  let user = existing.data[0]
-  let created = false
+  const found = existing.data[0]
+  if (found) return { clerkUserId: found.id, created: false }
 
-  if (!user) {
-    // Refuse to create a user on a production deployment holding TEST keys, which
-    // would put a real member's account in the development instance where nobody
-    // would look for it.
-    assertLiveCredentials('clerk')
+  // Refuse to create a user on a production deployment holding TEST keys, which
+  // would put a real member's account in the development instance where nobody
+  // would look for it.
+  assertLiveCredentials('clerk')
 
-    user = await client.users.createUser({
-      emailAddress: [email],
-      firstName,
-      lastName,
-      skipPasswordRequirement: true,
-    })
-    created = true
-  }
-
-  // 1 hour is plenty for the registration → confirmation hop (and survives a
-  // detour through Stripe checkout for card payments).
-  const { token } = await client.signInTokens.createSignInToken({
-    userId: user.id,
-    expiresInSeconds: 60 * 60,
+  const user = await client.users.createUser({
+    emailAddress: [email],
+    firstName,
+    lastName,
+    skipPasswordRequirement: true,
   })
-
-  return { clerkUserId: user.id, signInToken: token, created }
+  return { clerkUserId: user.id, created: true }
 }

@@ -1,5 +1,6 @@
 import { createSign, createHmac, timingSafeEqual } from 'crypto'
 import { assertLiveCredentials } from './env-guards'
+import { formatFormDate } from './docusign-form-data'
 
 const ENV = {
   oauthUrl:       process.env.DOCUSIGN_OAUTH_URL         ?? 'https://account-d.docusign.com',
@@ -85,6 +86,9 @@ function consentDocBase64(minor: string, guardian: string, event: string): strin
     '  2. Stellr Education may collect personal information per their Privacy Policy.',
     '  3. Photos or videos may be taken for educational and promotional purposes.',
     '  4. I have read and agree to the Stellr Education Terms & Conditions.',
+    '  5. My child may choose to make a Stellr credential page (name and',
+    '     achievement) public and share it, e.g. on LinkedIn from age 16.',
+    '     To decline, email privacy@stellreducation.org.',
     '',
     '',
     'Guardian Signature: ____________________   Guardian Date: ____________',
@@ -145,7 +149,7 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<CreatedE
     // template (DocuSign ignores tab values a recipient doesn't own).
     const sharedTextTabs = [
       { tabLabel: 'MinorName',        value: minorName               },
-      { tabLabel: 'MinorDateOfBirth', value: p.minorDateOfBirth ?? '' },
+      { tabLabel: 'MinorDateOfBirth', value: formatFormDate(p.minorDateOfBirth) },
       { tabLabel: 'EventTitle',       value: p.eventTitle            },
       { tabLabel: 'GuardianName',     value: p.guardianName          },
       { tabLabel: 'GuardianEmail',    value: p.guardianEmail         },
@@ -478,6 +482,27 @@ export async function voidEnvelope(envelopeId: string, reason = 'Record deleted 
     body: JSON.stringify({ status: 'voided', voidedReason: reason }),
   })
   if (!res.ok) throw new Error(`DocuSign void failed: ${await res.text()}`)
+}
+
+// The values guardians entered on the signed form — used to read the
+// CredentialSharingOptOut checkbox back on completion. DocuSign returns every
+// tab's value here, keyed by tabLabel, regardless of which role owned it.
+export interface EnvelopeFormField { name: string; value: string }
+
+export async function getEnvelopeFormData(envelopeId: string): Promise<EnvelopeFormField[]> {
+  const res = await dsRequest(`/envelopes/${envelopeId}/form_data`)
+  if (!res.ok) throw new Error(`DocuSign form_data fetch failed: ${await res.text()}`)
+  const data = await res.json() as {
+    formData?: { name?: string; value?: string }[]
+    recipientFormData?: { formData?: { name?: string; value?: string }[] }[]
+  }
+  const fields = [
+    ...(data.formData ?? []),
+    ...(data.recipientFormData ?? []).flatMap((r) => r.formData ?? []),
+  ]
+  return fields
+    .filter((f) => typeof f.name === 'string')
+    .map((f) => ({ name: f.name as string, value: f.value ?? '' }))
 }
 
 export async function getEnvelopeDocument(envelopeId: string): Promise<ArrayBuffer> {

@@ -127,12 +127,12 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ optOut }),
       })
-      const data = await res.json() as { error?: string; alreadyPublic?: number }
+      const data = await res.json() as { error?: string; unpublished?: number }
       if (!res.ok) throw new Error(data.error ?? 'Update failed')
       setEnvelopes(prev => prev.map(e => e.id === env.id ? { ...e, credential_sharing_opt_out: optOut } : e))
-      const alreadyPublic = data.alreadyPublic ?? 0
+      const unpublished = data.unpublished ?? 0
       setMsg({ text: optOut
-        ? `${env.minor_name}'s credential pages will stay private.${alreadyPublic > 0 ? ` ${alreadyPublic} already public — not changed; follow up with the family.` : ''}`
+        ? `${env.minor_name}'s credential pages will stay private.${unpublished > 0 ? ` ${unpublished} public page${unpublished === 1 ? ' was' : 's were'} made private and the family emailed.` : ''}`
         : `${env.minor_name} may make credential pages public again.`, error: false })
     } catch (e) {
       setMsg({ text: e instanceof Error ? e.message : 'Failed to update', error: true })

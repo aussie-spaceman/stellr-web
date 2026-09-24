@@ -18,7 +18,7 @@ export const metadata = { title: 'Home' }
 // through existing lib/ helpers; no new queries inline.
 export default async function HomePage() {
   const member = await getCurrentMember()
-  if (!member) redirect('/account/onboarding')
+  if (!member || member.needsOnboarding) redirect('/account/onboarding')
 
   const firstName = member.first_name || 'there'
 

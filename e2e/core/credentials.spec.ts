@@ -1,3 +1,4 @@
+import type { APIRequestContext } from '@playwright/test'
 import { expect, test } from '../fixtures/test'
 import { storageStatePath } from '../fixtures/users'
 import { attachConsoleGuard } from '../fixtures/console-guard'
@@ -10,12 +11,28 @@ import { attachConsoleGuard } from '../fixtures/console-guard'
  *   STL-2026-E2EADA01 — Ada, 16, consent form 1-of-2 signed. Stays private
  *                       with the "needs a signed consent form" explanation.
  *
- * Each owner test leaves its credential private again, so the suite can run
- * in any order and the public-state test below sees what the seed promises.
+ * The one test that publishes Grace's credential resets it to private before
+ * and after itself, through the owner's own API, so a failure part-way through
+ * cannot leave it public. That happened on 24 Sept: the post-click assertion
+ * timed out, the in-test cleanup never ran, the dev database kept
+ * visibility='public', and every retry and later run failed at the first
+ * "Make public". A hook runs whether or not the test passed.
  */
 
 const GRACE = '/credentials/STL-2026-E2EGRACE'
 const ADA = '/credentials/STL-2026-E2EADA01'
+
+// The click POSTs, then router.refresh() re-renders the server page before the
+// label changes. On a cold CI server that round trip has run past the default
+// 5s expect timeout. Longer wait, same assertion.
+const AFTER_TOGGLE = { timeout: 20_000 }
+
+async function makeGracePrivate(request: APIRequestContext) {
+  const res = await request.post('/api/credentials/STL-2026-E2EGRACE/visibility', {
+    data: { visibility: 'private' },
+  })
+  expect(res.status(), `resetting Grace's credential to private: ${await res.text()}`).toBe(200)
+}
 
 test.describe('as Grace (adult)', () => {
   test.use({ storageState: storageStatePath('teacher') })
@@ -31,38 +48,46 @@ test.describe('as Grace (adult)', () => {
     expect(consoleErrors, 'wallet logged console errors').toEqual([])
   })
 
-  test('she can make it public, gets LinkedIn links, and can make it private again', async ({ page }) => {
-    await page.goto(GRACE)
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('Running a Space Design Competition')
+  // Scoped to this test alone: the suite is fullyParallel, and a reset hook on
+  // the wallet test could flip the credential back mid-way through this one.
+  test.describe('publishing', () => {
+    test.beforeEach(async ({ request }) => makeGracePrivate(request))
+    test.afterEach(async ({ request }) => makeGracePrivate(request))
 
-    // Owner sees the action bar; a private page shows no share row yet.
-    const makePublic = page.getByRole('button', { name: 'Make public' })
-    await expect(makePublic).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Add to LinkedIn profile' })).toHaveCount(0)
+    test('she can make it public, gets LinkedIn links, and can make it private again', async ({ page }) => {
+      await page.goto(GRACE)
+      await expect(page.getByRole('heading', { level: 1 })).toContainText('Running a Space Design Competition')
 
-    await makePublic.click()
-    await expect(page.getByRole('button', { name: 'Make private' })).toBeVisible()
+      // Owner sees the action bar; a private page shows no share row yet.
+      const makePublic = page.getByRole('button', { name: 'Make public' })
+      await expect(makePublic).toBeVisible()
+      await expect(page.getByRole('link', { name: 'Add to LinkedIn profile' })).toHaveCount(0)
 
-    // The two LinkedIn links carry what the profile form needs.
-    const add = page.getByRole('link', { name: 'Add to LinkedIn profile' })
-    await expect(add).toBeVisible()
-    const href = await add.getAttribute('href')
-    expect(href).toContain('linkedin.com/profile/add?')
-    expect(href).toContain('startTask=CERTIFICATION_NAME')
-    expect(href).toContain('certId=STL-2026-E2EGRACE')
-    expect(href).toContain(encodeURIComponent('/credentials/STL-2026-E2EGRACE'))
-    expect(href).toMatch(/organization(Id|Name)=/)
+      await makePublic.click()
+      await expect(page.getByRole('button', { name: 'Make private' })).toBeVisible(AFTER_TOGGLE)
 
-    const share = page.getByRole('link', { name: 'Share on LinkedIn' })
-    expect(await share.getAttribute('href')).toContain('linkedin.com/sharing/share-offsite/?url=')
+      // The two LinkedIn links carry what the profile form needs.
+      const add = page.getByRole('link', { name: 'Add to LinkedIn profile' })
+      await expect(add).toBeVisible()
+      const href = await add.getAttribute('href')
+      expect(href).toContain('linkedin.com/profile/add?')
+      expect(href).toContain('startTask=CERTIFICATION_NAME')
+      expect(href).toContain('certId=STL-2026-E2EGRACE')
+      expect(href).toContain(encodeURIComponent('/credentials/STL-2026-E2EGRACE'))
+      expect(href).toMatch(/organization(Id|Name)=/)
 
-    // The hand-typed details, for when prefill does not fire.
-    await page.getByRole('button', { name: /Show the details to type/ }).click()
-    await expect(page.getByText('STL-2026-E2EGRACE', { exact: true }).first()).toBeVisible()
+      const share = page.getByRole('link', { name: 'Share on LinkedIn' })
+      expect(await share.getAttribute('href')).toContain('linkedin.com/sharing/share-offsite/?url=')
 
-    // Leave it as the seed promises.
-    await page.getByRole('button', { name: 'Make private' }).click()
-    await expect(page.getByRole('button', { name: 'Make public' })).toBeVisible()
+      // The hand-typed details, for when prefill does not fire.
+      await page.getByRole('button', { name: /Show the details to type/ }).click()
+      await expect(page.getByText('STL-2026-E2EGRACE', { exact: true }).first()).toBeVisible()
+
+      // Making it private again works from the page too. (afterEach resets it
+      // regardless, so a failure here cannot leave it public.)
+      await page.getByRole('button', { name: 'Make private' }).click()
+      await expect(page.getByRole('button', { name: 'Make public' })).toBeVisible(AFTER_TOGGLE)
+    })
   })
 })
 

@@ -16,7 +16,7 @@ const BLOCK_COPY: Record<ShareBlock, string> = {
   withdrawn:        'This credential has been withdrawn.',
   expired:          'This credential has expired, so it can no longer be shared.',
   minor_no_consent: 'Sharing needs a signed Stellr consent form on file. It is part of the paperwork for your next Stellr event — nothing extra to do.',
-  minor_declined:   'Your parent or guardian has asked that this stay private. If that changes, they can let us know.',
+  minor_declined:   'Your parent or guardian has asked that this stay private. If that changes, they can email privacy@stellreducation.org.',
 }
 
 interface Props {
@@ -42,7 +42,7 @@ export function CredentialActions(p: Props) {
   const isPublic = p.visibility === 'public'
 
   function track(kind: CredentialEventKind) {
-    pushDataLayer({ event: 'credential_share', share_kind: kind, credential: p.number })
+    pushDataLayer({ event: 'credential_share', share_kind: kind })
     void fetch(`/api/credentials/${encodeURIComponent(p.number)}/events`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -118,6 +118,12 @@ export function CredentialActions(p: Props) {
         </p>
       )}
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      <p className="mt-3 text-xs text-content-muted">
+        Public pages show your name, the credential, and the issue date. Once you add a credential
+        to LinkedIn or share it there, LinkedIn&rsquo;s terms apply and we can&rsquo;t remove it for
+        you — making this page private changes it here only.{' '}
+        <a href="/privacy#credentials" className="underline hover:text-ink">How credentials are shared</a>
+      </p>
 
       {/* ── Share ─────────────────────────────────────────────────────── */}
       {isPublic && (

@@ -6,6 +6,7 @@ import { AGREEMENT_LABEL } from '@/lib/docusign-agreements'
 import { syncEnvelopeRecipients, loadRecipientsByEnvelopeRows, alertOnNewBounces } from '@/lib/docusign-recipients'
 import { sendEmail, docusignCompletedToMinorEmail, docusignCompletedToSignerEmail } from '@/lib/email'
 import { logActivity } from '@/lib/activity-log'
+import { recordCredentialOptOutFromForm } from '@/lib/docusign-optout'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -87,7 +88,7 @@ export async function POST(req: Request) {
     .from('docusign_envelopes')
     .update(update)
     .eq('envelope_id', envelopeId)
-    .select('id, member_id, envelope_type, minor_name, signer_name, event_title, signers_total')
+    .select('id, envelope_id, member_id, participant_id, reused_from, credential_sharing_opt_out, envelope_type, minor_name, signer_name, event_title, signers_total')
     .maybeSingle()
 
   // Envelope completion implies every signer finished.
@@ -101,6 +102,13 @@ export async function POST(req: Request) {
   if (!envelope) {
     console.warn('[docusign-webhook] No envelope record for', envelopeId)
     return NextResponse.json({ received: true })
+  }
+
+  // Guardian's credential-sharing opt-out (minor forms only). Non-fatal: a
+  // failed read leaves form_data_read_at null and the docusign-form-data cron
+  // retries it.
+  if (newStatus === 'completed') {
+    await recordCredentialOptOutFromForm(db, envelope)
   }
 
   if (newStatus === 'completed' && envelope.member_id) {

@@ -33,6 +33,11 @@ export default async function CredentialsPage() {
           What you have earned with Stellr — course completions and event participation. Each one has a page you
           can make public, share, and add to LinkedIn.
         </p>
+        <p className="mt-2 text-xs text-content-muted">
+          Every credential is private until you make it public. For students under 18, a parent or guardian can ask
+          for credentials to stay private.{' '}
+          <Link href="/privacy#credentials" className="underline hover:text-ink">How credentials are shared</Link>
+        </p>
       </div>
 
       {rows.length === 0 ? (

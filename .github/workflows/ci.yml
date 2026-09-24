@@ -70,6 +70,21 @@ jobs:
     needs: verify
     timeout-minutes: 20
 
+    # One e2e job at a time across the whole repo, not per ref. Every run, from
+    # any branch, writes the same seeded rows on the one dev Supabase project,
+    # and the workflow-level group above only serialises runs of the SAME ref.
+    # On 24 Sept a PR run and a dev run overlapped; with the credentials spec
+    # resetting Grace's credential in its hooks, one run could flip it private
+    # halfway through the other's publish test (TRACKER 13.1).
+    #
+    # cancel-in-progress: false, so a running suite is never killed halfway
+    # through, with rows left mutated. GitHub keeps only ONE pending job per
+    # group: if a third run queues while one runs and one waits, the waiting
+    # one is cancelled. Its e2e check then reads "cancelled"; re-run that job.
+    concurrency:
+      group: e2e-dev-supabase
+      cancel-in-progress: false
+
     env:
       # Non-secret configuration. The dev Supabase project, never production —
       # e2e/global-setup.ts also refuses production hosts by name, but the URL

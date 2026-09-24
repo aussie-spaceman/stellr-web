@@ -262,12 +262,12 @@ export default function TermsPage() {
             it there.
           </li>
           <li>
-            <strong>We may revoke a credential</strong> that was issued in error, obtained through a
+            <strong>We may revoke a credential</strong>{' '}that was issued in error, obtained through a
             breach of these Terms or competition rules, or that must be withdrawn for legal reasons.
             A revoked credential&rsquo;s page shows it as revoked.
           </li>
           <li>
-            <strong>LinkedIn.</strong> You can choose to add a credential to LinkedIn or share it
+            <strong>LinkedIn.</strong>{' '}You can choose to add a credential to LinkedIn or share it
             there. LinkedIn requires its members to be 16 or older, and your use of LinkedIn is
             governed by LinkedIn&rsquo;s own terms and privacy policy. Stellr does not connect to
             your LinkedIn account, and once you have shared a credential, Stellr cannot control,
@@ -657,7 +657,7 @@ export default function TermsPage() {
           stays in effect.
         </p>
         <p>
-          <strong>No waiver.</strong> If we don&rsquo;t enforce a part of these Terms, that isn&rsquo;t
+          <strong>No waiver.</strong>{' '}If we don&rsquo;t enforce a part of these Terms, that isn&rsquo;t
           a waiver of our right to do so later.
         </p>
         <p>

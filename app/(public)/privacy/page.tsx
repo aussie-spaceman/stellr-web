@@ -45,7 +45,7 @@ export default function PrivacyPage() {
           where applicable, your parent or guardian) agree to the practices described in this Policy.
         </p>
         <p>
-          <strong>This Privacy Policy applies to:</strong> our website, competition registration
+          <strong>This Privacy Policy applies to:</strong>{' '}our website, competition registration
           portals, and online community platform (collectively, the &ldquo;Services&rdquo;).
         </p>
 
@@ -78,13 +78,13 @@ export default function PrivacyPage() {
             to review, correct, or request deletion of their child&rsquo;s information.
           </li>
           <li>
-            <strong>Parent and guardian data:</strong> When we collect consent, we collect the
+            <strong>Parent and guardian data:</strong>{' '}When we collect consent, we collect the
             consenting parent or guardian&rsquo;s full name and email address. This information is
             used solely to administer the consent process and is not used for marketing or shared
             beyond what is necessary.
           </li>
           <li>
-            <strong>FERPA — school-facilitated registrations:</strong> When a school, teacher, or
+            <strong>FERPA — school-facilitated registrations:</strong>{' '}When a school, teacher, or
             student manager registers a group of students, the data involved (student names, school
             affiliation, grade level) may constitute education records under FERPA. Stellr acts as
             a &ldquo;school official&rdquo; in these circumstances and processes education records
@@ -387,7 +387,7 @@ export default function PrivacyPage() {
           older, so these buttons are not shown to anyone under 16.
         </p>
         <p>
-          <strong>Once shared, it is out of our hands.</strong> After you add a credential to
+          <strong>Once shared, it is out of our hands.</strong>{' '}After you add a credential to
           LinkedIn or share it there, what happens to that information is governed by
           LinkedIn&rsquo;s terms and privacy policy, not ours. Stellr cannot control, change, or
           remove what LinkedIn — or anyone who has seen or copied the post — does with it, and
@@ -438,7 +438,7 @@ export default function PrivacyPage() {
             beyond what is necessary for the event.
           </li>
           <li>
-            We enter into a <strong>school official data processing agreement</strong> with the
+            We enter into a <strong>school official data processing agreement</strong>{' '}with the
             registering school or institution before processing their students&rsquo; education
             records. This agreement specifies how data may be used and prohibits unauthorised
             disclosure.
@@ -678,7 +678,7 @@ export default function PrivacyPage() {
           <li>Right to delete personal information</li>
           <li>
             Right to opt out of the sale or sharing of personal information.{' '}
-            <strong>We do not sell personal information.</strong> Where you have accepted
+            <strong>We do not sell personal information.</strong>{' '}Where you have accepted
             advertising cookies, technical identifiers may be disclosed to our advertising and
             business-audience providers in a way that CPRA treats as &ldquo;sharing&rdquo; for
             cross-context behavioural advertising. You can opt out at any time by selecting{' '}

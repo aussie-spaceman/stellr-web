@@ -37,15 +37,13 @@ Dev had no duplicate `stripe_refund_id`s; production could not be checked from
 the session (production reads blocked) — check before applying:
 `select stripe_refund_id, count(*) from event_refunds where stripe_refund_id is not null group by 1 having count(*) > 1;`
 
-## Open
-1. **Stripe dashboard:** add `charge.refunded` to the production webhook
-   endpoint's events. Until then the Stripe check still prevents a double
-   refund; only the roster line and the audit-on-refund are missing.
-2. **Browser check not done.** Dev has no paid registration on a Sanity-backed
-   event; the Playwright run with mocked preview responses was blocked. The
-   dialog states are covered only by typecheck and code reading.
-3. **Daksha in production:** after promotion, open her delete dialog. Expected:
-   "Already refunded 75.00 USD in Stripe", reason pre-filled. If her payment
-   intent is not stored, the Stripe check can't run — choose "No refund —
-   remove only" with a reason. Either way no second refund is issued.
-   Confirm afterwards: one `event_refunds` row, no new `account_credits`.
+## Closed (24 Sept 2026)
+1. `charge.refunded` added to the production Stripe webhook endpoint (maintainer). Not yet exercised
+   by a real dashboard refund; the first one should add a `stripe_external` cash row and a roster line.
+2. The dialog was first exercised live on Daksha's removal (below), which also closes the browser-check gap
+   for the external-full path. The partial-refund and "No refund" paths are not yet used live.
+3. Daksha removed 24 Sept 15:26Z. The Stripe check detected the manual refund, and one `event_refunds` row
+   was written (`none`, `stripe_external`, 0 cents, note "Refunded 75.00 USD in Stripe outside the app —
+   Refunded in full in Stripe"). No account credit was issued.
+
+Production migration applied 23 Sept before the #168 merge; `db:status --prod` clean for it.

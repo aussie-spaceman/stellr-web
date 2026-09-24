@@ -15,6 +15,24 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 16 — 24 Sept 2026 (duplicate member cleanup; permanent member delete removes the Clerk login)
+
+Handover: `docs/handovers/HANDOVER-member-delete-clerk-login-2026-09-24.md`.
+PR: #192 → `dev` as `9741a3d`. Promotion follows in the same session.
+Doc snapshot: `1A7qdHbe0N3F6LzsLdX2E_6mTrs2HTLRM58C6nvSo2Go`.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 16.0 | Did the three-to-one Jack Campbell cleanup leave any problems? | No. Verified by read-only prod queries and Vercel logs, 24 Sept. One member `e021b94e…`, active, on the CO SDC roster. Both purges are in `deletion_archive`. Registrations `e26afd3a…` and `7c58fc28…` are withdrawn with 0 participants. No leftover references to the 8 IDs outside `audit_log`. Four `DELETE /api/admin/deletion` requests, all 200, no errors. | — | ☑ |
+| 16.1 | HIGH: two Clerk logins still live | `user_3JCv5NpvMg0Uqy089QDVfKqW0gB` (chriscam2@gmail.com) and `user_3JCuVNFLz662M7ogxvvFCycIxal` (aasaldana@gmail.com). A sign-in with either email onboards a new duplicate member. The session declined to delete them: permanently deleting accounts is the maintainer's call. | David: Clerk dashboard → Production → Users → delete both. `user.deleted` will match no row. | ☐ |
+| 16.2 | Permanent member delete also removes the Clerk login | #192 → dev `9741a3d`. `verify` passed every step (log shows `external.test.ts` 9 tests, 86/86 files); `e2e` passed. Staff logins (`admin`, `event_manager`) and logins linked to another member are left in place. Soft delete and Deactivate are unchanged. | Tick when promotion is confirmed in production. | ☐ |
+| 16.3 | First real Clerk deletion not seen | Covered only by unit tests with mocks. | On the next real "Permanently delete" of a member, check that the dialog shows no Clerk issue and that the user is gone in Clerk. | ☐ |
+| 16.4 | Logins left behind by earlier purges | 54 member purges since 11 Jun; 30 had `clerk_user_id` in the snapshot. 2 are the Campbells (16.1); 2 are the maintainer's own logins, re-linked to live members (`user_3Exea9…`, `user_3ExgRb5…`: **never delete**); up to 26 others. | Run the query in the handover, check each in Clerk, and delete the ones that aren't staff and have no live member. Related: 15.8. | ☐ |
+| 16.5 | DocuSign warning 21:24:59Z | `No envelope record for e790dae1-f168-8aed-8249-e3306f13f59a`. Most likely the void notice for a deleted participant's envelope, arriving after the row had cascaded away. Unconfirmed. | Optional: DocuSign → e790dae1 should be Voided, with a Campbell recipient. | ☐ |
+| 16.6 | Withdrawn registrations: empty group containers (16 of 18), and 2 with active roster rows | Existed before this session. Maintainer decision, 24 Sept: keep withdrawals in the member DB for outreach; don't change them. | — (parked by decision) | ☑ |
+| 16.7 | `user.deleted` can blank the login in the archive | The Clerk step runs before `archiveEntity`. If the webhook lands in between, it sets `clerk_user_id` to NULL and the snapshot records NULL, so audits like 16.4 miss that purge. | Optional: take the archive snapshot before the external cleanup, or add the login ID to it. | ☐ |
+| 16.8 | /code-review not run on #192 | Skipped; reviewed against the ask only. | Optional: `/code-review high` on `9741a3d`. | ☐ |
+
 ## Session 15 — 24 Sept 2026 (admin-created members: invite to complete account)
 
 Handover: `docs/handovers/HANDOVER-admin-member-invite-2026-09-24.md`.

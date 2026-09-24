@@ -15,6 +15,20 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 14 — 24 Sept 2026 (email-signature logo lost in Outlook → Gmail drafts)
+
+Handover: `docs/handovers/HANDOVER-email-signature-logo-2026-09-24.md`.
+PR #179 (`749ccf6`), promoted in #183 (`e2a99e3`).
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 14.0 | Signature logo showed as an empty box for recipients | Cause confirmed from the sent message: `cid:` image references with no inline parts, because Gmail drops them from Outlook drafts. Logo now hosted at `/email/signature-logo.png` (checked live: `200 image/png`, byte-identical). The signature loads it by URL, and its master copy is in `Shared drives/Stellr/8 Media + Collateral/`. The maintainer confirmed Outlook sends and Outlook-draft → Gmail-scheduled sends both show the logo. | — | ☑ |
+| 14.1 | `public/email/signature-logo.png` has no code reference | Only sent emails reference it, so a grep-based cleanup would call it unused. Deleting or renaming it breaks the logo in every email already sent. | None. Keep it; this row and the handover are its references. Replacing it in place also changes the logo in past emails. | ☑ |
+| 14.2 | UNLV recipients never saw the member-portal screenshot | The 24 Sept email said "as you can see from the member portal screenshot below", and the screenshot was dropped the same way as the logo. The maintainer is following up separately. | Re-send the screenshot to Rachel De Vera and Yingtao Jiang. | ☐ |
+| 14.3 | Images pasted into the body still don't survive Outlook → Gmail | The hosted logo fixes the signature only. Screenshots pasted in Outlook become `cid:` parts, and Gmail drops them when it opens the draft. | Habit, on the rare Gmail-scheduled send: paste images again in Gmail, or attach them as files; check the Scheduled folder preview before it sends. | ☐ |
+| 14.4 | Another session's uncommitted work sits in the main checkout | Seen 24 Sept: about 15 modified or new files in `stellr-web/` (member invite: `app/api/admin/members/[id]/invite/`, `lib/member-invite.ts`, migration `20260924120000_member_account_invite.sql`, `lib/email.ts`, `lib/env.ts`, …). Not this session's; untouched. The one-worktree-per-session rule exists because a shared checkout lost a commit on 9 Sept. | Its owner moves it into its own worktree, or commits it on a branch, before anyone switches branches in `stellr-web/`. | ☐ |
+| 14.5 | Signatures elsewhere | Only Outlook for Mac and Gmail web were updated. Outlook on iPhone keeps its own signature, and other staff may still use the old `cid:` version. | Optional: paste the shared-drive signature into Outlook mobile, and give it to staff as a template (change the name and title). | ☐ |
+
 ## Session 13 — 24 Sept 2026 (credentials e2e: a failure can no longer leave Grace public)
 
 Handover: `docs/handovers/HANDOVER-credentials-e2e-self-reset-2026-09-24.md`.

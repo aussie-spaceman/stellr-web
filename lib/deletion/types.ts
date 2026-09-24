@@ -43,7 +43,7 @@ export interface Dependent {
   adminHref?: string
 }
 
-export type ExternalCleanupKind = 'stripe' | 'docusign'
+export type ExternalCleanupKind = 'stripe' | 'docusign' | 'clerk'
 
 // Definition of one deletable entity type.
 export interface EntityDef {

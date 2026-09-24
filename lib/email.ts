@@ -925,3 +925,33 @@ export function credentialRevokedEmail({
   const text = `Hi ${toGuardian ? guardianFirstName : recipientFirstName},\n\nThe Stellr credential ${title} (${number})${toGuardian ? ` issued to ${recipientFirstName}` : ''} has been withdrawn and is no longer valid.\n\nReason: ${reason}\n\nIts page now shows it as revoked. If it was added to a LinkedIn profile, please remove it there.\n\nIf you think this is a mistake, reply to this email.\n\n— Stellr Education`
   return { subject, html, text }
 }
+
+// Sent when an admin creates a member record by hand (or re-sends from the
+// member page). The record exists but is missing what only the member knows —
+// date of birth, gender, phone — so the one action is "complete your profile".
+// The link lands on /account/onboarding, which bounces a signed-out visitor
+// through sign-in and back; the caller provisions a passwordless login for this
+// email first, so "sign in with this address" is all they need to do.
+export function accountInviteEmail({
+  firstName, email, url,
+}: {
+  firstName: string
+  email: string
+  url: string
+}) {
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const subject = 'Your Stellr account is ready — complete your profile'
+  const html = emailLayout({
+    heading: 'Welcome to Stellr',
+    preheader: 'Finish setting up your account in a couple of minutes.',
+    bodyHtml: `
+        <p>Hi ${esc(firstName)},</p>
+        <p>The Stellr team has set up a member account for you. Before you can use it, we need a few details only you can give us — your date of birth, gender and phone number.</p>
+        <p style="margin:24px 0"><a href="${url}" style="display:inline-block;background:#3C6DF6;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">Complete your account</a></p>
+        <p style="color:#6b7280;font-size:14px">Use <strong>${esc(email)}</strong> to sign in — your account is already tied to that address.</p>
+        <p style="color:#6b7280;font-size:14px">Not expecting this? Reply to this email and we'll sort it out.</p>`,
+  })
+  const text = `Hi ${firstName},\n\nThe Stellr team has set up a member account for you. Before you can use it, we need a few details only you can give us — your date of birth, gender and phone number.\n\nComplete your account: ${url}\n\nUse ${email} to sign in — your account is already tied to that address.\n\nNot expecting this? Reply to this email and we'll sort it out.\n\n— Stellr Education`
+  return { subject, html, text }
+}

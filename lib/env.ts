@@ -125,7 +125,7 @@ export function isProductionDeployment(): boolean {
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
 /** Member app origin. Same fallback reasoning as SITE_URL. */
-const AUTH_APP_URL =
+export const AUTH_APP_URL =
   process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
 /**

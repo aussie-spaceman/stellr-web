@@ -379,6 +379,7 @@ export async function scheduleFromRequest(
     activeTierIds: [],
     event_role: null,
     age_bracket: null,
+    needsOnboarding: false,
   } satisfies CommunityMember
 
   const result = await bookCoaching(member, req.coachId, startIso, { title: `Coaching — ${req.topic}` })

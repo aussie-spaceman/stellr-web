@@ -20,7 +20,7 @@ export default async function CommunityLayout({
   if (!userId) redirect('/sign-up')
 
   const member = await getCurrentMember()
-  if (!member) redirect('/account/onboarding')
+  if (!member || member.needsOnboarding) redirect('/account/onboarding')
 
   return (
     <>

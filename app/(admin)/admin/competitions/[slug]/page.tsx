@@ -109,11 +109,13 @@ export default async function AdminEventDetailPage({
   }
 
   // ── Settings (live events, settings tab) ──────────────────────────────────
-  let eventSettings: { badge_artwork_path: string | null } | null = null
+  let eventSettings: { badge_artwork_path: string | null; badge_8395_artwork_path: string | null } | null = null
   let refundTiers: RefundTier[] = DEFAULT_TIERS
-  if (tab === 'settings' && !isCampaign && access.isAdmin) {
+  // Event managers see the settings tab too (badges, certificates), so load it
+  // for them; the refund editor that uses the policy rows is admin-only.
+  if (tab === 'settings' && !isCampaign) {
     const [{ data: es }, { data: globalPolicy }, { data: eventPolicy }] = await Promise.all([
-      db.from('event_settings').select('badge_artwork_path').eq('event_slug', slug).maybeSingle(),
+      db.from('event_settings').select('badge_artwork_path, badge_8395_artwork_path').eq('event_slug', slug).maybeSingle(),
       db.from('refund_policies').select('tiers').eq('scope', 'global').maybeSingle(),
       db.from('refund_policies').select('tiers').eq('scope', 'event').eq('event_slug', slug).maybeSingle(),
     ])
@@ -359,7 +361,10 @@ export default async function AdminEventDetailPage({
 
           <EventBadges
             eventSlug={slug}
-            hasBadgeArtwork={Boolean(eventSettings?.badge_artwork_path)}
+            artworkSet={{
+              avery_5392: Boolean(eventSettings?.badge_artwork_path),
+              avery_8395: Boolean(eventSettings?.badge_8395_artwork_path),
+            }}
           />
 
           <EventCertificates eventSlug={slug} />

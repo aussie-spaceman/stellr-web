@@ -7,6 +7,7 @@ import { getMemberCampaignRegistration } from '@/lib/campaign-registrations'
 import { memberManagesContainer } from '@/lib/resource-upload'
 import { requireEventAccess } from '@/lib/event-access'
 import { AWARD_TYPES } from '@/lib/event-awards'
+import { BADGE_FORMATS } from '@/lib/badge-layout'
 
 // Every file upload in the app, in one place.
 //
@@ -97,8 +98,11 @@ async function requireMember(): Promise<CommunityMember | UploadDenied> {
   return member ?? deny('Unauthorised', 401)
 }
 
-// Badge background, or one certificate background per award.
-const EVENT_ARTWORK_KINDS = ['badge', ...AWARD_TYPES.map((t) => `certificate-${t}`)]
+// One badge background per Avery format, or one certificate background per award.
+const EVENT_ARTWORK_KINDS = [
+  ...Object.values(BADGE_FORMATS).map((f) => f.artworkKind),
+  ...AWARD_TYPES.map((t) => `certificate-${t}`),
+]
 
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const
 const LICENSE_TYPES = [

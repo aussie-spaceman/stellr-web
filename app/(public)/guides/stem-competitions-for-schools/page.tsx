@@ -23,7 +23,10 @@ const articleSchema = {
   headline: TITLE,
   description: DESCRIPTION,
   url: `${WWW}${PATH}`,
-  dateModified: '2026-09-24',
+  // Full datetime with offset and an image: the Rich Results Test flags both
+  // as missing on a bare date (25 Sept 2026).
+  dateModified: '2026-09-24T00:00:00Z',
+  image: `${WWW}/images/og-default.jpg`,
   author: { '@type': 'Organization', '@id': `${WWW}/#organization`, name: 'Stellr Education' },
   publisher: { '@id': `${WWW}/#organization` },
   about: PROGRAMS.map((p) => ({ '@type': 'Thing', name: p.name })),

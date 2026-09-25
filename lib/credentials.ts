@@ -110,12 +110,15 @@ export interface IssueInput {
   issuer?: string
   roleLabel?: string | null
   award?: string | null
+  /** Event credentials: which certificate this is. Defaults to participation. */
+  awardType?: string | null
   theme?: CredentialTheme | null
   expiresAt?: string | null
 }
 
 /**
- * Idempotent on the partial unique indexes (member+course, participant+event):
+ * Idempotent on the partial unique indexes (member+course,
+ * participant+event+award):
  * a re-run returns the existing row with `created: false`. A concurrent first
  * issue is treated the same way — the unique violation is the signal.
  */
@@ -141,6 +144,7 @@ export async function issueCredential(
     issuer:         input.issuer ?? 'Stellr Education',
     role_label:     input.roleLabel ?? null,
     award:          input.award ?? null,
+    award_type:     input.source === 'event' ? input.awardType ?? 'participation' : null,
     theme:          input.theme ?? null,
     expires_at:     input.expiresAt ?? null,
     is_minor:       isMinorOn(input.recipient.dateOfBirth),
@@ -170,7 +174,10 @@ async function findExisting(db: SupabaseClient, input: IssueInput): Promise<Cred
     q = q.eq('member_id', input.memberId).eq('module_id', input.moduleId)
   } else if (input.source === 'event') {
     if (!input.participantId || !input.eventSlug) throw new Error('[credentials] event credential needs participantId + eventSlug')
-    q = q.eq('participant_id', input.participantId).eq('event_slug', input.eventSlug)
+    q = q
+      .eq('participant_id', input.participantId)
+      .eq('event_slug', input.eventSlug)
+      .eq('award_type', input.awardType ?? 'participation')
   } else {
     return null
   }
@@ -198,6 +205,23 @@ export async function revokeCredential(
     })
     .eq('id', id)
     .eq('status', 'issued')
+    .select(CREDENTIAL_COLUMNS)
+    .maybeSingle()
+  return (data as CredentialRow | null) ?? null
+}
+
+/**
+ * Undo a revocation — an award taken away and then given back to the same
+ * person. The unique index means the old row is the only row this person can
+ * hold for it, so it is restored (same number, same URL) rather than re-issued.
+ */
+export async function reinstateCredential(db: SupabaseClient, id: string): Promise<CredentialRow | null> {
+  const { data } = await db
+    .from('credentials')
+    .update({ status: 'issued', revoked_at: null, revoked_reason: null, revoked_by: null, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('status', 'revoked')
+    .is('tombstoned_at', null)
     .select(CREDENTIAL_COLUMNS)
     .maybeSingle()
   return (data as CredentialRow | null) ?? null
@@ -258,6 +282,12 @@ export async function unpublishCredentialsFor(
 export interface CredentialView extends CredentialRow {
   /** From the linked member or participant; used for the LinkedIn age gate. */
   date_of_birth: string | null
+  /**
+   * Who holds it: the member it was issued to, or — for an event credential
+   * issued before the student's account was linked — the member their
+   * participant row points at now. Ownership checks use this, not member_id.
+   */
+  owner_member_id: string | null
 }
 
 export async function getCredentialByNumber(db: SupabaseClient, number: string): Promise<CredentialView | null> {
@@ -265,7 +295,7 @@ export async function getCredentialByNumber(db: SupabaseClient, number: string):
   if (!n) return null
   const { data, error } = await db
     .from('credentials')
-    .select(`${CREDENTIAL_COLUMNS}, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth)`)
+    .select(`${CREDENTIAL_COLUMNS}, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth, member_id)`)
     .eq('number', n)
     .maybeSingle()
   if (error) console.error('[credentials] lookup failed:', error.message)
@@ -274,20 +304,29 @@ export async function getCredentialByNumber(db: SupabaseClient, number: string):
 }
 
 export async function listMemberCredentials(db: SupabaseClient, memberId: string): Promise<CredentialView[]> {
+  // Event credentials follow the participant row, so one issued before the
+  // student's account was linked still reaches their wallet.
+  const { data: parts } = await db.from('participants').select('id').eq('member_id', memberId)
+  const participantIds = (parts ?? []).map((p) => p.id as string)
+  const owner = participantIds.length
+    ? `member_id.eq.${memberId},participant_id.in.(${participantIds.join(',')})`
+    : `member_id.eq.${memberId}`
   const { data } = await db
     .from('credentials')
-    .select(`${CREDENTIAL_COLUMNS}, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth)`)
-    .eq('member_id', memberId)
+    .select(`${CREDENTIAL_COLUMNS}, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth, member_id)`)
+    .or(owner)
     .is('tombstoned_at', null)
     .order('issued_at', { ascending: false })
   return ((data ?? []) as Record<string, unknown>[]).map(withDob)
 }
 
 function withDob(row: Record<string, unknown>): CredentialView {
-  const one = (v: unknown) => (Array.isArray(v) ? v[0] : v) as { date_of_birth?: string | null } | null
+  const one = (v: unknown) =>
+    (Array.isArray(v) ? v[0] : v) as { date_of_birth?: string | null; member_id?: string | null } | null
   const { members, participants, ...rest } = row
+  const cred = rest as unknown as CredentialRow
   const dob = one(members)?.date_of_birth ?? one(participants)?.date_of_birth ?? null
-  return { ...(rest as unknown as CredentialRow), date_of_birth: dob }
+  return { ...cred, date_of_birth: dob, owner_member_id: cred.member_id ?? one(participants)?.member_id ?? null }
 }
 
 // ── Telemetry ────────────────────────────────────────────────────────────────

@@ -16,6 +16,8 @@ vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: assertNotImperso
 vi.mock('@/lib/spaces', () => ({ getSpaceForMember: vi.fn() }))
 vi.mock('@/lib/campaign-registrations', () => ({ getMemberCampaignRegistration: vi.fn() }))
 vi.mock('@/lib/resource-upload', () => ({ memberManagesContainer: vi.fn() }))
+const requireEventAccessMock = vi.fn()
+vi.mock('@/lib/event-access', () => ({ requireEventAccess: requireEventAccessMock }))
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
     storage: { from: () => ({ createSignedUploadUrl, download, remove }) },
@@ -85,6 +87,32 @@ describe('signUpload', () => {
 
   it('gives training video real headroom, not the old 4.5MB ceiling', () => {
     expect(UPLOAD_PURPOSES['training-item'].maxBytes).toBeGreaterThan(50 * 1024 * 1024)
+  })
+})
+
+// Event artwork is signed on event access, not admin role: an assigned event
+// manager uploads their own event's certificate templates.
+describe('signUpload — event-artwork', () => {
+  const sign = (kind: string) =>
+    signUpload({ purpose: 'event-artwork', ctx: { slug: 'colorado', kind }, fileName: 'art.png', fileSize: 10, contentType: 'image/png' })
+
+  it('signs for an event manager assigned to the event', async () => {
+    requireEventAccessMock.mockResolvedValue({ ok: true, userId: 'u1', isAdmin: false, assignedSlugs: ['colorado'] })
+    expect(await sign('certificate-anita_gale')).toEqual({ bucket: 'community-resources', path: 'p', token: 't' })
+    expect(requireEventAccessMock).toHaveBeenCalledWith('colorado')
+    expect(createSignedUploadUrl.mock.calls[0][0]).toMatch(/^event-artwork\/colorado\/certificate-anita_gale-\d+-art\.png$/)
+  })
+
+  it('refuses a manager of another event', async () => {
+    requireEventAccessMock.mockResolvedValue({ ok: false, status: 403 })
+    expect(await sign('certificate-participation')).toEqual({ error: 'Forbidden', status: 403 })
+    expect(createSignedUploadUrl).not.toHaveBeenCalled()
+  })
+
+  it('refuses an artwork kind that is not a badge or an award', async () => {
+    requireEventAccessMock.mockResolvedValue({ ok: true, userId: 'u1', isAdmin: true, assignedSlugs: null })
+    expect(await sign('certificate-best_hat')).toMatchObject({ status: 400 })
+    expect(createSignedUploadUrl).not.toHaveBeenCalled()
   })
 })
 

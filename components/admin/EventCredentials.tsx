@@ -117,7 +117,8 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
         <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Participation credentials</h3>
         <p className="text-xs text-brand-muted-soft mt-1">
           A verifiable record per person with its own page, which they can make public and add to LinkedIn (16+).
-          Separate from the printed certificates above.
+          Award credentials are issued from Judging &amp; awards above; every credential for this event is listed
+          here.
         </p>
       </div>
 

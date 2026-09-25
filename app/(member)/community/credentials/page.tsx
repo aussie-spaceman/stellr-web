@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ArrowRight, Eye, EyeOff, Award } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, Award, FileDown } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
 import { listMemberCredentials, credentialState, type CredentialState } from '@/lib/credentials'
@@ -10,7 +10,9 @@ export const metadata = { title: 'Credentials' }
 
 // The member's wallet: every credential they hold, with state and visibility.
 // Sharing lives on the credential page itself (one place for owner and
-// verifier alike), so this is a list, not a second control surface.
+// verifier alike), so this is a list, not a second control surface — apart
+// from the certificate download, which is the holder's own copy whether the
+// page is public or not.
 
 const STATE_LABEL: Record<CredentialState, { text: string; className: string }> = {
   valid:     { text: 'Valid',     className: 'bg-enviro-green-bg text-enviro-green-text' },
@@ -30,8 +32,8 @@ export default async function CredentialsPage() {
       <div className="mb-6">
         <h1 className="font-heading uppercase text-title text-brand-blue-dark">Credentials</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">
-          What you have earned with Stellr — course completions and event participation. Each one has a page you
-          can make public, share, and add to LinkedIn.
+          What you have earned with Stellr — course completions, event participation and awards. Each one has a
+          certificate to download and a page you can make public, share, and add to LinkedIn.
         </p>
         <p className="mt-2 text-xs text-content-muted">
           Every credential is private until you make it public. For students under 18, a parent or guardian can ask
@@ -58,10 +60,10 @@ export default async function CredentialsPage() {
             const s = STATE_LABEL[state]
             const isPublic = c.visibility === 'public'
             return (
-              <li key={c.id}>
+              <li key={c.id} className="flex items-center hover:bg-surface transition-colors">
                 <Link
                   href={`/credentials/${encodeURIComponent(c.number)}`}
-                  className="flex items-center gap-4 px-5 py-4 hover:bg-surface transition-colors"
+                  className="flex min-w-0 flex-1 items-center gap-4 py-4 pl-5 pr-2"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-ink truncate">{c.title}</p>
@@ -69,6 +71,11 @@ export default async function CredentialsPage() {
                       {c.issuer} · {formatDateShort(c.issued_at)} · <span className="font-mono">{c.number}</span>
                     </p>
                   </div>
+                  {c.award_type && c.award_type !== 'participation' && (
+                    <span className="hidden md:inline-flex items-center gap-1 rounded-pill bg-star-gold/20 px-2.5 py-0.5 text-xs font-bold uppercase tracking-[0.05em] text-ink">
+                      <Award size={12} aria-hidden="true" /> Award
+                    </span>
+                  )}
                   <span className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-xs font-bold uppercase tracking-[0.05em] ${s.className}`}>
                     {s.text}
                   </span>
@@ -78,6 +85,19 @@ export default async function CredentialsPage() {
                   </span>
                   <ArrowRight size={16} className="text-content-faint" aria-hidden="true" />
                 </Link>
+                {state === 'valid' || state === 'expired' ? (
+                  <a
+                    href={`/api/credentials/${encodeURIComponent(c.number)}/pdf`}
+                    className="mr-3 inline-flex items-center gap-1 rounded-ds-card px-2 py-2 text-xs font-semibold text-primary hover:underline"
+                    aria-label="Download certificate"
+                    title="Download certificate (PDF)"
+                  >
+                    <FileDown size={16} aria-hidden="true" />
+                    <span className="hidden sm:inline">PDF</span>
+                  </a>
+                ) : (
+                  <span className="mr-3 w-[52px]" aria-hidden="true" />
+                )}
               </li>
             )
           })}

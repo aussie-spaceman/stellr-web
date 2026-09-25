@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { CheckCircle } from 'lucide-react'
 import { ClearCartOnLoad } from '@/components/store/ClearCartOnLoad'
 
-export const metadata = { title: 'Order confirmed — Stellr Store' }
+export const metadata = { title: 'Order confirmed — Stellr Store', robots: { index: false, follow: true } }
 
 export default function StoreSuccessPage() {
   return (

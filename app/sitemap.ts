@@ -74,19 +74,29 @@ export const STATIC_SITEMAP_PATHS = staticPaths.map((r) => r.path)
  */
 export const LANDING_PAGE_SITEMAP_PATHS = LANDING_PAGE_SLUGS.map((slug) => `/lp/${slug}`)
 
+/**
+ * lastModified is deliberately omitted for code-defined routes. They change
+ * when a deploy ships, not per request, and stamping `new Date()` told crawlers
+ * the whole site changed daily — Google discounts a lastmod it learns is
+ * unreliable, which then costs the routes where it is real (Sanity content
+ * below). A missing lastmod is neutral; a wrong one is not.
+ */
 const landingPageRoutes: MetadataRoute.Sitemap = LANDING_PAGE_SITEMAP_PATHS.map((path) => ({
   url: `${BASE_URL}${path}`,
-  lastModified: new Date(),
   changeFrequency: 'monthly' as const,
   priority: 0.7,
 }))
 
 const staticRoutes: MetadataRoute.Sitemap = staticPaths.map((r) => ({
   url: `${BASE_URL}${r.path}`,
-  lastModified: new Date(),
   changeFrequency: r.changeFrequency,
   priority: r.priority,
 }))
+
+/** A Sanity document's last edit, or undefined — never "now". */
+function editedAt(doc: { _updatedAt?: string }): Date | undefined {
+  return doc._updatedAt ? new Date(doc._updatedAt) : undefined
+}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [events, campaigns, newsPosts] = await Promise.all([
@@ -96,9 +106,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ])
 
   const eventRoutes: MetadataRoute.Sitemap = (events ?? []).map(
-    (e: { slug: { current: string }; date?: string }) => ({
+    // _updatedAt, not the event date: the date is when the event happens (often
+    // months ahead), not when the page last changed.
+    (e: { slug: { current: string }; _updatedAt?: string }) => ({
       url: `${BASE_URL}/events/${e.slug.current}`,
-      lastModified: e.date ? new Date(e.date) : new Date(),
+      lastModified: editedAt(e),
       changeFrequency: 'weekly' as const,
       priority: 0.8,
     })
@@ -107,18 +119,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Campaigns are also served at /events/[slug] (the detail page renders the
   // campaign view for activityType === 'campaign').
   const campaignRoutes: MetadataRoute.Sitemap = (campaigns ?? []).map(
-    (c: { slug: { current: string } }) => ({
+    (c: { slug: { current: string }; _updatedAt?: string }) => ({
       url: `${BASE_URL}/events/${c.slug.current}`,
-      lastModified: new Date(),
+      lastModified: editedAt(c),
       changeFrequency: 'weekly' as const,
       priority: 0.7,
     })
   )
 
   const newsRoutes: MetadataRoute.Sitemap = (newsPosts ?? []).map(
-    (p: { slug: { current: string }; publishedAt?: string }) => ({
+    (p: { slug: { current: string }; _updatedAt?: string }) => ({
       url: `${BASE_URL}/news/${p.slug.current}`,
-      lastModified: p.publishedAt ? new Date(p.publishedAt) : new Date(),
+      lastModified: editedAt(p),
       changeFrequency: 'monthly' as const,
       priority: 0.6,
     })

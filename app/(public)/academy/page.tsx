@@ -19,13 +19,22 @@ import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
 import { PHOTOS, VIDEOS } from '@/lib/media-manifest'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
+import { JsonLd } from '@/components/seo/JsonLd'
+import { buildAcademyCourseJsonLd, buildBreadcrumbJsonLd } from '@/lib/structured-data'
+
+const DESCRIPTION =
+  'The Stellr Academy is where high-school and college students build career-ready ability — through Competition training, hands-on career preparation, and the STEM Power Skills schools rarely teach.'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/academy' },
   title: 'Academy',
-  description:
-    'The Stellr Academy is where high-school and college students build career-ready ability — through Competition training, hands-on career preparation, and the STEM Power Skills schools rarely teach.',
+  description: DESCRIPTION,
 }
+
+const schema = [
+  buildAcademyCourseJsonLd(DESCRIPTION),
+  buildBreadcrumbJsonLd([{ name: 'Academy', path: '/academy' }]),
+]
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 const SIGNUP_URL = `${AUTH_URL}/sign-up`
@@ -162,6 +171,7 @@ const coachingHelps = [
 export default function AcademyPage() {
   return (
     <>
+      <JsonLd data={schema} />
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <Hero
         breadcrumb="The Stellr Academy"

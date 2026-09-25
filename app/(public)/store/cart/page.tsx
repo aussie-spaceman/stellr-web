@@ -1,7 +1,7 @@
 import { CartView } from '@/components/store/CartView'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 
-export const metadata = { title: 'Your cart — Stellr Store' }
+export const metadata = { title: 'Your cart — Stellr Store', robots: { index: false, follow: true } }
 
 export default function CartPage() {
   return (

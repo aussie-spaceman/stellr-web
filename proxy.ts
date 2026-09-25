@@ -2,6 +2,7 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { APP_HOST, SITE_URL } from '@/lib/env'
 import { checkRateLimit, clientIp } from '@/lib/rate-limit'
+import { matchCrawler, recordCrawlerHit } from '@/lib/crawlers'
 
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
@@ -46,10 +47,18 @@ const WWW = SITE_URL
 // Production is unaffected: its two hosts differ, so this is false there.
 const IS_SINGLE_HOST = APP_HOST === new URL(WWW).host
 
-export default clerkMiddleware(async (auth, req) => {
+export default clerkMiddleware(async (auth, req, event) => {
   const host = req.headers.get('host') ?? ''
   const isAppSubdomain = !IS_SINGLE_HOST && host === APP_HOST
   const url = new URL(req.url)
+
+  // AEO measurement: count public-site page requests from search and AI
+  // crawlers (lib/crawlers.ts). waitUntil, so the write never delays or fails
+  // the response the crawler receives.
+  if (!isAppSubdomain && req.method === 'GET' && !url.pathname.startsWith('/api/')) {
+    const bot = matchCrawler(req.headers.get('user-agent'))
+    if (bot) event.waitUntil(recordCrawlerHit(bot, url.pathname))
+  }
 
   // Resolve auth once and reuse across all branches
   const needsUserId = isAppSubdomain || isAuthRoute(req) || isCommunityRoute(req)

@@ -1,9 +1,14 @@
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from 'pdf-lib'
-import { stampPdfDocument } from '@/lib/watermark/pdf'
+import fontkit from '@pdf-lib/fontkit'
+import { markWatermarked, stampPdfDocument } from '@/lib/watermark/pdf'
+import { tokens } from '@/lib/tokens'
 
 // Badge + certificate PDF generation (PRD 6.7).
 // Badges: 3x4" landscape (user-confirmed size), tiled 2×3 on US Letter for printing.
-// Certificates: one per student, US Letter or A4 landscape.
+// Certificates: one page per recipient, US Letter or A4 landscape. The artwork
+// carries every word but the name; only the name is drawn (see below).
 
 const PT_PER_IN = 72
 const BADGE_W = 4 * PT_PER_IN
@@ -107,44 +112,133 @@ export async function generateBadgesPdf(
   return doc.save()
 }
 
+// ── Certificates ─────────────────────────────────────────────────────────────
+// The certificate artwork (one per award, event_certificate_templates) already
+// says everything — title, award, citation, signatures. The only thing drawn is
+// the recipient's name, centred in the space the artwork leaves for it.
+//
+// The artwork is cover-fitted (aspect kept, centre-cropped) rather than
+// stretched, and the name's position is stored as fractions of the ARTWORK, so
+// the name lands on the same rule whether the page is US Letter or A4.
+
+export type PaperFormat = 'us_letter' | 'a4'
+
+export function pageSizeFor(format: PaperFormat): [number, number] {
+  return format === 'a4' ? A4_LANDSCAPE : LETTER_LANDSCAPE
+}
+
+export interface NamePlacement {
+  /** Baseline, as a fraction of artwork height from the top. */
+  nameY: number
+  /** Widest the name may run, as a fraction of artwork width. */
+  nameMaxWidth: number
+  /** Starting size in points on US Letter; scaled with the artwork on A4. */
+  nameSize: number
+}
+
+/** Where the Canva set leaves room: baseline just above the rule at 57%. */
+export const DEFAULT_NAME_PLACEMENT: NamePlacement = { nameY: 0.545, nameMaxWidth: 0.5, nameSize: 40 }
+
+export interface Fit {
+  /** Bottom-left of the drawn image in page points (negative when cropped). */
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** Scale the image to cover the page, keep its aspect ratio, centre-crop. */
+export function coverFit(imgW: number, imgH: number, pageW: number, pageH: number): Fit {
+  const scale = Math.max(pageW / imgW, pageH / imgH)
+  const width = imgW * scale
+  const height = imgH * scale
+  return { x: (pageW - width) / 2, y: (pageH - height) / 2, width, height }
+}
+
+export interface NameBox {
+  centerX: number
+  baselineY: number
+  maxWidth: number
+  size: number
+}
+
+/** Map artwork-relative placement to page points for a given fit. */
+export function nameBox(fit: Fit, placement: NamePlacement, letterFitHeight: number): NameBox {
+  return {
+    centerX: fit.x + fit.width / 2,
+    // PDF y runs up from the bottom; nameY runs down from the top of the art.
+    baselineY: fit.y + fit.height * (1 - placement.nameY),
+    maxWidth: fit.width * placement.nameMaxWidth,
+    // The size was chosen against US Letter; keep it proportional to the art.
+    size: placement.nameSize * (fit.height / letterFitHeight),
+  }
+}
+
+/** Largest size ≤ `size` at which `text` fits `maxWidth` (floor 6pt). */
+export function fittedSize(widthAt: (size: number) => number, size: number, maxWidth: number): number {
+  let fitted = size
+  while (fitted > 6 && widthAt(fitted) > maxWidth) fitted -= 0.5
+  return fitted
+}
+
+function hexToRgb(hex: string) {
+  const h = hex.replace('#', '')
+  return rgb(parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255)
+}
+
+// Aileron is the competition body face (CLAUDE.md: print materials only). Read
+// from public/fonts at request time; next.config.mjs traces it into the routes
+// that render certificates.
+let aileron: Promise<Uint8Array> | null = null
+function loadNameFont(): Promise<Uint8Array> {
+  aileron ??= readFile(path.join(process.cwd(), 'public', 'fonts', 'Aileron-SemiBold.otf')).then((b) => new Uint8Array(b))
+  return aileron
+}
+
+export interface CertificateRecipient {
+  name: string
+}
+
+export class CertificateArtworkError extends Error {}
+
+/**
+ * One page per recipient: the artwork, then the name. Nothing else — the
+ * visible © stamp is left off (the artwork is the whole design) but the
+ * watermark marker is still set so nothing downstream re-stamps it.
+ */
 export async function generateCertificatesPdf(
-  students: { firstName: string; lastName: string }[],
-  eventTitle: string,
-  format: 'us_letter' | 'a4',
-  artwork: Artwork | null
+  recipients: CertificateRecipient[],
+  format: PaperFormat,
+  artwork: Artwork,
+  placement: NamePlacement = DEFAULT_NAME_PLACEMENT,
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold)
-  const regular = await doc.embedFont(StandardFonts.Helvetica)
-  const italic = await doc.embedFont(StandardFonts.HelveticaOblique)
-  const image = artwork ? await embedArtwork(doc, artwork) : null
+  doc.registerFontkit(fontkit)
+  const font = await doc.embedFont(await loadNameFont(), { subset: false })
+  const image = await embedArtwork(doc, artwork)
+  if (!image) throw new CertificateArtworkError('The certificate artwork could not be read. Upload it again as a PNG or JPEG.')
 
-  const size = format === 'a4' ? A4_LANDSCAPE : LETTER_LANDSCAPE
-  const [pageW, pageH] = size
+  const [pageW, pageH] = pageSizeFor(format)
+  const fit = coverFit(image.width, image.height, pageW, pageH)
+  const letterFit = coverFit(image.width, image.height, LETTER_LANDSCAPE[0], LETTER_LANDSCAPE[1])
+  const box = nameBox(fit, placement, letterFit.height)
+  const ink = hexToRgb(tokens.color.ink)
 
-  for (const student of students) {
-    const page = doc.addPage(size)
-    if (image) {
-      page.drawImage(image, { x: 0, y: 0, width: pageW, height: pageH })
-    } else {
-      page.drawRectangle({
-        x: 24,
-        y: 24,
-        width: pageW - 48,
-        height: pageH - 48,
-        borderColor: rgb(0.3, 0.33, 0.85),
-        borderWidth: 2,
-      })
-    }
-
-    const centerX = pageW / 2
-    const maxWidth = pageW - 160
-    drawCentered(page, 'Certificate of Participation', regular, 22, centerX, pageH - 150, maxWidth)
-    drawCentered(page, `${student.firstName} ${student.lastName}`, bold, 44, centerX, pageH / 2 + 10, maxWidth)
-    drawCentered(page, 'participated in', italic, 14, centerX, pageH / 2 - 40, maxWidth)
-    drawCentered(page, eventTitle, bold, 24, centerX, pageH / 2 - 78, maxWidth)
+  for (const r of recipients) {
+    const page = doc.addPage([pageW, pageH])
+    page.drawImage(image, fit)
+    const name = r.name.trim()
+    if (!name) continue
+    const size = fittedSize((s) => font.widthOfTextAtSize(name, s), box.size, box.maxWidth)
+    page.drawText(name, {
+      x: box.centerX - font.widthOfTextAtSize(name, size) / 2,
+      y: box.baselineY,
+      size,
+      font,
+      color: ink,
+    })
   }
 
-  await stampPdfDocument(doc)
+  markWatermarked(doc)
   return doc.save()
 }

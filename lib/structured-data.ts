@@ -59,15 +59,17 @@ export function buildOrganizationJsonLd() {
       url: `${WWW}/images/stellr-logo.png`,
     },
     description:
-      'Stellr Education is a US 501(c)(3) nonprofit running industry-simulation STEM design competitions that connect middle and high school students with practising aerospace, engineering and environmental professionals. Competitions are free for students to enter and the classroom curriculum is free to download.',
+      // Accuracy matters more here than anywhere: assistants quote this. Live
+      // events carry a per-participant fee (varies by event); Campaigns and the core
+      // curriculum are free. "Competitions are free to enter" was wrong.
+      'Stellr Education is a US 501(c)(3) nonprofit running industry-simulation STEM design competitions that connect middle and high school students (grades 7–12) with practising aerospace, engineering and environmental professionals. Classroom Campaigns and the core curriculum are free; live competition events carry a participation fee, with scholarships available.',
     foundingDate: '2021-05',
     nonprofitStatus: 'https://schema.org/Nonprofit501c3',
     areaServed: { '@type': 'Country', name: 'United States' },
-    audience: {
-      '@type': 'EducationalAudience',
-      educationalRole: 'student',
-      audienceType: 'Middle and high school students, college students, and educators',
-    },
+    // No `audience`: schema.org doesn't define it on Organization, and the
+    // validator flagged it on every page (first run, 24 Sept 2026). Who Stellr
+    // serves is in `description`; audience belongs on the Course and
+    // LearningResource nodes, which carry it.
     // The topics we want to be retrieved for — not just the brand name.
     knowsAbout: [
       'STEM education',
@@ -613,5 +615,148 @@ export function buildImpactDatasetJsonLd(
       ...(s.maxValue !== undefined ? { maxValue: s.maxValue } : {}),
     })),
   }
+}
+
+// ── Navigation and learning content ──────────────────────────────────────────
+
+/**
+ * BreadcrumbList for a page's position in the site. Paths are site-relative;
+ * the home crumb is prepended here so callers can't forget it.
+ */
+export function buildBreadcrumbJsonLd(trail: readonly { name: string; path: string }[]) {
+  const items = [{ name: 'Home', path: '' }, ...trail]
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((c, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: c.name,
+      item: `${WWW}${c.path}`,
+    })),
+  }
+}
+
+/**
+ * A free classroom learning resource (tutorial, teacher companion). Every field
+ * comes from the page's own data module, so the markup can't drift from what a
+ * teacher reads — the NGSS codes in particular are the ones listed on the page.
+ */
+export function buildLearningResourceJsonLd(resource: {
+  path: string
+  name: string
+  description: string
+  learningResourceType: string
+  audience: 'student' | 'teacher'
+  educationalLevel: string
+  timeRequired?: string
+  teaches?: readonly string[]
+  standards?: readonly { code: string; label: string }[]
+  isPartOf?: string
+  hasPart?: string
+}) {
+  const url = `${WWW}${resource.path}`
+  return prune({
+    '@context': 'https://schema.org',
+    '@type': 'LearningResource',
+    '@id': `${url}#resource`,
+    name: resource.name,
+    description: resource.description,
+    url,
+    learningResourceType: resource.learningResourceType,
+    educationalLevel: resource.educationalLevel,
+    audience: { '@type': 'EducationalAudience', educationalRole: resource.audience },
+    timeRequired: resource.timeRequired,
+    teaches: resource.teaches,
+    educationalAlignment: resource.standards?.map((s) => ({
+      '@type': 'AlignmentObject',
+      alignmentType: 'teaches',
+      educationalFramework: 'Next Generation Science Standards',
+      targetName: s.code,
+      targetDescription: s.label,
+    })),
+    isAccessibleForFree: true,
+    inLanguage: 'en-US',
+    provider: ORGANIZER,
+    publisher: ORGANIZER,
+    isPartOf: resource.isPartOf ? { '@id': `${WWW}${resource.isPartOf}#resource` } : undefined,
+    hasPart: resource.hasPart ? { '@id': `${WWW}${resource.hasPart}#resource` } : undefined,
+  })
+}
+
+/**
+ * The Academy as a Course with two instances: self-paced online Training (free
+ * tier) and professional-led Mentoring cohorts. Coaching is 1:1 and on request —
+ * a service rather than a course — so it is left out rather than forced into the
+ * wrong type. Keep in step with the `formats` copy on /academy.
+ */
+export function buildAcademyCourseJsonLd(description: string) {
+  const url = `${WWW}/academy`
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Course',
+    '@id': `${url}#course`,
+    name: 'Stellr Academy',
+    description,
+    url,
+    provider: ORGANIZER,
+    educationalLevel: 'High school and college',
+    teaches: ['Competition training', 'STEM career preparation', 'STEM Power Skills'],
+    inLanguage: 'en-US',
+    // The free tier is the entry point the page advertises ("Free, or upgrade").
+    offers: { '@type': 'Offer', category: 'Free', price: '0', priceCurrency: 'USD', url },
+    hasCourseInstance: [
+      {
+        '@type': 'CourseInstance',
+        name: 'Training',
+        description: 'Self-paced courses, reference resources and recorded webinars.',
+        courseMode: 'online',
+        courseWorkload: 'Self-paced',
+      },
+      {
+        '@type': 'CourseInstance',
+        name: 'Mentoring',
+        description: 'A small-group cohort led by a working STEM professional over several weeks.',
+        courseMode: 'online',
+      },
+    ],
+  }
+}
+
+/**
+ * A store product with one Offer per active variant. Prices are the variant's
+ * market price — the figure the page shows before any member discount — so the
+ * markup never advertises a price a visitor can't see.
+ */
+export function buildProductJsonLd(product: {
+  slug: string
+  name: string
+  description: string | null
+  images: string[]
+  variants: readonly { sku: string; label: string | null; market_price_cents: number; active: boolean }[]
+}) {
+  const url = `${WWW}/store/${product.slug}`
+  return prune({
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    '@id': `${url}#product`,
+    name: product.name,
+    description: product.description,
+    image: product.images,
+    brand: { '@type': 'Brand', name: 'Stellr Education' },
+    url,
+    offers: product.variants
+      .filter((v) => v.active)
+      .map((v) => ({
+        '@type': 'Offer',
+        sku: v.sku,
+        name: v.label,
+        price: (v.market_price_cents / 100).toFixed(2),
+        priceCurrency: 'USD',
+        availability: IN_STOCK,
+        seller: ORGANIZER,
+        url,
+      })),
+  })
 }
 

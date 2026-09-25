@@ -15,6 +15,26 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 17 — 24–25 Sept 2026 (event award certificates + credentials)
+
+Branch: `feat/event-award-certificates`. Migration `20260925090000_event_awards.sql`.
+Four certificates per event, fixed and global (`lib/event-awards.ts`): participation, Overall Champion (whole
+company), Anita Gale and Dick Edwards (one winner per company each; one specialist award per student). Each has its
+own artwork; only the name is drawn (Aileron, position set per template with a live preview). Awards are a draft
+until **Issue awards**, which issues/reinstates/revokes credentials. Students download any certificate from
+`/community/credentials`, private or not.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 17.1 | Migration on dev | Applied via MCP 25 Sept, grants checked (`has_table_privilege` true on both new tables). The follow-up `credentials_event_award_type` CHECK went on as a second MCP apply. Ledger rows are `20260925024854 event_awards` and `event_awards_award_type_check` (apply-time versions): the realigning UPDATE was **blocked** by the auto-mode classifier, as in 15.3. | David: `update supabase_migrations.schema_migrations set version = '20260925090000' where name = 'event_awards';` and delete the `event_awards_award_type_check` row (its SQL is in the same file), then `npm run db:status`. | ☐ |
+| 17.2 | Migration on prod | Not applied. Prod has no event credentials yet (11.3), so the unique-index swap is safe. The participation template is backfilled from `event_settings.certificate_artwork_path`. | David applies before promotion (auto mode blocks prod migrations). | ☐ |
+| 17.3 | Verified end-to-end on dev | Real admin UI: uploaded the four Canva PNGs to `colorado-space-design-challenge`. Previews (Letter + A4, long name) put the name on the rule, and nothing else is drawn. Seed event: 409 on a second specialist; `award=all` printed 7 pages (3+2+1+1); issued 4, then 0, then reassign (1 issued, 1 revoked), then give back (1 reinstated, 1 revoked). As Ada: wallet lists 3, award PDF downloads, Grace's returns 404. `e2e/core/credentials.spec.ts` 11/11. `npm run build` green; the font is traced into all 4 rendering routes. Fixture state restored afterwards: awards cleared and issued (4 revoked rows remain on the seed event), Ada's participant unlinked again. | — | ☑ |
+| 17.4 | Dev storage had **no buckets at all** | The session created the private `community-resources` bucket on dev (`storage.buckets`), because every dev upload was failing with "related resource does not exist". No storage policies were added: uploads use service-role signed URLs. | Check whether other dev buckets (proposals, …) are missing too. | ☐ |
+| 17.5 | Visible "© Stellr Education" stamp left off certificate PDFs | Ask: "only student names superimposed". The `stellr-watermarked` keyword is still set (`markWatermarked`), so nothing re-stamps them. Badges and all other PDFs are unchanged. | David: confirm, or re-add `stampPdfDocument` in `generateCertificatesPdf`. | ☐ |
+| 17.6 | Credential ownership follows the participant | `owner_member_id` = the credential's `member_id`, or else the participant's current `member_id`. So a student linked after issue still sees their credentials (wallet, PDF, visibility, page). Participants never linked to a member (no account) still can't. | Decide whether guardians/unlinked students need a download route (e.g. a signed emailed link). | ☐ |
+| 17.7 | Old single-artwork path | `event_settings.certificate_artwork_path` / `certificate_format` are no longer read or written. | Drop both columns one release after prod is on the new table. | ☐ |
+| 17.8 | CO SDC (3 Oct) artwork | Prod still has the old single background (signatures in the older order). | After promotion: upload the four PNGs per award on prod and check a preview. | ☐ |
+
 ## Session 16 — 24 Sept 2026 (duplicate member cleanup; permanent member delete removes the Clerk login)
 
 Handover: `docs/handovers/HANDOVER-member-delete-clerk-login-2026-09-24.md`.
@@ -25,7 +45,7 @@ Doc snapshot: `1A7qdHbe0N3F6LzsLdX2E_6mTrs2HTLRM58C6nvSo2Go`.
 |---|---|---|---|---|
 | 16.0 | Did the three-to-one Jack Campbell cleanup leave any problems? | No. Verified by read-only prod queries and Vercel logs, 24 Sept. One member `e021b94e…`, active, on the CO SDC roster. Both purges are in `deletion_archive`. Registrations `e26afd3a…` and `7c58fc28…` are withdrawn with 0 participants. No leftover references to the 8 IDs outside `audit_log`. Four `DELETE /api/admin/deletion` requests, all 200, no errors. | — | ☑ |
 | 16.1 | HIGH: two Clerk logins still live | `user_3JCv5NpvMg0Uqy089QDVfKqW0gB` (chriscam2@gmail.com) and `user_3JCuVNFLz662M7ogxvvFCycIxal` (aasaldana@gmail.com). A sign-in with either email onboards a new duplicate member. The session declined to delete them: permanently deleting accounts is the maintainer's call. | David: Clerk dashboard → Production → Users → delete both. `user.deleted` will match no row. | ☐ |
-| 16.2 | Permanent member delete also removes the Clerk login | #192 → dev `9741a3d`. `verify` passed every step (log shows `external.test.ts` 9 tests, 86/86 files); `e2e` passed. Staff logins (`admin`, `event_manager`) and logins linked to another member are left in place. Soft delete and Deactivate are unchanged. | Tick when promotion is confirmed in production. | ☐ |
+| 16.2 | Permanent member delete also removes the Clerk login | #192 → dev `9741a3d`. `verify` passed every step (log shows `external.test.ts` 9 tests, 86/86 files); `e2e` passed. Staff logins (`admin`, `event_manager`) and logins linked to another member are left in place. Soft delete and Deactivate are unchanged. **Live 25 Sept 02:49Z:** production `dpl_4um37DRop7Uupo1kae8GsBX1RFmR` (main `bc28af1`, #197) is READY. The first push (#195, `d0f4130`) was rate-limited by Vercel; see `.claude/releases/promote-2026-09-24c.md`. Checked live: www 200, app 307, cron guard 401. | — | ☑ |
 | 16.3 | First real Clerk deletion not seen | Covered only by unit tests with mocks. | On the next real "Permanently delete" of a member, check that the dialog shows no Clerk issue and that the user is gone in Clerk. | ☐ |
 | 16.4 | Logins left behind by earlier purges | 54 member purges since 11 Jun; 30 had `clerk_user_id` in the snapshot. 2 are the Campbells (16.1); 2 are the maintainer's own logins, re-linked to live members (`user_3Exea9…`, `user_3ExgRb5…`: **never delete**); up to 26 others. | Run the query in the handover, check each in Clerk, and delete the ones that aren't staff and have no live member. Related: 15.8. | ☐ |
 | 16.5 | DocuSign warning 21:24:59Z | `No envelope record for e790dae1-f168-8aed-8249-e3306f13f59a`. Most likely the void notice for a deleted participant's envelope, arriving after the row had cascaded away. Unconfirmed. | Optional: DocuSign → e790dae1 should be Voided, with a Campbell recipient. | ☐ |

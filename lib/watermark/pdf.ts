@@ -25,7 +25,8 @@ export function pdfHasWatermark(doc: PDFDocument): boolean {
   return (doc.getKeywords() ?? '').includes(WATERMARK_MARKER)
 }
 
-function markWatermarked(doc: PDFDocument) {
+/** Set the marker without drawing the mark — for print artwork that must carry nothing but its own words. */
+export function markWatermarked(doc: PDFDocument) {
   const existing = doc.getKeywords()
   const parts = existing ? existing.split(/[\s,]+/).filter(Boolean) : []
   if (!parts.includes(WATERMARK_MARKER)) parts.push(WATERMARK_MARKER)

@@ -36,6 +36,15 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     images: [OG_IMAGE.url],
   },
+  // Search Console / Bing Webmaster ownership tags. Env-driven so the tokens
+  // live with the other per-environment config, and emitted only when set —
+  // the dev project must not claim ownership of the production property.
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || undefined,
+    other: process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION
+      ? { 'msvalidate.01': process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION }
+      : undefined,
+  },
 }
 
 // Organization + WebSite JSON-LD, emitted on every page so the entity is

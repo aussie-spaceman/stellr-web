@@ -5,6 +5,8 @@ import { assertNotImpersonating } from '@/lib/impersonation'
 import { getSpaceForMember } from '@/lib/spaces'
 import { getMemberCampaignRegistration } from '@/lib/campaign-registrations'
 import { memberManagesContainer } from '@/lib/resource-upload'
+import { requireEventAccess } from '@/lib/event-access'
+import { AWARD_TYPES } from '@/lib/event-awards'
 
 // Every file upload in the app, in one place.
 //
@@ -95,6 +97,9 @@ async function requireMember(): Promise<CommunityMember | UploadDenied> {
   return member ?? deny('Unauthorised', 401)
 }
 
+// Badge background, or one certificate background per award.
+const EVENT_ARTWORK_KINDS = ['badge', ...AWARD_TYPES.map((t) => `certificate-${t}`)]
+
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const
 const LICENSE_TYPES = [
   'image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/heic', 'application/pdf',
@@ -159,9 +164,12 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     bucket: RESOURCES_BUCKET,
     maxBytes: 10 * MB,
     async grant({ ctx, safeName }) {
-      const denied = await requireAdmin()
-      if (denied) return denied
       if (!ctx.slug || !ctx.kind) return deny('slug and kind required', 400)
+      // Event managers upload their own event's artwork, so this is the event
+      // gate, not the admin one (the claiming route already used it).
+      const access = await requireEventAccess(ctx.slug)
+      if (!access.ok) return deny('Forbidden', access.status)
+      if (!EVENT_ARTWORK_KINDS.includes(ctx.kind)) return deny('Unknown artwork kind', 400)
       return { path: `event-artwork/${ctx.slug}/${ctx.kind}-${Date.now()}-${safeName}` }
     },
   },

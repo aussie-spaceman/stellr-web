@@ -4,26 +4,21 @@ import { useState } from 'react'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { useRouter } from 'next/navigation'
 
-// Badge & certificate generator panel (PRD 6.7).
+// Name badge generator panel (PRD 6.7).
 // Badges: 3x4" landscape, all participants, tiled on US Letter for printing.
-// Certificates: students only, US Letter or A4.
+// Certificates have their own panel, one artwork per award: EventCertificates.
 export default function EventBadges({
   eventSlug,
   hasBadgeArtwork,
-  hasCertificateArtwork,
-  certificateFormat,
 }: {
   eventSlug: string
   hasBadgeArtwork: boolean
-  hasCertificateArtwork: boolean
-  certificateFormat: 'us_letter' | 'a4'
 }) {
   const router = useRouter()
-  const [format, setFormat] = useState<'us_letter' | 'a4'>(certificateFormat)
   const [uploading, setUploading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  async function upload(kind: 'badge' | 'certificate', file: File) {
+  async function upload(kind: 'badge', file: File) {
     setUploading(kind)
     setError(null)
     try {
@@ -48,7 +43,7 @@ export default function EventBadges({
     }
   }
 
-  function UploadInput({ kind, has }: { kind: 'badge' | 'certificate'; has: boolean }) {
+  function UploadInput({ kind, has }: { kind: 'badge'; has: boolean }) {
     return (
       <label className="text-xs text-brand-muted-soft cursor-pointer">
         <span className="underline hover:text-brand-muted">
@@ -72,7 +67,7 @@ export default function EventBadges({
 
   return (
     <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">
-      <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Badges & Certificates</h3>
+      <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Name badges</h3>
       {error && <p className="text-xs text-red-600">{error}</p>}
       <div className="grid md:grid-cols-2 gap-4">
         <div className="border border-brand-border rounded-lg p-4 space-y-2">
@@ -87,27 +82,6 @@ export default function EventBadges({
               className="inline-block text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5 mt-1"
             >
               Download Badges PDF
-            </a>
-          </div>
-        </div>
-        <div className="border border-brand-border rounded-lg p-4 space-y-2">
-          <p className="font-medium text-brand-blue-dark text-sm">Participation Certificates</p>
-          <p className="text-xs text-brand-muted-soft">One per student, landscape, with their full name and the event name.</p>
-          <UploadInput kind="certificate" has={hasCertificateArtwork} />
-          <div className="flex items-center gap-2 mt-1">
-            <select
-              value={format}
-              onChange={(e) => setFormat(e.target.value as 'us_letter' | 'a4')}
-              className="border border-brand-border rounded-lg px-2 py-1.5 text-sm bg-white text-brand-muted"
-            >
-              <option value="us_letter">US Letter</option>
-              <option value="a4">A4</option>
-            </select>
-            <a
-              href={`/api/admin/events/${eventSlug}/certificates?format=${format}`}
-              className="inline-block text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5"
-            >
-              Download Certificates PDF
             </a>
           </div>
         </div>

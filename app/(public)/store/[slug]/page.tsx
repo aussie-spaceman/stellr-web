@@ -5,6 +5,8 @@ import { supabaseServer } from '@/lib/supabase'
 import { AddToCart } from '@/components/store/AddToCart'
 import type { StoreProductWithVariants } from '@/lib/store/types'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
+import { JsonLd } from '@/components/seo/JsonLd'
+import { buildBreadcrumbJsonLd, buildProductJsonLd } from '@/lib/structured-data'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +26,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const product = await load(slug)
   return {
     title: product ? `${product.name} — Stellr Store` : 'Store — Stellr Education',
+    description: product?.description ?? undefined,
     alternates: { canonical: `/store/${slug}` },
   }
 }
@@ -36,6 +39,15 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   return (
     <div className="section-padding">
+      <JsonLd
+        data={[
+          buildProductJsonLd({ ...product, variants: product.variants ?? [] }),
+          buildBreadcrumbJsonLd([
+            { name: 'Store', path: '/store' },
+            { name: product.name, path: `/store/${product.slug}` },
+          ]),
+        ]}
+      />
       <div className="container-max">
         <Link href="/store" className="mb-6 inline-flex items-center gap-1 text-sm text-brand-grey-dark hover:text-brand-blue">
           <ArrowLeft className="h-4 w-4" /> Store

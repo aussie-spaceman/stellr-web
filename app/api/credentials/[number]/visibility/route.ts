@@ -21,7 +21,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ number:
   const { number } = await params
   const db = supabaseServer()
   const cred = await getCredentialByNumber(db, number)
-  if (!cred || cred.member_id !== member.id) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!cred || cred.owner_member_id !== member.id) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const consent = await shareConsentFor(db, cred)
   const result = await setVisibility(db, cred, visibility, consent)

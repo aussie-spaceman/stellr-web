@@ -27,3 +27,6 @@ supabase/.temp/
 
 # clerk configuration (can include secrets)
 /.clerk/
+
+# AEO prompt-panel results (scripts/aeo-prompt-panel.ts) — local, uploaded to the tracker sheet
+.aeo-panel/

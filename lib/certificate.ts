@@ -21,6 +21,10 @@ export interface CertificateInput {
   certNumber: string
   issuedOn: string // pre-formatted date string
   templateBytes?: ArrayBuffer | null
+  /** Default design only. Courses: "Certificate of Completion". */
+  heading?: string
+  /** Default design only, the line before the title. Courses: "has successfully completed". */
+  lead?: string
 }
 
 export async function renderCertificatePdf(input: CertificateInput): Promise<Uint8Array> {
@@ -53,10 +57,10 @@ export async function renderCertificatePdf(input: CertificateInput): Promise<Uin
     page.drawRectangle({ x: 0, y: height - 14, width, height: 14, color: accent })
     page.drawRectangle({ x: 0, y: 0, width, height: 14, color: accent })
     center('STELLR EDUCATION', helvBold, 13, height - 70, accent)
-    center('Certificate of Completion', helvBold, 30, height - 150, ink)
+    center(input.heading ?? 'Certificate of Completion', helvBold, 30, height - 150, ink)
     center('This certifies that', helv, 13, height - 200, muted)
     center(input.memberName, helvBold, 26, height - 245, ink)
-    center('has successfully completed', helv, 13, height - 290, muted)
+    center(input.lead ?? 'has successfully completed', helv, 13, height - 290, muted)
     center(input.courseTitle, helvBold, 20, height - 330, accent)
     center(`Issued ${input.issuedOn} · ${input.issuer}`, helv, 12, 120, muted)
     center(`Certificate No. ${input.certNumber}`, helv, 11, 100, muted)

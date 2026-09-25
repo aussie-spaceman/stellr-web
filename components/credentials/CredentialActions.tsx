@@ -125,6 +125,16 @@ export function CredentialActions(p: Props) {
         <a href="/privacy#credentials" className="underline hover:text-ink">How credentials are shared</a>
       </p>
 
+      {/* The certificate is the holder's own copy — private or not. */}
+      {!isPublic && (
+        <div className="mt-4">
+          <Button variant="softBlue" className="!py-2" href={`/api/credentials/${encodeURIComponent(p.number)}/pdf`}>
+            <FileDown size={16} aria-hidden="true" />
+            Download certificate
+          </Button>
+        </div>
+      )}
+
       {/* ── Share ─────────────────────────────────────────────────────── */}
       {isPublic && (
         <div className="mt-6 border-t border-line-light pt-6">

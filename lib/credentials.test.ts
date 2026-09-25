@@ -32,7 +32,7 @@ function row(over: Partial<CredentialRow> = {}): CredentialRow {
   return {
     id: 'c1', number: 'STL-2026-7K3MQ8ZD', source: 'course', member_id: 'm1', participant_id: null,
     module_id: 'mod1', event_slug: null, recipient_name: 'Ada Lovelace', title: 'Orbital Mechanics 101',
-    description: null, criteria: null, skills: [], issuer: 'Stellr Academy', role_label: null, award: null,
+    description: null, criteria: null, skills: [], issuer: 'Stellr Academy', role_label: null, award: null, award_type: null,
     theme: 'space', badge_path: null, issued_at: '2026-09-01T00:00:00Z', expires_at: null, status: 'issued',
     revoked_at: null, revoked_reason: null, tombstoned_at: null, visibility: 'private', is_minor: false,
     ...over,

@@ -60,7 +60,7 @@ export default async function CredentialPage({ params }: Params) {
   if (!cred) notFound()
 
   const member = await getCurrentMember()
-  const isOwner = !!member && !!cred.member_id && member.id === cred.member_id
+  const isOwner = !!member && !!cred.owner_member_id && member.id === cred.owner_member_id
   const state = credentialState(cred)
 
   // ── Withdrawn: the number still answers, the person is gone ─────────────

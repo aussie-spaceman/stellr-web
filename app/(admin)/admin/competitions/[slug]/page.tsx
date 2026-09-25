@@ -11,6 +11,8 @@ import EventManagerAssignments from '@/components/admin/EventManagerAssignments'
 import { EventVolunteersPanel } from '@/components/admin/competitions/EventVolunteersPanel'
 import EventCompanies, { type CompanyRow } from '@/components/admin/EventCompanies'
 import EventBadges from '@/components/admin/EventBadges'
+import EventCertificates from '@/components/admin/EventCertificates'
+import EventAwards from '@/components/admin/EventAwards'
 import EventCredentials from '@/components/admin/EventCredentials'
 import { RefundPolicyEditor } from '@/components/admin/RefundPolicyEditor'
 import { EventMerchandiseEditor } from '@/components/admin/EventMerchandiseEditor'
@@ -107,11 +109,11 @@ export default async function AdminEventDetailPage({
   }
 
   // ── Settings (live events, settings tab) ──────────────────────────────────
-  let eventSettings: { badge_artwork_path: string | null; certificate_artwork_path: string | null; certificate_format: string | null } | null = null
+  let eventSettings: { badge_artwork_path: string | null } | null = null
   let refundTiers: RefundTier[] = DEFAULT_TIERS
   if (tab === 'settings' && !isCampaign && access.isAdmin) {
     const [{ data: es }, { data: globalPolicy }, { data: eventPolicy }] = await Promise.all([
-      db.from('event_settings').select('badge_artwork_path, certificate_artwork_path, certificate_format').eq('event_slug', slug).maybeSingle(),
+      db.from('event_settings').select('badge_artwork_path').eq('event_slug', slug).maybeSingle(),
       db.from('refund_policies').select('tiers').eq('scope', 'global').maybeSingle(),
       db.from('refund_policies').select('tiers').eq('scope', 'event').eq('event_slug', slug).maybeSingle(),
     ])
@@ -358,9 +360,11 @@ export default async function AdminEventDetailPage({
           <EventBadges
             eventSlug={slug}
             hasBadgeArtwork={Boolean(eventSettings?.badge_artwork_path)}
-            hasCertificateArtwork={Boolean(eventSettings?.certificate_artwork_path)}
-            certificateFormat={(eventSettings?.certificate_format as 'us_letter' | 'a4') ?? 'us_letter'}
           />
+
+          <EventCertificates eventSlug={slug} />
+
+          <EventAwards eventSlug={slug} />
 
           <EventCredentials eventSlug={slug} eventTitle={event.title} />
         </div>

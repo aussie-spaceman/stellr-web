@@ -122,6 +122,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     try {
       const result = await issueCredential(db, {
         source: 'event',
+        awardType: 'participation',
         participantId: p.id,
         memberId: p.member_id,
         eventSlug: slug,

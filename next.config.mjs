@@ -19,6 +19,12 @@ const nextConfig = {
       './node_modules/next/dist/compiled/@vercel/og/**',
     ],
   },
+  // lib/event-pdf.ts reads the certificate name face from public/fonts at
+  // request time; public/ is not traced into functions on its own.
+  outputFileTracingIncludes: {
+    '/api/admin/events/**': ['./public/fonts/Aileron-SemiBold.otf'],
+    '/api/credentials/**': ['./public/fonts/Aileron-SemiBold.otf'],
+  },
   async redirects() {
     return [
       { source: '/login', destination: '/sign-in', permanent: true },

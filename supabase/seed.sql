@@ -303,19 +303,19 @@ on conflict (id) do update set
 
 insert into public.credentials (
   id, number, source, member_id, recipient_name, title, description, criteria,
-  skills, issuer, theme, role_label, is_minor, visibility
+  skills, issuer, theme, role_label, is_minor, visibility, award_type
 ) values
   ('00000000-0000-4000-e000-000000000001', 'STL-2026-E2EGRACE', 'course',
    '00000000-0000-4000-a000-000000000002', 'Grace Teacher',
    'Running a Space Design Competition', 'Completed the educator course on hosting a Stellr competition.',
    'Completed every published lesson.', array['Facilitation', 'STEM pedagogy'],
-   'Stellr Academy', 'space', null, false, 'private'),
+   'Stellr Academy', 'space', null, false, 'private', null),
 
   ('00000000-0000-4000-e000-000000000002', 'STL-2026-E2EADA01', 'event',
    '00000000-0000-4000-a000-000000000001', 'Ada Student',
    'Seed Regional Challenge — Participant', 'Took part in the fixture competition.',
    'Registered and attended.', array['Teamwork'],
-   'Stellr Education', 'space', 'Student', true, 'private')
+   'Stellr Education', 'space', 'Student', true, 'private', 'participation')
 on conflict (number) do update set
   member_id = excluded.member_id,
   recipient_name = excluded.recipient_name,

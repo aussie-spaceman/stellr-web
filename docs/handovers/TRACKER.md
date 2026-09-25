@@ -15,6 +15,26 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 17 — 24–25 Sept 2026 (event award certificates + credentials)
+
+Branch: `feat/event-award-certificates`. Migration `20260925090000_event_awards.sql`.
+Four certificates per event, fixed and global (`lib/event-awards.ts`): participation, Overall Champion (whole
+company), Anita Gale and Dick Edwards (one winner per company each; one specialist award per student). Each has its
+own artwork; only the name is drawn (Aileron, position set per template with a live preview). Awards are a draft
+until **Issue awards**, which issues/reinstates/revokes credentials. Students download any certificate from
+`/community/credentials`, private or not.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 17.1 | Migration on dev | Applied via MCP 25 Sept, grants checked (`has_table_privilege` true on both new tables). The follow-up `credentials_event_award_type` CHECK went on as a second MCP apply. Ledger rows are `20260925024854 event_awards` and `event_awards_award_type_check` (apply-time versions): the realigning UPDATE was **blocked** by the auto-mode classifier, as in 15.3. | David: `update supabase_migrations.schema_migrations set version = '20260925090000' where name = 'event_awards';` and delete the `event_awards_award_type_check` row (its SQL is in the same file), then `npm run db:status`. | ☐ |
+| 17.2 | Migration on prod | Not applied. Prod has no event credentials yet (11.3), so the unique-index swap is safe. The participation template is backfilled from `event_settings.certificate_artwork_path`. | David applies before promotion (auto mode blocks prod migrations). | ☐ |
+| 17.3 | Verified end-to-end on dev | Real admin UI: uploaded the four Canva PNGs to `colorado-space-design-challenge`. Previews (Letter + A4, long name) put the name on the rule, and nothing else is drawn. Seed event: 409 on a second specialist; `award=all` printed 7 pages (3+2+1+1); issued 4, then 0, then reassign (1 issued, 1 revoked), then give back (1 reinstated, 1 revoked). As Ada: wallet lists 3, award PDF downloads, Grace's returns 404. `e2e/core/credentials.spec.ts` 11/11. `npm run build` green; the font is traced into all 4 rendering routes. Fixture state restored afterwards: awards cleared and issued (4 revoked rows remain on the seed event), Ada's participant unlinked again. | — | ☑ |
+| 17.4 | Dev storage had **no buckets at all** | The session created the private `community-resources` bucket on dev (`storage.buckets`), because every dev upload was failing with "related resource does not exist". No storage policies were added: uploads use service-role signed URLs. | Check whether other dev buckets (proposals, …) are missing too. | ☐ |
+| 17.5 | Visible "© Stellr Education" stamp left off certificate PDFs | Ask: "only student names superimposed". The `stellr-watermarked` keyword is still set (`markWatermarked`), so nothing re-stamps them. Badges and all other PDFs are unchanged. | David: confirm, or re-add `stampPdfDocument` in `generateCertificatesPdf`. | ☐ |
+| 17.6 | Credential ownership follows the participant | `owner_member_id` = the credential's `member_id`, or else the participant's current `member_id`. So a student linked after issue still sees their credentials (wallet, PDF, visibility, page). Participants never linked to a member (no account) still can't. | Decide whether guardians/unlinked students need a download route (e.g. a signed emailed link). | ☐ |
+| 17.7 | Old single-artwork path | `event_settings.certificate_artwork_path` / `certificate_format` are no longer read or written. | Drop both columns one release after prod is on the new table. | ☐ |
+| 17.8 | CO SDC (3 Oct) artwork | Prod still has the old single background (signatures in the older order). | After promotion: upload the four PNGs per award on prod and check a preview. | ☐ |
+
 ## Session 16 — 24 Sept 2026 (duplicate member cleanup; permanent member delete removes the Clerk login)
 
 Handover: `docs/handovers/HANDOVER-member-delete-clerk-login-2026-09-24.md`.

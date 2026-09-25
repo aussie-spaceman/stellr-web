@@ -27,6 +27,8 @@ export interface CredentialRow {
   issuer: string
   role_label: string | null
   award: string | null
+  /** Event credentials only: participation or a judged award (lib/event-awards). */
+  award_type: string | null
   theme: CredentialTheme | null
   badge_path: string | null
   issued_at: string
@@ -40,7 +42,7 @@ export interface CredentialRow {
 }
 
 export const CREDENTIAL_COLUMNS =
-  'id, number, source, member_id, participant_id, module_id, event_slug, recipient_name, title, description, criteria, skills, issuer, role_label, award, theme, badge_path, issued_at, expires_at, status, revoked_at, revoked_reason, tombstoned_at, visibility, is_minor'
+  'id, number, source, member_id, participant_id, module_id, event_slug, recipient_name, title, description, criteria, skills, issuer, role_label, award, award_type, theme, badge_path, issued_at, expires_at, status, revoked_at, revoked_reason, tombstoned_at, visibility, is_minor'
 
 /** What a verifier sees: the row's state collapsed to one word. */
 export type CredentialState = 'valid' | 'expired' | 'revoked' | 'withdrawn'

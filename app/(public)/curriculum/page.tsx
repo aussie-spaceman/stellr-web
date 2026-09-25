@@ -11,6 +11,7 @@ import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
 import { PHOTOS, VIDEOS, mediaDownloadUrl } from '@/lib/media-manifest'
 import { getAllCampaigns } from '@/lib/sanity'
 import { getCampaignDates, campaignStatusFromDates, type CampaignSeason } from '@/lib/campaigns'
+import { GuideFaq } from '@/components/guides/GuideFaq'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/curriculum' },
@@ -20,6 +21,32 @@ export const metadata: Metadata = {
 }
 
 export const revalidate = 3600
+
+/* Teacher questions, answered in plain text — rendered visibly and as FAQPage
+   JSON-LD from the same strings. Keep in step with the Material levels section
+   and the campaign pages. */
+const CURRICULUM_FAQS = [
+  {
+    q: 'What does the free Stellr curriculum include?',
+    a: 'A free Educator account gives you the competition material — the Request for Proposal (RFP) and the Mission Handbook — plus teacher and student Campaign guides. Paid educator tiers add lesson plans, worksheets, marking rubrics, PD hours and standards alignment.',
+  },
+  {
+    q: 'Do I need a lab, kit or engineering background?',
+    a: 'No. Students research, design and write a proposal, so a classroom and internet access are enough, and the guides are written for teachers who are not engineers.',
+  },
+  {
+    q: 'How long does it take to run?',
+    a: 'As long as you choose. Use the material on your own schedule, or enter a Campaign, which comes with 4-week and 10-week indicative schedules.',
+  },
+  {
+    q: 'What is the difference between using the material and entering a Campaign?',
+    a: 'The material is yours to use any time, with no deadline. Entering a Fall or Spring Campaign is optional and free: your group submits a proposal by the deadline, receives written feedback from Stellr’s judging panel, and can be invited toward the national championships.',
+  },
+  {
+    q: 'What grades is it for?',
+    a: 'Campaigns are for high school students, grades 9–12. The material builds from first principles, so no prior experience is needed.',
+  },
+] as const
 
 interface Campaign {
   _id: string
@@ -566,6 +593,8 @@ export default async function CampaignsPage() {
           </div>
         </div>
       </section>
+
+      <GuideFaq faqs={CURRICULUM_FAQS} />
 
       {/* ── CTA ───────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden text-white py-20 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(120%_130%_at_15%_0%,#1B2350_0%,#10153A_55%,#0E1330_100%)]">

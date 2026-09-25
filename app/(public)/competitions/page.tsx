@@ -26,11 +26,12 @@ import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { buildCompetitionSeriesJsonLd } from '@/lib/structured-data'
 import { getSeriesMembers } from '@/lib/schema-series'
+import { GuideFaq } from '@/components/guides/GuideFaq'
 
 export const metadata: Metadata = {
   title: 'Competitions',
   description:
-    'Real professional STEM skills for high school students — delivered through competitive, industry-simulation Design Competitions on themes like Space and Environment.',
+    'Industry-simulation STEM Design Competitions for grades 7–12, on Space and Environmental themes: free classroom Campaigns, or one-day live events judged by industry professionals. No lab, kit or engineering background needed.',
   alternates: { canonical: '/competitions' },
 }
 
@@ -138,6 +139,37 @@ const TIER_ITEMS: Record<string, string[]> = Object.fromEntries(
   educatorTiers.map((t, i) => [t.id, educatorTierHighlights(i)]),
 )
 
+/* The questions teachers ask before committing a class — rendered visibly and
+   as FAQPage JSON-LD from the same strings. Fees and grades must match the
+   event and campaign pages (a $75 live-event fee is the Oct 2026 Colorado
+   figure; check the events before changing the wording). */
+const COMPETITION_FAQS = [
+  {
+    q: 'How much does a Stellr competition cost?',
+    a: 'Classroom Campaigns are free — the entry-level Educator membership covers the core material for teachers and students. Live Challenges charge a per-participant fee (for example $75 at the October 2026 Colorado event), which includes a year of Stellr membership, meals and materials. Scholarships are available so cost is never a barrier.',
+  },
+  {
+    q: 'What grades can take part?',
+    a: 'Live Challenges are open to grades 7–12. Campaigns are for high school students, grades 9–12.',
+  },
+  {
+    q: 'Do students need to prepare or have prior experience?',
+    a: 'No. Live Challenges are designed for students to arrive and compete with no preparation, and Campaigns include everything a group needs. Teachers do not need to be engineers or scientists.',
+  },
+  {
+    q: 'How are teams organized?',
+    a: 'At live Challenges, students register individually or in groups of 2–12 and are formed into engineering companies on the day. Campaigns are entered as a group registered by a teacher, mentor or student manager; a school can enter as many groups as it likes.',
+  },
+  {
+    q: 'What do students produce, and who judges it?',
+    a: 'Each team responds to a Request for Proposal with a written proposal (Campaigns) or a live presentation (Challenges). Work is judged by professionals from aerospace, engineering and science industries, and Campaign groups receive written feedback.',
+  },
+  {
+    q: 'Is there a national championship?',
+    a: 'Yes. Winning teams and exceptional individuals from live Challenges and Campaigns can be invited to Stellr’s annual championship event, held in summer.',
+  },
+] as const
+
 const TIER_HIGHLIGHT: Record<string, { badge: string; featured: boolean }> = {
   innovator: { badge: 'Best Value', featured: true },
 }
@@ -168,8 +200,8 @@ export default async function CompetitionsPage() {
         breadcrumb="Educate → Competitions"
         pill={{ accent: 'Themed Competitions', rest: 'In class, or join an event' }}
         title="Design Competitions"
-        lead="Real professional STEM skills for high school students — delivered through competitive, industry-simulation activities."
-        pills={['High school students', 'State & national', 'Free for students to enter']}
+        lead="Real professional STEM skills for middle and high school students — delivered through competitive, industry-simulation activities."
+        pills={['Grades 7–12', 'State & national', 'Campaigns free to enter']}
         media={
           <ResponsivePhoto
             photo={PHOTOS['competitions-3']}
@@ -395,6 +427,8 @@ export default async function CompetitionsPage() {
         align="center"
         photoColumns={3}
       />
+
+      <GuideFaq faqs={COMPETITION_FAQS} />
 
       {/* ── CTA ───────────────────────────────────────────────────────── */}
       <CtaBand

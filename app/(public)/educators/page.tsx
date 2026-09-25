@@ -21,6 +21,32 @@ import {
   GRANT_PROGRAM_YEAR,
   grantAmount,
 } from '@/lib/grant'
+import { GuideFaq } from '@/components/guides/GuideFaq'
+
+/* Rendered visibly and as FAQPage JSON-LD from the same strings. Grant
+   figures come from lib/grant, the same source /grant renders. */
+const EDUCATOR_FAQS = [
+  {
+    q: 'How can a teacher bring Stellr competitions to their school?',
+    a: 'Two ways. Run a free Campaign in class or as a club using Stellr’s material, or bring a team to a one-day live Challenge. Registering as a Stellr Educator is free.',
+  },
+  {
+    q: 'Is there funding for teachers who run Stellr activities?',
+    a: `Yes. The Teacher Grant Program pays US high school teachers up to ${grantAmount(GRANT_AMOUNTS.annualMaximum)} a year for bringing a team to a live Challenge and running a Campaign, plus ${GRANT_PD_HOURS} documented PD contact hours and free Catalyst membership. There are ${GRANT_PLACES} places for ${GRANT_PROGRAM_YEAR}.`,
+  },
+  {
+    q: 'Do Stellr activities count toward PD or CTE hours?',
+    a: 'Stellr provides documented PD contact hours and a statement of the standards covered. Whether they count toward CTE or recertification is decided by your district or state.',
+  },
+  {
+    q: 'Do I have to stay with students at a live Challenge?',
+    a: 'Yes — teachers bringing a team stay at the venue for the day. You don’t need to be an engineer or scientist, and you can join in or use the time for your own work.',
+  },
+  {
+    q: 'How is student information protected?',
+    a: 'Student details are encrypted and stored securely, never shared or sold, and group registration captures the agreements your school requires.',
+  },
+] as const
 
 export const metadata: Metadata = {
   alternates: { canonical: '/educators' },
@@ -281,6 +307,8 @@ export default function EducatorsPage() {
           </div>
         </div>
       </section>
+
+      <GuideFaq faqs={EDUCATOR_FAQS} />
 
       {/* ── Closing CTA ───────────────────────────────────────────────── */}
       <section className="section-padding bg-brand-blue-dark text-white text-center">

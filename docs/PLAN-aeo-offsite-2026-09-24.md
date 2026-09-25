@@ -67,7 +67,9 @@ Add the Wikidata URL to `sameAs` in `lib/structured-data.ts` once the item exist
 
 **Candid (GuideStar)** — claim or complete the profile for EIN 86-2292698: mission, programs (Space Design Challenge, Environmental Design Challenge, Campaigns, Teacher Grant), 2026 participation figures from /impact, and a Seal of Transparency. Assistants use Candid to answer "is X a real nonprofit".
 
-**Verify the five `sameAs` profiles** in a browser (close-out item B4, still open) — curl returns 200 for any path on LinkedIn/Instagram/Facebook.
+**The five `sameAs` profiles are verified** (close-out item B4, closed 24 Sept 2026): LinkedIn, X, Instagram, Facebook ("Stellr Education | West Jordan UT") and YouTube each opened in a browser to Stellr Education's own page.
+
+Wikidata property IDs above are from memory — confirm each on the property page as you enter it.
 
 ## 3. Links from people who already work with Stellr
 

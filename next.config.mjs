@@ -25,6 +25,21 @@ const nextConfig = {
     '/api/admin/events/**': ['./public/fonts/Aileron-SemiBold.otf'],
     '/api/credentials/**': ['./public/fonts/Aileron-SemiBold.otf'],
   },
+  async headers() {
+    return [
+      // One Next app serves both hosts, so every public page (/academy,
+      // /curriculum, /competitions, …) also answers 200 on the member app.
+      // Canonicals already point at www, but a canonical is a hint; this keeps
+      // the app host out of search and AI indexes outright. Headers, not
+      // redirects: signed-in members navigate these pages in-app, and bouncing
+      // them to www mid-session is a UX change this should not make.
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'app.stellreducation.org' }],
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, follow' }],
+      },
+    ]
+  },
   async redirects() {
     return [
       { source: '/login', destination: '/sign-in', permanent: true },

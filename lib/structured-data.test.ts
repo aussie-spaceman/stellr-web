@@ -15,6 +15,9 @@ import {
   buildCompetitionSeriesJsonLd,
   buildEventJsonLd,
   buildCampaignJsonLd,
+  buildBreadcrumbJsonLd,
+  buildLearningResourceJsonLd,
+  buildProductJsonLd,
   type SeriesMember,
 } from './structured-data'
 import type { StellarEvent } from './sanity'
@@ -423,4 +426,54 @@ describe('the published graph', () => {
       expect(nullPaths(graph)).toEqual([])
     })
   }
+})
+
+describe('buildBreadcrumbJsonLd', () => {
+  it('prepends Home and numbers positions from 1', () => {
+    const crumbs = buildBreadcrumbJsonLd([{ name: 'Curriculum', path: '/curriculum' }])
+    expect(crumbs.itemListElement).toEqual([
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://www.stellreducation.org' },
+      { '@type': 'ListItem', position: 2, name: 'Curriculum', item: 'https://www.stellreducation.org/curriculum' },
+    ])
+  })
+})
+
+describe('buildLearningResourceJsonLd', () => {
+  it('carries NGSS codes as alignments and links the teacher companion', () => {
+    const node = buildLearningResourceJsonLd({
+      path: '/curriculum/x',
+      name: 'X',
+      description: 'd',
+      learningResourceType: 'Interactive tutorial',
+      audience: 'student',
+      educationalLevel: 'High school',
+      standards: [{ code: 'HS-ETS1-2', label: 'Design a solution' }],
+      hasPart: '/curriculum/x/teachers',
+    }) as Record<string, unknown>
+    expect(node.educationalAlignment).toEqual([
+      expect.objectContaining({ targetName: 'HS-ETS1-2', educationalFramework: 'Next Generation Science Standards' }),
+    ])
+    expect(node.hasPart).toEqual({ '@id': 'https://www.stellreducation.org/curriculum/x/teachers#resource' })
+    expect(node.isPartOf).toBeUndefined()
+    expect(nullPaths(node)).toEqual([])
+  })
+})
+
+describe('buildProductJsonLd', () => {
+  it('offers only active variants, at the price the page shows', () => {
+    const node = buildProductJsonLd({
+      slug: 'tee',
+      name: 'Tee',
+      description: null,
+      images: [],
+      variants: [
+        { sku: 'T-M', label: 'M', market_price_cents: 2500, active: true },
+        { sku: 'T-L', label: 'L', market_price_cents: 2500, active: false },
+      ],
+    }) as { offers: { sku: string; price: string }[]; description?: unknown; image?: unknown }
+    expect(node.offers.map((o) => [o.sku, o.price])).toEqual([['T-M', '25.00']])
+    // Absent data is omitted, not serialised as null or [].
+    expect(node.description).toBeUndefined()
+    expect(node.image).toBeUndefined()
+  })
 })

@@ -3,14 +3,38 @@ import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { Hero, Button, CtaBand } from '@stellr/web-ui'
 import { AtmosphericRequirements } from '@/components/interactive/atmospheric-requirements'
-import { TUTORIAL_META } from '@/components/interactive/atmospheric-requirements/tutorial-data'
+import { TUTORIAL_META, OBJECTIVES, NGSS } from '@/components/interactive/atmospheric-requirements/tutorial-data'
+import { JsonLd } from '@/components/seo/JsonLd'
+import { buildBreadcrumbJsonLd, buildLearningResourceJsonLd } from '@/lib/structured-data'
+
+const PATH = '/curriculum/atmospheric-requirements'
+const DESCRIPTION =
+  'Work out the air a space settlement needs: convert between total pressure, oxygen partial pressure and percent oxygen, weigh comfort against fire risk, and size the gas required — with interactive calculators.'
 
 export const metadata: Metadata = {
-  alternates: { canonical: '/curriculum/atmospheric-requirements' },
+  alternates: { canonical: PATH },
   title: 'Atmospheric Requirements for Space Settlements — Tutorial',
-  description:
-    'Work out the air a space settlement needs: convert between total pressure, oxygen partial pressure and percent oxygen, weigh comfort against fire risk, and size the gas required — with interactive calculators.',
+  description: DESCRIPTION,
 }
+
+const schema = [
+  buildLearningResourceJsonLd({
+    path: PATH,
+    name: TUTORIAL_META.title,
+    description: DESCRIPTION,
+    learningResourceType: 'Interactive tutorial',
+    audience: 'student',
+    educationalLevel: TUTORIAL_META.level,
+    timeRequired: 'PT60M',
+    teaches: OBJECTIVES,
+    standards: NGSS,
+    hasPart: `${PATH}/teachers`,
+  }),
+  buildBreadcrumbJsonLd([
+    { name: 'Curriculum', path: '/curriculum' },
+    { name: 'Atmospheric requirements', path: PATH },
+  ]),
+]
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 const SIGNUP_URL = `${AUTH_URL}/sign-up`
@@ -20,6 +44,7 @@ const SIGNUP_URL = `${AUTH_URL}/sign-up`
 export default function AtmosphericRequirementsPage() {
   return (
     <>
+      <JsonLd data={schema} />
       <Hero
         breadcrumb="Curriculum · Tutorial"
         title="Estimating atmospheric requirements for space settlements"

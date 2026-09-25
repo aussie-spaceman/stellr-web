@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next'
+import { AI_CRAWLER_TOKENS } from '@/lib/crawlers'
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -6,23 +7,10 @@ const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducatio
  * Answer-engine and AI-training crawlers we explicitly welcome onto the public
  * marketing site. They are already covered by the `*` rule; naming them states
  * the policy (so a future blanket tightening doesn't silently drop them) and
- * lets us keep the member/admin surfaces off-limits per agent.
+ * lets us keep the member/admin surfaces off-limits per agent. The list lives in
+ * lib/crawlers.ts, shared with the proxy that counts their visits.
  */
-const AI_CRAWLERS = [
-  'GPTBot',
-  'OAI-SearchBot',
-  'ChatGPT-User',
-  'ClaudeBot',
-  'Claude-User',
-  'Claude-SearchBot',
-  'PerplexityBot',
-  'Perplexity-User',
-  'Google-Extended',
-  'Applebot-Extended',
-  'CCBot',
-  'Bytespider',
-  'meta-externalagent',
-]
+const AI_CRAWLERS = AI_CRAWLER_TOKENS
 
 /** Never crawlable: CMS, API surface, and anything behind auth. */
 const PRIVATE_PATHS = ['/studio/', '/api/', '/account/', '/admin/', '/community/', '/home/']

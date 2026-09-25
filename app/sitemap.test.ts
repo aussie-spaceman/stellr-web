@@ -1,7 +1,15 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
-import { STATIC_SITEMAP_PATHS, STATIC_ROUTE_EXCLUSIONS, LANDING_PAGE_SITEMAP_PATHS } from './sitemap'
+import { describe, expect, it, vi } from 'vitest'
+import sitemap, { STATIC_SITEMAP_PATHS, STATIC_ROUTE_EXCLUSIONS, LANDING_PAGE_SITEMAP_PATHS } from './sitemap'
+
+vi.mock('@/lib/sanity', () => ({
+  getAllEvents: async () => [
+    { slug: { current: 'live-event' }, _updatedAt: '2026-01-02T00:00:00Z', date: '2027-09-09' },
+  ],
+  getAllCampaigns: async () => [{ slug: { current: 'unedited-campaign' } }],
+  getAllNewsPosts: async () => [],
+}))
 
 /**
  * Guards against the sitemap silently falling behind the routes. Fifteen public
@@ -70,5 +78,26 @@ describe('sitemap static route coverage', () => {
     for (const path of LANDING_PAGE_SITEMAP_PATHS) {
       expect(STATIC_SITEMAP_PATHS).not.toContain(path)
     }
+  })
+})
+
+describe('sitemap lastModified', () => {
+  // The July audit and the August AEO pass both found every static route
+  // reporting "changed just now". A missing lastmod is neutral; a wrong one
+  // teaches crawlers to ignore the field where it is real (Sanity content).
+  it('never stamps an entry with the request time', async () => {
+    const entries = await sitemap()
+    const stampedNow = entries.filter(
+      (e) => e.lastModified && Date.now() - new Date(e.lastModified).getTime() < 60_000
+    )
+    expect(stampedNow.map((e) => e.url)).toEqual([])
+  })
+
+  it('reports the last edit of an event, not the date it takes place', async () => {
+    const entries = await sitemap()
+    expect(entries.find((e) => e.url.endsWith('/events/live-event'))?.lastModified).toEqual(
+      new Date('2026-01-02T00:00:00Z')
+    )
+    expect(entries.find((e) => e.url.endsWith('/events/unedited-campaign'))?.lastModified).toBeUndefined()
   })
 })

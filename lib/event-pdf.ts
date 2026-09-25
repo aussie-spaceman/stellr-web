@@ -2,17 +2,16 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
-import { markWatermarked, stampPdfDocument } from '@/lib/watermark/pdf'
+import { markWatermarked } from '@/lib/watermark/pdf'
 import { tokens } from '@/lib/tokens'
+import { BADGE_FORMATS, badgeName, nameSetting, type BadgeFormat, type NameLine } from '@/lib/badge-layout'
 
 // Badge + certificate PDF generation (PRD 6.7).
-// Badges: 3x4" landscape (user-confirmed size), tiled 2×3 on US Letter for printing.
+// Badges: one label per person on Avery 5392 or 8395 stock (lib/badge-layout.ts).
 // Certificates: one page per recipient, US Letter or A4 landscape. The artwork
 // carries every word but the name; only the name is drawn (see below).
 
 const PT_PER_IN = 72
-const BADGE_W = 4 * PT_PER_IN
-const BADGE_H = 3 * PT_PER_IN
 const LETTER: [number, number] = [8.5 * PT_PER_IN, 11 * PT_PER_IN]
 const LETTER_LANDSCAPE: [number, number] = [11 * PT_PER_IN, 8.5 * PT_PER_IN]
 const A4_LANDSCAPE: [number, number] = [841.89, 595.28]
@@ -60,55 +59,82 @@ function drawCentered(
   })
 }
 
+export interface BadgeArtwork extends Artwork {
+  /** The rule the name sits on; see prepareBadgeArtwork(). */
+  line: NameLine | null
+}
+
+/**
+ * One label per person on the chosen Avery sheet. With artwork, the artwork
+ * is the design and the only thing drawn is the full name, on one line, above
+ * the artwork's rule. Without it, a plain badge: name, then role or company
+ * and the event.
+ *
+ * No visible © stamp: on label stock it would print on a label. The watermark
+ * marker is still set, as for certificates.
+ */
 export async function generateBadgesPdf(
   people: BadgePerson[],
   eventTitle: string,
-  artwork: Artwork | null
+  format: BadgeFormat,
+  artwork: BadgeArtwork | null
 ): Promise<Uint8Array> {
+  const spec = BADGE_FORMATS[format]
   const doc = await PDFDocument.create()
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold)
+  doc.registerFontkit(fontkit)
+  const nameFont = await doc.embedFont(await loadNameFont(), { subset: false })
   const regular = await doc.embedFont(StandardFonts.Helvetica)
   const image = artwork ? await embedArtwork(doc, artwork) : null
-
-  const perRow = 2
-  const perCol = 3
-  const perPage = perRow * perCol
-  const [pageW, pageH] = LETTER
-  const marginX = (pageW - perRow * BADGE_W) / 2
-  const marginY = (pageH - perCol * BADGE_H) / 2
+  const line = image ? (artwork?.line ?? null) : null
+  const [, pageH] = LETTER
+  const perPage = spec.cols * spec.rows
 
   for (let i = 0; i < people.length; i += perPage) {
     const page = doc.addPage(LETTER)
-    const batch = people.slice(i, i + perPage)
-    batch.forEach((person, j) => {
-      const col = j % perRow
-      const row = Math.floor(j / perRow)
-      const x = marginX + col * BADGE_W
-      const y = pageH - marginY - (row + 1) * BADGE_H
-
-      if (image) {
-        page.drawImage(image, { x, y, width: BADGE_W, height: BADGE_H })
+    people.slice(i, i + perPage).forEach((person, j) => {
+      const col = j % spec.cols
+      const row = Math.floor(j / spec.cols)
+      const label = {
+        x: (spec.left + col * spec.pitchX) * PT_PER_IN,
+        y: pageH - (spec.top + row * spec.pitchY + spec.height) * PT_PER_IN,
+        width: spec.width * PT_PER_IN,
+        height: spec.height * PT_PER_IN,
       }
-      // Cut guide
-      page.drawRectangle({
-        x,
-        y,
-        width: BADGE_W,
-        height: BADGE_H,
-        borderColor: rgb(0.8, 0.8, 0.8),
-        borderWidth: 0.5,
+      const bleed = spec.bleed * PT_PER_IN
+      const box = {
+        x: label.x - bleed,
+        y: label.y - bleed,
+        width: label.width + bleed * 2,
+        height: label.height + bleed * 2,
+      }
+
+      if (image) page.drawImage(image, box)
+      if (spec.cutGuides) {
+        page.drawRectangle({ ...label, borderColor: rgb(0.8, 0.8, 0.8), borderWidth: 0.5 })
+      }
+
+      const name = badgeName(person.firstName, person.lastName)
+      const set = nameSetting(box, label, line, spec.maxNameSize)
+      const size = fittedSize((s) => nameFont.widthOfTextAtSize(name, s), set.size, set.maxWidth)
+      const dark = line ? line.backgroundLuma < 110 : false
+      page.drawText(name, {
+        x: set.centerX - nameFont.widthOfTextAtSize(name, size) / 2,
+        y: set.baselineY,
+        size,
+        font: nameFont,
+        color: dark ? rgb(1, 1, 1) : hexToRgb(tokens.color.ink),
       })
 
-      const centerX = x + BADGE_W / 2
-      const maxWidth = BADGE_W - 24
-      drawCentered(page, person.firstName, bold, 26, centerX, y + BADGE_H - 78, maxWidth)
-      drawCentered(page, person.lastName, bold, 20, centerX, y + BADGE_H - 104, maxWidth)
-      drawCentered(page, person.subtitle, regular, 13, centerX, y + 46, maxWidth)
-      drawCentered(page, eventTitle, regular, 9, centerX, y + 20, maxWidth)
+      if (!image) {
+        const maxWidth = label.width - 24
+        const centerX = label.x + label.width / 2
+        drawCentered(page, person.subtitle, regular, 12, centerX, set.baselineY - 28, maxWidth)
+        drawCentered(page, eventTitle, regular, 8, centerX, label.y + 14, maxWidth)
+      }
     })
   }
 
-  await stampPdfDocument(doc)
+  markWatermarked(doc)
   return doc.save()
 }
 

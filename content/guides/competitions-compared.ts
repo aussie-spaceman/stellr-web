@@ -160,11 +160,11 @@ export const PROGRAMS: readonly Program[] = [
     organizer: 'Stellr Education',
     grades: '7–12',
     team: 'Individuals or groups of 2–12, formed into “engineering companies” on the day',
-    cost: 'Per participant — $75 at the Colorado event, Oct 2026; scholarships available',
+    cost: 'Per participant, varies by event; scholarships available',
     equipment: 'None — all material provided; a laptop helps but isn’t required',
     format: 'One day, in person, no preparation required',
     professionals: 'Yes — judges from aerospace, engineering and science industries',
-    sources: ['https://www.stellreducation.org/events/colorado-space-design-challenge'],
+    sources: ['https://www.stellreducation.org/events'],
     stellr: true,
   },
 ]

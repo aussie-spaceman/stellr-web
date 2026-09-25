@@ -42,7 +42,7 @@ or engineering background is needed.
 
 ## Guides for teachers
 - [STEM competitions for your school, compared](${BASE_URL}/guides/stem-competitions-for-schools): Science Olympiad, FIRST, VEX, TSA TEAMS, StellarXplorers, Future City, NASA TechRise, eCYBERMISSION and Stellr side by side — grades, team size, cost, equipment and time, with sources.
-- [How to run an engineering design challenge in your classroom](${BASE_URL}/guides/run-an-engineering-design-challenge): The eight stages, the first session, a worked trade study and how to assess — no lab, kit or engineering background needed.
+- [How to run an engineering design challenge in your classroom](${BASE_URL}/guides/run-an-engineering-design-challenge): A summary of the eight stages and how proposals are judged — no lab, kit or engineering background needed.
 - [Teacher Grant Program](${BASE_URL}/grant): Up to $500 a year plus documented PD hours for US high school teachers who run Stellr activities.
 
 ## Explainers

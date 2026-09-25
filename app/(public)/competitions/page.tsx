@@ -141,12 +141,12 @@ const TIER_ITEMS: Record<string, string[]> = Object.fromEntries(
 
 /* The questions teachers ask before committing a class — rendered visibly and
    as FAQPage JSON-LD from the same strings. Fees and grades must match the
-   event and campaign pages (a $75 live-event fee is the Oct 2026 Colorado
-   figure; check the events before changing the wording). */
+   event and campaign pages. Live-event fees vary by event, so no figure is
+   quoted here — each event page states its own. */
 const COMPETITION_FAQS = [
   {
     q: 'How much does a Stellr competition cost?',
-    a: 'Classroom Campaigns are free — the entry-level Educator membership covers the core material for teachers and students. Live Challenges charge a per-participant fee (for example $75 at the October 2026 Colorado event), which includes a year of Stellr membership, meals and materials. Scholarships are available so cost is never a barrier.',
+    a: 'Classroom Campaigns are free — the entry-level Educator membership covers the core material for teachers and students. Live Challenges charge a per-participant fee that varies by event and includes a year of Stellr membership, meals and materials. Scholarships are available so cost is never a barrier.',
   },
   {
     q: 'What grades can take part?',

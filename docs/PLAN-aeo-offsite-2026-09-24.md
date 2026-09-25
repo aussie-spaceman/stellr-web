@@ -91,4 +91,4 @@ doesn't, and it is exactly what answer engines cite for "competitions near me".
 
 - **Event pages say "Humanities Place In The Solar System"** — should be "Humanity's Place…". It's Sanity content (the event tagline), repeated on every event page.
 - **Campaign dates render as "08-15 – 12-15, 2026"** on /events/space-design-campaign-fall — reads oddly to people and parsers; "15 Aug – 15 Dec 2026".
-- **Campaign Guide (Teacher, ADVANCED) trade-study totals are wrong**: its scores total 3.25 / 2.85 / 3.10, not 3.20 / 2.90 / 3.15, so the sensitivity note ("A and C within 0.05") is also wrong. The public guide page computes the totals in code.
+- **Campaign Guide (Teacher, ADVANCED) trade-study totals are wrong**: its scores total 3.25 / 2.85 / 3.10, not 3.20 / 2.90 / 3.15, so the sensitivity note ("A and C within 0.05") is also wrong. (The public guide is a summary and no longer shows the worked example.)

@@ -60,7 +60,7 @@ export function buildOrganizationJsonLd() {
     },
     description:
       // Accuracy matters more here than anywhere: assistants quote this. Live
-      // events carry a per-participant fee (e.g. $75); Campaigns and the core
+      // events carry a per-participant fee (varies by event); Campaigns and the core
       // curriculum are free. "Competitions are free to enter" was wrong.
       'Stellr Education is a US 501(c)(3) nonprofit running industry-simulation STEM design competitions that connect middle and high school students (grades 7–12) with practising aerospace, engineering and environmental professionals. Classroom Campaigns and the core curriculum are free; live competition events carry a participation fee, with scholarships available.',
     foundingDate: '2021-05',

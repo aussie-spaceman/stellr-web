@@ -2,11 +2,15 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { claimUpload } from '@/lib/uploads'
 import { requireEventAccess } from '@/lib/event-access'
+import { BADGE_FORMATS, badgeFormatForKind } from '@/lib/badge-layout'
+import { prepareBadgeArtwork } from '@/lib/badge-artwork'
 
-// POST /api/admin/events/[slug]/artwork — register the badge background.
-// Body: { kind: 'badge', storagePath, fileType }. Certificate backgrounds, one
-// per award, go through ../certificate-templates.
+// POST /api/admin/events/[slug]/artwork — register a badge background.
+// Body: { kind, storagePath, fileType }, kind being one Avery format's
+// artworkKind (lib/badge-layout.ts). Certificate backgrounds, one per award,
+// go through ../certificate-templates.
 // Stored in the existing private community-resources bucket under event-artwork/.
+// Replies with whether a rule for the name was found, so the panel can say so.
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const access = await requireEventAccess(slug)
@@ -16,16 +20,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   // here. The 10MB this route advertised was never reachable — the platform
   // rejected any body over 4.5MB before the function ran.
   const b = await req.json().catch(() => ({}))
-  const kind = b.kind
+  const format = badgeFormatForKind(b.kind)
   const storagePath = typeof b.storagePath === 'string' ? b.storagePath : ''
   const fileType = typeof b.fileType === 'string' ? b.fileType : ''
-  if (kind !== 'badge' || !storagePath) {
-    return NextResponse.json({ error: 'kind (badge) and storagePath are required' }, { status: 400 })
+  if (!format || !storagePath) {
+    return NextResponse.json({ error: 'A badge kind and storagePath are required' }, { status: 400 })
   }
   if (!['image/png', 'image/jpeg'].includes(fileType)) {
     return NextResponse.json({ error: 'Artwork must be a PNG or JPEG image' }, { status: 400 })
   }
-  if (!storagePath.startsWith(`event-artwork/${slug}/${kind}-`)) {
+  const spec = BADGE_FORMATS[format]
+  if (!storagePath.startsWith(`event-artwork/${slug}/${spec.artworkKind}-`)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -44,11 +49,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
 
   const { error: dbError } = await db
     .from('event_settings')
-    .upsert({ event_slug: slug, badge_artwork_path: storagePath }, { onConflict: 'event_slug' })
+    .upsert({ event_slug: slug, [spec.artworkColumn]: storagePath }, { onConflict: 'event_slug' })
   if (dbError) {
     console.error('[event artwork] settings error:', dbError)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true, path: storagePath })
+  // Advisory only: the artwork is saved either way; with no rule the names
+  // are centred on the label.
+  let lineFound: boolean | null = null
+  try {
+    lineFound = (await prepareBadgeArtwork({ bytes: claimed.bytes, mime: fileType }, format)).line !== null
+  } catch (err) {
+    console.error('[event artwork] line detection failed:', err)
+  }
+
+  return NextResponse.json({ ok: true, path: storagePath, lineFound })
 }

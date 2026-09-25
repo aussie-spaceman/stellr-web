@@ -28,6 +28,8 @@ const staticPaths: { path: string; changeFrequency: MetadataRoute.Sitemap[number
   { path: '/events/why-design-competitions', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/curriculum/atmospheric-requirements', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/curriculum/atmospheric-requirements/teachers', changeFrequency: 'monthly', priority: 0.7 },
+  { path: '/guides/stem-competitions-for-schools', changeFrequency: 'monthly', priority: 0.8 },
+  { path: '/guides/run-an-engineering-design-challenge', changeFrequency: 'monthly', priority: 0.8 },
 
   // Audience landing pages.
   { path: '/students', changeFrequency: 'monthly', priority: 0.8 },

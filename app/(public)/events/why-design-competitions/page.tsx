@@ -141,7 +141,8 @@ export default function WhyDesignCompetitionsPage() {
         <div className="container-max">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
             {[
-              { stat: '90%+', label: 'of participants go on to study STEM at college' },
+              // Must match /impact (the Dataset figure): 85–90%, STEM or medicine.
+              { stat: '85–90%', label: 'of participants go on to study STEM or medicine at college' },
               { stat: 'US-wide', label: 'competitions across multiple states in 2026–27' },
               { stat: '100%', label: 'real-world, industry-simulated challenges' },
             ].map((item) => (

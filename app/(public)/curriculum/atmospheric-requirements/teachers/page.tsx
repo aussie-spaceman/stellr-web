@@ -3,13 +3,38 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Hero, Eyebrow, Button, CtaBand } from '@stellr/web-ui'
 import { OBJECTIVES, NGSS, TUTORIAL_META } from '@/components/interactive/atmospheric-requirements/tutorial-data'
+import { JsonLd } from '@/components/seo/JsonLd'
+import { buildBreadcrumbJsonLd, buildLearningResourceJsonLd } from '@/lib/structured-data'
+
+const TUTORIAL_PATH = '/curriculum/atmospheric-requirements'
+const PATH = `${TUTORIAL_PATH}/teachers`
+const DESCRIPTION =
+  'Facilitation guide for the Atmospheric Requirements tutorial: answer key, timing, common misconceptions, discussion prompts and NGSS alignment.'
 
 export const metadata: Metadata = {
-  alternates: { canonical: '/curriculum/atmospheric-requirements/teachers' },
+  alternates: { canonical: PATH },
   title: 'Atmospheric Requirements — Teacher Companion',
-  description:
-    'Facilitation guide for the Atmospheric Requirements tutorial: answer key, timing, common misconceptions, discussion prompts and NGSS alignment.',
+  description: DESCRIPTION,
 }
+
+const schema = [
+  buildLearningResourceJsonLd({
+    path: PATH,
+    name: 'Atmospheric Requirements — Teacher Companion',
+    description: DESCRIPTION,
+    learningResourceType: 'Teacher guide',
+    audience: 'teacher',
+    educationalLevel: TUTORIAL_META.level,
+    teaches: OBJECTIVES,
+    standards: NGSS,
+    isPartOf: TUTORIAL_PATH,
+  }),
+  buildBreadcrumbJsonLd([
+    { name: 'Curriculum', path: '/curriculum' },
+    { name: 'Atmospheric requirements', path: TUTORIAL_PATH },
+    { name: 'Teacher companion', path: PATH },
+  ]),
+]
 
 const TIMING = [
   { phase: 'Hook & objectives', min: 5, note: 'Frame the design problem: a settlement has to make its own air.' },
@@ -80,6 +105,7 @@ const DISCUSSION = [
 export default function TeacherCompanionPage() {
   return (
     <>
+      <JsonLd data={schema} />
       <Hero
         breadcrumb="Curriculum · Teacher companion"
         title="Atmospheric Requirements — teacher companion"

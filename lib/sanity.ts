@@ -131,7 +131,7 @@ export async function getFeaturedEvents() {
   // The !defined(activityType) guard keeps existing documents visible before migration.
   return client.fetch(`
     *[_type == "event" && featured == true && (activityType == "live_event" || !defined(activityType))] | order(date asc) [0...3] {
-      _id, title, slug, type, gradeLevel, gradeMin, gradeMax, date, endDate, activityType, setting,
+      _id, _updatedAt, title, slug, type, gradeLevel, gradeMin, gradeMax, date, endDate, activityType, setting,
       venue, city, state, tagline, image, registrationOpen,
       registrationOpenDate, registrationCloseDate
     }
@@ -157,7 +157,7 @@ export async function getAllCampaigns() {
   // Fall Aug–Dec of the prior calendar year, then Spring Jan–Apr).
   return client.fetch(`
     *[_type == "event" && activityType == "campaign" && defined(slug.current)] | order(campaignYear asc, season asc) {
-      _id, title, slug, type, gradeLevel, gradeMin, gradeMax, season, campaignYear, deadline, deliverable,
+      _id, _updatedAt, title, slug, type, gradeLevel, gradeMin, gradeMax, season, campaignYear, deadline, deliverable,
       activityType, registrationOpen, tagline, image
     }
   `)
@@ -243,7 +243,7 @@ export async function getAllNewsPosts() {
   if (!client) return null
   return client.fetch(`
     *[_type == "newsPost"] | order(publishedAt desc) {
-      _id, title, slug, publishedAt, category, excerpt, coverImage
+      _id, _updatedAt, title, slug, publishedAt, author, category, excerpt, coverImage
     }
   `)
 }
@@ -263,7 +263,7 @@ export async function getRelatedNewsPosts(category: string, excludeId: string) {
   if (!client) return null
   return client.fetch(
     `*[_type == "newsPost" && category == $category && _id != $excludeId] | order(publishedAt desc) [0...3] {
-      _id, title, slug, publishedAt, category, excerpt, coverImage
+      _id, title, slug, publishedAt, author, category, excerpt, coverImage
     }`,
     { category, excludeId }
   )

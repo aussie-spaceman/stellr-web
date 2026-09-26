@@ -48,7 +48,11 @@ export interface RosterParticipant {
   checked_in_at: string | null
   minor: boolean
   emergency_contact_name: string | null
+  emergency_contact_first_name: string | null
+  emergency_contact_last_name: string | null
   emergency_contact_email: string | null
+  emergency_contact_phone: string | null
+  emergency_contact_relationship: string | null
   paid: boolean
   docusign: 'completed' | 'outstanding' | 'not_required'
   payment_pill: PaymentPill
@@ -125,7 +129,8 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
          participants(id, first_name, last_name, email, grade, gender, date_of_birth, t_shirt_size,
            school_name, event_role, dietary_requirements, health_conditions, company_id,
            checked_in_at, individual_payment_status,
-           emergency_contact_first_name, emergency_contact_last_name, emergency_contact_email)`
+           emergency_contact_first_name, emergency_contact_last_name, emergency_contact_email,
+           emergency_contact_phone, emergency_contact_relationship)`
       )
       .eq('event_slug', eventSlug)
       .neq('status', 'withdrawn')
@@ -268,7 +273,11 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
         checked_in_at: p.checked_in_at as string | null,
         minor,
         emergency_contact_name: ecName,
+        emergency_contact_first_name: (p.emergency_contact_first_name as string | null) || null,
+        emergency_contact_last_name: (p.emergency_contact_last_name as string | null) || null,
         emergency_contact_email: (p.emergency_contact_email as string | null) || null,
+        emergency_contact_phone: (p.emergency_contact_phone as string | null) || null,
+        emergency_contact_relationship: (p.emergency_contact_relationship as string | null) || null,
         paid,
         docusign,
         docusign_label:  description.label,

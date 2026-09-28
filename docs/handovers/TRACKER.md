@@ -15,6 +15,33 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 20 — 25–28 Sept 2026 (admin member save fix)
+
+Handover: `HANDOVER-admin-member-save-2026-09-28.md`. Doc snapshot `1sjjYgozbcup3uM_0dp8v_9Vve2GcbNvKhf8xBlOGdGk`. #210 → promoted in #214 (`1c74f6b`); the merge was run by a separate session.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 20.1 | Admin save fix unexercised | Live since 28 Sept 16:08Z (`dpl_5SPm…`). No admin profile save on prod since; no enum errors in 24 h. Kept despite the no-smoke-test rule: the bug blocked every Adult edit. | Next admin edit of a no-grade member (e.g. David, 0000134) → Save changes. If it fails, note the time and read prod `postgres_logs` for `invalid input value`. | ☐ |
+| 20.2 | No regression test | `PATCH /api/admin/members/[id]` has no unit test. | Vitest: `''` for `grade`/`tshirt_size`/`gender`/`date_of_birth` reaches `.update()` as `null`. | ☐ |
+| 20.3 | Promote Step 6 status check false negative | Commit status `Vercel – stellr-web` on `1c74f6b` = "Canceled by Ignored Build Step" while prod deployment READY. Likely overwritten by Step 8's `dev` fast-forward to the same SHA. | Edit `.claude/skills/promote` Step 6: `list_deployments` (sha, target production) is authoritative; read status before Step 8. | ☐ |
+| 20.4 | Same `''` pass-through in `PATCH /api/members/me` | Latent: `AccountProfile` never sends `gender`/`grade`/`tshirt_size`. `handleSave` ignores the response (silent failure). | When next touched: normalise `''`→`null`; show an error on failure. | ☐ |
+| 20.5 | Admin "Save failed" has no reason | Route returns bare `Update failed`; clearing a required field fails the same way. | Optional: return the Postgres code/column to admin callers. | ☐ |
+| 20.6 | Main checkout stale | Duplicate of 19.3 (same finding, same day). | Track under 19.3. | ☑ |
+| 20.7 | Promotion finished by another session | Verified: merged with a merge commit by aussie-spaceman, READY, record Promoted (#217). | — | ☑ |
+
+## Session 19 — 25–28 Sept 2026 (roster CSV emergency contacts; promotion #214)
+
+PR #215 → `dev` as `e328fd7`; promoted with #210 in #214 (`1c74f6b`, deployment `dpl_5SPmMPw9p2WG4XMiCfVWA9a4XWfg`). No migration.
+Handover: `docs/handovers/HANDOVER-roster-csv-emergency-contacts-2026-09-28.md`. Doc snapshot: `19bmMHe1I5ZZeR812gkLfBLxR-WdFFFYSI5mALmAzLU4`.
+The event roster CSV export now carries each participant's emergency contact first name, last name, relationship, email and phone (from the participant row). Prod: 22/22 active participants have all five.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 19.1 | CSV formula injection / phone mangling | **Closed 28 Sept** (this PR): shared `lib/csv.ts` (`csvCell`/`toCsv`) prefixes a leading `=`, `+`, `-`, `@`, tab or CR with `'`, and quotes as before; 13 unit tests in `lib/csv.test.ts`. Both CSV routes use it — the event roster export and the admin members export (which also now writes empty cells, not `null`). The Google Sheets route is unaffected: it writes with `valueInputOption: 'RAW'`. | — | ☑ |
+| 19.2 | HIGH before 3 Oct: export never opened with real data | **Closed 28 Sept**: David confirmed the export is done and working. | — | ☑ |
+| 19.3 | Local `dev` checkout stale | **Closed 28 Sept**: stashed (`session19: 15 files identical to origin/dev…`; stash diff vs HEAD is empty) and fast-forwarded to `6c2782a`; tree clean. The 3 added files were intent-to-add, which `git stash` refuses — `git reset` them first. | Optional: `git stash drop` that entry. | ☑ |
+| 19.4 | Column naming | **Won't do** (28 Sept): David — keep "Emergency Contact …". | — | ☑ |
+
 ## Session 18 — 25 Sept 2026 (Avery 8395 name badges)
 
 PR #206 → `dev` as `e0f3a91`; promoted in #208 (`868a178`) by a separate session. Migration `20260925140000_badge_8395_artwork.sql`.

@@ -90,7 +90,7 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
 
           <dl className="mt-8 flex flex-wrap gap-x-12 gap-y-4">
             {/* Calendar year, not the school-year brand — Fall 2027 runs in 2026. */}
-            <Stat label="Runs" value={dates ? `${dates.startDate.slice(5)} – ${dates.endDate.slice(5)}, ${dates.calendarYear}` : season} />
+            <Stat label="Runs" value={dates ? `${dayMonth(dates.startDate)} – ${dayMonth(dates.endDate)} ${dates.calendarYear}` : season} />
             <Stat label="Deadline" value={dl?.label ?? 'TBC'} valueClassName="text-star-gold" />
             <Stat label="Cost" value="Free with membership" />
           </dl>
@@ -222,4 +222,12 @@ function Stat({
       <dd className={`mt-1 font-heading text-lg font-bold ${valueClassName}`}>{value}</dd>
     </div>
   )
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** "2026-08-15" → "15 Aug". String maths, not Date, so no timezone can shift the day. */
+function dayMonth(iso: string): string {
+  const [, m, d] = iso.split('-').map(Number)
+  return `${d} ${MONTHS[m - 1]}`
 }

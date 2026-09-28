@@ -18,7 +18,7 @@ tick, not a promise. **Next** is the smallest step that closes the row.
 ## Session 19 — 25–28 Sept 2026 (roster CSV emergency contacts; promotion #214)
 
 PR #215 → `dev` as `e328fd7`; promoted with #210 in #214 (`1c74f6b`, deployment `dpl_5SPmMPw9p2WG4XMiCfVWA9a4XWfg`). No migration.
-Handover: `docs/handovers/HANDOVER-roster-csv-emergency-contacts-2026-09-28.md`. Doc snapshot: see handover PR.
+Handover: `docs/handovers/HANDOVER-roster-csv-emergency-contacts-2026-09-28.md`. Doc snapshot: `19bmMHe1I5ZZeR812gkLfBLxR-WdFFFYSI5mALmAzLU4`.
 The event roster CSV export now carries each participant's emergency contact first name, last name, relationship, email and phone (from the participant row). Prod: 22/22 active participants have all five.
 
 | # | Item | State | Next | Done |

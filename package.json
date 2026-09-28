@@ -12,6 +12,7 @@
     "lint:migrations": "node scripts/check-migration-names.mjs",
     "migration:new": "supabase migration new",
     "db:status": "node scripts/db-status.mjs",
+    "tracker": "node scripts/tracker.mjs",
     "check:deploy-ready": "node scripts/check-deploy-ready.mjs",
     "prebuild": "node design/build-tokens.mjs && node scripts/ds-lint.mjs && node scripts/check-migration-names.mjs && tsx scripts/check-watermarks.ts",
     "build": "next build",

@@ -1,15 +1,28 @@
 # Close-out tracker
 
-The one rolling list of what each session left open, and whether it has since
-been closed. **This file is canonical.** Each close-out appends its own
-section and ticks any earlier row it closed — in the same docs PR as the
-session handover, so a tick is reviewed and lands on `dev` like everything
-else. A Google Doc snapshot may be created per session for reading away from
-the repo; it is a copy, never the source. The Drive connector cannot edit an
-*existing* document's body (15 Sept 2026) — but it **can** create one with a
-body: `create_file` takes `mimeType`, `title` and `content` as base64, and
-uploading base64 HTML with `mimeType: text/html` converts to a real Doc with
-real tables (22 Sept 2026).
+**Frozen for new sessions (28 Sept 2026).** The sections below are history and
+stay here. Every close-out from now on writes **its own file** in
+[`tracker/`](tracker/) instead: `tracker/YYYY-MM-DD-<slug>.md`, from
+[`tracker/_TEMPLATE.md`](tracker/_TEMPLATE.md). `npm run tracker` lists every
+open row across this file and that folder.
+
+WHY: every close-out inserted its section at the same line of this file, so any
+two running at once were a guaranteed merge conflict, and "Session N" was
+numbered from what was on `dev`, so concurrent sessions took the same number or
+landed out of order (21/22/23 on 28 Sept; two "Session 6"s on 15 Sept). One file
+per session, named by its slug, cannot collide.
+
+Rules:
+- **Row IDs are `<slug>.<n>`** (e.g. `email-reminders.3`). The numbered IDs
+  below (`18.2`, `21.4`, …) remain valid references.
+- **Write only your own file.** To close a row that belongs to another session —
+  in this file or in `tracker/` — list it under **Closes** in your own file with
+  how it was verified. Do not edit the other session's table. A session may tick
+  its own rows in a later follow-up.
+- A Google Doc snapshot may be made per session for reading away from the repo;
+  it is a copy, never the source. The Drive connector cannot edit an existing
+  Doc's body, but `create_file` with base64 HTML and `mimeType: text/html`
+  converts to a real Doc with real tables (22 Sept 2026).
 
 Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.

@@ -19,6 +19,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Does this change touch anything the app can run? Handover docs, the close-out
+  # tracker and promotion records cannot break e2e (no code reads docs/ or
+  # .claude/), yet each one used to take a turn in the single repo-wide e2e
+  # queue below. On 28 Sept four close-out PRs plus their dev pushes queued ~8
+  # serial runs, and GitHub's one-pending-job rule cancelled two of them, so
+  # the close-outs sat blocked on each other.
+  #
+  # An explicit allowlist, not `**/*.md`: markdown under app/ or content/ may be
+  # rendered, so it must still be tested. Anything unrecognised — an empty diff,
+  # a new branch, a manual run — counts as code. A push diffs only against the
+  # previous push, so code whose dev-push run was cancelled by a later docs push
+  # is not re-run here; it was already gated by e2e on its own PR, and the
+  # dev → main promotion PR diffs everything.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            # The checkout is GitHub's merge commit: parent 1 is the base.
+            files=$(git diff --name-only HEAD^1 HEAD)
+          elif [ "$EVENT" = push ] && [ -n "$BEFORE" ] && ! echo "$BEFORE" | grep -qE '^0+$' \
+               && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            files=$(git diff --name-only "$BEFORE" HEAD)
+          else
+            files=""
+          fi
+          echo "Changed files:"; echo "${files:-(none resolved)}"
+          code=true
+          if [ -n "$files" ] && ! echo "$files" | grep -qvE '^(docs/|\.claude/)|^[^/]+\.md$'; then
+            code=false
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" = false ]; then
+            echo "Docs-only change: e2e skipped (a skipped job satisfies the required check)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -67,7 +114,9 @@ jobs:
   e2e:
     name: e2e
     runs-on: ubuntu-latest
-    needs: verify
+    needs: [verify, changes]
+    # Skipped (reported as passing) for docs-only changes — see `changes`.
+    if: needs.changes.outputs.code == 'true'
     timeout-minutes: 20
 
     # One e2e job at a time across the whole repo, not per ref. Every run, from

@@ -110,3 +110,4 @@ The sequence is `.claude/skills/close-out`.
   conflict.
 - **`.env.local` drift.** Copied per worktree, so a variable added in one is
   missing in the others. `.env.local.example` is the reference.
+

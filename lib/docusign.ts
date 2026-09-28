@@ -290,24 +290,19 @@ export async function createAdultAgreementEnvelope(p: AdultAgreementParams): Pro
   return { envelopeId: data.envelopeId, signerCount: 1 }
 }
 
-export interface MentorAgreementParams {
-  firstName:  string
-  lastName:   string
-  email:      string
-  phone?:     string
-  eventTitle: string
-}
-
-export async function createMentorAgreementEnvelope(p: MentorAgreementParams): Promise<CreatedEnvelope> {
-  assertCanIssueEnvelopes()
-  if (!ENV.mentorTemplateId) throw new Error('DOCUSIGN_MENTOR_TEMPLATE_ID not configured')
+// Mentor + Stellr representative counter-sign concurrently (identical
+// routingOrder). The 'StellrRepresentative' role must exist on the template; it
+// is only added when DOCUSIGN_STELLR_REP_EMAIL is configured.
+//
+// Per-recipient email subjects, for the same reason as the consent form: with
+// one envelope-level subject the mentor's email and the counter-signer's email
+// were identical — same sender, subject and body. Gmail threads them together,
+// so whoever holds both inboxes (or the rep, forwarding) cannot tell them apart.
+// Seen in prod 28 Sept 2026: David, mentoring Colorado, opened the hello@ copy
+// and counter-signed, and his own mentor signature was never started.
+function mentorAgreementRoles(p: MentorAgreementParams): object[] {
   const fullName = `${p.firstName} ${p.lastName}`
-  const signerCount = ENV.stellrRepEmail ? 2 : 1
-
-  // Mentor + Stellr representative counter-sign concurrently (identical
-  // routingOrder). The 'StellrRepresentative' role must exist on the template;
-  // it is only added when DOCUSIGN_STELLR_REP_EMAIL is configured.
-  const templateRoles: object[] = [{
+  const roles: object[] = [{
     roleName:     'Mentor',
     name:         fullName,
     email:        p.email,
@@ -320,15 +315,41 @@ export async function createMentorAgreementEnvelope(p: MentorAgreementParams): P
         { tabLabel: 'EventTitle',  value: p.eventTitle  },
       ],
     },
+    emailNotification: {
+      emailSubject: `Your signature: Mentor Participation Agreement — ${fullName}`,
+      emailBody:    `${p.firstName}, please review and sign your Mentor Participation Agreement. You need it on file before you can support a Stellr event.`,
+      supportedLanguage: 'en',
+    },
   }]
   if (ENV.stellrRepEmail) {
-    templateRoles.push({
+    roles.push({
       roleName:     'StellrRepresentative',
       name:         ENV.stellrRepName,
       email:        ENV.stellrRepEmail,
       routingOrder: '1',
+      emailNotification: {
+        emailSubject: `Stellr counter-signature: Mentor Participation Agreement — ${fullName}`,
+        emailBody:    `Counter-sign ${fullName}'s Mentor Participation Agreement (${p.email}). This is the Stellr signature only: ${p.firstName} receives a separate email to sign their own part.`,
+        supportedLanguage: 'en',
+      },
     })
   }
+  return roles
+}
+
+export interface MentorAgreementParams {
+  firstName:  string
+  lastName:   string
+  email:      string
+  phone?:     string
+  eventTitle: string
+}
+
+export async function createMentorAgreementEnvelope(p: MentorAgreementParams): Promise<CreatedEnvelope> {
+  assertCanIssueEnvelopes()
+  if (!ENV.mentorTemplateId) throw new Error('DOCUSIGN_MENTOR_TEMPLATE_ID not configured')
+  const signerCount = ENV.stellrRepEmail ? 2 : 1
+  const templateRoles = mentorAgreementRoles(p)
 
   const body = {
     status:       'sent',
@@ -369,34 +390,8 @@ export interface VolunteerAgreementParams {
 export async function createVolunteerAgreementEnvelope(p: VolunteerAgreementParams): Promise<CreatedEnvelope> {
   assertCanIssueEnvelopes()
   if (!ENV.mentorTemplateId) throw new Error('DOCUSIGN_MENTOR_TEMPLATE_ID not configured')
-  const fullName = `${p.firstName} ${p.lastName}`
   const signerCount = ENV.stellrRepEmail ? 2 : 1
-
-  // Volunteer + Stellr representative counter-sign concurrently. The
-  // 'StellrRepresentative' role must exist on the template; it is only added when
-  // DOCUSIGN_STELLR_REP_EMAIL is configured.
-  const templateRoles: object[] = [{
-    roleName:     'Mentor',
-    name:         fullName,
-    email:        p.email,
-    routingOrder: '1',
-    tabs: {
-      textTabs: [
-        { tabLabel: 'MentorName',  value: fullName      },
-        { tabLabel: 'MentorEmail', value: p.email       },
-        { tabLabel: 'MentorPhone', value: p.phone ?? '' },
-        { tabLabel: 'EventTitle',  value: p.eventTitle  },
-      ],
-    },
-  }]
-  if (ENV.stellrRepEmail) {
-    templateRoles.push({
-      roleName:     'StellrRepresentative',
-      name:         ENV.stellrRepName,
-      email:        ENV.stellrRepEmail,
-      routingOrder: '1',
-    })
-  }
+  const templateRoles = mentorAgreementRoles(p)
 
   const body = {
     status:       'sent',

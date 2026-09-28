@@ -97,4 +97,25 @@ describe('createVolunteerAgreementEnvelope', () => {
     const { createVolunteerAgreementEnvelope } = await import('./docusign')
     await expect(createVolunteerAgreementEnvelope(PARAMS)).rejects.toThrow(/DOCUSIGN_MENTOR_TEMPLATE_ID/)
   })
+
+  it('gives the mentor and the counter-signer distinct email subjects', async () => {
+    // Regression (28 Sept 2026): both recipients got the same envelope-level
+    // subject, so the two emails were identical and Gmail threaded them. The
+    // mentor opened the counter-signer's copy and never started their own.
+    for (const fn of ['createVolunteerAgreementEnvelope', 'createMentorAgreementEnvelope'] as const) {
+      vi.resetModules()
+      const sent = stubDocuSign()
+      const mod = await import('./docusign')
+      await mod[fn](PARAMS)
+
+      const roles = (sent.find(c => c.url.endsWith('/envelopes'))!.body.templateRoles ?? []) as {
+        roleName: string; emailNotification?: { emailSubject: string; emailBody: string }
+      }[]
+      const mentor = roles.find(r => r.roleName === 'Mentor')!.emailNotification!
+      const rep    = roles.find(r => r.roleName === 'StellrRepresentative')!.emailNotification!
+      expect(mentor.emailSubject).toMatch(/^Your signature: .*Grace Hopper$/)
+      expect(rep.emailSubject).toMatch(/^Stellr counter-signature: .*Grace Hopper$/)
+      expect(rep.emailBody).toContain('separate email')
+    }
+  })
 })

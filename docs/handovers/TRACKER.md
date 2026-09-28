@@ -15,6 +15,20 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 20 — 25–28 Sept 2026 (admin member save fix)
+
+Handover: `HANDOVER-admin-member-save-2026-09-28.md`. Doc snapshot `1sjjYgozbcup3uM_0dp8v_9Vve2GcbNvKhf8xBlOGdGk`. #210 → promoted in #214 (`1c74f6b`); the merge was run by a separate session.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 20.1 | Admin save fix unexercised | Live since 28 Sept 16:08Z (`dpl_5SPm…`). No admin profile save on prod since; no enum errors in 24 h. Kept despite the no-smoke-test rule: the bug blocked every Adult edit. | Next admin edit of a no-grade member (e.g. David, 0000134) → Save changes. If it fails, note the time and read prod `postgres_logs` for `invalid input value`. | ☐ |
+| 20.2 | No regression test | `PATCH /api/admin/members/[id]` has no unit test. | Vitest: `''` for `grade`/`tshirt_size`/`gender`/`date_of_birth` reaches `.update()` as `null`. | ☐ |
+| 20.3 | Promote Step 6 status check false negative | Commit status `Vercel – stellr-web` on `1c74f6b` = "Canceled by Ignored Build Step" while prod deployment READY. Likely overwritten by Step 8's `dev` fast-forward to the same SHA. | Edit `.claude/skills/promote` Step 6: `list_deployments` (sha, target production) is authoritative; read status before Step 8. | ☐ |
+| 20.4 | Same `''` pass-through in `PATCH /api/members/me` | Latent: `AccountProfile` never sends `gender`/`grade`/`tshirt_size`. `handleSave` ignores the response (silent failure). | When next touched: normalise `''`→`null`; show an error on failure. | ☐ |
+| 20.5 | Admin "Save failed" has no reason | Route returns bare `Update failed`; clearing a required field fails the same way. | Optional: return the Postgres code/column to admin callers. | ☐ |
+| 20.6 | Main checkout stale | `dev` @ `513eb16`, 41 behind; 15 uncommitted files identical to `origin/dev`. | If no session owns it: `git stash && git merge --ff-only origin/dev && git stash drop`. | ☐ |
+| 20.7 | Promotion finished by another session | Verified: merged with a merge commit by aussie-spaceman, READY, record Promoted (#217). | — | ☑ |
+
 ## Session 18 — 25 Sept 2026 (Avery 8395 name badges)
 
 PR #206 → `dev` as `e0f3a91`; promoted in #208 (`868a178`) by a separate session. Migration `20260925140000_badge_8395_artwork.sql`.

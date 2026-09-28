@@ -461,16 +461,34 @@ export function summariseSigners(recipients: EnvelopeRecipient[]): { total: numb
   }
 }
 
-export async function resendEnvelope(envelopeId: string): Promise<void> {
+// Signer states DocuSign will not re-notify (and may reject an update for).
+const FINISHED_SIGNER_STATUSES = new Set(['completed', 'signed', 'declined'])
+
+/**
+ * Re-sends the envelope's notification to the signers who have NOT yet signed.
+ * Returns how many were re-notified (0 when nobody is outstanding).
+ *
+ * Only outstanding signers go in the PUT body. This used to echo back the whole
+ * GET /recipients payload — every signer, the ones who had already signed
+ * included — and on 28 Sept 2026, 9 of the 12 unsigned production envelopes
+ * were part-signed. It had never run in production (zero manual resends, zero
+ * cron chases since 4 Sept), so it is narrowed to the recipients a resend is for.
+ */
+export async function resendEnvelope(envelopeId: string): Promise<number> {
   const recipientsRes = await dsRequest(`/envelopes/${envelopeId}/recipients`)
-  if (!recipientsRes.ok) throw new Error('Failed to fetch envelope recipients')
-  const recipients = await recipientsRes.json()
+  if (!recipientsRes.ok) throw new Error(`Failed to fetch envelope recipients: ${await recipientsRes.text()}`)
+  const recipients = await recipientsRes.json() as { signers?: { status?: string }[] }
+  const outstanding = (recipients.signers ?? []).filter(
+    (s) => !FINISHED_SIGNER_STATUSES.has((s.status ?? '').toLowerCase()),
+  )
+  if (outstanding.length === 0) return 0
 
   const resendRes = await dsRequest(
     `/envelopes/${envelopeId}/recipients?resend_envelope=true`,
-    { method: 'PUT', body: JSON.stringify(recipients) },
+    { method: 'PUT', body: JSON.stringify({ signers: outstanding }) },
   )
   if (!resendRes.ok) throw new Error(`DocuSign resend failed: ${await resendRes.text()}`)
+  return outstanding.length
 }
 
 // Voids an in-flight envelope. DocuSign only allows voiding envelopes that are

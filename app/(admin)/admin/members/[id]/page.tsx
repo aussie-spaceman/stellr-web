@@ -3,6 +3,9 @@ import { notFound } from 'next/navigation'
 import { AdminMemberDetail } from '@/components/admin/AdminMemberDetail'
 import { loadComplianceForMember } from '@/lib/compliance'
 import type { MemberCompliance } from '@/components/admin/MemberCompliancePanel'
+import type { MemberAgreement } from '@/components/admin/MemberAgreementPanel'
+import { loadVolunteerAgreement } from '@/lib/volunteer'
+import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
 
 export const metadata = { title: 'Admin — Member Detail' }
 
@@ -111,6 +114,25 @@ export default async function AdminMemberPage({
         }
       : null
 
+  // Volunteer Agreement (mentor document) — shown for mentors and volunteers,
+  // whether that comes from their account type or an additive role.
+  const { data: roleRows } = await db
+    .from('member_roles')
+    .select('role')
+    .eq('member_id', id)
+    .in('role', ['mentor', 'volunteer'])
+  const eventRole = (member as { event_role?: string | null }).event_role
+  const needsAgreement =
+    (roleRows ?? []).length > 0 || eventRole === 'mentor' || eventRole === 'volunteer'
+  let agreement: MemberAgreement | null = null
+  if (needsAgreement) {
+    const envelope = await loadVolunteerAgreement(db, id)
+    const recipients = envelope
+      ? (await loadRecipientsByEnvelopeRows(db, [envelope.id])).get(envelope.id) ?? []
+      : []
+    agreement = { envelope, recipients }
+  }
+
   // Canonical Membership ID now lives on the members row (migration 036). Fall
   // back to the member's earliest participant id if not yet backfilled.
   const canonicalId = (member as { membership_id?: string | null }).membership_id ?? null
@@ -136,6 +158,7 @@ export default async function AdminMemberPage({
       membershipId={canonicalId ?? (firstParticipant as { membership_id?: string } | null)?.membership_id ?? null}
       activity={activity ?? []}
       compliance={compliance}
+      agreement={agreement}
     />
   )
 }

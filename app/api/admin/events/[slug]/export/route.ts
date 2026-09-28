@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireEventAccess } from '@/lib/event-access'
 import { getEventRoster } from '@/lib/event-admin'
-
-function csvEscape(value: string | null | undefined): string {
-  const s = value ?? ''
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-}
+import { toCsv } from '@/lib/csv'
 
 // GET /api/admin/events/[slug]/export — roster CSV (admins + assigned event managers)
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -18,6 +14,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
   const header = [
     'Registration Type', 'Group', 'First Name', 'Last Name', 'Email', 'Role', 'School', 'Grade',
     'Gender', 'Date of Birth', 'Shirt Size', 'Dietary Requirements', 'Health Conditions',
+    'Emergency Contact First Name', 'Emergency Contact Last Name', 'Emergency Contact Relationship',
+    'Emergency Contact Email', 'Emergency Contact Phone',
     'Paid', 'Payment Status', 'DocuSign', 'DocuSign Status', 'Checked In At',
   ]
   const rows = roster.groups.flatMap((g) =>
@@ -35,6 +33,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
       p.t_shirt_size ?? '',
       p.dietary_requirements.join('; '),
       p.health_conditions ?? '',
+      p.emergency_contact_first_name ?? '',
+      p.emergency_contact_last_name ?? '',
+      p.emergency_contact_relationship ?? '',
+      p.emergency_contact_email ?? '',
+      p.emergency_contact_phone ?? '',
       p.paid ? 'yes' : 'no',
       p.payment_pill,
       p.docusign,
@@ -43,7 +46,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     ])
   )
 
-  const csv = [header, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n')
+  const csv = toCsv([header, ...rows])
   return new NextResponse(csv, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',

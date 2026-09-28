@@ -10,6 +10,7 @@ import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { TERMINAL_SESSION_STATUSES } from '@/lib/deletion/registry'
 import { MemberMembershipManager } from '@/components/admin/MemberMembershipManager'
 import { MemberCompliancePanel, type MemberCompliance } from '@/components/admin/MemberCompliancePanel'
+import { MemberAgreementPanel, type MemberAgreement } from '@/components/admin/MemberAgreementPanel'
 import { MemberAccessPanel } from '@/components/admin/MemberAccessPanel'
 import { MemberSpacesPanel } from '@/components/admin/MemberSpacesPanel'
 import { ActivityTimeline, type ActivityItem } from '@/components/activity/ActivityTimeline'
@@ -92,6 +93,8 @@ interface Props {
   activity: ActivityItem[]
   /** Background-check / license compliance (PRD §13); null when not required. */
   compliance: MemberCompliance | null
+  /** Volunteer Agreement status; null when the member is not a mentor/volunteer. */
+  agreement: MemberAgreement | null
 }
 
 const TIER_TOOLTIPS: Record<string, string> = {
@@ -128,7 +131,7 @@ function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, sessions, membershipId, activity, compliance }: Props) {
+export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, sessions, membershipId, activity, compliance, agreement }: Props) {
   const router = useRouter()
   const [enteringPortal, setEnteringPortal] = useState(false)
   const [inviteSentAt, setInviteSentAt] = useState(member.account_invite_sent_at)
@@ -662,6 +665,8 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           />
 
           <MemberCompliancePanel memberId={member.id} compliance={compliance} />
+
+          <MemberAgreementPanel memberId={member.id} agreement={agreement} />
 
           <div className="bg-white rounded-xl border border-brand-border p-5">
             <MemberAccessPanel memberId={member.id} />

@@ -15,6 +15,19 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 23 — 28 Sept 2026 (admin alerts reached nobody; staff_roles fallback)
+
+Handover: `HANDOVER-admin-alert-fallback-2026-09-28.md`. Doc snapshot `1bq2KZpqGsDKFBbvBQkonDxSGPJMgMbkN6LCNoQjNEh0`. #228 (`c2b38ba`) was promoted in #231 (`b068c86`). Prod `dpl_7vcJ…` is READY. The prod `staff_roles` row for David (`{all}`) was inserted with David's approval.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 23.1 | Admin alerts before 28 Sept were never seen | `staff_roles` was empty, so DocuSign failures, missing-guardian consent, Checkr referred, bounces, payment and training-flag alerts reached nobody. Only the two 28 Sept `ACCOUNT_LACKS_EXTENSIONS_PERMISSIONS` failures are known. | Read-only prod audit: `docusign_envelopes` failed/voided, `docusign_envelope_recipients` bounced, `member_background_checks` flagged/referred, envelopes blocked on a missing guardian. Act on anything unhandled. **Before 3 Oct.** | ☐ |
+| 23.2 | Prod fallback address unconfirmed | Order is `REGISTRATION_ALERT_EMAIL` → `CONTACT_EMAIL` → `hello@`. The Vercel connector gets a 403 when listing envs. | David: check the Production env vars on `stellr-web`, and confirm the inbox is monitored. | ☐ |
+| 23.3 | Clerk admins are not alert recipients | An admin gets alerts only if also granted a scope on `/admin/staff`. This is not documented anywhere. | Add a note on `/admin/staff` and in `ACCESS-CONTROL-HANDOVER.md`, or include Clerk admins in `notifyCommunityAdmins`. | ☐ |
+| 23.4 | Holders who opt out of notifications get nothing | The fallback covers only the zero-holder case. | Also fall back when no holder has in-app or email enabled. | ☐ |
+| 23.5 | Alert HTML is not escaped | `notifyMember` and the fallback put `input.body` into `<p>` raw. Bodies can carry member-entered names. | `escapeHtml` in both paths. | ☐ |
+| 23.6 | Dev `staff_roles` is empty | Every dev alert takes the fallback. | Grant the dev admin test account `{all}`, or accept the fallback. | ☐ |
+
 ## Session 22 — 28 Sept 2026 (mentor Volunteer Agreement on event assignment)
 
 Handover: `HANDOVER-mentor-agreement-2026-09-28.md`.

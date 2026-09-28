@@ -79,6 +79,29 @@ rather than file numbers, from migrations applied through a different path —
 `db:status` reports those as "ledger-only" and they are a historical record, not
 a problem.
 
+## 5. Close-outs: one file per session, and no e2e for docs
+
+Several sessions usually close out within minutes of each other, right after a
+promotion. On 28 Sept four did, and they blocked each other in two ways:
+
+- Every close-out inserted a section at the same line of
+  `docs/handovers/TRACKER.md`, so the second one to merge went `DIRTY`.
+- Every docs PR, and every push to `dev` it caused, took a turn in the
+  repo-wide e2e queue (`ci.yml`: one run at a time, one pending). Runs that were
+  waiting got cancelled and their PRs stayed blocked.
+
+Now:
+- Each session writes `docs/handovers/tracker/YYYY-MM-DD-<slug>.md`.
+- Row IDs are `<slug>.<n>`, not session numbers, so there is nothing to
+  allocate.
+- Another session's rows are closed by reference (`## Closes`), not by
+  editing them.
+- `npm run tracker` shows the combined open list.
+- CI's `changes` job skips e2e when every changed path is under `docs/`,
+  `.claude/` or is a root `*.md`. A skipped job satisfies the required check.
+
+The sequence is `.claude/skills/close-out`.
+
 ## What is still convention rather than mechanism
 
 - **Branch naming.** `feat/`, `fix/`, `chore/` — nothing enforces it.

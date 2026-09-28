@@ -12,6 +12,16 @@
 #   stellr-web      (production)  builds `main` only
 #   stellr-web-dev  (dev)         builds `dev`  only
 #
+# This script cancels a build; it does NOT stop the deployment being created,
+# and a CANCELED deployment still counts toward the Hobby deployments/day limit
+# (100). On 28 Sept 2026, 100 deployments in 4.4 hours hit the limit and 75 of
+# them were cancelled here. So `vercel.json` also sets `git.deploymentEnabled`:
+# only `main` and `dev` create deployments at all (a branch deploys if any
+# matching pattern is true, so `"**": false` plus two `true`s). Feature-branch
+# pushes now cost nothing. This script still matters for the two branches that
+# do deploy: every `dev` push reaches the production project too, and every
+# `main` push reaches the dev project, and one of each pair must be skipped.
+#
 # Anything unrecognised builds, and says why, so a misconfiguration shows up as
 # a stray deployment in the dashboard rather than as silence. Project IDs are in
 # docs/ENV-MATRIX.md.

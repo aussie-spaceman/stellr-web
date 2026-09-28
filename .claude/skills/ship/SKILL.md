@@ -188,7 +188,10 @@ So, in order:
    ships with the code. This is the normal case.
 2. If it is written afterwards (`close-out` does this), it is a new branch from
    `dev`, a docs-only PR, and **that PR is merged before close-out reports
-   done.** CI gates it like anything else; docs-only PRs take ~8 minutes.
+   done.** Follow `.claude/skills/close-out`: one tracker file per session in
+   `docs/handovers/tracker/`, never an edit to `TRACKER.md` or another
+   session's rows. CI skips e2e for docs-only PRs, so they need only `verify`
+   and never queue behind another session's suite.
 3. Check before finishing: `gh pr list --state open --search "handover"` should
    be empty. If it is not, the session is not closed.
 

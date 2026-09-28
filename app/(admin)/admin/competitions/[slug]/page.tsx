@@ -9,6 +9,7 @@ import { getEventRoster } from '@/lib/event-admin'
 import EventRoster from '@/components/admin/EventRoster'
 import EventManagerAssignments from '@/components/admin/EventManagerAssignments'
 import { EventVolunteersPanel } from '@/components/admin/competitions/EventVolunteersPanel'
+import { EventEmailsPanel } from '@/components/admin/competitions/EventEmailsPanel'
 import EventCompanies, { type CompanyRow } from '@/components/admin/EventCompanies'
 import EventBadges from '@/components/admin/EventBadges'
 import EventCertificates from '@/components/admin/EventCertificates'
@@ -23,10 +24,11 @@ import { ContainerTraining, type ContentRow, type ModuleOption } from '@/compone
 export const metadata = { title: 'Admin — Event' }
 export const dynamic = 'force-dynamic'
 
-type Tab = 'overview' | 'roster' | 'training' | 'settings'
+type Tab = 'overview' | 'roster' | 'emails' | 'training' | 'settings'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'roster', label: 'Roster' },
+  { id: 'emails', label: 'Email Reminders' },
   { id: 'training', label: 'Training' },
   { id: 'settings', label: 'Settings' },
 ]
@@ -50,7 +52,7 @@ export default async function AdminEventDetailPage({
 }) {
   const { slug } = await params
   const { tab: rawTab = 'overview' } = await searchParams
-  const tab: Tab = (['overview', 'roster', 'training', 'settings'] as Tab[]).includes(rawTab as Tab)
+  const tab: Tab = TABS.some((t) => t.id === rawTab)
     ? (rawTab as Tab)
     : 'overview'
 
@@ -163,8 +165,9 @@ export default async function AdminEventDetailPage({
     }
   }
 
-  // ── Visible tabs (campaigns skip Settings) ────────────────────────────────
-  const visibleTabs = isCampaign ? TABS.filter((t) => t.id !== 'settings') : TABS
+  // ── Visible tabs (campaigns skip Settings and Email Reminders — a campaign
+  //    has its own proposal emails, and no venue or event day to count down to)
+  const visibleTabs = isCampaign ? TABS.filter((t) => t.id !== 'settings' && t.id !== 'emails') : TABS
 
   const baseHref = `/admin/competitions/${slug}`
 
@@ -293,6 +296,11 @@ export default async function AdminEventDetailPage({
             />
           )}
         </div>
+      )}
+
+      {/* ── Email Reminders (live events only) ─────────────────────────────── */}
+      {tab === 'emails' && !isCampaign && (
+        <EventEmailsPanel eventSlug={slug} eventDate={event.date ?? null} />
       )}
 
       {/* ── Training ───────────────────────────────────────────────────────── */}

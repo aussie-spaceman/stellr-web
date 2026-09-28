@@ -1,6 +1,6 @@
 # Handover — admin alerts reached nobody (28 Sept 2026)
 
-Tracker: TRACKER.md Session 22. Doc snapshot `1Wk9MPA118LLAro-tPBASmkcDrFL8rq3Wso_vBW5Kef4`.
+Tracker: TRACKER.md Session 23. Doc snapshot `1bq2KZpqGsDKFBbvBQkonDxSGPJMgMbkN6LCNoQjNEh0`.
 Code #228 (`c2b38ba`) was promoted by another session in #231 (`b068c86`). Production
 deployment `dpl_7vcJqx5yUzK5g57X6sNaWah9mx11` is READY (checked by SHA).
 
@@ -32,8 +32,8 @@ Affected callers: DocuSign dispatch failure and missing-guardian consent
   defaults.
 - The prod fallback address. The Vercel connector gets a 403 when listing project env vars.
 
-## Open (see TRACKER 22.x)
-1. **22.1 (HIGH, before 3 Oct).** Alerts raised before 28 Sept were never seen. Run a read-only
+## Open (see TRACKER 23.x)
+1. **23.1 (HIGH, before 3 Oct).** Alerts raised before 28 Sept were never seen. Run a read-only
    prod audit:
    - `docusign_envelopes` in failed or voided states
    - `docusign_envelope_recipients` that bounced
@@ -41,13 +41,13 @@ Affected callers: DocuSign dispatch failure and missing-guardian consent
    - envelopes blocked on a missing guardian
 
    Act on anything still unhandled.
-2. **22.2.** David confirms which of `REGISTRATION_ALERT_EMAIL` / `CONTACT_EMAIL` is set on the
+2. **23.2.** David confirms which of `REGISTRATION_ALERT_EMAIL` / `CONTACT_EMAIL` is set on the
    prod project, and that the inbox is monitored.
-3. **22.3.** Document that Clerk admins are not alert recipients, on `/admin/staff` and in
+3. **23.3.** Document that Clerk admins are not alert recipients, on `/admin/staff` and in
    `ACCESS-CONTROL-HANDOVER.md`. Alternatively, have `notifyCommunityAdmins` include Clerk
    admins as well.
-4. **22.4.** If every holder has turned off both in-app and email, alerts vanish again. Extend
+4. **23.4.** If every holder has turned off both in-app and email, alerts vanish again. Extend
    the fallback to cover that case.
-5. **22.5.** `input.body` goes into `<p>` unescaped, in both `notifyMember` and the fallback.
+5. **23.5.** `input.body` goes into `<p>` unescaped, in both `notifyMember` and the fallback.
    Use `escapeHtml`.
-6. **22.6.** Dev has no `staff_roles` rows, so every dev alert takes the fallback.
+6. **23.6.** Dev has no `staff_roles` rows, so every dev alert takes the fallback.

@@ -125,7 +125,8 @@ export async function GET(req: NextRequest) {
               waitingOn:  description.waitingOn.map(r => ({
                 name: r.name || r.email,
                 role: roleLabel(r.role_name),
-                neverOpened: !r.delivered_at,
+                neverOpened: description.neverOpened.includes(r),
+                queued:      description.queued.includes(r),
               })),
             })
           : docusignReminderToSignerEmail({

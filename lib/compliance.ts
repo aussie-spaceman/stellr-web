@@ -268,6 +268,46 @@ export async function loadComplianceRecordsByEmails(
   return out
 }
 
+export interface MemberComplianceRecords extends ComplianceRecords {
+  memberId: string
+  email: string | null
+  dateOfBirth: string | null
+}
+
+/**
+ * Load license + check records for members named by id or by email, in two
+ * queries. Used where the caller holds a mix — e.g. registered mentors (an
+ * email, sometimes a member id) and assigned volunteers (a member id).
+ */
+export async function loadComplianceRecordsForMembers(
+  db: SupabaseClient,
+  ids: string[],
+  emails: string[],
+): Promise<{ byId: Map<string, MemberComplianceRecords>; byEmail: Map<string, MemberComplianceRecords> }> {
+  const byId = new Map<string, MemberComplianceRecords>()
+  const byEmail = new Map<string, MemberComplianceRecords>()
+  const uniqueIds = [...new Set(ids.filter(Boolean))]
+  const uniqueEmails = [...new Set(emails.map((e) => (e ?? '').trim().toLowerCase()).filter(Boolean))]
+
+  const [byIdRes, byEmailRes] = await Promise.all([
+    uniqueIds.length ? db.from('members').select(COMPLIANCE_SELECT).in('id', uniqueIds) : Promise.resolve({ data: [] }),
+    uniqueEmails.length ? db.from('members').select(COMPLIANCE_SELECT).in('email', uniqueEmails) : Promise.resolve({ data: [] }),
+  ])
+  const rows = [...((byIdRes.data as MemberComplianceRow[] | null) ?? []), ...((byEmailRes.data as MemberComplianceRow[] | null) ?? [])]
+  for (const row of rows) {
+    const rec: MemberComplianceRecords = {
+      memberId: row.id,
+      email: row.email,
+      dateOfBirth: row.date_of_birth,
+      license: row.member_teacher_licenses?.[0] ?? null,
+      checks: row.member_background_checks ?? [],
+    }
+    byId.set(row.id, rec)
+    if (row.email) byEmail.set(row.email.toLowerCase(), rec)
+  }
+  return { byId, byEmail }
+}
+
 /** Load and derive a single member's compliance by id. */
 export async function loadComplianceForMember(
   db: SupabaseClient,

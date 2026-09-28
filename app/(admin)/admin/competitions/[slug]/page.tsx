@@ -283,7 +283,7 @@ export default async function AdminEventDetailPage({
       {/* ── Roster ─────────────────────────────────────────────────────────── */}
       {tab === 'roster' && (
         <div className="space-y-6">
-          <EventVolunteersPanel slug={slug} />
+          <EventVolunteersPanel slug={slug} isAdmin={access.isAdmin} />
           {!isCampaign && roster && (
             <EventCompanies eventSlug={slug} companies={companies} studentCount={studentCount} />
           )}
@@ -293,6 +293,7 @@ export default async function AdminEventDetailPage({
               exportHref={`/api/admin/events/${slug}/export`}
               eventSlug={slug}
               companies={companies}
+              isAdmin={access.isAdmin}
             />
           )}
         </div>

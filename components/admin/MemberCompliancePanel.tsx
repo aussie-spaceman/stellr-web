@@ -167,7 +167,7 @@ export function MemberCompliancePanel({
               <p className="text-xs text-amber-600 pt-1">Completed with one or more canceled screenings.</p>
             )}
             {check.provider_report_ref && (
-              <div className="pt-1">
+              <div className="pt-1 flex flex-wrap gap-x-4 gap-y-1">
                 <a
                   href={checkrReportUrl(check.provider_report_ref)}
                   target="_blank"
@@ -176,6 +176,16 @@ export function MemberCompliancePanel({
                 >
                   View report in Checkr ↗
                 </a>
+                {/* Cleared checks only: the PDF is fetched from Checkr on click
+                    and never stored here. */}
+                {compliance.state === 'valid_bc' && (
+                  <a
+                    href={`/api/admin/members/${memberId}/background-check/report`}
+                    className="text-xs font-medium text-brand-blue hover:text-brand-blue-dark"
+                  >
+                    Download Checkr report (PDF)
+                  </a>
+                )}
               </div>
             )}
             {check.adjudicated_at ? (

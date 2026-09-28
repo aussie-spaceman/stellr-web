@@ -28,6 +28,7 @@ import type {
   BackgroundWebhookResult,
   MappedStatus,
 } from '@/lib/background-provider/types'
+import { ReportPdfUnavailableError } from '@/lib/background-provider/types'
 
 const ENV = {
   apiKey:        process.env.CHECKR_API_KEY ?? '',
@@ -139,6 +140,16 @@ interface CheckrReport {
   assessment?: string | null
   includes_canceled?: boolean
   adjudication?: string | null // engaged | pre_adverse_action | post_adverse_action | null
+}
+
+// A report document. GET /reports/{id}?include=documents expands these inline;
+// the customer-facing PDF of the report is type 'pdf_report'. download_uri is a
+// pre-signed link that expires after an hour, so it is fetched, used, and never
+// stored.
+interface CheckrDocument {
+  id?: string
+  type?: string
+  download_uri?: string | null
 }
 
 interface CheckrInvitation {
@@ -342,5 +353,33 @@ export const checkrProvider: BackgroundProvider = {
     }
     // Still pending — nothing to apply.
     return null
+  },
+
+  async fetchReportPdf(reportRef: string): Promise<Uint8Array> {
+    if (!configured()) throw new Error('Checkr not configured (CHECKR_API_KEY / CHECKR_PACKAGE_SLUG)')
+
+    const report = await checkrGet<CheckrReport & { documents?: CheckrDocument[]; document_ids?: string[] }>(
+      `/reports/${encodeURIComponent(reportRef)}?include=documents`,
+    )
+    const isPdf = (d: CheckrDocument) => d.type === 'pdf_report' && !!d.download_uri
+    let docs = report.documents ?? []
+    // Older API versions return only the ids; resolve them one by one.
+    if (!docs.some(isPdf) && report.document_ids?.length) {
+      docs = await Promise.all(report.document_ids.map((id) => checkrGet<CheckrDocument>(`/documents/${encodeURIComponent(id)}`)))
+    }
+    const doc = docs.find(isPdf)
+    if (!doc?.download_uri) throw new ReportPdfUnavailableError(`Checkr has no PDF for report ${reportRef}`)
+
+    // Pre-signed storage URL: no Authorization header (a signed S3 link rejects
+    // one), and https only — it came from Checkr's response, not from us.
+    if (!doc.download_uri.startsWith('https://')) throw new Error(`Checkr PDF link for ${reportRef} is not https`)
+    const res = await fetch(doc.download_uri, { cache: 'no-store' })
+    if (!res.ok) throw new Error(`Checkr PDF download for ${reportRef} failed: ${res.status}`)
+    const bytes = new Uint8Array(await res.arrayBuffer())
+    // "%PDF" — an error page served with 200 must not be merged as a report.
+    if (!(bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46)) {
+      throw new Error(`Checkr PDF download for ${reportRef} did not return a PDF`)
+    }
+    return bytes
   },
 }

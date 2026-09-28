@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { PDFDocument } from 'pdf-lib'
 import sharp from 'sharp'
-import { BADGE_FORMATS, badgeFormatForKind, badgeName, findNameLine, isBadgeFormat, nameSetting } from './badge-layout'
-import { prepareBadgeArtwork } from './badge-artwork'
+import { BADGE_FORMATS, artworkBox, badgeFormatForKind, badgeName, findNameLine, isBadgeFormat, nameSetting, pickTemplate, placementFromLine } from './badge-layout'
+import { prepareBadgeArtwork, wantsLightInk } from './badge-artwork'
 import { generateBadgesPdf } from './event-pdf'
 
 const W = 1000
@@ -31,7 +31,6 @@ describe('findNameLine', () => {
     expect(line!.y).toBeCloseTo(350 / H, 2)
     expect(line!.x0).toBeCloseTo(0.15, 2)
     expect(line!.x1).toBeCloseTo(0.85, 2)
-    expect(line!.backgroundLuma).toBeGreaterThan(200)
   })
 
   it('finds a rule that is not vertically centred', async () => {
@@ -55,7 +54,6 @@ describe('findNameLine', () => {
   it('reads a light rule on a dark background', async () => {
     const line = findNameLine(await raw(await art(rule(380, 150, 850, 4, '#ffffff'), '#0b0e2a')))
     expect(line!.y).toBeCloseTo(380 / H, 2)
-    expect(line!.backgroundLuma).toBeLessThan(60)
   })
 
   it('survives JPEG compression and a hairline', async () => {
@@ -73,25 +71,80 @@ describe('findNameLine', () => {
   })
 })
 
-describe('nameSetting', () => {
-  const box = { x: 0, y: 0, width: 288, height: 216 }
-  const label = { x: 0, width: 288, height: 216 }
+describe('the CO SDC artwork (regression, 28 Sept)', () => {
+  // The real set: a two-line title, a rule that climbs ~8px across 570px,
+  // and ribbon swirls in the corners. The rule was found only from its middle
+  // rightwards, so names sat right of centre and long ones shrank to nothing.
+  const coArt = () =>
+    art(
+      `<text x="500" y="120" font-size="90" text-anchor="middle" font-family="Helvetica" font-weight="bold">2027 SPACE</text>` +
+        `<text x="500" y="210" font-size="90" text-anchor="middle" font-family="Helvetica" font-weight="bold">DESIGN COMPETITION</text>` +
+        `<line x1="230" y1="362" x2="770" y2="352" stroke="#111" stroke-width="3"/>` +
+        `<path d="M0 300 C 120 500, 300 600, 420 700" stroke="#3b64c8" stroke-width="2" fill="none"/>` +
+        `<path d="M0 320 C 140 520, 320 620, 440 700" stroke="#3b64c8" stroke-width="2" fill="none"/>` +
+        `<path d="M1000 480 C 860 520, 800 620, 780 700" stroke="#e0a830" stroke-width="2" fill="none"/>` +
+        `<circle cx="500" cy="560" r="70" fill="#13183a"/>`,
+    )
 
-  it('sets the baseline just above the rule and keeps the name inside the clear space', () => {
-    const line = { y: 0.6, x0: 0.15, x1: 0.85, clear: 0.2, backgroundLuma: 255 }
-    const s = nameSetting(box, label, line, 30)
-    const ruleTop = 216 * 0.4
-    expect(s.baselineY).toBeGreaterThan(ruleTop)
-    // Cap height stays below the top of the clear space.
-    expect(s.baselineY + s.size * 0.75).toBeLessThanOrEqual(ruleTop + 216 * 0.2)
-    expect(s.centerX).toBeCloseTo(144, 6)
-    expect(s.maxWidth).toBeLessThanOrEqual(288 * 0.7)
+  it('finds the whole sloping rule, centred', async () => {
+    const line = findNameLine(await raw(await coArt()))
+    expect(line).not.toBeNull()
+    expect(line!.x0).toBeCloseTo(0.23, 1)
+    expect(line!.x1).toBeCloseTo(0.77, 1)
+    expect((line!.x0 + line!.x1) / 2).toBeCloseTo(0.5, 1)
+    expect(line!.y).toBeGreaterThan(348 / H)
+    expect(line!.y).toBeLessThan(366 / H)
   })
 
-  it('centres on the label when there is no rule', () => {
-    const s = nameSetting(box, label, null, 30)
-    expect(s.size).toBe(30)
-    expect(s.centerX).toBe(144)
+  it('places the name centred, just on the rule, with room for a long name', async () => {
+    const prepared = await prepareBadgeArtwork(await coArt(), 'avery_8395')
+    const p = placementFromLine(prepared.line, 'avery_8395')
+    expect(p.nameX).toBeCloseTo(0.5, 1)
+    // Baseline within ~6pt above the rule's top.
+    const gapPt = (prepared.line!.y - p.nameY) * artworkBox('avery_8395').height
+    expect(gapPt).toBeGreaterThan(0)
+    expect(gapPt).toBeLessThan(6)
+    expect(p.nameMaxWidth).toBeGreaterThanOrEqual(0.6)
+    expect(p.nameSize).toBeLessThanOrEqual(BADGE_FORMATS.avery_8395.maxNameSize)
+    expect(wantsLightInk(prepared.analysis, p, 'avery_8395')).toBe(false)
+  })
+})
+
+describe('placementFromLine', () => {
+  it('stays inside the label when the rule runs to the edge', () => {
+    const p = placementFromLine({ y: 0.6, x0: 0, x1: 1, clear: 0.3 }, 'avery_8395')
+    expect(p.nameX - p.nameMaxWidth / 2).toBeGreaterThan(0.04)
+    expect(p.nameX + p.nameMaxWidth / 2).toBeLessThan(0.96)
+  })
+
+  it('centres the name when there is no rule', () => {
+    const p = placementFromLine(null, 'avery_5392')
+    expect(p.nameX).toBe(0.5)
+    expect(p.nameSize).toBe(BADGE_FORMATS.avery_5392.maxNameSize)
+  })
+
+  it('maps to page points with y up', () => {
+    const s = nameSetting({ x: 10, y: 20, width: 200, height: 100 }, { nameX: 0.5, nameY: 0.25, nameMaxWidth: 0.5, nameSize: 20 })
+    expect(s).toEqual({ centerX: 110, baselineY: 95, maxWidth: 100, size: 20 })
+  })
+})
+
+describe('pickTemplate', () => {
+  const everyone = { audience: 'everyone' as const, companyId: null, id: 'e' }
+  const mentors = { audience: 'mentors' as const, companyId: null, id: 'm' }
+  const c1 = { audience: 'company' as const, companyId: 'c1', id: 'c1' }
+  const all = [everyone, mentors, c1]
+
+  it('prefers the company, then mentors, then everyone', () => {
+    expect(pickTemplate(all, { companyId: 'c1', mentor: false })?.id).toBe('c1')
+    expect(pickTemplate(all, { companyId: 'c2', mentor: false })?.id).toBe('e')
+    expect(pickTemplate(all, { companyId: null, mentor: true })?.id).toBe('m')
+    expect(pickTemplate(all, { companyId: null, mentor: false })?.id).toBe('e')
+  })
+
+  it('falls back to a plain badge with no templates, and mentors to everyone', () => {
+    expect(pickTemplate([], { companyId: null, mentor: true })).toBeNull()
+    expect(pickTemplate([everyone], { companyId: null, mentor: true })?.id).toBe('e')
   })
 })
 
@@ -124,29 +177,41 @@ describe('formats', () => {
 })
 
 describe('generateBadgesPdf', () => {
-  const people = Array.from({ length: 9 }, (_, i) => ({ firstName: `First${i}`, lastName: `Last${i}`, subtitle: 'Student' }))
+  const people = Array.from({ length: 9 }, (_, i) => ({
+    person: { firstName: `First${i}`, lastName: `Last${i}`, subtitle: 'Student' },
+    design: null,
+  }))
 
   it('puts 6 per page on 5392 and 8 per page on 8395', async () => {
-    const a = await PDFDocument.load(await generateBadgesPdf(people, 'Test Event', 'avery_5392', null))
+    const a = await PDFDocument.load(await generateBadgesPdf(people, 'Test Event', 'avery_5392'))
     expect(a.getPageCount()).toBe(2)
-    const b = await PDFDocument.load(await generateBadgesPdf(people, 'Test Event', 'avery_8395', null))
+    const b = await PDFDocument.load(await generateBadgesPdf(people, 'Test Event', 'avery_8395'))
     expect(b.getPageCount()).toBe(2)
     expect(b.getPage(0).getSize()).toEqual({ width: 612, height: 792 })
     expect(b.getKeywords()).toContain('stellr-watermarked')
   })
 
-  it('crops artwork to the label shape and finds its rule', async () => {
+  it('crops artwork to the label shape and mixes designs on one sheet', async () => {
     const prepared = await prepareBadgeArtwork(await art(rule(420)), 'avery_8395')
     const meta = await sharp(Buffer.from(prepared.bytes)).metadata()
     const spec = BADGE_FORMATS.avery_8395
     expect(meta.width! / meta.height!).toBeCloseTo((spec.width + 2 * spec.bleed) / (spec.height + 2 * spec.bleed), 2)
-    expect(prepared.line).not.toBeNull()
+    const design = { key: 't1', artwork: prepared, placement: placementFromLine(prepared.line, 'avery_8395'), lightInk: false }
     const pdf = await generateBadgesPdf(
-      [{ firstName: 'Maximiliana-Josephine', lastName: 'Worthington-Fotheringham', subtitle: 'Mentor' }],
+      [
+        { person: { firstName: 'Maximiliana-Josephine', lastName: 'Worthington-Fotheringham', subtitle: 'Mentor' }, design },
+        { person: { firstName: 'Leon', lastName: 'Buk', subtitle: 'Student' }, design: null },
+      ],
       'Test Event',
       'avery_8395',
-      prepared,
     )
     expect((await PDFDocument.load(pdf)).getPageCount()).toBe(1)
+  })
+
+  it('renders a single label page for the preview', async () => {
+    const pdf = await generateBadgesPdf(people.slice(0, 1), '', 'avery_8395', { single: true })
+    const size = (await PDFDocument.load(pdf)).getPage(0).getSize()
+    expect(size.width).toBeCloseTo(artworkBox('avery_8395').width, 3)
+    expect(size.height).toBeCloseTo(artworkBox('avery_8395').height, 3)
   })
 })

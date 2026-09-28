@@ -109,17 +109,16 @@ export default async function AdminEventDetailPage({
   }
 
   // ── Settings (live events, settings tab) ──────────────────────────────────
-  let eventSettings: { badge_artwork_path: string | null; badge_8395_artwork_path: string | null } | null = null
+  // Badges and certificates load their own templates; this is the refund
+  // editor's, which only admins see.
   let refundTiers: RefundTier[] = DEFAULT_TIERS
-  // Event managers see the settings tab too (badges, certificates), so load it
-  // for them; the refund editor that uses the policy rows is admin-only.
-  if (tab === 'settings' && !isCampaign) {
-    const [{ data: es }, { data: globalPolicy }, { data: eventPolicy }] = await Promise.all([
-      db.from('event_settings').select('badge_artwork_path, badge_8395_artwork_path').eq('event_slug', slug).maybeSingle(),
+  let hasRefundOverride = false
+  if (tab === 'settings' && !isCampaign && access.isAdmin) {
+    const [{ data: globalPolicy }, { data: eventPolicy }] = await Promise.all([
       db.from('refund_policies').select('tiers').eq('scope', 'global').maybeSingle(),
       db.from('refund_policies').select('tiers').eq('scope', 'event').eq('event_slug', slug).maybeSingle(),
     ])
-    eventSettings = es ?? null
+    hasRefundOverride = Boolean(eventPolicy)
     refundTiers = (eventPolicy?.tiers as RefundTier[]) ?? (globalPolicy?.tiers as RefundTier[]) ?? DEFAULT_TIERS
   }
 
@@ -327,7 +326,7 @@ export default async function AdminEventDetailPage({
               <div>
                 <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Refund Policy</h2>
                 <p className="text-xs text-brand-muted-soft mt-1">
-                  {eventSettings ? 'This event uses a custom override.' : 'Using the global default. Save below to override for this event only.'}
+                  {hasRefundOverride ? 'This event uses a custom override.' : 'Using the global default. Save below to override for this event only.'}
                 </p>
               </div>
               <div className="bg-white rounded-xl border border-brand-border p-5">
@@ -335,7 +334,7 @@ export default async function AdminEventDetailPage({
                   scope="event"
                   eventSlug={slug}
                   initialTiers={refundTiers}
-                  hasOverride={Boolean(eventSettings)}
+                  hasOverride={hasRefundOverride}
                 />
               </div>
             </section>
@@ -359,13 +358,7 @@ export default async function AdminEventDetailPage({
             />
           </section>
 
-          <EventBadges
-            eventSlug={slug}
-            artworkSet={{
-              avery_5392: Boolean(eventSettings?.badge_artwork_path),
-              avery_8395: Boolean(eventSettings?.badge_8395_artwork_path),
-            }}
-          />
+          <EventBadges eventSlug={slug} />
 
           <EventCertificates eventSlug={slug} />
 

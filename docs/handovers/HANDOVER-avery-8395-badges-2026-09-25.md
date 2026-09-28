@@ -63,3 +63,7 @@ See `TRACKER.md` Session 18: 18.1–18.7.
 | Page | The refund override label now reads `refund_policies` (18.10). |
 
 Verified: 907 unit tests, including a synthetic replica of the CO artwork. The real CO background, extracted from the export, was re-rendered locally: names centred on the line at 22pt, and only a 30-character name shrinks.
+
+**Landed:** #225 → `dev` `2b7b159`, promoted #231 (`b068c86`). Prod has one row: the CO SDC 8395 Everyone template, backfilled and unpositioned, so it uses render-time detection until someone saves a position (18.3). Open: 18.1–18.6, 18.9, 18.11, 18.12.
+
+**Lesson:** never hand-pick a migration version. Two sessions' PRs were open at once with the same one, and a ledger check by version alone "passed" on the other migration's row. Check by `name` too.

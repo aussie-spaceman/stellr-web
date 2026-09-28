@@ -1,7 +1,6 @@
 # HANDOVER — Event Email Reminders + DocuSign re-issue (28 Sept 2026)
 
-**Status:** Phase 1 merged to `dev` (#224, `fd35306`). Phase 2 on the PR carrying this file. **Nothing is in production yet.**
-Colorado SDC is **3 Oct**; the DocuSign catch-up (§4) only helps if Phase 1 is promoted before then.
+**Status:** **In production since 28 Sept 18:58Z** — #224 + #229 (+ #230) promoted in #231 → `b068c86`, deployment `dpl_7vcJqx5yUzK5g57X6sNaWah9mx11`; rollback `dpl_Bq8NKBxVVEcB9E6y6psd4nA1kicx`. Production migrations applied before the merge. Colorado SDC is **3 Oct** — see §6 for what is still owed before then.
 
 ## 1. Why
 
@@ -83,7 +82,7 @@ Reminders for the Colorado SDC went out by hand from Outlook on 26–28 Sept. Th
 - Outlook's rendering of the signature table.
 - The Vercel crons firing in production (see §5).
 
-## 4. To do at promote (David)
+## 4. To do at promote (David) — DONE 28 Sept except items 2–4, carried into §6
 
 1. **Production migrations**, before the code merges: `20260928180000_cron_runs.sql`, then `20260928200000_event_emails.sql`.
 2. **DocuSign catch-up** once Phase 1 is live. Dry run first, then again with `--apply`:
@@ -95,3 +94,36 @@ Reminders for the Colorado SDC went out by hand from Outlook on 26–28 Sept. Th
 ## 5. Open
 
 See TRACKER Session 21.
+
+## 6. Close-out (28 Sept 2026, ~19:50Z)
+
+Snapshot for reading away from the repo: Google Doc `1AFoD3rCYkxw0VNmk090kUTR8IusoLTWhx-1YRN6dlAU`. The TRACKER (Session 21) is canonical.
+
+**Asked for and not done:**
+- **Re-sending the outstanding DocuSigns (TRACKER 21.3).** The user asked for this to be part of the session. The tooling shipped, but **no envelope has been resent**. At 19:45Z production showed 10 Colorado and 2 Nevada unsigned, and 0 manual resends.
+- It was held back on purpose. If the fixed `docusign-reminders` cron chases at 09:00 UTC on 29 Sept, running the script as well would email the same families twice.
+- The plan said "12 re-sent now". That became a 6-envelope script scope.
+- **Owed before 3 Oct:**
+  1. Read `cron_runs` after the 09:00 UTC run on 29 Sept. If the cron chased, stop there.
+  2. Otherwise run the script: dry run first, then `--apply`.
+  3. On 1 Oct, use the roster button for anything still unsigned.
+
+**Done differently from the request:**
+- **Scheduling is by day, not time of day (21.9).**
+- **Group payment reminders go to the teacher only (21.10).**
+- **The signature rebrand line is left out (21.11).** This was never explicitly answered.
+
+**Assumed done, but not done:**
+- **The cron root cause is unconfirmed (21.1).** The earliest proof is an `event-emails` row in `cron_runs` after 20:00Z on 28 Sept. At 19:46Z there were no rows, and the new deployment's logs held only our own 401 probes.
+- **The admin resend route was not moved onto the shared helper (21.12).**
+- **No real email has been sent from the tab (21.4).** High criticality: the first real send goes to families.
+- **The event-manager path was never tried in a browser (21.13).**
+
+**Where to start a new session:**
+1. `select * from cron_runs order by started_at desc` on production (`hwtzpfrnksksxlwwabqz`).
+2. `select event_slug, status, count(*) from docusign_envelopes where event_slug in ('colorado-space-design-challenge','nevada-space-design-challenge') group by 1,2`.
+3. Act on 21.1 and 21.3 in that order.
+
+Other facts a new session needs:
+- Prod MCP `apply_migration` was allowed on 28 Sept, after in-session approval.
+- `psql` is not installed on this Mac, so `db:status` cannot run. Read the ledger over MCP instead.

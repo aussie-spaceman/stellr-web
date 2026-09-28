@@ -29,21 +29,40 @@ git log --oneline origin/main..origin/dev
 git diff --stat origin/main...origin/dev
 ```
 
-If `dev` is **behind** `main` — a hotfix landed directly, or a previous
-promotion's merge commit — sync before anything else, or the promotion will
-carry a stale tree:
+If `dev` is **behind** `main`, sync before anything else, or the promotion will
+carry a stale tree. Since Step 8 merges `main` into `dev`, this should only
+happen after a hotfix landed on `main` directly. First compare trees: if
+`git rev-parse origin/main^{tree}` equals the tree of
+`git merge-base origin/main origin/dev`, the gap is merge commits only, with no
+content, and a sync is not needed:
 
 ```bash
 git checkout dev && git merge origin/main --no-edit && git push origin dev
 ```
 
-Write the state to `.claude/releases/promote-<YYYY-MM-DD>.md` and keep it
-current after every step. It is committed — on a normal branch → PR → `dev`,
-never straight to `dev` — so the rollback target outlives the checkout that
-wrote it (the 10 Sept record survived only because it was rescued from a
-worktree minutes before that worktree was deleted). A promotion spans async
-gaps and `dev` keeps moving; the doc is the source of truth for "where are
-we", not the conversation.
+**Is a promotion already in progress?** `gh pr list --base main --head dev
+--state open`. GitHub allows only one open PR per head and base, so this
+answers the question for every session. If one exists, finish that promotion
+instead of starting a second (22 Sept: two sessions promoted the same `dev`,
+and a migration was applied twice).
+
+Keep the state in `.claude/releases/promote-<YYYY-MM-DD>.md` in your worktree,
+and current after every step, but **do not commit it until Step 8**. While the
+promotion runs, **the promotion PR body is the durable record**. It lives on
+GitHub, so the rollback target outlives any checkout: the 10 Sept record
+survived only because it was rescued from a worktree minutes before the
+worktree was deleted. Update the body (`gh pr edit <n> --body-file <file>`)
+whenever the record changes. A promotion spans async gaps and `dev` keeps
+moving; the record is the source of truth for "where are we", not the
+conversation.
+
+WHY not a record PR per step (28 Sept 2026): every merge into `dev` is a
+deployment on **both** Vercel projects (one builds, the other is cancelled but
+still counted). Each promotion used to land 2–3 record PRs ("record", "add
+#215", "Promoted") plus the Step 8 sync, which is 6–8 deployments before any
+code moved. Three promotions in one afternoon helped exhaust the Hobby limit of
+100 deployments a day. Step 8 now lands the record and the sync as **one**
+merge into `dev`.
 
 ## Step 2 — Name the blast radius
 
@@ -156,14 +175,39 @@ Then, depending on the blast radius: `npm run verify:prod` for Stripe and
 DocuSign, Vercel runtime logs for a cron change, and a read-only E2E smoke run
 against production if the change was user-facing.
 
-## Step 8 — Close out
+## Step 8 — Close out: record and sync in one merge
 
-Report what shipped, what was verified and how, and what is still open. Then sync
-`dev` so the branches do not drift:
+Report what shipped, what was verified and how, and what is still open. Then
+land the record **and** bring `main`'s merge commit into `dev` with a single
+PR. One push to `dev` means one deployment pair, not the three or four it used
+to be:
 
 ```bash
-git checkout dev && git merge origin/main --no-edit && git push origin dev
+git fetch origin
+git worktree add -b docs/promote-<YYYY-MM-DD>-record ../stellr-web-promote-record origin/main
+cp <your record> ../stellr-web-promote-record/.claude/releases/promote-<YYYY-MM-DD>.md
+cd ../stellr-web-promote-record
+# Status: Promoted, the merge SHA, and the production deployment id
+git add .claude/releases && git commit -m "Promotion record <date>: Promoted (#<n>, <sha>)"
+git push -u origin HEAD
+gh pr create --base dev --title "Promotion record <date>: Promoted (#<n>, <sha>)" --body-file <file>
+gh pr checks <m> --watch      # docs-only against dev: verify runs, e2e skips
+gh pr merge <m> --merge --delete-branch
 ```
 
-Mark the progress doc `Promoted`. If anything failed, say so with the output —
-never round a partial success up to done.
+- **`--merge`, not `--squash`, for this one PR.** It is the exception to
+  "feature branches squash". The branch starts at `main`'s merge commit, and a
+  squash would copy only the record, leaving that commit out of `dev`'s
+  history. Then `dev` stays behind `main`, and because `main` requires
+  up-to-date branches, the next promotion PR opens `BEHIND`.
+- It replaces the old direct push that fast-forwarded `dev` to `main`. That push
+  needed the merge commit's own CI to finish first (`dev` enforces admins).
+  It also put `dev` on the *same* SHA as `main`, so the production project's
+  cancelled `dev` build overwrote the `Vercel – stellr-web` status on the
+  production merge commit (TRACKER 20.3). A merge commit on `dev` has its own
+  SHA, so the Step 6 status reading stays true.
+- If another session merges into `dev` meanwhile, nothing changes: the PR merges
+  `main` and the record into whatever `dev` is by then.
+
+Check `gh pr view <m> --json state` reads `MERGED`. If anything failed, say so
+with the output. Never round a partial success up to done.

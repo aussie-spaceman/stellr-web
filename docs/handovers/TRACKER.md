@@ -26,7 +26,7 @@ Handover: `HANDOVER-admin-member-save-2026-09-28.md`. Doc snapshot `1sjjYgozbcup
 | 20.3 | Promote Step 6 status check false negative | Commit status `Vercel – stellr-web` on `1c74f6b` = "Canceled by Ignored Build Step" while prod deployment READY. Likely overwritten by Step 8's `dev` fast-forward to the same SHA. | Edit `.claude/skills/promote` Step 6: `list_deployments` (sha, target production) is authoritative; read status before Step 8. | ☐ |
 | 20.4 | Same `''` pass-through in `PATCH /api/members/me` | Latent: `AccountProfile` never sends `gender`/`grade`/`tshirt_size`. `handleSave` ignores the response (silent failure). | When next touched: normalise `''`→`null`; show an error on failure. | ☐ |
 | 20.5 | Admin "Save failed" has no reason | Route returns bare `Update failed`; clearing a required field fails the same way. | Optional: return the Postgres code/column to admin callers. | ☐ |
-| 20.6 | Main checkout stale | `dev` @ `513eb16`, 41 behind; 15 uncommitted files identical to `origin/dev`. | If no session owns it: `git stash && git merge --ff-only origin/dev && git stash drop`. | ☐ |
+| 20.6 | Main checkout stale | Duplicate of 19.3 (same finding, same day). | Track under 19.3. | ☑ |
 | 20.7 | Promotion finished by another session | Verified: merged with a merge commit by aussie-spaceman, READY, record Promoted (#217). | — | ☑ |
 
 ## Session 19 — 25–28 Sept 2026 (roster CSV emergency contacts; promotion #214)

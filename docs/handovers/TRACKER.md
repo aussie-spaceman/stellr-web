@@ -29,6 +29,19 @@ Handover: `HANDOVER-admin-member-save-2026-09-28.md`. Doc snapshot `1sjjYgozbcup
 | 20.6 | Main checkout stale | `dev` @ `513eb16`, 41 behind; 15 uncommitted files identical to `origin/dev`. | If no session owns it: `git stash && git merge --ff-only origin/dev && git stash drop`. | ☐ |
 | 20.7 | Promotion finished by another session | Verified: merged with a merge commit by aussie-spaceman, READY, record Promoted (#217). | — | ☑ |
 
+## Session 19 — 25–28 Sept 2026 (roster CSV emergency contacts; promotion #214)
+
+PR #215 → `dev` as `e328fd7`; promoted with #210 in #214 (`1c74f6b`, deployment `dpl_5SPmMPw9p2WG4XMiCfVWA9a4XWfg`). No migration.
+Handover: `docs/handovers/HANDOVER-roster-csv-emergency-contacts-2026-09-28.md`. Doc snapshot: `19bmMHe1I5ZZeR812gkLfBLxR-WdFFFYSI5mALmAzLU4`.
+The event roster CSV export now carries each participant's emergency contact first name, last name, relationship, email and phone (from the participant row). Prod: 22/22 active participants have all five.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 19.1 | CSV formula injection / phone mangling | `csvEscape` does not neutralise a leading `=`, `+`, `-`, `@`. Prod has 1 row with such a value among name/phone/health (field unconfirmed). The export has no unit test. | Prefix those leading characters with `'` in `csvEscape`; add a test for header/row alignment and escaping. Check `app/api/registrations/[id]/spreadsheet/route.ts` for the same gap. | ☐ |
+| 19.2 | HIGH before 3 Oct: export never opened with real data | No CSV with the new columns has been downloaded on dev or prod. The roster carries event-day safety contacts for minors. | Download the 3 Oct event's roster CSV from prod; open in Excel and Sheets; confirm columns align and phones read correctly. | ☐ |
+| 19.3 | Local `dev` checkout stale | Main checkout on `dev` @ `513eb16` with 15 uncommitted files, all identical to `origin/dev` (28 Sept). | `git stash -u`, then `git pull --ff-only`; drop the stash once satisfied. | ☐ |
+| 19.4 | Column naming | Headers say "Emergency Contact …"; the ask said "parent". Relationship column included. | Maintainer: keep, or rename to "Parent/Guardian …" (five strings in the export route). | ☐ |
+
 ## Session 18 — 25 Sept 2026 (Avery 8395 name badges)
 
 PR #206 → `dev` as `e0f3a91`; promoted in #208 (`868a178`) by a separate session. Migration `20260925140000_badge_8395_artwork.sql`.

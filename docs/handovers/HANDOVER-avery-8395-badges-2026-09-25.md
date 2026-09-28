@@ -56,7 +56,7 @@ See `TRACKER.md` Session 18: 18.1–18.7.
 |---|---|
 | Sloping-rule detection | `findNameLine` runs over a band of rows (3% of the height), keeps the longest run per rule, and takes the rule's top at its middle. It measures clear space over the rule's middle half. |
 | Placement model | `BadgePlacement` {nameX, nameY, nameMaxWidth, nameSize}, as fractions of the label artwork (bleed included). `placementFromLine` gives the starting value: the baseline sits so descenders just touch the rule, the name may run 5% past each end of the rule but stays inside the label, and the size is 28pt on 5392 and 22pt on 8395, capped by the clear space. |
-| Templates | `event_badge_templates` (migration `20260928180000`). `lib/event-badges.ts` loads templates, companies and badge holders, and `resolveBadges` picks the most specific template per person (`pickTemplate`: company → mentors → everyone → plain). |
+| Templates | `event_badge_templates` (migration `20260928190000`). `lib/event-badges.ts` loads templates, companies and badge holders, and `resolveBadges` picks the most specific template per person (`pickTemplate`: company → mentors → everyone → plain). |
 | Ink | `wantsLightInk` looks at the artwork under the name's actual placement, so white ink follows a moved name. |
 | API | `badge-templates` (GET with companies; PUT upload / placement / `reset`; DELETE ?id), `badge-templates/preview` (one label page), `badges?format=`. The `artwork` route is **deleted**. |
 | UI | `EventBadges.tsx` has the format toggle and rows for Everyone, Mentors and each company. Each row has upload/replace, Position the name (live preview plus sliders) and Remove. It loads its own data; the page no longer passes props. |

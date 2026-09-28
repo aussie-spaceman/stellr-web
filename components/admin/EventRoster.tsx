@@ -3,12 +3,17 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { EventRosterData, PaymentPill, RosterParticipant } from '@/lib/event-admin'
-import { PILL_CLASSES as DOCUSIGN_PILL_CLASSES } from '@/lib/docusign-status'
+import { PILL_CLASSES as DOCUSIGN_PILL_CLASSES, type DocusignPill } from '@/lib/docusign-status'
 import type { ComplianceState } from '@/lib/compliance'
 import type { CompanyRow } from '@/components/admin/EventCompanies'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { SendPayLinkButton } from '@/components/admin/SendPayLinkButton'
+import { ReissueDocusignButton } from '@/components/admin/ReissueDocusignButton'
 import { displayEventRole } from '@/lib/member-enums'
+
+// Pills with paperwork still to chase. 'issued'/'partial' resend the live
+// envelope; the rest need a new one (the server confirms before spending quota).
+const REISSUABLE_PILLS = new Set<DocusignPill>(['not_issued', 'issued', 'partial', 'bounced', 'declined', 'voided'])
 
 const PAYMENT_PILLS: Record<PaymentPill, { label: string; className: string }> = {
   invoice_issued: { label: 'Invoice Issued', className: 'bg-red-100 text-red-700' },
@@ -380,6 +385,9 @@ export default function EventRoster({
                       <td className="px-4 py-2.5 text-right space-x-3">
                         {group.type === 'individual' && group.payLinkSendable && (
                           <SendPayLinkButton eventSlug={eventSlug} registrationId={group.registrationId} />
+                        )}
+                        {REISSUABLE_PILLS.has(p.docusign_pill) && (
+                          <ReissueDocusignButton eventSlug={eventSlug} participantId={p.id} />
                         )}
                         <DeleteEntityButton
                           entity="participant"

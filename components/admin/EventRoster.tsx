@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { EventRosterData, PaymentPill, RosterParticipant } from '@/lib/event-admin'
 import { PILL_CLASSES as DOCUSIGN_PILL_CLASSES, type DocusignPill } from '@/lib/docusign-status'
@@ -105,8 +106,6 @@ export default function EventRoster({
   const [docusign, setDocusign] = useState<DocusignFilter>('all')
   const [compliance, setCompliance] = useState<ComplianceFilter>('all')
   const [moving, setMoving] = useState<string | null>(null)
-  const [sending, setSending] = useState(false)
-  const [sendResult, setSendResult] = useState<string | null>(null)
   const [markingInvoice, setMarkingInvoice] = useState<string | null>(null)
 
   async function moveParticipant(participantId: string, companyId: string | null) {
@@ -142,53 +141,6 @@ export default function EventRoster({
   )
   const shown = filtered.reduce((n, g) => n + g.participants.length, 0)
 
-  // One-click reminders for the currently filtered outstanding participants.
-  const remindPayment = payment === 'unpaid'
-  const remindDocusign = docusign === 'outstanding'
-  const canRemind = (remindPayment || remindDocusign) && shown > 0
-  const remindLabel =
-    remindPayment && remindDocusign
-      ? 'Email Reminders'
-      : remindPayment
-        ? 'Email Payment Reminders'
-        : 'Email DocuSign Reminders'
-
-  async function sendReminders() {
-    const what =
-      remindPayment && remindDocusign
-        ? 'payment and DocuSign reminders'
-        : remindPayment
-          ? 'payment reminders'
-          : 'DocuSign reminders'
-    const ok = confirm(
-      `Send ${what} to the ${shown} participant${shown === 1 ? '' : 's'} currently shown?\n\n` +
-        'Minors are CC’d to their emergency contact; group members are CC’d to their teacher / student manager.'
-    )
-    if (!ok) return
-
-    setSending(true)
-    setSendResult(null)
-    try {
-      const res = await fetch(`/api/admin/events/${eventSlug}/remind`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payment: remindPayment, docusign: remindDocusign }),
-      })
-      const data = await res.json().catch(() => null)
-      if (!res.ok) {
-        setSendResult(data?.error ?? 'Failed to send reminders.')
-      } else {
-        setSendResult(
-          `Sent ${data.sent} reminder email${data.sent === 1 ? '' : 's'}` +
-            (data.failed > 0 ? ` (${data.failed} failed)` : '')
-        )
-      }
-    } catch {
-      setSendResult('Failed to send reminders.')
-    }
-    setSending(false)
-  }
-
   const select = 'border border-brand-border rounded-lg px-3 py-1.5 text-sm bg-white text-brand-muted'
 
   return (
@@ -212,20 +164,15 @@ export default function EventRoster({
         <span className="text-sm text-brand-muted-soft">
           {shown} of {roster.summary.totalParticipants} participants
         </span>
-        {sendResult && <span className="text-sm text-brand-muted">{sendResult}</span>}
-        <button
-          type="button"
-          onClick={sendReminders}
-          disabled={!canRemind || sending}
-          title={
-            canRemind
-              ? undefined
-              : 'Filter by Payment: Outstanding or DocuSign: Outstanding to email those participants'
-          }
-          className="ml-auto text-sm font-medium text-white bg-brand-blue hover:bg-brand-blue-dark disabled:bg-brand-border disabled:cursor-not-allowed rounded-lg px-3 py-1.5"
+        {/* Bulk reminders moved to the Email Reminders tab (editable copy,
+            attachments, scheduling, history). The old one-click route,
+            /api/admin/events/[slug]/remind, is left in place for now. */}
+        <Link
+          href={`/admin/competitions/${eventSlug}?tab=emails`}
+          className="ml-auto text-sm font-medium text-white bg-brand-blue hover:bg-brand-blue-dark rounded-lg px-3 py-1.5"
         >
-          {sending ? 'Sending…' : remindPayment || remindDocusign ? remindLabel : 'Email Reminders'}
-        </button>
+          Email Reminders
+        </Link>
         <a
           href={exportHref}
           className="text-sm font-medium text-brand-blue hover:text-brand-blue border border-brand-blue rounded-lg px-3 py-1.5"

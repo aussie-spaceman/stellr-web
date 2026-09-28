@@ -78,6 +78,8 @@ export interface RosterGroup {
   status: string
   groupLabel: string | null // teacher/school label for group registrations
   teacherEmail: string | null
+  /** Organiser's first name, for greetings (group registrations). */
+  teacherFirstName: string | null
   /** This group registration is settled by invoice (vs Stripe checkout). */
   invoiceRequested: boolean
   /** When the invoice was marked paid by an admin (null = outstanding). */
@@ -305,6 +307,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       status: reg.status,
       groupLabel,
       teacherEmail: (reg.teacher_email as string | null) || null,
+      teacherFirstName: (reg.teacher_first_name as string | null) || null,
       invoiceRequested: !!reg.invoice_requested,
       invoicePaidAt: (reg.invoice_paid_at as string | null) ?? null,
       memberPaysIndividually: !!reg.member_pays_individually,

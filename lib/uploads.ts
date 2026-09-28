@@ -43,6 +43,7 @@ export type UploadPurpose =
   | 'training-item-resource'
   | 'training-cert-template'
   | 'event-artwork'
+  | 'event-email-attachment'
   | 'campaign-proposal'
   | 'community-media'
   | 'space-attachment'
@@ -175,6 +176,21 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
       if (!access.ok) return deny('Forbidden', access.status)
       if (!EVENT_ARTWORK_KINDS.includes(ctx.kind)) return deny('Unknown artwork kind', 400)
       return { path: `event-artwork/${ctx.slug}/${ctx.kind}-${Date.now()}-${safeName}` }
+    },
+  },
+
+  // Attachments for the event "Email Reminders" tab (schedule, RFP…). Event
+  // managers attach to their own event's emails, so this is the event gate.
+  // 10MB keeps a message under Resend's 40MB total once base64-encoded, with
+  // room for more than one file.
+  'event-email-attachment': {
+    bucket: RESOURCES_BUCKET,
+    maxBytes: 10 * MB,
+    async grant({ ctx, safeName }) {
+      if (!ctx.slug) return deny('slug required', 400)
+      const access = await requireEventAccess(ctx.slug)
+      if (!access.ok) return deny('Forbidden', access.status)
+      return { path: `event-email/${ctx.slug}/${Date.now()}-${safeName}` }
     },
   },
 

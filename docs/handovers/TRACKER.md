@@ -15,6 +15,21 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 21 — 28 Sept 2026 (Event Email Reminders + DocuSign re-issue)
+
+Handover: `HANDOVER-event-email-reminders-2026-09-28.md`. Phase 1 #224 (`fd35306`) and Phase 2 (this PR) on `dev`; **not promoted**.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 21.1 | DocuSign crons have had no production effect since 4 Sept | Last chase 3 Sept; `form_data_read_at` never set; 3 envelopes eligible on 28 Sept. Query, secret and `APP_ENV` ruled out. Hobby keeps logs 1 h, so undiagnosable until `cron_runs` (#224) is live. | After promote + next 09:00 UTC: read `cron_runs`. No row → Vercel isn't invoking (Settings → Cron Jobs). Errors → fix what they name. | ☐ |
+| 21.2 | Production migrations | `20260928180000_cron_runs`, `20260928200000_event_emails` applied to dev (ledger realigned); prod not. | David applies both before the promote merge. | ☐ |
+| 21.3 | Colorado DocuSign catch-up | 6 envelopes sent before 26 Sept. Script dry-run verified on dev only. | After promote: `scripts/docusign-resend-outstanding.ts --event colorado-space-design-challenge --sent-before 2026-09-26`, dry run then `--apply`; confirm in DocuSign. **Before 3 Oct.** | ☐ |
+| 21.4 | No real inbox has received an event email | Every send in this session was suppressed (dev safelist blanked / no API key). Outlook rendering of the signature table unseen. | First production use: "Send test to me" and read it in Outlook and Gmail before "Send now". | ☐ |
+| 21.5 | Resend plan limits | Free = ~100/day, 3,000/month; a Colorado all-families send ≈ 40. Per-send cap 75 in code. | David: confirm the plan in Resend. | ☐ |
+| 21.6 | Bulk DocuSign reminder to a family with **no** envelope says "we've just re-sent it" | Bulk path only resends; missing envelopes need the roster button (quota). 0 such participants in prod on 28 Sept. | If it happens: make the copy conditional, or have the send list who still needs the roster button. | ☐ |
+| 21.7 | `/api/admin/events/[slug]/remind` superseded | UI no longer calls it; `PLAN-single-email-domain.md` lists it as a sender. | Delete the route and update that table in one PR. | ☐ |
+| 21.8 | Only 2 of 15 crons write `cron_runs` (+ event-emails) | The same "did it run?" blind spot applies to the other 13. | Wrap each in `startCronRun` — mechanical. | ☐ |
+
 ## Session 20 — 25–28 Sept 2026 (admin member save fix)
 
 Handover: `HANDOVER-admin-member-save-2026-09-28.md`. Doc snapshot `1sjjYgozbcup3uM_0dp8v_9Vve2GcbNvKhf8xBlOGdGk`. #210 → promoted in #214 (`1c74f6b`); the merge was run by a separate session.

@@ -14,7 +14,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { addGlobalRole, memberHasRole } from '@/lib/member-roles'
 import { applyGrantTrigger } from '@/lib/membership-grants'
-import { dispatchAgreement, agreementExpiry } from '@/lib/docusign-agreements'
+import { dispatchAgreement, agreementExpiry, coveringTypes, type DispatchOutcome } from '@/lib/docusign-agreements'
 import { deriveCompliance, loadComplianceRecordsByEmails, type ComplianceState } from '@/lib/compliance'
 import { logActivity, type Actor } from '@/lib/activity-log'
 
@@ -135,26 +135,27 @@ export interface VolunteerMemberRow {
  * program context. dispatchAgreement handles the 3-year on-file reuse and is
  * non-fatal on DocuSign outages. Unless `force` (admin re-issue), an envelope
  * already in flight (sent/delivered) is left alone so repeat onboarding saves
- * can't double-issue.
+ * and repeat event assignments can't double-issue. A mentor envelope counts:
+ * it is the same document (coveringTypes).
  */
 export async function dispatchVolunteerAgreement(
   db: SupabaseClient,
   member: VolunteerMemberRow,
   opts: { force?: boolean } = {},
-): Promise<void> {
-  if (!member.email) return
+): Promise<DispatchOutcome | 'no_email'> {
+  if (!member.email) return 'no_email'
   if (!opts.force) {
     const { data: inFlight } = await db
       .from('docusign_envelopes')
       .select('id')
       .eq('member_id', member.id)
-      .eq('envelope_type', 'volunteer')
+      .in('envelope_type', coveringTypes('volunteer'))
       .in('status', ['created', 'sent', 'delivered'])
       .limit(1)
       .maybeSingle()
-    if (inFlight) return
+    if (inFlight) return 'in_flight'
   }
-  await dispatchAgreement(db, {
+  return dispatchAgreement(db, {
     participantId: null,
     memberId:      member.id,
     eventSlug:     VOLUNTEER_PROGRAM_SLUG,
@@ -196,7 +197,7 @@ export async function getVolunteerStatuses(
       .from('docusign_envelopes')
       .select('member_id, status, completed_at')
       .in('member_id', ids)
-      .eq('envelope_type', 'volunteer'),
+      .in('envelope_type', coveringTypes('volunteer')),
     loadComplianceRecordsByEmails(db, members.map((m) => m.email ?? '')),
   ])
 
@@ -291,4 +292,55 @@ export async function getVolunteerInterests(
     .eq('status', 'interested')
     .order('created_at', { ascending: false })
   return data ?? []
+}
+
+export interface VolunteerAgreementRecord {
+  id: string
+  status: string
+  event_title: string
+  sent_at: string | null
+  completed_at: string | null
+  reused_from: string | null
+  signers_total: number | null
+  signers_completed: number | null
+  /** Completed only: when the 3-year validity ends. */
+  expires_at: string | null
+}
+
+/**
+ * The one envelope that answers "does this member have a Volunteer Agreement?"
+ * for the admin member page: the newest unexpired signed one, else the newest
+ * in flight, else the newest of any kind (declined / voided / expired), else
+ * null. Mentor envelopes count — same document (coveringTypes).
+ */
+export function pickVolunteerAgreement<T extends Omit<VolunteerAgreementRecord, 'expires_at'>>(
+  rows: T[],
+  now: Date = new Date(),
+): (T & { expires_at: string | null }) | null {
+  const newest = (xs: T[]) =>
+    [...xs].sort((a, b) =>
+      (b.completed_at ?? b.sent_at ?? '').localeCompare(a.completed_at ?? a.sent_at ?? ''),
+    )[0]
+  const withExpiry = (r: T | undefined) =>
+    r ? { ...r, expires_at: r.completed_at ? agreementExpiry(r.completed_at).toISOString() : null } : null
+
+  const valid = rows.filter(
+    (r) => r.status === 'completed' && r.completed_at && agreementExpiry(r.completed_at) > now,
+  )
+  if (valid.length) return withExpiry(newest(valid))
+  const open = rows.filter((r) => ['created', 'sent', 'delivered'].includes(r.status))
+  if (open.length) return withExpiry(newest(open))
+  return withExpiry(newest(rows))
+}
+
+export async function loadVolunteerAgreement(
+  db: SupabaseClient,
+  memberId: string,
+): Promise<VolunteerAgreementRecord | null> {
+  const { data } = await db
+    .from('docusign_envelopes')
+    .select('id, status, event_title, sent_at, completed_at, reused_from, signers_total, signers_completed')
+    .eq('member_id', memberId)
+    .in('envelope_type', coveringTypes('volunteer'))
+  return pickVolunteerAgreement(data ?? [])
 }

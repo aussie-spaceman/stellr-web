@@ -40,17 +40,18 @@ interface Fixture {
   memberByEmail?: { id: string } | null
 }
 
+interface Filters { eq: Record<string, unknown>; ins: Record<string, unknown[]> }
+
 function makeDb(fixture: Fixture) {
   const inserts: { table: string; payload: Record<string, unknown> }[] = []
 
   const db = {
     from(table: string) {
-      const filters: { eq: Record<string, unknown>; inCol: string | null; inVals: unknown[] | null } =
-        { eq: {}, inCol: null, inVals: null }
+      const filters: Filters = { eq: {}, ins: {} }
       const chain = {
         select: () => chain,
         eq: (col: string, val: unknown) => { filters.eq[col] = val; return chain },
-        in: (col: string, vals: unknown[]) => { filters.inCol = col; filters.inVals = vals; return chain },
+        in: (col: string, vals: unknown[]) => { filters.ins[col] = vals; return chain },
         gte: () => chain,
         order: () => chain,
         limit: () => chain,
@@ -66,11 +67,7 @@ function makeDb(fixture: Fixture) {
   return { db: db as never, inserts }
 }
 
-function resolve(
-  table: string,
-  filters: { eq: Record<string, unknown>; inCol: string | null; inVals: unknown[] | null },
-  fixture: Fixture,
-): unknown {
+function resolve(table: string, filters: Filters, fixture: Fixture): unknown {
   if (table === 'members') return fixture.memberByEmail ?? null
   if (table !== 'docusign_envelopes') return null
   if (filters.eq.participant_id) {
@@ -78,11 +75,18 @@ function resolve(
     if (!row) return null
     // Honour the status filter so a dead (voided/declined) envelope does not
     // count as paperwork on record.
-    if (row.status && filters.inVals && !filters.inVals.includes(row.status)) return null
+    if (row.status && filters.ins.status && !filters.ins.status.includes(row.status)) return null
     return row
   }
-  if (filters.inCol === 'status') return fixture.openEnvelope ?? null
-  if (filters.eq.status === 'completed') return fixture.completedEnvelope ?? null
+  if (filters.ins.status) return fixture.openEnvelope ?? null
+  if (filters.eq.status === 'completed') {
+    const row = fixture.completedEnvelope
+    // Honour the envelope_type filter, so equivalence (mentor ≡ volunteer) is
+    // what the query asks for rather than something the fixture assumes.
+    const types = filters.ins.envelope_type
+    if (row && types && row.envelope_type && !types.includes(row.envelope_type)) return null
+    return row ?? null
+  }
   return null
 }
 
@@ -224,5 +228,46 @@ describe('dispatchAgreement — never issues paperwork already in the system', (
     expect(createConsent).not.toHaveBeenCalled()
     expect(inserts).toHaveLength(0)
     expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('dispatchAgreement — outcome', () => {
+  it('reports issued / in_flight / on_file / failed / not_required', async () => {
+    expect(await dispatchAgreement(makeDb({}).db, ADULT)).toBe('issued')
+    expect(await dispatchAgreement(makeDb({ openEnvelope: { id: 'x' } }).db, ADULT)).toBe('in_flight')
+    expect(await dispatchAgreement(makeDb({
+      completedEnvelope: {
+        id: 'env-signed', completed_at: '2026-01-15T00:00:00Z',
+        signer_name: 'Ada', signer_email: 'ada@example.com', reused_from: null,
+      },
+    }).db, ADULT)).toBe('on_file')
+    createAdult.mockRejectedValueOnce(new Error('boom'))
+    expect(await dispatchAgreement(makeDb({}).db, ADULT)).toBe('failed')
+    expect(await dispatchAgreement(makeDb({}).db, { ...ADULT, eventRole: null })).toBe('not_required')
+  })
+})
+
+describe('dispatchAgreement — mentor and volunteer are the same document', () => {
+  const VOLUNTEER = { ...ADULT, participantId: null, eventSlug: 'volunteer-program', eventRole: 'volunteer' }
+  const SIGNED = {
+    id: 'env-mentor-signed', completed_at: '2026-01-15T00:00:00Z',
+    signer_name: 'Ada', signer_email: 'ada@example.com', reused_from: null,
+  }
+
+  it('a signed MENTOR agreement covers a volunteer requirement (no second envelope)', async () => {
+    const { db, inserts } = makeDb({ completedEnvelope: { ...SIGNED, envelope_type: 'mentor' } })
+    expect(await dispatchAgreement(db, VOLUNTEER)).toBe('on_file')
+    expect(inserts[0].payload.reused_from).toBe('env-mentor-signed')
+    expect(inserts[0].payload.envelope_type).toBe('volunteer')
+  })
+
+  it('a signed VOLUNTEER agreement covers a mentor requirement', async () => {
+    const { db } = makeDb({ completedEnvelope: { ...SIGNED, envelope_type: 'volunteer' } })
+    expect(await dispatchAgreement(db, { ...ADULT, eventRole: 'mentor' })).toBe('on_file')
+  })
+
+  it('an ADULT agreement is not coverage for a volunteer', async () => {
+    const { db } = makeDb({ completedEnvelope: { ...SIGNED, envelope_type: 'adult' } })
+    expect(await dispatchAgreement(db, VOLUNTEER)).toBe('issued')
   })
 })

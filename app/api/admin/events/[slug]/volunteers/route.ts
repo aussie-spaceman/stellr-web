@@ -4,7 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
 import { getEventBySlug } from '@/lib/sanity'
 import { ensureEventContainer } from '@/lib/container-sync'
-import { getVolunteerStatuses, grantVolunteerRole } from '@/lib/volunteer'
+import { getVolunteerStatuses, grantVolunteerRole, dispatchVolunteerAgreement } from '@/lib/volunteer'
 import { logActivity, actorFromAuth } from '@/lib/activity-log'
 import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 
@@ -13,7 +13,9 @@ import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 // assignment is a cohort_members row with relationship='volunteer' on the
 // event-level container (portal access) plus an event_participations row with
 // role='volunteer' (member history). Compliance/agreement pills are advisory —
-// assignment is warn-don't-block by design.
+// assignment is warn-don't-block by design. Assignment does issue the Volunteer
+// Agreement (the mentor document) when none is signed or in flight, so nobody
+// reaches event day unpapered because an admin forgot to send it.
 
 type Ctx = { params: Promise<{ slug: string }> }
 
@@ -145,7 +147,27 @@ export async function POST(req: Request, { params }: Ctx) {
   await grantVolunteerRole(db, memberId, actor, 'admin')
   await syncObjectSpaceRoster(db, 'event', slug, memberId)
 
-  return NextResponse.json({ ok: true })
+  // Paperwork. Idempotent: a signed agreement under 3 years old is linked, not
+  // re-sent, and one already out is left alone. Non-fatal — a DocuSign failure
+  // alerts admins inside dispatchAgreement and the assignment still stands.
+  const { data: member } = await db
+    .from('members')
+    .select('id, first_name, last_name, email, phone, date_of_birth')
+    .eq('id', memberId)
+    .maybeSingle()
+  const agreement = member ? await dispatchVolunteerAgreement(db, member) : 'no_email'
+  if (agreement === 'issued') {
+    await logActivity({
+      memberId,
+      category: 'docusign',
+      action: 'volunteer_agreement_issued',
+      summary: `Volunteer Agreement issued on assignment to ${title ?? slug}`,
+      metadata: { eventSlug: slug },
+      ...actor,
+    }, db)
+  }
+
+  return NextResponse.json({ ok: true, agreement })
 }
 
 // DELETE { memberId } — remove a volunteer assignment.

@@ -39,6 +39,15 @@ function AgreementPill({ v }: { v: VolunteerRow['agreement'] }) {
   return <Pill tone="red" label="No agreement" />
 }
 
+// What assignment did about the Volunteer Agreement (POST response `agreement`).
+const AGREEMENT_NOTICE: Record<string, string> = {
+  issued: 'Volunteer Agreement sent by DocuSign.',
+  on_file: 'Signed agreement already on file. Nothing new was sent.',
+  in_flight: 'An agreement is already out for signature. Nothing new was sent.',
+  failed: 'Assigned, but DocuSign could not send the agreement. Admins have been alerted.',
+  no_email: 'Assigned, but no agreement was sent because this member has no email on file.',
+}
+
 function CompliancePill({ state, detail }: { state: string; detail: string | null }) {
   if (state === 'valid_bc' || state === 'valid_license') return <Pill tone="green" label="Cleared" title={detail ?? undefined} />
   if (state === 'in_process') return <Pill tone="amber" label="Check in progress" title={detail ?? undefined} />
@@ -53,6 +62,7 @@ export function EventVolunteersPanel({ slug }: { slug: string }) {
   const [data, setData] = useState<PanelData>({ interested: [], assigned: [] })
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const load = async () => {
     const res = await fetch(`/api/admin/events/${slug}/volunteers`)
@@ -66,13 +76,20 @@ export function EventVolunteersPanel({ slug }: { slug: string }) {
 
   const post = async (method: 'POST' | 'DELETE', memberId: string) => {
     setBusy(true)
+    setNotice(null)
     try {
       const res = await fetch(`/api/admin/events/${slug}/volunteers`, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ memberId }),
       })
-      if (res.ok) await load()
+      if (res.ok) {
+        if (method === 'POST') {
+          const body = await res.json().catch(() => ({}))
+          setNotice(AGREEMENT_NOTICE[body.agreement as string] ?? null)
+        }
+        await load()
+      }
     } finally {
       setBusy(false)
     }
@@ -104,11 +121,13 @@ export function EventVolunteersPanel({ slug }: { slug: string }) {
         <h2 className="font-semibold text-brand-blue-dark">Volunteers</h2>
       </div>
       <p className="mb-3 text-xs text-brand-muted-soft">
-        Volunteers who offered to support this event, and those you&apos;ve assigned. Red pills flag
-        missing paperwork or clearance — they warn, but don&apos;t block assignment.
+        Volunteers who offered to support this event, and those you&apos;ve assigned. Assigning someone
+        sends the Volunteer Agreement if they don&apos;t already have one. Red pills flag missing paperwork
+        or clearance — they warn, but don&apos;t block assignment.
       </p>
 
       <MemberPicker onPick={(m: PickedMember) => post('POST', m.id)} disabled={busy} placeholder="Assign any member as a volunteer…" />
+      {notice && <p role="status" className="mt-2 text-xs text-brand-muted">{notice}</p>}
 
       <h3 className="mt-4 mb-1.5 text-xs font-semibold uppercase tracking-wide text-brand-muted">
         Offered to help

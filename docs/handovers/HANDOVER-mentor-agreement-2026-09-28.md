@@ -68,3 +68,26 @@ Decisions (David, 28 Sept):
 4. After step 3, confirm the three rows are `sent` with `signers_total=2`, and that the
    Colorado SDC Volunteers panel shows "Agreement sent" for all three.
 5. Envelope budget: 23 of 40 used in September as of 28 Sept.
+
+## Follow-up: admin alerts reached nobody (28 Sept 2026)
+- **Cause.** `notifyCommunityAdmins` (`lib/notify.ts`) sends only to `staff_roles` holders of
+  `all` or `community`. Prod and dev both had zero rows. Full admins are recognised by the
+  Clerk `role=admin` claim, which never adds a `staff_roles` row. So every admin alert went
+  nowhere: DocuSign dispatch failures (two fired unseen on 28 Sept, both
+  `ACCOUNT_LACKS_EXTENSIONS_PERMISSIONS`), missing-guardian consent, Checkr `referred`, and
+  DocuSign bounces.
+- **Prod data (David approved, 28 Sept).** David's member row
+  (`3bfe6a67-8f23-4601-90f2-56b4c5139dfe`) now holds `{all}`. It was read back with the code's own
+  `scopes && ['all','community']` filter. There is no prefs row for that member, so the defaults apply: in-app
+  and email. Dev still has no rows.
+- **Fallback.** When there are no holders, or the lookup errors, the alert is emailed to
+  `staffAlertEmail()` (`REGISTRATION_ALERT_EMAIL`, else `CONTACT_EMAIL`, else `hello@`) and
+  logged with `console.error`. `staffAlertEmail()` moved to `lib/email.ts`. Tests are in
+  `lib/notify.test.ts`.
+- **Open.**
+  - The two alerts from 28 Sept were not resent.
+  - Which fallback address prod actually uses is unconfirmed. Check whether
+    `REGISTRATION_ALERT_EMAIL` or `CONTACT_EMAIL` is set on the prod Vercel project.
+  - A holder who has turned off both in-app and email still gets nothing. The fallback
+    covers only the zero-holder case.
+  - To add someone, grant a scope on `/admin/staff`.

@@ -15,15 +15,10 @@
 // Every export is best-effort: onboarding must never fail because an email did.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { sendEmail, DEFAULT_REPLY_TO } from '@/lib/email'
+import { sendEmail, DEFAULT_REPLY_TO, staffAlertEmail } from '@/lib/email'
 import { emailLayout, escapeHtml, BRAND_NAVY, SIGN_OFF_HTML, SIGN_OFF_TEXT } from '@/lib/email-layout'
 import { appUrl } from '@/lib/email-campaigns'
 import { tierGroupOf, type TierGroupKey } from '@/lib/tiers'
-
-/** Where new-registration alerts land. Env-overridable so it can move without a deploy. */
-function staffAlertEmail(): string {
-  return process.env.REGISTRATION_ALERT_EMAIL ?? process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
-}
 
 export interface RegisteredMember {
   id: string

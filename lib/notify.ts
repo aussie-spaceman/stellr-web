@@ -1,5 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
-import { sendEmail } from '@/lib/email'
+import { sendEmail, staffAlertEmail } from '@/lib/email'
 import { sendSms, SMS_ENABLED } from '@/lib/sms'
 
 // Multi-channel notification dispatch (FR-COM-06 + session reminders).
@@ -80,19 +80,51 @@ export async function notifyMembers(memberIds: string[], input: NotifyInput): Pr
 /**
  * Member ids of community staff — anyone whose staff_roles.scopes grants 'all' or
  * 'community'. Used to route member-raised issues (e.g. a flagged unavailable
- * training resource) to the people who can fix them.
+ * training resource) to the people who can fix them. Platform admins are Clerk
+ * role claims, not rows here, so an admin is only reached if also granted a scope
+ * on /admin/staff. Throws on a query error so the caller can fall back.
  */
 async function communityAdminMemberIds(): Promise<string[]> {
   const db = supabaseServer()
-  const { data } = await db
+  const { data, error } = await db
     .from('staff_roles')
     .select('member_id')
     .overlaps('scopes', ['all', 'community'])
+  if (error) throw new Error(error.message)
   return [...new Set((data ?? []).map((r) => (r as { member_id: string }).member_id).filter(Boolean))]
 }
 
-/** Notify every community admin. Best-effort; a no-op if none are configured. */
+/**
+ * Notify every community admin. Best-effort. When no staff are configured (or the
+ * lookup fails) the alert goes to the staff inbox instead — on 28 Sept 2026 prod
+ * had zero staff_roles rows and every admin alert silently reached nobody.
+ */
 export async function notifyCommunityAdmins(input: NotifyInput): Promise<void> {
-  const ids = await communityAdminMemberIds()
-  await notifyMembers(ids, input)
+  let ids: string[] = []
+  try {
+    ids = await communityAdminMemberIds()
+  } catch (e) {
+    console.error('[notify] staff_roles lookup failed; falling back to the staff inbox:', e)
+  }
+  if (ids.length > 0) {
+    await notifyMembers(ids, input)
+    return
+  }
+
+  const to = staffAlertEmail()
+  console.error(
+    `[notify] no staff_roles holder of 'all' or 'community' — admin alert sent to ${to} instead. ` +
+      'Grant a scope on /admin/staff so alerts reach a named person.',
+  )
+  const note = `Sent to ${to} because no staff member holds the 'all' or 'community' scope. Grant one on /admin/staff.`
+  try {
+    await sendEmail({
+      to,
+      subject: input.email?.subject ?? input.body,
+      html: `${input.email?.html ?? `<p>${input.body}</p>`}<p><em>${note}</em></p>`,
+      text: `${input.email?.text ?? input.body}\n\n${note}`,
+    })
+  } catch (e) {
+    console.error('[notify] fallback admin alert email failed:', e)
+  }
 }

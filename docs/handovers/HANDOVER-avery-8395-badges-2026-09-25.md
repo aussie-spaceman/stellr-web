@@ -40,3 +40,26 @@ See `TRACKER.md` Session 18: 18.1–18.7.
 - A new badge format is one entry in `BADGE_FORMATS`, plus a column, plus a migration. `EVENT_ARTWORK_KINDS` in `lib/uploads.ts` derives from it.
 - The detection runs on **every download** (one sharp decode per format) and again on upload for the message. Nothing is persisted.
 - The rule finder works on RGB max-channel differences with a threshold of 48. A faint rule (e.g. light grey on white, Δ < 48) is not found, and the names fall back to centred.
+
+## Addendum: 28 Sept 2026, templates per audience
+
+**Why:** the first real print (the CO SDC 8395 export) had names off-centre to the right, floating above the rule, and wildly different sizes. The artwork's rule climbs ~8px across 570px. The detector scanned one pixel row at a time, so it found only the right half: the centre shifted right and the name's width halved.
+
+**What was asked (maintainer, 28 Sept), for admins and event managers:**
+1. Optionally, a different background for each student company, so companies look different.
+2. Optionally, a different background for mentors.
+3. A single background for all participants.
+4. Extend the certificate template functionality to name badges.
+
+**What changed:**
+| Piece | Where |
+|---|---|
+| Sloping-rule detection | `findNameLine` runs over a band of rows (3% of the height), keeps the longest run per rule, and takes the rule's top at its middle. It measures clear space over the rule's middle half. |
+| Placement model | `BadgePlacement` {nameX, nameY, nameMaxWidth, nameSize}, as fractions of the label artwork (bleed included). `placementFromLine` gives the starting value: the baseline sits so descenders just touch the rule, the name may run 5% past each end of the rule but stays inside the label, and the size is 28pt on 5392 and 22pt on 8395, capped by the clear space. |
+| Templates | `event_badge_templates` (migration `20260928180000`). `lib/event-badges.ts` loads templates, companies and badge holders, and `resolveBadges` picks the most specific template per person (`pickTemplate`: company → mentors → everyone → plain). |
+| Ink | `wantsLightInk` looks at the artwork under the name's actual placement, so white ink follows a moved name. |
+| API | `badge-templates` (GET with companies; PUT upload / placement / `reset`; DELETE ?id), `badge-templates/preview` (one label page), `badges?format=`. The `artwork` route is **deleted**. |
+| UI | `EventBadges.tsx` has the format toggle and rows for Everyone, Mentors and each company. Each row has upload/replace, Position the name (live preview plus sliders) and Remove. It loads its own data; the page no longer passes props. |
+| Page | The refund override label now reads `refund_policies` (18.10). |
+
+Verified: 907 unit tests, including a synthetic replica of the CO artwork. The real CO background, extracted from the export, was re-rendered locally: names centred on the line at 22pt, and only a 30-character name shrinks.

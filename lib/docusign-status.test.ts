@@ -128,3 +128,46 @@ describe('roleLabel', () => {
     expect(roleLabel(null)).toBe('signer')
   })
 })
+
+// Shared-inbox consent envelopes route the student after the guardian (#243).
+// Until the guardian signs, DocuSign holds the student at recipient status
+// 'created' — nothing has been emailed, so "never opened" would be false.
+describe('describeEnvelope — queued signer (shared inbox)', () => {
+  const guardian = {
+    name: 'Anne Byron', email: 'anne@example.org',
+    role_name: 'Guardian', status: 'sent', delivered_at: null,
+  }
+  const queuedStudent = {
+    name: 'Ada Lovelace', email: 'anne@example.org',
+    role_name: 'Minor', status: 'created', delivered_at: null,
+  }
+
+  it('reports the student as queued, not never-opened', () => {
+    const d = describeEnvelope({ status: 'sent', signers_total: 2, signers_completed: 0 }, [guardian, queuedStudent])
+    expect(d.pill).toBe('issued')
+    expect(d.detail).toBe(
+      'Awaiting Anne Byron (parent/guardian) — never opened; Ada Lovelace (student) queued — sent once the parent/guardian signs',
+    )
+    expect(d.queued.map(r => r.name)).toEqual(['Ada Lovelace'])
+    expect(d.neverOpened.map(r => r.name)).toEqual(['Anne Byron'])
+    expect(d.waitingOn).toHaveLength(2)
+  })
+
+  it('drops "never opened" once the guardian has opened it', () => {
+    const d = describeEnvelope(
+      { status: 'delivered', signers_total: 2, signers_completed: 0 },
+      [{ ...guardian, status: 'delivered', delivered_at: '2026-09-28T10:00:00Z' }, queuedStudent],
+    )
+    expect(d.detail).toBe('Awaiting Anne Byron (parent/guardian); Ada Lovelace (student) queued — sent once the parent/guardian signs')
+    expect(d.neverOpened).toHaveLength(0)
+  })
+
+  it('treats the student as an ordinary outstanding signer once DocuSign sends it', () => {
+    const d = describeEnvelope(
+      { status: 'sent', signers_total: 2, signers_completed: 1 },
+      [{ ...guardian, status: 'completed', delivered_at: '2026-09-28T10:00:00Z' }, { ...queuedStudent, status: 'sent' }],
+    )
+    expect(d.detail).toBe('Awaiting Ada Lovelace (student) — never opened')
+    expect(d.queued).toHaveLength(0)
+  })
+})

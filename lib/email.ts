@@ -458,7 +458,7 @@ export function docusignReminderToMinorEmail({
   firstName: string
   eventTitle: string
   /** Outstanding signers, e.g. [{ name: 'Tamara Buk', role: 'parent/guardian' }]. */
-  waitingOn: { name: string; role: string; neverOpened?: boolean }[]
+  waitingOn: { name: string; role: string; neverOpened?: boolean; queued?: boolean }[]
 }) {
   const guardianPart = waitingOn.find(w => w.role === 'parent/guardian')
   const studentPart  = waitingOn.find(w => w.role === 'student')
@@ -471,7 +471,7 @@ export function docusignReminderToMinorEmail({
 
   const outstandingHtml = waitingOn.length > 0
     ? `<ul style="margin:8px 0 0;padding-left:20px">${waitingOn
-        .map(w => `<li><strong>${w.name}</strong> — the ${w.role} signature${w.neverOpened ? ' (the DocuSign email has not been opened yet)' : ''}</li>`)
+        .map(w => `<li><strong>${w.name}</strong> — the ${w.role} signature${w.queued ? ' (DocuSign sends this once the other signature is done)' : w.neverOpened ? ' (the DocuSign email has not been opened yet)' : ''}</li>`)
         .join('')}</ul>`
     : ''
 
@@ -496,7 +496,7 @@ export function docusignReminderToMinorEmail({
         </div>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
   })
-  const outstandingText = waitingOn.map(w => `  - ${w.name} (${w.role} signature)`).join('\n')
+  const outstandingText = waitingOn.map(w => `  - ${w.name} (${w.role} signature${w.queued ? ', sent once the other signature is done' : ''})`).join('\n')
   const text = `Hi ${firstName},\n\nThe consent form for ${eventTitle} is not complete yet. Still to sign:\n${outstandingText}\n\nThis form needs a signature in each section and DocuSign emails them separately, so signing one does not complete the form.\n\nYour registration remains unconfirmed until every signature is complete.\n\n— Stellr Education`
   return { subject, html, text }
 }

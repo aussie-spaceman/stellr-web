@@ -11,6 +11,7 @@ import {
   docusignSentToGuardianEmail,
 } from '@/lib/email'
 import { guardCron } from '@/lib/cron'
+import { startCronRun } from '@/lib/cron-runs'
 
 // GET /api/cron/docusign-reminders
 // Vercel cron calls this daily at 09:00 UTC (see vercel.json).
@@ -40,10 +41,11 @@ export async function GET(req: NextRequest) {
   if (blocked) return blocked
 
   const db = supabaseServer()
+  const run = await startCronRun(db, 'docusign-reminders')
   const firstChaseCutoff = new Date(Date.now() - FIRST_CHASE_AFTER_DAYS * DAY_MS).toISOString()
   const repeatChaseCutoff = new Date(Date.now() - CHASE_INTERVAL_DAYS * DAY_MS).toISOString()
 
-  const { data: envelopes } = await db
+  const { data: envelopes, error: queryError } = await db
     .from('docusign_envelopes')
     .select('id, envelope_id, envelope_type, minor_name, signer_name, signer_email, event_title, member_id, status, signers_total, signers_completed, reused_from, reminder_count')
     .in('status', ['sent', 'delivered'])
@@ -52,7 +54,17 @@ export async function GET(req: NextRequest) {
     // Never chased, or last chased more than CHASE_INTERVAL_DAYS ago.
     .or(`reminder_sent_at.is.null,reminder_sent_at.lt.${repeatChaseCutoff}`)
 
-  if (!envelopes?.length) return NextResponse.json({ processed: 0 })
+  // The error used to be discarded, which made a failed query indistinguishable
+  // from "nothing to chase" — a daily `processed: 0` either way.
+  if (queryError) {
+    run.fail('query', queryError.message)
+    await run.finish({ processed: 0 })
+    return NextResponse.json({ error: queryError.message }, { status: 500 })
+  }
+  if (!envelopes?.length) {
+    await run.finish({ processed: 0, eligible: 0 })
+    return NextResponse.json({ processed: 0 })
+  }
 
   // Prefetch all participant emails in one query instead of one per envelope
   const memberIds = [...new Set(envelopes.map(e => e.member_id).filter(Boolean))]
@@ -155,9 +167,11 @@ export async function GET(req: NextRequest) {
       processed++
     } catch (err) {
       console.error(`[cron] docusign-reminders: failed for envelope ${env.id}:`, err)
+      run.fail(env.id, err)
     }
   }
 
   console.log(`[cron] docusign-reminders: processed ${processed} of ${envelopes.length} (${skippedBounced} skipped — bounced address)`)
+  await run.finish({ processed, eligible: envelopes.length, skippedBounced })
   return NextResponse.json({ processed, skippedBounced })
 }

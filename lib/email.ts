@@ -18,6 +18,15 @@ const FROM =
 export const DEFAULT_REPLY_TO =
   process.env.TRANSACTIONAL_REPLY_TO ?? 'hello@stellreducation.org'
 
+/**
+ * The staff inbox for operational alerts: new registrations, and any admin alert
+ * that finds no staff_roles recipient (lib/notify.ts). Read at call time so it can
+ * move without a deploy.
+ */
+export function staffAlertEmail(): string {
+  return process.env.REGISTRATION_ALERT_EMAIL ?? process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
+}
+
 // Marketing/campaign sender. Shares the mail. subdomain with the transactional
 // default above, and must keep sharing it: the Resend Free plan allows exactly
 // ONE verified domain, so there is no second domain to split bulk reputation

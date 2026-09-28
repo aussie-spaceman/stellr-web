@@ -4,7 +4,7 @@ import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from 'pdf
 import fontkit from '@pdf-lib/fontkit'
 import { markWatermarked } from '@/lib/watermark/pdf'
 import { tokens } from '@/lib/tokens'
-import { BADGE_FORMATS, badgeName, nameSetting, type BadgeFormat, type NameLine } from '@/lib/badge-layout'
+import { BADGE_FORMATS, artworkBox, badgeName, nameSetting, placementFromLine, type BadgeFormat, type BadgePlacement } from '@/lib/badge-layout'
 
 // Badge + certificate PDF generation (PRD 6.7).
 // Badges: one label per person on Avery 5392 or 8395 stock (lib/badge-layout.ts).
@@ -59,80 +59,93 @@ function drawCentered(
   })
 }
 
-export interface BadgeArtwork extends Artwork {
-  /** The rule the name sits on; see prepareBadgeArtwork(). */
-  line: NameLine | null
+/** One template, ready to draw: prepared artwork, where the name goes, and its ink. */
+export interface BadgeDesign {
+  /** Same key → same embedded image; one per template. */
+  key: string
+  artwork: Artwork
+  placement: BadgePlacement
+  lightInk: boolean
+}
+
+export interface Badge {
+  person: BadgePerson
+  /** null: a plain badge — name, then role or company and the event. */
+  design: BadgeDesign | null
 }
 
 /**
- * One label per person on the chosen Avery sheet. With artwork, the artwork
- * is the design and the only thing drawn is the full name, on one line, above
- * the artwork's rule. Without it, a plain badge: name, then role or company
- * and the event.
+ * One label per badge on the chosen Avery sheet — or, with `single`, one page
+ * the size of the label's artwork (the template preview). With a design, the
+ * artwork is the whole design and the only thing drawn is the full name, on
+ * one line, shrunk to the placement's width.
  *
  * No visible © stamp: on label stock it would print on a label. The watermark
  * marker is still set, as for certificates.
  */
 export async function generateBadgesPdf(
-  people: BadgePerson[],
+  badges: Badge[],
   eventTitle: string,
   format: BadgeFormat,
-  artwork: BadgeArtwork | null
+  opts: { single?: boolean } = {},
 ): Promise<Uint8Array> {
   const spec = BADGE_FORMATS[format]
   const doc = await PDFDocument.create()
   doc.registerFontkit(fontkit)
   const nameFont = await doc.embedFont(await loadNameFont(), { subset: false })
   const regular = await doc.embedFont(StandardFonts.Helvetica)
-  const image = artwork ? await embedArtwork(doc, artwork) : null
-  const line = image ? (artwork?.line ?? null) : null
-  const [, pageH] = LETTER
-  const perPage = spec.cols * spec.rows
-
-  for (let i = 0; i < people.length; i += perPage) {
-    const page = doc.addPage(LETTER)
-    people.slice(i, i + perPage).forEach((person, j) => {
-      const col = j % spec.cols
-      const row = Math.floor(j / spec.cols)
-      const label = {
-        x: (spec.left + col * spec.pitchX) * PT_PER_IN,
-        y: pageH - (spec.top + row * spec.pitchY + spec.height) * PT_PER_IN,
-        width: spec.width * PT_PER_IN,
-        height: spec.height * PT_PER_IN,
-      }
-      const bleed = spec.bleed * PT_PER_IN
-      const box = {
-        x: label.x - bleed,
-        y: label.y - bleed,
-        width: label.width + bleed * 2,
-        height: label.height + bleed * 2,
-      }
-
-      if (image) page.drawImage(image, box)
-      if (spec.cutGuides) {
-        page.drawRectangle({ ...label, borderColor: rgb(0.8, 0.8, 0.8), borderWidth: 0.5 })
-      }
-
-      const name = badgeName(person.firstName, person.lastName)
-      const set = nameSetting(box, label, line, spec.maxNameSize)
-      const size = fittedSize((s) => nameFont.widthOfTextAtSize(name, s), set.size, set.maxWidth)
-      const dark = line ? line.backgroundLuma < 110 : false
-      page.drawText(name, {
-        x: set.centerX - nameFont.widthOfTextAtSize(name, size) / 2,
-        y: set.baselineY,
-        size,
-        font: nameFont,
-        color: dark ? rgb(1, 1, 1) : hexToRgb(tokens.color.ink),
-      })
-
-      if (!image) {
-        const maxWidth = label.width - 24
-        const centerX = label.x + label.width / 2
-        drawCentered(page, person.subtitle, regular, 12, centerX, set.baselineY - 28, maxWidth)
-        drawCentered(page, eventTitle, regular, 8, centerX, label.y + 14, maxWidth)
-      }
-    })
+  const images = new Map<string, PDFImage | null>()
+  for (const b of badges) {
+    if (b.design && !images.has(b.design.key)) images.set(b.design.key, await embedArtwork(doc, b.design.artwork))
   }
+  const ink = hexToRgb(tokens.color.ink)
+  const bleed = spec.bleed * PT_PER_IN
+  const [, pageH] = LETTER
+  const perPage = opts.single ? 1 : spec.cols * spec.rows
+  const single = artworkBox(format)
+
+  let page: PDFPage | null = null
+  badges.forEach((badge, i) => {
+    const j = i % perPage
+    if (j === 0) page = doc.addPage(opts.single ? [single.width, single.height] : LETTER)
+    const col = j % spec.cols
+    const row = Math.floor(j / spec.cols)
+    const label = opts.single
+      ? { x: bleed, y: bleed, width: spec.width * PT_PER_IN, height: spec.height * PT_PER_IN }
+      : {
+          x: (spec.left + col * spec.pitchX) * PT_PER_IN,
+          y: pageH - (spec.top + row * spec.pitchY + spec.height) * PT_PER_IN,
+          width: spec.width * PT_PER_IN,
+          height: spec.height * PT_PER_IN,
+        }
+    const box = { x: label.x - bleed, y: label.y - bleed, width: label.width + bleed * 2, height: label.height + bleed * 2 }
+    const p = page as unknown as PDFPage
+
+    const design = badge.design
+    const image = design ? images.get(design.key) ?? null : null
+    if (image) p.drawImage(image, box)
+    if (spec.cutGuides || opts.single) {
+      p.drawRectangle({ ...label, borderColor: rgb(0.8, 0.8, 0.8), borderWidth: 0.5 })
+    }
+
+    const name = badgeName(badge.person.firstName, badge.person.lastName)
+    const set = nameSetting(box, image && design ? design.placement : placementFromLine(null, format))
+    const size = fittedSize((s) => nameFont.widthOfTextAtSize(name, s), set.size, set.maxWidth)
+    p.drawText(name, {
+      x: set.centerX - nameFont.widthOfTextAtSize(name, size) / 2,
+      y: set.baselineY,
+      size,
+      font: nameFont,
+      color: image && design?.lightInk ? rgb(1, 1, 1) : ink,
+    })
+
+    if (!image) {
+      const maxWidth = label.width - 24
+      const centerX = label.x + label.width / 2
+      drawCentered(p, badge.person.subtitle, regular, 12, centerX, set.baselineY - 28, maxWidth)
+      drawCentered(p, eventTitle, regular, 8, centerX, label.y + 14, maxWidth)
+    }
+  })
 
   markWatermarked(doc)
   return doc.save()

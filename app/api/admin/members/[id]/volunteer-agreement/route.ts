@@ -26,16 +26,34 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   if (!member.email) return NextResponse.json({ error: 'Member has no email on file' }, { status: 400 })
 
-  await dispatchVolunteerAgreement(db, member, { force: true })
+  const agreement = await dispatchVolunteerAgreement(db, member, { force: true })
 
-  const actor = await actorFromAuth()
-  await logActivity({
-    memberId: id,
-    category: 'docusign',
-    action: 'volunteer_agreement_issued',
-    summary: `Volunteer Agreement issued for ${VOLUNTEER_PROGRAM_TITLE}`,
-    ...actor,
-  }, db)
+  // Report what actually happened. This route used to answer 200 and log
+  // "issued" unconditionally — on 28 Sept 2026 two production issues were
+  // rejected by DocuSign (ACCOUNT_LACKS_EXTENSIONS_PERMISSIONS), the admin saw
+  // no error, and the activity log recorded agreements that were never sent.
+  if (agreement === 'failed') {
+    return NextResponse.json(
+      { error: 'DocuSign rejected the request, so nothing was sent. The reason is in the server log.', agreement },
+      { status: 502 },
+    )
+  }
+  if (agreement === 'not_required') {
+    return NextResponse.json({ error: 'No agreement applies to this member.', agreement }, { status: 422 })
+  }
 
-  return NextResponse.json({ ok: true })
+  if (agreement === 'issued' || agreement === 'on_file') {
+    const actor = await actorFromAuth()
+    await logActivity({
+      memberId: id,
+      category: 'docusign',
+      action: agreement === 'issued' ? 'volunteer_agreement_issued' : 'volunteer_agreement_on_file',
+      summary: agreement === 'issued'
+        ? `Volunteer Agreement issued for ${VOLUNTEER_PROGRAM_TITLE}`
+        : `Volunteer Agreement already on file for ${VOLUNTEER_PROGRAM_TITLE}; nothing new sent`,
+      ...actor,
+    }, db)
+  }
+
+  return NextResponse.json({ ok: true, agreement })
 }

@@ -9,6 +9,7 @@ import { getEventRoster } from '@/lib/event-admin'
 import EventRoster from '@/components/admin/EventRoster'
 import EventManagerAssignments from '@/components/admin/EventManagerAssignments'
 import { EventVolunteersPanel } from '@/components/admin/competitions/EventVolunteersPanel'
+import { EventEmailsPanel } from '@/components/admin/competitions/EventEmailsPanel'
 import EventCompanies, { type CompanyRow } from '@/components/admin/EventCompanies'
 import EventBadges from '@/components/admin/EventBadges'
 import EventCertificates from '@/components/admin/EventCertificates'
@@ -23,10 +24,11 @@ import { ContainerTraining, type ContentRow, type ModuleOption } from '@/compone
 export const metadata = { title: 'Admin — Event' }
 export const dynamic = 'force-dynamic'
 
-type Tab = 'overview' | 'roster' | 'training' | 'settings'
+type Tab = 'overview' | 'roster' | 'emails' | 'training' | 'settings'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'roster', label: 'Roster' },
+  { id: 'emails', label: 'Email Reminders' },
   { id: 'training', label: 'Training' },
   { id: 'settings', label: 'Settings' },
 ]
@@ -50,7 +52,7 @@ export default async function AdminEventDetailPage({
 }) {
   const { slug } = await params
   const { tab: rawTab = 'overview' } = await searchParams
-  const tab: Tab = (['overview', 'roster', 'training', 'settings'] as Tab[]).includes(rawTab as Tab)
+  const tab: Tab = TABS.some((t) => t.id === rawTab)
     ? (rawTab as Tab)
     : 'overview'
 
@@ -109,17 +111,16 @@ export default async function AdminEventDetailPage({
   }
 
   // ── Settings (live events, settings tab) ──────────────────────────────────
-  let eventSettings: { badge_artwork_path: string | null; badge_8395_artwork_path: string | null } | null = null
+  // Badges and certificates load their own templates; this is the refund
+  // editor's, which only admins see.
   let refundTiers: RefundTier[] = DEFAULT_TIERS
-  // Event managers see the settings tab too (badges, certificates), so load it
-  // for them; the refund editor that uses the policy rows is admin-only.
-  if (tab === 'settings' && !isCampaign) {
-    const [{ data: es }, { data: globalPolicy }, { data: eventPolicy }] = await Promise.all([
-      db.from('event_settings').select('badge_artwork_path, badge_8395_artwork_path').eq('event_slug', slug).maybeSingle(),
+  let hasRefundOverride = false
+  if (tab === 'settings' && !isCampaign && access.isAdmin) {
+    const [{ data: globalPolicy }, { data: eventPolicy }] = await Promise.all([
       db.from('refund_policies').select('tiers').eq('scope', 'global').maybeSingle(),
       db.from('refund_policies').select('tiers').eq('scope', 'event').eq('event_slug', slug).maybeSingle(),
     ])
-    eventSettings = es ?? null
+    hasRefundOverride = Boolean(eventPolicy)
     refundTiers = (eventPolicy?.tiers as RefundTier[]) ?? (globalPolicy?.tiers as RefundTier[]) ?? DEFAULT_TIERS
   }
 
@@ -164,8 +165,9 @@ export default async function AdminEventDetailPage({
     }
   }
 
-  // ── Visible tabs (campaigns skip Settings) ────────────────────────────────
-  const visibleTabs = isCampaign ? TABS.filter((t) => t.id !== 'settings') : TABS
+  // ── Visible tabs (campaigns skip Settings and Email Reminders — a campaign
+  //    has its own proposal emails, and no venue or event day to count down to)
+  const visibleTabs = isCampaign ? TABS.filter((t) => t.id !== 'settings' && t.id !== 'emails') : TABS
 
   const baseHref = `/admin/competitions/${slug}`
 
@@ -296,6 +298,11 @@ export default async function AdminEventDetailPage({
         </div>
       )}
 
+      {/* ── Email Reminders (live events only) ─────────────────────────────── */}
+      {tab === 'emails' && !isCampaign && (
+        <EventEmailsPanel eventSlug={slug} eventDate={event.date ?? null} />
+      )}
+
       {/* ── Training ───────────────────────────────────────────────────────── */}
       {tab === 'training' && (
         <div className="space-y-4">
@@ -327,7 +334,7 @@ export default async function AdminEventDetailPage({
               <div>
                 <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Refund Policy</h2>
                 <p className="text-xs text-brand-muted-soft mt-1">
-                  {eventSettings ? 'This event uses a custom override.' : 'Using the global default. Save below to override for this event only.'}
+                  {hasRefundOverride ? 'This event uses a custom override.' : 'Using the global default. Save below to override for this event only.'}
                 </p>
               </div>
               <div className="bg-white rounded-xl border border-brand-border p-5">
@@ -335,7 +342,7 @@ export default async function AdminEventDetailPage({
                   scope="event"
                   eventSlug={slug}
                   initialTiers={refundTiers}
-                  hasOverride={Boolean(eventSettings)}
+                  hasOverride={hasRefundOverride}
                 />
               </div>
             </section>
@@ -359,13 +366,7 @@ export default async function AdminEventDetailPage({
             />
           </section>
 
-          <EventBadges
-            eventSlug={slug}
-            artworkSet={{
-              avery_5392: Boolean(eventSettings?.badge_artwork_path),
-              avery_8395: Boolean(eventSettings?.badge_8395_artwork_path),
-            }}
-          />
+          <EventBadges eventSlug={slug} />
 
           <EventCertificates eventSlug={slug} />
 

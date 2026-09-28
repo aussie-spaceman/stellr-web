@@ -15,6 +15,21 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 21 — 28 Sept 2026 (Event Email Reminders + DocuSign re-issue)
+
+Handover: `HANDOVER-event-email-reminders-2026-09-28.md`. Phase 1 #224 (`fd35306`) and Phase 2 (this PR) on `dev`; **not promoted**.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 21.1 | DocuSign crons have had no production effect since 4 Sept | Last chase 3 Sept; `form_data_read_at` never set; 3 envelopes eligible on 28 Sept. Query, secret and `APP_ENV` ruled out. Hobby keeps logs 1 h, so undiagnosable until `cron_runs` (#224) is live. | After promote + next 09:00 UTC: read `cron_runs`. No row → Vercel isn't invoking (Settings → Cron Jobs). Errors → fix what they name. | ☐ |
+| 21.2 | Production migrations | `20260928180000_cron_runs`, `20260928200000_event_emails` applied to dev (ledger realigned); prod not. | David applies both before the promote merge. | ☐ |
+| 21.3 | Colorado DocuSign catch-up | 6 envelopes sent before 26 Sept. Script dry-run verified on dev only. | After promote: `scripts/docusign-resend-outstanding.ts --event colorado-space-design-challenge --sent-before 2026-09-26`, dry run then `--apply`; confirm in DocuSign. **Before 3 Oct.** | ☐ |
+| 21.4 | No real inbox has received an event email | Every send in this session was suppressed (dev safelist blanked / no API key). Outlook rendering of the signature table unseen. | First production use: "Send test to me" and read it in Outlook and Gmail before "Send now". | ☐ |
+| 21.5 | Resend plan limits | Free = ~100/day, 3,000/month; a Colorado all-families send ≈ 40. Per-send cap 75 in code. | David: confirm the plan in Resend. | ☐ |
+| 21.6 | Bulk DocuSign reminder to a family with **no** envelope says "we've just re-sent it" | Bulk path only resends; missing envelopes need the roster button (quota). 0 such participants in prod on 28 Sept. | If it happens: make the copy conditional, or have the send list who still needs the roster button. | ☐ |
+| 21.7 | `/api/admin/events/[slug]/remind` superseded | UI no longer calls it; `PLAN-single-email-domain.md` lists it as a sender. | Delete the route and update that table in one PR. | ☐ |
+| 21.8 | Only 2 of 15 crons write `cron_runs` (+ event-emails) | The same "did it run?" blind spot applies to the other 13. | Wrap each in `startCronRun` — mechanical. | ☐ |
+
 ## Session 20 — 25–28 Sept 2026 (admin member save fix)
 
 Handover: `HANDOVER-admin-member-save-2026-09-28.md`. Doc snapshot `1sjjYgozbcup3uM_0dp8v_9Vve2GcbNvKhf8xBlOGdGk`. #210 → promoted in #214 (`1c74f6b`); the merge was run by a separate session.
@@ -53,11 +68,14 @@ assigned volunteer mentors) go on one line in the clear space above the artwork'
 |---|---|---|---|---|
 | 18.1 | Dev ledger row for the badge migration | Dev has the column (David ran the `ALTER TABLE` directly on 25 Sept). `schema_migrations` has no `20260925140000` row, so `db:status` lists it as pending. Prod is correct. | David: `insert into supabase_migrations.schema_migrations (version, name) values ('20260925140000', 'badge_8395_artwork');` then `npm run db:status`. Do it alongside 17.1. | ☐ |
 | 18.2 | 8395 sheet geometry | These are gLabels' Avery 5395/8395 template values (first label 0.6875″, 0.59375″; pitch 3.75 × 2.5). No physical sheet has been checked. A wrong offset puts every name off-label. **High criticality before the first event using 8395.** | Print one 8395 PDF on plain paper at 100%, lay it over a real 8395 sheet against a window, and adjust `BADGE_FORMATS.avery_8395` if needed. | ☐ |
-| 18.3 | Rule detection on real artwork | Tested only on synthetic SVG backgrounds. No real Canva badge background exists on dev or prod. | Upload the real background for each format on dev, and read the upload message ("Names will sit on the line", or the red no-line warning). Then download and check the first page. If a faint rule is missed, lower `CONTRAST` in `lib/badge-layout.ts`. | ☐ |
+| 18.3 | Rule detection on real artwork | **28 Sept:** the first real artwork (CO SDC, 8395) printed names right of centre and floating: its rule slopes ~1% and detection caught only the right half. Fixed in the session-18 addendum PR: detection now follows a sloping rule. Re-run locally on that artwork: centred, on the line. Not yet re-uploaded on dev or prod. | After promotion: re-upload the CO SDC background on prod (or press **Put it back on the line**), then check the preview. | ☐ |
 | 18.4 | Badge panel never rendered in a browser | The session skipped browser verification: the worktree had no `.env.local`. It is covered by typecheck, the build and unit tests only. The e2e suite does not touch badges. | This closes with 18.3. While there, open the Settings tab as an **event manager** too, to confirm they see "Background set." | ☐ |
 | 18.5 | Very long names shrink to ~7pt | By design (one line was asked for). A 45-character name on 8395 is barely readable at arm's length. | Maintainer decision: accept it, or set a floor (e.g. 12pt) below which the name wraps to two lines or the first name is shortened. No action if accepted. | ☐ |
 | 18.6 | Inferred behaviour changes, never confirmed | (a) With artwork, **only the name** prints; company/role and event title now appear only on plain badges. This also changes 5392. (b) Active assigned volunteers now get badges; "interested" volunteers do not. (c) No visible © stamp on badge sheets. | Maintainer: confirm, or ask for the company/role line back under the name. It is a small change in `generateBadgesPdf`. | ☐ |
-| 18.7 | Upload feedback is transient | "No line found" shows once, at upload, and is not stored. After a reload the panel only says "Background set." Certificates have a live preview; badges don't. | Optional: a preview iframe like `EventCertificates`, rendering the first sheet with a sample long name. | ☐ |
+| 18.7 | Upload feedback is transient | Closed by the addendum: every template has a live preview with sliders (height, across, width, size) and a **Put it back on the line** reset, like certificates. | — | ☑ |
+| 18.8 | Addendum migration `20260928190000_event_badge_templates` (renamed from `…180000` on 28 Sept: it collided with `20260928180000_cron_runs`) | New table `event_badge_templates`: one background per format per audience (everyone / mentors / one company), each with a stored name placement. Existing `event_settings.badge_*` paths are backfilled as "everyone" rows with a NULL placement, which is found from the rule at render time. The old columns stay one release, unread. **The code needs the table on dev before merge, and on prod before promotion.** | David applies it on dev (auto mode blocks the MCP apply), then on prod in `promote`. | ☐ |
+| 18.9 | Drop `event_settings.badge_artwork_path` / `badge_8395_artwork_path` | Unread since the addendum. | One release after the addendum is promoted: a migration dropping both columns. | ☐ |
+| 18.10 | Refund "custom override" label was wrong | The settings page showed "This event uses a custom override" whenever an `event_settings` row existed, and uploading a badge background creates one. Fixed in the addendum: it now checks `refund_policies` scope=event. | — | ☑ |
 
 ## Session 17 — 24–25 Sept 2026 (event award certificates + credentials)
 

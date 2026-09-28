@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { guardCron } from '@/lib/cron'
+import { startCronRun } from '@/lib/cron-runs'
 import { recordCredentialOptOutFromForm, OPT_OUT_ENVELOPE_COLUMNS, type OptOutEnvelope } from '@/lib/docusign-optout'
 
 // GET /api/cron/docusign-form-data
@@ -19,6 +20,7 @@ export async function GET(req: NextRequest) {
   if (blocked) return blocked
 
   const db = supabaseServer()
+  const run = await startCronRun(db, 'docusign-form-data')
   const since = new Date(Date.now() - LOOKBACK_DAYS * DAY_MS).toISOString()
 
   const { data, error } = await db
@@ -30,12 +32,17 @@ export async function GET(req: NextRequest) {
     .is('form_data_read_at', null)
     .gte('completed_at', since)
     .limit(50)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    run.fail('query', error.message)
+    await run.finish({ processed: 0 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
   const results: Record<string, number> = {}
   for (const env of (data ?? []) as OptOutEnvelope[]) {
     const r = await recordCredentialOptOutFromForm(db, env)
     results[r] = (results[r] ?? 0) + 1
   }
+  await run.finish({ processed: data?.length ?? 0, results })
   return NextResponse.json({ processed: data?.length ?? 0, results })
 }

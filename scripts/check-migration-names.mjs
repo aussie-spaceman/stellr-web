@@ -29,9 +29,21 @@ const TIMESTAMPED = /^\d{14}_/
 
 const offenders = []
 
+// Two sessions can still pick the same timestamp by hand (28 Sept 2026:
+// 20260928180000_cron_runs and 20260928180000_event_badge_templates). The
+// version is the primary key of supabase_migrations.schema_migrations, so the
+// second one to be recorded collides, and db:status can only show one of them.
+const byVersion = new Map()
+
 for (const file of readdirSync(DIR)) {
   if (!file.endsWith('.sql')) continue
-  if (TIMESTAMPED.test(file)) continue
+  if (TIMESTAMPED.test(file)) {
+    const version = file.slice(0, 14)
+    const other = byVersion.get(version)
+    if (other) offenders.push([file, `same version as ${other} — give one of them a later timestamp`])
+    else byVersion.set(version, file)
+    continue
+  }
 
   const match = file.match(LEGACY)
   if (!match) {
@@ -56,4 +68,4 @@ if (offenders.length) {
   process.exit(1)
 }
 
-console.log('✓ migration naming: no new sequential migrations')
+console.log('✓ migration naming: no new sequential migrations, no duplicate versions')

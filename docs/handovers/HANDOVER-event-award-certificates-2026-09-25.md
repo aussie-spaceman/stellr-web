@@ -35,7 +35,7 @@ From the maintainer, with the flyer artwork and a sample CO SDC print attached:
 | Admin UI (Settings tab) | `components/admin/EventCertificates.tsx`, `components/admin/EventAwards.tsx` |
 | Member download | `app/api/credentials/[number]/pdf` renders on the event's award artwork; the wallet at `app/(member)/community/credentials` has a PDF link per row |
 | Ownership | `CredentialView.owner_member_id` = the credential's `member_id`, falling back to the participant's current `member_id` |
-| Upload signing | `lib/uploads.ts` `event-artwork` uses `requireEventAccess` (managers can upload). Kinds are `badge` and `certificate-<award>` |
+| Upload signing | `lib/uploads.ts` `event-artwork` uses `requireEventAccess` (managers can upload). Kinds are `badge` (Avery 5392), `badge8395` (Avery 8395; added 25 Sept, #206) and `certificate-<award>` |
 | Font tracing | `next.config.mjs` `outputFileTracingIncludes` → `public/fonts/Aileron-SemiBold.otf` |
 
 **Data model:**

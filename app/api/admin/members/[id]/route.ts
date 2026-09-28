@@ -39,8 +39,11 @@ export async function PATCH(
     'health_conditions', 'is_active',
   ]
   const updates: Record<string, unknown> = {}
+  // The form submits cleared/unset fields as ''. Enum and date columns (grade,
+  // tshirt_size, gender, date_of_birth) reject '', so an Adult with no grade
+  // could never be saved — store empties as NULL instead.
   for (const key of allowed) {
-    if (key in body) updates[key] = body[key]
+    if (key in body) updates[key] = body[key] === '' ? null : body[key]
   }
 
   // Snapshot the editable fields + current ethnicity/allergy selections before

@@ -15,6 +15,23 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 18 — 25 Sept 2026 (Avery 8395 name badges)
+
+PR #206 → `dev` as `e0f3a91`; promoted in #208 (`868a178`) by a separate session. Migration `20260925140000_badge_8395_artwork.sql`.
+Handover: `docs/handovers/HANDOVER-avery-8395-badges-2026-09-25.md`. Doc snapshot: `1Au-xSMrXRMJdOV3I3HAy51wTU31AYhnfrugyusaflws`.
+Admins and event managers pick Avery 5392 or 8395, upload a background for each, and download a PDF. Names (students and
+assigned volunteer mentors) go on one line in the clear space above the artwork's horizontal rule, which is found automatically.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 18.1 | Dev ledger row for the badge migration | Dev has the column (David ran the `ALTER TABLE` directly on 25 Sept). `schema_migrations` has no `20260925140000` row, so `db:status` lists it as pending. Prod is correct. | David: `insert into supabase_migrations.schema_migrations (version, name) values ('20260925140000', 'badge_8395_artwork');` then `npm run db:status`. Do it alongside 17.1. | ☐ |
+| 18.2 | 8395 sheet geometry | These are gLabels' Avery 5395/8395 template values (first label 0.6875″, 0.59375″; pitch 3.75 × 2.5). No physical sheet has been checked. A wrong offset puts every name off-label. **High criticality before the first event using 8395.** | Print one 8395 PDF on plain paper at 100%, lay it over a real 8395 sheet against a window, and adjust `BADGE_FORMATS.avery_8395` if needed. | ☐ |
+| 18.3 | Rule detection on real artwork | Tested only on synthetic SVG backgrounds. No real Canva badge background exists on dev or prod. | Upload the real background for each format on dev, and read the upload message ("Names will sit on the line", or the red no-line warning). Then download and check the first page. If a faint rule is missed, lower `CONTRAST` in `lib/badge-layout.ts`. | ☐ |
+| 18.4 | Badge panel never rendered in a browser | The session skipped browser verification: the worktree had no `.env.local`. It is covered by typecheck, the build and unit tests only. The e2e suite does not touch badges. | This closes with 18.3. While there, open the Settings tab as an **event manager** too, to confirm they see "Background set." | ☐ |
+| 18.5 | Very long names shrink to ~7pt | By design (one line was asked for). A 45-character name on 8395 is barely readable at arm's length. | Maintainer decision: accept it, or set a floor (e.g. 12pt) below which the name wraps to two lines or the first name is shortened. No action if accepted. | ☐ |
+| 18.6 | Inferred behaviour changes, never confirmed | (a) With artwork, **only the name** prints; company/role and event title now appear only on plain badges. This also changes 5392. (b) Active assigned volunteers now get badges; "interested" volunteers do not. (c) No visible © stamp on badge sheets. | Maintainer: confirm, or ask for the company/role line back under the name. It is a small change in `generateBadgesPdf`. | ☐ |
+| 18.7 | Upload feedback is transient | "No line found" shows once, at upload, and is not stored. After a reload the panel only says "Background set." Certificates have a live preview; badges don't. | Optional: a preview iframe like `EventCertificates`, rendering the first sheet with a sample long name. | ☐ |
+
 ## Session 17 — 24–25 Sept 2026 (event award certificates + credentials)
 
 PR #201 → `dev` as `9f780d3`; promoted in #203 (`839b53c`) by a separate session. Migration `20260925090000_event_awards.sql`.

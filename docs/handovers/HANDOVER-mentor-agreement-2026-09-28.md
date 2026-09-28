@@ -50,24 +50,35 @@ Decisions (David, 28 Sept):
 - The per-signer lines on the card, for the same reason.
 - The mentor's own `/account` view.
 
-## Open items: prod retro issue for Colorado SDC (after promotion)
-1. Confirm that `DOCUSIGN_STELLR_REP_EMAIL` is set on the prod Vercel project. It is set on dev.
-   Without it, `signers_total` is 1 and Stellr gets no email.
-2. No mentor or volunteer envelope has ever been sent in prod.
-   - Run `scripts/verify-prod-services.ts` to confirm the mentor template resolves.
-   - It won't show whether the template has the MentorEmail and EventTitle tabs. The 9 Sept
-     handover says they may be missing, and missing tabs arrive blank.
-3. On prod `/admin/members/<id>`, click **Issue agreement** for each mentor:
-   - Patrick Eaton `8c1df004-f862-465b-afa6-23c70589898f`. He has no phone on file, so
-     MentorPhone will be blank. His Checkr check is at invited.
-   - Sophie Fleck `297c9fb0-d5a3-4099-90ee-694d0ef2bcda`. Not onboarded yet (DOB is null).
-   - Pauline Davila `aaf02268-5735-4e13-af90-24af81b5e927`.
+## Retro issue for Colorado SDC: what happened
+1. The first attempt failed. At 17:51 and 17:52Z, David issued to Patrick and Pauline, and DocuSign rejected both with
+   `ACCOUNT_LACKS_EXTENSIONS_PERMISSIONS`.
+   - **Cause:** the prod Mentor template's signer carried DocuSign's **Verify Postal Address**
+     extension. It had five address fields bound to `postal-address-verify`, in `extensionData`.
+   - The sandbox allows Extensions; the prod Basic API plan does not.
+   - The Adult and Minor templates have no extension fields, which is why registrations work.
+2. The failure was invisible, for two reasons:
+   - The admin Issue route returned 200 and logged `volunteer_agreement_issued` anyway. #227
+     fixed that: a rejection now returns 502 with a message on the card, and activity is logged
+     only for issued or on-file.
+   - The admin alert reached nobody, because `staff_roles` was empty (see below).
+   - Patrick and Pauline each still carry **one false "issued" activity row** from 17:51/17:52.
+3. David fixed the template. He removed the Address extension and replaced it with one plain
+   required text field on page 1.
+   - `node scripts/check-docusign-template.mjs mentor <download>` passed.
+   - The file has 0 `extensionData` fields.
+   - The roles are unchanged: `Mentor` and `StellrRepresentative`, both routingOrder 1.
+4. The re-issue succeeded at about 18:20Z. Each mentor has a `volunteer`/`sent` envelope with
+   `signers_total=2`:
+   - Pauline `1be0cc47`
+   - Sophie `2dc9a87f`
+   - Patrick `71e45978`
+5. By close-out, the StellrRepresentative had signed all three, and Connect recorded it
+   (`signers_completed=1`). No mentor had opened theirs yet.
 
-   This was deliberately done through the UI rather than a script, so prod keys stay off local
-   disk and each issue is logged against the admin who sent it.
-4. After step 3, confirm the three rows are `sent` with `signers_total=2`, and that the
-   Colorado SDC Volunteers panel shows "Agreement sent" for all three.
-5. Envelope budget: 23 of 40 used in September as of 28 Sept.
+All code from this work is in production:
+- #220 via #223 (`0db07ee`)
+- #227 via #231 (`b068c86`, `dpl_7vcJqx5yUzK5g57X6sNaWah9mx11`)
 
 ## Follow-up: admin alerts reached nobody (28 Sept 2026)
 - **Cause.** `notifyCommunityAdmins` (`lib/notify.ts`) sends only to `staff_roles` holders of
@@ -91,3 +102,42 @@ Decisions (David, 28 Sept):
   - A holder who has turned off both in-app and email still gets nothing. The fallback
     covers only the zero-holder case.
   - To add someone, grant a scope on `/admin/staff`.
+
+## Close-out (28 Sept 2026): open items
+This list mirrors TRACKER Session 22.
+
+- **22.1 Mentor signatures.**
+  - All three are at 1 of 2: Stellr signed, the mentor has not.
+  - The event is 3 Oct. Chase the three directly.
+  - Don't rely on the reminder cron: its first run since 4 Sept is unproven (TRACKER 21.1).
+- **22.2 The webhook has never flipped a `volunteer` envelope to `completed` in prod.**
+  - The recipient sync is proven; completion is not.
+  - When the first mentor signs, check:
+    - the row reads `completed`, with `completed_at` set,
+    - the admin card reads Complete, with a valid-until date 3 years out,
+    - the event panel reads "Agreement signed".
+- **22.3 The mentor's own `/account` view is unverified.**
+  - Use admin view-as on Pauline.
+  - `DocusignsSection` should list "Mentor Participation Agreement".
+  - The `VolunteeringSection` agreement pill should read "Awaiting your signature".
+- **22.4 The app's heads-up email (`docusignSentToSignerEmail`) is unconfirmed** for the three
+  18:20Z sends. Check the Resend log.
+- **22.5 Two false activity rows.** Patrick and Pauline each have a `volunteer_agreement_issued`
+  row at 17:51/17:52Z for a send DocuSign rejected. David to decide: leave them as history, or
+  delete them. Either way, don't read those rows as sends.
+- **22.6 The admin failure-alert copy is wrong for this path.** `dispatchAgreement`'s catch says
+  "registered for … Registration succeeded". On the admin Issue and event-assignment paths
+  there was no registration. Make the copy depend on where the call came from.
+- **22.7 Mentor template tidy-ups:**
+  - The address field is 84pt wide.
+  - The required text on page 4 (x179 y463) is unlabelled. If it is the mentor's email, label
+    it `MentorEmail` and the app will prefill it.
+  - There is no `EventTitle` tab, so the app's value is dropped.
+  - After any edit, re-run the checker.
+- **22.8 Guard against extension drift.** Make `scripts/check-docusign-template.mjs` fail on any
+  `extensionData`. A field like that passes every sandbox test and fails every prod send.
+- **22.9 Patrick Eaton is not cleared.** His Checkr check has been `invited` since before
+  28 Sept, and he has not onboarded (DOB null). Sophie has not onboarded either. Both need a nudge
+  before 3 Oct.
+- **22.10 #221 (CSV formula escaping) is in production, but this session never read its diff.**
+  The classifier blocked the read. It rests on its CI and its PR. Low risk; it is admin-only.

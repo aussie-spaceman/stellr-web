@@ -15,6 +15,25 @@ Columns: **State** is a fact about the repo or a service at the time of the
 tick, not a promise. **Next** is the smallest step that closes the row.
 **Done** is ☑ only when the State column says how it was verified.
 
+## Session 22 — 28 Sept 2026 (mentor Volunteer Agreement on event assignment)
+
+Handover: `HANDOVER-mentor-agreement-2026-09-28.md`.
+- In production: #220 via #223 (`0db07ee`) and #227 via #231 (`b068c86`).
+- The three Colorado SDC mentors were issued at about 18:20Z, after the Mentor template's Verify Postal Address extension was removed.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| 22.1 | Colorado SDC mentor signatures | All 3 are at 1 of 2: Stellr counter-signed, and Connect recorded it. No mentor had opened theirs at close-out (prod read). | Chase Patrick, Pauline and Sophie directly **before 3 Oct**. The reminder cron's first run is unproven (21.1). | ☐ |
+| 22.2 | Webhook completion of a `volunteer` envelope | Recipient sync proven in prod; `completed` never observed (dev can't receive Connect). | On the first mentor signature: row `completed` with `completed_at`, admin card Complete with valid-until +3y, event panel "Agreement signed". | ☐ |
+| 22.3 | Mentor's own `/account` view | Unverified. | Admin view-as on Pauline: "Mentor Participation Agreement" listed, Volunteering pill "Awaiting your signature". | ☐ |
+| 22.4 | App heads-up email for the 3 sends | DocuSign's email went out; `docusignSentToSignerEmail` delivery unconfirmed. | Check the Resend log at about 18:20Z, 28 Sept. | ☐ |
+| 22.5 | False "issued" activity rows | Patrick and Pauline each have a `volunteer_agreement_issued` row at 17:51/17:52Z for a rejected send (pre-#227). | David: leave as history, or delete the two rows. | ☐ |
+| 22.6 | Failure-alert copy says "Registration succeeded" | Wrong on the admin Issue and event-assignment paths. | Pass the caller's context into `dispatchAgreement` and word the alert to match. | ☐ |
+| 22.7 | Mentor template tidy-ups | Address field 84pt wide. Page 4 required text (x179 y463) unlabelled. No `EventTitle` tab, so the app's value is dropped. | David edits: widen the address field, label the page 4 field `MentorEmail` if it is the email. Re-run `check-docusign-template.mjs mentor`. | ☐ |
+| 22.8 | Extension drift is invisible to tests | Sandbox allows DocuSign Extensions; the prod plan rejects every envelope that uses one. | `check-docusign-template.mjs`: fail on any `extensionData`. | ☐ |
+| 22.9 | Patrick not cleared; Patrick and Sophie not onboarded | Patrick's Checkr check is `invited`. Both have DOB null. | Nudge both before 3 Oct. Admin decides whether Patrick attends uncleared. | ☐ |
+| 22.10 | #221 diff never read by the promoting session | In prod. Classifier blocked the read; rests on its CI. | Optional review of `lib/csv.ts`. Admin-only. | ☐ |
+
 ## Session 21 — 28 Sept 2026 (Event Email Reminders + DocuSign re-issue)
 
 Handover: `HANDOVER-event-email-reminders-2026-09-28.md`. Phase 1 #224 (`fd35306`) and Phase 2 (this PR) on `dev`; **not promoted**.

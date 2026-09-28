@@ -36,18 +36,24 @@ Handover: `HANDOVER-mentor-agreement-2026-09-28.md`.
 
 ## Session 21 — 28 Sept 2026 (Event Email Reminders + DocuSign re-issue)
 
-Handover: `HANDOVER-event-email-reminders-2026-09-28.md`. Phase 1 #224 (`fd35306`) and Phase 2 (this PR) on `dev`; **not promoted**.
+Handover: `HANDOVER-event-email-reminders-2026-09-28.md` (see §6, close-out). Doc snapshot `1AFoD3rCYkxw0VNmk090kUTR8IusoLTWhx-1YRN6dlAU`. #224 + #229 (+ #230 migration fix) **promoted in #231 → `b068c86`, live 28 Sept 18:58Z** (`dpl_7vcJqx5yUzK5g57X6sNaWah9mx11`). Rollback `dpl_Bq8NKBxVVEcB9E6y6psd4nA1kicx`.
 
 | # | Item | State | Next | Done |
 |---|---|---|---|---|
-| 21.1 | DocuSign crons have had no production effect since 4 Sept | Last chase 3 Sept; `form_data_read_at` never set; 3 envelopes eligible on 28 Sept. Query, secret and `APP_ENV` ruled out. Hobby keeps logs 1 h, so undiagnosable until `cron_runs` (#224) is live. | After promote + next 09:00 UTC: read `cron_runs`. No row → Vercel isn't invoking (Settings → Cron Jobs). Errors → fix what they name. | ☐ |
-| 21.2 | Production migrations | `20260928180000_cron_runs`, `20260928200000_event_emails` applied to dev (ledger realigned); prod not. | David applies both before the promote merge. | ☐ |
-| 21.3 | Colorado DocuSign catch-up | 6 envelopes sent before 26 Sept. Script dry-run verified on dev only. | After promote: `scripts/docusign-resend-outstanding.ts --event colorado-space-design-challenge --sent-before 2026-09-26`, dry run then `--apply`; confirm in DocuSign. **Before 3 Oct.** | ☐ |
+| 21.1 | DocuSign crons have had no production effect since 4 Sept — **root cause unconfirmed** | Fixed on a hypothesis (resend PUT included signed signers). `cron_runs` live since 18:58Z. At 19:46Z: no cron_runs rows; the only `/api/cron/*` hits in the new deployment's logs were our own 401 probes — the 19:00 `event-emails` slot had not (yet) fired. | **After 20:00Z 28 Sept:** an `event-emails` row must exist (it writes one even with nothing due). None → Vercel isn't invoking crons at all: Vercel → Settings → Cron Jobs. **After 09:00 UTC 29 Sept:** read the `docusign-reminders` row — errors name the failure. | ☐ |
+| 21.2 | Production migrations | **Applied 28 Sept ~18:45Z** via MCP with David's in-session approval, before the merge: `…180000_cron_runs`, `…190000_event_badge_templates` (1 row backfilled), `…200000_event_emails`. Ledger realigned to filenames; all 4 tables + service-role policies verified. | — | ☑ |
+| 21.3 | **Retrospective DocuSign re-issue — directly requested, NOT done** | Tooling shipped (roster button + script) but zero envelopes resent; prod 19:45Z: 10 CO + 2 NV unsigned, 0 manual resends. Held back so families aren't double-emailed if the fixed cron chases at 09:00 UTC 29 Sept (it would cover ~5 of the 6 script targets). Plan's "12 now" became a 6-envelope script. | After 09:00 UTC 29 Sept: if `docusign-reminders` processed > 0, stop. Else `npx tsx scripts/docusign-resend-outstanding.ts --event colorado-space-design-challenge --sent-before 2026-09-26` (dry run, then `--apply`); confirm in DocuSign. Anything still unsigned 1 Oct (incl. the 4 CO issued 28 Sept and 2 NV): roster **Reissue DocuSign**. **Before 3 Oct.** | ☐ |
 | 21.4 | No real inbox has received an event email | Every send in this session was suppressed (dev safelist blanked / no API key). Outlook rendering of the signature table unseen. | First production use: "Send test to me" and read it in Outlook and Gmail before "Send now". | ☐ |
 | 21.5 | Resend plan limits | Free = ~100/day, 3,000/month; a Colorado all-families send ≈ 40. Per-send cap 75 in code. | David: confirm the plan in Resend. | ☐ |
 | 21.6 | Bulk DocuSign reminder to a family with **no** envelope says "we've just re-sent it" | Bulk path only resends; missing envelopes need the roster button (quota). 0 such participants in prod on 28 Sept. | If it happens: make the copy conditional, or have the send list who still needs the roster button. | ☐ |
 | 21.7 | `/api/admin/events/[slug]/remind` superseded | UI no longer calls it; `PLAN-single-email-domain.md` lists it as a sender. | Delete the route and update that table in one PR. | ☐ |
 | 21.8 | Only 2 of 15 crons write `cron_runs` (+ event-emails) | The same "did it run?" blind spot applies to the other 13. | Wrap each in `startCronRun` — mechanical. | ☐ |
+| 21.9 | Scheduling is by day, not time | Story asked for "a certain time prior"; built as N days before, sent ~9am MT (11am/1pm fallback slots). Hobby crons are daily. | David: accept, or time-of-day needs Vercel Pro / an external scheduler. | ☐ |
+| 21.10 | Group payment reminders go to the teacher only | Story said participant + parent; for groups paid as one (invoice / organiser card) only the teacher is emailed. | David: confirm, or include parents (`buildRecipients` in `lib/event-emails/audiences.ts`). | ☐ |
+| 21.11 | Signature "rebranded from @insimeducation" line | Omitted by default; never explicitly answered. | David: say if wanted (`SIGNATURE_HTML`/`_TEXT`, `lib/event-emails/render.ts`). | ☐ |
+| 21.12 | Admin `/api/admin/docusigns/[id]/resend` not moved onto the shared helper | Plan step said it would be; it still calls `resendEnvelope` directly (gets the body fix, not the bounce/quota rules). | Point it at `reissueParticipantAgreement`, or leave with a comment. | ☐ |
+| 21.13 | Event-manager path through the tab untested in a browser | Admin only; access checks unit-tested (403, cross-event 404). | First event-manager use: confirm tab loads and sends. | ☐ |
+| 21.14 | Migration version collision | `20260928180000` used by #224 and #225; badge file renamed `…190000`, `lint:migrations` rejects duplicate versions (#230, tested). | — | ☑ |
 
 ## Session 20 — 25–28 Sept 2026 (admin member save fix)
 

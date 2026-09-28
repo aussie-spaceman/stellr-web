@@ -34,6 +34,32 @@ export const AGREEMENT_LABEL: Record<AgreementType, string> = {
 // Signed paperwork is valid for this long, across all Stellr events.
 const AGREEMENT_VALIDITY_YEARS = 3
 
+// Mentors and volunteers execute the same document (the mentor template —
+// Stellr, 9 Sept 2026); only the envelope_type recorded against it differs, by
+// the route that issued it. So either one is coverage for the other: a mentor
+// who signed at registration must not be sent a second copy when an admin puts
+// them on an event's volunteer roster, and vice versa.
+const SAME_DOCUMENT: Partial<Record<AgreementType, AgreementType[]>> = {
+  mentor:    ['mentor', 'volunteer'],
+  volunteer: ['mentor', 'volunteer'],
+}
+
+/** Envelope types that satisfy a requirement for `type`. */
+export function coveringTypes(type: AgreementType): AgreementType[] {
+  return SAME_DOCUMENT[type] ?? [type]
+}
+
+/**
+ * What dispatchAgreement did. Existing callers ignore it; the admin volunteer
+ * assignment reports it back so the admin sees whether paperwork went out.
+ *   issued       — a new envelope was sent
+ *   on_file      — covered by unexpired signed paperwork; nothing sent
+ *   in_flight    — an envelope is already out; nothing sent
+ *   not_required — no agreement applies (or no guardian for a minor)
+ *   failed       — DocuSign rejected it; admins have been alerted
+ */
+export type DispatchOutcome = 'issued' | 'on_file' | 'in_flight' | 'not_required' | 'failed'
+
 export function agreementExpiry(completedAt: string): Date {
   const d = new Date(completedAt)
   d.setFullYear(d.getFullYear() + AGREEMENT_VALIDITY_YEARS)
@@ -68,9 +94,9 @@ export interface ParticipantContext {
 export async function dispatchAgreement(
   db: SupabaseClient,
   ctx: ParticipantContext,
-): Promise<void> {
+): Promise<DispatchOutcome> {
   const type = classifyAgreement(ctx.eventRole, ctx.dateOfBirth)
-  if (!type) return
+  if (!type) return 'not_required'
 
   try {
     // ── Never issue a second envelope for paperwork already in the system ─────
@@ -96,14 +122,14 @@ export async function dispatchAgreement(
         .in('status', BLOCKING_ENVELOPE_STATUSES)
         .limit(1)
         .maybeSingle()
-      if (existing) return
+      if (existing) return 'in_flight'
     }
 
     // 2. An envelope for this person is already out for THIS event, issued
     //    against a different participant row (re-added after removal, a second
     //    registration for the same event). Chasing them twice for one signature
     //    reads as a system error; an outstanding envelope is still live.
-    if (await hasOpenEnvelopeForEvent(db, ctx, type)) return
+    if (await hasOpenEnvelopeForEvent(db, ctx, type)) return 'in_flight'
 
     // 3. Paperwork on the member's profile is valid for 3 years across events:
     //    if an unexpired signed agreement of the required type is on record,
@@ -120,7 +146,7 @@ export async function dispatchAgreement(
           signedOn:       onFile.completedAt,
           expiresOn:      agreementExpiry(onFile.completedAt).toISOString(),
         }))
-        return
+        return 'on_file'
       }
     }
 
@@ -141,7 +167,7 @@ export async function dispatchAgreement(
             text: `A parental consent form is required for ${ctx.firstName} ${ctx.lastName} (${ctx.email}) for ${ctx.eventTitle}, but no guardian contact is on file. Collect the guardian's details and re-issue.`,
           },
         }).catch(() => {})
-        return
+        return 'not_required'
       }
       const guardianName = [ctx.guardianFirstName, ctx.guardianLastName].filter(Boolean).join(' ')
       const envelope = await createConsentEnvelope({
@@ -170,7 +196,7 @@ export async function dispatchAgreement(
         minorName:  `${ctx.firstName} ${ctx.lastName}`,
         eventTitle: ctx.eventTitle,
       }))
-      return
+      return 'issued'
     }
 
     // Adult, mentor or volunteer — self-signed, sourced from the participant's own phone column
@@ -194,6 +220,7 @@ export async function dispatchAgreement(
     await safeEmail(ctx.email, docusignSentToSignerEmail({
       firstName: ctx.firstName, eventTitle: ctx.eventTitle, agreementLabel: AGREEMENT_LABEL[type],
     }))
+    return 'issued'
   } catch (err) {
     console.error(`[docusign] dispatchAgreement (${type}) failed (non-fatal):`, err)
 
@@ -229,6 +256,7 @@ export async function dispatchAgreement(
         text: `${who} (${ctx.email}) registered for ${ctx.eventTitle}, but no ${label} could be issued — ${reason}. The registration went through; the participant has no paperwork on file. ${fix}`,
       },
     }).catch(() => {})
+    return 'failed'
   }
 }
 
@@ -258,7 +286,7 @@ async function hasOpenEnvelopeForEvent(
     .from('docusign_envelopes')
     .select('id')
     .eq('event_slug', ctx.eventSlug)
-    .eq('envelope_type', type)
+    .in('envelope_type', coveringTypes(type))
     .in('status', OPEN_ENVELOPE_STATUSES)
     .limit(1)
 
@@ -305,8 +333,8 @@ interface ValidAgreement {
   signerEmail: string
 }
 
-// Newest unexpired completed agreement of the given type on the member's
-// record, resolved to the root signed envelope (a coverage row's reused_from
+// Newest unexpired completed agreement of the given type (or one executing the
+// same document — see coveringTypes) on the member's record, resolved to the root signed envelope (a coverage row's reused_from
 // always points at the originally signed row, so one hop suffices).
 async function findValidAgreement(
   db: SupabaseClient,
@@ -320,7 +348,7 @@ async function findValidAgreement(
     .from('docusign_envelopes')
     .select('id, completed_at, signer_name, signer_email, reused_from')
     .eq('member_id', memberId)
-    .eq('envelope_type', type)
+    .in('envelope_type', coveringTypes(type))
     .eq('status', 'completed')
     .gte('completed_at', cutoff.toISOString())
     .order('completed_at', { ascending: false })

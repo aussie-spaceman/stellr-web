@@ -26,6 +26,8 @@ const TYPE_LABEL: Record<string, string> = {
   minor:  'Parental Consent',
   adult:  'Participation Agreement',
   mentor: 'Mentor Participation Agreement',
+  // Volunteers sign the mentor document (lib/docusign-agreements AGREEMENT_LABEL).
+  volunteer: 'Mentor Participation Agreement',
 }
 
 interface Props {

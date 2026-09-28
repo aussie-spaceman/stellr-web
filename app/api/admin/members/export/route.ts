@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { toCsv } from '@/lib/csv'
 
 export async function GET() {
   const { sessionClaims } = await auth()
@@ -57,9 +58,7 @@ export async function GET() {
     ]
   })
 
-  const csv = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    .join('\n')
+  const csv = toCsv([headers, ...rows])
 
   return new NextResponse(csv, {
     headers: {

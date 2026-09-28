@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireEventAccess } from '@/lib/event-access'
 import { getEventRoster } from '@/lib/event-admin'
-
-function csvEscape(value: string | null | undefined): string {
-  const s = value ?? ''
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-}
+import { toCsv } from '@/lib/csv'
 
 // GET /api/admin/events/[slug]/export — roster CSV (admins + assigned event managers)
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -50,7 +46,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     ])
   )
 
-  const csv = [header, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n')
+  const csv = toCsv([header, ...rows])
   return new NextResponse(csv, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',

@@ -23,10 +23,10 @@ The event roster CSV export now carries each participant's emergency contact fir
 
 | # | Item | State | Next | Done |
 |---|---|---|---|---|
-| 19.1 | CSV formula injection / phone mangling | `csvEscape` does not neutralise a leading `=`, `+`, `-`, `@`. Prod has 1 row with such a value among name/phone/health (field unconfirmed). The export has no unit test. | Prefix those leading characters with `'` in `csvEscape`; add a test for header/row alignment and escaping. Check `app/api/registrations/[id]/spreadsheet/route.ts` for the same gap. | ☐ |
-| 19.2 | HIGH before 3 Oct: export never opened with real data | No CSV with the new columns has been downloaded on dev or prod. The roster carries event-day safety contacts for minors. | Download the 3 Oct event's roster CSV from prod; open in Excel and Sheets; confirm columns align and phones read correctly. | ☐ |
-| 19.3 | Local `dev` checkout stale | Main checkout on `dev` @ `513eb16` with 15 uncommitted files, all identical to `origin/dev` (28 Sept). | `git stash -u`, then `git pull --ff-only`; drop the stash once satisfied. | ☐ |
-| 19.4 | Column naming | Headers say "Emergency Contact …"; the ask said "parent". Relationship column included. | Maintainer: keep, or rename to "Parent/Guardian …" (five strings in the export route). | ☐ |
+| 19.1 | CSV formula injection / phone mangling | **Closed 28 Sept** (this PR): shared `lib/csv.ts` (`csvCell`/`toCsv`) prefixes a leading `=`, `+`, `-`, `@`, tab or CR with `'`, and quotes as before; 13 unit tests in `lib/csv.test.ts`. Both CSV routes use it — the event roster export and the admin members export (which also now writes empty cells, not `null`). The Google Sheets route is unaffected: it writes with `valueInputOption: 'RAW'`. | — | ☑ |
+| 19.2 | HIGH before 3 Oct: export never opened with real data | **Closed 28 Sept**: David confirmed the export is done and working. | — | ☑ |
+| 19.3 | Local `dev` checkout stale | **Closed 28 Sept**: stashed (`session19: 15 files identical to origin/dev…`; stash diff vs HEAD is empty) and fast-forwarded to `6c2782a`; tree clean. The 3 added files were intent-to-add, which `git stash` refuses — `git reset` them first. | Optional: `git stash drop` that entry. | ☑ |
+| 19.4 | Column naming | **Won't do** (28 Sept): David — keep "Emergency Contact …". | — | ☑ |
 
 ## Session 18 — 25 Sept 2026 (Avery 8395 name badges)
 

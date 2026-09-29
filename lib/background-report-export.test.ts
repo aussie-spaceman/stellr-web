@@ -6,6 +6,7 @@ import {
   buildMentorReportPdf,
   classifyMentor,
   coverPageCount,
+  exportModeFor,
   fileSlug,
   logReportExport,
   pdfSafe,
@@ -245,5 +246,17 @@ describe('pdfSafe / fileSlug', () => {
   it('makes a safe filename fragment', () => {
     expect(fileSlug('O\'Brien Zoë')).toBe('o-brien-zoe')
     expect(fileSlug('李')).toBe('mentor')
+  })
+})
+
+describe('exportModeFor', () => {
+  it('an admin gets Checkr reports by default, and the summary on request', () => {
+    expect(exportModeFor(true, null)).toBe('checkr')
+    expect(exportModeFor(true, 'summary')).toBe('summary')
+    expect(exportModeFor(true, 'anything-else')).toBe('checkr')
+  })
+  it('an event manager always gets the summary, whatever they ask for', () => {
+    expect(exportModeFor(false, null)).toBe('summary')
+    expect(exportModeFor(false, 'checkr')).toBe('summary')
   })
 })

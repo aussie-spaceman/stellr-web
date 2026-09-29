@@ -76,4 +76,13 @@ export interface BackgroundProvider {
    * by polling. Returns null when there is nothing new to apply (still pending).
    */
   fetchStatus(refs: BackgroundRefs): Promise<BackgroundWebhookResult | null>
+  /**
+   * Download the vendor's own PDF of a completed report, fetched fresh each time
+   * (nothing is stored — the vendor's download links expire). Throws
+   * ReportPdfUnavailableError when the report has no PDF to give.
+   */
+  fetchReportPdf(reportRef: string): Promise<Uint8Array>
 }
+
+/** The report exists but the vendor has no PDF for it (yet, or on this package). */
+export class ReportPdfUnavailableError extends Error {}

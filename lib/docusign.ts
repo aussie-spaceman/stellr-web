@@ -135,14 +135,32 @@ export interface CreatedEnvelope {
   signerCount: number
 }
 
+/** Same mailbox, ignoring case and surrounding whitespace. */
+function sameAddress(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase()
+}
+
 export async function createConsentEnvelope(p: EnvelopeParams): Promise<CreatedEnvelope> {
   assertCanIssueEnvelopes()
   const minorName = `${p.minorFirstName} ${p.minorLastName}`
   const signerCount = p.minorEmail ? 2 : 1
   let body: object
 
+  // One inbox for both signatures (a parent who entered their own address for
+  // the student — common for younger students with no email of their own).
+  // Sent concurrently, both DocuSign emails land side by side and the parent
+  // can't finish both roles from one inbox (Robert Blake, 28 Sept 2026, and the
+  // earlier prod case below). Sequenced instead: the guardian signs first, and
+  // only then does DocuSign send the student's copy as its own email.
+  const sharedInbox = !!p.minorEmail && sameAddress(p.minorEmail, p.guardianEmail)
+  const minorRoutingOrder = sharedInbox ? '2' : '1'
+  const sharedInboxNote = sharedInbox
+    ? '\n\nThis inbox is on file for both the parent/guardian and the student, so DocuSign sends the two signatures one after the other: the student signature request arrives as a separate email once the parent/guardian has signed.'
+    : ''
+
   if (ENV.templateId) {
-    // Guardian + minor sign concurrently (identical routingOrder). The 'Minor'
+    // Guardian + minor sign concurrently (identical routingOrder), unless they
+    // share an inbox (see sharedInbox above). The 'Minor'
     // role must exist on the DocuSign template; it is only added when the minor
     // has an email on file. The informational text tabs are sent on BOTH roles
     // so each field prefills regardless of which recipient owns it in the
@@ -167,7 +185,7 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<CreatedE
     // Naming the role in the subject is what makes the two tellable apart.
     const roleEmail = (heading: string, instruction: string) => ({
       emailSubject: `${heading} — ${p.eventTitle}`,
-      emailBody:    `${instruction}\n\nThis is one of two signatures required on this form. It is not complete until both are signed.`,
+      emailBody:    `${instruction}\n\nThis is one of two signatures required on this form. It is not complete until both are signed.${sharedInboxNote}`,
       supportedLanguage: 'en',
     })
 
@@ -187,7 +205,7 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<CreatedE
         roleName:     'Minor',
         name:         minorName,
         email:        p.minorEmail,
-        routingOrder: '1',
+        routingOrder: minorRoutingOrder,
         tabs: { textTabs: sharedTextTabs },
         emailNotification: roleEmail(
           'STUDENT signature required',
@@ -217,7 +235,7 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<CreatedE
         email:        p.minorEmail,
         name:         minorName,
         recipientId:  '2',
-        routingOrder: '1',
+        routingOrder: minorRoutingOrder,
         tabs: {
           signHereTabs:   [{ anchorString: 'Participant Signature:', anchorXOffset: '140', anchorYOffset: '-5', anchorUnits: 'pixels' }],
           dateSignedTabs: [{ anchorString: 'Participant Date:',      anchorXOffset: '95',  anchorYOffset: '-5', anchorUnits: 'pixels' }],

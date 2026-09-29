@@ -228,3 +228,69 @@ describe('fetchStatus — polling a missed webhook', () => {
     await expect(p.fetchStatus({ candidateRef: null, invitationRef: null, reportRef: 'missing' })).rejects.toThrow(/404/)
   })
 })
+
+describe('fetchReportPdf — the report PDF, fetched fresh', () => {
+  const PDF = new TextEncoder().encode('%PDF-1.7 fake')
+  function mockRoutes(routes: Record<string, unknown>, download: Response | (() => Response) = () => new Response(PDF, { status: 200 })) {
+    const calls: { url: string; init?: RequestInit }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url, init })
+        if (url.startsWith('https://s3.example.com/')) return typeof download === 'function' ? download() : download
+        const hit = routes[url.replace('https://api.checkr-staging.com/v1', '')]
+        if (hit === undefined) return new Response('not found', { status: 404 })
+        return new Response(JSON.stringify(hit), { status: 200 })
+      }),
+    )
+    return calls
+  }
+
+  it('picks the pdf_report document and downloads it without our API key', async () => {
+    const calls = mockRoutes({
+      '/reports/rep_1?include=documents': report({
+        documents: [
+          { id: 'd0', type: 'consumer_pdf_report', download_uri: 'https://s3.example.com/consumer' },
+          { id: 'd1', type: 'pdf_report', download_uri: 'https://s3.example.com/customer' },
+        ],
+      }),
+    })
+    const p = await load()
+    const bytes = await p.fetchReportPdf('rep_1')
+    expect(new TextDecoder().decode(bytes)).toBe('%PDF-1.7 fake')
+    const download = calls.find((c) => c.url === 'https://s3.example.com/customer')
+    expect(download).toBeTruthy()
+    expect(JSON.stringify(download?.init?.headers ?? {})).not.toContain('Basic')
+  })
+
+  it('resolves document_ids when documents are not expanded', async () => {
+    mockRoutes({
+      '/reports/rep_1?include=documents': report({ document_ids: ['d1'] }),
+      '/documents/d1': { id: 'd1', type: 'pdf_report', download_uri: 'https://s3.example.com/customer' },
+    })
+    const p = await load()
+    expect((await p.fetchReportPdf('rep_1')).length).toBe(PDF.length)
+  })
+
+  it('throws ReportPdfUnavailableError when there is no pdf_report', async () => {
+    mockRoutes({ '/reports/rep_1?include=documents': report({ documents: [] }) })
+    const p = await load()
+    const { ReportPdfUnavailableError } = await import('./types')
+    await expect(p.fetchReportPdf('rep_1')).rejects.toBeInstanceOf(ReportPdfUnavailableError)
+  })
+
+  it('refuses a download that is not a PDF (an error page served with 200)', async () => {
+    mockRoutes(
+      { '/reports/rep_1?include=documents': report({ documents: [{ type: 'pdf_report', download_uri: 'https://s3.example.com/x' }] }) },
+      () => new Response('<html>expired</html>', { status: 200 }),
+    )
+    const p = await load()
+    await expect(p.fetchReportPdf('rep_1')).rejects.toThrow(/did not return a PDF/)
+  })
+
+  it('refuses a non-https download link', async () => {
+    mockRoutes({ '/reports/rep_1?include=documents': report({ documents: [{ type: 'pdf_report', download_uri: 'http://s3.example.com/x' }] }) })
+    const p = await load()
+    await expect(p.fetchReportPdf('rep_1')).rejects.toThrow(/not https/)
+  })
+})

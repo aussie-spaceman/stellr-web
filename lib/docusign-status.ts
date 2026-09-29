@@ -52,6 +52,14 @@ export interface EnvelopeDescription {
   bounced: RecipientLike[]
   /** Outstanding signers who have never opened the link. */
   neverOpened: RecipientLike[]
+  /**
+   * Outstanding signers DocuSign has not emailed yet, because an earlier signer
+   * in the routing order must sign first (status 'created'). Consent envelopes
+   * whose student and guardian share an inbox route the student second, so the
+   * student sits here until the guardian signs. Never counted as "never opened":
+   * there is nothing to open yet.
+   */
+  queued: RecipientLike[]
 }
 
 const PILL_LABELS: Record<DocusignPill, string> = {
@@ -106,6 +114,10 @@ function joinNames(list: RecipientLike[]): string {
 
 const TERMINAL_RECIPIENT_STATUSES = new Set(['completed', 'declined'])
 
+// DocuSign's recipient status for a signer whose turn in the routing order has
+// not come yet. Distinct from 'sent' with no delivered_at (emailed, not opened).
+const QUEUED_RECIPIENT_STATUS = 'created'
+
 /**
  * Paperwork is required but no envelope exists at all — or none is required.
  * Kept here so the roster's "no envelope row" branch speaks the same vocabulary
@@ -116,7 +128,7 @@ export function describeMissingEnvelope(required: boolean): EnvelopeDescription 
     pill:  required ? 'not_issued' : 'not_required',
     label: PILL_LABELS[required ? 'not_issued' : 'not_required'],
     detail: required ? 'Paperwork is required but no envelope has been issued' : null,
-    waitingOn: [], bounced: [], neverOpened: [],
+    waitingOn: [], bounced: [], neverOpened: [], queued: [],
   }
 }
 
@@ -131,9 +143,11 @@ export function describeEnvelope(
   const waitingOn = recipients.filter(
     (r) => !TERMINAL_RECIPIENT_STATUSES.has(r.status) && r.status !== 'autoresponded',
   )
-  const neverOpened = waitingOn.filter((r) => !r.delivered_at)
+  const queued = waitingOn.filter((r) => r.status === QUEUED_RECIPIENT_STATUS)
+  const active = waitingOn.filter((r) => r.status !== QUEUED_RECIPIENT_STATUS)
+  const neverOpened = active.filter((r) => !r.delivered_at)
 
-  const base = { waitingOn, bounced, neverOpened }
+  const base = { waitingOn, bounced, neverOpened, queued }
 
   // Coverage rows carry paperwork signed for an earlier event; they are complete
   // by construction and have no recipients of their own.
@@ -172,8 +186,18 @@ export function describeEnvelope(
 
   let detail: string | null = null
   if (waitingOn.length > 0) {
-    const never = neverOpened.length === waitingOn.length && waitingOn.length > 0
-    detail = `Awaiting ${joinNames(waitingOn)}${never ? ' — never opened' : ''}`
+    const parts: string[] = []
+    if (active.length > 0) {
+      const never = neverOpened.length === active.length
+      parts.push(`Awaiting ${joinNames(active)}${never ? ' — never opened' : ''}`)
+    }
+    if (queued.length > 0) {
+      const before = active.length > 0
+        ? [...new Set(active.map((r) => roleLabel(r.role_name)))].join(' and ')
+        : 'earlier signer'
+      parts.push(`${joinNames(queued)} queued — sent once the ${before} signs`)
+    }
+    detail = parts.join('; ')
   } else if (partial) {
     // Counts say partial but we have no recipient rows yet (envelope issued
     // before migration 148, or the webhook has not synced it). Say so rather

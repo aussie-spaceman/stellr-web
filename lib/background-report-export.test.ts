@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { PDFDocument } from 'pdf-lib'
+import { PDFDocument, StandardFonts } from 'pdf-lib'
 import type { BackgroundCheck, MemberComplianceRecords, TeacherLicense } from './compliance'
 import { ReportPdfUnavailableError, type BackgroundProvider } from './background-provider'
 import {
@@ -7,6 +7,7 @@ import {
   classifyMentor,
   coverPageCount,
   exportModeFor,
+  fittedFontSize,
   fileSlug,
   logReportExport,
   pdfSafe,
@@ -124,7 +125,12 @@ describe('classifyMentor', () => {
   })
 
   it('a registered email with no member row is flagged', () => {
-    expect(classifyMentor(mentor({ memberId: null }), undefined)).toMatchObject({ outcome: 'no_account', memberId: null })
+    expect(classifyMentor(mentor({ memberId: null }), undefined)).toMatchObject({ outcome: 'no_account', memberId: null, dateOfBirth: null })
+  })
+
+  it('carries the member row\'s date of birth, whatever the outcome', () => {
+    expect(classifyMentor(mentor(), records([check({})])).dateOfBirth).toBe(ADULT)
+    expect(classifyMentor(mentor(), records([check({ status: 'referred' })])).dateOfBirth).toBe(ADULT)
   })
 })
 
@@ -152,6 +158,7 @@ const row = (over: Partial<MentorRow>): MentorRow => ({
   state: 'valid_bc',
   reportRef: 'rep_1',
   validUntil: future(2),
+  dateOfBirth: ADULT,
   outcome: 'included',
   note: null,
   ...over,
@@ -258,5 +265,22 @@ describe('exportModeFor', () => {
   it('an event manager always gets the summary, whatever they ask for', () => {
     expect(exportModeFor(false, null)).toBe('summary')
     expect(exportModeFor(false, 'checkr')).toBe('summary')
+  })
+})
+
+describe('fittedFontSize', () => {
+  it('a full 24-character Checkr report id fits the column at full size', async () => {
+    const doc = await PDFDocument.create()
+    const font = await doc.embedFont(StandardFonts.Helvetica)
+    // Report column: 792 - 48 - 568 = 176pt.
+    expect(fittedFontSize(font, '4722c07dd9a10c3985ae432a', 10, 176)).toBe(10)
+  })
+  it('shrinks, rather than truncates, an unusually long one', async () => {
+    const doc = await PDFDocument.create()
+    const font = await doc.embedFont(StandardFonts.Helvetica)
+    const long = 'x'.repeat(60)
+    const size = fittedFontSize(font, long, 10, 176)
+    expect(size).toBeLessThan(10)
+    expect(font.widthOfTextAtSize(long, size) <= 176 || size === 6).toBe(true)
   })
 })

@@ -314,6 +314,16 @@ export function nameSetting(
   }
 }
 
+/**
+ * Blank badges to add after a roster of `roster`: whatever fills the last
+ * sheet, plus one full sheet — so there is always at least a page of spares
+ * for walk-ins and misprints.
+ */
+export function spareCount(roster: number, format: BadgeFormat): number {
+  const perPage = BADGE_FORMATS[format].cols * BADGE_FORMATS[format].rows
+  return ((perPage - (roster % perPage)) % perPage) + perPage
+}
+
 export function badgeName(firstName: string, lastName: string): string {
   return `${firstName.trim()} ${lastName.trim()}`.trim()
 }

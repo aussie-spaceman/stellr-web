@@ -67,3 +67,8 @@ Verified: 907 unit tests, including a synthetic replica of the CO artwork. The r
 **Landed:** #225 → `dev` `2b7b159`, promoted #231 (`b068c86`). Prod has one row: the CO SDC 8395 Everyone template, backfilled and unpositioned, so it uses render-time detection until someone saves a position (18.3). Open: 18.1–18.6, 18.9, 18.11, 18.12.
 
 **Lesson:** never hand-pick a migration version. Two sessions' PRs were open at once with the same one, and a ledger check by version alone "passed" on the other migration's row. Check by `name` too.
+
+## Addendum: 29 Sept 2026, spare badges
+
+Asked (maintainer): for both Avery formats, always print a full page of spare name tags.
+Change: the download (`badges?format=`) appends blank badges after the roster: enough to fill the last sheet, plus one full sheet (`spareCount` in `lib/badge-layout.ts`). Spares use the **Everyone** background, or a plain empty label without one, and draw no text (the renderer skips a blank name). The preview is unchanged. Filling the rest of the last sheet was the session's call (those labels would otherwise print empty). If you want exactly one page and no fill, change `spareCount` to return `perPage`.

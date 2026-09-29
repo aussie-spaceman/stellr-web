@@ -69,6 +69,7 @@ export interface BadgeDesign {
 }
 
 export interface Badge {
+  /** A blank name (spares) draws the background and nothing else. */
   person: BadgePerson
   /** null: a plain badge — name, then role or company and the event. */
   design: BadgeDesign | null
@@ -130,14 +131,16 @@ export async function generateBadgesPdf(
 
     const name = badgeName(badge.person.firstName, badge.person.lastName)
     const set = nameSetting(box, image && design ? design.placement : placementFromLine(null, format))
-    const size = fittedSize((s) => nameFont.widthOfTextAtSize(name, s), set.size, set.maxWidth)
-    p.drawText(name, {
-      x: set.centerX - nameFont.widthOfTextAtSize(name, size) / 2,
-      y: set.baselineY,
-      size,
-      font: nameFont,
-      color: image && design?.lightInk ? rgb(1, 1, 1) : ink,
-    })
+    if (name) {
+      const size = fittedSize((s) => nameFont.widthOfTextAtSize(name, s), set.size, set.maxWidth)
+      p.drawText(name, {
+        x: set.centerX - nameFont.widthOfTextAtSize(name, size) / 2,
+        y: set.baselineY,
+        size,
+        font: nameFont,
+        color: image && design?.lightInk ? rgb(1, 1, 1) : ink,
+      })
+    }
 
     if (!image) {
       const maxWidth = label.width - 24

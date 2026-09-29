@@ -2,7 +2,7 @@
 
 Slug `checkr-report-export`. Tracker: `tracker/2026-09-28-checkr-report-export.md`.
 PR #247 squash-merged to `dev` as `0f40aef` (dev deployment `dpl_2yVjvBjU93rzbjg8r3S78jsMNDmn`, READY).
-**Not promoted.** Migration: none.
+**Promoted 29 Sept** in #249 (`50d7e61`). See the close-out addendum below. Migration: none.
 
 ## The ask
 
@@ -91,3 +91,20 @@ member).
 ## Open items
 
 See `tracker/2026-09-28-checkr-report-export.md`, rows `checkr-report-export.1`–`.6`.
+
+## Close-out addendum (after promotion)
+
+- **checkr-report-export.1 closed.** David reported that the member-route download on dev returned a real Checkr PDF. The session didn't observe the file itself.
+- **Promoted.** #249 merged with a merge commit as `50d7e61`, 2026-09-29T02:54:03Z, with David's yes in session. It also shipped two other sessions' unpromoted DocuSign changes, both named to David before he approved:
+  - #243: consent envelopes route the student second when student and guardian share an inbox.
+  - #246: a sequenced signer shows as "queued".
+- **Production verification:**
+  - CI on #249 was checked by step outcome: the full Playwright suite ran, and only the cached browser install was skipped.
+  - Deployment `dpl_6sdmkoZ84kZqGwmkW8MhkNSPjfXT` exists for the merge SHA, with commit status success.
+  - www returns 200, app returns 307 to `/sign-in`, and the cron guard returns 401.
+  - Signed out, the new routes return 401 (event export) and 403 (member report).
+- **Rollback target:** `dpl_HzM333Uc1YAxacFPGwSpCBYgTRW4` (`4b197c7`). The record is in `.claude/releases/promote-2026-09-28d.md` and the #249 body.
+- **Record + sync:** #250 was merged with a merge commit as `1cbd370`. `dev` contains `50d7e61`, and `dev` is 0 commits behind `main`.
+- **Repo setting:** GitHub auto-merge is disabled, so `gh pr merge --auto` and the app's auto-merge both fail. Record PRs need a manual merge after `verify`.
+- **New open row:** `checkr-report-export.7`. No report has been downloaded in production, where Checkr uses the live account.
+- **Still open:** `.2` (bulk merge of real PDFs), `.3` (event-manager path), `.5` (volunteers panel date basis), `.6` (large-event timing), `.7`.

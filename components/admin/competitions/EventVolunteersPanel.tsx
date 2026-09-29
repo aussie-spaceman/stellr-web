@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { X, HandHeart, UserCheck } from 'lucide-react'
+import { X, HandHeart, UserCheck, FileDown } from 'lucide-react'
 import MemberPicker, { type PickedMember } from '@/components/admin/MemberPicker'
 
 interface VolunteerRow {
@@ -58,7 +58,7 @@ function CompliancePill({ state, detail }: { state: string; detail: string | nul
 // Event Volunteers panel (PRD §15). Shows volunteers who offered to support this
 // event and those already assigned. Assignment is manual and warn-don't-block:
 // missing paperwork / clearance shows as red pills but never disables the button.
-export function EventVolunteersPanel({ slug }: { slug: string }) {
+export function EventVolunteersPanel({ slug, isAdmin }: { slug: string; isAdmin: boolean }) {
   const [data, setData] = useState<PanelData>({ interested: [], assigned: [] })
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -160,14 +160,26 @@ export function EventVolunteersPanel({ slug }: { slug: string }) {
         {data.assigned.map((m) =>
           row(
             m,
-            <button
-              onClick={() => post('DELETE', m.memberId)}
-              disabled={busy}
-              aria-label={`Remove ${name(m)} from this event`}
-              className="text-brand-muted-soft hover:text-red-600 disabled:opacity-50"
-            >
-              <X className="h-4 w-4" />
-            </button>,
+            <>
+              {m.compliance === 'valid_bc' && (
+                <a
+                  href={`/api/admin/events/${slug}/background-reports?member=${m.memberId}`}
+                  aria-label={isAdmin ? `Download ${name(m)}'s Checkr report` : `Download ${name(m)}'s clearance summary`}
+                  title={isAdmin ? 'Checkr report (PDF)' : 'Clearance summary (PDF)'}
+                  className="text-brand-muted-soft hover:text-brand-blue"
+                >
+                  <FileDown className="h-4 w-4" />
+                </a>
+              )}
+              <button
+                onClick={() => post('DELETE', m.memberId)}
+                disabled={busy}
+                aria-label={`Remove ${name(m)} from this event`}
+                className="text-brand-muted-soft hover:text-red-600 disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </>,
           ),
         )}
       </ul>

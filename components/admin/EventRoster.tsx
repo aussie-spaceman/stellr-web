@@ -95,11 +95,14 @@ export default function EventRoster({
   exportHref,
   eventSlug,
   companies,
+  isAdmin,
 }: {
   roster: EventRosterData
   exportHref: string
   eventSlug: string
   companies: CompanyRow[]
+  /** Admins export Checkr's reports; event managers get the clearance summary. */
+  isAdmin: boolean
 }) {
   const router = useRouter()
   const [payment, setPayment] = useState<PaymentFilter>('all')
@@ -178,6 +181,17 @@ export default function EventRoster({
           className="text-sm font-medium text-brand-blue hover:text-brand-blue border border-brand-blue rounded-lg px-3 py-1.5"
         >
           Export CSV
+        </a>
+        <a
+          href={`/api/admin/events/${eventSlug}/background-reports`}
+          title={
+            isAdmin
+              ? 'Cover page plus each cleared mentor\'s Checkr report, fetched from Checkr now'
+              : 'Each mentor\'s clearance status and dates. Full reports are held by Stellr admins.'
+          }
+          className="text-sm font-medium text-brand-blue hover:text-brand-blue border border-brand-blue rounded-lg px-3 py-1.5"
+        >
+          {isAdmin ? 'Mentor Reports (PDF)' : 'Mentor Clearance (PDF)'}
         </a>
       </div>
 
@@ -332,6 +346,14 @@ export default function EventRoster({
                       <td className="px-4 py-2.5 text-right space-x-3">
                         {group.type === 'individual' && group.payLinkSendable && (
                           <SendPayLinkButton eventSlug={eventSlug} registrationId={group.registrationId} />
+                        )}
+                        {p.event_role === 'mentor' && p.compliance_pill === 'valid_bc' && (
+                          <a
+                            href={`/api/admin/events/${eventSlug}/background-reports?participant=${p.id}`}
+                            className="text-xs font-medium text-brand-blue hover:text-brand-blue-dark"
+                          >
+                            {isAdmin ? 'Checkr Report' : 'Clearance PDF'}
+                          </a>
                         )}
                         {REISSUABLE_PILLS.has(p.docusign_pill) && (
                           <ReissueDocusignButton eventSlug={eventSlug} participantId={p.id} />

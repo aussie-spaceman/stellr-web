@@ -137,6 +137,7 @@ describe('syncStaleChecks', () => {
       verifyWebhook: () => true,
       parseWebhook: () => null,
       fetchStatus,
+      fetchReportPdf: async () => { throw new Error('not used') },
     }
   }
   const open = (id: string, refs: Partial<Record<'provider_candidate_ref' | 'provider_invitation_ref' | 'provider_report_ref', string>> = {}) => ({

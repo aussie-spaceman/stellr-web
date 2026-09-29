@@ -7,6 +7,7 @@ import { actorFromAuth } from '@/lib/activity-log'
 import {
   buildMentorReportPdf,
   classifyMentors,
+  exportModeFor,
   fileSlug,
   loadEventMentors,
   logReportExport,
@@ -18,12 +19,13 @@ export const dynamic = 'force-dynamic'
 // runs to tens of seconds even four at a time.
 export const maxDuration = 60
 
-// GET /api/admin/events/[slug]/background-reports[?participant=<id>|?member=<id>]
+// GET /api/admin/events/[slug]/background-reports[?participant=<id>|?member=<id>][&mode=summary]
 // Every mentor at the event, as one PDF. Admins get a cover page plus each
-// cleared mentor's Checkr report; event managers get the clearance summary
-// only (see lib/background-report-export.ts for why). `participant` (a roster
-// row) or `member` (an assigned volunteer) narrows it to one mentor — for an
-// admin that is Checkr's PDF on its own.
+// cleared mentor's Checkr report, or the clearance summary with ?mode=summary
+// (the version they can share with an event team). Event managers always get
+// the summary (see lib/background-report-export.ts for why). `participant` (a
+// roster row) or `member` (an assigned volunteer) narrows it to one mentor;
+// for an admin in checkr mode that is Checkr's PDF on its own.
 export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const access = await requireEventAccess(slug)
@@ -33,7 +35,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
   const participantId = search.get('participant')
   const memberId = search.get('member')
   const single = !!(participantId || memberId)
-  const mode: ExportMode = access.isAdmin ? 'checkr' : 'summary'
+  const mode: ExportMode = exportModeFor(access.isAdmin, search.get('mode'))
 
   const db = supabaseServer()
   const [event, allMentors] = await Promise.all([getEventBySlug(slug), loadEventMentors(db, slug)])

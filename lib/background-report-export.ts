@@ -29,6 +29,15 @@ import { formatDateShort } from '@/lib/utils'
 
 export type ExportMode = 'checkr' | 'summary'
 
+/**
+ * Which export a request gets. Only an admin can have Checkr's reports; an
+ * admin can also ask for the summary (?mode=summary) to hand to an event team.
+ * Event managers get the summary whatever they ask for.
+ */
+export function exportModeFor(isAdmin: boolean, requested: string | null): ExportMode {
+  return isAdmin && requested !== 'summary' ? 'checkr' : 'summary'
+}
+
 export interface EventMentor {
   /** Set for registered mentors (the roster row); null for assigned volunteers. */
   participantId: string | null

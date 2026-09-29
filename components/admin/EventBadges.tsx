@@ -131,7 +131,8 @@ export default function EventBadges({ eventSlug }: { eventSlug: string }) {
         <div>
           <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Name badges</h3>
           <p className="text-xs text-brand-muted-soft mt-1">
-            One badge for every student and volunteer mentor, full name on one line. One background for everyone is
+            One badge for every student and volunteer mentor, full name on one line, then blank spares on the
+            Everyone background: the rest of the last sheet plus one full sheet. One background for everyone is
             enough; give mentors or a company their own to tell them apart.
           </p>
         </div>

@@ -11,7 +11,8 @@ export const dynamic = 'force-dynamic'
 // GET /api/admin/events/[slug]/badges?format=avery_5392|avery_8395 — one badge
 // per registered participant and per assigned volunteer mentor, on the chosen
 // Avery sheet. Each badge uses its company's template, else the mentors' (for
-// mentors), else everyone's, else a plain badge (lib/event-badges.ts).
+// mentors), else everyone's, else a plain badge (lib/event-badges.ts). Blank
+// spares follow: the rest of the last sheet and one full sheet more.
 export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const access = await requireEventAccess(slug)
@@ -31,7 +32,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
   }
   const eventTitle = (event as { title?: string } | null)?.title ?? slug
 
-  const pdf = await generateBadgesPdf(await resolveBadges(db, holders, templates), eventTitle, format)
+  const pdf = await generateBadgesPdf(await resolveBadges(db, holders, templates, { spares: format }), eventTitle, format)
   return new NextResponse(Buffer.from(pdf), {
     headers: {
       'Content-Type': 'application/pdf',

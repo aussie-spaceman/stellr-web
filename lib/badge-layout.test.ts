@@ -1,9 +1,26 @@
 import { describe, it, expect } from 'vitest'
 import { PDFDocument } from 'pdf-lib'
 import sharp from 'sharp'
-import { BADGE_FORMATS, artworkBox, badgeFormatForKind, badgeName, findNameLine, isBadgeFormat, nameSetting, pickTemplate, placementFromLine } from './badge-layout'
+import { inflateSync } from 'zlib'
+import { BADGE_FORMATS, artworkBox, spareCount, badgeFormatForKind, badgeName, findNameLine, isBadgeFormat, nameSetting, pickTemplate, placementFromLine } from './badge-layout'
 import { prepareBadgeArtwork, wantsLightInk } from './badge-artwork'
 import { generateBadgesPdf } from './event-pdf'
+
+/** Text-showing operators across every content stream in the file. */
+function textShows(pdf: Uint8Array): number {
+  const raw = Buffer.from(pdf).toString('latin1')
+  let count = 0
+  for (const m of raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+    let body: string
+    try {
+      body = inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1')
+    } catch {
+      body = m[1]
+    }
+    count += (body.match(/\bTj\b|\bTJ\b/g) ?? []).length
+  }
+  return count
+}
 
 const W = 1000
 const H = 700
@@ -129,6 +146,29 @@ describe('placementFromLine', () => {
   })
 })
 
+describe('spareCount', () => {
+  it('fills the last sheet and adds one full sheet', () => {
+    // 8395: 8 per sheet.
+    expect(spareCount(9, 'avery_8395')).toBe(7 + 8)
+    expect(spareCount(16, 'avery_8395')).toBe(8)
+    expect(spareCount(0, 'avery_8395')).toBe(8)
+    // 5392: 6 per sheet.
+    expect(spareCount(5, 'avery_5392')).toBe(1 + 6)
+    expect(spareCount(12, 'avery_5392')).toBe(6)
+  })
+
+  it('always leaves at least one whole page of spares, ending on a full sheet', () => {
+    for (const f of ['avery_5392', 'avery_8395'] as const) {
+      const per = BADGE_FORMATS[f].cols * BADGE_FORMATS[f].rows
+      for (let n = 1; n <= 30; n++) {
+        const spares = spareCount(n, f)
+        expect(spares).toBeGreaterThanOrEqual(per)
+        expect((n + spares) % per).toBe(0)
+      }
+    }
+  })
+})
+
 describe('pickTemplate', () => {
   const everyone = { audience: 'everyone' as const, companyId: null, id: 'e' }
   const mentors = { audience: 'mentors' as const, companyId: null, id: 'm' }
@@ -205,6 +245,22 @@ describe('generateBadgesPdf', () => {
       'Test Event',
       'avery_8395',
     )
+    expect((await PDFDocument.load(pdf)).getPageCount()).toBe(1)
+  })
+
+  it('draws no text on a spare badge with a background', async () => {
+    const prepared = await prepareBadgeArtwork(await art(rule(420)), 'avery_8395')
+    const design = { key: 't1', artwork: prepared, placement: placementFromLine(prepared.line, 'avery_8395'), lightInk: false }
+    const blank = { firstName: '', lastName: '', subtitle: '' }
+    const pdf = await generateBadgesPdf(Array.from({ length: 8 }, () => ({ person: blank, design })), 'Test Event', 'avery_8395')
+    expect(textShows(pdf)).toBe(0)
+    // Control: the same sheet with names draws one per badge.
+    const named = await generateBadgesPdf(
+      Array.from({ length: 8 }, (_, i) => ({ person: { firstName: 'Ada', lastName: `L${i}`, subtitle: '' }, design })),
+      'Test Event',
+      'avery_8395',
+    )
+    expect(textShows(named)).toBe(8)
     expect((await PDFDocument.load(pdf)).getPageCount()).toBe(1)
   })
 

@@ -62,6 +62,8 @@ export interface MentorRow {
   state: ComplianceState | null
   reportRef: string | null
   validUntil: string | null
+  /** From the member row; null when there is no account or none on file. */
+  dateOfBirth: string | null
   outcome: RowOutcome
   /** Why, in a phrase — shown under the name on the cover page. */
   note: string | null
@@ -137,7 +139,13 @@ export function classifyMentor(
   records: MemberComplianceRecords | undefined,
   eventDate?: string,
 ): MentorRow {
-  const base = { mentor, memberId: records?.memberId ?? mentor.memberId, reportRef: null, validUntil: null }
+  const base = {
+    mentor,
+    memberId: records?.memberId ?? mentor.memberId,
+    reportRef: null,
+    validUntil: null,
+    dateOfBirth: records?.dateOfBirth ?? null,
+  }
   if (!records) {
     return { ...base, state: null, outcome: 'no_account', note: 'No Stellr account for this email' }
   }
@@ -184,11 +192,13 @@ export async function classifyMentors(
 
 // ── The PDF ───────────────────────────────────────────────────────────────────
 
-const PAGE: [number, number] = [612, 792] // US Letter
+// US Letter, landscape: five columns, and a full Checkr report id (~24
+// characters) needs about 135pt at 10pt, which portrait could not give it.
+const PAGE: [number, number] = [792, 612]
 const MARGIN = 48
-const ROWS_PER_PAGE = 14
+const ROWS_PER_PAGE = 12
 const ROW_H = 32
-const COLS = { name: MARGIN, status: 236, valid: 392, report: 470 }
+const COLS = { name: MARGIN, dob: 228, status: 318, valid: 478, report: 568 }
 
 const STATUS_LABEL: Record<RowOutcome, string> = {
   included: 'Cleared: background check',
@@ -217,6 +227,13 @@ function fit(text: string, font: PDFFont, size: number, width: number): string {
   if (font.widthOfTextAtSize(t, size) <= width) return t
   while (t.length > 1 && font.widthOfTextAtSize(`${t}...`, size) > width) t = t.slice(0, -1)
   return `${t}...`
+}
+
+/** The largest size (down to 6pt) at which `text` fits `width`. */
+export function fittedFontSize(font: PDFFont, text: string, size: number, width: number): number {
+  let s = size
+  while (s > 6 && font.widthOfTextAtSize(text, s) > width) s -= 0.5
+  return s
 }
 
 const INK = rgb(0.1, 0.12, 0.2)
@@ -259,6 +276,7 @@ async function drawCover(doc: PDFDocument, input: CoverInput): Promise<void> {
     y -= 26
 
     page.drawText('Mentor', { x: COLS.name, y, size: 9, font: bold, color: MUTED })
+    page.drawText('Date of birth', { x: COLS.dob, y, size: 9, font: bold, color: MUTED })
     page.drawText('Clearance', { x: COLS.status, y, size: 9, font: bold, color: MUTED })
     page.drawText('Valid until', { x: COLS.valid, y, size: 9, font: bold, color: MUTED })
     page.drawText(input.mode === 'checkr' ? 'Checkr report' : 'Report ID', { x: COLS.report, y, size: 9, font: bold, color: MUTED })
@@ -270,7 +288,10 @@ async function drawCover(doc: PDFDocument, input: CoverInput): Promise<void> {
     slice.forEach((row, i) => {
       const index = p * ROWS_PER_PAGE + i
       const name = `${row.mentor.firstName} ${row.mentor.lastName}`.trim() || row.mentor.email || 'Unnamed mentor'
-      page.drawText(fit(name, bold, 10, COLS.status - COLS.name - 8), { x: COLS.name, y, size: 10, font: bold, color: INK })
+      page.drawText(fit(name, bold, 10, COLS.dob - COLS.name - 8), { x: COLS.name, y, size: 10, font: bold, color: INK })
+      if (row.dateOfBirth) {
+        page.drawText(pdfSafe(formatDateShort(row.dateOfBirth)), { x: COLS.dob, y, size: 10, font: regular, color: INK })
+      }
       page.drawText(fit(STATUS_LABEL[row.outcome], regular, 10, COLS.valid - COLS.status - 8), { x: COLS.status, y, size: 10, font: regular, color: INK })
       if (row.validUntil) {
         page.drawText(pdfSafe(formatDateShort(row.validUntil)), { x: COLS.valid, y, size: 10, font: regular, color: INK })
@@ -287,7 +308,11 @@ async function drawCover(doc: PDFDocument, input: CoverInput): Promise<void> {
                 : ''
           : (row.reportRef ?? '')
       if (reportCell) {
-        page.drawText(fit(reportCell, regular, 10, PAGE[0] - MARGIN - COLS.report), { x: COLS.report, y, size: 10, font: regular, color: INK })
+        // Never truncate: a report id is looked up in Checkr character for
+        // character. Shrink the type instead if one is unusually long.
+        const text = pdfSafe(reportCell)
+        const size = fittedFontSize(regular, text, 10, PAGE[0] - MARGIN - COLS.report)
+        page.drawText(text, { x: COLS.report, y, size, font: regular, color: INK })
       }
       if (row.note) {
         page.drawText(fit(row.note, regular, 8, PAGE[0] - MARGIN * 2), { x: COLS.name, y: y - 12, size: 8, font: regular, color: MUTED })

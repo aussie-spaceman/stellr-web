@@ -182,16 +182,24 @@ export default function EventRoster({
         >
           Export CSV
         </a>
+        {/* Admins get both: Checkr's reports (admins only, FCRA) and the
+            clearance summary an event team can be given. Event managers get
+            the summary alone. */}
+        {isAdmin && (
+          <a
+            href={`/api/admin/events/${eventSlug}/background-reports`}
+            title="Cover page plus each cleared mentor's Checkr report, fetched from Checkr now. Admins only."
+            className="text-sm font-medium text-brand-blue hover:text-brand-blue border border-brand-blue rounded-lg px-3 py-1.5"
+          >
+            Mentor Reports (PDF)
+          </a>
+        )}
         <a
-          href={`/api/admin/events/${eventSlug}/background-reports`}
-          title={
-            isAdmin
-              ? 'Cover page plus each cleared mentor\'s Checkr report, fetched from Checkr now'
-              : 'Each mentor\'s clearance status and dates. Full reports are held by Stellr admins.'
-          }
+          href={`/api/admin/events/${eventSlug}/background-reports?mode=summary`}
+          title="Each mentor's clearance status and dates, with no Checkr report pages."
           className="text-sm font-medium text-brand-blue hover:text-brand-blue border border-brand-blue rounded-lg px-3 py-1.5"
         >
-          {isAdmin ? 'Mentor Reports (PDF)' : 'Mentor Clearance (PDF)'}
+          Mentor Clearance (PDF)
         </a>
       </div>
 

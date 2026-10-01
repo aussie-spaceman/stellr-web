@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   pickTemplate,
+  spareCount,
   placementFromLine,
   type BadgeAudience,
   type BadgeFormat,
@@ -192,26 +193,36 @@ export async function loadBadgeHolders(db: SupabaseClient, slug: string): Promis
   return holders.map(({ sortKey: _s, ...h }) => h) // eslint-disable-line @typescript-eslint/no-unused-vars
 }
 
-/** Every holder with the design of the most specific template they have. */
+/**
+ * Every holder with the design of the most specific template they have. With
+ * `spares`, blank badges follow on the Everyone background (plain without
+ * one): enough to fill the last sheet and one sheet more (spareCount).
+ */
 export async function resolveBadges(
   db: SupabaseClient,
   holders: BadgeHolder[],
   templates: BadgeTemplate[],
+  opts: { spares?: BadgeFormat } = {},
 ): Promise<Badge[]> {
   const refs = templates.map((t) => ({ t, audience: t.audience, companyId: t.company_id }))
   const designs = new Map<string, BadgeDesign | null>()
-  const out: Badge[] = []
-  for (const h of holders) {
-    const ref = pickTemplate(refs, h)
-    let design: BadgeDesign | null = null
-    if (ref) {
-      if (!designs.has(ref.t.id)) {
-        const prepared = await prepareTemplate(db, ref.t)
-        designs.set(ref.t.id, prepared ? designOf(ref.t, prepared) : null)
-      }
-      design = designs.get(ref.t.id) ?? null
+  async function designFor(who: { companyId: string | null; mentor: boolean }): Promise<BadgeDesign | null> {
+    const ref = pickTemplate(refs, who)
+    if (!ref) return null
+    if (!designs.has(ref.t.id)) {
+      const prepared = await prepareTemplate(db, ref.t)
+      designs.set(ref.t.id, prepared ? designOf(ref.t, prepared) : null)
     }
-    out.push({ person: h, design })
+    return designs.get(ref.t.id) ?? null
+  }
+
+  const out: Badge[] = []
+  for (const h of holders) out.push({ person: h, design: await designFor(h) })
+
+  if (opts.spares) {
+    const design = await designFor({ companyId: null, mentor: false })
+    const blank: BadgePerson = { firstName: '', lastName: '', subtitle: '' }
+    for (let i = spareCount(holders.length, opts.spares); i > 0; i--) out.push({ person: blank, design })
   }
   return out
 }

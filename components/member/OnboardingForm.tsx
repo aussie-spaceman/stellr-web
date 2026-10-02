@@ -218,9 +218,16 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, ...schoolPayload }),
       })
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const data = await res.json()
         setError(data.error ?? 'Something went wrong')
+        return
+      }
+      // An adult joining can sign the Membership Agreement straight away.
+      // Not when onboarding is a stop on the way somewhere (checkout): the
+      // account page offers "Sign now" for them instead.
+      if (typeof data.signNowUrl === 'string' && !next) {
+        window.location.assign(data.signNowUrl)
         return
       }
       router.push(next ?? '/home')

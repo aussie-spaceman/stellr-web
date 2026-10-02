@@ -7,6 +7,7 @@ import { sendEventEmail } from '@/lib/event-emails/send'
 import { scheduleDecision } from '@/lib/event-emails/schedule'
 import { todayInMountain } from '@/lib/event-emails/render'
 import { runCatchUps } from '@/lib/event-emails/catch-up'
+import { drainOutbox } from '@/lib/esign/outbox'
 
 export const maxDuration = 60
 
@@ -51,7 +52,10 @@ export async function GET(req: NextRequest) {
     }
     return eventDates.get(slug) ?? null
   }
-  const result = { due: 0, sent: 0, skipped: 0, deferred: 0, catchUpEmailed: 0, catchUpDeferred: 0 }
+  const result = {
+    due: 0, sent: 0, skipped: 0, deferred: 0, catchUpEmailed: 0, catchUpDeferred: 0,
+    signingEmailsSent: 0, signingEmailsWaiting: 0,
+  }
   for (const row of rows ?? []) {
     const slug = row.event_slug as string
     const decision = scheduleDecision(await eventDate(slug), row.schedule_days_before as number, today)
@@ -76,6 +80,18 @@ export async function GET(req: NextRequest) {
   result.catchUpEmailed = catchUps.emailed
   result.catchUpDeferred = catchUps.deferred
   for (const e of catchUps.errors) run.fail(`catch-up:${e.id}`, e.error)
+
+  // Stellr signing emails waiting on the daily budget: three more chances a
+  // day for a group's links to go out, while time allows.
+  if (Date.now() - started <= START_BUDGET_MS * 2) {
+    try {
+      const outbox = await drainOutbox(db, { limit: 20 })
+      result.signingEmailsSent = outbox.sent
+      result.signingEmailsWaiting = outbox.waiting - outbox.sent
+    } catch (err) {
+      run.fail('esign-outbox', err)
+    }
+  }
 
   await run.finish(result)
   return NextResponse.json(result)

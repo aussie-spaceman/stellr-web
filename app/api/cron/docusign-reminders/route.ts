@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import type { AgreementType } from '@/lib/docusign'
 import { remindEnvelopeRow } from '@/lib/esign/operations'
+import { drainOutbox } from '@/lib/esign/outbox'
 import { AGREEMENT_LABEL } from '@/lib/docusign-agreements'
 import { syncEnvelopeRecipients } from '@/lib/docusign-recipients'
 import { describeEnvelope, roleLabel } from '@/lib/docusign-status'
@@ -63,7 +64,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: queryError.message }, { status: 500 })
   }
   if (!envelopes?.length) {
-    await run.finish({ processed: 0, eligible: 0 })
+    const outbox = await drainOutbox(db).catch((err) => { run.fail('outbox', err); return null })
+    await run.finish({ processed: 0, eligible: 0, outbox })
     return NextResponse.json({ processed: 0 })
   }
 
@@ -117,8 +119,13 @@ export async function GET(req: NextRequest) {
 
       const type = (env.envelope_type ?? 'minor') as AgreementType
       const member = env.member_id ? memberById.get(env.member_id) : null
+      // On Stellr signing the reminder IS the signing email, with a fresh
+      // link, already sent to each outstanding signer by remindEnvelopeRow.
+      // The emails below exist because DocuSign's own reminder arrives
+      // separately and is easy to miss; sending them too would double up.
+      const nativeRow = (env.provider ?? 'docusign') === 'native'
 
-      if (member) {
+      if (member && !nativeRow) {
         const content = type === 'minor'
           ? docusignReminderToMinorEmail({
               firstName:  member.first_name,
@@ -141,7 +148,7 @@ export async function GET(req: NextRequest) {
       // Chase the outstanding guardian directly too. Previously only the student
       // was emailed and asked to relay the message to their parent — which fails
       // completely when the student is a minor who does not read that inbox.
-      if (type === 'minor') {
+      if (type === 'minor' && !nativeRow) {
         const guardian = description.waitingOn.find(r => (r.role_name ?? '').toLowerCase() === 'guardian')
         if (guardian?.email) {
           await sendEmail({
@@ -173,7 +180,15 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Signing emails held back by yesterday's budget go out with the new day's.
+  let outbox: unknown = null
+  try {
+    outbox = await drainOutbox(db)
+  } catch (err) {
+    run.fail('outbox', err)
+  }
+
   console.log(`[cron] docusign-reminders: processed ${processed} of ${envelopes.length} (${skippedBounced} skipped — bounced address)`)
-  await run.finish({ processed, eligible: envelopes.length, skippedBounced })
+  await run.finish({ processed, eligible: envelopes.length, skippedBounced, outbox })
   return NextResponse.json({ processed, skippedBounced })
 }

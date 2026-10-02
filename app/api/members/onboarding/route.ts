@@ -10,6 +10,7 @@ import { syncMemberClassificationRole } from '@/lib/member-roles'
 import { onboardingRequirements, emergencyContactComplete } from '@/lib/onboarding-requirements'
 import { sendAccountConfirmation, notifyStaffOfRegistration } from '@/lib/registration-notify'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { dispatchMembershipAgreement } from '@/lib/membership-agreement'
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
@@ -304,5 +305,20 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ success: true })
+  // The Membership Agreement, for anyone joining who has no signed agreement
+  // already (self-serve sign-up, an admin invite, /join all finish here).
+  // Volunteers sign the mentor agreement above instead. Non-blocking: the
+  // member's account is created whatever happens. An adult can sign straight
+  // away; for an under-18 the parent or guardian is emailed first.
+  let signNowUrl: string | null = null
+  if (memberId && !isVolunteerSignup) {
+    try {
+      const result = await dispatchMembershipAgreement(db, memberId)
+      signNowUrl = result.signNowUrl ?? null
+    } catch (e) {
+      console.error('[onboarding] membership agreement failed (non-fatal):', e)
+    }
+  }
+
+  return NextResponse.json({ success: true, signNowUrl })
 }

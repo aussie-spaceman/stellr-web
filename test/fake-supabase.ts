@@ -96,6 +96,11 @@ export function fakeSupabase(
       gte(c: string, v: unknown) { filters.push((r) => r[c] != null && cmp(r[c], v) >= 0); return b },
       lt(c: string, v: unknown) { filters.push((r) => r[c] != null && cmp(r[c], v) < 0); return b },
       lte(c: string, v: unknown) { filters.push((r) => r[c] != null && cmp(r[c], v) <= 0); return b },
+      like(c: string, pattern: string) {
+        const re = new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.')}$`)
+        filters.push((r) => typeof r[c] === 'string' && re.test(r[c] as string))
+        return b
+      },
       not(c: string, op: string, v: unknown) {
         if (op !== 'is') throw new Error(`fake-supabase: unsupported not() operator ${op}`)
         filters.push((r) => (r[c] ?? null) !== v)

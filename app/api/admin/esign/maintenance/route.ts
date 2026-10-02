@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { startCronRun } from '@/lib/cron-runs'
-import { runEsignMaintenance } from '@/lib/esign/maintenance'
+import { ALL_STEPS, runEsignMaintenance, type MaintenanceStep } from '@/lib/esign/maintenance'
 
 // POST /api/admin/esign/maintenance — run the daily signed-record housekeeping
 // now: sync DocuSign's allowance figures, archive signed PDFs not yet stored
@@ -19,7 +19,7 @@ export const maxDuration = 60
 
 const bodySchema = z.object({
   dryRun: z.boolean().optional(),
-  steps: z.array(z.enum(['usage', 'archive', 'retention'])).optional(),
+  steps: z.array(z.enum(ALL_STEPS as [MaintenanceStep, ...MaintenanceStep[]])).optional(),
 }).strict()
 
 export async function POST(req: NextRequest) {

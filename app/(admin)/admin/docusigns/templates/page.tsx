@@ -5,6 +5,7 @@ import { Badge } from '@stellr/web-ui'
 import { supabaseServer } from '@/lib/supabase'
 import { formatDateShort } from '@/lib/utils'
 import { parseFieldMap } from '@/lib/esign/native/template'
+import { ApproveTemplateVersion } from '@/components/admin/ApproveTemplateVersion'
 
 export const metadata = { title: 'Admin — Agreement documents' }
 
@@ -52,11 +53,14 @@ export default async function AgreementTemplatesPage({ searchParams }: { searchP
     <div className="space-y-6">
       <div>
         <p className="text-sm">
-          <Link href="/admin/docusigns" className="text-primary underline">Consent forms</Link>
+          <Link href="/admin/docusigns" className="text-primary-deep underline">Consent forms</Link>
         </p>
         <h1 className="mt-1 font-heading text-2xl font-semibold text-ink">Agreement documents</h1>
         <p className="mt-0.5 text-sm text-content-muted">
           The documents Stellr signing sends. A version is used only once it is approved; approved versions never change.
+        </p>
+        <p className="mt-2 text-sm">
+          <Link href="/admin/docusigns/templates/edit" className="text-primary-deep underline">Add a new document</Link>
         </p>
       </div>
 
@@ -79,7 +83,7 @@ export default async function AgreementTemplatesPage({ searchParams }: { searchP
             {versions.map((r) => (
               <tr key={r.id} className={`border-b border-line last:border-0 ${r.id === selected?.id ? 'bg-surface' : ''}`}>
                 <td className="px-4 py-2">
-                  <Link href={`/admin/docusigns/templates?v=${r.id}`} className="font-semibold text-primary underline">{r.title}</Link>
+                  <Link href={`/admin/docusigns/templates?v=${r.id}`} className="font-semibold text-primary-deep underline">{r.title}</Link>
                   <span className="ml-2 text-xs text-content-muted">{r.key}</span>
                 </td>
                 <td className="px-4 py-2 text-ink">v{r.version}</td>
@@ -110,7 +114,13 @@ export default async function AgreementTemplatesPage({ searchParams }: { searchP
                 : 'Not approved. Check both copies and every field below, then approve with scripts/esign-template.ts.'}
               {` SHA-256 ${selected.pdf_sha256}.`}
             </p>
+            <p className="mt-1 text-sm">
+              <Link href={`/admin/docusigns/templates/edit?from=${selected.id}`} className="text-primary-deep underline">
+                Edit fields (saves a new version)
+              </Link>
+            </p>
           </div>
+          {!selected.approved_at && <ApproveTemplateVersion id={selected.id} label={`${selected.key} v${selected.version}`} />}
           <div className="grid gap-4 lg:grid-cols-2">
             <figure className="space-y-2">
               <figcaption className="text-sm font-semibold text-ink">As signers see it</figcaption>

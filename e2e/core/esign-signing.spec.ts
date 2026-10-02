@@ -255,6 +255,53 @@ test.describe('Agreement documents (admin)', () => {
     expect(consoleErrors).toEqual([])
   })
 
+  test('the field editor draws the document, moves a field by keyboard and by drag, and previews it', async ({ page }) => {
+    const consoleErrors = attachConsoleGuard(page)
+    await page.goto('/admin/docusigns/templates')
+    await page.getByRole('link', { name: 'Parental Consent Form' }).first().click()
+    await page.getByRole('link', { name: 'Edit fields (saves a new version)' }).click()
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Edit fields, starting from minor v')
+    await expect(page.getByRole('img', { name: 'Page 1' })).toBeVisible()
+
+    // Select a field from the list and nudge it right by 10 points.
+    await page.getByRole('region', { name: 'All fields' }).getByRole('button').first().click()
+    const x = page.getByRole('spinbutton', { name: 'X', exact: true })
+    const before = Number(await x.inputValue())
+    const box = page.locator('button[aria-pressed="true"]')
+    await box.focus()
+    await page.keyboard.press('Shift+ArrowRight')
+    await expect(x).toHaveValue(String(before + 10))
+
+    // And drag it 40 screen pixels down.
+    const y = page.getByRole('spinbutton', { name: 'Y', exact: true })
+    const yBefore = Number(await y.inputValue())
+    await box.scrollIntoViewIfNeeded()
+    const b = (await box.boundingBox())!
+    await page.mouse.move(b.x + 3, b.y + 3)
+    await page.mouse.down()
+    await page.mouse.move(b.x + 3, b.y + 43, { steps: 5 })
+    await page.mouse.up()
+    expect(Number(await y.inputValue())).toBeGreaterThan(yBefore + 20)
+
+    const preview = page.waitForResponse((r) => r.url().endsWith('/api/admin/esign/templates/preview'))
+    const popup = page.waitForEvent('popup')
+    await page.getByRole('button', { name: 'Preview with labels' }).click()
+    const res = await preview
+    expect(res.status()).toBe(200)
+    expect(res.headers()['content-type']).toBe('application/pdf')
+    await (await popup).close()
+    expect(consoleErrors).toEqual([])
+  })
+
+  test('the editor\'s routes are for admins only', async ({ browser, baseURL }) => {
+    const anonymous = await browser.newContext({ storageState: { cookies: [], origins: [] }, baseURL })
+    for (const [method, path] of [['POST', '/api/admin/esign/templates'], ['POST', '/api/admin/esign/templates/upload'], ['GET', '/api/admin/esign/templates/file?path=drafts/x.pdf'], ['POST', '/api/admin/esign/templates/preview']] as const) {
+      const res = method === 'GET' ? await anonymous.request.get(path) : await anonymous.request.post(path, { data: {} })
+      expect([401, 403], `${method} ${path}`).toContain(res.status())
+    }
+    await anonymous.close()
+  })
+
   test('the preview is for admins only', async ({ browser, baseURL }) => {
     const anonymous = await browser.newContext({ storageState: { cookies: [], origins: [] }, baseURL })
     const res = await anonymous.request.get('/api/admin/esign/templates/00000000-0000-4000-8000-000000000000/preview')

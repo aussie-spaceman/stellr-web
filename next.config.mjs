@@ -26,11 +26,18 @@ const nextConfig = {
     '/api/credentials/**': ['./public/fonts/Aileron-SemiBold.otf'],
     // Stellr signing stamps names and values in Open Sans (lib/esign/native/render.ts).
     '/api/sign/**': ['./public/fonts/esign/OpenSans-Regular.ttf'],
-    '/api/admin/esign/**': ['./public/fonts/esign/OpenSans-Regular.ttf'],
+    // The template editor checks documents with pdf.js on the server
+    // (lib/esign/native/pdf-text.ts), which loads its worker and font metrics
+    // from node_modules at run time.
+    '/api/admin/esign/**': [
+      './public/fonts/esign/OpenSans-Regular.ttf',
+      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+      './node_modules/pdfjs-dist/standard_fonts/**',
+    ],
     '/api/admin/events/**/docusign-reissue': ['./public/fonts/esign/OpenSans-Regular.ttf'],
     '/api/cron/**': ['./public/fonts/esign/OpenSans-Regular.ttf'],
-    '/api/admin/esign/**': ['./public/fonts/esign/OpenSans-Regular.ttf'],
   },
+  serverExternalPackages: ['pdfjs-dist'],
   async headers() {
     // Pages opened from a private link (lib/private-routes.ts). The link is the
     // key, so: never framed, never cached, never indexed, and never passed on

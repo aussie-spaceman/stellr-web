@@ -47,8 +47,10 @@ export function PdfViewer({ src, title }: { src: string; title: string }) {
         }
         if (!cancelled) setState('ready')
       } catch (err) {
+        // Leaving the step while pages are still being drawn cancels them: not a failure.
+        if (cancelled || (err as { name?: string } | null)?.name === 'RenderingCancelledException') return
         console.error('[sign] document viewer failed:', err)
-        if (!cancelled) setState('error')
+        setState('error')
       }
     })()
     return () => {

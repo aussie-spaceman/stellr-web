@@ -84,6 +84,26 @@ export async function POST(req: Request) {
   const resolvedBracket = required.isMinor ? 'high_school' : age_bracket
   const resolvedRole = required.isMinor ? 'participant' : event_role
 
+  // Self-registration is not open to Minors yet (Terms §4.1, Privacy §2, 2 Oct
+  // 2026). Until the pending-consent flow exists — parent email, DocuSign
+  // without an event, 30-day purge — a Minor (under 18, or in high school) may
+  // only finish onboarding when an adult route already brought them here: an
+  // admin invite, an event registration (which sends the guardian's consent
+  // form), or a consent envelope on file.
+  if (required.isMinor || resolvedBracket === 'high_school') {
+    const cleared = await minorHasConsentRoute(db, userId)
+    if (!cleared) {
+      return NextResponse.json(
+        {
+          code: 'minor_self_signup_closed',
+          error:
+            'Students under 18, or still in high school, join Stellr through a school or event registration for now. Ask your teacher or a parent to register you for a Stellr event, and your account will be set up from there.',
+        },
+        { status: 403 },
+      )
+    }
+  }
+
   // Resolve school FK
   let resolvedSchoolId: string | null = school_id && school_id !== 'new' ? school_id : null
 
@@ -321,4 +341,35 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ success: true, signNowUrl })
+}
+
+/**
+ * Whether a Minor reached onboarding by a route that already involves an adult:
+ * an admin invite (account_invite_sent_at), an event registration (a
+ * participants row, which dispatched the guardian's consent form), or a minor
+ * consent envelope. Matches the member by Clerk id, then by the Clerk email.
+ */
+async function minorHasConsentRoute(db: ReturnType<typeof supabaseServer>, userId: string): Promise<boolean> {
+  let { data: member } = await db
+    .from('members')
+    .select('id, account_invite_sent_at')
+    .eq('clerk_user_id', userId)
+    .maybeSingle()
+  if (!member) {
+    const clerkUser = await currentUser()
+    const email = normalizeEmail(clerkUser?.emailAddresses.find(
+      (e) => e.id === clerkUser.primaryEmailAddressId
+    )?.emailAddress)
+    if (email) {
+      ;({ data: member } = await db.from('members').select('id, account_invite_sent_at').eq('email', email).maybeSingle())
+    }
+  }
+  if (!member) return false
+  if (member.account_invite_sent_at) return true
+
+  const [{ count: participations }, { count: envelopes }] = await Promise.all([
+    db.from('participants').select('id', { count: 'exact', head: true }).eq('member_id', member.id),
+    db.from('agreements').select('id', { count: 'exact', head: true }).eq('member_id', member.id).eq('envelope_type', 'minor'),
+  ])
+  return (participations ?? 0) > 0 || (envelopes ?? 0) > 0
 }

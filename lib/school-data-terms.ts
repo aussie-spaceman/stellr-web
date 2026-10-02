@@ -9,8 +9,10 @@ import { createHash } from 'node:crypto'
 // version and the SHA-256 of these sections (registrations.school_data_terms_*).
 // Any change to the wording is a new version.
 
-export const SCHOOL_DATA_TERMS_VERSION = '2026-10-v1'
-export const SCHOOL_DATA_TERMS_EFFECTIVE = '9 October 2026'
+// v2 (2 Oct 2026): retention and signed-record wording aligned with the Privacy
+// Policy's 02-Oct-2026 update (membership + 7 years; minimal signed record).
+export const SCHOOL_DATA_TERMS_VERSION = '2026-10-v2'
+export const SCHOOL_DATA_TERMS_EFFECTIVE = '2 October 2026'
 
 export interface TermsSection {
   heading: string
@@ -42,7 +44,7 @@ export const SCHOOL_DATA_TERMS: TermsSection[] = [
   {
     heading: '4. Consent forms are the family\'s, not the School\'s',
     paragraphs: [
-      'A participant under 18 needs a consent form signed by their parent or legal guardian. That form, and the record of its signing, comes from the family, not the School: it is Stellr\'s own legal record, kept for seven years from signing as the Privacy Policy describes, and is not School Data for the purposes of deletion under these terms. The School\'s consent cannot stand in for a parent\'s.',
+      'A participant under 18 needs a consent form signed by their parent or legal guardian. That form, and the record of its signing, comes from the family, not the School: it is Stellr\'s own legal record. After a deletion request Stellr keeps only a minimal record of it (the names of the student and signers, the dates, and the signed document) until seven years after the student\'s account is deactivated, as the Privacy Policy describes; that minimal record is not School Data for the purposes of deletion under these terms. The School\'s consent cannot stand in for a parent\'s.',
     ],
   },
   {
@@ -55,8 +57,8 @@ export const SCHOOL_DATA_TERMS: TermsSection[] = [
   {
     heading: '6. Deleting School Data',
     paragraphs: [
-      'When students withdraw from an event, or at the School\'s written request, Stellr deletes the School Data for those students within 30 days, except signed consent forms (Section 4) and records the law requires Stellr to keep, such as payment records.',
-      'Otherwise Stellr keeps School Data for as long as the students have a Stellr account, or, for students without one, until 12 months after the event, then deletes it. Backup copies are deleted as they expire.',
+      'When students withdraw from an event, or at the School\'s written request, Stellr deletes the School Data for those students within 30 days, or sooner if the School\'s own data agreement requires, except the minimal signed-agreement record (Section 4) and records the law requires Stellr to keep, such as payment records.',
+      'Otherwise Stellr keeps School Data for the duration of the student\'s Stellr membership and seven years after their account is deactivated, as the Privacy Policy describes, or, for students without an account, until 12 months after the event, then deletes it. Medical information is deleted within 90 days after the event unless it is needed for an incident record. Backup copies are deleted as they expire.',
     ],
   },
   {

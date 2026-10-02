@@ -1,4 +1,6 @@
 import { CONSENT_STORAGE_KEY, STRICT_REGIONS } from '@/lib/consent'
+import { APP_HOST } from '@/lib/env'
+import { noAdsScript } from '@/lib/no-ads'
 
 /**
  * Google Consent Mode v2 defaults.
@@ -24,6 +26,10 @@ import { CONSENT_STORAGE_KEY, STRICT_REGIONS } from '@/lib/consent'
  * survive a page load, so without this replay a returning visitor who accepted
  * would start every page denied until React hydrated and the banner ran — long
  * enough for tags to fire with the wrong state.
+ *
+ * Students (Privacy Policy §9.4): on registration pages, the member platform,
+ * and in a browser where a student has signed in, the stored decision is NOT
+ * replayed and advertising stays denied — see lib/no-ads.ts.
  */
 
 // STRICT_REGIONS moved to lib/consent.ts: the HubSpot tracking script has to
@@ -57,20 +63,10 @@ export function ConsentMode() {
     wait_for_update: 500
   });
 
-  try {
-    var raw = window.localStorage.getItem(${JSON.stringify(CONSENT_STORAGE_KEY)});
-    if (raw) {
-      var saved = JSON.parse(raw);
-      if (saved && saved.ads === true) {
-        gtag('consent', 'update', {
-          ad_storage: 'granted',
-          ad_user_data: 'granted',
-          ad_personalization: 'granted',
-          analytics_storage: 'granted'
-        });
-      }
-    }
-  } catch (e) { /* storage blocked — stay with the denied default */ }
+  var CONSENT_KEY = ${JSON.stringify(CONSENT_STORAGE_KEY)};
+  // Replays a stored "Accept all" — except where advertising is off for
+  // students, which wins whatever was stored. Storage blocked → denied default.
+  ${noAdsScript(APP_HOST)}
 })();
 `.trim()
 

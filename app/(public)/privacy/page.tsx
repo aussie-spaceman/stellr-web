@@ -12,20 +12,24 @@ export default function PrivacyPage() {
       <h1 className="text-4xl font-bold text-brand-blue-dark mb-8">Privacy Policy</h1>
       <div className="prose prose-slate max-w-none space-y-6 text-brand-grey-dark">
         <p className="text-sm text-brand-grey-mid italic">
-          Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 09-Oct-2026
+          Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 02-Oct-2026
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
-          <strong>Recent update (9 Oct 2026):</strong> Consent forms and agreements can now be
-          signed through <strong>Stellr&rsquo;s own signing system</strong> as well as DocuSign
-          (Sections 2, 3.10, 4, 5 and 7.1). When you sign, we record your name, email, the date and
-          time, and the internet address and browser you used, and we keep signed documents for{' '}
-          <strong>seven years from signing</strong> (Section 10). We have also corrected this policy
-          where it had fallen out of step with what we do: medical and dietary details are kept on
-          your member record for future events (Section 8); the photo and media permission on the
-          consent form is an opt-out (Section 7.4); we list every provider we use, including Google
-          Workspace, Checkr, Printful and Discord (Section 7.1); and Section 7.7 now states our
-          position on school records plainly, alongside our new{' '}
-          <a href="/school-data-terms" className="underline">School Data Terms</a>.
+          <strong>Recent update (02-Oct-2026):</strong>{' '}Student self-registration and pending
+          accounts; the definition of Minor (state age of majority); students who are adults but
+          still in high school; students&rsquo; own opt-out choices; deletion within 30 days on
+          request; our children&rsquo;s data retention policy; credential pages for children under
+          13; FERPA protections for all student data; cookies on student pages, including for
+          children under 13 (Sections 2, 3.10, 5, 7.1, 7.4, 7.7, 8, 9, 10, 12, 14). Consent forms
+          and agreements can also now be signed through <strong>Stellr&rsquo;s own signing
+          system</strong> as well as DocuSign (Sections 2, 3.10, 4, 5 and 7.1): when you sign, we
+          record your name, email, the date and time, and the internet address and browser you
+          used. Medical information is deleted within 90 days after the event, and dietary details
+          are kept on your member record for future events (Section 8); the photo and media
+          permission on the consent form is an opt-out (Section 7.4); we list every provider we
+          use, including Google Workspace, Checkr, Printful and Discord (Section 7.1); and school
+          registrations are covered by our new{' '}
+          <a href="/school-data-terms" className="underline">School Data Terms</a> (Section 7.7).
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
           <strong>Earlier update (23 Sep 2026):</strong> We now describe{' '}
@@ -72,11 +76,17 @@ export default function PrivacyPage() {
         </p>
         <ul className="list-disc pl-6 space-y-2">
           <li>
-            <strong>Participants under 18:</strong> A participant under 18 needs the consent of a
-            parent or legal guardian to take part. We ask for it electronically: a consent form is
-            emailed to the parent or guardian address given at registration, through DocuSign or
-            through Stellr&rsquo;s own signing system. The parent or guardian signs first. We follow
-            up on any form that is still outstanding before the event.
+            <strong>Minors.</strong>{' '}In this policy, a &ldquo;Minor&rdquo; is anyone under the age
+            of majority in their state of residence (18 in most states, 19 in Alabama and Nebraska,
+            21 in Mississippi), anyone still enrolled in high school, or anyone who is a ward of the
+            state or under guardianship. A person who has been legally emancipated is not a Minor
+            once they give us proof. A Minor needs a parent or legal guardian to sign Stellr&rsquo;s
+            Participation Agreement — Student / Minor (through DocuSign or Stellr&rsquo;s own
+            signing system) before they can take part in Stellr activities. One signed agreement
+            covers the student&rsquo;s membership and every Stellr activity, however they joined.
+            The form is emailed to the parent or guardian address given at registration, and the
+            parent or guardian signs first. We follow up on any form that is still outstanding
+            before the event.
           </li>
           <li>
             <strong>How we confirm who is signing:</strong>{' '}The form is sent to the parent or
@@ -95,7 +105,15 @@ export default function PrivacyPage() {
             <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
               privacy@stellreducation.org
             </a>{' '}
-            to review, correct, or request deletion of their child&rsquo;s information.
+            to review, correct, or request deletion of their child&rsquo;s information. When a
+            child under 13 creates an account themselves, before a parent consents we collect no
+            more than the child&rsquo;s name, date of birth, and email address and the
+            parent&rsquo;s name and email address, and we use them only to seek consent. A
+            child&rsquo;s credential pages always stay private while the child is under 13. We do
+            not disclose a child&rsquo;s personal information to third parties except to the
+            service providers in Section 7.1 that we need to run our programs; we will not disclose
+            it for any other purpose, such as advertising, without the parent&rsquo;s separate
+            consent.
           </li>
           <li>
             <strong>Parent and guardian data:</strong>{' '}When we ask for consent, we collect the
@@ -105,18 +123,51 @@ export default function PrivacyPage() {
             necessary.
           </li>
           <li>
-            <strong>Schools and FERPA:</strong>{' '}When a school or teacher registers a group of
-            students, the student information they give us may form part of the school&rsquo;s
-            education records. We use it only to run the competition, under our{' '}
+            <strong>FERPA.</strong>{' '}We treat the information we hold about students as education
+            records protected by FERPA. When a school registers students, we act as a &ldquo;school
+            official&rdquo; under a data processing agreement with the school — our{' '}
             <a href="/school-data-terms" className="text-brand-blue hover:underline">School Data Terms</a>
-            , and do not disclose it further except as those terms allow. Section 7.7 explains this
-            in full.
+            , which the registering teacher accepts on the school&rsquo;s behalf. When a student
+            joins on their own, we apply the same protections. We use student information only to
+            run our programs and do not disclose it except as FERPA permits or with consent. The
+            signed Participation Agreement is the parent&rsquo;s (or, for a student aged 18 or over,
+            the student&rsquo;s) written consent to the disclosures it describes, such as public
+            credential pages and photo and media use. Section 7.7 explains this in full.
           </li>
           <li>
-            <strong>Participants aged 13–17 in individually-registered events:</strong> We
-            encourage parents and guardians to review this Policy and discuss it with their child.
-            The consent process described above applies to every participant under 18, whether
-            they registered individually or through their school.
+            <strong>Self-registration and pending accounts.</strong>{' '}Students may create a Stellr
+            account themselves. When a Minor does, we ask for their date of birth and their
+            parent&rsquo;s or legal guardian&rsquo;s name and email address, and send the parent or
+            legal guardian the Participation Agreement. Until it is signed, the account is pending:
+            we use the information only to seek consent and manage the pending account, the student
+            cannot use the community portal, mentoring, courses, or event registration, no
+            credential page can be made public, and we send the student only messages about the
+            pending account. If consent is not given within 30 days, we delete the pending account
+            and all information collected for it. We may take reasonable steps to confirm that the
+            person consenting is the student&rsquo;s parent or legal guardian.
+          </li>
+          <li>
+            <strong>Students who are adults but still in high school.</strong> Students who have
+            reached the age of majority where they live but are still in high school are adults and
+            agree to our terms in their own name. Because we have a duty of care to every high
+            school student, we also require a parent or legal guardian to co-sign the Participation
+            Agreement before the student can take part. By registering, the student authorizes us
+            to share information about their account, consents, and participation with the
+            co-signing parent or legal guardian, and to contact them in an emergency.
+          </li>
+          <li>
+            <strong>Students&rsquo; own choices (age 13 and over).</strong> Students aged 13 or over
+            make their own choices about uses of their information that are not needed to run their
+            account, events, and courses. We use their photos, videos, name, and work in our
+            promotional materials unless they or their parent or legal guardian opt out, which they
+            can do at any time by emailing{' '}
+            <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+              privacy@stellreducation.org
+            </a>
+            . Credential pages stay private unless the student chooses to make each one public.
+            Where state law requires a student&rsquo;s own agreement first (currently New York and
+            Colorado), these uses stay off for students aged 13 to 17 until the student turns them
+            on. Opting out never affects participation.
           </li>
         </ul>
 
@@ -172,8 +223,9 @@ export default function PrivacyPage() {
             necessary for participant safety
           </li>
           <li>
-            It is kept on your member record so you don&rsquo;t have to give it again for each
-            event. You can change or remove it at any time (see Section 8)
+            It is kept on your member record while you have an upcoming event, and deleted within
+            90 days after the event unless it is needed for an incident record. You can change or
+            remove it at any time (see Section 8)
           </li>
         </ul>
 
@@ -250,6 +302,12 @@ export default function PrivacyPage() {
           Signing records are used only to obtain and prove the signature. They are not used for
           marketing or analytics.
         </p>
+        <p className="text-sm text-brand-grey-mid">
+          We also record how the student joined Stellr (school or group registration, or
+          self-registration), the version of the Participation Agreement signed, and, for students
+          who are adults but still in high school, the co-signing parent&rsquo;s or legal
+          guardian&rsquo;s name and email address.
+        </p>
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">3.11 Credentials</h3>
         <ul className="list-disc pl-6 space-y-1">
@@ -294,12 +352,14 @@ export default function PrivacyPage() {
                 ['Verifying age eligibility and triggering parental consent', 'Date of birth / age'],
                 ['Obtaining parental consent for minor participants, and agreements from participants, mentors and members', 'Parent/guardian name, email, phone and relationship; participant name, date of birth, school and event details (signed through Stellr signing or DocuSign)'],
                 ['Showing that a signature is genuine, if it is ever questioned', 'Signing records: name, email, IP address, browser, timestamps, audit trail'],
+                ['Managing pending accounts and contacting a parent or legal guardian for consent', 'Student name, date of birth, and email; parent or guardian name and email'],
                 ['Providing access to the online community', 'Account / login credentials'],
                 ['Communicating with participants about competitions and results', 'Contact information'],
-                ['Ensuring participant safety at in-person events, now and at future events', 'Medical and dietary requirements'],
+                ['Ensuring participant safety at in-person events', 'Medical requirements (deleted within 90 days after the event) and dietary requirements'],
+                ['Supervision and emergency contact for students attending in-person events without a school group', 'Parent or guardian contact details; name and contact details of a designated responsible adult'],
                 ['Processing registration payments and refunds', 'Billing history'],
                 ['Publishing competition results, photos, and highlights', 'Photos, videos, name'],
-                ['Issuing verifiable credentials, and showing a credential page publicly when you choose to', 'Name, credential details, date of birth (to apply the age rules in Section 7.4), parental consent record for students under 18'],
+                ['Issuing verifiable credentials, and showing a credential page publicly when you choose to (credential pages of children under 13 are never public)', 'Name, credential details, date of birth (to apply the age rules in Section 7.4), parental consent record for students under 18'],
                 ['Improving our Services through analytics', 'Technical and usage data'],
                 ['Understanding which schools and organisations are interested in partnering with us', 'Technical data and inferred organisation — educator and partner pages only, with advertising consent'],
                 ['Complying with legal obligations', 'All categories as required'],
@@ -356,7 +416,7 @@ export default function PrivacyPage() {
                 ['Supabase', 'Cloud database, file storage and hosting (United States)', 'All account and registration data, signed consent forms and agreements, and their signing records'],
                 ['Clerk', 'User authentication and identity', 'Name, email, login credentials'],
                 ['Resend', 'Transactional email delivery, including requests to sign and copies of signed documents', 'Name, email address, and the content of the email — including the private link to sign or download a document. Signed documents are never sent as attachments'],
-                ['DocuSign', 'Electronic signatures for some consent forms and agreements, until our DocuSign contract ends in 2027', 'Names and email addresses of signers, and the details pre-filled on the form; DocuSign keeps its own copy of signed forms under its data processing terms'],
+                ['DocuSign', 'Electronic consent for Minors (parent or guardian, and the student where they have reached the age of majority), and other agreements, until our DocuSign contract ends in 2027', "Student name, membership or event name, parent or guardian name and email, and for students who are adults, the student's email, with the other details pre-filled on the form; DocuSign keeps its own copy of signed forms under its data processing terms"],
                 ['Vercel', 'Website hosting and delivery, and aggregate page analytics (Vercel Analytics)', 'Usage/technical data, including the internet address and browser of people who sign documents. Page analytics do not run on signing pages'],
                 ['Google Workspace', 'Staff email and documents; spreadsheets schools use to send us their group roster; an encrypted backup copy of signed agreements', 'Group roster details a school shares (which can include names, dates of birth, health information and emergency contacts). Backup copies are encrypted before they leave our systems, with a key Google does not hold'],
                 ['Checkr', 'Background checks for adult mentors and volunteers', 'Name and email, and the details you give Checkr directly'],
@@ -425,7 +485,9 @@ export default function PrivacyPage() {
           under 18, the parent or guardian consent form includes our photo and media permission,
           with a box to opt out; opting out does not affect participation. We do not publish
           identifiable photographs or video of a participant whose parent or guardian has opted
-          out, and anyone can ask us to remove a photograph at any time.
+          out, and anyone can ask us to remove a photograph at any time. Students aged 13 or over
+          can also opt out themselves, and students aged 13 to 17 in New York and Colorado are
+          opted out until they opt in (Section 2).
         </p>
         <p>
           <strong>Credential pages.</strong> When you complete a Stellr course or take part in a
@@ -456,16 +518,14 @@ export default function PrivacyPage() {
           link is not misled. To remove a LinkedIn profile entry or post, delete it on LinkedIn.
         </p>
         <p>
-          <strong>Students under 18.</strong> For participants under 18, permission to make a
-          credential page public is part of the parent or guardian consent form signed at
-          registration; no separate consent is requested for each credential. A parent or
-          guardian may decline by ticking the credential opt-out on the consent form, or at any
-          time by contacting{' '}
+          <strong>Students who are Minors.</strong> Permission for a Minor to make credential pages
+          public is part of the Participation Agreement their parent or legal guardian signs.
+          Parents and guardians may decline, or withdraw permission at any time by contacting{' '}
           <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
             privacy@stellreducation.org
           </a>
-          . When a parent or guardian declines, any credential pages that are already public are
-          made private and we let the family know.
+          , and any public pages are made private. Credential pages of a child under 13 always stay
+          private, and no credential page can be made public while an account is pending consent.
         </p>
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">7.5 Legal Requirements</h3>
@@ -481,28 +541,29 @@ export default function PrivacyPage() {
           here.
         </p>
 
-        <h3 className="text-lg font-semibold text-brand-blue-dark">7.7 FERPA — School Records</h3>
+        <h3 className="text-lg font-semibold text-brand-blue-dark">7.7 FERPA — Education Records</h3>
         <p>
-          Stellr runs its own competitions; we are not part of any school. Information reaches us
-          in two ways, and we treat them differently:
+          We treat the information we hold about students as education records protected by FERPA,
+          however it reaches us:
         </p>
         <ul className="list-disc pl-6 space-y-2">
           <li>
-            <strong>From a school or teacher</strong> registering a group. The student information
-            they share (such as names, dates of birth, grade and school) may come from the
-            school&rsquo;s education records. The registering teacher accepts our{' '}
-            <a href="/school-data-terms" className="text-brand-blue hover:underline">School Data Terms</a>{' '}
-            on the school&rsquo;s behalf. Under them we use that information only to run the
+            <strong>From a school or teacher</strong> registering a group. We act as a &ldquo;school
+            official&rdquo; under a data processing agreement with the school: our{' '}
+            <a href="/school-data-terms" className="text-brand-blue hover:underline">School Data Terms</a>
+            , which the registering teacher accepts on the school&rsquo;s behalf, or the
+            school&rsquo;s own agreement where it has one. We use that information only to run the
             competition, never for advertising, profiling or product development, and we do not
-            disclose it to anyone else except as the terms allow (for example, to the providers in
-            Section 7.1 that host our services). We delete it at the school&rsquo;s request when its
-            students withdraw.
+            disclose it to anyone else except as FERPA and the agreement allow (for example, to the
+            providers in Section 7.1 that host our services). We delete it within 30 days of the
+            school&rsquo;s request, or sooner if the school&rsquo;s agreement requires.
           </li>
           <li>
             <strong>From a parent, guardian or student directly</strong>, including everything on a
-            signed consent form or agreement. This is Stellr&rsquo;s own record, held under this
-            Policy. Signed forms are legal records of consent and are kept for the period in
-            Section 10, even if the school later asks us to delete its records.
+            signed consent form or agreement. We apply these protections to all student information
+            on our platform, including for students who join on their own without a school. After a
+            deletion request, we keep only the minimal signed-agreement record described in Section
+            10.
           </li>
           <li>
             Schools and parents may exercise their rights by contacting us at{' '}
@@ -517,8 +578,8 @@ export default function PrivacyPage() {
         <h2 className="text-xl font-bold text-brand-blue-dark">8. Sensitive Information</h2>
         <p>We treat the following categories as <strong>sensitive</strong> and apply heightened protections:</p>
         <ul className="list-disc pl-6 space-y-2">
-          <li><strong>Medical and health information</strong> — collected solely for participant safety; kept on your member record so it is ready for future events; accessible only to staff with a direct need; never shared with sponsors, partners, or the public. You can change or remove it at any time in your account, or ask us to delete it</li>
-          <li><strong>Dietary requirements</strong> — used only for event catering; kept on your member record for future events; you can change or remove it at any time</li>
+          <li><strong>Medical and health information</strong> — collected solely for participant safety; accessible only to staff with a direct need; never shared with sponsors, partners, or the public; deleted within 90 days after the event unless it is needed for an incident record. You can change or remove it sooner at any time in your account, or ask us to delete it</li>
+          <li><strong>Dietary requirements</strong> — used only for event catering, and kept under our standard retention periods (Section 10); you can change or remove it at any time</li>
           <li><strong>Signing records</strong> — the internet address and browser recorded when you sign are used only to show the signature is yours; never used for analytics or advertising</li>
           <li><strong>Date of birth</strong> — used for eligibility and COPPA compliance; not displayed publicly</li>
           <li><strong>Payment data</strong> — handled exclusively by our payment processor Stripe; Stellr retains only transaction confirmations and last-four-digit references</li>
@@ -555,8 +616,8 @@ export default function PrivacyPage() {
             <tbody>
               {[
                 ['Essential', 'Login sessions, security, and core site function', 'Always on — the site cannot work without these'],
-                ['Analytics', 'Aggregate usage measurement (Google Analytics, HubSpot)', 'On by default; denied until you accept in the UK, EEA and Switzerland'],
-                ['Advertising', 'Campaign measurement and remarketing (Google Ads, Meta, LinkedIn); business-audience identification on educator and partner pages (Apollo.io)', 'Off until you accept'],
+                ['Analytics', 'Aggregate usage measurement (Google Analytics, HubSpot)', 'On by default; denied until you accept in the UK, EEA and Switzerland; limited for children under 13 (Section 9.4)'],
+                ['Advertising', 'Campaign measurement and remarketing (Google Ads, Meta, LinkedIn); business-audience identification on educator and partner pages (Apollo.io)', 'Off until you accept; never for students or children under 13 (Section 9.4)'],
               ].map(([category, purpose, consent]) => (
                 <tr key={category} className="even:bg-surface">
                   <td className="border border-line px-4 py-2 font-medium">{category}</td>
@@ -623,8 +684,34 @@ export default function PrivacyPage() {
           Stellr event.
         </p>
 
+        <h3 className="text-lg font-semibold text-brand-blue-dark">9.4 Students, and Children Under 13</h3>
+        <p>
+          Advertising cookies and tags (including Google Ads remarketing and Apollo.io) are never
+          loaded on registration pages, on the participant platform, or for any signed-in student,
+          whatever the cookie settings. For a child under 13, this applies even if
+          &ldquo;Accept&rdquo; was selected in Cookie settings, because a child cannot give that
+          consent. For children under 13 we use analytics only to operate, secure, and improve our
+          Services, as COPPA permits for the support of internal operations, and never to build a
+          profile of the child, to target advertising, or to share identifiers with third parties
+          for those purposes.
+        </p>
+
         {/* 10. Data Retention */}
         <h2 className="text-xl font-bold text-brand-blue-dark">10. Data Retention</h2>
+        <p>
+          This section is our written data retention policy, including for personal information
+          collected from children under 13 (16 CFR 312.10). We keep student information for the
+          duration of membership and for seven years after an account is deactivated so that we
+          hold a record of consents and participation if questions or claims arise after a student
+          leaves, and so that we can verify credentials we have issued. When a retention period
+          ends, we securely delete the information. A school, parent, guardian, or student may ask
+          us to delete it sooner (Section 12). We delete it within 30 days of the request, or
+          sooner if a school&rsquo;s agreement with us requires it. We keep only a minimal record
+          of the signed Participation Agreement (the names of the student and signers, the dates,
+          and the signed document) until seven years after the account is deactivated, so that we
+          can show what was agreed if a question or claim arises later. The parent or legal
+          guardian (or adult student) consents to us keeping this record when they sign.
+        </p>
         <p>We retain personal information only as long as necessary:</p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse border border-line">
@@ -636,14 +723,18 @@ export default function PrivacyPage() {
             </thead>
             <tbody>
               {[
-                ['Account and competition records', 'Duration of account'],
-                ['Medical and dietary information', 'Duration of account, so it is ready for future events. You can remove it at any time'],
+                ['Account and competition records', 'Duration of membership + 7 years after deactivation (all ages, including under 13)'],
+                ['Pending accounts with no parental consent', 'Deleted within 30 days of registration'],
+                ['Medical information', '90 days after the event, unless needed for an incident record. You can remove it sooner at any time'],
+                ['Dietary information', 'Same as account and competition records, so it is ready for future events. You can remove it at any time'],
                 ['Payment transaction records', '7 years (US tax/accounting requirements)'],
-                ['Signed consent forms and agreements, and their signing records (names, emails, internet address, browser, timestamps, audit trail)', '7 years from the date of signing, then deleted automatically. If you ask us to delete your information before then, we keep the signed record only so it can be produced if a claim is made, and use it for nothing else'],
+                ['Signed consent forms and agreements, and their signing records (names, emails, internet address, browser, timestamps, audit trail)', 'Duration of membership + 7 years after deactivation. After a deletion request, only the minimal signed-agreement record is kept, restricted so it can be produced if a claim is made and used for nothing else'],
                 ['Encrypted backup copies of signed agreements', 'Deleted with the original. Our nightly encrypted database copies, which may also contain it, are each kept for 30 days'],
                 ['Requests to sign that are never completed', 'Cancelled 30 days after the last signing link we sent, and everything entered on the form (including any partial signature) deleted then; the request itself is deleted with the participant record'],
+                ['Data subject to a deletion request (school, parent, or student)', "Deleted within 30 days of the request (sooner if a school's agreement requires), except the minimal signed-agreement record"],
                 ['Parent/guardian contact information', 'Duration of account, or until the associated minor participant record is deleted. The copy within a signed consent form is kept with that form'],
-                ['Photos and videos', 'Until you request removal, or indefinitely'],
+                ['Profile photos', 'Same as account and competition records'],
+                ['Event photos and videos', 'Until removal is requested; reviewed every 2 years, and deleted when no longer needed'],
                 ['Credentials', 'Duration of account. If you ask us to erase your data, the credential number is kept so a copy can be checked, but your name is removed and the page shows the credential as withdrawn'],
                 ['Credential page activity (views and share clicks)', 'Duration of the credential; deleted with it'],
                 ['Technical/usage logs', 'Generally 12 months, with minor exceptions on a platform-specific basis'],
@@ -704,7 +795,7 @@ export default function PrivacyPage() {
         <ul className="list-disc pl-6 space-y-2">
           <li><strong>Access</strong> — request a copy of personal information we hold about you</li>
           <li><strong>Correction</strong> — request correction of inaccurate information</li>
-          <li><strong>Deletion</strong> — request deletion of your information. Signed consent forms and agreements are kept for the period in Section 10 and restricted so they are used for nothing else</li>
+          <li><strong>Deletion</strong> — request deletion. We delete within 30 days, keeping only the minimal signed-agreement record described in Section 10</li>
           <li><strong>Paper copies</strong> — sign on paper instead of electronically, or ask for a paper copy of anything you have signed, at no cost</li>
           <li><strong>Withdrawal of consent</strong> — withdraw consent for processing based on consent (e.g., for publication of photos)</li>
           <li><strong>Credential privacy</strong> — make any credential page private at any time from your Stellr account</li>
@@ -722,7 +813,7 @@ export default function PrivacyPage() {
         <h3 className="text-lg font-semibold text-brand-blue-dark">Parents and Guardians (COPPA Rights)</h3>
         <ul className="list-disc pl-6 space-y-2">
           <li>Review personal information collected from your child under 13</li>
-          <li>Request correction or deletion of that information (a signed consent form is kept, restricted, for the period in Section 10)</li>
+          <li>Request correction or deletion of that information (only the minimal signed-agreement record is kept, as described in Section 10)</li>
           <li>Withdraw consent you have given, including to photo and media use</li>
           <li>Refuse further collection or use of your child&rsquo;s information</li>
           <li>
@@ -736,8 +827,18 @@ export default function PrivacyPage() {
             </a>
           </li>
         </ul>
+        <p>
+          For a student who has reached the age of majority but is still in high school, the
+          student exercises these rights in their own name. Their co-signing parent or legal
+          guardian receives the information the student has authorized us to share (Section 2).
+        </p>
 
-        <h3 className="text-lg font-semibold text-brand-blue-dark">Schools and Educators (FERPA Rights)</h3>
+        <h3 className="text-lg font-semibold text-brand-blue-dark">FERPA Rights</h3>
+        <p>
+          Parents of students who are Minors under the age of majority, and adult students, may
+          exercise these rights directly with us, including where the student joined Stellr on
+          their own. Schools and educators may exercise them for students they registered.
+        </p>
         <p>
           Schools whose students&rsquo; education records are processed by Stellr have the right to:
         </p>
@@ -745,9 +846,9 @@ export default function PrivacyPage() {
           <li>Inspect and review the records the school shared with Stellr about its students</li>
           <li>Request correction of inaccurate records</li>
           <li>
-            Request deletion of those records when students withdraw from an event. Signed consent
-            forms, which come from parents rather than the school, are kept as described in Section
-            10
+            Request deletion of those records. We delete within 30 days, or sooner if the
+            school&rsquo;s agreement requires, keeping only the minimal signed-agreement record
+            described in Section 10
           </li>
           <li>Receive a copy of our School Data Terms and of our list of providers (Section 7.1)</li>
         </ul>
@@ -798,9 +899,16 @@ export default function PrivacyPage() {
         <p>
           We may update this Privacy Policy from time to time. When we do, we will post the revised
           version on this page with an updated &ldquo;Last Updated&rdquo; date and a notice at the top of
-          the page summarising what changed. We give notice of changes on our public website only;
-          we do not send notice by email. Please check this page from time to time. Continued use of
-          our Services after a change is posted constitutes acceptance of the updated Policy.
+          the page summarising what changed. Except as described below, we give notice of changes
+          on our public website only; we do not send notice by email. Please check this page from
+          time to time. Continued use of our Services after a change is posted constitutes
+          acceptance of the updated Policy.
+        </p>
+        <p>
+          If a change materially affects how we collect, use, or disclose the personal information
+          of a Minor whose parent or legal guardian has consented, including any child under 13, we
+          will email the parent or legal guardian and obtain new consent before the change applies
+          to that student. Continued use alone is not treated as consent for these changes.
         </p>
 
         {/* 15. Contact */}

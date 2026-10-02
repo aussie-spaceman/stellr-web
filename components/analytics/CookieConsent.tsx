@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { pushDataLayer } from '@/lib/analytics'
 import { CONSENT_OPEN_EVENT, applyConsent, readConsent, writeConsent } from '@/lib/consent'
+import { noAdsActive } from '@/lib/no-ads'
 
 /**
  * Cookie consent banner, gating advertising tags only.
@@ -62,7 +63,10 @@ export function CookieConsent() {
     //
     // Pushed after applyConsent so GTM has already processed the consent update
     // by the time the tag is evaluated; the reverse order would re-block it.
-    if (ads) pushDataLayer({ event: 'consent_granted' })
+    //
+    // Not on a student page or in a student's browser: nothing was granted
+    // there (applyConsent refuses), so no tag may be woken (§9.4).
+    if (ads && !noAdsActive()) pushDataLayer({ event: 'consent_granted' })
 
     setVisible(false)
   }

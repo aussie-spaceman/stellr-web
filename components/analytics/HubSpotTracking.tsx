@@ -2,6 +2,7 @@ import Script from 'next/script'
 import { headers } from 'next/headers'
 import { isStrictRegion } from '@/lib/consent'
 import { HubSpotTrackingConsented } from './HubSpotTrackingConsented'
+import { HubSpotTrackingNoAdsGate } from './HubSpotTrackingNoAdsGate'
 
 /**
  * HubSpot tracking script.
@@ -42,15 +43,22 @@ export async function HubSpotTracking() {
 
   const country = (await headers()).get('x-vercel-ip-country')
 
+  // Never in a browser where a student has signed in (§9.4).
   if (isStrictRegion(country)) {
-    return <HubSpotTrackingConsented portalId={portalId} />
+    return (
+      <HubSpotTrackingNoAdsGate>
+        <HubSpotTrackingConsented portalId={portalId} />
+      </HubSpotTrackingNoAdsGate>
+    )
   }
 
   return (
-    <Script
-      id="hs-script-loader"
-      strategy="afterInteractive"
-      src={`https://js.hs-scripts.com/${portalId}.js`}
-    />
+    <HubSpotTrackingNoAdsGate>
+      <Script
+        id="hs-script-loader"
+        strategy="afterInteractive"
+        src={`https://js.hs-scripts.com/${portalId}.js`}
+      />
+    </HubSpotTrackingNoAdsGate>
   )
 }

@@ -19,7 +19,9 @@ import {
   canUseLinkedIn,
   credentialState,
   canShare,
+  ageBlock,
   consentForMinor,
+  shareConsentFor,
   credentialUrl,
   tombstoneCredentialsFor,
   unpublishCredentialsFor,
@@ -98,6 +100,10 @@ describe('canShare', () => {
     expect(canShare(minor, 'granted')).toEqual({ ok: true })
     expect(canShare(minor, 'declined')).toEqual({ ok: false, reason: 'minor_declined' })
     expect(canShare(minor, 'none')).toEqual({ ok: false, reason: 'minor_no_consent' })
+  })
+  it('age blocks are never overridden by consent', () => {
+    expect(canShare(row({ is_minor: true }), 'under_13')).toEqual({ ok: false, reason: 'under_13' })
+    expect(canShare(row(), 'dob_unknown')).toEqual({ ok: false, reason: 'dob_unknown' })
   })
   it('state blocks win over consent', () => {
     expect(canShare(row({ status: 'revoked' }), 'granted')).toEqual({ ok: false, reason: 'revoked' })
@@ -268,5 +274,38 @@ describe('unpublishCredentialsFor (guardian opt-out)', () => {
     const db = makeDb([])
     await expect(unpublishCredentialsFor(db, { memberId: null, participantId: null })).resolves.toEqual([])
     expect(db.calls).toHaveLength(0)
+  })
+})
+
+// ── Age rules (D5, 2 Oct): under 13 never public; unknown DOB never public ──
+
+describe('ageBlock', () => {
+  it('blocks under 13 and unknown DOB, from the live date', () => {
+    expect(ageBlock('2014-09-22', NOW)).toBe('under_13')   // 11
+    expect(ageBlock('2013-09-22', NOW)).toBe('under_13')   // 12, birthday tomorrow
+    expect(ageBlock('2013-09-21', NOW)).toBeNull()         // 13 today
+    expect(ageBlock(null, NOW)).toBe('dob_unknown')
+    expect(ageBlock('not-a-date', NOW)).toBe('dob_unknown')
+  })
+})
+
+describe('shareConsentFor', () => {
+  const view = (dob: string | null, over: Partial<CredentialRow> = {}) => ({ ...row(over), date_of_birth: dob })
+  const granting = () => makeDb({ id: 'e1', completed_at: new Date().toISOString() })
+
+  it('an under-13 is blocked even with a granting consent form', async () => {
+    const recent = `${new Date().getUTCFullYear() - 10}-01-01`
+    expect(await shareConsentFor(granting(), view(recent, { is_minor: true }))).toBe('under_13')
+  })
+  it('an unknown DOB is blocked', async () => {
+    expect(await shareConsentFor(granting(), view(null))).toBe('dob_unknown')
+  })
+  it('an adult needs no consent', async () => {
+    expect(await shareConsentFor(granting(), view('1990-05-05'))).toBe('not_required')
+  })
+  it('a minor today needs consent even when is_minor was stored false', async () => {
+    const sixteen = `${new Date().getUTCFullYear() - 16}-01-01`
+    expect(await shareConsentFor(makeDb(null), view(sixteen, { is_minor: false }))).toBe('none')
+    expect(await shareConsentFor(granting(), view(sixteen, { is_minor: false }))).toBe('granted')
   })
 })

@@ -48,6 +48,8 @@ export interface EventEmailRow {
   status: EventEmailStatus
   created_by: string | null
   sent_at: string | null
+  /** Lease held while a late-registrant catch-up is sending. */
+  catch_up_claimed_at?: string | null
   created_at: string
   updated_at: string
 }
@@ -58,7 +60,7 @@ export interface EventEmailSendRow {
   email_name: string
   subject: string
   audiences: AudienceKey[]
-  trigger: 'manual' | 'schedule' | 'test'
+  trigger: 'manual' | 'schedule' | 'test' | 'catch_up'
   triggered_by: string | null
   recipient_count: number
   sent_count: number

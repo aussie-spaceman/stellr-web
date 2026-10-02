@@ -7,6 +7,7 @@ const TRIGGER_LABEL: Record<EventEmailSendRow['trigger'], string> = {
   manual: 'Sent now',
   schedule: 'Scheduled',
   test: 'Test',
+  catch_up: 'Late registrants',
 }
 
 function when(iso: string): string {
@@ -68,7 +69,9 @@ export function EventEmailHistory({ history }: { history: EventEmailSendRow[] })
                 <td className="whitespace-nowrap px-4 py-2.5 text-brand-muted">
                   {TRIGGER_LABEL[h.trigger]}
                   {h.triggered_by && h.trigger !== 'schedule' && (
-                    <span className="block text-xs text-brand-muted-soft">{h.triggered_by}</span>
+                    <span className="block text-xs text-brand-muted-soft">
+                      {h.triggered_by === 'schedule' ? 'Automatic' : h.triggered_by}
+                    </span>
                   )}
                 </td>
               </tr>

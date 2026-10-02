@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { rows, sendEventEmail, statusWrites, today } = vi.hoisted(() => ({
+const { rows, sendEventEmail, statusWrites, today, runCatchUps } = vi.hoisted(() => ({
+  runCatchUps: vi.fn(async (..._a: unknown[]) => ({ checked: 1, emailed: 4, deferred: 0, errors: [] as { id: string; error: string }[] })),
   rows: [] as { id: string; event_slug: string; schedule_days_before: number }[],
   sendEventEmail: vi.fn(async (..._a: unknown[]) => ({ ok: true })),
   statusWrites: [] as { id: string; status: string }[],
@@ -12,6 +13,7 @@ vi.mock('@/lib/cron-runs', () => ({ startCronRun: async () => ({ fail: () => {},
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: async (slug: string) => ({ date: slug === 'past' ? '2026-09-20' : '2026-10-03' }) }))
 vi.mock('@/lib/event-emails/send', () => ({ sendEventEmail }))
 vi.mock('@/lib/event-emails/render', () => ({ todayInMountain: () => today.value }))
+vi.mock('@/lib/event-emails/catch-up', () => ({ runCatchUps }))
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
     from: () => {
@@ -62,5 +64,14 @@ describe('GET /api/cron/event-emails', () => {
     now.mockReturnValue(40_000)         // before b
     expect(await run()).toMatchObject({ due: 2, sent: 1, deferred: 1 })
     now.mockRestore()
+  })
+
+  it('catches up late registrants after the scheduled sends, sharing the event-date lookup', async () => {
+    expect(await run()).toMatchObject({ catchUpEmailed: 4, catchUpDeferred: 0 })
+    expect(runCatchUps).toHaveBeenCalledTimes(1)
+    const [, eventDate, budgetLeft, day] = runCatchUps.mock.calls[0] as [unknown, (s: string) => Promise<string | null>, () => boolean, string]
+    expect(await eventDate('co')).toBe('2026-10-03')
+    expect(budgetLeft()).toBe(true)
+    expect(day).toBe('2026-09-28')
   })
 })

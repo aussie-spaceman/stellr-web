@@ -72,3 +72,6 @@ Verified: 907 unit tests, including a synthetic replica of the CO artwork. The r
 
 Asked (maintainer): for both Avery formats, always print a full page of spare name tags.
 Change: the download (`badges?format=`) appends blank badges after the roster: enough to fill the last sheet, plus one full sheet (`spareCount` in `lib/badge-layout.ts`). Spares use the **Everyone** background, or a plain empty label without one, and draw no text (the renderer skips a blank name). The preview is unchanged. Filling the rest of the last sheet was the session's call (those labels would otherwise print empty). If you want exactly one page and no fill, change `spareCount` to return `perPage`.
+
+## Close-out: 29 Sept 2026
+Spares were promoted in #260 (`ad3828c`). Their open items are in `tracker/2026-09-29-badge-spares.md`; Session 18's open rows stay in `TRACKER.md`. 18.9 (drop the old `event_settings.badge_*` columns) is now due; see `badge-spares.4`.

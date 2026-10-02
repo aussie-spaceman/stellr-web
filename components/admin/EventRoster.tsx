@@ -108,6 +108,7 @@ export default function EventRoster({
   const [payment, setPayment] = useState<PaymentFilter>('all')
   const [docusign, setDocusign] = useState<DocusignFilter>('all')
   const [compliance, setCompliance] = useState<ComplianceFilter>('all')
+  const [scholarshipOnly, setScholarshipOnly] = useState(false)
   const [moving, setMoving] = useState<string | null>(null)
   const [markingInvoice, setMarkingInvoice] = useState<string | null>(null)
 
@@ -138,9 +139,10 @@ export default function EventRoster({
   const filtered = useMemo(
     () =>
       roster.groups
+        .filter((g) => !scholarshipOnly || g.scholarship)
         .map((g) => ({ ...g, participants: g.participants.filter((p) => matches(p, payment, docusign, compliance)) }))
         .filter((g) => g.participants.length > 0),
-    [roster, payment, docusign, compliance]
+    [roster, payment, docusign, compliance, scholarshipOnly]
   )
   const shown = filtered.reduce((n, g) => n + g.participants.length, 0)
 
@@ -164,8 +166,17 @@ export default function EventRoster({
           <option value="cleared">Background: Cleared</option>
           <option value="outstanding">Background: Outstanding</option>
         </select>
+        <select
+          value={scholarshipOnly ? 'holders' : 'all'}
+          onChange={(e) => setScholarshipOnly(e.target.value === 'holders')}
+          className={select}
+        >
+          <option value="all">Scholarship: All</option>
+          <option value="holders">Scholarship: Holders only</option>
+        </select>
         <span className="text-sm text-brand-muted-soft">
           {shown} of {roster.summary.totalParticipants} participants
+          {roster.summary.scholarshipHolders > 0 && ` · ${roster.summary.scholarshipHolders} on scholarship`}
         </span>
         {/* Bulk reminders moved to the Email Reminders tab (editable copy,
             attachments, scheduling, history). The old one-click route,
@@ -203,6 +214,35 @@ export default function EventRoster({
         </a>
       </div>
 
+      {/* Offered, but the student hasn't completed their details — so there is
+          no registration row yet. Shown here so the roster is the whole picture. */}
+      {roster.scholarshipOffers.length > 0 && (
+        <div className="rounded-xl border border-line bg-white overflow-hidden">
+          <div className="px-4 py-2 bg-primary-soft text-xs font-subheading font-semibold uppercase tracking-wide text-primary-deep">
+            Scholarship offers — awaiting registration details ({roster.scholarshipOffers.length})
+          </div>
+          <ul className="divide-y divide-brand-hairline text-sm">
+            {roster.scholarshipOffers.map((o) => (
+              <li key={o.id} className="px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span className="font-medium text-brand-blue-dark">{o.name}</span>
+                <span className="text-xs text-brand-muted-soft">{o.email}</span>
+                <ScholarshipBadge percent={o.percentOff} />
+                {o.offeredAt && (
+                  <span className="text-xs text-brand-muted-soft">
+                    offered {new Date(o.offeredAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
+                )}
+                {isAdmin && (
+                  <Link href={`/admin/scholarships/${o.id}`} className="ml-auto text-xs font-medium text-brand-blue hover:text-brand-blue-dark">
+                    View application
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <p className="text-sm text-brand-muted-soft bg-white rounded-xl border border-brand-border px-4 py-6">
           No participants match the current filters.
@@ -221,7 +261,12 @@ export default function EventRoster({
                   group.type === 'group' ? 'bg-brand-blue/5 text-brand-blue' : 'bg-brand-canvas text-brand-muted-soft'
                 }`}
               >
-                <span>{group.type === 'group' ? `Group — ${group.groupLabel}` : 'Individual Registration'}</span>
+                <span className="flex items-center gap-2">
+                  {group.type === 'group' ? `Group — ${group.groupLabel}` : 'Individual Registration'}
+                  {group.scholarship && (
+                    <ScholarshipBadge percent={group.scholarship.percentOff} refundCents={group.scholarship.refundCents} />
+                  )}
+                </span>
                 {/* Individual registrations need no header delete — the per-row
                     "Delete Registration" removes the participant and auto-withdraws
                     the emptied registration. */}
@@ -386,5 +431,15 @@ export default function EventRoster({
         </div>
       )}
     </div>
+  )
+}
+
+// "Scholarship · 50%" — marks a registration held under a scholarship.
+function ScholarshipBadge({ percent, refundCents }: { percent: number; refundCents?: number | null }) {
+  return (
+    <span className="inline-flex items-center rounded-full bg-pathway-amber-bg px-2 py-0.5 text-[11px] font-semibold normal-case tracking-normal text-ink">
+      Scholarship · {percent}%
+      {refundCents ? ` · $${(refundCents / 100).toFixed(2)} reimbursed` : ''}
+    </span>
   )
 }

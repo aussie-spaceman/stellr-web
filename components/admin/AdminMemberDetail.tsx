@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ROLES_FOR_BRACKET, DEFAULT_ROLE_FOR_BRACKET, getEligibleTierNames } from '@/lib/membership-rules'
 import { EventHistory } from '@/components/member/EventHistory'
+import { ScholarshipHistory } from '@/components/member/ScholarshipHistory'
+import type { ScholarshipHistoryItem } from '@/lib/scholarships'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { TERMINAL_SESSION_STATUSES } from '@/lib/deletion/registry'
 import { MemberMembershipManager } from '@/components/admin/MemberMembershipManager'
@@ -95,6 +97,8 @@ interface Props {
   compliance: MemberCompliance | null
   /** Volunteer Agreement status; null when the member is not a mentor/volunteer. */
   agreement: MemberAgreement | null
+  /** Scholarship applications and offers, newest first. */
+  scholarships: ScholarshipHistoryItem[]
 }
 
 const TIER_TOOLTIPS: Record<string, string> = {
@@ -131,7 +135,7 @@ function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, sessions, membershipId, activity, compliance, agreement }: Props) {
+export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, sessions, membershipId, activity, compliance, agreement, scholarships }: Props) {
   const router = useRouter()
   const [enteringPortal, setEnteringPortal] = useState(false)
   const [inviteSentAt, setInviteSentAt] = useState(member.account_invite_sent_at)
@@ -555,6 +559,9 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
             editable
             adminMemberId={member.id}
           />
+
+          {/* Scholarships — offered %, and whether they accepted / attended */}
+          <ScholarshipHistory items={scholarships} audience="admin" />
 
           {/* Group registrations (teacher / student manager) */}
           {registrations.length > 0 && (

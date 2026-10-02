@@ -92,11 +92,27 @@ export interface RosterGroup {
    * per-member links.
    */
   payLinkSendable: boolean
+  /** An offered scholarship on this registration (lib/scholarships). */
+  scholarship: { id: string; percentOff: number; refundCents: number | null } | null
   participants: RosterParticipant[]
+}
+
+/**
+ * A scholarship offered for this event whose student hasn't completed their
+ * registration details yet — so there is no registration row to show. The
+ * roster lists these separately ("awaiting details").
+ */
+export interface RosterScholarshipOffer {
+  id: string
+  name: string
+  email: string
+  percentOff: number
+  offeredAt: string | null
 }
 
 export interface EventRosterData {
   groups: RosterGroup[]
+  scholarshipOffers: RosterScholarshipOffer[]
   summary: {
     totalParticipants: number
     groupParticipants: number
@@ -108,6 +124,8 @@ export interface EventRosterData {
     outstandingPayments: number
     outstandingDocusigns: number
     checkedIn: number
+    /** Registrations held under a scholarship, plus offers awaiting details. */
+    scholarshipHolders: number
   }
 }
 
@@ -122,7 +140,7 @@ function isMinor(dateOfBirth: string | null, eventDate?: string): boolean {
 export async function getEventRoster(eventSlug: string, eventDate?: string): Promise<EventRosterData> {
   const db = supabaseServer()
 
-  const [{ data: regs, error: regError }, { data: envelopes, error: envError }] = await Promise.all([
+  const [{ data: regs, error: regError }, { data: envelopes, error: envError }, { data: offers }] = await Promise.all([
     db
       .from('registrations')
       .select(
@@ -141,7 +159,27 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       .from('docusign_envelopes')
       .select('id, participant_id, status, signers_total, signers_completed, reused_from')
       .eq('event_slug', eventSlug),
+    db
+      .from('scholarship_applications')
+      .select('id, first_name, last_name, email, percent_off, registration_id, offered_at')
+      .eq('event_slug', eventSlug)
+      .eq('status', 'offered'),
   ])
+  const offerRows = (offers ?? []) as {
+    id: string; first_name: string; last_name: string; email: string
+    percent_off: number; registration_id: string | null; offered_at: string | null
+  }[]
+  const offerByRegistration = new Map(offerRows.filter((o) => o.registration_id).map((o) => [o.registration_id as string, o]))
+  // Reimbursements to students who had paid before their scholarship.
+  const { data: scholarshipRefunds } = await db
+    .from('event_refunds')
+    .select('registration_id, refund_cents')
+    .eq('event_slug', eventSlug)
+    .eq('kind', 'scholarship')
+    .in('refund_type', ['cash', 'credit'])
+  const scholarshipRefundByReg = new Map(
+    ((scholarshipRefunds ?? []) as { registration_id: string; refund_cents: number | null }[]).map((r) => [r.registration_id, r.refund_cents ?? 0]),
+  )
   if (regError) throw new Error(`Failed to load registrations: ${regError.message}`)
   if (envError) throw new Error(`Failed to load docusign envelopes: ${envError.message}`)
 
@@ -313,6 +351,12 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       memberPaysIndividually: !!reg.member_pays_individually,
       payLinkSendable:
         reg.status === 'pending' && !reg.invoice_requested && !reg.member_pays_individually && reg.type !== 'campaign',
+      scholarship: (() => {
+        const o = offerByRegistration.get(reg.id as string)
+        return o
+          ? { id: o.id, percentOff: o.percent_off, refundCents: scholarshipRefundByReg.get(reg.id as string) ?? null }
+          : null
+      })(),
       participants,
     }
   })
@@ -326,8 +370,22 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
     }
   }
 
+  // Offers whose registration is missing or withdrawn: the student still has
+  // to complete their details.
+  const liveRegIds = new Set(groups.map((g) => g.registrationId))
+  const scholarshipOffers: RosterScholarshipOffer[] = offerRows
+    .filter((o) => !o.registration_id || !liveRegIds.has(o.registration_id))
+    .map((o) => ({
+      id: o.id,
+      name: `${o.first_name} ${o.last_name}`.trim(),
+      email: o.email,
+      percentOff: o.percent_off,
+      offeredAt: o.offered_at,
+    }))
+
   return {
     groups,
+    scholarshipOffers,
     summary: {
       totalParticipants: all.length,
       groupParticipants: groups.filter((g) => g.type === 'group').reduce((n, g) => n + g.participants.length, 0),
@@ -343,6 +401,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       outstandingPayments: all.filter((p) => !p.paid).length,
       outstandingDocusigns: all.filter((p) => p.docusign === 'outstanding').length,
       checkedIn: all.filter((p) => p.checked_in_at).length,
+      scholarshipHolders: groups.filter((g) => g.scholarship).length + scholarshipOffers.length,
     },
   }
 }

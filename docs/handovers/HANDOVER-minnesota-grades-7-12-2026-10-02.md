@@ -104,3 +104,27 @@ Only Colorado and Minnesota take 7–12, and Nebraska, Nevada and South Dakota s
 
 Carried from the Colorado work and still open: migration ledger realign (TRACKER
 4.8).
+
+---
+
+## 5. Close-out (2 Oct 2026)
+
+**Deployed.** #264 squash-merged to `dev` as `d4db11b`. A parallel session
+promoted it in #265 (`40ea376`). On 2 Oct www `/lp/homeschool-students` showed
+"Grades 7–12" ×3 and "9–12" ×0. The Sanity content was already live before
+that (§1).
+
+**Gaps, honestly:**
+- **The plan said to clean up the test registration; it wasn't.** Hard-deleting
+  rows was left to David (tracker `minnesota-grades-7-12.4`).
+- **The grade-7 run is partial.** It went through the API under a throwaway slug,
+  not through Minnesota itself, because of the live-price block (§2). A guardian
+  signing and payment are unproven (`.5`).
+- **The OG image** was seen locally only, not on www.
+- **Not in the tracker.** The Colorado handover's open item 3 (a grade-7
+  registration end to end) and item 4 (venue) never had tracker rows:
+  - Item 3 is now closed for the DB and DocuSign-send half by §2.
+  - Item 4 is already resolved: Colorado's venue reads "STEM School" in Sanity.
+
+Open rows: `minnesota-grades-7-12.4`–`.9` in
+`docs/handovers/tracker/2026-10-02-minnesota-grades-7-12.md`.

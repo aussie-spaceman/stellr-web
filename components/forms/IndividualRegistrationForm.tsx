@@ -15,6 +15,16 @@ import { gradeOptions } from '@/lib/grade-band'
 import { resolveSchoolPayload } from '@/lib/school-utils'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
 
+export interface ScholarshipFormOffer {
+  token: string
+  percent: number
+  firstName: string
+  lastName: string
+  email: string
+  /** What they'll pay, formatted — null when the fee isn't known. */
+  dueLabel: string | null
+}
+
 const schema = z.object({
   // Step 1 — Personal
   first_name: z.string().min(1, 'Required'),
@@ -58,6 +68,7 @@ export default function IndividualRegistrationForm({
   addons = [],
   gradeMin = DEFAULT_GRADE_BAND.min,
   gradeMax = DEFAULT_GRADE_BAND.max,
+  scholarship = null,
 }: {
   eventSlug: string
   eventTitle: string
@@ -71,6 +82,12 @@ export default function IndividualRegistrationForm({
   gradeMax?: number
   prefill?: RegistrationPrefill | null
   addons?: { variantId: string; name: string; unitCents: number }[]
+  /**
+   * Arrived from a scholarship offer email: the token links this registration
+   * to the offer, and the name/email seed the form for a student who isn't
+   * signed in yet.
+   */
+  scholarship?: ScholarshipFormOffer | null
 }) {
   // When the registrant is signed in, the email is authoritative and locked
   // (Option A) — a logged-in member can only register under their own address.
@@ -116,10 +133,10 @@ export default function IndividualRegistrationForm({
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      first_name: prefill?.first_name ?? '',
-      last_name: prefill?.last_name ?? '',
+      first_name: prefill?.first_name ?? scholarship?.firstName ?? '',
+      last_name: prefill?.last_name ?? scholarship?.lastName ?? '',
       nickname: prefill?.nickname ?? '',
-      email: prefill?.email ?? '',
+      email: prefill?.email ?? scholarship?.email ?? '',
       phone: prefill?.phone ?? '',
       date_of_birth: prefill?.date_of_birth ?? '',
       grade: prefill?.grade ?? '',
@@ -221,6 +238,7 @@ export default function IndividualRegistrationForm({
           ...resolveSchoolPayload(schoolSelection),
           event_slug: eventSlug,
           event_title: eventTitle,
+          ...(scholarship ? { scholarship_token: scholarship.token } : {}),
           age_bracket,
           // Role drives which DocuSign agreement dispatchAgreement sends:
           // School Student → minor consent, Mentor → mentor agreement,
@@ -288,6 +306,18 @@ export default function IndividualRegistrationForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      {scholarship && (
+        <div className="rounded-ds-card border border-line bg-primary-soft px-4 py-3 text-sm text-ink">
+          <p className="font-semibold">Your {scholarship.percent}% scholarship is applied to this registration.</p>
+          <p className="mt-0.5">
+            {scholarship.percent >= 100
+              ? 'There’s nothing to pay — once you submit, you’re registered.'
+              : scholarship.dueLabel
+                ? `You’ll pay ${scholarship.dueLabel} at checkout — no code needed.`
+                : 'It comes off at checkout — no code needed.'}
+          </p>
+        </div>
+      )}
       {/* ── Step 1: Personal Details ── */}
       {step === 1 && (
         <div className="space-y-6">

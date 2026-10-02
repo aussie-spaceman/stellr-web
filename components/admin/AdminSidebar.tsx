@@ -24,6 +24,7 @@ const SECTIONS: Section[] = [
       { href: '/admin/members', label: 'Members' },
       { href: '/admin/members/access', label: 'Access' },
       { href: '/admin/members/volunteers', label: 'Volunteers' },
+      { href: '/admin/scholarships', label: 'Scholarships' },
       { href: '/admin/schools', label: 'Schools' },
     ],
   },

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { regLookup, getEventBySlug, createRegistrationCheckout } = vi.hoisted(() => ({
+const { regLookup, getEventBySlug, createRegistrationCheckout, findOfferForRegistration } = vi.hoisted(() => ({
+  findOfferForRegistration: vi.fn(async (): Promise<unknown> => null),
   regLookup: vi.fn(async (): Promise<{ data: unknown; error: null }> => ({ data: null, error: null })),
   getEventBySlug: vi.fn(async (_slug: string) => ({ registrationOpenDate: '2026-01-01', registrationCloseDate: '2099-01-01' })),
   createRegistrationCheckout: vi.fn(async () => ({ url: 'https://checkout.stripe.test/cs_1', sessionId: 'cs_1', amountCents: 7500 })),
@@ -16,6 +17,7 @@ vi.mock('@/lib/supabase', () => ({
 }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug }))
 vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: () => null }))
+vi.mock('@/lib/scholarships', () => ({ findOfferForRegistration }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => ({}) }))
 vi.mock('@/lib/registration-checkout', async () => {
   const actual = await vi.importActual<typeof import('@/lib/registration-checkout')>('@/lib/registration-checkout')
@@ -39,6 +41,7 @@ function post(body: unknown) {
 beforeEach(() => {
   vi.clearAllMocks()
   regLookup.mockResolvedValue({ data: null, error: null })
+  findOfferForRegistration.mockResolvedValue(null)
   getEventBySlug.mockResolvedValue({ registrationOpenDate: '2026-01-01', registrationCloseDate: '2099-01-01' })
 })
 
@@ -68,6 +71,15 @@ describe('POST /api/register/pay', () => {
     const res = await post({ token: TOKEN })
     expect(res.status).toBe(403)
     expect(createRegistrationCheckout).not.toHaveBeenCalled()
+  })
+
+  it('lets a scholarship registration pay after registration has closed', async () => {
+    regLookup.mockResolvedValue({ data: { id: 'reg-1', event_slug: 'colorado', type: 'individual', status: 'pending' }, error: null })
+    getEventBySlug.mockResolvedValue({ registrationOpenDate: '2020-01-01', registrationCloseDate: '2020-02-01' })
+    findOfferForRegistration.mockResolvedValue({ id: 'sch-1', percent_off: 50 })
+    const res = await post({ token: TOKEN })
+    expect(res.status).toBe(200)
+    expect(createRegistrationCheckout).toHaveBeenCalledOnce()
   })
 
   it('mints a checkout for a pending registration, cancelling back to the pay page', async () => {

@@ -6,6 +6,7 @@ import type { MemberCompliance } from '@/components/admin/MemberCompliancePanel'
 import type { MemberAgreement } from '@/components/admin/MemberAgreementPanel'
 import { loadVolunteerAgreement } from '@/lib/volunteer'
 import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
+import { listMemberScholarships, toHistoryItems } from '@/lib/scholarships'
 
 export const metadata = { title: 'Admin — Member Detail' }
 
@@ -146,6 +147,11 @@ export default async function AdminMemberPage({
         .limit(1)
         .maybeSingle()
 
+  // Scholarships: offered (and at what %), and whether they took it up.
+  const scholarships = toHistoryItems(
+    await listMemberScholarships(db, { id, email: (member as { email?: string | null }).email ?? null }),
+  )
+
   return (
     <AdminMemberDetail
       member={member}
@@ -159,6 +165,7 @@ export default async function AdminMemberPage({
       activity={activity ?? []}
       compliance={compliance}
       agreement={agreement}
+      scholarships={scholarships}
     />
   )
 }

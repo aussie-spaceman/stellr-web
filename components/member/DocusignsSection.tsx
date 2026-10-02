@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { formatDateShort } from '@/lib/utils'
+import { isMinorOn } from '@/lib/age'
 import { describeEnvelope, PILL_CLASSES, type RecipientLike } from '@/lib/docusign-status'
 import { downloadSignedRecord } from '@/lib/esign/download-client'
 import { slug } from '@/lib/esign/filenames'
@@ -78,12 +79,7 @@ function EnvelopeProgressBadge({ env }: { env: Envelope }) {
 
 const fmt = formatDateShort
 
-function isStillMinor(dob: string | null | undefined): boolean {
-  if (!dob) return false
-  const d = new Date(dob)
-  const eighteenth = new Date(d.getFullYear() + 18, d.getMonth(), d.getDate())
-  return new Date() < eighteenth
-}
+const isStillMinor = (dob: string | null | undefined) => isMinorOn(dob)
 
 function memberHasGraduated(dob: string | null | undefined, role: string | null | undefined): boolean {
   if (!isStillMinor(dob)) return true

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ageOn, isMinorOn, isUnder13On } from './age'
+import { ageOn, appToday, isMinorOn, isUnder13On, isValidDob, onDate } from './age'
 
 const on = new Date('2026-10-02T12:00:00Z')
 
@@ -38,5 +38,30 @@ describe('isUnder13On', () => {
 
   it('is false when the date of birth is unknown', () => {
     expect(isUnder13On(undefined, on)).toBe(false)
+  })
+})
+
+describe('the shared "today"', () => {
+  it('is the Mountain-time calendar date, so a birthday turns over at local midnight', () => {
+    // 9 pm on 1 Oct in Denver is already 2 Oct in UTC.
+    const evening = new Date('2026-10-02T03:00:00Z')
+    expect(appToday(evening).toISOString().slice(0, 10)).toBe('2026-10-01')
+    expect(ageOn('2008-10-02', appToday(evening))).toBe(17)
+    expect(ageOn('2008-10-02', appToday(new Date('2026-10-02T07:00:00Z')))).toBe(18)
+  })
+
+  it('reads an event date as that calendar day', () => {
+    expect(isMinorOn('2008-10-03', onDate('2026-10-02'))).toBe(true)
+    expect(isMinorOn('2008-10-03', onDate('2026-10-03T08:30:00'))).toBe(false)
+  })
+})
+
+describe('isValidDob', () => {
+  it('accepts a real past date and nothing else; an unreadable one is never treated as a minor', () => {
+    expect(isValidDob('2012-02-29')).toBe(true)
+    expect(isValidDob('2013-02-29')).toBe(false)
+    expect(isValidDob('not a date')).toBe(false)
+    expect(isValidDob('2999-01-01')).toBe(false)
+    expect(isMinorOn('not a date', on)).toBe(false)
   })
 })

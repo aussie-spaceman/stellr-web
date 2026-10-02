@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { isMinorOn, isValidDob } from '@/lib/age'
 import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
 import { onboardingRequirements, emergencyContactComplete } from '@/lib/onboarding-requirements'
 
@@ -154,12 +155,7 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
     return !!(d.name?.trim() && d.address_line1?.trim() && d.city?.trim() && d.state?.trim() && d.postcode?.trim())
   }
 
-  function isAdultDob(dob: string): boolean {
-    if (!dob) return false
-    const d = new Date(dob)
-    const eighteenth = new Date(d.getFullYear() + 18, d.getMonth(), d.getDate())
-    return new Date() >= eighteenth
-  }
+  const isAdultDob = (dob: string) => isValidDob(dob) && !isMinorOn(dob)
 
   const volunteerUnderage = !!volunteerFlow && !!form.date_of_birth && !isAdultDob(form.date_of_birth)
 

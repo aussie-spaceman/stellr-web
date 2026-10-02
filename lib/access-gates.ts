@@ -1,4 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
+import { isMinorOn } from '@/lib/age'
 import type { CommunityMember } from '@/lib/community'
 import { logActivity } from '@/lib/activity-log'
 import { registrationPaid } from '@/lib/payment-status'
@@ -30,11 +31,7 @@ export function accessGatesEnforced(): boolean {
   return process.env.ACCESS_GATES_ENFORCE === 'true'
 }
 
-function isMinor(dob: string | null): boolean {
-  if (!dob) return false
-  const age = (Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000)
-  return age < 18
-}
+const isMinor = (dob: string | null) => isMinorOn(dob)
 
 /**
  * Payment + DocuSign gate status for a member's access to a competition. Payment

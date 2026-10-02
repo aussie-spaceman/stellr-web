@@ -26,6 +26,14 @@ async function main() {
     return `/sign#${mintToken(arg, 'sign', data.token_version as number, 3600).token}`
   }
 
+  if (command === 'privacy-link') {
+    // The confirmation link for the newest request from this address, as emailed.
+    const { mintToken } = await import('../../lib/esign/native/tokens')
+    const { data, error } = await db.from('privacy_requests').select('id, token_version').eq('requester_email', arg).order('created_at', { ascending: false }).limit(1).single()
+    if (error) throw new Error(error.message)
+    return `/privacy/request/confirm#${mintToken(data.id as string, 'request', data.token_version as number, 3600).token}`
+  }
+
   if (command === 'issue-minor') {
     const { nativeProvider } = await import('../../lib/esign/providers/native')
     const stamp = Date.now().toString(36)

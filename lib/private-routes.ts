@@ -6,12 +6,15 @@
 //   /sign, /sign/copy           Stellr signing (token in the URL fragment)
 //   /register/<slug>/pay/<tok>  pay-later link for a registration
 //   /register/<slug>/join/<tok> join link for a group registration
+//   /privacy/request, …/confirm the privacy request form and its emailed
+//                               confirmation link (people describe their families)
 
 export const PRIVATE_ROUTE_HEADER = 'x-stellr-private-route'
 
 const PRIVATE = [
   /^\/sign(\/|$)/,
   /^\/register\/[^/]+\/(pay|join)\//,
+  /^\/privacy\/request(\/|$)/,
 ]
 
 export function isPrivatePath(pathname: string): boolean {

@@ -53,6 +53,15 @@ export async function signingPath(recipientId: string): Promise<string> {
   return cli<string>('link', recipientId)
 }
 
+/** The confirmation link for the newest privacy request from this address. */
+export async function privacyConfirmPath(email: string): Promise<string> {
+  return cli<string>('privacy-link', email)
+}
+
+export async function removePrivacyRequests(email: string): Promise<void> {
+  await db().from('privacy_requests').delete().eq('requester_email', email)
+}
+
 export async function readAgreement(rowId: string) {
   const client = db()
   const [{ data: envelope }, { data: recipients }, { data: brokenAt }] = await Promise.all([

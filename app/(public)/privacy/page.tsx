@@ -710,6 +710,14 @@ export default function PrivacyPage() {
           <li><strong>Credential privacy</strong> — make any credential page private at any time from your Stellr account</li>
           <li><strong>Opt-out of communications</strong> — unsubscribe from non-essential emails at any time</li>
         </ul>
+        <p>
+          To make a request, use our{' '}
+          <a href="/privacy/request" className="text-brand-blue hover:underline">privacy request form</a> or email{' '}
+          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">privacy@stellreducation.org</a>.
+          We email a link to the address you give, to confirm the request came from you, and answer within 30 days of
+          confirmation. Requests never confirmed are deleted after 30 days; we keep a record of how each confirmed
+          request was answered for 3 years.
+        </p>
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">Parents and Guardians (COPPA Rights)</h3>
         <ul className="list-disc pl-6 space-y-2">

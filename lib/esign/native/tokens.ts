@@ -16,11 +16,15 @@ import { safeStrEqual } from '@/lib/secret-compare'
 //   d — download: the link in the completion email, for the signed copy
 //   c — session: the cookie set once a link has been opened, so the token
 //       leaves the address bar and is never sent again
+//   r — request: the link confirming a privacy request (review, deletion,
+//       withdrawal) came from the address it names (lib/privacy-requests.ts)
+//
+// The purpose is inside the HMAC, so no link works as any other kind.
 
-export type TokenPurpose = 'sign' | 'download' | 'session'
+export type TokenPurpose = 'sign' | 'download' | 'session' | 'request'
 
-const PURPOSE_CODE: Record<TokenPurpose, string> = { sign: 's', download: 'd', session: 'c' }
-const CODE_PURPOSE: Record<string, TokenPurpose> = { s: 'sign', d: 'download', c: 'session' }
+const PURPOSE_CODE: Record<TokenPurpose, string> = { sign: 's', download: 'd', session: 'c', request: 'r' }
+const CODE_PURPOSE: Record<string, TokenPurpose> = { s: 'sign', d: 'download', c: 'session', r: 'request' }
 
 const DAY = 24 * 60 * 60
 export const SIGN_LINK_TTL_SECONDS = 30 * DAY

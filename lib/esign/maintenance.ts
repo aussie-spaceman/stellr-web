@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getProvider } from '@/lib/esign'
 import { archivePending } from '@/lib/esign/archive'
 import { expireUnsigned, purgeExpired } from '@/lib/esign/retention'
+import { purgeRequests } from '@/lib/privacy-requests'
 import { syncDocusignUsage } from '@/lib/esign/routing'
 import { drainOutbox } from '@/lib/esign/outbox'
 import { finaliseStalled } from '@/lib/esign/native/flow'
@@ -105,6 +106,8 @@ export async function runEsignMaintenance(
   await step('retention', async () => ({
     purged: await purgeExpired(db, { limit: PURGE_BATCH, dryRun: opts.dryRun, store }),
     unsignedExpired: await expireUnsigned(db, { limit: PURGE_BATCH, dryRun: opts.dryRun }),
+    // Privacy requests never confirmed (30 days) and answered ones past 3 years.
+    privacyRequests: opts.dryRun ? { skipped: 'dry run' } : await purgeRequests(db),
   }))
 
   // This job checks the others; the reminder cron checks this one.

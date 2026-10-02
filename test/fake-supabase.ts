@@ -40,6 +40,19 @@ function parseOr(expr: string): Op {
   return (r) => clauses.some((c) => c(r))
 }
 
+/** SQL LIKE → RegExp: % any run, _ any one character, \ escapes the next. */
+function likeToRegex(pattern: string, flags = ''): RegExp {
+  let out = ''
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i]
+    if (ch === '\\' && i + 1 < pattern.length) out += pattern[++i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    else if (ch === '%') out += '.*'
+    else if (ch === '_') out += '.'
+    else out += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  }
+  return new RegExp(`^${out}$`, flags)
+}
+
 let idCounter = 0
 export const fakeId = () => `00000000-0000-4000-8000-${String(++idCounter).padStart(12, '0')}`
 
@@ -99,6 +112,11 @@ export function fakeSupabase(
       lte(c: string, v: unknown) { filters.push((r) => r[c] != null && cmp(r[c], v) <= 0); return b },
       like(c: string, pattern: string) {
         const re = new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.')}$`)
+        filters.push((r) => typeof r[c] === 'string' && re.test(r[c] as string))
+        return b
+      },
+      ilike(c: string, pattern: string) {
+        const re = likeToRegex(pattern, 'i')
         filters.push((r) => typeof r[c] === 'string' && re.test(r[c] as string))
         return b
       },

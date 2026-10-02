@@ -62,8 +62,12 @@ const staticPaths: { path: string; changeFrequency: MetadataRoute.Sitemap[number
  */
 // /school-data-terms is listed with the other legal pages above.
 // Never indexed: /sign and /sign/copy are reached only through a private
-// emailed link (lib/private-routes.ts); without one they show nothing.
-export const STATIC_ROUTE_EXCLUSIONS = ['/store/cart', '/store/success', '/sign', '/sign/copy']
+// emailed link (lib/private-routes.ts); without one they show nothing. The
+// privacy request form is linked from the Privacy Policy, not indexed: it is a
+// private route (no trackers), and its confirm page needs the emailed link.
+export const STATIC_ROUTE_EXCLUSIONS = [
+  '/store/cart', '/store/success', '/sign', '/sign/copy', '/privacy/request', '/privacy/request/confirm',
+]
 
 export const STATIC_SITEMAP_PATHS = staticPaths.map((r) => r.path)
 

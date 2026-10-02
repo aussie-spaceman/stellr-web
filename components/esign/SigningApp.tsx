@@ -239,7 +239,7 @@ function Signing({ view, onDone, onDeclined, onLost }: {
     const { ok, status, data } = await post('/api/sign/submit', { values, signature, confirmDifferentName })
     setBusy(false)
     if (lost(status)) return
-    if (!ok) {
+    if (!ok || data.ok === false) {
       const fieldErrors = (data.fieldErrors ?? {}) as Record<string, string>
       setErrors(fieldErrors)
       if (data.error === 'name_differs') return setNameDiffers(signature)

@@ -29,6 +29,10 @@ export async function POST(req: Request) {
     { values: values as Record<string, unknown>, signatureText: body.signature, confirmDifferentName: body.confirmDifferentName === true },
     requestMeta(req),
   )
+  // A different name is a question for the signer, not a failure.
+  if (!result.ok && result.error === 'name_differs') {
+    return json({ ok: false, error: result.error, fieldErrors: result.fieldErrors, nameOnRecord: result.nameOnRecord })
+  }
   if (!result.ok) return json({ error: result.error, fieldErrors: result.fieldErrors, nameOnRecord: result.nameOnRecord }, result.status)
 
   if (result.activated.length) await sendInvites(db, result.activated)

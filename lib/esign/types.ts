@@ -16,17 +16,53 @@ import type {
 /** Stored on docusign_envelopes.provider. */
 export type ProviderId = 'docusign' | 'native'
 
+/**
+ * The membership agreement, for people who join without attending an event.
+ * An adult signs it themselves; for an under-18 a parent or guardian signs
+ * first, then the member.
+ */
+export interface MembershipAgreementParams {
+  memberId: string
+  firstName: string
+  lastName: string
+  email: string
+  phone?: string
+  dateOfBirth?: string
+  guardianName?: string
+  guardianEmail?: string
+  guardianPhone?: string
+  relationship?: string
+}
+
+/**
+ * Who the member is behind each request, when known, so a signer with an
+ * account can sign from it rather than waiting for an email.
+ */
+export interface SignerAccounts {
+  /** The participant's or member's own account (the student, the adult, the mentor). */
+  memberId?: string | null
+}
+
 /** One agreement to issue, with the fields its template is pre-filled from. */
 export type CreateAgreementRequest =
-  | { type: 'minor'; params: EnvelopeParams }
-  | { type: 'adult'; params: AdultAgreementParams }
-  | { type: 'mentor' | 'volunteer'; params: MentorAgreementParams }
+  | { type: 'minor'; params: EnvelopeParams; accounts?: SignerAccounts }
+  | { type: 'adult'; params: AdultAgreementParams; accounts?: SignerAccounts }
+  | { type: 'mentor' | 'volunteer'; params: MentorAgreementParams; accounts?: SignerAccounts }
+  | { type: 'membership'; params: MembershipAgreementParams; accounts?: SignerAccounts }
 
 export interface CreatedAgreement {
   provider: ProviderId
   /** The engine's own id for the agreement: docusign_envelopes.envelope_id. */
   externalId: string
   signerCount: number
+  /** Extra columns for the docusign_envelopes row (the native engine's template and prefill). */
+  rowFields?: Record<string, unknown>
+  /**
+   * Runs once the docusign_envelopes row exists: the native engine creates its
+   * signer rows, records the issue in the audit trail and queues the emails.
+   * Returns the first signer's link when they can sign straight away.
+   */
+  afterRecord?: (db: SupabaseClient, envelopeRowId: string) => Promise<{ signNowUrl?: string | null } | void>
 }
 
 export interface SignedDocument {

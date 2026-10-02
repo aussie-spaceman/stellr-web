@@ -5,7 +5,9 @@ import { recordCredentialOptOutFromForm, type OptOutEnvelope } from '@/lib/docus
 import { sendEmail, docusignCompletedToMinorEmail, docusignCompletedToSignerEmail } from '@/lib/email'
 import { logActivity } from '@/lib/activity-log'
 import { archiveEnvelope } from '@/lib/esign/archive'
-import { SITE_URL } from '@/lib/env'
+import { AUTH_APP_URL, SITE_URL } from '@/lib/env'
+import { agreementCompletedEmail } from '@/lib/esign/emails'
+import { DOWNLOAD_LINK_TTL_SECONDS, downloadUrl, mintToken } from '@/lib/esign/native/tokens'
 
 // What happens when an agreement is fully signed, whichever engine signed it.
 // The DocuSign Connect webhook and the in-app signing route both end here.
@@ -68,17 +70,16 @@ export async function onEnvelopeCompleted(
     .select('id')
   if (!claimed?.length) return { notified: false }
 
+  if ((envelope.provider ?? 'docusign') === 'native') {
+    await notifyNativeSigners(db, envelope)
+    if (envelope.member_id) await logCompletion(db, envelope)
+    return { notified: true }
+  }
+
   if (!envelope.member_id) return { notified: true }
 
   const type = (envelope.envelope_type ?? 'minor') as AgreementType
-  await logActivity({
-    memberId: envelope.member_id,
-    category: 'docusign',
-    action: 'docusign_completed',
-    summary: `${AGREEMENT_LABEL[type] ?? 'Consent form'} completed${envelope.event_title ? ` for ${envelope.event_title}` : ''}`,
-    metadata: { envelopeId: envelope.envelope_id, agreementType: type, eventTitle: envelope.event_title ?? null },
-    actorType: 'docusign',
-  }, db)
+  await logCompletion(db, envelope)
 
   const { data: member } = await db
     .from('members')
@@ -110,4 +111,46 @@ export async function onEnvelopeCompleted(
     console.error('[esign-completion] completion email failed:', err)
   }
   return { notified: true }
+}
+
+async function logCompletion(db: SupabaseClient, envelope: CompletedEnvelope): Promise<void> {
+  if (!envelope.member_id) return
+  const type = (envelope.envelope_type ?? 'minor') as AgreementType
+  await logActivity({
+    memberId: envelope.member_id,
+    category: 'docusign',
+    action: 'docusign_completed',
+    summary: `${AGREEMENT_LABEL[type] ?? 'Consent form'} completed${envelope.event_title ? ` for ${envelope.event_title}` : ''}`,
+    metadata: { envelopeId: envelope.envelope_id, agreementType: type, eventTitle: envelope.event_title ?? null, provider: envelope.provider ?? 'docusign' },
+    actorType: 'docusign',
+  }, db)
+}
+
+/**
+ * Stellr signing: every signer hears that it is done, with a link to their
+ * own copy. With DocuSign the parent got DocuSign's completion email; here
+ * ours is the only one, so it must go to them too.
+ */
+async function notifyNativeSigners(db: SupabaseClient, envelope: CompletedEnvelope): Promise<void> {
+  const { data } = await db
+    .from('docusign_envelope_recipients')
+    .select('id, name, email, member_id, token_version')
+    .eq('envelope_row', envelope.id)
+  const type = (envelope.envelope_type ?? 'minor') as AgreementType
+  for (const r of (data ?? []) as { id: string; name: string; email: string; member_id: string | null; token_version: number }[]) {
+    const { token, expiresAt } = mintToken(r.id, 'download', r.token_version, DOWNLOAD_LINK_TTL_SECONDS)
+    const content = agreementCompletedEmail({
+      recipientName: r.name,
+      documentLabel: AGREEMENT_LABEL[type] ?? 'Agreement',
+      eventTitle: envelope.event_title,
+      copyUrl: downloadUrl(SITE_URL, token),
+      copyUntil: expiresAt.toISOString(),
+      accountUrl: r.member_id ? `${AUTH_APP_URL}/account?tab=profile` : null,
+    })
+    try {
+      await sendEmail({ to: r.email, ...content })
+    } catch (err) {
+      console.error('[esign-completion] completion email failed:', err)
+    }
+  }
 }

@@ -1,23 +1,14 @@
-import { createHash } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchSignedDocument } from '@/lib/esign/operations'
 import { slug } from '@/lib/esign/filenames'
+import { SIGNED_BUCKET, archivePaths, putImmutable, retainUntil } from '@/lib/esign/storage'
 
 // Signed agreements are kept in this app, not only at the engine that issued
 // them. Until October 2026 both download routes fetched the executed PDF from
 // DocuSign on every request, so the day the account lapsed every signed
-// consent form would have become unreachable.
-//
-// Layout of the private bucket:
-//   {provider}/{yyyy}/{envelope row id}/signed.pdf
-//   {provider}/{yyyy}/{envelope row id}/certificate.pdf   (DocuSign)
-//   {provider}/{yyyy}/{envelope row id}/audit.json        (native engine)
-// No names in paths: an object listing reveals nothing about who signed.
+// consent form would have become unreachable. Layout: lib/esign/storage.ts.
 
-export const SIGNED_BUCKET = 'signed-agreements'
-
-/** Signed agreements are kept this long after signing (Privacy Policy §10). */
-export const RETENTION_YEARS = 7
+export { SIGNED_BUCKET, RETENTION_YEARS, archivePaths, putImmutable, retainUntil, sha256Hex } from '@/lib/esign/storage'
 
 /** Archive attempts after which the retry job stops and reports the envelope. */
 export const MAX_ARCHIVE_ATTEMPTS = 10
@@ -38,49 +29,6 @@ export interface ArchivableRow {
 
 export const ARCHIVABLE_COLUMNS =
   'id, envelope_id, provider, status, reused_from, completed_at, archived_at, archive_attempts'
-
-export function sha256Hex(bytes: ArrayBuffer | Uint8Array): string {
-  return createHash('sha256').update(new Uint8Array(bytes as ArrayBuffer)).digest('hex')
-}
-
-export function retainUntil(completedAt: string): string {
-  const d = new Date(completedAt)
-  d.setUTCFullYear(d.getUTCFullYear() + RETENTION_YEARS)
-  return d.toISOString()
-}
-
-export function archivePaths(row: { id: string; provider?: string | null; completed_at?: string | null }) {
-  const provider = row.provider ?? 'docusign'
-  const year = new Date(row.completed_at ?? Date.now()).getUTCFullYear()
-  const dir = `${provider}/${year}/${row.id}`
-  return {
-    pdf: `${dir}/signed.pdf`,
-    certificate: provider === 'docusign' ? `${dir}/certificate.pdf` : `${dir}/audit.json`,
-  }
-}
-
-/**
- * Writes an object that must never be overwritten. If an earlier attempt
- * already stored it, the stored bytes win and their hash is returned: a second
- * fetch from the engine may not be byte-identical, and the record is the first
- * copy we kept.
- */
-export async function putImmutable(
-  db: SupabaseClient,
-  path: string,
-  bytes: ArrayBuffer | Uint8Array,
-  contentType: string,
-): Promise<string> {
-  const body = new Uint8Array(bytes as ArrayBuffer)
-  const { error } = await db.storage.from(SIGNED_BUCKET).upload(path, body, { contentType, upsert: false })
-  if (!error) return sha256Hex(body)
-
-  const exists = /exists|duplicate/i.test(error.message)
-  if (!exists) throw new Error(`Storage upload failed for ${path}: ${error.message}`)
-  const { data, error: readError } = await db.storage.from(SIGNED_BUCKET).download(path)
-  if (readError || !data) throw new Error(`Stored copy of ${path} exists but could not be read`)
-  return sha256Hex(await data.arrayBuffer())
-}
 
 export type ArchiveOutcome =
   | { kind: 'archived'; path: string; sha256: string }

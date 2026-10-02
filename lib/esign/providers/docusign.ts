@@ -39,6 +39,10 @@ function createEnvelope(req: CreateAgreementRequest): Promise<CreatedEnvelope> {
     case 'adult':     return createAdultAgreementEnvelope(req.params)
     case 'volunteer': return createVolunteerAgreementEnvelope(req.params)
     case 'mentor':    return createMentorAgreementEnvelope(req.params)
+    case 'membership':
+      // Never a DocuSign envelope (owner's decision, 2 Oct 2026); routing
+      // sends it to Stellr signing before it can reach here.
+      throw new Error('The membership agreement is not issued through DocuSign')
   }
 }
 

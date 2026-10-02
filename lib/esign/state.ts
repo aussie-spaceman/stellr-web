@@ -8,7 +8,7 @@ import {
   periodStart,
   type ProviderState,
 } from '@/lib/esign/routing'
-import { hasProvider } from '@/lib/esign'
+import { canIssue } from '@/lib/esign'
 
 // What the admin "E-signature engine" card shows, and the changes it may make.
 
@@ -72,7 +72,7 @@ export async function loadEngineSummary(db: SupabaseClient, now = new Date()): P
     countDocusignIssuedSince(db, start),
     state.accountSyncedAt ? countDocusignIssuedSince(db, new Date(state.accountSyncedAt)) : Promise.resolve(0),
   ])
-  const facts = { type: 'adult', signerEmails: [], nativeAvailable: hasProvider('native'), issuedThisPeriod, issuedSinceSync, now }
+  const facts = { type: 'adult', signerEmails: [], nativeAvailable: canIssue('native'), issuedThisPeriod, issuedSinceSync, now }
   const used = estimatedUsage(state, facts)
   const cap = effectiveCap(state)
 

@@ -29,6 +29,18 @@ export async function syncEnvelopeRecipients(
   if (recipients.length === 0) return recipients
 
   const now = new Date().toISOString()
+
+  // Stellr signing keeps its signer list in this table already: nothing to
+  // mirror, only the legacy counters to keep in step.
+  if (provider === 'native') {
+    const { total, completed } = summariseSigners(recipients)
+    await db
+      .from('docusign_envelopes')
+      .update({ signers_total: total, signers_completed: completed, updated_at: now })
+      .eq('id', envelopeRowId)
+    return recipients
+  }
+
   const { error } = await db
     .from('docusign_envelope_recipients')
     .upsert(
@@ -69,7 +81,7 @@ export async function loadRecipientsByEnvelopeRows(
 
   const { data, error } = await db
     .from('docusign_envelope_recipients')
-    .select('envelope_row, name, email, role_name, status, delivered_at, routing_order')
+    .select('envelope_row, name, email, role_name, status, delivered_at, routing_order, invite_sent_at, envelope:docusign_envelopes!inner(provider)')
     .in('envelope_row', ids)
     .order('routing_order', { ascending: true })
   if (error) {
@@ -79,9 +91,17 @@ export async function loadRecipientsByEnvelopeRows(
     return byRow
   }
 
-  for (const row of data ?? []) {
+  for (const raw of data ?? []) {
+    const { envelope, invite_sent_at, ...row } = raw as Record<string, unknown> & {
+      envelope?: { provider?: string } | { provider?: string }[] | null
+      invite_sent_at?: string | null
+    }
+    const provider = (Array.isArray(envelope) ? envelope[0] : envelope)?.provider ?? 'docusign'
+    // Stellr signing emails its own invitations; DocuSign rows never carry
+    // invite_sent_at, and DocuSign emails at the moment it issues.
+    const unsent = provider === 'native' && row.status === 'sent' && !invite_sent_at
     const list = byRow.get(row.envelope_row as string) ?? []
-    list.push(row as RecipientLike)
+    list.push({ ...(row as unknown as RecipientLike), unsent })
     byRow.set(row.envelope_row as string, list)
   }
   return byRow

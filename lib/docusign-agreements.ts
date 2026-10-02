@@ -1,8 +1,9 @@
 import { randomUUID } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { classifyAgreement, type AgreementType } from './docusign'
+import { classifyAgreement, type AgreementType, type EventAgreementType } from './docusign'
 import { issueAgreement } from './esign/issue'
-import type { CreatedAgreement } from './esign/types'
+import type { CreatedAgreement, MembershipAgreementParams, ProviderId } from './esign/types'
+import { escapeHtml as esc } from './email-layout'
 import {
   sendEmail,
   docusignSentToMinorEmail,
@@ -83,15 +84,38 @@ export interface ParticipantContext {
   relationship?:      string | null
 }
 
-// Sends the correct DocuSign agreement for a single participant, records the
-// envelope, and emails a heads-up. Non-fatal: failures are logged, never thrown,
-// so a DocuSign outage can't break registration.
+/** What was issued, and how the signer in front of us can sign right now. */
+export interface DispatchResult {
+  outcome: DispatchOutcome
+  provider?: ProviderId
+  /** Set when the participant themself is a signer on Stellr signing: sign without waiting for the email. */
+  signNowUrl?: string | null
+}
+
+// Sends the correct agreement for a single participant, records the envelope,
+// and emails a heads-up. Non-fatal: failures are logged, never thrown, so a
+// signing outage can't break registration.
 export async function dispatchAgreement(
   db: SupabaseClient,
   ctx: ParticipantContext,
 ): Promise<DispatchOutcome> {
+  return (await dispatchAgreementDetailed(db, ctx)).outcome
+}
+
+export async function dispatchAgreementDetailed(
+  db: SupabaseClient,
+  ctx: ParticipantContext,
+): Promise<DispatchResult> {
   const type = classifyAgreement(ctx.eventRole, ctx.dateOfBirth)
-  if (!type) return 'not_required'
+  if (!type) return { outcome: 'not_required' }
+  return issueOrReuse(db, ctx, type)
+}
+
+async function issueOrReuse(
+  db: SupabaseClient,
+  ctx: ParticipantContext,
+  type: EventAgreementType,
+): Promise<DispatchResult> {
 
   try {
     // ── Never issue a second envelope for paperwork already in the system ─────
@@ -117,14 +141,14 @@ export async function dispatchAgreement(
         .in('status', BLOCKING_ENVELOPE_STATUSES)
         .limit(1)
         .maybeSingle()
-      if (existing) return 'in_flight'
+      if (existing) return { outcome: 'in_flight' }
     }
 
     // 2. An envelope for this person is already out for THIS event, issued
     //    against a different participant row (re-added after removal, a second
     //    registration for the same event). Chasing them twice for one signature
     //    reads as a system error; an outstanding envelope is still live.
-    if (await hasOpenEnvelopeForEvent(db, ctx, type)) return 'in_flight'
+    if (await hasOpenEnvelopeForEvent(db, ctx, type)) return { outcome: 'in_flight' }
 
     // 3. Paperwork on the member's profile is valid for 3 years across events:
     //    if an unexpired signed agreement of the required type is on record,
@@ -141,7 +165,7 @@ export async function dispatchAgreement(
           signedOn:       onFile.completedAt,
           expiresOn:      agreementExpiry(onFile.completedAt).toISOString(),
         }))
-        return 'on_file'
+        return { outcome: 'on_file' }
       }
     }
 
@@ -162,11 +186,12 @@ export async function dispatchAgreement(
             text: `A parental consent form is required for ${ctx.firstName} ${ctx.lastName} (${ctx.email}) for ${ctx.eventTitle}, but no guardian contact is on file. Collect the guardian's details and re-issue.`,
           },
         }).catch(() => {})
-        return 'not_required'
+        return { outcome: 'not_required' }
       }
       const guardianName = [ctx.guardianFirstName, ctx.guardianLastName].filter(Boolean).join(' ')
       const envelope = await issueAgreement(db, {
         type: 'minor',
+        accounts: { memberId: ctx.memberId },
         params: {
           minorFirstName:   ctx.firstName,
           minorLastName:    ctx.lastName,
@@ -181,20 +206,24 @@ export async function dispatchAgreement(
           schoolState:      ctx.schoolState ?? undefined,
         },
       })
-      await recordEnvelope(db, ctx, type, envelope, guardianName, ctx.guardianEmail)
-      await safeEmail(ctx.email, docusignSentToMinorEmail({
-        firstName: ctx.firstName, guardianName, guardianEmail: ctx.guardianEmail, eventTitle: ctx.eventTitle,
-      }))
-      // The guardian is the signature that actually gates the registration, yet
-      // until now they only ever heard from DocuSign — so a filtered or ignored
-      // DocuSign email was a silent dead end for everyone. Tell them directly,
-      // in our own voice, what is coming and from whom.
-      await safeEmail(ctx.guardianEmail, docusignSentToGuardianEmail({
-        guardianName,
-        minorName:  `${ctx.firstName} ${ctx.lastName}`,
-        eventTitle: ctx.eventTitle,
-      }))
-      return 'issued'
+      const recorded = await recordEnvelope(db, ctx, type, envelope, guardianName, ctx.guardianEmail)
+      // Stellr signing's own email IS the request; the heads-up pair below
+      // exists only because DocuSign's email arrives separately.
+      if (envelope.provider === 'docusign') {
+        await safeEmail(ctx.email, docusignSentToMinorEmail({
+          firstName: ctx.firstName, guardianName, guardianEmail: ctx.guardianEmail, eventTitle: ctx.eventTitle,
+        }))
+        // The guardian is the signature that actually gates the registration, yet
+        // until now they only ever heard from DocuSign — so a filtered or ignored
+        // DocuSign email was a silent dead end for everyone. Tell them directly,
+        // in our own voice, what is coming and from whom.
+        await safeEmail(ctx.guardianEmail, docusignSentToGuardianEmail({
+          guardianName,
+          minorName:  `${ctx.firstName} ${ctx.lastName}`,
+          eventTitle: ctx.eventTitle,
+        }))
+      }
+      return { outcome: 'issued', provider: envelope.provider, signNowUrl: recorded.signNowUrl }
     }
 
     // Adult, mentor or volunteer — self-signed, sourced from the participant's own phone column
@@ -203,17 +232,21 @@ export async function dispatchAgreement(
       firstName: ctx.firstName, lastName: ctx.lastName, email: ctx.email,
       phone: ctx.phone ?? undefined, eventTitle: ctx.eventTitle,
     }
+    const accounts = { memberId: ctx.memberId }
     const envelope = type === 'adult'
       ? await issueAgreement(db, {
           type: 'adult',
+          accounts,
           params: { ...signer, schoolName: ctx.schoolName ?? undefined, schoolState: ctx.schoolState ?? undefined },
         })
-      : await issueAgreement(db, { type, params: signer })
-    await recordEnvelope(db, ctx, type, envelope, signerName, ctx.email)
-    await safeEmail(ctx.email, docusignSentToSignerEmail({
-      firstName: ctx.firstName, eventTitle: ctx.eventTitle, agreementLabel: AGREEMENT_LABEL[type],
-    }))
-    return 'issued'
+      : await issueAgreement(db, { type, accounts, params: signer })
+    const recorded = await recordEnvelope(db, ctx, type, envelope, signerName, ctx.email)
+    if (envelope.provider === 'docusign') {
+      await safeEmail(ctx.email, docusignSentToSignerEmail({
+        firstName: ctx.firstName, eventTitle: ctx.eventTitle, agreementLabel: AGREEMENT_LABEL[type],
+      }))
+    }
+    return { outcome: 'issued', provider: envelope.provider, signNowUrl: recorded.signNowUrl }
   } catch (err) {
     console.error(`[docusign] dispatchAgreement (${type}) failed (non-fatal):`, err)
 
@@ -232,12 +265,20 @@ export async function dispatchAgreement(
     const label = AGREEMENT_LABEL[type] ?? 'agreement'
     const who = `${ctx.firstName} ${ctx.lastName}`
     const sandbox = err instanceof SandboxCredentialsError
+    const message = err instanceof Error ? err.message : String(err)
     const reason = sandbox
       ? 'this production deployment is configured against the DocuSign SANDBOX, whose envelopes are stamped "Demonstration document only" and are not binding'
-      : `DocuSign rejected the request: ${err instanceof Error ? err.message : String(err)}`
+      : `the signing service refused the request: ${message}`
     const fix = sandbox
       ? 'Complete the DocuSign production cutover (docs/GO-LIVE-CHECKLIST.md §4a), then re-issue.'
-      : 'Check the DocuSign account status and envelope allowance, then re-issue.'
+      : 'Check the signing engine card under Admin → Consent forms, then re-issue. It is retried automatically each day.'
+
+    // A visible row, not only an alert: the participant shows as needing
+    // paperwork on the roster, and the daily job retries it. Recorded as
+    // 'voided' because, like a voided envelope, it is dead paperwork that must
+    // be re-issued, and nothing treats it as in flight.
+    await recordIssueFailure(db, ctx, type, message)
+
     await notifyCommunityAdmins({
       type: 'action',
       body: `No ${label} could be issued for ${who} (${ctx.eventTitle}) — ${reason}. Registration succeeded but the participant has NO paperwork on file. ${fix}`,
@@ -245,11 +286,41 @@ export async function dispatchAgreement(
       referenceId: ctx.participantId ?? undefined,
       email: {
         subject: `Action needed: no ${label} issued for ${who}`,
-        html: `<p><strong>${who}</strong> (${ctx.email}) registered for <strong>${ctx.eventTitle}</strong>, but no ${label} could be issued — ${reason}.</p><p>The registration went through. The participant currently has <strong>no paperwork on file</strong>.</p><p>${fix}</p>`,
+        html: `<p><strong>${esc(who)}</strong> (${esc(ctx.email)}) registered for <strong>${esc(ctx.eventTitle)}</strong>, but no ${esc(label)} could be issued — ${esc(reason)}.</p><p>The registration went through. The participant currently has <strong>no paperwork on file</strong>.</p><p>${esc(fix)}</p>`,
         text: `${who} (${ctx.email}) registered for ${ctx.eventTitle}, but no ${label} could be issued — ${reason}. The registration went through; the participant has no paperwork on file. ${fix}`,
       },
     }).catch(() => {})
-    return 'failed'
+    return { outcome: 'failed' }
+  }
+}
+
+/** Prefix of the synthetic envelope_id on a row recording an issue that failed on every engine. */
+export const ISSUE_FAILED_PREFIX = 'failed:'
+
+async function recordIssueFailure(
+  db: SupabaseClient,
+  ctx: ParticipantContext,
+  type: AgreementType,
+  error: string,
+): Promise<void> {
+  try {
+    const minor = type === 'minor'
+    await db.from('docusign_envelopes').insert({
+      participant_id: ctx.participantId,
+      member_id:      ctx.memberId,
+      event_slug:     ctx.eventSlug,
+      event_title:    ctx.eventTitle,
+      envelope_id:    `${ISSUE_FAILED_PREFIX}${randomUUID()}`,
+      envelope_type:  type,
+      status:         'voided',
+      signer_name:    minor ? [ctx.guardianFirstName, ctx.guardianLastName].filter(Boolean).join(' ') : `${ctx.firstName} ${ctx.lastName}`,
+      signer_email:   minor ? (ctx.guardianEmail ?? '') : ctx.email,
+      minor_name:     `${ctx.firstName} ${ctx.lastName}`,
+      issue_error:    error.slice(0, 1000),
+      signers_total:  0,
+    })
+  } catch (recordErr) {
+    console.error('[docusign] recording the failed issue also failed:', recordErr)
   }
 }
 
@@ -409,8 +480,8 @@ async function recordEnvelope(
   envelope: CreatedAgreement,
   signerName: string,
   signerEmail: string,
-): Promise<void> {
-  await db.from('docusign_envelopes').insert({
+): Promise<{ signNowUrl: string | null }> {
+  const row = {
     participant_id:    ctx.participantId,
     member_id:         ctx.memberId,
     event_slug:        ctx.eventSlug,
@@ -424,7 +495,58 @@ async function recordEnvelope(
     minor_name:        `${ctx.firstName} ${ctx.lastName}`,
     signers_total:     envelope.signerCount,
     signers_completed: 0,
-  })
+    ...envelope.rowFields,
+  }
+  if (!envelope.afterRecord) {
+    await db.from('docusign_envelopes').insert(row)
+    return { signNowUrl: null }
+  }
+
+  // Stellr signing needs the row's id to create its signer rows.
+  const { data, error } = await db.from('docusign_envelopes').insert(row).select('id').single()
+  if (error || !data) throw new Error(`Recording the agreement failed: ${error?.message ?? 'no row'}`)
+  const after = await envelope.afterRecord(db, (data as { id: string }).id)
+  return { signNowUrl: after?.signNowUrl ?? null }
+}
+
+/**
+ * Issues an agreement of a given type that no event role implies: the
+ * membership agreement, and an admin re-issue that names the type. Same
+ * duplicate and coverage checks as event paperwork.
+ */
+export async function dispatchTyped(
+  db: SupabaseClient,
+  ctx: ParticipantContext,
+  type: AgreementType,
+  membership?: Omit<MembershipAgreementParams, 'firstName' | 'lastName' | 'email' | 'phone'>,
+): Promise<DispatchResult> {
+  if (type !== 'membership') return issueOrReuse(db, ctx, type)
+  if (!membership) throw new Error('Membership details are required for the membership agreement')
+  try {
+    if (await hasOpenEnvelopeForEvent(db, ctx, type)) return { outcome: 'in_flight' }
+    const envelope = await issueAgreement(db, {
+      type: 'membership',
+      accounts: { memberId: ctx.memberId },
+      params: { ...membership, firstName: ctx.firstName, lastName: ctx.lastName, email: ctx.email, phone: ctx.phone ?? undefined },
+    })
+    const minor = !!membership.guardianEmail
+    const recorded = await recordEnvelope(
+      db, ctx, type, envelope,
+      minor ? membership.guardianName ?? '' : `${ctx.firstName} ${ctx.lastName}`,
+      minor ? membership.guardianEmail ?? '' : ctx.email,
+    )
+    return { outcome: 'issued', provider: envelope.provider, signNowUrl: recorded.signNowUrl }
+  } catch (err) {
+    console.error('[docusign] membership agreement failed (non-fatal):', err)
+    await recordIssueFailure(db, ctx, type, err instanceof Error ? err.message : String(err))
+    await notifyCommunityAdmins({
+      type: 'action',
+      body: `No Membership Agreement could be issued for ${ctx.firstName} ${ctx.lastName}: ${err instanceof Error ? err.message : String(err)}. It is retried automatically each day.`,
+      referenceType: 'member',
+      referenceId: ctx.memberId ?? undefined,
+    }).catch(() => {})
+    return { outcome: 'failed' }
+  }
 }
 
 async function safeEmail(to: string, content: { subject: string; html: string; text: string }): Promise<void> {

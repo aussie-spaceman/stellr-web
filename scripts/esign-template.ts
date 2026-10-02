@@ -33,7 +33,8 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
 
 const OUT = path.resolve(process.cwd(), 'esign-out')
 const OVERRIDES = path.resolve(process.cwd(), 'lib/esign/native/templates')
-const DISCLOSURE_VERSION = '2026-10-v1'
+// No environment reads in this module, so importing it before dotenv runs is safe.
+import { DISCLOSURE_VERSION } from '../lib/esign/disclosure'
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag)

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { SIGNED_BUCKET } from '@/lib/esign/archive'
+import { SIGNED_BUCKET } from '@/lib/esign/storage'
 
 // What happens to signed agreements when the people they belong to are deleted,
 // and when their retention period ends.

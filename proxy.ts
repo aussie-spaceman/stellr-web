@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { APP_HOST, SITE_URL } from '@/lib/env'
 import { checkRateLimit, clientIp } from '@/lib/rate-limit'
 import { matchCrawler, recordCrawlerHit } from '@/lib/crawlers'
+import { PRIVATE_ROUTE_HEADER, isPrivatePath } from '@/lib/private-routes'
 
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
@@ -52,10 +53,13 @@ export default clerkMiddleware(async (auth, req, event) => {
   const isAppSubdomain = !IS_SINGLE_HOST && host === APP_HOST
   const url = new URL(req.url)
 
+  const privateRoute = isPrivatePath(url.pathname)
+
   // AEO measurement: count public-site page requests from search and AI
   // crawlers (lib/crawlers.ts). waitUntil, so the write never delays or fails
-  // the response the crawler receives.
-  if (!isAppSubdomain && req.method === 'GET' && !url.pathname.startsWith('/api/')) {
+  // the response the crawler receives. Never for a private link: its path is
+  // the key to someone's registration or agreement.
+  if (!isAppSubdomain && !privateRoute && req.method === 'GET' && !url.pathname.startsWith('/api/')) {
     const bot = matchCrawler(req.headers.get('user-agent'))
     if (bot) event.waitUntil(recordCrawlerHit(bot, url.pathname))
   }
@@ -117,6 +121,14 @@ export default clerkMiddleware(async (auth, req, event) => {
       return NextResponse.redirect(new URL('/admin/competitions', req.url))
     }
   }
+
+  // Tell the root layout to load no tracking on a private-link page. Set here,
+  // overwriting anything the client sent, so it cannot be spoofed to switch
+  // tracking off elsewhere (or on here).
+  const headers = new Headers(req.headers)
+  headers.delete(PRIVATE_ROUTE_HEADER)
+  if (privateRoute) headers.set(PRIVATE_ROUTE_HEADER, '1')
+  return NextResponse.next({ request: { headers } })
 })
 
 export const config = {

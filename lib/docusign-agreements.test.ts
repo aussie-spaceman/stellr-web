@@ -165,7 +165,15 @@ describe('dispatchAgreement — never issues paperwork already in the system', (
     const { db, inserts } = makeDb({})
     await dispatchAgreement(db, ADULT)
 
-    expect(inserts).toHaveLength(0)
+    // No envelope, but a visible "needs paperwork" row the daily job retries:
+    // dead paperwork ('voided'), so nothing treats it as in flight.
+    expect(inserts).toHaveLength(1)
+    expect(inserts[0].payload).toMatchObject({
+      status: 'voided',
+      envelope_type: 'adult',
+      issue_error: 'ENVELOPE_LIMIT_EXCEEDED',
+    })
+    expect(String(inserts[0].payload.envelope_id)).toMatch(/^failed:/)
     expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
     const alert = notifyCommunityAdmins.mock.calls[0][0] as {
       body: string; email: { subject: string }

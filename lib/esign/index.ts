@@ -4,11 +4,24 @@
 
 import type { EsignProvider, ProviderId } from '@/lib/esign/types'
 import { docusignProvider } from '@/lib/esign/providers/docusign'
+import { nativeProvider } from '@/lib/esign/providers/native'
+import { signingConfigured } from '@/lib/esign/native/tokens'
 
 export * from '@/lib/esign/types'
 
 const PROVIDERS: Partial<Record<ProviderId, EsignProvider>> = {
   docusign: docusignProvider,
+  native: nativeProvider,
+}
+
+/**
+ * Whether an engine can issue agreements in this deployment. Stellr signing
+ * needs its own token secret; until that is set every agreement uses DocuSign,
+ * exactly as before.
+ */
+export function canIssue(id: ProviderId): boolean {
+  if (id === 'native') return signingConfigured()
+  return PROVIDERS[id] !== undefined
 }
 
 /** Whether an engine is built and registered in this deployment. */

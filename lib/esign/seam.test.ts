@@ -23,6 +23,7 @@ const UNRESTRICTED = new Set([
  */
 const PURE_EXPORTS = new Set([
   'AgreementType',
+  'EventAgreementType',
   'EnvelopeRecipient',
   'EnvelopeFormField',
   'EnvelopeParams',

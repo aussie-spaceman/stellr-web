@@ -82,7 +82,9 @@ export async function loadProviderState(db: SupabaseClient): Promise<ProviderSta
 export function signerEmails(req: CreateAgreementRequest): string[] {
   const emails = req.type === 'minor'
     ? [req.params.guardianEmail, req.params.minorEmail]
-    : [req.params.email]
+    : req.type === 'membership'
+      ? [req.params.email, req.params.guardianEmail ?? '']
+      : [req.params.email]
   return emails.filter(Boolean).map((e) => e.trim().toLowerCase())
 }
 

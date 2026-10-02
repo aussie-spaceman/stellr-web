@@ -6,6 +6,8 @@ import { CookieConsent } from '@/components/analytics/CookieConsent'
 import { GoogleTagManager } from '@/components/analytics/GoogleTagManager'
 import { HubSpotTracking } from '@/components/analytics/HubSpotTracking'
 import { buildOrganizationJsonLd, buildWebSiteJsonLd } from '@/lib/structured-data'
+import { headers } from 'next/headers'
+import { PRIVATE_ROUTE_HEADER } from '@/lib/private-routes'
 import '../styles/globals.css'
 
 /* Default social card. Without it every share preview came back blank — the
@@ -52,16 +54,22 @@ export const metadata: Metadata = {
 // See lib/structured-data.ts.
 const siteSchema = [buildOrganizationJsonLd(), buildWebSiteJsonLd()]
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // A page opened from a private link (a signing link, a pay or join link)
+  // loads no analytics or advertising tags at all: its address is the key to
+  // someone's agreement or registration. Set by proxy.ts; see lib/private-routes.
+  const privateRoute = (await headers()).get(PRIVATE_ROUTE_HEADER) === '1'
+  const tracking = !privateRoute
+
   return (
     <ClerkProvider>
       <html lang="en">
         <head>
           {/* Consent Mode v2 defaults — MUST stay above GTM so advertising tags
               never fire before the denied-by-default state lands. */}
-          <ConsentMode />
+          {tracking && <ConsentMode />}
           {/* Google Tag Manager — the single tag container (see GoogleTagManager.tsx) */}
-          <GoogleTagManager />
+          {tracking && <GoogleTagManager />}
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{ __html: JSON.stringify(siteSchema) }}
@@ -69,7 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </head>
         <body>
           {/* Google Tag Manager (noscript) */}
-          {process.env.NEXT_PUBLIC_GTM_ID && (
+          {tracking && process.env.NEXT_PUBLIC_GTM_ID && (
             <noscript>
               {/* eslint-disable-next-line @next/next/no-sync-scripts */}
               <iframe
@@ -82,11 +90,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </noscript>
           )}
           {children}
-          <CookieConsent />
-          <Analytics />
+          {tracking && <CookieConsent />}
+          {tracking && <Analytics />}
           {/* Sets the hubspotutk cookie the lead routes pass to the Forms API
               for source attribution (see lib/hubspot.ts). */}
-          <HubSpotTracking />
+          {tracking && <HubSpotTracking />}
         </body>
       </html>
     </ClerkProvider>

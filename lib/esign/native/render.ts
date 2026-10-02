@@ -1,6 +1,8 @@
-import { readFile } from 'fs/promises'
-import { join } from 'path'
-import { createHash } from 'crypto'
+// node: specifiers, not bare names: under Vitest's jsdom environment a bare
+// 'path' resolves to the browser shim in node_modules, which cannot join paths.
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { createHash } from 'node:crypto'
 import { PDFDocument, PDFName, rgb, type PDFFont, type PDFPage } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
 import type { FieldMap, Role, TemplateField } from '@/lib/esign/native/template'

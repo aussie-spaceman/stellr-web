@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getProvider, hasProvider } from '@/lib/esign'
+import { canIssue, getProvider } from '@/lib/esign'
 import {
   countDocusignIssuedSince,
   decideProvider,
@@ -23,11 +23,18 @@ export async function issueAgreement(
   req: CreateAgreementRequest,
 ): Promise<CreatedAgreement> {
   const ctx = { db }
+  const nativeAvailable = canIssue('native')
 
-  // Until the in-app engine is registered there is nothing to route between:
+  // The membership agreement never spends a DocuSign envelope.
+  if (req.type === 'membership') {
+    if (!nativeAvailable) throw new Error('Stellr signing is not configured, so the membership agreement cannot be issued')
+    return getProvider('native').create(ctx, req)
+  }
+
+  // Until Stellr signing is configured there is nothing to route between:
   // every agreement is DocuSign's and no routing state is read, so this path
   // behaves exactly as it did before the seam existed.
-  if (!hasProvider('native')) return getProvider('docusign').create(ctx, req)
+  if (!nativeAvailable) return getProvider('docusign').create(ctx, req)
 
   const now = new Date()
   const state = await loadProviderState(db)
@@ -46,7 +53,7 @@ export async function issueAgreement(
   const decision = decideProvider(state, {
     type: req.type,
     signerEmails: signerEmails(req),
-    nativeAvailable: true,
+    nativeAvailable,
     issuedThisPeriod,
     issuedSinceSync,
     now,
@@ -75,8 +82,8 @@ export async function issueAgreement(
 async function alertAllowanceExhausted(until: Date, overflowing: boolean): Promise<void> {
   const resets = until.toISOString().slice(0, 10)
   const consequence = overflowing
-    ? `New agreements are being issued by Stellr's own signing system until ${resets}. Nothing needs doing.`
-    : `New agreements will fail until ${resets}, because the in-app signing system is switched off for this agreement type. Switch it on under Admin → Consent forms, or re-issue after that date.`
+    ? `New agreements are being issued by Stellr signing until ${resets}. Nothing needs doing.`
+    : `New agreements will fail until ${resets}, because Stellr signing is switched off for this agreement type. Switch it on under Admin → Consent forms, or re-issue after that date.`
   const body = `DocuSign's monthly envelope allowance is used up. ${consequence}`
   await notifyCommunityAdmins({
     type: 'action',

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
@@ -41,6 +42,9 @@ export default async function AdminDocusignsPage() {
           <h1 className="font-heading uppercase text-title text-brand-blue-dark">Consent Forms</h1>
           <p className="text-sm text-brand-muted-soft mt-0.5">
             Signed agreements for event participants, volunteers and members, from DocuSign and Stellr signing.
+          </p>
+          <p className="text-sm mt-1">
+            <Link href="/admin/docusigns/templates" className="text-primary underline">Agreement documents</Link>
           </p>
         </div>
         <div className="flex gap-4 text-sm text-right">

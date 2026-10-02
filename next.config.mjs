@@ -29,6 +29,7 @@ const nextConfig = {
     '/api/admin/esign/**': ['./public/fonts/esign/OpenSans-Regular.ttf'],
     '/api/admin/events/**/docusign-reissue': ['./public/fonts/esign/OpenSans-Regular.ttf'],
     '/api/cron/**': ['./public/fonts/esign/OpenSans-Regular.ttf'],
+    '/api/admin/esign/**': ['./public/fonts/esign/OpenSans-Regular.ttf'],
   },
   async headers() {
     // Pages opened from a private link (lib/private-routes.ts). The link is the

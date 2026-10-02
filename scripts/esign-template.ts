@@ -132,7 +132,7 @@ async function publish(key: string) {
     created_by: process.env.USER ?? 'script',
   })
   if (error) throw new Error(`Recording the version failed: ${error.message}`)
-  console.log(`✓ Published ${key} v${version} (not yet in use). Preview it in Admin → Agreements, then approve.`)
+  console.log(`✓ Published ${key} v${version} (not yet in use). Preview it in Admin → Consent forms → Agreement documents, check it, then approve.`)
 }
 
 /** Runs the template checks; returns the number of problems found. */

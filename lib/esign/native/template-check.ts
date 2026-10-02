@@ -1,5 +1,5 @@
-import type { FieldMap, Role, TemplateField } from '@/lib/esign/native/template'
-import { renderDocument, type SignerRender } from '@/lib/esign/native/render'
+import type { FieldMap, TemplateField } from '@/lib/esign/native/template'
+import { renderSample, SAMPLE_SIGNED_AT_TEXT } from '@/lib/esign/native/template-sample'
 import { extractPages, pageWords } from '@/lib/esign/native/pdf-text'
 
 // Checks a Stellr signing template before anyone signs it:
@@ -60,13 +60,10 @@ export function compareCoverage(expected: FieldMap, stored: FieldMap): TemplateI
   return issues
 }
 
-const SIGNED_AT = '2026-10-02T17:00:00.000Z'
-const SIGNED_AT_TEXT = 'Oct 02, 2026'
-
 /** A value for each field that can be found again in the rendered text. */
 function sampleFor(field: TemplateField, i: number): string {
   if (field.type === 'checkbox') return 'true'
-  if (field.type === 'date_signed') return SIGNED_AT_TEXT
+  if (field.type === 'date_signed') return SAMPLE_SIGNED_AT_TEXT
   // A signer has one name, printed in each of their name fields.
   if (field.type === 'full_name') return `QzName${field.role}`
   return `Qz${i}`
@@ -74,28 +71,8 @@ function sampleFor(field: TemplateField, i: number): string {
 
 export async function checkPlacement(template: Uint8Array, map: FieldMap): Promise<TemplateIssue[]> {
   const samples = new Map(map.fields.map((f, i) => [f.name, sampleFor(f, i)]))
-  const roles = [...new Set(map.roles.map((r) => r.role))] as Role[]
-  const prefill: Record<string, string> = {}
-  const names: Partial<Record<Role, string>> = {}
-  const signers: SignerRender[] = roles.map((role) => {
-    const values: Record<string, string> = {}
-    let title: string | undefined
-    let signature: SignerRender['signature']
-    let name = `${role} name`
-    for (const f of map.fields.filter((x) => x.role === role)) {
-      const v = samples.get(f.name) as string
-      if (f.type === 'signature') signature = { kind: 'typed', text: v }
-      else if (f.type === 'full_name') name = v
-      else if (f.type === 'title') title = v
-      else if (f.source === 'prefill' && f.prefillKey) { prefill[f.prefillKey] = v; values[f.name] = v }
-      else values[f.name] = v
-    }
-    names[role] = name
-    return { role, name, email: `${role}@example.test`, values, signature, signedAt: SIGNED_AT, title }
-  })
-
-  const { pdf } = await renderDocument({ template, map, prefill, signers, names })
-  const [blank, rendered] = await Promise.all([extractPages(template), extractPages(await pdf.save())])
+  const filled = await renderSample(template, map, sampleFor)
+  const [blank, rendered] = await Promise.all([extractPages(template), extractPages(filled)])
 
   const issues: TemplateIssue[] = []
   for (const f of map.fields) {

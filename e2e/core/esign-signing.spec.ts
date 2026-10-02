@@ -1,5 +1,6 @@
 import { expect, test } from '../fixtures/test'
 import { attachConsoleGuard } from '../fixtures/console-guard'
+import { storageStatePath } from '../fixtures/users'
 import {
   esignConfigured,
   issueMinorAgreement,
@@ -165,5 +166,40 @@ test.describe('Stellr signing', () => {
     })
     expect(res.status()).toBe(404)
     expect(await res.json()).toEqual({ state: 'invalid' })
+  })
+})
+
+test.describe('Agreement documents (admin)', () => {
+  test.use({ storageState: storageStatePath('admin') })
+
+  test('lists each version and previews it blank and with its fields labelled', async ({ page }) => {
+    const consoleErrors = attachConsoleGuard(page)
+    await page.goto('/admin/docusigns')
+    await page.getByRole('link', { name: 'Agreement documents' }).click()
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Agreement documents')
+
+    // Open the parental consent form's newest version.
+    await page.getByRole('link', { name: 'Parental Consent Form' }).first().click()
+    await expect(page.getByRole('heading', { level: 2 })).toContainText(/version \d+/)
+    await expect(page.locator('iframe')).toHaveCount(2)
+    await expect(page.getByRole('cell', { name: /MediaOptOut/ })).toBeVisible()
+
+    for (const as of ['blank', 'labels']) {
+      const src = await page.locator(`iframe[src$="as=${as}"]`).getAttribute('src')
+      const res = await page.request.get(src as string)
+      expect(res.status()).toBe(200)
+      expect(res.headers()['content-type']).toBe('application/pdf')
+      expect(res.headers()['cache-control']).toContain('no-store')
+      expect((await res.body()).subarray(0, 5).toString()).toBe('%PDF-')
+    }
+    expect(consoleErrors).toEqual([])
+  })
+
+  test('the preview is for admins only', async ({ browser, baseURL }) => {
+    const anonymous = await browser.newContext({ storageState: { cookies: [], origins: [] }, baseURL })
+    const res = await anonymous.request.get('/api/admin/esign/templates/00000000-0000-4000-8000-000000000000/preview')
+    expect([401, 403]).toContain(res.status())
+    expect(res.headers()['content-type']).not.toBe('application/pdf')
+    await anonymous.close()
   })
 })

@@ -105,9 +105,27 @@ export function canUseLinkedIn(dateOfBirth: string | null | undefined, on = new 
   return ageOn(dateOfBirth, on) >= 16
 }
 
-export type ShareConsent = 'not_required' | 'granted' | 'declined' | 'none'
+/**
+ * Credential pages of a child under 13 always stay private, whatever the
+ * consent form says (Privacy Policy §2, §7.4; D5, 2 Oct). An unknown date of
+ * birth is treated the same way: we cannot rule out a child, so we do not
+ * publish. Both are read from the live DOB, not the `is_minor` flag stored at
+ * issue, which goes stale.
+ */
+export const MIN_PUBLIC_CREDENTIAL_AGE = 13
 
-export type ShareBlock = 'revoked' | 'withdrawn' | 'expired' | 'minor_no_consent' | 'minor_declined'
+export function ageBlock(
+  dateOfBirth: string | null | undefined,
+  on = new Date(),
+): 'under_13' | 'dob_unknown' | null {
+  if (!dateOfBirth || !/^\d{4}-\d{2}-\d{2}/.test(dateOfBirth)) return 'dob_unknown'
+  return ageOn(dateOfBirth, on) < MIN_PUBLIC_CREDENTIAL_AGE ? 'under_13' : null
+}
+
+export type ShareConsent = 'not_required' | 'granted' | 'declined' | 'none' | 'under_13' | 'dob_unknown'
+
+export type ShareBlock =
+  | 'revoked' | 'withdrawn' | 'expired' | 'minor_no_consent' | 'minor_declined' | 'under_13' | 'dob_unknown'
 
 /** Whether this credential may be made public / shared, and if not, why. */
 export function canShare(
@@ -116,6 +134,7 @@ export function canShare(
 ): { ok: true } | { ok: false; reason: ShareBlock } {
   const state = credentialState(c)
   if (state !== 'valid') return { ok: false, reason: state }
+  if (consent === 'under_13' || consent === 'dob_unknown') return { ok: false, reason: consent }
   if (consent === 'declined') return { ok: false, reason: 'minor_declined' }
   if (consent === 'none') return { ok: false, reason: 'minor_no_consent' }
   return { ok: true }

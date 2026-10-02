@@ -13,10 +13,16 @@ export default function TermsPage() {
       <h1 className="text-4xl font-bold text-brand-blue-dark mb-8">Terms of Use</h1>
       <div className="prose prose-slate max-w-none space-y-6 text-brand-grey-dark">
         <p className="text-sm text-brand-grey-mid italic">
-          Effective Date: 18-Jun-2026 &nbsp;·&nbsp; Last Updated: 23-Sep-2026
+          Effective Date: 18-Jun-2026 &nbsp;·&nbsp; Last Updated: 02-Oct-2026
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
-          <strong>Recent update (23 Sep 2026):</strong> New Section 5.1 covers{' '}
+          <strong>Recent update (02-Oct-2026):</strong> Students can now create a Stellr account
+          themselves. Section 4 defines a <strong>Minor</strong> by the age of majority in your state,
+          explains pending accounts until a parent or legal guardian signs, and adds new Sections 4.5
+          (adult students still in high school) and 4.6 (when a student is no longer a Minor).
+          Sections 1, 5.1, 6.4, 8, 11.3 and 20 were updated to match.
+          <br />
+          <strong>Earlier update (23 Sep 2026):</strong> New Section 5.1 covers{' '}
           <strong>credentials</strong> — the verifiable record we issue for course completions and
           event participation — including your right to display and share them, our right to revoke
           them, and sharing on <strong>LinkedIn</strong>. Sections 5, 11.3 and 13 were updated to
@@ -122,9 +128,8 @@ export default function TermsPage() {
           . If you do not agree, please do not use the Services.
         </p>
         <p>
-          <strong>If you are under 18</strong>, you may use the Services only with the involvement
-          and consent of a parent, legal guardian, or authorized school official, who must agree to
-          these Terms on your behalf. See Section 4.
+          <strong>Students who are Minors</strong> (Section 4.1) need the consent and involvement of
+          a parent or legal guardian, as described in Section 4.
         </p>
 
         {/* 2. Who We Are */}
@@ -162,10 +167,14 @@ export default function TermsPage() {
         </h2>
         <h3 className="text-lg font-semibold text-brand-blue-dark">4.1 Who may use the Services</h3>
         <p>
-          The Services are intended for users located in the United States. You may create an account
-          on your own behalf only if you are 18 or older. Students under 18 may participate, but only
-          through a parent, legal guardian, or authorized school official who registers for them or
-          supervises their account.
+          Our Services are intended for users in the United States. You may create a Stellr account
+          yourself. A &ldquo;Minor&rdquo; is anyone under the age of majority in their state of
+          residence (18 in most states, 19 in Alabama and Nebraska, 21 in Mississippi), anyone still
+          enrolled in high school, or anyone who is a ward of the state or under guardianship. If you
+          are a Minor, your account stays pending until your parent or legal guardian signs
+          Stellr&rsquo;s Participation Agreement — Student / Minor, and you cannot take part in Stellr
+          activities until then. Pending accounts that do not receive consent within 30 days are
+          deleted. A Minor may also be registered by an authorized school official (Section 4.3).
         </p>
         <h3 className="text-lg font-semibold text-brand-blue-dark">4.2 Parents, guardians, and schools</h3>
         <p>
@@ -178,7 +187,11 @@ export default function TermsPage() {
           <Link href="/privacy" className="text-brand-blue hover:underline">
             Privacy Policy
           </Link>
-          .
+          . A student who registers must give their true date of birth and the real contact details
+          of their parent or legal guardian, and must not complete or sign the Participation
+          Agreement on their behalf. We may take reasonable steps to confirm that consent came from a
+          genuine parent or legal guardian, and we may suspend or close an account registered with
+          false details.
         </p>
         <h3 className="text-lg font-semibold text-brand-blue-dark">4.3 Educators and group registrations</h3>
         <p>
@@ -197,6 +210,20 @@ export default function TermsPage() {
             hello@stellreducation.org
           </a>{' '}
           if you suspect unauthorized use.
+        </p>
+        <h3 className="text-lg font-semibold text-brand-blue-dark">4.5 Adult students still in high school</h3>
+        <p>
+          If you have reached the age of majority where you live and are still enrolled in high
+          school, you accept these Terms and the Participation Agreement in your own name. Because we
+          have a duty of care to every high school student, we also require a parent or legal
+          guardian to co-sign the Participation Agreement before you can take part. Their signature
+          does not limit your own rights. By registering, you authorize us to share information about
+          your account, consents, and participation with them, and to contact them in an emergency.
+        </p>
+        <h3 className="text-lg font-semibold text-brand-blue-dark">4.6 When a student is no longer a Minor</h3>
+        <p>
+          When a student is no longer a Minor, we will ask them to accept these Terms in their own
+          name to keep their account.
         </p>
 
         {/* 5. Our Services */}
@@ -252,7 +279,7 @@ export default function TermsPage() {
             <Link href="/privacy" className="text-brand-blue hover:underline">
               Privacy Policy
             </Link>
-            .
+            . Credential pages of a child under 13 always stay private.
           </li>
           <li>
             <strong>Use them honestly.</strong> You may not alter a credential or its artwork,
@@ -312,8 +339,8 @@ export default function TermsPage() {
         </p>
         <h3 className="text-lg font-semibold text-brand-blue-dark">6.4 Purchases for minors</h3>
         <p>
-          If a purchase relates to a minor, it must be made or authorized by the minor&rsquo;s parent,
-          guardian, or authorized school official.
+          Any purchase for a Minor must be made or authorized by their parent or legal guardian (or
+          an authorized school official), who is responsible for the fee.
         </p>
 
         {/* 7. Competitions */}
@@ -368,6 +395,13 @@ export default function TermsPage() {
           and for complying with venue and host rules. We may remove any participant whose conduct is
           unsafe, disruptive, or in breach of these Terms or an event code of conduct. Nothing in
           these Terms limits any rights or protections that cannot be waived under applicable law.
+        </p>
+        <p>
+          A student who attends an in-person event without a school group must have their parent or
+          legal guardian, or a responsible adult (18 or over) named at registration, responsible for
+          their transport and their supervision outside scheduled event activities. Stellr staff and
+          volunteers supervise scheduled activities only. Emergency care is arranged as described in
+          the Participation Agreement.
         </p>
 
         {/* 9. Refunds */}
@@ -464,7 +498,11 @@ export default function TermsPage() {
             Privacy Policy
           </Link>
           . Some uses already published or distributed may not be fully reversible. Credential pages
-          are covered separately in Section 5.1.
+          are covered separately in Section 5.1. Students aged 13 or over may also opt out of
+          Stellr&rsquo;s use of their photos, videos, name, and work themselves, as described in our
+          Privacy Policy. For students aged 13 to 17 who live in a state that requires the
+          student&rsquo;s own agreement first (currently New York and Colorado), we do not use these
+          until the student agrees.
         </p>
         <h3 className="text-lg font-semibold text-brand-blue-dark">11.4 Your responsibilities</h3>
         <p>
@@ -619,6 +657,12 @@ export default function TermsPage() {
           additional notice (for example, by email or a notice in the Services). Changes take effect
           when posted unless we say otherwise. If you continue to use the Services after changes take
           effect, you accept the revised Terms. If you do not agree, please stop using the Services.
+          Changes that affect how we handle the personal information of a Minor follow Section 14 of
+          our{' '}
+          <Link href="/privacy" className="text-brand-blue hover:underline">
+            Privacy Policy
+          </Link>
+          , which may require new parental consent.
         </p>
 
         {/* 21. Disputes */}

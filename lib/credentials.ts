@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { agreementExpiry } from '@/lib/docusign-agreements'
 import {
   CREDENTIAL_COLUMNS,
+  ageBlock,
   canShare,
   isMinorOn,
   normaliseCredentialNumber,
@@ -89,9 +90,33 @@ export async function consentForMinor(
   return optOut ? 'declined' : 'granted'
 }
 
-export async function shareConsentFor(db: SupabaseClient, c: CredentialRow): Promise<ShareConsent> {
-  if (!c.is_minor) return 'not_required'
+/**
+ * The age rules come first and use the live DOB: under 13 (or unknown) never
+ * goes public, and anyone under 18 today needs consent even if the credential
+ * was issued without a DOB (`is_minor` false). Callers holding a CredentialView
+ * already have the DOB; a bare row is looked up.
+ */
+export async function shareConsentFor(
+  db: SupabaseClient,
+  c: CredentialRow & { date_of_birth?: string | null },
+): Promise<ShareConsent> {
+  const dob = 'date_of_birth' in c ? (c.date_of_birth ?? null) : await credentialDob(db, c)
+  const blocked = ageBlock(dob)
+  if (blocked) return blocked
+  if (!c.is_minor && !isMinorOn(dob)) return 'not_required'
   return consentForMinor(db, { memberId: c.member_id, participantId: c.participant_id })
+}
+
+async function credentialDob(db: SupabaseClient, c: CredentialRow): Promise<string | null> {
+  if (c.member_id) {
+    const { data } = await db.from('members').select('date_of_birth').eq('id', c.member_id).maybeSingle()
+    if (data?.date_of_birth) return data.date_of_birth as string
+  }
+  if (c.participant_id) {
+    const { data } = await db.from('participants').select('date_of_birth').eq('id', c.participant_id).maybeSingle()
+    if (data?.date_of_birth) return data.date_of_birth as string
+  }
+  return null
 }
 
 // ── Issue / revoke / visibility ──────────────────────────────────────────────

@@ -36,6 +36,7 @@
     "probe:apollo": "tsx scripts/probe-apollo-engagement.ts",
     "backfill:apollo": "tsx scripts/backfill-apollo-engagement.ts",
     "audit:event-slugs": "tsx scripts/audit-event-slugs.ts",
+    "retention:medical-sql": "tsx scripts/medical-retention-sql.ts",
     "notify:event-waitlist": "tsx scripts/notify-event-waitlist.ts",
     "sync:event-spaces": "tsx scripts/sync-event-spaces.ts",
     "upload:event-flyers": "tsx scripts/upload-event-flyers.ts",

@@ -8,6 +8,8 @@ import { getImpersonation } from '@/lib/impersonation'
 import { supabaseServer } from '@/lib/supabase'
 import { getHostCaps } from '@/lib/sessions'
 import { isAdminClaims } from '@/lib/admin-auth'
+import { isStudentForAds } from '@/lib/no-ads'
+import { NoAdsStudentMarker } from '@/components/analytics/NoAdsStudentMarker'
 
 export default async function MemberLayout({ children }: { children: React.ReactNode }) {
   const { sessionClaims } = await auth()
@@ -36,9 +38,12 @@ export default async function MemberLayout({ children }: { children: React.React
   const caps = member ? await getHostCaps(member.id) : null
   const showHosting = !!caps && (caps.canCoach || caps.canMentor)
   const isTeacher = member?.event_role === 'teacher'
+  // Not while an admin views as the member: that is the admin's browser.
+  const markStudent = !!member && !impersonation && isStudentForAds({ date_of_birth: member.date_of_birth ?? null, age_bracket: member.age_bracket })
 
   return (
     <div className="min-h-screen bg-surface">
+      {markStudent && <NoAdsStudentMarker />}
       {impersonation && member && (
         <ImpersonationBanner
           memberId={impersonation.memberId}

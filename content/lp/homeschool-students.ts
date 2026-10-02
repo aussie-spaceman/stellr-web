@@ -23,7 +23,7 @@ export const homeschoolStudents: LandingPageConfig = {
   seo: {
     title: 'Homeschool students — Space Design Competitions',
     description:
-      'Open to any student in grades 9–12, nation-wide. No school team required. Design a ' +
+      'Open to students in grades 7–12, nation-wide. No school team required. Design a ' +
       'Martian habitat and defend it to industry judges. Scholarships at every event.',
   },
   hero: {
@@ -113,8 +113,9 @@ export const homeschoolStudents: LandingPageConfig = {
       {
         q: 'Who is eligible?',
         a:
-          'Any student in grades 9–12, including homeschooled students and students in ' +
-          'co-ops. No school affiliation is needed.',
+          'Any student in grades 7–12, including homeschooled students and students in ' +
+          'co-ops. Some events start at grade 9, so check the event page for yours. No ' +
+          'school affiliation is needed.',
       },
       {
         q: 'Who mentors and judges?',

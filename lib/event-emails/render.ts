@@ -82,6 +82,18 @@ export interface RecipientForRender {
   /** True when the recipient is themselves the registered participant. */
   isParticipant: boolean
   payments: PaymentLine[]
+  /** Agreements this address still has to sign, for {{agreement_link}}. */
+  agreements?: AgreementLine[]
+}
+
+export interface AgreementLine {
+  /** Whose agreement: a participant's first name, or "your" for the recipient's own. */
+  participantName: string
+  provider: 'native' | 'docusign'
+  /** Stellr signing: this address's own link. Null on DocuSign, and while it is another signer's turn. */
+  signUrl: string | null
+  /** Stellr signing: someone else (the parent) signs first. */
+  waiting?: boolean
 }
 
 function joinNames(names: string[]): string {
@@ -110,6 +122,20 @@ function paymentText(lines: PaymentLine[]): string {
     .join('\n')
 }
 
+function agreementText(lines: AgreementLine[]): string {
+  if (lines.length === 0) return ''
+  const multi = lines.length > 1
+  return lines
+    .map((l) => {
+      const whose = l.participantName === 'your' ? 'your' : `${l.participantName}’s`
+      const form = multi ? `${whose} form` : 'the form'
+      if (l.provider === 'native' && l.signUrl) return `You can sign ${form} here: ${l.signUrl}`
+      if (l.provider === 'native' && l.waiting) return `${multi ? `For ${whose} form, the` : 'The'} parent or guardian signs first; we’ll email a link as soon as they have.`
+      return `${multi ? `${whose[0].toUpperCase()}${whose.slice(1)} form` : 'The form'} comes from DocuSign: look for an email from @docusign.net, and check your junk folder too.`
+    })
+    .join('\n')
+}
+
 function link(href: string, label?: string): string {
   return `<a href="${href}" style="color:#1e3a5f;text-decoration:underline">${label ?? href}</a>`
 }
@@ -120,6 +146,7 @@ export function recipientMergeVars(r: RecipientForRender): Record<string, string
     who_is_registered:    whoIsRegistered(r),
     participant_names:    joinNames(r.participantNames) || r.firstName,
     payment_instructions: paymentText(r.payments),
+    agreement_link:       agreementText(r.agreements ?? []),
   }
 }
 
@@ -200,8 +227,9 @@ export function renderEventEmail(
   for (const [k, v] of Object.entries(vars)) {
     htmlVars[k] = URL_FIELDS.has(k) && v ? link(v) : escapeHtml(v)
   }
-  // payment_instructions carries its own markup (link + line breaks).
-  if ('payment_instructions' in vars) htmlVars.payment_instructions = paymentHtmlFromText(vars.payment_instructions)
+  // These carry their own markup (link + line breaks).
+  if ('payment_instructions' in vars) htmlVars.payment_instructions = linesHtmlFromText(vars.payment_instructions, 'Pay now')
+  if ('agreement_link' in vars) htmlVars.agreement_link = linesHtmlFromText(vars.agreement_link, 'Sign now')
 
   const subject = substituteTokens(email.subject, vars).replace(/\s+/g, ' ').trim()
   const bodyHtml = substituteTokens(tiptapToEmailHtml(email.body_json), htmlVars)
@@ -216,13 +244,15 @@ ${SIGNATURE_HTML}
   return { subject, html, text: `${bodyText.trim()}\n\n${SIGNATURE_TEXT}\n` }
 }
 
-function paymentHtmlFromText(text: string): string {
+function linesHtmlFromText(text: string, label: string): string {
   if (!text) return ''
   return escapeHtml(text)
     .split('\n')
-    .map((line) => line.replace(/(https?:\/\/[^\s<]+)/g, (url) => link(url, 'Pay now')))
+    .map((line) => line.replace(/(https?:\/\/[^\s<]+)/g, (url) => link(url, label)))
     .join('<br/>')
 }
 
+const paymentHtmlFromText = (text: string) => linesHtmlFromText(text, 'Pay now')
+
 // Exported for tests.
-export const __test = { paymentText, paymentHtmlFromText, whoIsRegistered }
+export const __test = { paymentText, paymentHtmlFromText, agreementText, whoIsRegistered }

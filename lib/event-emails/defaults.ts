@@ -33,7 +33,9 @@ You're receiving this because {{who_is_registered}} registered for {{event_name}
 
 Our records show the consent form or agreement for this registration hasn't been completed yet. We need it signed before the event.
 
-For a student, one form goes to their nominated parent or legal guardian and to the student, and **both** need to sign (the parent or guardian first). We've just re-sent it: look for an email from **Stellr Education** or from **@docusign.net**, and check your junk folder too.
+For a student, one form goes to their nominated parent or legal guardian and to the student, and **both** need to sign (the parent or guardian first).
+
+{{agreement_link}}
 
 Participants can check their status any time in the Stellr portal: {{portal_link}}
 

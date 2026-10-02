@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getEnvelopeRecipients, summariseSigners, type EnvelopeRecipient } from './docusign'
+import { summariseSigners, type EnvelopeRecipient } from './docusign'
 import type { RecipientLike } from './docusign-status'
+import { fetchEnvelopeRecipients } from './esign/operations'
 import { notifyCommunityAdmins } from './notify'
 
 // Persistence for docusign_envelope_recipients (migration 148): pull the signer
@@ -14,13 +15,17 @@ import { notifyCommunityAdmins } from './notify'
  *
  * Upserts on (envelope_row, recipient_id), which is stable across resends — so
  * this is idempotent under DocuSign Connect's at-least-once delivery.
+ *
+ * `provider` is the envelope row's own column; omitted, the row is DocuSign's
+ * (every row written before the column existed).
  */
 export async function syncEnvelopeRecipients(
   db: SupabaseClient,
   envelopeRowId: string,
   envelopeId: string,
+  provider?: string | null,
 ): Promise<EnvelopeRecipient[]> {
-  const recipients = await getEnvelopeRecipients(envelopeId)
+  const recipients = await fetchEnvelopeRecipients(db, { envelope_id: envelopeId, provider })
   if (recipients.length === 0) return recipients
 
   const now = new Date().toISOString()

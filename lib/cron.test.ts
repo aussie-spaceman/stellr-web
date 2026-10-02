@@ -105,6 +105,18 @@ describe('guardCron', () => {
     await expect(res?.json()).resolves.toEqual({ error: 'Unauthorized' })
   })
 
+  it('rejects a request with no authorization header', async () => {
+    const { guardCron } = await load('prod')
+    expect(guardCron(req())?.status).toBe(401)
+  })
+
+  it('fails closed when CRON_SECRET is unset, even for "Bearer undefined"', async () => {
+    // The previous string comparison built `Bearer ${undefined}` and matched it.
+    const { guardCron } = await load('prod', '')
+    expect(guardCron(req('Bearer undefined'))?.status).toBe(401)
+    expect(guardCron(req('Bearer '))?.status).toBe(401)
+  })
+
   it('declines to run in dev even with the correct secret', async () => {
     const { guardCron } = await load('dev')
     const res = guardCron(req('Bearer secret'))

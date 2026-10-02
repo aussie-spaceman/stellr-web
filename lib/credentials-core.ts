@@ -1,4 +1,5 @@
 import { SITE_URL } from '@/lib/env'
+import { ageOn, isMinorOn } from '@/lib/age'
 
 // ── Verifiable credentials: pure helpers ─────────────────────────────────────
 // Edge-safe (no Node crypto, no DocuSign): imported by the OG image and badge
@@ -71,28 +72,9 @@ export function normaliseCredentialNumber(input: string): string | null {
 
 // ── Age ──────────────────────────────────────────────────────────────────────
 
-/**
- * Dates of birth are date-only strings (YYYY-MM-DD). Parsing one with `new
- * Date()` yields UTC midnight, which is the previous evening in every US
- * timezone, so the parts are read straight from the string and compared with
- * `on` in UTC. A day's drift around midnight is immaterial; a systematic
- * off-by-one on every birthday is not.
- */
-export function ageOn(dateOfBirth: string, on = new Date()): number {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOfBirth)
-  if (!m) return 0
-  const [y, mo, d] = [Number(m[1]), Number(m[2]) - 1, Number(m[3])]
-  let age = on.getUTCFullYear() - y
-  const beforeBirthday =
-    on.getUTCMonth() < mo || (on.getUTCMonth() === mo && on.getUTCDate() < d)
-  if (beforeBirthday) age -= 1
-  return age
-}
-
-export function isMinorOn(dateOfBirth: string | null | undefined, on = new Date()): boolean {
-  if (!dateOfBirth) return false
-  return ageOn(dateOfBirth, on) < 18
-}
+// Defined in lib/age.ts so e-signing and credentials share one definition;
+// re-exported here for the existing importers.
+export { ageOn, isMinorOn }
 
 /**
  * LinkedIn's minimum age is 16. The buttons are hidden below that regardless

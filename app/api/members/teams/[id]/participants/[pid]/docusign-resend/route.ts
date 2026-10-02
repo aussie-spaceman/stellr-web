@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { resendEnvelope } from '@/lib/docusign'
+import { remindEnvelopeRow } from '@/lib/esign/operations'
 import { ownsTeam } from '@/lib/team-access'
 import { assertNotImpersonating } from '@/lib/impersonation'
 
@@ -35,7 +35,7 @@ export async function POST(
       .eq('id', id)
       .maybeSingle(),
     db.from('docusign_envelopes')
-      .select('id, envelope_id, status, sent_at')
+      .select('id, envelope_id, provider, status, sent_at')
       .eq('participant_id', pid)
       .maybeSingle(),
   ])
@@ -64,7 +64,7 @@ export async function POST(
     )
   }
 
-  await resendEnvelope(envelope.envelope_id)
+  await remindEnvelopeRow(db, envelope)
 
   // last_manual_resend_at, NOT reminder_sent_at: the reminder cron used to skip
   // any envelope with reminder_sent_at set, so a teacher nudging their own team

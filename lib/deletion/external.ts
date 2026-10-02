@@ -1,7 +1,7 @@
 import Stripe from 'stripe'
 import { clerkClient } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
-import { voidEnvelope } from '@/lib/docusign'
+import { voidEnvelopeRow } from '@/lib/esign/operations'
 import type { DeleteMode, EntityDef, ExternalCleanupKind, ExternalResult } from './types'
 import { stripeClient } from '@/lib/stripe'
 
@@ -92,7 +92,7 @@ async function cleanupDocusignForEnvelope(envelopeId: string): Promise<ExternalR
     const db = supabaseServer()
     const { data: row } = await db
       .from('docusign_envelopes')
-      .select('envelope_id, status')
+      .select('envelope_id, provider, status')
       .eq('id', envelopeId)
       .maybeSingle()
 
@@ -103,7 +103,7 @@ async function cleanupDocusignForEnvelope(envelopeId: string): Promise<ExternalR
     if (status === 'completed' || status === 'declined' || status === 'voided') {
       return { kind: 'docusign', ok: true, detail: `Envelope ${status}; nothing to void` }
     }
-    await voidEnvelope(dsId)
+    await voidEnvelopeRow(db, { envelope_id: dsId, provider: row?.provider as string | null | undefined })
     return { kind: 'docusign', ok: true, detail: `Voided envelope ${dsId}` }
   } catch (e) {
     return { kind: 'docusign', ok: false, detail: e instanceof Error ? e.message : 'DocuSign cleanup failed' }

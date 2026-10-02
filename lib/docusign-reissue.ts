@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { classifyAgreement, resendEnvelope, voidEnvelope } from './docusign'
+import { classifyAgreement } from './docusign'
 import { dispatchAgreement, type DispatchOutcome } from './docusign-agreements'
+import { remindEnvelopeRow, voidEnvelopeRow } from './esign/operations'
 import { maskEmail } from './utils'
 
 // "Reissue DocuSign" for one event participant — the roster action, the bulk
@@ -50,7 +51,7 @@ export async function reissueParticipantAgreement(
 
   const { data: env } = await db
     .from('docusign_envelopes')
-    .select('id, envelope_id, status, reused_from')
+    .select('id, envelope_id, provider, status, reused_from')
     .eq('participant_id', participantId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -70,7 +71,7 @@ export async function reissueParticipantAgreement(
       .eq('envelope_row', env.id)
       .eq('status', 'autoresponded')
     if (!bounced?.length) {
-      const recipients = await resendEnvelope(env.envelope_id)
+      const recipients = await remindEnvelopeRow(db, env)
       // Deliberately NOT reminder_sent_at — that column drives the cron's
       // chase cadence (see app/api/admin/docusigns/[id]/resend).
       const now = new Date().toISOString()
@@ -87,7 +88,7 @@ export async function reissueParticipantAgreement(
       }
     }
     try {
-      await voidEnvelope(env.envelope_id, 'Re-issued by administrator after a bounced email')
+      await voidEnvelopeRow(db, env, 'Re-issued by administrator after a bounced email')
     } catch (err) {
       // Already finished on DocuSign's side — the row will catch up via Connect.
       console.error(`[docusign-reissue] void failed for ${env.id}:`, err)

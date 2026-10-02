@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { resendEnvelope } from '@/lib/docusign'
+import { remindEnvelopeRow } from '@/lib/esign/operations'
 
 // POST /api/admin/docusigns/[id]/resend — admin can resend any envelope at any time
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -14,7 +14,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   const { data: envelope } = await db
     .from('docusign_envelopes')
-    .select('envelope_id, status, reused_from')
+    .select('envelope_id, provider, status, reused_from')
     .eq('id', id)
     .maybeSingle()
 
@@ -29,7 +29,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Envelope has been voided' }, { status: 400 })
   }
 
-  await resendEnvelope(envelope.envelope_id)
+  await remindEnvelopeRow(db, envelope)
 
   // Records the manual resend WITHOUT touching reminder_sent_at. Writing that
   // column here used to permanently remove the envelope from the reminder cron,

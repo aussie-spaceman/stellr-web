@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { resendEnvelope, type AgreementType } from '@/lib/docusign'
+import type { AgreementType } from '@/lib/docusign'
+import { remindEnvelopeRow } from '@/lib/esign/operations'
 import { AGREEMENT_LABEL } from '@/lib/docusign-agreements'
 import { syncEnvelopeRecipients } from '@/lib/docusign-recipients'
 import { describeEnvelope, roleLabel } from '@/lib/docusign-status'
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
 
   const { data: envelopes, error: queryError } = await db
     .from('docusign_envelopes')
-    .select('id, envelope_id, envelope_type, minor_name, signer_name, signer_email, event_title, member_id, status, signers_total, signers_completed, reused_from, reminder_count')
+    .select('id, envelope_id, provider, envelope_type, minor_name, signer_name, signer_email, event_title, member_id, status, signers_total, signers_completed, reused_from, reminder_count')
     .in('status', ['sent', 'delivered'])
     .lt('sent_at', firstChaseCutoff)
     .lt('reminder_count', MAX_CHASES)
@@ -83,7 +84,7 @@ export async function GET(req: NextRequest) {
       // outstanding, and a stale list would reproduce the exact bug this fixes.
       let recipients: Awaited<ReturnType<typeof syncEnvelopeRecipients>> = []
       try {
-        recipients = await syncEnvelopeRecipients(db, env.id, env.envelope_id)
+        recipients = await syncEnvelopeRecipients(db, env.id, env.envelope_id, env.provider)
       } catch (err) {
         console.error(`[cron] docusign-reminders: recipient sync failed for ${env.id}:`, err)
       }
@@ -112,7 +113,7 @@ export async function GET(req: NextRequest) {
         continue
       }
 
-      await resendEnvelope(env.envelope_id)
+      await remindEnvelopeRow(db, env)
 
       const type = (env.envelope_type ?? 'minor') as AgreementType
       const member = env.member_id ? memberById.get(env.member_id) : null

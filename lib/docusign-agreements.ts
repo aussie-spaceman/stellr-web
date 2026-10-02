@@ -1,14 +1,8 @@
 import { randomUUID } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import {
-  classifyAgreement,
-  createConsentEnvelope,
-  createAdultAgreementEnvelope,
-  createMentorAgreementEnvelope,
-  createVolunteerAgreementEnvelope,
-  type AgreementType,
-  type CreatedEnvelope,
-} from './docusign'
+import { classifyAgreement, type AgreementType } from './docusign'
+import { issueAgreement } from './esign/issue'
+import type { CreatedAgreement } from './esign/types'
 import {
   sendEmail,
   docusignSentToMinorEmail,
@@ -170,18 +164,21 @@ export async function dispatchAgreement(
         return 'not_required'
       }
       const guardianName = [ctx.guardianFirstName, ctx.guardianLastName].filter(Boolean).join(' ')
-      const envelope = await createConsentEnvelope({
-        minorFirstName:   ctx.firstName,
-        minorLastName:    ctx.lastName,
-        minorEmail:       ctx.email,
-        minorDateOfBirth: ctx.dateOfBirth ?? undefined,
-        guardianName,
-        guardianEmail:    ctx.guardianEmail,
-        guardianPhone:    ctx.guardianPhone ?? undefined,
-        relationship:     ctx.relationship ?? undefined,
-        eventTitle:       ctx.eventTitle,
-        schoolName:       ctx.schoolName ?? undefined,
-        schoolState:      ctx.schoolState ?? undefined,
+      const envelope = await issueAgreement(db, {
+        type: 'minor',
+        params: {
+          minorFirstName:   ctx.firstName,
+          minorLastName:    ctx.lastName,
+          minorEmail:       ctx.email,
+          minorDateOfBirth: ctx.dateOfBirth ?? undefined,
+          guardianName,
+          guardianEmail:    ctx.guardianEmail,
+          guardianPhone:    ctx.guardianPhone ?? undefined,
+          relationship:     ctx.relationship ?? undefined,
+          eventTitle:       ctx.eventTitle,
+          schoolName:       ctx.schoolName ?? undefined,
+          schoolState:      ctx.schoolState ?? undefined,
+        },
       })
       await recordEnvelope(db, ctx, type, envelope, guardianName, ctx.guardianEmail)
       await safeEmail(ctx.email, docusignSentToMinorEmail({
@@ -201,21 +198,16 @@ export async function dispatchAgreement(
 
     // Adult, mentor or volunteer — self-signed, sourced from the participant's own phone column
     const signerName = `${ctx.firstName} ${ctx.lastName}`
+    const signer = {
+      firstName: ctx.firstName, lastName: ctx.lastName, email: ctx.email,
+      phone: ctx.phone ?? undefined, eventTitle: ctx.eventTitle,
+    }
     const envelope = type === 'adult'
-      ? await createAdultAgreementEnvelope({
-          firstName: ctx.firstName, lastName: ctx.lastName, email: ctx.email,
-          phone: ctx.phone ?? undefined, eventTitle: ctx.eventTitle,
-          schoolName: ctx.schoolName ?? undefined, schoolState: ctx.schoolState ?? undefined,
+      ? await issueAgreement(db, {
+          type: 'adult',
+          params: { ...signer, schoolName: ctx.schoolName ?? undefined, schoolState: ctx.schoolState ?? undefined },
         })
-      : type === 'volunteer'
-      ? await createVolunteerAgreementEnvelope({
-          firstName: ctx.firstName, lastName: ctx.lastName, email: ctx.email,
-          phone: ctx.phone ?? undefined, eventTitle: ctx.eventTitle,
-        })
-      : await createMentorAgreementEnvelope({
-          firstName: ctx.firstName, lastName: ctx.lastName, email: ctx.email,
-          phone: ctx.phone ?? undefined, eventTitle: ctx.eventTitle,
-        })
+      : await issueAgreement(db, { type, params: signer })
     await recordEnvelope(db, ctx, type, envelope, signerName, ctx.email)
     await safeEmail(ctx.email, docusignSentToSignerEmail({
       firstName: ctx.firstName, eventTitle: ctx.eventTitle, agreementLabel: AGREEMENT_LABEL[type],
@@ -413,7 +405,7 @@ async function recordEnvelope(
   db: SupabaseClient,
   ctx: ParticipantContext,
   type: AgreementType,
-  envelope: CreatedEnvelope,
+  envelope: CreatedAgreement,
   signerName: string,
   signerEmail: string,
 ): Promise<void> {
@@ -422,7 +414,8 @@ async function recordEnvelope(
     member_id:         ctx.memberId,
     event_slug:        ctx.eventSlug,
     event_title:       ctx.eventTitle,
-    envelope_id:       envelope.envelopeId,
+    envelope_id:       envelope.externalId,
+    provider:          envelope.provider,
     envelope_type:     type,
     status:            'sent',
     signer_name:       signerName,

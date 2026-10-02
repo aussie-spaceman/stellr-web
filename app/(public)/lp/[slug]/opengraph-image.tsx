@@ -33,7 +33,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
   const config = getLandingPage(slug)
 
   const headline = config?.hero.headline ?? 'Space Design Competitions'
-  const kicker = config?.hero.kicker ?? 'Real-world STEM for grades 9–12'
+  const kicker = config?.hero.kicker ?? 'Real-world STEM for grades 7–12'
   const accent =
     config?.theme === 'enviro' ? tokens.color.enviroGreen : tokens.color.spaceViolet
 
@@ -86,7 +86,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
         </div>
 
         <div style={{ fontSize: 24, color: tokens.color.heroLead }}>
-          stellreducation.org · Grades 9–12 · Scholarships available
+          stellreducation.org · Grades 7–12 · Scholarships available
         </div>
       </div>
     ),

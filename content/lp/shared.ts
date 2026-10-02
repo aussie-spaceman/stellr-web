@@ -15,8 +15,8 @@ export const GLANCE_EYEBROW = 'At a glance'
 
 export const GLANCE_FACTS: LpGlanceFact[] = [
   {
-    value: 'Grades 9–12',
-    label: 'Open to every student in these years',
+    value: 'Grades 7–12',
+    label: 'Some events start at grade 9 — see each event page.',
   },
   {
     value: 'One or Two Day Events',

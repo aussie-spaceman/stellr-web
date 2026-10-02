@@ -5,6 +5,7 @@ import { normalizeEmail } from '@/lib/member-enums'
 import { linkMembersToRegistrationSchool } from '@/lib/school-link'
 import { recordEventParticipationForRegistration } from '@/lib/event-participation-sync'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
+import { batchInvites } from '@/lib/esign/outbox'
 import { isMinor } from '@/lib/docusign'
 import { ensureIndividualPayments, type IndividualPaymentPerson } from '@/lib/individual-payment'
 
@@ -49,6 +50,15 @@ function roleFromType(type: string, dateOfBirth: string | null): { eventRole: st
 // Shared by the manual "Sync From Sheet" button and the Google-Drive change
 // webhook so the two never drift. Non-fatal throughout.
 export async function syncParticipantsFromSheet(
+  db: SupabaseClient,
+  registration: SheetSyncRegistration,
+): Promise<SheetSyncResult> {
+  // Stellr signing invitations go out together at the end, so a parent of
+  // siblings on the sheet gets one email with a link for each child.
+  return batchInvites(db, () => syncFromSheet(db, registration))
+}
+
+async function syncFromSheet(
   db: SupabaseClient,
   registration: SheetSyncRegistration,
 ): Promise<SheetSyncResult> {

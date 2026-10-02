@@ -12,6 +12,8 @@ export const Buttons: StoryObj = {
       <Button href="/events" variant="energy">Energy</Button>
       <Button href="/events" variant="softBlue">Soft blue</Button>
       <Button href="/events" variant="softAmber">Soft amber</Button>
+      <Button href="/events" variant="primaryStrong">Primary (AA)</Button>
+      <Button href="/events" variant="secondaryStrong">Secondary (AA)</Button>
       <div className="bg-midnight p-4 rounded-panel">
         <Button href="/events" variant="outlineWhite">Outline white</Button>
       </div>

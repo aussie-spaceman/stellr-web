@@ -101,20 +101,23 @@ interface SendEmailOptions {
   attachments?: EmailAttachment[]
 }
 
-export async function sendEmail({ to, from, cc, replyTo, subject, html, text, attachments }: SendEmailOptions) {
+/** Resend's id for the message, when one was sent. */
+export interface SentEmail { id: string | null }
+
+export async function sendEmail({ to, from, cc, replyTo, subject, html, text, attachments }: SendEmailOptions): Promise<SentEmail> {
   if (!RESEND_API_KEY) {
     console.log('[email] No RESEND_API_KEY — would have sent to:', to?.replace(/^.*@/, '…@'), subject)
-    return
+    return { id: null }
   }
 
   const routed = routeRecipients(to, cc ?? [])
   if (!routed.to) {
     console.warn(
       `[email] Suppressed (APP_ENV=${appEnv()}, DEV_EMAIL_SAFELIST is blank) — would have sent to:`,
-      to,
+      to?.replace(/^.*@/, '…@'),
       subject,
     )
-    return
+    return { id: null }
   }
 
   const res = await fetch('https://api.resend.com/emails', {
@@ -145,8 +148,27 @@ export async function sendEmail({ to, from, cc, replyTo, subject, html, text, at
 
   if (!res.ok) {
     const err = await res.text()
-    console.error('[email] Resend error sending to', routed.to, '—', err)
-    throw new Error(`Failed to send email: ${err}`)
+    console.error('[email] Resend error sending to', routed.to.replace(/^.*@/, '…@'), '—', err)
+    throw new EmailSendError(`Failed to send email: ${err}`, res.status)
+  }
+  const body = await res.json().catch(() => null) as { id?: string } | null
+  return { id: body?.id ?? null }
+}
+
+/**
+ * A send Resend refused. `status` 429 is the rate limit or the plan's daily
+ * quota: a sender working through a queue should stop and try later, not
+ * carry on and fail the rest.
+ */
+export class EmailSendError extends Error {
+  readonly status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'EmailSendError'
+    this.status = status
+  }
+  get isQuota(): boolean {
+    return this.status === 429
   }
 }
 
@@ -443,7 +465,7 @@ export function docusignSentToMinorEmail({
 
 /**
  * Reminder to the student. `waitingOn` is the list of signers who have NOT yet
- * signed, taken from docusign_envelope_recipients.
+ * signed, taken from agreement_recipients.
  *
  * WHY the shape changed (4 Sept 2026): this template used to hard-code "we
  * haven't received a signed consent form from {guardianName}" and the cron never

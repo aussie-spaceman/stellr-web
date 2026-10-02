@@ -24,9 +24,60 @@ const nextConfig = {
   outputFileTracingIncludes: {
     '/api/admin/events/**': ['./public/fonts/Aileron-SemiBold.otf'],
     '/api/credentials/**': ['./public/fonts/Aileron-SemiBold.otf'],
+    // Stellr signing stamps names and values in Open Sans (lib/esign/native/render.ts).
+    '/api/sign/**': ['./public/fonts/esign/OpenSans-Regular.ttf'],
+    // The template editor checks documents with pdf.js on the server
+    // (lib/esign/native/pdf-text.ts), which loads its worker and font metrics
+    // from node_modules at run time.
+    '/api/admin/esign/**': [
+      './public/fonts/esign/OpenSans-Regular.ttf',
+      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+      './node_modules/pdfjs-dist/standard_fonts/**',
+    ],
+    '/api/admin/events/**/docusign-reissue': ['./public/fonts/esign/OpenSans-Regular.ttf'],
+    '/api/cron/**': ['./public/fonts/esign/OpenSans-Regular.ttf'],
   },
+  serverExternalPackages: ['pdfjs-dist'],
   async headers() {
+    // Pages opened from a private link (lib/private-routes.ts). The link is the
+    // key, so: never framed, never cached, never indexed, and never passed on
+    // as a referrer to another site.
+    const privateLink = [
+      { key: 'Referrer-Policy', value: 'no-referrer' },
+      { key: 'Cache-Control', value: 'private, no-store' },
+      { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+      { key: 'X-Frame-Options', value: 'DENY' },
+      { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" },
+    ]
     return [
+      // Baseline for every response: no clickjacking from other sites, no MIME
+      // sniffing, no full URLs sent to other sites, and no powerful browser
+      // features nobody here uses.
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(self)' },
+        ],
+      },
+      { source: '/sign', headers: privateLink },
+      { source: '/sign/:path*', headers: privateLink },
+      { source: '/register/:slug/pay/:path*', headers: privateLink },
+      { source: '/register/:slug/join/:path*', headers: privateLink },
+      { source: '/api/sign/:path*', headers: privateLink },
+      { source: '/privacy/request', headers: privateLink },
+      { source: '/privacy/request/:path*', headers: privateLink },
+      // The signing page shows the document in a same-origin frame. No
+      // object-src here: on a PDF response it can stop the browser's own viewer.
+      {
+        source: '/api/sign/document',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'self'" },
+        ],
+      },
       // One Next app serves both hosts, so every public page (/academy,
       // /curriculum, /competitions, …) also answers 200 on the member app.
       // Canonicals already point at www, but a canonical is a hint; this keeps

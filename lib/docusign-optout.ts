@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getEnvelopeFormData } from '@/lib/docusign'
+import { fetchEnvelopeFieldValues } from '@/lib/esign/operations'
 import { readCredentialOptOut } from '@/lib/docusign-form-data'
 import { applyGuardianOptOut } from '@/lib/credentials-notify'
 import { logActivity } from '@/lib/activity-log'
@@ -19,6 +19,8 @@ import { logActivity } from '@/lib/activity-log'
 export interface OptOutEnvelope {
   id: string
   envelope_id: string
+  /** The signing engine that issued the envelope; absent on rows read without it. */
+  provider?: string | null
   envelope_type: string | null
   reused_from: string | null
   member_id: string | null
@@ -27,7 +29,7 @@ export interface OptOutEnvelope {
 }
 
 export const OPT_OUT_ENVELOPE_COLUMNS =
-  'id, envelope_id, envelope_type, reused_from, member_id, participant_id, credential_sharing_opt_out'
+  'id, envelope_id, provider, envelope_type, reused_from, member_id, participant_id, credential_sharing_opt_out'
 
 export async function recordCredentialOptOutFromForm(
   db: SupabaseClient,
@@ -37,7 +39,7 @@ export async function recordCredentialOptOutFromForm(
 
   let ticked: boolean | null
   try {
-    ticked = readCredentialOptOut(await getEnvelopeFormData(env.envelope_id))
+    ticked = readCredentialOptOut(await fetchEnvelopeFieldValues(db, env))
   } catch (err) {
     // Left unstamped: the cron retries. The stored default (no opt-out) stands
     // meanwhile, which is the decided model.
@@ -48,7 +50,7 @@ export async function recordCredentialOptOutFromForm(
   const now = new Date().toISOString()
   const update: Record<string, unknown> = { form_data_read_at: now, updated_at: now }
   if (ticked) update.credential_sharing_opt_out = true
-  const { error } = await db.from('docusign_envelopes').update(update).eq('id', env.id)
+  const { error } = await db.from('agreements').update(update).eq('id', env.id)
   if (error) {
     console.error('[docusign-optout] write failed:', error.message)
     return 'failed'

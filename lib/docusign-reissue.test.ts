@@ -28,7 +28,7 @@ function fakeDb(state: {
     from(table: string) {
       const result =
         table === 'participants' ? state.participant ?? null
-        : table === 'docusign_envelopes' ? state.envelope ?? null
+        : table === 'agreements' ? state.envelope ?? null
         : state.bounced ?? []
       const chain: Record<string, unknown> = {}
       for (const m of ['select', 'eq', 'order', 'limit']) chain[m] = () => chain

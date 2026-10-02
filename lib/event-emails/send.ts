@@ -7,6 +7,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
+import { extractTokens } from '@/lib/email-render'
 import { RESOURCES_BUCKET } from '@/lib/community'
 import { getEventBySlug } from '@/lib/sanity'
 import { reissueParticipantAgreement } from '@/lib/docusign-reissue'
@@ -120,9 +121,14 @@ export async function sendEventEmail(
     }
 
     // DocuSign first, so "we've just re-sent it" is true when the email lands.
+    // An email carrying {{agreement_link}} is itself the Stellr signing
+    // reminder, so those families are not sent a second signing email.
     let docusignResent = 0
+    const carriesLink = [...extractTokens(email.subject), ...extractTokens(JSON.stringify(email.body_json ?? ''))]
+      .includes('agreement_link')
+    const skip = new Set(carriesLink ? audience.nativeParticipantIds ?? [] : [])
     if (!isTest && email.resend_docusign && audience.docusignParticipantIds.length) {
-      for (const pid of audience.docusignParticipantIds) {
+      for (const pid of audience.docusignParticipantIds.filter((id) => !skip.has(id))) {
         try {
           const r = await reissueParticipantAgreement(db, pid, { eventSlug: event.slug, allowNewEnvelope: false })
           if (r.kind === 'resent') docusignResent++

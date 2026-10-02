@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { appEnv, isProd } from './env'
+import { safeStrEqual } from './secret-compare'
 
 /**
  * Gate for every route under `app/api/cron/`. Returns a response to send back
@@ -18,7 +19,13 @@ import { appEnv, isProd } from './env'
  * it has found.
  */
 export function guardCron(req: Request): NextResponse | null {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+  // Fails closed when CRON_SECRET is unset: the old `!== \`Bearer ${secret}\``
+  // comparison accepted the literal header "Bearer undefined" on a deployment
+  // with no secret configured. Compared in constant time, like every other
+  // request-supplied secret (lib/secret-compare).
+  const secret = process.env.CRON_SECRET
+  const supplied = req.headers.get('authorization') ?? ''
+  if (!secret || !safeStrEqual(supplied, `Bearer ${secret}`)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

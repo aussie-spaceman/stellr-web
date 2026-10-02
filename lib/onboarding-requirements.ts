@@ -8,6 +8,8 @@
 // back as a 400 they have no way to satisfy. Hence one shared rule set rather
 // than the two hand-mirrored copies this replaces.
 
+import { isMinorOn } from '@/lib/age'
+
 /** 'hidden' — don't ask. 'optional' — ask, never block. 'required' — must answer. */
 export type FieldRule = 'hidden' | 'optional' | 'required'
 
@@ -37,13 +39,7 @@ export interface OnboardingRequirements {
 
 /** Under 18 today. Exact to the day, not a year subtraction: someone born in
  *  December is still 17 for most of their eighteenth calendar year. */
-function isMinorDob(dob: string | undefined | null): boolean {
-  if (!dob) return false
-  const d = new Date(dob)
-  if (Number.isNaN(d.getTime())) return false
-  const eighteenth = new Date(d.getFullYear() + 18, d.getMonth(), d.getDate())
-  return new Date() < eighteenth
-}
+const isMinorDob = (dob: string | undefined | null) => isMinorOn(dob)
 
 export function onboardingRequirements(a: OnboardingAudience): OnboardingRequirements {
   const isVolunteerSignup = !!a.volunteerFlow || a.event_role === 'volunteer'

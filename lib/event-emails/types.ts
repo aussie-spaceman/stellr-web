@@ -84,6 +84,7 @@ export const EVENT_MERGE_FIELDS = [
   { token: 'event_end_time',       example: '5:30 PM',                       label: 'Finish time' },
   { token: 'days_to_go',           example: '7',                             label: 'Days until the event' },
   { token: 'payment_instructions', example: 'You can pay securely here: …',  label: 'Pay link or invoice note (payment emails)' },
+  { token: 'agreement_link',       example: 'You can sign the form here: …', label: 'Signing link, or where to find the form (consent emails)' },
   { token: 'portal_link',          example: 'https://app.stellreducation.org/sign-in', label: 'Stellr portal sign-in' },
   { token: 'event_link',           example: 'https://www.stellreducation.org/events/…', label: 'Public event page' },
 ] as const

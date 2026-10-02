@@ -14,6 +14,10 @@ storybook-static/
 # regenerate on demand; not a source artefact.
 /scripts/docusign-templates/
 
+# Converted agreement templates (scripts/esign-template.ts) — PDFs and field
+# maps on their way to the agreement-templates bucket.
+/esign-out/
+
 # Supabase CLI scratch state — rewritten by every `supabase link`, and
 # per-machine. Tracking it made every session that linked a project produce a
 # spurious diff, and two sessions linking different projects conflict.

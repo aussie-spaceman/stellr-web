@@ -66,7 +66,7 @@ export async function consentForMinor(
   ].filter(Boolean).join(',')
 
   const { data } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, completed_at, credential_sharing_opt_out, reused_from')
     .or(filters)
     .eq('envelope_type', 'minor')
@@ -80,7 +80,7 @@ export async function consentForMinor(
   let optOut = Boolean(data.credential_sharing_opt_out)
   if (data.reused_from) {
     const { data: root } = await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .select('credential_sharing_opt_out')
       .eq('id', data.reused_from)
       .maybeSingle()

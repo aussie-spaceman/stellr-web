@@ -1,0 +1,9 @@
+{
+  "$comment": "Adult participation agreement. Checked against Participation Agreement - Adults V2-1; re-check against the production export before publishing.",
+  "fields": {
+    "p2@49,515": {
+      "name": "MediaOptOut",
+      "label": "I do NOT consent to photo and media use"
+    }
+  }
+}

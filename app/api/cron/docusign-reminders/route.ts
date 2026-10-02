@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { resendEnvelope, type AgreementType } from '@/lib/docusign'
+import type { AgreementType } from '@/lib/docusign'
+import { remindEnvelopeRow } from '@/lib/esign/operations'
+import { drainOutbox } from '@/lib/esign/outbox'
+import { checkHeartbeat } from '@/lib/esign/heartbeat'
 import { AGREEMENT_LABEL } from '@/lib/docusign-agreements'
 import { syncEnvelopeRecipients } from '@/lib/docusign-recipients'
 import { describeEnvelope, roleLabel } from '@/lib/docusign-status'
@@ -46,8 +49,8 @@ export async function GET(req: NextRequest) {
   const repeatChaseCutoff = new Date(Date.now() - CHASE_INTERVAL_DAYS * DAY_MS).toISOString()
 
   const { data: envelopes, error: queryError } = await db
-    .from('docusign_envelopes')
-    .select('id, envelope_id, envelope_type, minor_name, signer_name, signer_email, event_title, member_id, status, signers_total, signers_completed, reused_from, reminder_count')
+    .from('agreements')
+    .select('id, envelope_id, provider, envelope_type, minor_name, signer_name, signer_email, event_title, member_id, status, signers_total, signers_completed, reused_from, reminder_count')
     .in('status', ['sent', 'delivered'])
     .lt('sent_at', firstChaseCutoff)
     .lt('reminder_count', MAX_CHASES)
@@ -62,7 +65,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: queryError.message }, { status: 500 })
   }
   if (!envelopes?.length) {
-    await run.finish({ processed: 0, eligible: 0 })
+    const outbox = await drainOutbox(db).catch((err) => { run.fail('outbox', err); return null })
+    await run.finish({ processed: 0, eligible: 0, outbox })
     return NextResponse.json({ processed: 0 })
   }
 
@@ -83,7 +87,7 @@ export async function GET(req: NextRequest) {
       // outstanding, and a stale list would reproduce the exact bug this fixes.
       let recipients: Awaited<ReturnType<typeof syncEnvelopeRecipients>> = []
       try {
-        recipients = await syncEnvelopeRecipients(db, env.id, env.envelope_id)
+        recipients = await syncEnvelopeRecipients(db, env.id, env.envelope_id, env.provider)
       } catch (err) {
         console.error(`[cron] docusign-reminders: recipient sync failed for ${env.id}:`, err)
       }
@@ -112,12 +116,17 @@ export async function GET(req: NextRequest) {
         continue
       }
 
-      await resendEnvelope(env.envelope_id)
+      await remindEnvelopeRow(db, env)
 
       const type = (env.envelope_type ?? 'minor') as AgreementType
       const member = env.member_id ? memberById.get(env.member_id) : null
+      // On Stellr signing the reminder IS the signing email, with a fresh
+      // link, already sent to each outstanding signer by remindEnvelopeRow.
+      // The emails below exist because DocuSign's own reminder arrives
+      // separately and is easy to miss; sending them too would double up.
+      const nativeRow = (env.provider ?? 'docusign') === 'native'
 
-      if (member) {
+      if (member && !nativeRow) {
         const content = type === 'minor'
           ? docusignReminderToMinorEmail({
               firstName:  member.first_name,
@@ -140,7 +149,7 @@ export async function GET(req: NextRequest) {
       // Chase the outstanding guardian directly too. Previously only the student
       // was emailed and asked to relay the message to their parent — which fails
       // completely when the student is a minor who does not read that inbox.
-      if (type === 'minor') {
+      if (type === 'minor' && !nativeRow) {
         const guardian = description.waitingOn.find(r => (r.role_name ?? '').toLowerCase() === 'guardian')
         if (guardian?.email) {
           await sendEmail({
@@ -157,7 +166,7 @@ export async function GET(req: NextRequest) {
 
       const now = new Date().toISOString()
       await db
-        .from('docusign_envelopes')
+        .from('agreements')
         .update({
           reminder_sent_at: now,
           reminder_count: (env.reminder_count ?? 0) + 1,
@@ -172,7 +181,17 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Signing emails held back by yesterday's budget go out with the new day's.
+  let outbox: unknown = null
+  try {
+    outbox = await drainOutbox(db)
+  } catch (err) {
+    run.fail('outbox', err)
+  }
+  // The daily housekeeping job checks this cron; this cron checks it.
+  await checkHeartbeat(db, ['esign-maintenance', 'docusign-form-data']).catch((err) => run.fail('heartbeat', err))
+
   console.log(`[cron] docusign-reminders: processed ${processed} of ${envelopes.length} (${skippedBounced} skipped — bounced address)`)
-  await run.finish({ processed, eligible: envelopes.length, skippedBounced })
+  await run.finish({ processed, eligible: envelopes.length, skippedBounced, outbox })
   return NextResponse.json({ processed, skippedBounced })
 }

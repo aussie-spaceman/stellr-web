@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { guardCron } from '@/lib/cron'
 import { startCronRun } from '@/lib/cron-runs'
 import { recordCredentialOptOutFromForm, OPT_OUT_ENVELOPE_COLUMNS, type OptOutEnvelope } from '@/lib/docusign-optout'
+import { runEsignMaintenance } from '@/lib/esign/maintenance'
 
 // GET /api/cron/docusign-form-data
 // Vercel cron, daily (see vercel.json).
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - LOOKBACK_DAYS * DAY_MS).toISOString()
 
   const { data, error } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select(OPT_OUT_ENVELOPE_COLUMNS)
     .eq('envelope_type', 'minor')
     .eq('status', 'completed')
@@ -44,5 +45,15 @@ export async function GET(req: NextRequest) {
     results[r] = (results[r] ?? 0) + 1
   }
   await run.finish({ processed: data?.length ?? 0, results })
-  return NextResponse.json({ processed: data?.length ?? 0, results })
+
+  // The signed-record housekeeping rides on this cron's daily slot: Vercel
+  // Hobby allows each cron entry to run at most once a day, and the schedule is
+  // already long. It records its own cron_runs row.
+  const maintenanceRun = await startCronRun(db, 'esign-maintenance')
+  const maintenance = await runEsignMaintenance(db, {
+    onError: (step, err) => maintenanceRun.fail(step, err),
+  })
+  await maintenanceRun.finish(maintenance)
+
+  return NextResponse.json({ processed: data?.length ?? 0, results, maintenance })
 }

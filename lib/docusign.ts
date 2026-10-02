@@ -1,6 +1,7 @@
 import { createSign, createHmac, timingSafeEqual } from 'crypto'
 import { assertLiveCredentials } from './env-guards'
 import { formatFormDate } from './docusign-form-data'
+import { isMinorOn } from './age'
 
 const ENV = {
   oauthUrl:       process.env.DOCUSIGN_OAUTH_URL         ?? 'https://account-d.docusign.com',
@@ -44,6 +45,7 @@ async function getAccessToken(): Promise<string> {
   const jwt = `${input}.${sig}`
 
   const res = await fetch(`${ENV.oauthUrl}/oauth/token`, {
+    signal:  AbortSignal.timeout(DS_TIMEOUT_MS),
     method:  'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body:    `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
@@ -55,10 +57,18 @@ async function getAccessToken(): Promise<string> {
   return tokenCache.accessToken
 }
 
+/**
+ * DocuSign calls give up after this long. A hung request would otherwise run
+ * until the serverless function is killed, taking the registration with it;
+ * timing out lets the caller fall back to Stellr signing instead.
+ */
+const DS_TIMEOUT_MS = 25_000
+
 async function dsRequest(path: string, init: RequestInit = {}): Promise<Response> {
   const token = await getAccessToken()
   const { headers: extraHeaders, ...rest } = init
   return fetch(`${ENV.basePath}/v2.1/accounts/${ENV.accountId}${path}`, {
+    signal: AbortSignal.timeout(DS_TIMEOUT_MS),
     ...rest,
     headers: {
       Authorization:  `Bearer ${token}`,
@@ -66,6 +76,38 @@ async function dsRequest(path: string, init: RequestInit = {}): Promise<Response
       ...extraHeaders,
     },
   })
+}
+
+/**
+ * A failed DocuSign API call, with the error code DocuSign put in the body.
+ *
+ * The message is the same text the bare `Error` used to carry, so logs and the
+ * admin alert read as before. The code is what lets the caller tell "the
+ * monthly envelope allowance is spent" (ENVELOPE_ALLOWANCE_EXCEEDED) apart from
+ * every other failure, and route the agreement to the other signing engine
+ * instead of leaving the participant without paperwork.
+ */
+export class DocusignApiError extends Error {
+  readonly status: number
+  readonly errorCode: string | null
+  constructor(message: string, status: number, errorCode: string | null) {
+    super(message)
+    this.name = 'DocusignApiError'
+    this.status = status
+    this.errorCode = errorCode
+  }
+}
+
+async function dsError(prefix: string, res: Response): Promise<DocusignApiError> {
+  const text = await res.text()
+  let errorCode: string | null = null
+  try {
+    const parsed = JSON.parse(text) as { errorCode?: unknown }
+    if (typeof parsed.errorCode === 'string') errorCode = parsed.errorCode
+  } catch {
+    // Not JSON (a gateway page, an empty body): no code to read.
+  }
+  return new DocusignApiError(`${prefix}: ${text}`, res.status, errorCode)
 }
 
 function consentDocBase64(minor: string, guardian: string, event: string): string {
@@ -256,7 +298,7 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<CreatedE
   }
 
   const res = await dsRequest('/envelopes', { method: 'POST', body: JSON.stringify(body) })
-  if (!res.ok) throw new Error(`DocuSign create envelope failed: ${await res.text()}`)
+  if (!res.ok) throw await dsError('DocuSign create envelope failed', res)
   const data = await res.json() as { envelopeId: string }
   return { envelopeId: data.envelopeId, signerCount }
 }
@@ -303,7 +345,7 @@ export async function createAdultAgreementEnvelope(p: AdultAgreementParams): Pro
   }
 
   const res = await dsRequest('/envelopes', { method: 'POST', body: JSON.stringify(body) })
-  if (!res.ok) throw new Error(`DocuSign create adult envelope failed: ${await res.text()}`)
+  if (!res.ok) throw await dsError('DocuSign create adult envelope failed', res)
   const data = await res.json() as { envelopeId: string }
   return { envelopeId: data.envelopeId, signerCount: 1 }
 }
@@ -377,7 +419,7 @@ export async function createMentorAgreementEnvelope(p: MentorAgreementParams): P
   }
 
   const res = await dsRequest('/envelopes', { method: 'POST', body: JSON.stringify(body) })
-  if (!res.ok) throw new Error(`DocuSign create mentor envelope failed: ${await res.text()}`)
+  if (!res.ok) throw await dsError('DocuSign create mentor envelope failed', res)
   const data = await res.json() as { envelopeId: string }
   return { envelopeId: data.envelopeId, signerCount }
 }
@@ -419,12 +461,12 @@ export async function createVolunteerAgreementEnvelope(p: VolunteerAgreementPara
   }
 
   const res = await dsRequest('/envelopes', { method: 'POST', body: JSON.stringify(body) })
-  if (!res.ok) throw new Error(`DocuSign create volunteer envelope failed: ${await res.text()}`)
+  if (!res.ok) throw await dsError('DocuSign create volunteer envelope failed', res)
   const data = await res.json() as { envelopeId: string }
   return { envelopeId: data.envelopeId, signerCount }
 }
 
-/** One DocuSign signer, as stored in docusign_envelope_recipients. */
+/** One DocuSign signer, as stored in agreement_recipients. */
 export interface EnvelopeRecipient {
   recipientId:  string
   roleName:     string | null
@@ -544,6 +586,52 @@ export async function getEnvelopeDocument(envelopeId: string): Promise<ArrayBuff
   return res.arrayBuffer()
 }
 
+/**
+ * DocuSign's own Certificate of Completion for an envelope: the signer list,
+ * timestamps and IP addresses that give the signature its evidentiary weight.
+ * `documents/combined` (above) does not include it.
+ */
+export async function getEnvelopeCertificate(envelopeId: string): Promise<ArrayBuffer> {
+  const res = await dsRequest(`/envelopes/${envelopeId}/documents/certificate`, {
+    headers: { Accept: 'application/pdf' },
+  })
+  if (!res.ok) throw new Error(`DocuSign certificate fetch failed: ${await res.text()}`)
+  return res.arrayBuffer()
+}
+
+/** Envelope usage for the current billing period, as DocuSign reports it. */
+export interface AccountUsage {
+  /** Envelopes sent this period, including any sent from DocuSign's own web UI. */
+  sent: number
+  /** The period's allowance; null when the plan reports it as unlimited. */
+  allowed: number | null
+  periodStart: string | null
+  periodEnd: string | null
+}
+
+/**
+ * Reads the account's billing-period envelope counters. This is the only count
+ * that includes envelopes sent outside this app, and the only source for when
+ * the allowance resets, so provider routing prefers it to counting our own rows.
+ */
+export async function getAccountUsage(): Promise<AccountUsage> {
+  const res = await dsRequest('')
+  if (!res.ok) throw await dsError('DocuSign account fetch failed', res)
+  const data = await res.json() as {
+    billingPeriodEnvelopesSent?: string
+    billingPeriodEnvelopesAllowed?: string
+    billingPeriodStartDate?: string
+    billingPeriodEndDate?: string
+  }
+  const allowed = Number(data.billingPeriodEnvelopesAllowed)
+  return {
+    sent:        Number(data.billingPeriodEnvelopesSent) || 0,
+    allowed:     Number.isFinite(allowed) ? allowed : null,
+    periodStart: data.billingPeriodStartDate ?? null,
+    periodEnd:   data.billingPeriodEndDate ?? null,
+  }
+}
+
 export function verifyConnectHmac(body: string, signature: string): boolean {
   // Fail CLOSED when the key is unset: an unconfigured secret must reject every
   // request, not trust it. A misconfigured prod env otherwise let any anonymous
@@ -558,14 +646,18 @@ export function verifyConnectHmac(body: string, signature: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
+// Delegates to lib/age so the agreement a person is sent and every other age
+// check in the app agree. The previous arithmetic parsed the date of birth as
+// UTC midnight and then read it in local time: the day before, in every US
+// timezone.
 export function isMinor(dateOfBirth: string): boolean {
-  if (!dateOfBirth) return false
-  const dob = new Date(dateOfBirth)
-  const eighteenth = new Date(dob.getFullYear() + 18, dob.getMonth(), dob.getDate())
-  return new Date() < eighteenth
+  return isMinorOn(dateOfBirth)
 }
 
-export type AgreementType = 'minor' | 'adult' | 'mentor' | 'volunteer'
+// 'membership' is signed by people who join without attending an event. It is
+// only ever issued by the in-app engine, never as a DocuSign envelope, so
+// classifyAgreement (which picks an event's paperwork) never returns it.
+export type AgreementType = 'minor' | 'adult' | 'mentor' | 'volunteer' | 'membership'
 
 // Which DocuSign agreement (if any) a participant needs, based on role and age:
 //   • any student (incl. Student Manager) → minor "Participation Agreement"
@@ -575,10 +667,13 @@ export type AgreementType = 'minor' | 'adult' | 'mentor' | 'volunteer'
 //   • adult registering as a mentor       → mentor participation agreement
 //   • adult in the volunteer program      → volunteer agreement
 //   • any other adult attendee            → adult participation agreement
+/** The agreements an event participant can need: every type but membership. */
+export type EventAgreementType = Exclude<AgreementType, 'membership'>
+
 export function classifyAgreement(
   eventRole: string | null | undefined,
   dateOfBirth: string | null | undefined,
-): AgreementType | null {
+): EventAgreementType | null {
   const role = (eventRole ?? '').toLowerCase().replace(/\s+/g, '_')
   // Student participants always sign the minor agreement — role wins over age,
   // so an 18-year-old senior or student-manager still gets parental consent.

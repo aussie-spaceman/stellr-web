@@ -1,14 +1,14 @@
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { verifyConnectHmac, type AgreementType } from '@/lib/docusign'
-import { AGREEMENT_LABEL } from '@/lib/docusign-agreements'
+import { verifyConnectHmac } from '@/lib/docusign'
 import { syncEnvelopeRecipients, loadRecipientsByEnvelopeRows, alertOnNewBounces } from '@/lib/docusign-recipients'
-import { sendEmail, docusignCompletedToMinorEmail, docusignCompletedToSignerEmail } from '@/lib/email'
-import { logActivity } from '@/lib/activity-log'
-import { recordCredentialOptOutFromForm } from '@/lib/docusign-optout'
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
+import {
+  COMPLETED_ENVELOPE_COLUMNS,
+  mayTransition,
+  onEnvelopeCompleted,
+  type CompletedEnvelope,
+} from '@/lib/esign/completion'
 
 // DocuSign Connect delivers POST events when envelope status changes.
 // Configure Connect in the DocuSign admin console to send JSON to this URL,
@@ -63,14 +63,25 @@ export async function POST(req: Request) {
   const db = supabaseServer()
   const now = new Date().toISOString()
 
+  // Only DocuSign's own envelopes. A native row cannot share a DocuSign id, but
+  // the filter makes that structural rather than a coincidence.
+  const { data: current } = await db
+    .from('agreements')
+    .select('id, status')
+    .eq('envelope_id', envelopeId)
+    .eq('provider', 'docusign')
+    .maybeSingle()
+
+  if (!current) {
+    console.warn('[docusign-webhook] No envelope record for', envelopeId)
+    return NextResponse.json({ received: true })
+  }
+
   // ── Recipient-level state ────────────────────────────────────────────────────
   // Every event refreshes the full signer list, not just recipient-completed.
-  // The API call was always being made here; it just kept two integers and threw
-  // the rest away, which is why nothing downstream could name the outstanding
-  // signer, notice a bounced address, or tell "never opened it" from "opened it
-  // yesterday". Recounted from DocuSign rather than incremented locally, so it
-  // stays idempotent under Connect's at-least-once delivery.
-  await syncRecipients(db, envelopeId)
+  // Recounted from DocuSign rather than incremented locally, so it stays
+  // idempotent under Connect's at-least-once delivery.
+  await syncRecipients(db, current.id as string, envelopeId)
 
   // recipient-* events carry no envelope-level status change of their own.
   if (payload.event.startsWith('recipient-')) {
@@ -80,100 +91,56 @@ export async function POST(req: Request) {
   const newStatus = DS_STATUS_MAP[payload.event]
   if (!newStatus) return NextResponse.json({ received: true, skipped: 'unhandled event' })
 
+  // Connect does not guarantee order: a late "envelope-sent" must not turn a
+  // completed consent form back into an unsigned one.
+  if (!mayTransition(current.status as string, newStatus)) {
+    return NextResponse.json({ received: true, skipped: `stale ${newStatus} after ${current.status}` })
+  }
+
   const update: Record<string, string | null> = { status: newStatus, updated_at: now }
   if (newStatus === 'completed') update.completed_at = payload.data.envelopeSummary?.completedDateTime ?? now
   if (newStatus === 'declined')  update.declined_at  = payload.data.envelopeSummary?.declinedDateTime  ?? now
 
   const { data: envelope } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .update(update)
-    .eq('envelope_id', envelopeId)
-    .select('id, envelope_id, member_id, participant_id, reused_from, credential_sharing_opt_out, envelope_type, minor_name, signer_name, event_title, signers_total')
+    .eq('id', current.id)
+    .select(COMPLETED_ENVELOPE_COLUMNS + ', signers_total')
     .maybeSingle()
 
-  // Envelope completion implies every signer finished.
   if (envelope && newStatus === 'completed') {
+    const row = envelope as unknown as CompletedEnvelope & { signers_total: number | null }
+    // Envelope completion implies every signer finished.
     await db
-      .from('docusign_envelopes')
-      .update({ signers_completed: envelope.signers_total ?? 1 })
-      .eq('id', envelope.id)
-  }
-
-  if (!envelope) {
-    console.warn('[docusign-webhook] No envelope record for', envelopeId)
-    return NextResponse.json({ received: true })
-  }
-
-  // Guardian's credential-sharing opt-out (minor forms only). Non-fatal: a
-  // failed read leaves form_data_read_at null and the docusign-form-data cron
-  // retries it.
-  if (newStatus === 'completed') {
-    await recordCredentialOptOutFromForm(db, envelope)
-  }
-
-  if (newStatus === 'completed' && envelope.member_id) {
-    const dsType = (envelope.envelope_type ?? 'minor') as AgreementType
-    await logActivity({
-      memberId: envelope.member_id,
-      category: 'docusign',
-      action: 'docusign_completed',
-      summary: `${AGREEMENT_LABEL[dsType] ?? 'Consent form'} completed${envelope.event_title ? ` for ${envelope.event_title}` : ''}`,
-      metadata: { envelopeId, agreementType: dsType, eventTitle: envelope.event_title ?? null },
-      actorType: 'docusign',
-    }, db)
-
-    const { data: member } = await db
-      .from('members')
-      .select('email, first_name')
-      .eq('id', envelope.member_id)
-      .maybeSingle()
-
-    if (member) {
-      const downloadUrl = `${SITE_URL}/account?tab=profile`
-      const type = (envelope.envelope_type ?? 'minor') as AgreementType
-      const content = type === 'minor'
-        ? docusignCompletedToMinorEmail({
-            firstName:    member.first_name,
-            guardianName: envelope.signer_name,
-            eventTitle:   envelope.event_title,
-            downloadUrl,
-          })
-        : docusignCompletedToSignerEmail({
-            firstName:     member.first_name,
-            eventTitle:    envelope.event_title,
-            downloadUrl,
-            agreementLabel: AGREEMENT_LABEL[type],
-          })
-      try {
-        await sendEmail({ to: member.email, ...content })
-      } catch (err) {
-        console.error('[docusign-webhook] Failed to send completion email:', err)
-      }
-    }
+      .from('agreements')
+      .update({ signers_completed: row.signers_total ?? 1 })
+      .eq('id', row.id)
+    await onEnvelopeCompleted(db, row)
   }
 
   return NextResponse.json({ received: true })
 }
 
-// Mirrors DocuSign's signer list into docusign_envelope_recipients and raises an
+// Mirrors DocuSign's signer list into agreement_recipients and raises an
 // admin alert the first time an address is reported bounced. Non-fatal
 // throughout: a DocuSign hiccup here must not stop the envelope's status change
 // from being recorded, and must not make us return non-2xx (Connect would retry
 // the whole event, re-running the side effects below it).
 async function syncRecipients(
   db: ReturnType<typeof supabaseServer>,
+  envelopeRowId: string,
   envelopeId: string,
 ): Promise<void> {
   try {
     const { data: row } = await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .select('id, minor_name, event_title, participant_id')
-      .eq('envelope_id', envelopeId)
+      .eq('id', envelopeRowId)
       .maybeSingle()
     if (!row) return
 
     const before = (await loadRecipientsByEnvelopeRows(db, [row.id as string])).get(row.id as string) ?? []
-    const after = await syncEnvelopeRecipients(db, row.id as string, envelopeId)
+    const after = await syncEnvelopeRecipients(db, row.id as string, envelopeId, 'docusign')
     await alertOnNewBounces(before, after, {
       minorName:     (row.minor_name as string) ?? 'a participant',
       eventTitle:    (row.event_title as string) ?? '',

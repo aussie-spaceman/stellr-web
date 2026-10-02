@@ -11,6 +11,7 @@ const REASON_LABEL: Record<GapReason, string> = {
   issue_failed: 'Could not be sent',
   voided: 'Voided or expired',
   declined: 'Declined',
+  bounced: 'Email bounced: correct the address on the roster',
 }
 
 // Admin → Consent forms → Needs paperwork: people at upcoming events with no

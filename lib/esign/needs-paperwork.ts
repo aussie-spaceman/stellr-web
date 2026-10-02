@@ -9,7 +9,7 @@ import { getEventsBySlugs } from '@/lib/sanity'
 // never issued, one that failed on both engines, one voided (including expired
 // Stellr signing requests), or one the signer declined.
 
-export type GapReason = 'not_issued' | 'issue_failed' | 'voided' | 'declined'
+export type GapReason = 'not_issued' | 'issue_failed' | 'voided' | 'declined' | 'bounced'
 
 export interface PaperworkGap {
   participantId: string
@@ -34,8 +34,11 @@ export interface GapParticipant {
 }
 
 export interface GapEnvelope {
+  id?: string
   participant_id: string
   envelope_id: string
+  /** A signer's email bounced: out for signature in name only. */
+  bounced?: boolean
   status: string
   issue_error: string | null
   created_at: string
@@ -55,10 +58,18 @@ export function findGaps(participants: GapParticipant[], envelopes: GapEnvelope[
   for (const p of participants) {
     if (!classifyAgreement(p.eventRole, p.dateOfBirth)) continue
     const rows = (byParticipant.get(p.id) ?? []).sort((a, b) => b.created_at.localeCompare(a.created_at))
-    // Signed (or covered by paperwork on file), or out for signature: nothing to do.
-    if (rows.some((r) => ['completed', 'sent', 'delivered', 'created'].includes(r.status))) continue
-
     const base = { participantId: p.id, name: p.name, eventSlug: p.eventSlug, eventTitle: p.eventTitle, eventDate: p.eventDate }
+    if (rows.some((r) => r.status === 'completed')) continue
+    // Out for signature, but the email never arrived: a person has to fix the address.
+    const live = rows.filter((r) => ['sent', 'delivered', 'created'].includes(r.status))
+    if (live.some((r) => r.bounced)) {
+      const r = live.find((x) => x.bounced) as GapEnvelope
+      gaps.push({ ...base, reason: 'bounced', detail: r.issue_error, since: r.updated_at ?? r.created_at })
+      continue
+    }
+    // Out for signature: nothing to do.
+    if (live.length) continue
+
     const latest = rows[0]
     if (!latest) { gaps.push({ ...base, reason: 'not_issued', detail: null, since: null }); continue }
     const failed = latest.envelope_id.startsWith(ISSUE_FAILED_PREFIX)
@@ -111,10 +122,24 @@ export async function loadPaperworkGaps(db: SupabaseClient, now = new Date()): P
   for (let i = 0; i < ids.length; i += 200) {
     const { data, error: envError } = await db
       .from('docusign_envelopes')
-      .select('participant_id, envelope_id, status, issue_error, created_at, updated_at')
+      .select('id, participant_id, envelope_id, status, issue_error, created_at, updated_at')
       .in('participant_id', ids.slice(i, i + 200))
     if (envError) throw new Error(`Agreement lookup failed: ${envError.message}`)
     envelopes.push(...((data ?? []) as GapEnvelope[]))
+  }
+
+  const live = envelopes.filter((e) => ['sent', 'delivered'].includes(e.status)).map((e) => e.id as string)
+  const bounced = new Map<string, string | null>()
+  for (let i = 0; i < live.length; i += 200) {
+    const { data } = await db
+      .from('docusign_envelope_recipients')
+      .select('envelope_row, invite_error')
+      .in('envelope_row', live.slice(i, i + 200))
+      .eq('status', 'autoresponded')
+    for (const r of data ?? []) bounced.set(r.envelope_row as string, (r.invite_error as string | null) ?? null)
+  }
+  for (const e of envelopes) {
+    if (e.id && bounced.has(e.id)) { e.bounced = true; e.issue_error = bounced.get(e.id) ?? 'Email bounced' }
   }
   return findGaps(participants, envelopes)
 }

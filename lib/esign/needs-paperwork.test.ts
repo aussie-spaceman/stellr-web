@@ -38,6 +38,11 @@ describe('findGaps', () => {
     ])
   })
 
+  it('lists an agreement whose email bounced, though it is still out for signature', () => {
+    const gaps = findGaps([person('b')], [env('b', 'sent', { bounced: true, issue_error: 'Bounced: no such mailbox' })])
+    expect(gaps.map((g) => [g.reason, g.detail])).toEqual([['bounced', 'Bounced: no such mailbox']])
+  })
+
   it('skips people who need no agreement, and orders by event date', () => {
     const gaps = findGaps(
       [

@@ -201,7 +201,7 @@ const ENTITIES: Record<string, EntityDef> = {
   // declined, voided) delete as before.
   docusign_envelope: {
     type: 'docusign_envelope',
-    table: 'docusign_envelopes',
+    table: 'agreements',
     label: 'Agreement record',
     pk: 'id',
     keyType: 'uuid',
@@ -209,7 +209,7 @@ const ENTITIES: Record<string, EntityDef> = {
     external: ['docusign'],
     dependents: [
       {
-        table: 'docusign_envelopes',
+        table: 'agreements',
         fkColumn: 'id',
         label: 'signed agreement, kept for 7 years from signing and then deleted automatically',
         activeFilter: { column: 'status', value: 'completed' },

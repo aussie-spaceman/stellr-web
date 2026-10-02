@@ -66,7 +66,7 @@ export async function POST(req: Request) {
   // Only DocuSign's own envelopes. A native row cannot share a DocuSign id, but
   // the filter makes that structural rather than a coincidence.
   const { data: current } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, status')
     .eq('envelope_id', envelopeId)
     .eq('provider', 'docusign')
@@ -102,7 +102,7 @@ export async function POST(req: Request) {
   if (newStatus === 'declined')  update.declined_at  = payload.data.envelopeSummary?.declinedDateTime  ?? now
 
   const { data: envelope } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .update(update)
     .eq('id', current.id)
     .select(COMPLETED_ENVELOPE_COLUMNS + ', signers_total')
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
     const row = envelope as unknown as CompletedEnvelope & { signers_total: number | null }
     // Envelope completion implies every signer finished.
     await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .update({ signers_completed: row.signers_total ?? 1 })
       .eq('id', row.id)
     await onEnvelopeCompleted(db, row)
@@ -121,7 +121,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ received: true })
 }
 
-// Mirrors DocuSign's signer list into docusign_envelope_recipients and raises an
+// Mirrors DocuSign's signer list into agreement_recipients and raises an
 // admin alert the first time an address is reported bounced. Non-fatal
 // throughout: a DocuSign hiccup here must not stop the envelope's status change
 // from being recorded, and must not make us return non-2xx (Connect would retry
@@ -133,7 +133,7 @@ async function syncRecipients(
 ): Promise<void> {
   try {
     const { data: row } = await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .select('id, minor_name, event_title, participant_id')
       .eq('id', envelopeRowId)
       .maybeSingle()

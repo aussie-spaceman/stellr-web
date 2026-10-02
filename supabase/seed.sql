@@ -259,7 +259,7 @@ on conflict (id) do update set
 -- envelope_id is a fixture string, not a real DocuSign envelope — nothing here
 -- calls DocuSign, and it must never resolve against the sandbox.
 
-insert into public.docusign_envelopes (
+insert into public.agreements (
   id, event_slug, event_title, envelope_id, status,
   signer_name, signer_email, minor_name, envelope_type,
   signers_total, signers_completed, sent_at, member_id
@@ -276,7 +276,7 @@ on conflict (id) do update set
   signers_completed = excluded.signers_completed,
   sent_at = excluded.sent_at;
 
-insert into public.docusign_envelope_recipients (
+insert into public.agreement_recipients (
   id, envelope_row, recipient_id, role_name, name, email, status, routing_order, signed_at
 ) values
   ('00000000-0000-4000-9100-000000000001', '00000000-0000-4000-9000-000000000001',

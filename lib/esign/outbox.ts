@@ -117,7 +117,7 @@ export async function sendInvites(
   const envelopeFor = async (id: string) => {
     if (!envelopes.has(id)) {
       const { data } = await db
-        .from('docusign_envelopes')
+        .from('agreements')
         .select('id, envelope_type, event_title, minor_name, status, prefill')
         .eq('id', id)
         .maybeSingle()
@@ -151,7 +151,7 @@ export async function sendInvites(
       result.deferred += remaining(i)
       if (opts.reminder) {
         // Put the rest back in the outbox, so they still hear from us.
-        await db.from('docusign_envelope_recipients').update({ invite_sent_at: null }).in('id', units.slice(i).flat().map((q) => q.id))
+        await db.from('agreement_recipients').update({ invite_sent_at: null }).in('id', units.slice(i).flat().map((q) => q.id))
       }
       break
     }
@@ -191,7 +191,7 @@ export async function sendInvites(
     try {
       const sent = await sendEmail({ to: first.r.email, ...content })
       await db
-        .from('docusign_envelope_recipients')
+        .from('agreement_recipients')
         .update({ invite_sent_at: now.toISOString(), invite_email_id: sent.id, invite_error: null, invite_attempts: 0 })
         .in('id', ids)
       for (const { r } of live) {
@@ -207,7 +207,7 @@ export async function sendInvites(
       const message = err instanceof Error ? err.message : String(err)
       for (const { r } of live) {
         await db
-          .from('docusign_envelope_recipients')
+          .from('agreement_recipients')
           .update({ invite_sent_at: null, invite_attempts: ((r as { invite_attempts?: number }).invite_attempts ?? 0) + 1, invite_error: message.slice(0, 500) })
           .eq('id', r.id)
       }
@@ -225,8 +225,8 @@ export async function sendInvites(
 /** Sends what is waiting in the outbox, oldest and guardians first. */
 export async function drainOutbox(db: SupabaseClient, opts: { limit?: number; now?: Date } = {}): Promise<SendResult & { waiting: number }> {
   const { data, error } = await db
-    .from('docusign_envelope_recipients')
-    .select('id, envelope_row, recipient_id, role_name, name, email, status, routing_order, member_id, token_version, token_expires_at, invite_sent_at, invite_attempts, envelope:docusign_envelopes!inner(provider, status)')
+    .from('agreement_recipients')
+    .select('id, envelope_row, recipient_id, role_name, name, email, status, routing_order, member_id, token_version, token_expires_at, invite_sent_at, invite_attempts, envelope:agreements!inner(provider, status)')
     .eq('status', 'sent')
     .is('invite_sent_at', null)
     .eq('envelope.provider', 'native')
@@ -244,8 +244,8 @@ export async function drainOutbox(db: SupabaseClient, opts: { limit?: number; no
 /** Signing emails waiting to go out. */
 export async function outboxDepth(db: SupabaseClient): Promise<number> {
   const { count } = await db
-    .from('docusign_envelope_recipients')
-    .select('id, envelope:docusign_envelopes!inner(provider, status)', { count: 'exact', head: true })
+    .from('agreement_recipients')
+    .select('id, envelope:agreements!inner(provider, status)', { count: 'exact', head: true })
     .eq('status', 'sent')
     .is('invite_sent_at', null)
     .eq('envelope.provider', 'native')

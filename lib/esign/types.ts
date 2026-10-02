@@ -13,7 +13,7 @@ import type {
 // its contract and then be removed without touching business logic.
 // Plan: docs/PLAN-esign-2026-10-02.md.
 
-/** Stored on docusign_envelopes.provider. */
+/** Stored on agreements.provider. */
 export type ProviderId = 'docusign' | 'native'
 
 /**
@@ -52,13 +52,13 @@ export type CreateAgreementRequest =
 
 export interface CreatedAgreement {
   provider: ProviderId
-  /** The engine's own id for the agreement: docusign_envelopes.envelope_id. */
+  /** The engine's own id for the agreement: agreements.envelope_id. */
   externalId: string
   signerCount: number
-  /** Extra columns for the docusign_envelopes row (the native engine's template and prefill). */
+  /** Extra columns for the agreements row (the native engine's template and prefill). */
   rowFields?: Record<string, unknown>
   /**
-   * Runs once the docusign_envelopes row exists: the native engine creates its
+   * Runs once the agreements row exists: the native engine creates its
    * signer rows, records the issue in the audit trail and queues the emails.
    * Returns the first signer's link when they can sign straight away.
    */
@@ -83,7 +83,7 @@ export interface EsignProvider {
    */
   readonly sendsOwnEmails: boolean
   create(ctx: EsignContext, req: CreateAgreementRequest): Promise<CreatedAgreement>
-  /** The signer list, in the status vocabulary of docusign_envelope_recipients. */
+  /** The signer list, in the status vocabulary of agreement_recipients. */
   getRecipients(ctx: EsignContext, externalId: string): Promise<EnvelopeRecipient[]>
   /** Re-notifies whoever has not signed. Returns how many were notified. */
   remind(ctx: EsignContext, externalId: string): Promise<number>

@@ -40,7 +40,7 @@ vi.mock('@/lib/supabase', () => ({
       const chain: Record<string, unknown> = {}
       for (const m of ['select', 'in', 'lt', 'or', 'eq']) chain[m] = () => chain
       chain.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
-        (table === 'docusign_envelopes' ? query() : Promise.resolve({ data: [], error: null })).then(resolve, reject)
+        (table === 'agreements' ? query() : Promise.resolve({ data: [], error: null })).then(resolve, reject)
       chain.update = () => ({ eq: async () => ({ error: null }) })
       return chain
     },

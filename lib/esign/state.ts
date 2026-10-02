@@ -90,12 +90,12 @@ export async function loadEngineSummary(db: SupabaseClient, now = new Date()): P
         ? 'native'
         : 'docusign'
 
-  const envelopes = () => db.from('docusign_envelopes').select('id', { count: 'exact', head: true })
+  const envelopes = () => db.from('agreements').select('id', { count: 'exact', head: true })
 
   const [unarchived, failing, documents, restricted, runs, unreplicated, waiting] = await Promise.all([
     envelopes().eq('status', 'completed').is('reused_from', null).is('archived_at', null),
     envelopes().eq('status', 'completed').is('archived_at', null).gt('archive_attempts', 0),
-    db.from('docusign_envelopes')
+    db.from('agreements')
       .select('signed_pdf_bytes, certificate_bytes', { count: 'exact' })
       .not('signed_pdf_path', 'is', null),
     envelopes().not('restricted_at', 'is', null),

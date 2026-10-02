@@ -40,7 +40,7 @@ export async function retainSignedRecords(
   if (ids.length === 0) return { restricted: 0, removedUnsigned: 0 }
 
   const { data: restricted, error: restrictError } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .update({ restricted_at: now.toISOString(), updated_at: now.toISOString() })
     .in(column, ids)
     .eq('status', 'completed')
@@ -53,7 +53,7 @@ export async function retainSignedRecords(
   let removedUnsigned = 0
   if (scope.kind !== 'member') {
     const { data: removed, error: removeError } = await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .delete()
       .in('participant_id', ids)
       .neq('status', 'completed')
@@ -112,7 +112,7 @@ export async function expireUnsigned(
 ): Promise<ExpireResult> {
   const now = opts.now ?? new Date()
   const { data: envelopes, error } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id')
     .eq('provider', 'native')
     .in('status', ['sent', 'delivered'])
@@ -123,7 +123,7 @@ export async function expireUnsigned(
   if (!envelopes?.length) return { eligible: 0, expired: 0, failed: [] }
 
   const { data: recipients, error: rErr } = await db
-    .from('docusign_envelope_recipients')
+    .from('agreement_recipients')
     .select('id, envelope_row, status, token_version, token_expires_at, signature_image_path')
     .in('envelope_row', envelopes.map((e) => e.id as string))
   if (rErr) throw new Error(`Recipient lookup failed: ${rErr.message}`)
@@ -151,7 +151,7 @@ export async function expireUnsigned(
       const signers = byEnvelope.get(id) ?? []
       // Void first, under a condition, so a signature landing right now wins.
       const { data: voided, error: vErr } = await db
-        .from('docusign_envelopes')
+        .from('agreements')
         .update({ status: 'voided', prefill: {}, updated_at: now.toISOString() })
         .eq('id', id)
         .in('status', ['sent', 'delivered'])
@@ -160,7 +160,7 @@ export async function expireUnsigned(
       if (!voided?.length) continue
       for (const r of signers) {
         const { error: cErr } = await db
-          .from('docusign_envelope_recipients')
+          .from('agreement_recipients')
           .update({ ...CLEARED_SIGNING_DATA, token_version: (r.token_version as number) + 1 })
           .eq('id', r.id)
         if (cErr) throw new Error(`Clearing signer data failed: ${cErr.message}`)
@@ -200,7 +200,7 @@ export async function purgeExpired(
 ): Promise<PurgeResult> {
   const now = opts.now ?? new Date()
   const { data, error } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, signed_pdf_path, certificate_path')
     .lte('retain_until', now.toISOString())
     .order('retain_until', { ascending: true })
@@ -219,7 +219,7 @@ export async function purgeExpired(
       // Drawn signatures live beside the record; the signer rows that point at
       // them go by cascade, so collect the paths first.
       const { data: drawn } = await db
-        .from('docusign_envelope_recipients')
+        .from('agreement_recipients')
         .select('signature_image_path')
         .eq('envelope_row', row.id)
         .not('signature_image_path', 'is', null)
@@ -243,7 +243,7 @@ export async function purgeExpired(
       // The audit trail is append-only; only this function may remove it.
       const { error: auditError } = await db.rpc('esign_purge_audit', { p_envelope: row.id })
       if (auditError) throw new Error(`Audit trail delete failed: ${auditError.message}`)
-      const { error: rowError } = await db.from('docusign_envelopes').delete().eq('id', row.id)
+      const { error: rowError } = await db.from('agreements').delete().eq('id', row.id)
       if (rowError) throw new Error(`Row delete failed: ${rowError.message}`)
       purged++
     } catch (err) {

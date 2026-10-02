@@ -39,7 +39,7 @@ const MEMBER_COLUMNS =
 /** A signed agreement of any kind, still within its three-year validity. */
 async function agreementOnFile(db: SupabaseClient, memberId: string, now = new Date()): Promise<boolean> {
   const { data } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('completed_at')
     .eq('member_id', memberId)
     .eq('status', 'completed')
@@ -54,7 +54,7 @@ async function agreementOnFile(db: SupabaseClient, memberId: string, now = new D
 /** Any agreement out for signature for this member: paperwork is already on its way. */
 async function agreementInFlight(db: SupabaseClient, memberId: string): Promise<boolean> {
   const { data } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id')
     .eq('member_id', memberId)
     .in('envelope_type', COVERING_TYPES)

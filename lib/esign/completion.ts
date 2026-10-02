@@ -63,7 +63,7 @@ export async function onEnvelopeCompleted(
   await archiveEnvelope(db, envelope)
 
   const { data: claimed } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .update({ completion_notified_at: new Date().toISOString() })
     .eq('id', envelope.id)
     .is('completion_notified_at', null)
@@ -133,7 +133,7 @@ async function logCompletion(db: SupabaseClient, envelope: CompletedEnvelope): P
  */
 async function notifyNativeSigners(db: SupabaseClient, envelope: CompletedEnvelope): Promise<void> {
   const { data } = await db
-    .from('docusign_envelope_recipients')
+    .from('agreement_recipients')
     .select('id, name, email, member_id, token_version')
     .eq('envelope_row', envelope.id)
   const type = (envelope.envelope_type ?? 'minor') as AgreementType

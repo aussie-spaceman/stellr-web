@@ -91,7 +91,7 @@ async function cleanupDocusignForEnvelope(envelopeId: string): Promise<ExternalR
   try {
     const db = supabaseServer()
     const { data: row } = await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .select('envelope_id, provider, status')
       .eq('id', envelopeId)
       .maybeSingle()
@@ -110,12 +110,12 @@ async function cleanupDocusignForEnvelope(envelopeId: string): Promise<ExternalR
   }
 }
 
-// Voids every in-flight envelope whose docusign_envelopes row matches
+// Voids every in-flight envelope whose agreements row matches
 // `column = value` (e.g. member_id, participant_id).
 async function cleanupDocusignByColumn(column: string, value: string): Promise<ExternalResult[]> {
   const db = supabaseServer()
   const { data: envs } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id')
     .eq(column, value)
   const out: ExternalResult[] = []
@@ -126,7 +126,7 @@ async function cleanupDocusignByColumn(column: string, value: string): Promise<E
 }
 
 // Dispatches the external cleanups declared on the entity. `id` is the local row
-// id (member id, docusign_envelopes id, participant id, registration id, etc.).
+// id (member id, agreements id, participant id, registration id, etc.).
 export async function runExternalCleanup(def: EntityDef, id: string, mode: DeleteMode): Promise<ExternalResult[]> {
   const kinds: ExternalCleanupKind[] = def.external ?? []
   const results: ExternalResult[] = []

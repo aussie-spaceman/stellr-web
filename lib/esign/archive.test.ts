@@ -40,14 +40,14 @@ beforeEach(() => {
 
 describe('archiveEnvelope', () => {
   it('stores the signed PDF and certificate, and records path, hash and retention', async () => {
-    const db = fakeSupabase({ docusign_envelopes: [completed()] })
+    const db = fakeSupabase({ agreements: [completed()] })
     const outcome = await archiveEnvelope(db.client, completed())
 
     expect(outcome).toEqual({ kind: 'archived', path: 'docusign/2026/row-1/signed.pdf', sha256: sha256Hex(pdf) })
     expect(db.objects.has(`${SIGNED_BUCKET}/docusign/2026/row-1/signed.pdf`)).toBe(true)
     expect(db.objects.has(`${SIGNED_BUCKET}/docusign/2026/row-1/certificate.pdf`)).toBe(true)
 
-    const row = db.table('docusign_envelopes')[0]
+    const row = db.table('agreements')[0]
     expect(row.signed_pdf_sha256).toBe(sha256Hex(pdf))
     expect(row.certificate_path).toBe('docusign/2026/row-1/certificate.pdf')
     expect(row.archived_at).toBeTruthy()
@@ -55,7 +55,7 @@ describe('archiveEnvelope', () => {
   })
 
   it('keeps names out of object paths', async () => {
-    const db = fakeSupabase({ docusign_envelopes: [completed()] })
+    const db = fakeSupabase({ agreements: [completed()] })
     await archiveEnvelope(db.client, completed())
     for (const key of db.objects.keys()) expect(key).not.toMatch(/jos|alvarez|ana/i)
   })
@@ -71,11 +71,11 @@ describe('archiveEnvelope', () => {
 
   it('counts a failure on the row and does not throw', async () => {
     fetchSignedDocument.mockRejectedValue(new Error('DocuSign document fetch failed: ENVELOPE_DOES_NOT_EXIST'))
-    const db = fakeSupabase({ docusign_envelopes: [completed({ archive_attempts: 2 })] })
+    const db = fakeSupabase({ agreements: [completed({ archive_attempts: 2 })] })
 
     const outcome = await archiveEnvelope(db.client, completed({ archive_attempts: 2 }))
     expect(outcome.kind).toBe('failed')
-    const row = db.table('docusign_envelopes')[0]
+    const row = db.table('agreements')[0]
     expect(row.archive_attempts).toBe(3)
     expect(row.archive_error).toContain('ENVELOPE_DOES_NOT_EXIST')
     expect(row.archived_at).toBeNull()
@@ -107,7 +107,7 @@ describe('archivePending', () => {
       if (row.envelope_id === 'env-b') throw new Error('gone')
       return { pdf, certificate: null }
     })
-    const db = fakeSupabase({ docusign_envelopes: rows })
+    const db = fakeSupabase({ agreements: rows })
 
     const result = await archivePending(db.client, { limit: 20 })
     expect(result.eligible).toBe(2)
@@ -116,7 +116,7 @@ describe('archivePending', () => {
   })
 
   it('changes nothing on a dry run', async () => {
-    const db = fakeSupabase({ docusign_envelopes: [completed()] })
+    const db = fakeSupabase({ agreements: [completed()] })
     const result = await archivePending(db.client, { limit: 20, dryRun: true })
     expect(result).toEqual({ eligible: 1, archived: 0, failed: [] })
     expect(fetchSignedDocument).not.toHaveBeenCalled()
@@ -136,17 +136,17 @@ describe('loadSignedRecord', () => {
   })
 
   it('archives an unstored DocuSign agreement on first download', async () => {
-    const db = fakeSupabase({ docusign_envelopes: [completed()] })
+    const db = fakeSupabase({ agreements: [completed()] })
     const record = await loadSignedRecord(db.client, completed())
     expect(record.kind).toBe('url')
-    expect(db.table('docusign_envelopes')[0].archived_at).toBeTruthy()
+    expect(db.table('agreements')[0].archived_at).toBeTruthy()
   })
 
   it('falls back to the live document when storing fails, so nobody is refused it', async () => {
     fetchSignedDocument
       .mockRejectedValueOnce(new Error('storage path failed'))
       .mockResolvedValueOnce({ pdf, certificate: null })
-    const db = fakeSupabase({ docusign_envelopes: [completed()] })
+    const db = fakeSupabase({ agreements: [completed()] })
     const record = await loadSignedRecord(db.client, completed())
     expect(record.kind).toBe('bytes')
   })

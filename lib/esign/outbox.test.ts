@@ -17,8 +17,8 @@ const recipient = (id: string, order: number, role = 'Guardian') => ({
 
 function setup(budget: number) {
   const db = fakeSupabase({
-    docusign_envelopes: [{ id: 'env-1', envelope_type: 'minor', event_title: 'E', minor_name: 'Kid', status: 'sent', prefill: {} }],
-    docusign_envelope_recipients: [recipient('1', 1), recipient('2', 2, 'Minor'), recipient('3', 1)],
+    agreements: [{ id: 'env-1', envelope_type: 'minor', event_title: 'E', minor_name: 'Kid', status: 'sent', prefill: {} }],
+    agreement_recipients: [recipient('1', 1), recipient('2', 2, 'Minor'), recipient('3', 1)],
   })
   let used = 0
   db.rpcs.esign_claim_email = () => (used < budget ? (used++, true) : false)
@@ -36,7 +36,7 @@ afterEach(() => vi.unstubAllEnvs())
 describe('sendInvites', () => {
   it('sends guardians first and stops at the day’s budget, leaving the rest queued', async () => {
     const db = setup(2)
-    const rows = db.table('docusign_envelope_recipients')
+    const rows = db.table('agreement_recipients')
     const result = await sendInvites(db.client, rows as never)
 
     expect(result).toEqual({ sent: 2, deferred: 1, failed: 0 })
@@ -48,7 +48,7 @@ describe('sendInvites', () => {
 
   it('puts a signing link, not an attachment, in the email', async () => {
     const db = setup(5)
-    await sendInvites(db.client, [db.table('docusign_envelope_recipients')[0]] as never)
+    await sendInvites(db.client, [db.table('agreement_recipients')[0]] as never)
     const msg = sendEmail.mock.calls[0][0]
     expect(msg.text).toMatch(/\/sign#[0-9a-f-]{36}\.s1\.\d+\./)
     expect(msg.attachments).toBeUndefined()
@@ -57,10 +57,10 @@ describe('sendInvites', () => {
   it('stops the batch on Resend’s rate limit or quota, and records the failure', async () => {
     const db = setup(10)
     sendEmail.mockRejectedValueOnce(new EmailSendError('daily quota', 429))
-    const result = await sendInvites(db.client, db.table('docusign_envelope_recipients') as never)
+    const result = await sendInvites(db.client, db.table('agreement_recipients') as never)
     expect(result).toEqual({ sent: 0, deferred: 2, failed: 1 })
     expect(sendEmail).toHaveBeenCalledTimes(1)
-    const first = db.table('docusign_envelope_recipients').find((r) => r.recipient_id === '1')
+    const first = db.table('agreement_recipients').find((r) => r.recipient_id === '1')
     expect(first?.invite_error).toMatch(/daily quota/)
   })
 })
@@ -70,11 +70,11 @@ describe('a parent with several forms', () => {
   function siblings(budget: number) {
     const parent = (id: string, env: string) => ({ ...recipient(id, 1), envelope_row: env, email: id === '1' ? 'Pat@x.test' : 'pat@x.test', name: 'Pat Lee' })
     const db = fakeSupabase({
-      docusign_envelopes: [
+      agreements: [
         { id: 'env-luke', envelope_type: 'minor', event_title: 'CO SDC', minor_name: 'Luke Lee', status: 'sent', prefill: { MinorName: 'Luke' } },
         { id: 'env-lily', envelope_type: 'minor', event_title: 'CO SDC', minor_name: 'Lily Lee', status: 'sent', prefill: { MinorName: 'Lily' } },
       ],
-      docusign_envelope_recipients: [parent('1', 'env-luke'), parent('2', 'env-lily'), { ...recipient('3', 2, 'Minor'), envelope_row: 'env-luke' }],
+      agreement_recipients: [parent('1', 'env-luke'), parent('2', 'env-lily'), { ...recipient('3', 2, 'Minor'), envelope_row: 'env-luke' }],
     })
     const claims = { used: 0 }
     db.rpcs.esign_claim_email = () => (claims.used < budget ? (claims.used++, true) : false)
@@ -84,7 +84,7 @@ describe('a parent with several forms', () => {
 
   it('gets one email with a link for each child, spending one send', async () => {
     const { db, claims } = siblings(5)
-    const rows = db.table('docusign_envelope_recipients')
+    const rows = db.table('agreement_recipients')
     const result = await sendInvites(db.client, rows.slice(0, 2) as never)
 
     expect(result).toEqual({ sent: 2, deferred: 0, failed: 0 })
@@ -103,7 +103,7 @@ describe('a parent with several forms', () => {
 
   it('inside batchInvites, waits and sends once at the end', async () => {
     const { db, claims } = siblings(5)
-    const rows = db.table('docusign_envelope_recipients')
+    const rows = db.table('agreement_recipients')
     const during = await batchInvites(db.client, async () => {
       expect(await sendInvites(db.client, [rows[0]] as never)).toEqual({ sent: 0, deferred: 1, failed: 0 })
       expect(await sendInvites(db.client, [rows[1]] as never)).toEqual({ sent: 0, deferred: 1, failed: 0 })
@@ -116,7 +116,7 @@ describe('a parent with several forms', () => {
 
   it('a student is never folded into their parent’s email', async () => {
     const { db } = siblings(5)
-    const rows = db.table('docusign_envelope_recipients')
+    const rows = db.table('agreement_recipients')
     await sendInvites(db.client, [rows[0], { ...rows[2], email: 'pat@x.test' }] as never)
     expect(sendEmail).toHaveBeenCalledTimes(2)
   })

@@ -31,7 +31,7 @@ async function main() {
 
   const [kind, arg] = process.argv.slice(2)
   if (kind === 'link') {
-    const { data: r } = await db.from('docusign_envelope_recipients').select('id, token_version, token_expires_at').eq('id', arg).single()
+    const { data: r } = await db.from('agreement_recipients').select('id, token_version, token_expires_at').eq('id', arg).single()
     console.log(signNowUrlFor(r as never).replace(/^https?:\/\/[^/]+/, process.env.ESIGN_DEV_BASE ?? 'http://localhost:3100'))
     return
   }
@@ -53,7 +53,7 @@ async function main() {
   if (!req) throw new Error('Kind: minor | adult | mentor | membership [--minor] | link <recipient id>')
 
   const created = await nativeProvider.create({ db }, req as never)
-  const { data: row, error } = await db.from('docusign_envelopes').insert({
+  const { data: row, error } = await db.from('agreements').insert({
     participant_id: null,
     member_id: null,
     event_slug: 'dev-test',
@@ -72,7 +72,7 @@ async function main() {
   if (error) throw new Error(error.message)
   await created.afterRecord!(db, row.id as string)
 
-  const { data: recipients } = await db.from('docusign_envelope_recipients').select('id, role_name, status, token_version, token_expires_at').eq('envelope_row', row.id).order('routing_order')
+  const { data: recipients } = await db.from('agreement_recipients').select('id, role_name, status, token_version, token_expires_at').eq('envelope_row', row.id).order('routing_order')
   console.log(`Agreement ${row.id} (${created.externalId})`)
   for (const r of recipients ?? []) {
     const link = r.status === 'sent' ? signNowUrlFor(r as never).replace(/^https?:\/\/[^/]+/, process.env.ESIGN_DEV_BASE ?? 'http://localhost:3100') : '(waits for the earlier signer)'

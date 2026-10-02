@@ -104,7 +104,7 @@ async function issue(db: FakeDb) {
     signers_total: created.signerCount, signers_completed: 0, completion_notified_at: null,
     ...created.rowFields,
   }
-  db.table('docusign_envelopes').push(row)
+  db.table('agreements').push(row)
   const after = await created.afterRecord!(db.client, row.id)
   return { created, row, after }
 }
@@ -127,7 +127,7 @@ describe('Stellr signing: a minor’s consent form', () => {
     const db = await setup()
     await issue(db)
 
-    const recipients = db.table('docusign_envelope_recipients')
+    const recipients = db.table('agreement_recipients')
     expect(recipients.map((r) => [r.role_name, r.status])).toEqual([['Guardian', 'sent'], ['Minor', 'created']])
     expect(sent.map((e) => e.to)).toEqual(['pat@home.test'])
     expect(sent[0].subject).toMatch(/Parent\/guardian signature needed/)
@@ -198,7 +198,7 @@ describe('Stellr signing: a minor’s consent form', () => {
     expect(done).toMatchObject({ ok: true, agreementComplete: true })
 
     // Sealed and stored.
-    const envelope = db.table('docusign_envelopes')[0]
+    const envelope = db.table('agreements')[0]
     expect(envelope).toMatchObject({ status: 'completed', seal_kind: 'hash', signers_completed: 2 })
     expect(envelope.signed_pdf_sha256).toMatch(/^[0-9a-f]{64}$/)
     expect(db.objects.has(`${SIGNED_BUCKET}/${envelope.signed_pdf_path}`)).toBe(true)
@@ -237,7 +237,7 @@ describe('Stellr signing: a minor’s consent form', () => {
 
     const refused = await submitSignature(db.client, await ctx(), { values, signatureText: 'Someone Else' }, meta)
     expect(refused).toMatchObject({ ok: false, status: 409, error: 'name_differs', nameOnRecord: 'Pat Rivera' })
-    expect(db.table('docusign_envelope_recipients')[0].status).toBe('sent')
+    expect(db.table('agreement_recipients')[0].status).toBe('sent')
 
     const accepted = await submitSignature(db.client, await ctx(), { values, signatureText: 'Patricia Rivera', confirmDifferentName: true }, meta)
     expect(accepted).toMatchObject({ ok: true })
@@ -256,7 +256,7 @@ describe('Stellr signing: a minor’s consent form', () => {
     const png = testPng()
     const first = await submitSignature(db.client, await ctx(), { values: { GuardianPhone: '555 0199' }, signatureText: 'Pat Rivera', signaturePng: png }, meta)
     expect(first).toMatchObject({ ok: true })
-    const parent = db.table('docusign_envelope_recipients').find((r) => r.role_name === 'Guardian')!
+    const parent = db.table('agreement_recipients').find((r) => r.role_name === 'Guardian')!
     expect(parent).toMatchObject({ signature_kind: 'drawn', signature_text: 'Pat Rivera' })
     expect(db.objects.get(`${SIGNED_BUCKET}/${parent.signature_image_path}`)).toEqual(png)
     expect(db.table('esign_audit_events').find((e) => e.event === 'signed')?.detail).toMatchObject({
@@ -272,7 +272,7 @@ describe('Stellr signing: a minor’s consent form', () => {
     await recordConsent(db.client, await student(), { disclosureVersion: '2026-10-v1' }, meta)
     expect(await submitSignature(db.client, await student(), { values: { MinorDateOfBirth: '04-May-2012' }, signatureText: 'Sam Rivera' }, meta))
       .toMatchObject({ ok: true, agreementComplete: true })
-    const envelope = db.table('docusign_envelopes').find((e) => e.id === row.id)!
+    const envelope = db.table('agreements').find((e) => e.id === row.id)!
     expect(envelope.status).toBe('completed')
     const pdf = await PDFDocument.load(db.objects.get(`${SIGNED_BUCKET}/${envelope.signed_pdf_path}`)!)
     expect(pdf.getPageCount()).toBeGreaterThan(1)
@@ -291,7 +291,7 @@ describe('Stellr signing: a minor’s consent form', () => {
     const { created } = await issue(db)
     const token = linkFrom(sent[0])
     await nativeProvider.void({ db: db.client }, created.externalId, 'Reissued')
-    expect(db.table('docusign_envelopes')[0].status).toBe('voided')
+    expect(db.table('agreements')[0].status).toBe('voided')
     expect((await openLink(db.client, token, { birthYear: '2012' })).kind).toBe('invalid')
     expect(db.table('esign_audit_events').at(-1)?.event).toBe('voided')
   })

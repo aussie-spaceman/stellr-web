@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
   const repeatChaseCutoff = new Date(Date.now() - CHASE_INTERVAL_DAYS * DAY_MS).toISOString()
 
   const { data: envelopes, error: queryError } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, envelope_id, provider, envelope_type, minor_name, signer_name, signer_email, event_title, member_id, status, signers_total, signers_completed, reused_from, reminder_count')
     .in('status', ['sent', 'delivered'])
     .lt('sent_at', firstChaseCutoff)
@@ -166,7 +166,7 @@ export async function GET(req: NextRequest) {
 
       const now = new Date().toISOString()
       await db
-        .from('docusign_envelopes')
+        .from('agreements')
         .update({
           reminder_sent_at: now,
           reminder_count: (env.reminder_count ?? 0) + 1,

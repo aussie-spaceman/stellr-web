@@ -59,7 +59,7 @@ async function main() {
 
   const sample = Number(arg('--sample') ?? 10)
   const { data } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, signed_pdf_sha256')
     .not('replicated_at', 'is', null)
     .limit(1000)

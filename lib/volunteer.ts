@@ -146,7 +146,7 @@ export async function dispatchVolunteerAgreement(
   if (!member.email) return 'no_email'
   if (!opts.force) {
     const { data: inFlight } = await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .select('id')
       .eq('member_id', member.id)
       .in('envelope_type', coveringTypes('volunteer'))
@@ -194,7 +194,7 @@ export async function getVolunteerStatuses(
   const ids = members.map((m) => m.id)
   const [{ data: envelopes }, compliance] = await Promise.all([
     db
-      .from('docusign_envelopes')
+      .from('agreements')
       .select('member_id, status, completed_at')
       .in('member_id', ids)
       .in('envelope_type', coveringTypes('volunteer')),
@@ -338,7 +338,7 @@ export async function loadVolunteerAgreement(
   memberId: string,
 ): Promise<VolunteerAgreementRecord | null> {
   const { data } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, status, event_title, sent_at, completed_at, reused_from, signers_total, signers_completed')
     .eq('member_id', memberId)
     .in('envelope_type', coveringTypes('volunteer'))

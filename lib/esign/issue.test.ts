@@ -28,7 +28,7 @@ const adult = {
 function setup(overflowTypes = ['adult']) {
   return fakeSupabase({
     esign_provider_state: [{ id: true, mode: 'auto', monthly_cap: 40, reserve: 2, overflow_types: overflowTypes, overflow_allowlist: [], exhausted_until: null }],
-    docusign_envelopes: [],
+    agreements: [],
   })
 }
 

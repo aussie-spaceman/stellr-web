@@ -66,7 +66,7 @@ describe('mayTransition', () => {
 describe('onEnvelopeCompleted', () => {
   function db() {
     return fakeSupabase({
-      docusign_envelopes: [{ id: 'row-1', completion_notified_at: null }],
+      agreements: [{ id: 'row-1', completion_notified_at: null }],
       members: [{ id: 'm1', email: 'sam@example.test', first_name: 'Sam' }],
     })
   }
@@ -78,7 +78,7 @@ describe('onEnvelopeCompleted', () => {
     expect(archiveEnvelope).toHaveBeenCalledTimes(1)
     expect(logActivity).toHaveBeenCalledTimes(1)
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'sam@example.test', subject: 'minor-done' }))
-    expect(fake.table('docusign_envelopes')[0].completion_notified_at).toBeTruthy()
+    expect(fake.table('agreements')[0].completion_notified_at).toBeTruthy()
   })
 
   it('does not email or log again on a replayed completion, but still retries archive and opt-out', async () => {

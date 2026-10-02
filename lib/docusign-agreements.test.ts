@@ -69,7 +69,7 @@ function makeDb(fixture: Fixture) {
 
 function resolve(table: string, filters: Filters, fixture: Fixture): unknown {
   if (table === 'members') return fixture.memberByEmail ?? null
-  if (table !== 'docusign_envelopes') return null
+  if (table !== 'agreements') return null
   if (filters.eq.participant_id) {
     const row = fixture.participantEnvelope
     if (!row) return null

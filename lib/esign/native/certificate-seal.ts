@@ -20,7 +20,7 @@ export type CertificateSealOutcome =
 export async function applyCertificateSeal(db: SupabaseClient, rowId: string, now = new Date()): Promise<CertificateSealOutcome> {
   if (!sealConfigured()) return { sealed: false, reason: 'no seal certificate configured' }
   const { data: row, error } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, provider, status, seal_kind, signed_pdf_path, signed_pdf_sha256')
     .eq('id', rowId)
     .maybeSingle()
@@ -44,7 +44,7 @@ export async function applyCertificateSeal(db: SupabaseClient, rowId: string, no
 
   // Only if still hash-sealed: two runs at once seal it once.
   const { data: updated, error: upError } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .update({
       signed_pdf_path: path,
       signed_pdf_sha256: sha,
@@ -85,7 +85,7 @@ export interface SealPendingResult {
 export async function sealPending(db: SupabaseClient, opts: { limit: number; dryRun?: boolean; now?: Date }): Promise<SealPendingResult> {
   if (!sealConfigured()) return { eligible: 0, sealed: 0, failed: [], skipped: 'no seal certificate configured' }
   const { data, error } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id')
     .eq('provider', 'native')
     .eq('status', 'completed')

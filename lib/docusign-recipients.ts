@@ -4,14 +4,14 @@ import type { RecipientLike } from './docusign-status'
 import { fetchEnvelopeRecipients } from './esign/operations'
 import { notifyCommunityAdmins } from './notify'
 
-// Persistence for docusign_envelope_recipients (migration 148): pull the signer
+// Persistence for agreement_recipients (migration 148): pull the signer
 // list from DocuSign and mirror it into the DB so every surface can answer "who
 // is outstanding?" without a live API call.
 
 /**
  * Refreshes the recipient rows for one envelope from DocuSign and returns them.
  * Also keeps the legacy signers_total / signers_completed counters on
- * docusign_envelopes current, so anything still reading those stays correct.
+ * agreements current, so anything still reading those stays correct.
  *
  * Upserts on (envelope_row, recipient_id), which is stable across resends — so
  * this is idempotent under DocuSign Connect's at-least-once delivery.
@@ -35,14 +35,14 @@ export async function syncEnvelopeRecipients(
   if (provider === 'native') {
     const { total, completed } = summariseSigners(recipients)
     await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .update({ signers_total: total, signers_completed: completed, updated_at: now })
       .eq('id', envelopeRowId)
     return recipients
   }
 
   const { error } = await db
-    .from('docusign_envelope_recipients')
+    .from('agreement_recipients')
     .upsert(
       recipients.map((r) => ({
         envelope_row:   envelopeRowId,
@@ -63,14 +63,14 @@ export async function syncEnvelopeRecipients(
 
   const { total, completed } = summariseSigners(recipients)
   await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .update({ signers_total: total, signers_completed: completed, updated_at: now })
     .eq('id', envelopeRowId)
 
   return recipients
 }
 
-/** Recipient rows for many envelopes at once, keyed by docusign_envelopes.id. */
+/** Recipient rows for many envelopes at once, keyed by agreements.id. */
 export async function loadRecipientsByEnvelopeRows(
   db: SupabaseClient,
   envelopeRowIds: string[],
@@ -80,8 +80,8 @@ export async function loadRecipientsByEnvelopeRows(
   if (ids.length === 0) return byRow
 
   const { data, error } = await db
-    .from('docusign_envelope_recipients')
-    .select('envelope_row, name, email, role_name, status, delivered_at, routing_order, invite_sent_at, envelope:docusign_envelopes!inner(provider)')
+    .from('agreement_recipients')
+    .select('envelope_row, name, email, role_name, status, delivered_at, routing_order, invite_sent_at, envelope:agreements!inner(provider)')
     .in('envelope_row', ids)
     .order('routing_order', { ascending: true })
   if (error) {

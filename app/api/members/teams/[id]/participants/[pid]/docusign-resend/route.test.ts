@@ -29,7 +29,7 @@ function seed(envelopes: Record<string, unknown>[]) {
       { id: 'p-mine', registration_id: 'reg-mine' },
       { id: 'p-other', registration_id: 'reg-other' },
     ],
-    docusign_envelopes: envelopes,
+    agreements: envelopes,
   })
 }
 
@@ -74,7 +74,7 @@ describe('POST team docusign-resend', () => {
 
     seed([{ id: 'e1', participant_id: 'p-mine', envelope_id: 'env', status: 'sent', sent_at: ago(10), created_at: ago(10), last_manual_resend_at: ago(2) }])
     expect((await post('reg-mine', 'p-mine')).status).toBe(200)
-    expect(state.db!.table('docusign_envelopes')[0].last_manual_resend_at).not.toBe(ago(2))
+    expect(state.db!.table('agreements')[0].last_manual_resend_at).not.toBe(ago(2))
   })
 
   it('403s a member who does not own the group', async () => {

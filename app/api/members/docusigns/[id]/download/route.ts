@@ -35,7 +35,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!member) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { data: row } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select(STORED_RECORD_COLUMNS)
     .eq('id', id)
     .eq('member_id', member.id)

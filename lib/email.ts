@@ -465,7 +465,7 @@ export function docusignSentToMinorEmail({
 
 /**
  * Reminder to the student. `waitingOn` is the list of signers who have NOT yet
- * signed, taken from docusign_envelope_recipients.
+ * signed, taken from agreement_recipients.
  *
  * WHY the shape changed (4 Sept 2026): this template used to hard-code "we
  * haven't received a signed consent form from {guardianName}" and the cron never

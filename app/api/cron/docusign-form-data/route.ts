@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - LOOKBACK_DAYS * DAY_MS).toISOString()
 
   const { data, error } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select(OPT_OUT_ENVELOPE_COLUMNS)
     .eq('envelope_type', 'minor')
     .eq('status', 'completed')

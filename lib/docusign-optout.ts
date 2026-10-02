@@ -50,7 +50,7 @@ export async function recordCredentialOptOutFromForm(
   const now = new Date().toISOString()
   const update: Record<string, unknown> = { form_data_read_at: now, updated_at: now }
   if (ticked) update.credential_sharing_opt_out = true
-  const { error } = await db.from('docusign_envelopes').update(update).eq('id', env.id)
+  const { error } = await db.from('agreements').update(update).eq('id', env.id)
   if (error) {
     console.error('[docusign-optout] write failed:', error.message)
     return 'failed'

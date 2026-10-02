@@ -35,7 +35,7 @@ async function setup(): Promise<{ db: FakeDb; original: Uint8Array }> {
   const original = await doc.save()
   const path = 'native/2026/agr-1/signed.pdf'
   const db = fakeSupabase({
-    docusign_envelopes: [
+    agreements: [
       { id: 'agr-1', provider: 'native', status: 'completed', seal_kind: 'hash', signed_pdf_path: path, signed_pdf_sha256: sha256Hex(original), completed_at: '2026-10-02T00:00:00Z', replicated_at: '2026-10-02T01:00:00Z', certificate_path: 'native/2026/agr-1/audit.json', retain_until: '2020-01-01T00:00:00Z' },
       { id: 'ds-1', provider: 'docusign', status: 'completed', seal_kind: null, signed_pdf_path: 'docusign/2026/ds-1/signed.pdf', completed_at: '2026-10-01T00:00:00Z' },
     ],
@@ -52,7 +52,7 @@ describe('applyCertificateSeal', () => {
     const out = await applyCertificateSeal(db.client, 'agr-1')
     expect(out).toEqual({ sealed: true, kind: 'pades', path: 'native/2026/agr-1/sealed.pdf' })
 
-    const row = db.table('docusign_envelopes')[0]
+    const row = db.table('agreements')[0]
     const sealed = db.objects.get(`${SIGNED_BUCKET}/native/2026/agr-1/sealed.pdf`)!
     expect(row).toMatchObject({ seal_kind: 'pades', signed_pdf_path: 'native/2026/agr-1/sealed.pdf', signed_pdf_sha256: sha256Hex(sealed), replicated_at: null })
     expect(db.objects.get(`${SIGNED_BUCKET}/native/2026/agr-1/signed.pdf`)).toEqual(original)
@@ -69,7 +69,7 @@ describe('applyCertificateSeal', () => {
     const { db } = await setup()
     db.objects.set(`${SIGNED_BUCKET}/native/2026/agr-1/signed.pdf`, new TextEncoder().encode('%PDF-1.7 changed'))
     await expect(applyCertificateSeal(db.client, 'agr-1')).rejects.toThrow(/does not match/)
-    expect(db.table('docusign_envelopes')[0].seal_kind).toBe('hash')
+    expect(db.table('agreements')[0].seal_kind).toBe('hash')
   })
 
   it('does nothing without a certificate, or for DocuSign records', async () => {

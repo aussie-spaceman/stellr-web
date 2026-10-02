@@ -7,7 +7,7 @@ import type { SignedDocument } from '@/lib/esign/types'
 // that issued it. Callers pass the stored row; they never need to know which
 // engine that was.
 
-/** The columns of docusign_envelopes these helpers read. */
+/** The columns of agreements these helpers read. */
 export interface EnvelopeRef {
   envelope_id: string
   provider?: string | null

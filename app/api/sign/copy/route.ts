@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     const verified = verifyToken(body.token, 'download')
     if (!verified) return invalidLink()
     const { data: r } = await db
-      .from('docusign_envelope_recipients')
+      .from('agreement_recipients')
       .select('id, envelope_row, status, token_version')
       .eq('id', verified.recipientId)
       .maybeSingle()
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
   }
 
   const { data: row } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select(STORED_RECORD_COLUMNS)
     .eq('id', envelopeRow)
     .eq('provider', 'native')

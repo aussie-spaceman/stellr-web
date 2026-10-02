@@ -85,7 +85,7 @@ export async function eventAccessGates(member: CommunityMember, eventSlug: strin
   // DocuSign: load the members' envelopes; a required one that isn't complete blocks.
   const participantIds = mine.map((m) => m.row.id)
   const { data: envs } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('participant_id, status')
     .eq('event_slug', eventSlug)
     .in('participant_id', participantIds)
@@ -141,7 +141,7 @@ export async function reportEnrollmentGate(
   let hasCompleted = false
   if (pids.length) {
     const { count } = await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .select('id', { count: 'exact', head: true })
       .in('participant_id', pids)
       .eq('status', 'completed')

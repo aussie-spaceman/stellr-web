@@ -56,8 +56,8 @@ export async function signingPath(recipientId: string): Promise<string> {
 export async function readAgreement(rowId: string) {
   const client = db()
   const [{ data: envelope }, { data: recipients }, { data: brokenAt }] = await Promise.all([
-    client.from('docusign_envelopes').select('*').eq('id', rowId).single(),
-    client.from('docusign_envelope_recipients').select('*').eq('envelope_row', rowId).order('routing_order'),
+    client.from('agreements').select('*').eq('id', rowId).single(),
+    client.from('agreement_recipients').select('*').eq('envelope_row', rowId).order('routing_order'),
     client.rpc('esign_verify_audit', { p_envelope: rowId }),
   ])
   const { data: events } = await client
@@ -72,7 +72,7 @@ export async function readAgreement(rowId: string) {
 export async function removeAgreement(rowId: string): Promise<void> {
   const client = db()
   const { data: row } = await client
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('signed_pdf_path, certificate_path')
     .eq('id', rowId)
     .maybeSingle()
@@ -80,6 +80,6 @@ export async function removeAgreement(rowId: string): Promise<void> {
   if (paths.length) await client.storage.from('signed-agreements').remove(paths)
   await client.rpc('esign_purge_audit', { p_envelope: rowId })
   await client.from('esign_access_log').delete().eq('envelope_row', rowId)
-  await client.from('docusign_envelope_recipients').delete().eq('envelope_row', rowId)
-  await client.from('docusign_envelopes').delete().eq('id', rowId)
+  await client.from('agreement_recipients').delete().eq('envelope_row', rowId)
+  await client.from('agreements').delete().eq('id', rowId)
 }

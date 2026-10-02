@@ -13,7 +13,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const db = supabaseServer()
 
   const { data: envelope } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('envelope_id, provider, status, reused_from')
     .eq('id', id)
     .maybeSingle()
@@ -38,7 +38,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // that family (4 Sept 2026).
   const now = new Date().toISOString()
   await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .update({ last_manual_resend_at: now, updated_at: now })
     .eq('id', id)
 

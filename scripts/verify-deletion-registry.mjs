@@ -32,7 +32,7 @@ const CHECKS = [
   ['mentoring_cohorts', 'is_active'],
   ['membership_tiers', 'is_active'],
   ['session_participants', 'member_id'], ['session_participants', 'session_id'],
-  ['docusign_envelopes', 'member_id'], ['docusign_envelopes', 'participant_id'],
+  ['agreements', 'member_id'], ['agreements', 'participant_id'],
   ['participants', 'registration_id'],
   // refund engine (migration 027)
   ['participants', 'stripe_payment_intent_id'], ['registrations', 'stripe_payment_intent_id'],

@@ -121,7 +121,7 @@ export async function loadPaperworkGaps(db: SupabaseClient, now = new Date()): P
   const ids = participants.map((p) => p.id)
   for (let i = 0; i < ids.length; i += 200) {
     const { data, error: envError } = await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .select('id, participant_id, envelope_id, status, issue_error, created_at, updated_at')
       .in('participant_id', ids.slice(i, i + 200))
     if (envError) throw new Error(`Agreement lookup failed: ${envError.message}`)
@@ -132,7 +132,7 @@ export async function loadPaperworkGaps(db: SupabaseClient, now = new Date()): P
   const bounced = new Map<string, string | null>()
   for (let i = 0; i < live.length; i += 200) {
     const { data } = await db
-      .from('docusign_envelope_recipients')
+      .from('agreement_recipients')
       .select('envelope_row, invite_error')
       .in('envelope_row', live.slice(i, i + 200))
       .eq('status', 'autoresponded')

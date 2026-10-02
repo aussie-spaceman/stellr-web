@@ -277,7 +277,7 @@ export async function syncDocusignUsage(
 export async function countDocusignIssuedSince(db: SupabaseClient, since: Date): Promise<number> {
   try {
     const { count, error } = await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .select('id', { count: 'exact', head: true })
       .eq('provider', 'docusign')
       .is('reused_from', null)

@@ -22,7 +22,7 @@ export async function retryFailedIssues(
   const now = opts.now ?? new Date()
   const since = new Date(now.getTime() - RETRY_WINDOW_DAYS * 86_400_000).toISOString()
   const { data, error } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, envelope_id, envelope_type, participant_id, member_id, created_at')
     .like('envelope_id', `${ISSUE_FAILED_PREFIX}%`)
     .gte('created_at', since)
@@ -37,7 +37,7 @@ export async function retryFailedIssues(
   for (const row of rows) {
     // Remove the marker first: a retry that fails again records a fresh one,
     // so markers never pile up for the same person.
-    await db.from('docusign_envelopes').delete().eq('id', row.id)
+    await db.from('agreements').delete().eq('id', row.id)
     let outcome = 'skipped'
     try {
       if (row.participant_id) {

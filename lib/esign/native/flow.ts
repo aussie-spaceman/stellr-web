@@ -116,18 +116,18 @@ const ACTIVE_RECIPIENT = new Set(['sent', 'delivered'])
 // ── Loading ──────────────────────────────────────────────────────────────────
 
 export async function loadEnvelope(db: SupabaseClient, envelopeRowId: string): Promise<NativeEnvelope | null> {
-  const { data } = await db.from('docusign_envelopes').select(NATIVE_ENVELOPE_COLUMNS).eq('id', envelopeRowId).eq('provider', 'native').maybeSingle()
+  const { data } = await db.from('agreements').select(NATIVE_ENVELOPE_COLUMNS).eq('id', envelopeRowId).eq('provider', 'native').maybeSingle()
   return (data as unknown as NativeEnvelope | null) ?? null
 }
 
 export async function loadEnvelopeByExternalId(db: SupabaseClient, externalId: string): Promise<NativeEnvelope | null> {
-  const { data } = await db.from('docusign_envelopes').select(NATIVE_ENVELOPE_COLUMNS).eq('envelope_id', externalId).eq('provider', 'native').maybeSingle()
+  const { data } = await db.from('agreements').select(NATIVE_ENVELOPE_COLUMNS).eq('envelope_id', externalId).eq('provider', 'native').maybeSingle()
   return (data as unknown as NativeEnvelope | null) ?? null
 }
 
 export async function loadRecipients(db: SupabaseClient, envelopeRowId: string): Promise<NativeRecipient[]> {
   const { data, error } = await db
-    .from('docusign_envelope_recipients')
+    .from('agreement_recipients')
     .select(RECIPIENT_COLUMNS)
     .eq('envelope_row', envelopeRowId)
     .order('routing_order', { ascending: true })
@@ -136,7 +136,7 @@ export async function loadRecipients(db: SupabaseClient, envelopeRowId: string):
 }
 
 async function loadRecipient(db: SupabaseClient, recipientId: string): Promise<NativeRecipient | null> {
-  const { data } = await db.from('docusign_envelope_recipients').select(RECIPIENT_COLUMNS).eq('id', recipientId).maybeSingle()
+  const { data } = await db.from('agreement_recipients').select(RECIPIENT_COLUMNS).eq('id', recipientId).maybeSingle()
   return (data as unknown as NativeRecipient | null) ?? null
 }
 
@@ -169,7 +169,7 @@ export async function insertSigners(
     token_expires_at: s.order === first ? expires : null,
     last_synced_at: now.toISOString(),
   }))
-  const { data, error } = await db.from('docusign_envelope_recipients').insert(rows).select(RECIPIENT_COLUMNS)
+  const { data, error } = await db.from('agreement_recipients').insert(rows).select(RECIPIENT_COLUMNS)
   if (error) throw new Error(`Recording the signers failed: ${error.message}`)
 
   await appendAudit(db, {
@@ -198,7 +198,7 @@ export async function activateNext(db: SupabaseClient, envelopeRowId: string, no
 
   const expires = new Date(now.getTime() + SIGN_LINK_TTL_SECONDS * 1000).toISOString()
   const { data, error } = await db
-    .from('docusign_envelope_recipients')
+    .from('agreement_recipients')
     .update({ status: 'sent', token_expires_at: expires, last_synced_at: now.toISOString() })
     .eq('envelope_row', envelopeRowId)
     .eq('routing_order', next)
@@ -269,7 +269,7 @@ export async function openLink(
     if (!answer) return verify
     if (answer !== expectedYear) {
       await db
-        .from('docusign_envelope_recipients')
+        .from('agreement_recipients')
         .update({ failed_token_attempts: failedChecks + 1 })
         .eq('id', recipient.id)
       if (failedChecks + 1 >= MAX_FAILED_CHECKS) return { kind: 'invalid' }
@@ -420,7 +420,7 @@ export interface RequestMeta {
 export async function recordViewed(db: SupabaseClient, ctx: SessionContext, meta: RequestMeta, now = new Date()): Promise<void> {
   const first = !ctx.recipient.viewed_at
   await db
-    .from('docusign_envelope_recipients')
+    .from('agreement_recipients')
     .update({
       viewed_at: ctx.recipient.viewed_at ?? now.toISOString(),
       delivered_at: ctx.recipient.delivered_at ?? now.toISOString(),
@@ -429,7 +429,7 @@ export async function recordViewed(db: SupabaseClient, ctx: SessionContext, meta
     })
     .eq('id', ctx.recipient.id)
   if (ctx.envelope.status === 'sent') {
-    await db.from('docusign_envelopes').update({ status: 'delivered', updated_at: now.toISOString() }).eq('id', ctx.envelope.id).eq('status', 'sent')
+    await db.from('agreements').update({ status: 'delivered', updated_at: now.toISOString() }).eq('id', ctx.envelope.id).eq('status', 'sent')
   }
   if (first) {
     await appendAuditQuietly(db, { envelopeRow: ctx.envelope.id, recipientRow: ctx.recipient.id, event: 'viewed', ...auditMeta(meta) })
@@ -471,7 +471,7 @@ export async function recordConsent(
     })
   }
   await db
-    .from('docusign_envelope_recipients')
+    .from('agreement_recipients')
     .update({
       consented_at: now.toISOString(),
       disclosure_version: view.disclosureVersion,
@@ -549,7 +549,7 @@ export async function submitSignature(
   const kind = imagePath ? 'drawn' : 'typed'
 
   const { data: claimed, error } = await db
-    .from('docusign_envelope_recipients')
+    .from('agreement_recipients')
     .update({
       status: 'completed',
       signed_at: now.toISOString(),
@@ -587,7 +587,7 @@ export async function submitSignature(
 
   const recipients = await loadRecipients(db, ctx.envelope.id)
   await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .update({
       signers_completed: recipients.filter((r) => r.status === 'completed').length,
       updated_at: now.toISOString(),
@@ -610,14 +610,14 @@ export async function declineAgreement(
 ): Promise<void> {
   const cleanReason = reason.normalize('NFC').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 500)
   const { data: claimed } = await db
-    .from('docusign_envelope_recipients')
+    .from('agreement_recipients')
     .update({ status: 'declined', declined_at: now.toISOString(), declined_reason: cleanReason, token_version: ctx.recipient.token_version + 1 })
     .eq('id', ctx.recipient.id)
     .in('status', ['sent', 'delivered'])
     .select('id')
   if (!claimed?.length) return
   await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .update({ status: 'declined', declined_at: now.toISOString(), updated_at: now.toISOString() })
     .eq('id', ctx.envelope.id)
   await appendAudit(db, {
@@ -653,7 +653,7 @@ export class FinaliseError extends Error {}
  */
 export async function finaliseAgreement(db: SupabaseClient, envelopeRowId: string, now = new Date()): Promise<void> {
   const { data: claim } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .update({ sealed_at: now.toISOString() })
     .eq('id', envelopeRowId)
     .is('sealed_at', null)
@@ -756,7 +756,7 @@ export async function finaliseAgreement(db: SupabaseClient, envelopeRowId: strin
 
     const completedAt = now.toISOString()
     const { error } = await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .update({
         status: 'completed',
         completed_at: completedAt,
@@ -787,13 +787,13 @@ export async function finaliseAgreement(db: SupabaseClient, envelopeRowId: strin
     }
 
     const { onEnvelopeCompleted, COMPLETED_ENVELOPE_COLUMNS } = await import('@/lib/esign/completion')
-    const { data: done } = await db.from('docusign_envelopes').select(COMPLETED_ENVELOPE_COLUMNS).eq('id', envelopeRowId).maybeSingle()
+    const { data: done } = await db.from('agreements').select(COMPLETED_ENVELOPE_COLUMNS).eq('id', envelopeRowId).maybeSingle()
     if (done) await onEnvelopeCompleted(db, done as never)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`[esign-flow] finalising ${envelopeRowId} failed:`, message)
     await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .update({ sealed_at: null, issue_error: `Completion failed: ${message}`.slice(0, 1000), updated_at: new Date().toISOString() })
       .eq('id', envelopeRowId)
     if (err instanceof FinaliseError) return
@@ -804,7 +804,7 @@ export async function finaliseAgreement(db: SupabaseClient, envelopeRowId: strin
 /** Agreements every signer has signed but that never finished completing. Retried daily. */
 export async function finaliseStalled(db: SupabaseClient, limit = 10): Promise<{ retried: number }> {
   const { data } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, signers_total, signers_completed')
     .eq('provider', 'native')
     .in('status', ['sent', 'delivered'])

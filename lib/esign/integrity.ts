@@ -24,7 +24,7 @@ export async function checkIntegrity(
   const now = opts.now ?? new Date()
   const sample = opts.sample ?? DAILY_SAMPLE
   const { count } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id', { count: 'exact', head: true })
     .not('signed_pdf_path', 'is', null)
   const total = count ?? 0
@@ -35,7 +35,7 @@ export async function checkIntegrity(
   const day = Math.floor(now.getTime() / 86_400_000)
   const offset = (day * sample) % total
   const { data } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, provider, signed_pdf_path, signed_pdf_sha256')
     .not('signed_pdf_path', 'is', null)
     .order('id', { ascending: true })

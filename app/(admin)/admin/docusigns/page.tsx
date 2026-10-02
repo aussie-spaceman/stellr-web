@@ -21,7 +21,7 @@ export default async function AdminDocusignsPage() {
   // 1-of-2 envelope rendered as a flat "Awaiting signature" here while the
   // roster called the same row "Partially Complete" (4 Sept 2026).
   const { data: envelopes } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, envelope_id, provider, status, envelope_type, signer_name, signer_email, minor_name, event_title, event_slug, sent_at, completed_at, declined_at, reminder_sent_at, reminder_count, participant_id, member_id, reused_from, signers_total, signers_completed, credential_sharing_opt_out')
     .order('sent_at', { ascending: false })
 

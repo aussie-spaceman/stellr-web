@@ -466,7 +466,7 @@ export async function createVolunteerAgreementEnvelope(p: VolunteerAgreementPara
   return { envelopeId: data.envelopeId, signerCount }
 }
 
-/** One DocuSign signer, as stored in docusign_envelope_recipients. */
+/** One DocuSign signer, as stored in agreement_recipients. */
 export interface EnvelopeRecipient {
   recipientId:  string
   roleName:     string | null

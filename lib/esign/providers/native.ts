@@ -73,7 +73,7 @@ export const nativeProvider: EsignProvider = {
     // A reminder renews the link's life: a parent chased on day 28 must not
     // get a link that dies on day 30.
     const expires = new Date(Date.now() + SIGN_LINK_TTL_SECONDS * 1000).toISOString()
-    await db.from('docusign_envelope_recipients').update({ token_expires_at: expires }).in('id', due.map((r) => r.id))
+    await db.from('agreement_recipients').update({ token_expires_at: expires }).in('id', due.map((r) => r.id))
     const result = await sendInvites(db, due.map((r) => ({ ...r, token_expires_at: expires })), { reminder: true })
     await appendAudit(db, { envelopeRow: env.id, event: 'reminded', detail: { recipients: due.length, sent: result.sent } })
     return due.length
@@ -89,10 +89,10 @@ export const nativeProvider: EsignProvider = {
     // Every outstanding link dies with the agreement.
     for (const r of await loadRecipients(db, env.id)) {
       if (r.status !== 'completed') {
-        await db.from('docusign_envelope_recipients').update({ token_version: r.token_version + 1 }).eq('id', r.id)
+        await db.from('agreement_recipients').update({ token_version: r.token_version + 1 }).eq('id', r.id)
       }
     }
-    await db.from('docusign_envelopes').update({ status: 'voided', updated_at: now }).eq('id', env.id)
+    await db.from('agreements').update({ status: 'voided', updated_at: now }).eq('id', env.id)
     await appendAudit(db, { envelopeRow: env.id, event: 'voided', detail: { reason: reason ?? 'Voided by Stellr' } })
   },
 
@@ -108,7 +108,7 @@ export const nativeProvider: EsignProvider = {
 
   async getSignedDocument({ db }, externalId, opts) {
     const { data: row } = await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .select('signed_pdf_path, certificate_path')
       .eq('envelope_id', externalId)
       .eq('provider', 'native')

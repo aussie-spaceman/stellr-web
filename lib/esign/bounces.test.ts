@@ -12,8 +12,8 @@ import { POST } from '@/app/api/webhooks/resend/route'
 
 function setup() {
   const fake = fakeSupabase({
-    docusign_envelopes: [{ id: 'env-1', event_title: 'CO SDC', minor_name: 'Luke Lee', signer_name: 'Pat Lee' }],
-    docusign_envelope_recipients: [
+    agreements: [{ id: 'env-1', event_title: 'CO SDC', minor_name: 'Luke Lee', signer_name: 'Pat Lee' }],
+    agreement_recipients: [
       { id: 'r1', envelope_row: 'env-1', email: 'pat@example.test', status: 'sent', invite_email_id: 're_bundle' },
       { id: 'r2', envelope_row: 'env-2', email: 'pat@example.test', status: 'sent', invite_email_id: 're_bundle' },
       { id: 'r3', envelope_row: 'env-3', email: 'sam@example.test', status: 'completed', invite_email_id: 're_done' },
@@ -30,7 +30,7 @@ describe('handleResendEvent', () => {
     const fake = setup()
     const out = await handleResendEvent(fake.client, { type: 'email.bounced', data: { email_id: 're_bundle', bounce: { message: 'Mailbox does not exist' } } })
     expect(out).toEqual({ bounced: 2 })
-    const rows = fake.table('docusign_envelope_recipients')
+    const rows = fake.table('agreement_recipients')
     expect(rows.filter((r) => r.status === 'autoresponded').map((r) => r.id)).toEqual(['r1', 'r2'])
     expect(rows[0].invite_error).toBe('Bounced: Mailbox does not exist')
     expect(notify).toHaveBeenCalledTimes(1)
@@ -78,6 +78,6 @@ describe('POST /api/webhooks/resend', () => {
     expect(forged.status).toBe(400)
     const stale = await POST(signed(body, { at: new Date(Date.now() - 60 * 60_000) }))
     expect(stale.status).toBe(400)
-    expect(fake.table('docusign_envelope_recipients').every((r) => r.status !== 'autoresponded')).toBe(true)
+    expect(fake.table('agreement_recipients').every((r) => r.status !== 'autoresponded')).toBe(true)
   })
 })

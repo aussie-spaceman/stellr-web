@@ -53,14 +53,14 @@ export async function loadOutstandingSigners(
   opts: { mintLinks: boolean },
 ): Promise<OutstandingSigner[]> {
   const { data: envelopes } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, provider, participant_id, signer_email')
     .eq('event_slug', slug)
     .in('status', ['sent', 'delivered'])
     .is('reused_from', null)
   if (!envelopes?.length) return []
   const { data: recipients } = await db
-    .from('docusign_envelope_recipients')
+    .from('agreement_recipients')
     .select('id, envelope_row, email, role_name, status, token_version, token_expires_at')
     .in('envelope_row', envelopes.map((e) => e.id as string))
   const byEnvelope = new Map<string, NonNullable<typeof recipients>>()

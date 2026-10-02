@@ -64,7 +64,7 @@ export async function POST(
   // rows, and `.maybeSingle()` on the participant id used to error on both —
   // reporting "no consent form" for exactly the families who needed a nudge.
   const { data: envelope } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, envelope_id, provider, status, sent_at, reused_from, last_manual_resend_at')
     .eq('participant_id', pid)
     .order('created_at', { ascending: false })
@@ -109,7 +109,7 @@ export async function POST(
   // (4 Sept 2026).
   const stamp = new Date(now).toISOString()
   await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .update({ last_manual_resend_at: stamp, updated_at: stamp })
     .eq('id', envelope.id)
 

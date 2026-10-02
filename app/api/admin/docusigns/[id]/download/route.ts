@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const db = supabaseServer()
 
   const { data: row } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select(STORED_RECORD_COLUMNS)
     .eq('id', id)
     .maybeSingle()

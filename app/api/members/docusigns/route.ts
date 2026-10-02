@@ -28,7 +28,7 @@ export async function GET() {
   if (!member) return NextResponse.json({ envelopes: [] })
 
   const { data: envelopes } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, envelope_id, provider, status, envelope_type, signer_name, signer_email, minor_name, event_title, event_slug, sent_at, completed_at, reminder_sent_at, reused_from, signers_total, signers_completed')
     .eq('member_id', member.id)
     // Kept only for legal claims after a deletion request: not shown.
@@ -51,7 +51,7 @@ export async function GET() {
     const nativeIds = (envelopes ?? []).filter(e => e.provider === 'native' && ['sent', 'delivered'].includes(e.status as string)).map(e => e.id as string)
     if (nativeIds.length) {
       const { data: mine } = await db
-        .from('docusign_envelope_recipients')
+        .from('agreement_recipients')
         .select('id, envelope_row, token_version, token_expires_at, status')
         .in('envelope_row', nativeIds)
         .eq('member_id', member.id)

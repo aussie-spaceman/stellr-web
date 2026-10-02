@@ -19,7 +19,7 @@ export async function handleResendEvent(db: SupabaseClient, event: ResendEvent):
 
   // One email can carry several forms (a parent's siblings), so several rows.
   const { data: rows, error } = await db
-    .from('docusign_envelope_recipients')
+    .from('agreement_recipients')
     .update({
       status: 'autoresponded',
       invite_error: `Bounced${event.data.bounce?.message ? `: ${event.data.bounce.message}` : ''}`.slice(0, 500),
@@ -32,7 +32,7 @@ export async function handleResendEvent(db: SupabaseClient, event: ResendEvent):
   if (!rows?.length) return { bounced: 0 }
 
   const { data: env } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('event_title, minor_name, signer_name')
     .eq('id', rows[0].envelope_row as string)
     .maybeSingle()

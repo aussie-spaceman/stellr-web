@@ -10,7 +10,7 @@
 // which is the only thing anyone needs to know.
 //
 // Everything here is pure. Callers pass the envelope row plus its recipients
-// (docusign_envelope_recipients, migration 148); this module decides what it means.
+// (agreement_recipients, migration 148); this module decides what it means.
 
 export type DocusignPill =
   | 'not_required'

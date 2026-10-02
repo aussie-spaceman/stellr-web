@@ -136,7 +136,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       .neq('status', 'withdrawn')
       .order('created_at', { ascending: true }),
     db
-      .from('docusign_envelopes')
+      .from('agreements')
       .select('id, participant_id, status, signers_total, signers_completed, reused_from')
       .eq('event_slug', eventSlug),
   ])

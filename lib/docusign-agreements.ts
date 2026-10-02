@@ -135,7 +135,7 @@ async function issueOrReuse(
     //    consent forms that had been executed in the DocuSign sandbox.
     if (ctx.participantId) {
       const { data: existing } = await db
-        .from('docusign_envelopes')
+        .from('agreements')
         .select('id')
         .eq('participant_id', ctx.participantId)
         .in('status', BLOCKING_ENVELOPE_STATUSES)
@@ -305,7 +305,7 @@ async function recordIssueFailure(
 ): Promise<void> {
   try {
     const minor = type === 'minor'
-    await db.from('docusign_envelopes').insert({
+    await db.from('agreements').insert({
       participant_id: ctx.participantId,
       member_id:      ctx.memberId,
       event_slug:     ctx.eventSlug,
@@ -347,7 +347,7 @@ async function hasOpenEnvelopeForEvent(
   type: AgreementType,
 ): Promise<boolean> {
   let q = db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id')
     .eq('event_slug', ctx.eventSlug)
     .in('envelope_type', coveringTypes(type))
@@ -409,7 +409,7 @@ async function findValidAgreement(
   cutoff.setFullYear(cutoff.getFullYear() - AGREEMENT_VALIDITY_YEARS)
 
   const { data, error } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, completed_at, signer_name, signer_email, reused_from')
     .eq('member_id', memberId)
     .in('envelope_type', coveringTypes(type))
@@ -430,7 +430,7 @@ async function findValidAgreement(
   }
 
   const { data: root } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, completed_at, signer_name, signer_email')
     .eq('id', data.reused_from)
     .eq('status', 'completed')
@@ -455,7 +455,7 @@ async function recordCoverage(
   type: AgreementType,
   source: ValidAgreement,
 ): Promise<void> {
-  await db.from('docusign_envelopes').insert({
+  await db.from('agreements').insert({
     participant_id:    ctx.participantId,
     member_id:         ctx.memberId,
     event_slug:        ctx.eventSlug,
@@ -498,12 +498,12 @@ async function recordEnvelope(
     ...envelope.rowFields,
   }
   if (!envelope.afterRecord) {
-    await db.from('docusign_envelopes').insert(row)
+    await db.from('agreements').insert(row)
     return { signNowUrl: null }
   }
 
   // Stellr signing needs the row's id to create its signer rows.
-  const { data, error } = await db.from('docusign_envelopes').insert(row).select('id').single()
+  const { data, error } = await db.from('agreements').insert(row).select('id').single()
   if (error || !data) throw new Error(`Recording the agreement failed: ${error?.message ?? 'no row'}`)
   const after = await envelope.afterRecord(db, (data as { id: string }).id)
   return { signNowUrl: after?.signNowUrl ?? null }

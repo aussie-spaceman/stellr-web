@@ -21,7 +21,7 @@ async function main() {
 
   if (command === 'link') {
     const { mintToken } = await import('../../lib/esign/native/tokens')
-    const { data, error } = await db.from('docusign_envelope_recipients').select('token_version').eq('id', arg).single()
+    const { data, error } = await db.from('agreement_recipients').select('token_version').eq('id', arg).single()
     if (error) throw new Error(error.message)
     return `/sign#${mintToken(arg, 'sign', data.token_version as number, 3600).token}`
   }
@@ -43,7 +43,7 @@ async function main() {
       schoolState: 'CO',
     }
     const created = await nativeProvider.create({ db }, { type: 'minor', params } as never)
-    const { data: row, error } = await db.from('docusign_envelopes').insert({
+    const { data: row, error } = await db.from('agreements').insert({
       participant_id: null,
       member_id: null,
       event_slug: 'e2e-signing',
@@ -62,7 +62,7 @@ async function main() {
     if (error) throw new Error(`Issuing the test agreement failed: ${error.message}`)
     await created.afterRecord!(db, row.id as string)
     const { data: recipients } = await db
-      .from('docusign_envelope_recipients')
+      .from('agreement_recipients')
       .select('id, role_name')
       .eq('envelope_row', row.id)
       .order('routing_order')

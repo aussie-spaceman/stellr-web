@@ -69,14 +69,14 @@ export async function archiveEnvelope(db: SupabaseClient, row: ArchivableRow): P
       updated_at:        now,
     }
     if (row.completed_at) update.retain_until = retainUntil(row.completed_at)
-    const { error } = await db.from('docusign_envelopes').update(update).eq('id', row.id)
+    const { error } = await db.from('agreements').update(update).eq('id', row.id)
     if (error) throw new Error(`Recording the archive failed: ${error.message}`)
     return { kind: 'archived', path: paths.pdf, sha256 }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`[esign-archive] ${row.id} failed:`, message)
     await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .update({
         archive_attempts: (row.archive_attempts ?? 0) + 1,
         archive_error:    message.slice(0, 1000),
@@ -96,7 +96,7 @@ export async function archivePending(
   opts: { limit: number; dryRun?: boolean },
 ): Promise<{ eligible: number; archived: number; failed: { id: string; error: string }[] }> {
   const { data, error } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select(ARCHIVABLE_COLUMNS)
     .eq('status', 'completed')
     .is('reused_from', null)
@@ -147,7 +147,7 @@ export type SignedRecord =
 export async function resolveOriginal(db: SupabaseClient, row: StoredRecordRow): Promise<StoredRecordRow | null> {
   if (!row.reused_from) return row
   const { data } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select(STORED_RECORD_COLUMNS)
     .eq('id', row.reused_from)
     .maybeSingle()

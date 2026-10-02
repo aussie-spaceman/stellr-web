@@ -41,7 +41,7 @@ export async function replicatePending(
   opts: { limit?: number; now?: Date } = {},
 ): Promise<{ replicated: number; failed: { id: string; error: string }[] }> {
   const { data, error } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, provider, signed_pdf_path, signed_pdf_sha256, certificate_path')
     .not('archived_at', 'is', null)
     .is('replicated_at', null)
@@ -63,7 +63,7 @@ export async function replicatePending(
         const kind = (row.provider ?? 'docusign') === 'native' ? 'audit' : 'certificate'
         await store.put(backupName(row.id, kind), encryptBackup(await readStored(db, row.certificate_path)))
       }
-      await db.from('docusign_envelopes').update({ replicated_at: (opts.now ?? new Date()).toISOString() }).eq('id', row.id)
+      await db.from('agreements').update({ replicated_at: (opts.now ?? new Date()).toISOString() }).eq('id', row.id)
       replicated++
     } catch (err) {
       failed.push({ id: row.id, error: err instanceof Error ? err.message : String(err) })
@@ -73,8 +73,8 @@ export async function replicatePending(
 }
 
 const EXPORT_TABLES = [
-  { table: 'docusign_envelopes', order: 'created_at' },
-  { table: 'docusign_envelope_recipients', order: 'created_at' },
+  { table: 'agreements', order: 'created_at' },
+  { table: 'agreement_recipients', order: 'created_at' },
   { table: 'esign_audit_events', order: 'id' },
   { table: 'esign_access_log', order: 'id' },
   { table: 'esign_templates', order: 'created_at' },

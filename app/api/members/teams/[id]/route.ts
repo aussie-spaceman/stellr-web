@@ -109,7 +109,7 @@ export async function GET(
       .limit(1)
       .maybeSingle(),
     participantIds.length > 0
-      ? db.from('docusign_envelopes')
+      ? db.from('agreements')
           .select('id, participant_id, status, envelope_type, signer_name, signer_email, sent_at, completed_at, reminder_sent_at')
           .in('participant_id', participantIds)
           // Oldest first, so the map below keeps each participant's newest

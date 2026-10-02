@@ -358,7 +358,7 @@ async function consentSigned(db: SupabaseClient, registrationId: string): Promis
   const ids = ((parts ?? []) as { id: string }[]).map((p) => p.id)
   if (ids.length === 0) return false
   const { data } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id')
     .in('participant_id', ids)
     .eq('status', 'completed')

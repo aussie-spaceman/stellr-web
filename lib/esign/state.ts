@@ -14,6 +14,29 @@ import { hasProvider } from '@/lib/esign'
 
 const AGREEMENT_TYPES = ['minor', 'adult', 'mentor', 'volunteer', 'membership'] as const
 
+/**
+ * Supabase Free includes 1 GB of file storage for the whole project, shared
+ * with every other bucket. Signed records are the part that only grows, so the
+ * card warns well before they could fill it. Override with
+ * ESIGN_STORAGE_LIMIT_BYTES after a plan change.
+ */
+export const STORAGE_LIMIT_BYTES = Number(process.env.ESIGN_STORAGE_LIMIT_BYTES) || 1024 ** 3
+
+/** The share of the limit at which admins are warned. */
+export const STORAGE_WARN_RATIO = 0.7
+
+export interface StorageSummary {
+  documents: number
+  bytes: number
+  limitBytes: number
+  /** At or past STORAGE_WARN_RATIO of the limit. */
+  warn: boolean
+}
+
+export function storageSummary(documents: number, bytes: number, limitBytes = STORAGE_LIMIT_BYTES): StorageSummary {
+  return { documents, bytes, limitBytes, warn: bytes >= limitBytes * STORAGE_WARN_RATIO }
+}
+
 export const stateUpdateSchema = z.object({
   mode: z.enum(['auto', 'docusign_only', 'overflow_only']).optional(),
   monthlyCap: z.number().int().min(0).max(10_000).optional(),
@@ -36,7 +59,8 @@ export interface EngineSummary {
   /** Which engine an ordinary (non-allowlisted) agreement would go to right now. */
   currentEngine: 'docusign' | 'native'
   archive: { unarchived: number; failing: number }
-  storage: { documents: number; bytes: number | null }
+  /** Signed records stored here, against the Supabase plan's storage limit. */
+  storage: StorageSummary
   restricted: number
   lastRuns: { job: string; started_at: string; ok: boolean | null }[]
 }
@@ -65,7 +89,9 @@ export async function loadEngineSummary(db: SupabaseClient, now = new Date()): P
   const [unarchived, failing, documents, restricted, runs] = await Promise.all([
     envelopes().eq('status', 'completed').is('reused_from', null).is('archived_at', null),
     envelopes().eq('status', 'completed').is('archived_at', null).gt('archive_attempts', 0),
-    envelopes().not('signed_pdf_path', 'is', null),
+    db.from('docusign_envelopes')
+      .select('signed_pdf_bytes, certificate_bytes', { count: 'exact' })
+      .not('signed_pdf_path', 'is', null),
     envelopes().not('restricted_at', 'is', null),
     db.from('cron_runs')
       .select('job, started_at, ok')
@@ -83,7 +109,11 @@ export async function loadEngineSummary(db: SupabaseClient, now = new Date()): P
     usableAllowance: cap,
     currentEngine,
     archive: { unarchived: unarchived.count ?? 0, failing: failing.count ?? 0 },
-    storage: { documents: documents.count ?? 0, bytes: null },
+    storage: storageSummary(
+      documents.count ?? 0,
+      ((documents.data ?? []) as { signed_pdf_bytes: number | null; certificate_bytes: number | null }[])
+        .reduce((sum, r) => sum + (r.signed_pdf_bytes ?? 0) + (r.certificate_bytes ?? 0), 0),
+    ),
     restricted: restricted.count ?? 0,
     lastRuns: (runs.data ?? []) as { job: string; started_at: string; ok: boolean | null }[],
   }

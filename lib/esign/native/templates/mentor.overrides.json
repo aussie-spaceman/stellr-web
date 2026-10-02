@@ -1,0 +1,16 @@
+{
+  "$comment": "Mentor participation agreement (also signed by volunteers). The Stellr representative's signature is applied automatically on completion under the standing authorisation. Checked against Participation Agreement - Mentors V2-1. The page-1 address fields there were DocuSign's paid Verify Postal Address extension, removed from production on 28 Sept 2026 and replaced with a free-text address field: re-check this file against the production export before publishing.",
+  "fields": {
+    "p1@135,252": { "name": "MentorStreet", "label": "Street address", "required": true },
+    "p1@215,251": { "name": "MentorCity", "label": "City", "required": true },
+    "p1@295,251": { "name": "MentorState", "label": "State or region", "required": true },
+    "p1@499,251": { "name": "MentorPostcode", "label": "ZIP or postal code", "required": true },
+    "p1@374,253": { "drop": true },
+    "p4@179,463": { "name": "MentorAddress", "label": "Mailing address", "required": true },
+    "GuardianPhone": { "name": "MentorPhone", "label": "Phone", "source": "prefill", "prefillKey": "MentorPhone" },
+    "p4@51,122": {
+      "name": "MediaOptOut",
+      "label": "I do NOT consent to use of my name and image"
+    }
+  }
+}

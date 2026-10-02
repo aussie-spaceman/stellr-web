@@ -64,6 +64,8 @@ describe('purgeExpired', () => {
 
   it('deletes records past their retention date, document and row, and nothing else', async () => {
     const db = fakeSupabase({ docusign_envelopes: rows() })
+    const purgedTrails: unknown[] = []
+    db.rpcs.esign_purge_audit = (args) => { purgedTrails.push(args.p_envelope); return 3 }
     db.objects.set(`${SIGNED_BUCKET}/docusign/2019/old/signed.pdf`, new Uint8Array([1]))
     db.objects.set(`${SIGNED_BUCKET}/docusign/2019/old/certificate.pdf`, new Uint8Array([2]))
     db.objects.set(`${SIGNED_BUCKET}/docusign/2023/kept/signed.pdf`, new Uint8Array([3]))
@@ -72,6 +74,7 @@ describe('purgeExpired', () => {
     expect(result).toEqual({ eligible: 1, purged: 1, failed: [] })
     expect(db.table('docusign_envelopes').map((r) => r.id).sort()).toEqual(['kept', 'unsigned'])
     expect([...db.objects.keys()]).toEqual([`${SIGNED_BUCKET}/docusign/2023/kept/signed.pdf`])
+    expect(purgedTrails).toEqual(['old'])
   })
 
   it('reports and changes nothing on a dry run', async () => {

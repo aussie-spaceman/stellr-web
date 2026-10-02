@@ -46,6 +46,7 @@ export const fakeId = () => `00000000-0000-4000-8000-${String(++idCounter).padSt
 export interface FakeDb {
   tables: Record<string, Row[]>
   objects: Map<string, Uint8Array>
+  rpcs: Record<string, (args: Record<string, unknown>) => unknown>
   client: never
   table(name: string): Row[]
 }
@@ -205,6 +206,18 @@ export function fakeSupabase(
     },
   }
 
-  const client = { from: builder, storage }
-  return { tables, objects, client: client as never, table }
+  // RPCs are registered per test: `fake.rpcs.name = (args) => result`.
+  const rpcs: Record<string, (args: Record<string, unknown>) => unknown> = {}
+  const rpc = async (fn: string, args: Record<string, unknown> = {}) => {
+    const handler = rpcs[fn]
+    if (!handler) return { data: null, error: { message: `fake-supabase: no rpc ${fn}` } }
+    try {
+      return { data: await handler(args), error: null }
+    } catch (err) {
+      return { data: null, error: { message: err instanceof Error ? err.message : String(err) } }
+    }
+  }
+
+  const client = { from: builder, storage, rpc }
+  return { tables, objects, rpcs, client: client as never, table }
 }

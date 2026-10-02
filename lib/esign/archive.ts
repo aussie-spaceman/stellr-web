@@ -113,7 +113,9 @@ export async function archiveEnvelope(db: SupabaseClient, row: ArchivableRow): P
     const update: Record<string, unknown> = {
       signed_pdf_path:   paths.pdf,
       signed_pdf_sha256: sha256,
+      signed_pdf_bytes:  pdf.byteLength,
       certificate_path:  certificatePath,
+      certificate_bytes: certificate?.byteLength ?? null,
       archived_at:       now,
       archive_error:     null,
       updated_at:        now,

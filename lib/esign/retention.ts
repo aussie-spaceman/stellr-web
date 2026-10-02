@@ -109,6 +109,9 @@ export async function purgeExpired(
         const { error: storageError } = await db.storage.from(SIGNED_BUCKET).remove(paths)
         if (storageError) throw new Error(`Storage delete failed: ${storageError.message}`)
       }
+      // The audit trail is append-only; only this function may remove it.
+      const { error: auditError } = await db.rpc('esign_purge_audit', { p_envelope: row.id })
+      if (auditError) throw new Error(`Audit trail delete failed: ${auditError.message}`)
       const { error: rowError } = await db.from('docusign_envelopes').delete().eq('id', row.id)
       if (rowError) throw new Error(`Row delete failed: ${rowError.message}`)
       purged++

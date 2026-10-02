@@ -154,6 +154,13 @@ export function EsignEngineCard() {
         </div>
       </dl>
 
+      {summary.storage.warn && (
+        <p className="text-sm text-danger" role="status">
+          Signed records use {(summary.storage.bytes / 1024 ** 2).toFixed(0)} MB of the{' '}
+          {(summary.storage.limitBytes / 1024 ** 2).toFixed(0)} MB storage plan. Upgrade the Supabase plan before it fills.
+        </p>
+      )}
+
       {summary.archive.failing > 0 && (
         <p className="text-sm text-danger" role="status">
           {summary.archive.failing} signed document(s) could not be stored yet. They are retried daily.

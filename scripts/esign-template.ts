@@ -17,8 +17,15 @@
  *   # 2. Upload it as a new, unapproved version. Read-only unless --apply.
  *   npx tsx scripts/esign-template.ts publish minor --title "Parental Consent Form" [--apply]
  *
- *   # 3. Approve that version after checking the preview: it becomes the one
- *   #    new agreements use, and can no longer be changed.
+ *   # 3. Check it: every value prints in its field; with --pdf, every page has
+ *   #    the source document's exact wording; with --export, every DocuSign
+ *   #    field is in the map, in the same place. Exits 1 on any problem.
+ *   npx tsx scripts/esign-template.ts check minor 1 --pdf original.pdf --export scripts/docusign-templates/minor.json
+ *   #    (no version: checks the files in esign-out/ before publishing)
+ *
+ *   # 4. Approve that version after checking the preview: it becomes the one
+ *   #    new agreements use, and can no longer be changed. Runs the check
+ *   #    first (pass --pdf and --export as above) and refuses on any problem.
  *   npx tsx scripts/esign-template.ts approve minor 1 --by "David Shaw" [--apply]
  *
  * Output lands in esign-out/ (gitignored). Field maps and overrides are
@@ -128,9 +135,53 @@ async function publish(key: string) {
   console.log(`✓ Published ${key} v${version} (not yet in use). Preview it in Admin → Agreements, then approve.`)
 }
 
+/** Runs the template checks; returns the number of problems found. */
+async function check(key: string, version: number | null): Promise<number> {
+  const { parseFieldMap } = await import('../lib/esign/native/template')
+  const { checkPlacement, compareCoverage, compareWording } = await import('../lib/esign/native/template-check')
+  let pdf: Uint8Array
+  let map
+  if (version) {
+    const db = await client()
+    const { loadTemplateById, loadTemplatePdf } = await import('../lib/esign/native/templates-store')
+    const { data: row, error } = await db.from('esign_templates').select('id').eq('key', key).eq('version', version).maybeSingle()
+    if (error || !row) throw new Error(`${key} v${version} does not exist`)
+    const template = await loadTemplateById(db, row.id as string)
+    pdf = await loadTemplatePdf(db, template) // verifies the stored hash
+    map = template.map
+  } else {
+    pdf = fs.readFileSync(path.join(OUT, `${key}.pdf`))
+    map = parseFieldMap(JSON.parse(fs.readFileSync(path.join(OUT, `${key}.fields.json`), 'utf8')))
+  }
+
+  const issues = await checkPlacement(pdf, map)
+  const ran = ['placement']
+  if (arg('--pdf')) {
+    issues.push(...await compareWording(fs.readFileSync(path.resolve(arg('--pdf') as string)), pdf))
+    ran.push('wording')
+  }
+  if (arg('--export')) {
+    const { convertDocusignTemplate } = await import('../lib/esign/native/convert-docusign')
+    const exp = JSON.parse(fs.readFileSync(path.resolve(arg('--export') as string), 'utf8'))
+    const overridesFile = path.join(OVERRIDES, `${key}.overrides.json`)
+    const overrides = fs.existsSync(overridesFile) ? JSON.parse(fs.readFileSync(overridesFile, 'utf8')) : {}
+    const converted = convertDocusignTemplate(exp, overrides)
+    if (!converted.map) issues.push({ check: 'coverage', message: `The DocuSign export no longer converts cleanly (${converted.issues.length} unnamed field(s))` })
+    else issues.push(...compareCoverage(converted.map, map))
+    ran.push('coverage')
+  }
+  const label = `${key}${version ? ` v${version}` : ' (esign-out)'}`
+  for (const i of issues) console.error(`  ✗ ${i.check.padEnd(9)} ${i.message}`)
+  console.log(`${issues.length ? '✗' : '✓'} ${label}: ${map.fields.length} fields; checked ${ran.join(', ')}; ${issues.length} problem(s)`)
+  if (!arg('--pdf')) console.log('  Wording not checked: add --pdf <the agreement’s source PDF>.')
+  if (!arg('--export') && !version) console.log('  Coverage not checked: add --export <DocuSign export JSON> for a converted template.')
+  return issues.length
+}
+
 async function approve(key: string, version: number) {
   const by = arg('--by')
   if (!by) throw new Error('--by "<name>" is required: who checked this version')
+  if (await check(key, version)) throw new Error(`Not approved: fix the problems above, publish a new version, and check again`)
   const db = await client()
   const { data: row } = await db.from('esign_templates').select('id, approved_at').eq('key', key).eq('version', version).maybeSingle()
   if (!row) throw new Error(`${key} v${version} does not exist`)
@@ -150,12 +201,17 @@ async function approve(key: string, version: number) {
 async function main() {
   const [cmd, key, third] = process.argv.slice(2)
   if (!cmd || !key) {
-    console.log('Usage: esign-template.ts convert|publish|approve <key> …  (see the header of this file)')
+    console.log('Usage: esign-template.ts convert|publish|check|approve <key> …  (see the header of this file)')
     process.exit(1)
   }
   if (cmd === 'convert') return convert(key, third?.startsWith('--') ? undefined : third)
   if (cmd === 'publish') return publish(key)
   if (cmd === 'approve') return approve(key, Number(third))
+  if (cmd === 'check') {
+    const version = third && !third.startsWith('--') ? Number(third) : null
+    if (await check(key, version)) process.exit(1)
+    return
+  }
   throw new Error(`Unknown command ${cmd}`)
 }
 

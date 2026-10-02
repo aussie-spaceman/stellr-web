@@ -85,6 +85,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
+    "@axe-core/playwright": "^4.13.0",
     "@clerk/testing": "^2.2.34",
     "@playwright/test": "^1.63.0",
     "@storybook/nextjs": "^10.4.6",

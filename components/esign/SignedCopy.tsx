@@ -46,7 +46,7 @@ export function SignedCopy() {
           <>
             <p className="mt-3 text-content-body">Download it and keep it somewhere safe. The download link works for two minutes; reload this page if it expires.</p>
             <div className="mt-6">
-              <Button href={state.url} download={state.filename} rel="noopener noreferrer">Download the signed PDF</Button>
+              <Button variant="primaryStrong" href={state.url} download={state.filename} rel="noopener noreferrer">Download the signed PDF</Button>
             </div>
           </>
         )}

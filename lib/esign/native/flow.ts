@@ -10,7 +10,7 @@ import {
   mintToken,
   verifyToken,
 } from '@/lib/esign/native/tokens'
-import { archivePaths, putImmutable, retainUntil } from '@/lib/esign/storage'
+import { archivePaths, putImmutable, retainUntil, sha256Hex, SIGNED_BUCKET } from '@/lib/esign/storage'
 
 // Stellr signing, from issue to sealed record. Each signer moves through:
 //
@@ -37,7 +37,7 @@ const RECIPIENT_COLUMNS =
   'id, envelope_row, recipient_id, role_name, name, email, status, routing_order, member_id, ' +
   'delivered_at, signed_at, declined_at, token_version, token_expires_at, failed_token_attempts, ' +
   'viewed_at, consented_at, disclosure_version, attested_at, signed_ip, signed_user_agent, ' +
-  'signature_kind, signature_text, signer_values, invite_sent_at'
+  'signature_kind, signature_text, signature_image_path, signer_values, invite_sent_at'
 
 export interface NativeEnvelope {
   id: string
@@ -85,6 +85,8 @@ export interface NativeRecipient {
   signed_user_agent: string | null
   signature_kind: string | null
   signature_text: string | null
+  /** A drawn signature's PNG, in the signed-agreements bucket. */
+  signature_image_path?: string | null
   signer_values: Record<string, string> | null
   invite_sent_at: string | null
 }
@@ -356,17 +358,34 @@ export async function signingView(db: SupabaseClient, ctx: SessionContext): Prom
   }
 }
 
-function completedSigners(recipients: NativeRecipient[]): SignerRender[] {
+/** Drawn signatures, by recipient row, read back from storage. */
+async function loadSignatureImages(db: SupabaseClient, recipients: NativeRecipient[]): Promise<Map<string, Uint8Array>> {
+  const out = new Map<string, Uint8Array>()
+  for (const r of recipients) {
+    if (r.status !== 'completed' || r.signature_kind !== 'drawn' || !r.signature_image_path) continue
+    const { data, error } = await db.storage.from(SIGNED_BUCKET).download(r.signature_image_path)
+    if (error || !data) throw new FinaliseError(`Drawn signature for ${r.id} could not be read`)
+    out.set(r.id, new Uint8Array(await data.arrayBuffer()))
+  }
+  return out
+}
+
+function completedSigners(recipients: NativeRecipient[], images: Map<string, Uint8Array> = new Map()): SignerRender[] {
   return recipients
     .filter((r) => r.status === 'completed')
-    .map((r) => ({
-      role: roleOf(r),
-      name: r.name,
-      email: r.email,
-      values: r.signer_values ?? {},
-      signedAt: r.signed_at ?? undefined,
-      signature: r.signature_text ? { kind: 'typed' as const, text: r.signature_text } : undefined,
-    }))
+    .map((r) => {
+      const png = images.get(r.id)
+      return {
+        role: roleOf(r),
+        name: r.name,
+        email: r.email,
+        values: r.signer_values ?? {},
+        signedAt: r.signed_at ?? undefined,
+        signature: png && r.signature_text
+          ? { kind: 'drawn' as const, png, text: r.signature_text }
+          : r.signature_text ? { kind: 'typed' as const, text: r.signature_text } : undefined,
+      }
+    })
 }
 
 /** The document as it stands for this signer: prefill plus what earlier signers entered. */
@@ -378,7 +397,7 @@ export async function previewFor(db: SupabaseClient, ctx: SessionContext): Promi
     map: template.map,
     prefill: ctx.envelope.prefill ?? {},
     names: namesFor(ctx.envelope, recipients),
-    signers: completedSigners(recipients),
+    signers: completedSigners(recipients, await loadSignatureImages(db, recipients)),
   })
 }
 
@@ -481,7 +500,13 @@ export function sameName(a: string, b: string): boolean {
 export async function submitSignature(
   db: SupabaseClient,
   ctx: SessionContext,
-  input: { values: Record<string, unknown>; signatureText: string; confirmDifferentName?: boolean },
+  input: {
+    values: Record<string, unknown>
+    signatureText: string
+    confirmDifferentName?: boolean
+    /** A drawn signature, already checked (./signature-image). The typed name is still required. */
+    signaturePng?: Uint8Array | null
+  },
   meta: RequestMeta,
   now = new Date(),
 ): Promise<SubmitResult> {
@@ -511,14 +536,27 @@ export async function submitSignature(
     }
   }
 
+  // A drawn signature is stored before the signature is recorded, so a signed
+  // row never points at an image that is not there. Named by its hash: a retry
+  // with the same drawing finds it, a different drawing never overwrites it.
+  let imagePath: string | null = null
+  let imageSha: string | null = null
+  if (input.signaturePng) {
+    imageSha = sha256Hex(input.signaturePng)
+    imagePath = `native/${now.getUTCFullYear()}/${ctx.envelope.id}/signature-${ctx.recipient.id}-${imageSha.slice(0, 16)}.png`
+    await putImmutable(db, imagePath, input.signaturePng, 'image/png')
+  }
+  const kind = imagePath ? 'drawn' : 'typed'
+
   const { data: claimed, error } = await db
     .from('docusign_envelope_recipients')
     .update({
       status: 'completed',
       signed_at: now.toISOString(),
       signer_values: checked.values,
-      signature_kind: 'typed',
+      signature_kind: kind,
       signature_text: signatureText,
+      signature_image_path: imagePath,
       signed_ip: meta.ip,
       signed_user_agent: meta.userAgent?.slice(0, 400) ?? null,
       token_version: ctx.recipient.token_version + 1,
@@ -537,8 +575,9 @@ export async function submitSignature(
     ...auditMeta(meta),
     detail: {
       role,
-      signatureKind: 'typed',
+      signatureKind: kind,
       signatureText,
+      ...(imageSha ? { signatureImageSha256: imageSha } : {}),
       nameOnRecord: ctx.recipient.name,
       nameMatchesRecord,
       values: checked.values,
@@ -629,7 +668,7 @@ export async function finaliseAgreement(db: SupabaseClient, envelopeRowId: strin
     const recipients = await loadRecipients(db, envelopeRowId)
     if (!recipients.every((r) => r.status === 'completed')) throw new FinaliseError('Not every signer has signed')
 
-    const signers = completedSigners(recipients)
+    const signers = completedSigners(recipients, await loadSignatureImages(db, recipients))
     const needsCountersign = template.map.roles.some((r) => r.role === 'stellr')
     let countersignature: { name: string; title: string; authority: string; at: string } | null = null
     if (needsCountersign) {

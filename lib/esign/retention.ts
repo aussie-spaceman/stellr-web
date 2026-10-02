@@ -216,7 +216,18 @@ export async function purgeExpired(
     try {
       // Off-site copies first: a record deleted here must not live on there.
       if (opts.store) await removeReplicas(opts.store, row.id)
-      const paths = [row.signed_pdf_path, row.certificate_path].filter((p): p is string => !!p)
+      // Drawn signatures live beside the record; the signer rows that point at
+      // them go by cascade, so collect the paths first.
+      const { data: drawn } = await db
+        .from('docusign_envelope_recipients')
+        .select('signature_image_path')
+        .eq('envelope_row', row.id)
+        .not('signature_image_path', 'is', null)
+      const paths = [
+        row.signed_pdf_path,
+        row.certificate_path,
+        ...(drawn ?? []).map((d) => d.signature_image_path as string | null),
+      ].filter((p): p is string => !!p)
       if (paths.length) {
         const { error: storageError } = await db.storage.from(SIGNED_BUCKET).remove(paths)
         if (storageError) throw new Error(`Storage delete failed: ${storageError.message}`)

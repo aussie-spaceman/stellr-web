@@ -1,6 +1,19 @@
 import { expect, test } from '../fixtures/test'
 import { attachConsoleGuard } from '../fixtures/console-guard'
 import { storageStatePath } from '../fixtures/users'
+import AxeBuilder from '@axe-core/playwright'
+import type { Page } from '@playwright/test'
+
+/** WCAG 2.1 A and AA, on the signing page's own content (not the site chrome around it). */
+async function expectAccessible(page: Page, step: string) {
+  const { violations } = await new AxeBuilder({ page })
+    .include('main')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  expect(violations.map((v) =>
+    `${step}: ${v.id} ${v.help} — ${v.nodes.slice(0, 6).map((n) => `${n.target.join(' ')} ${n.any[0]?.message ?? ''}`).join(' | ')}`,
+  )).toEqual([])
+}
 import {
   esignConfigured,
   issueMinorAgreement,
@@ -62,6 +75,7 @@ test.describe('Stellr signing', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('One quick check')
     // The key leaves the address bar as soon as the page has read it.
     await expect.poll(() => new URL(page.url()).hash).toBe('')
+    await expectAccessible(page, 'year check')
 
     const year = page.getByLabel('Year of birth')
     await year.fill('1999')
@@ -74,15 +88,27 @@ test.describe('Stellr signing', () => {
     const continueButton = page.getByRole('button', { name: 'Continue', exact: true })
     await expect(continueButton).toBeDisabled()
     await expect(page.getByText('Tick both boxes to continue.')).toBeVisible()
+    await expectAccessible(page, 'disclosure')
     await page.getByLabel(/agree to receive and sign this document electronically/).check()
     await page.getByLabel(/I am the parent or legal guardian/).check()
     await continueButton.click()
 
     await expect(page.getByRole('heading', { name: 'Read the document' })).toBeVisible()
+    // The document is drawn into the page, every page of it.
+    await expect(page.getByRole('img', { name: /^Page 1 of \d+$/ })).toBeVisible()
+    await expect(page.getByText(/\d+ pages?\. Scroll to read them all\./)).toBeVisible()
+    await expectAccessible(page, 'read')
     await page.getByRole('button', { name: /I’ve read it/ }).click()
 
     await expect(page.getByRole('heading', { name: 'Your details and choices' })).toBeVisible()
     await expect(page.getByLabel(/Parent or guardian phone/)).toHaveValue('555 0142')
+    // A required field left empty: the signer is taken to it.
+    const phone = page.getByLabel(/Parent or guardian phone/)
+    await phone.fill('')
+    await page.getByRole('button', { name: 'Continue', exact: true }).click()
+    await expect(phone).toBeFocused()
+    await expectAccessible(page, 'details with an error')
+    await phone.fill('555 0142')
     // Photo and media release is an opt-out, unticked unless the parent ticks it.
     const mediaOptOut = page.getByLabel(/do NOT consent to photo and media use/)
     await expect(mediaOptOut).not.toBeChecked()
@@ -90,6 +116,7 @@ test.describe('Stellr signing', () => {
     await page.getByRole('button', { name: 'Continue', exact: true }).click()
 
     await expect(page.getByRole('heading', { name: 'Review and sign' })).toBeVisible()
+    await expectAccessible(page, 'review and sign')
     const signature = page.locator('#signature')
     await page.getByLabel(/I have read the .* and agree to it/).check()
 
@@ -124,7 +151,20 @@ test.describe('Stellr signing', () => {
     await page.getByRole('button', { name: 'Continue', exact: true }).click()
     await page.getByLabel(/I have read the .* and agree to it/).check()
     await page.locator('#signature').fill(agreement.studentName)
-    await page.getByRole('button', { name: 'Sign', exact: true }).click()
+
+    // The student draws their signature.
+    await page.getByLabel('Draw my signature').check()
+    const sign = page.getByRole('button', { name: 'Sign', exact: true })
+    await expect(sign).toBeDisabled() // nothing drawn yet
+    const pad = await page.getByRole('img', { name: /Signature pad/ }).boundingBox()
+    if (!pad) throw new Error('no signature pad')
+    await page.mouse.move(pad.x + 30, pad.y + 100)
+    await page.mouse.down()
+    for (let i = 1; i <= 12; i++) await page.mouse.move(pad.x + 30 + i * 18, pad.y + 100 - Math.sin(i / 2) * 40)
+    await page.mouse.up()
+    await expect(page.getByRole('img', { name: 'Signature pad, with your drawn signature' })).toBeVisible()
+    await expectAccessible(page, 'drawn signature')
+    await sign.click()
 
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Signed. Thank you.', { timeout: 60_000 })
     await expect(page.getByText('Everyone has signed.')).toBeVisible()
@@ -145,6 +185,8 @@ test.describe('Stellr signing', () => {
     expect(record.chainBrokenAt).toBeNull()
     const signed = record.events.filter((e) => e.event === 'signed')
     expect(signed.map((e) => (e.detail as { nameMatchesRecord: boolean }).nameMatchesRecord)).toEqual([true, true])
+    expect(record.recipients.map((r) => r.signature_kind)).toEqual(['typed', 'drawn'])
+    expect(record.recipients[1].signature_image_path).toMatch(/\/signature-[0-9a-f-]{36}-[0-9a-f]{16}\.png$/)
     expect(record.events.map((e) => e.event)).toEqual(expect.arrayContaining(['issued', 'consented', 'attested', 'sealed', 'completed']))
 
     expect(trackerRequests).toEqual([])

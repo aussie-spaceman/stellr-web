@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { resolveSession, submitSignature } from '@/lib/esign/native/flow'
+import { parseSignatureImage } from '@/lib/esign/native/signature-image'
 import { sendInvites } from '@/lib/esign/outbox'
 import { invalidLink, json, readJson, requestMeta, sameOrigin, sessionCookie, throttle } from '@/lib/esign/native/http'
 
@@ -17,16 +18,28 @@ export async function POST(req: Request) {
   const ctx = await resolveSession(db, await sessionCookie(), 'act')
   if (!ctx) return invalidLink()
 
-  const body = await readJson<{ values?: unknown; signature?: unknown; confirmDifferentName?: unknown }>(req)
+  // Room for a drawn signature (at most ~200 KB as base64) on top of the fields.
+  const body = await readJson<{ values?: unknown; signature?: unknown; confirmDifferentName?: unknown; signatureImage?: unknown }>(req, 260_000)
   const values = body?.values
   if (!body || typeof values !== 'object' || values === null || Array.isArray(values) || typeof body.signature !== 'string') {
     return json({ error: 'Invalid request' }, 400)
+  }
+  let signaturePng: Uint8Array | null = null
+  if (body.signatureImage !== undefined && body.signatureImage !== null) {
+    const parsed = await parseSignatureImage(body.signatureImage)
+    if (!parsed.ok) return json({ error: parsed.error, fieldErrors: { signature: parsed.error } }, 422)
+    signaturePng = parsed.png
   }
 
   const result = await submitSignature(
     db,
     ctx,
-    { values: values as Record<string, unknown>, signatureText: body.signature, confirmDifferentName: body.confirmDifferentName === true },
+    {
+      values: values as Record<string, unknown>,
+      signatureText: body.signature,
+      confirmDifferentName: body.confirmDifferentName === true,
+      signaturePng,
+    },
     requestMeta(req),
   )
   // A different name is a question for the signer, not a failure.

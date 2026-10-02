@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@stellr/web-ui'
 import { DISCLOSURE_PARAGRAPHS, DISCLOSURE_TITLE } from '@/lib/esign/disclosure'
+import { PdfViewer } from './PdfViewer'
+import { SignaturePad } from './SignaturePad'
 
 // Stellr signing: the page a signer reaches from their emailed link.
 //
@@ -53,7 +55,9 @@ async function post(path: string, body: unknown) {
 
 export function SigningApp() {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' })
+  // Held in memory only (never stored): what renews the session if it expires mid-way.
   const tokenRef = useRef<string | null>(null)
+  const yearRef = useRef<string | null>(null)
 
   const loadContext = useCallback(async () => {
     const res = await fetch('/api/sign/context', { cache: 'no-store', credentials: 'same-origin' })
@@ -63,10 +67,20 @@ export function SigningApp() {
     else setPhase({ kind: 'invalid' })
   }, [])
 
+  const renew = useCallback(async () => {
+    const token = tokenRef.current
+    if (!token) return false
+    const { data } = await post('/api/sign/session', { token, birthYear: yearRef.current ?? undefined })
+    return data.state === 'ready'
+  }, [])
+
   const openSession = useCallback(async (birthYear?: string) => {
     const token = tokenRef.current
     if (!token) return loadContext()
     const { data } = await post('/api/sign/session', { token, birthYear })
+    // Only a year that was accepted is kept: a wrong one resent on renewal
+    // would count against the link's five tries.
+    if (data.state === 'ready' && birthYear) yearRef.current = birthYear
     switch (data.state) {
       case 'ready': return loadContext()
       case 'verify': return setPhase({ kind: 'verify', documentLabel: String(data.documentLabel ?? 'form'), aboutSigner: !!data.aboutSigner, retry: !!data.retry })
@@ -125,13 +139,14 @@ export function SigningApp() {
             onDone={(complete) => setPhase({ kind: 'done', complete })}
             onDeclined={() => setPhase({ kind: 'declined' })}
             onLost={() => setPhase({ kind: 'invalid' })}
+            onRenew={renew}
           />
         )}
         {phase.kind === 'done' && <Done complete={phase.complete} />}
         {phase.kind === 'declined' && (
           <Notice title="You declined to sign">
             We&rsquo;ve let the Stellr team know. If that was a mistake, or you&rsquo;d like to talk it through, email{' '}
-            <a className="text-primary underline" href="mailto:privacy@stellreducation.org">privacy@stellreducation.org</a>.
+            <a className="text-primary-deep underline" href="mailto:privacy@stellreducation.org">privacy@stellreducation.org</a>.
           </Notice>
         )}
       </div>
@@ -153,7 +168,7 @@ function InvalidLink() {
     <Notice title="This link can’t be used">
       It may have expired, already been used, or been replaced by a newer one. Check your email for the most recent
       message from Stellr Education, or email{' '}
-      <a className="text-primary underline" href="mailto:privacy@stellreducation.org">privacy@stellreducation.org</a>{' '}
+      <a className="text-primary-deep underline" href="mailto:privacy@stellreducation.org">privacy@stellreducation.org</a>{' '}
       and we&rsquo;ll send you a new link.
     </Notice>
   )
@@ -192,17 +207,19 @@ function VerifyYear({ documentLabel, aboutSigner, retry, onSubmit }: { documentL
             That doesn&rsquo;t match. Check the year and try again.
           </p>
         )}
-        <div><Button type="submit" disabled={busy || year.length !== 4}>Continue</Button></div>
+        <div><Button variant="primaryStrong" type="submit" disabled={busy || year.length !== 4}>Continue</Button></div>
       </form>
     </section>
   )
 }
 
-function Signing({ view, onDone, onDeclined, onLost }: {
+function Signing({ view, onDone, onDeclined, onLost, onRenew }: {
   view: View
   onDone: (complete: boolean) => void
   onDeclined: () => void
   onLost: () => void
+  /** Opens a fresh session from the link; false when the link no longer works. */
+  onRenew: () => Promise<boolean>
 }) {
   const [step, setStep] = useState<Step>(view.consented ? 'read' : 'consent')
   const [values, setValues] = useState<Record<string, string>>(() =>
@@ -225,18 +242,27 @@ function Signing({ view, onDone, onDeclined, onLost }: {
 
   const lost = (status: number) => { if (status === 404) { onLost(); return true } return false }
 
+  // The session lasts 30 minutes. Someone who reads slowly must not lose their
+  // place (WCAG 2.2.1): when it has run out, open a fresh one from the link
+  // this page already holds, and try once more.
+  async function call(path: string, body: unknown) {
+    const first = await post(path, body)
+    if (first.status !== 404 || !(await onRenew())) return first
+    return post(path, body)
+  }
+
   async function consent(attest: boolean) {
     setBusy(true); setMessage(null)
-    const { ok, status, data } = await post('/api/sign/consent', { disclosureVersion: view.disclosureVersion, attest })
+    const { ok, status, data } = await call('/api/sign/consent', { disclosureVersion: view.disclosureVersion, attest })
     setBusy(false)
     if (lost(status)) return
     if (!ok) return setMessage(String(data.error ?? 'Something went wrong. Please try again.'))
     setStep('read')
   }
 
-  async function sign(signature: string, confirmDifferentName = false) {
+  async function sign(signature: string, confirmDifferentName = false, image: string | null = null) {
     setBusy(true); setMessage(null); setErrors({}); setNameDiffers(null)
-    const { ok, status, data } = await post('/api/sign/submit', { values, signature, confirmDifferentName })
+    const { ok, status, data } = await call('/api/sign/submit', { values, signature, confirmDifferentName, signatureImage: image })
     setBusy(false)
     if (lost(status)) return
     if (!ok || data.ok === false) {
@@ -252,7 +278,7 @@ function Signing({ view, onDone, onDeclined, onLost }: {
 
   async function decline(reason: string) {
     setBusy(true)
-    const { status } = await post('/api/sign/decline', { reason })
+    const { status } = await call('/api/sign/decline', { reason })
     setBusy(false)
     if (lost(status)) return
     onDeclined()
@@ -269,7 +295,7 @@ function Signing({ view, onDone, onDeclined, onLost }: {
   return (
     <div className="space-y-6">
       <header>
-        <p className="font-subheading text-xs font-semibold uppercase tracking-[0.14em] text-primary">Stellr signing</p>
+        <p className="font-subheading text-xs font-semibold uppercase tracking-[0.14em] text-primary-deep">Stellr signing</p>
         <h1 className="mt-1 font-display text-3xl font-bold text-ink">{view.documentTitle}</h1>
         <p className="mt-1 text-content-muted">
           {view.eventTitle ? `${view.eventTitle} · ` : ''}Signing as {view.signerName} ({view.roleLabel.toLowerCase()})
@@ -279,7 +305,7 @@ function Signing({ view, onDone, onDeclined, onLost }: {
             <li
               key={s.id}
               aria-current={i === index ? 'step' : undefined}
-              className={`rounded-pill px-3 py-1 font-semibold ${i === index ? 'bg-primary text-white' : i < index ? 'bg-primary-soft text-primary' : 'bg-white text-content-muted border border-line'}`}
+              className={`rounded-pill px-3 py-1 font-semibold ${i === index ? 'bg-primary-deep text-white' : i < index ? 'bg-primary-soft text-primary-deep' : 'bg-white text-content-muted border border-line'}`}
             >
               {i + 1}. {s.label}
             </li>
@@ -313,7 +339,10 @@ function Signing({ view, onDone, onDeclined, onLost }: {
                 view.fields.filter((f) => f.required && f.type !== 'checkbox' && !values[f.name]?.trim()).map((f) => [f.name, `Enter ${f.label.toLowerCase()}.`]),
               )
               setErrors(missing)
-              if (!Object.keys(missing).length) setStep('sign')
+              const first = Object.keys(missing)[0]
+              // Take the signer to the first thing to fix (WCAG 3.3.1).
+              if (first) requestAnimationFrame(() => document.getElementById(`field-${first}`)?.focus())
+              else setStep('sign')
             }}
           />
         )}
@@ -360,7 +389,7 @@ function ConsentStep({ headingRef, attestation, busy, onAgree }: {
       <div className="space-y-3 text-sm text-content-body">
         {DISCLOSURE_PARAGRAPHS.map((p) => <p key={p.slice(0, 24)}>{p}</p>)}
         <p>
-          <a className="text-primary underline" href="/privacy" target="_blank" rel="noopener noreferrer">Read our Privacy Policy</a>
+          <a className="text-primary-deep underline" href="/privacy" target="_blank" rel="noopener noreferrer">Read our Privacy Policy</a>
         </p>
       </div>
       <label className="flex items-start gap-3 text-sm text-ink">
@@ -374,6 +403,7 @@ function ConsentStep({ headingRef, attestation, busy, onAgree }: {
         </label>
       )}
       <Button
+        variant="primaryStrong"
         disabled={busy || !agreed || (!!attestation && !attested)}
         onClick={() => onAgree(attested)}
         aria-describedby="consent-hint"
@@ -398,20 +428,10 @@ function ReadStep({ headingRef, textHtml, onNext }: { headingRef: HeadingRef; te
         Please read it in full before you sign. Your details are already filled in where we have them; you can correct
         them in the next step.
       </p>
-      <p className="text-sm">
-        <a className="text-primary underline" href="/api/sign/document" target="_blank" rel="noopener noreferrer">
-          Open the document in a new tab
-        </a>{' '}
-        <span className="text-content-muted">(best on a phone)</span>
-      </p>
-      <iframe
-        title="The document to sign"
-        src="/api/sign/document#toolbar=1&view=FitH"
-        className="hidden h-[70vh] w-full rounded-control border border-line sm:block"
-      />
+      <PdfViewer src="/api/sign/document" title="The document to sign" />
       {textHtml && (
         <div>
-          <button type="button" className="text-sm text-primary underline" onClick={() => setShowText((v) => !v)} aria-expanded={showText}>
+          <button type="button" className="text-sm text-primary-deep underline" onClick={() => setShowText((v) => !v)} aria-expanded={showText}>
             {`${showText ? 'Hide' : 'Show'} the text version`}
           </button>
           {showText && (
@@ -420,7 +440,7 @@ function ReadStep({ headingRef, textHtml, onNext }: { headingRef: HeadingRef; te
           )}
         </div>
       )}
-      <Button onClick={onNext}>I&rsquo;ve read it — continue</Button>
+      <Button variant="primaryStrong" onClick={onNext}>I&rsquo;ve read it — continue</Button>
     </div>
   )
 }
@@ -437,6 +457,9 @@ function DetailsStep({ headingRef, fields, values, errors, onChange, onBack, onN
   return (
     <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); onNext() }} noValidate>
       <StepHeading headingRef={headingRef}>Your details and choices</StepHeading>
+      {fields.some((f) => f.required && f.type !== 'checkbox') && (
+        <p className="text-sm text-content-muted">Fields marked <span className="text-danger">*</span> are required.</p>
+      )}
       {fields.map((f) => {
         const id = `field-${f.name}`
         const err = errors[f.name]
@@ -478,8 +501,8 @@ function DetailsStep({ headingRef, fields, values, errors, onChange, onBack, onN
         )
       })}
       <div className="flex flex-wrap gap-3">
-        <Button type="button" variant="secondary" onClick={onBack}>Back</Button>
-        <Button type="submit">Continue</Button>
+        <Button type="button" variant="secondaryStrong" onClick={onBack}>Back</Button>
+        <Button variant="primaryStrong" type="submit">Continue</Button>
       </div>
     </form>
   )
@@ -494,12 +517,19 @@ function SignStep({ headingRef, view, values, busy, error, nameDiffers, onBack, 
   /** Set when the typed name differs from the one on the form. */
   nameDiffers: string | null
   onBack: () => void
-  onSign: (signature: string, confirmDifferentName?: boolean) => void
+  onSign: (signature: string, confirmDifferentName?: boolean, image?: string | null) => void
 }) {
   const [signature, setSignature] = useState('')
   const [confirmed, setConfirmed] = useState(false)
+  const [mode, setMode] = useState<'type' | 'draw'>('type')
+  const [drawing, setDrawing] = useState<string | null>(null)
+  const image = mode === 'draw' ? drawing : null
+  const ready = confirmed && signature.trim().length >= 2 && (mode === 'type' || !!drawing)
+  const hint = signature.trim().length < 2
+    ? 'Type your full name and tick the box to sign.'
+    : mode === 'draw' && !drawing ? 'Draw your signature in the box, or choose to type it.' : 'Tick the box to sign.'
   return (
-    <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); onSign(signature) }}>
+    <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); onSign(signature, false, image) }}>
       <StepHeading headingRef={headingRef}>Review and sign</StepHeading>
       {view.fields.length > 0 && (
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
@@ -513,8 +543,31 @@ function SignStep({ headingRef, view, values, busy, error, nameDiffers, onBack, 
           ))}
         </dl>
       )}
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-semibold text-ink">How would you like to sign?</legend>
+        <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-ink">
+          <label className="flex items-center gap-2">
+            <input type="radio" name="sign-mode" checked={mode === 'type'} onChange={() => setMode('type')} />
+            Type my name
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="radio" name="sign-mode" checked={mode === 'draw'} onChange={() => setMode('draw')} />
+            Draw my signature
+          </label>
+        </div>
+      </fieldset>
+      {mode === 'draw' && (
+        <div>
+          <p id="pad-hint" className="mb-2 text-sm text-content-muted">
+            Draw with your finger, a pen or the mouse. Only the finished picture is kept.
+          </p>
+          <SignaturePad onChange={setDrawing} describedBy="pad-hint" />
+        </div>
+      )}
       <div>
-        <label htmlFor="signature" className="block text-sm font-semibold text-ink">Type your full name to sign</label>
+        <label htmlFor="signature" className="block text-sm font-semibold text-ink">
+          {mode === 'draw' ? 'Type your full name as well' : 'Type your full name to sign'}
+        </label>
         <input
           id="signature"
           autoComplete="name"
@@ -526,14 +579,18 @@ function SignStep({ headingRef, view, values, busy, error, nameDiffers, onBack, 
           className="mt-1 w-full rounded-control border border-line px-3 py-2 font-display text-xl text-ink"
           placeholder={view.signerName}
         />
-        <p id="signature-hint" className="mt-1 text-xs text-content-muted">This is your legal signature on the document.</p>
+        <p id="signature-hint" className="mt-1 text-xs text-content-muted">
+          {mode === 'draw'
+            ? 'Your name goes on the signing record beside your drawn signature.'
+            : 'This is your legal signature on the document.'}
+        </p>
         {error && <p id="signature-error" className="mt-1 text-sm text-danger">{error}</p>}
         {nameDiffers && nameDiffers === signature && (
           <div className="mt-3 space-y-2 rounded-control border border-line bg-surface p-3 text-sm text-ink">
             <p>
               {`If your name is spelled differently from the form, you can sign as “${nameDiffers}”. Only sign if you are ${view.signerName}; signing in someone else’s name is not permitted.`}
             </p>
-            <Button type="button" variant="secondary" disabled={busy} onClick={() => onSign(signature, true)}>
+            <Button type="button" variant="secondaryStrong" disabled={busy} onClick={() => onSign(signature, true, image)}>
               {`Sign as “${nameDiffers}”`}
             </Button>
           </div>
@@ -544,20 +601,12 @@ function SignStep({ headingRef, view, values, busy, error, nameDiffers, onBack, 
         <span>I have read the {view.documentTitle} and agree to it. I am signing it electronically as {view.signerName}.</span>
       </label>
       <div className="flex flex-wrap gap-3">
-        <Button type="button" variant="secondary" onClick={onBack} disabled={busy}>Back</Button>
-        <Button
-          type="submit"
-          disabled={busy || !confirmed || signature.trim().length < 2}
-          aria-describedby={confirmed && signature.trim().length >= 2 ? undefined : 'sign-hint'}
-        >
+        <Button type="button" variant="secondaryStrong" onClick={onBack} disabled={busy}>Back</Button>
+        <Button variant="primaryStrong" type="submit" disabled={busy || !ready} aria-describedby={ready ? undefined : 'sign-hint'}>
           {busy ? 'Signing…' : 'Sign'}
         </Button>
       </div>
-      {(!confirmed || signature.trim().length < 2) && (
-        <p id="sign-hint" className="text-sm text-content-muted">
-          {signature.trim().length < 2 ? 'Type your full name and tick the box to sign.' : 'Tick the box to sign.'}
-        </p>
-      )}
+      {!ready && <p id="sign-hint" className="text-sm text-content-muted">{hint}</p>}
     </form>
   )
 }
@@ -569,9 +618,9 @@ function DeclineLink({ busy, onDecline }: { busy: boolean; onDecline: (reason: s
     return (
       <p className="text-sm text-content-muted">
         Don&rsquo;t want to sign?{' '}
-        <button type="button" className="text-primary underline" onClick={() => setOpen(true)}>Decline instead</button>{' '}
+        <button type="button" className="text-primary-deep underline" onClick={() => setOpen(true)}>Decline instead</button>{' '}
         or ask for a paper copy at{' '}
-        <a className="text-primary underline" href="mailto:privacy@stellreducation.org">privacy@stellreducation.org</a>.
+        <a className="text-primary-deep underline" href="mailto:privacy@stellreducation.org">privacy@stellreducation.org</a>.
       </p>
     )
   }
@@ -590,7 +639,7 @@ function DeclineLink({ busy, onDecline }: { busy: boolean; onDecline: (reason: s
         rows={3}
       />
       <div className="flex flex-wrap gap-3">
-        <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Keep signing</Button>
+        <Button type="button" variant="secondaryStrong" onClick={() => setOpen(false)}>Keep signing</Button>
         <Button type="submit" variant="softAmber" disabled={busy}>Decline to sign</Button>
       </div>
     </form>
@@ -620,7 +669,7 @@ function Done({ complete }: { complete: boolean }) {
       </p>
       {complete && (
         <div className="mt-6">
-          <Button onClick={download} disabled={busy}>{busy ? 'Preparing…' : 'Download your signed copy'}</Button>
+          <Button variant="primaryStrong" onClick={download} disabled={busy}>{busy ? 'Preparing…' : 'Download your signed copy'}</Button>
           {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
         </div>
       )}

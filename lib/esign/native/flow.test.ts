@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 import { fakeSupabase, type FakeDb } from '@/test/fake-supabase'
+import { testPng } from '@/test/png'
 
 // The whole Stellr signing journey for a minor's consent form, against the
 // in-memory database: issue, the parent's check and signature, the student's
@@ -242,6 +243,39 @@ describe('Stellr signing: a minor’s consent form', () => {
     expect(accepted).toMatchObject({ ok: true })
     const signed = db.table('esign_audit_events').find((e) => e.event === 'signed')!
     expect(signed.detail).toMatchObject({ signatureText: 'Patricia Rivera', nameOnRecord: 'Pat Rivera', nameMatchesRecord: false })
+  })
+
+  it('takes a drawn signature as an image, puts it on the document and keeps it with the record', async () => {
+    const db = await setup()
+    const { row } = await issue(db)
+    const link = await openLink(db.client, linkFrom(sent[0]), { birthYear: '2012' })
+    if (link.kind !== 'ready') throw new Error('expected a session')
+    const ctx = async () => (await resolveSession(db.client, link.session, 'act'))!
+    await recordConsent(db.client, await ctx(), { disclosureVersion: '2026-10-v1', attest: true }, meta)
+
+    const png = testPng()
+    const first = await submitSignature(db.client, await ctx(), { values: { GuardianPhone: '555 0199' }, signatureText: 'Pat Rivera', signaturePng: png }, meta)
+    expect(first).toMatchObject({ ok: true })
+    const parent = db.table('docusign_envelope_recipients').find((r) => r.role_name === 'Guardian')!
+    expect(parent).toMatchObject({ signature_kind: 'drawn', signature_text: 'Pat Rivera' })
+    expect(db.objects.get(`${SIGNED_BUCKET}/${parent.signature_image_path}`)).toEqual(png)
+    expect(db.table('esign_audit_events').find((e) => e.event === 'signed')?.detail).toMatchObject({
+      signatureKind: 'drawn', signatureImageSha256: createHash('sha256').update(png).digest('hex'),
+    })
+
+    // The student signs; the sealed record carries the drawn signature.
+    if (!first.ok) return
+    await sendInvites(db.client, first.activated)
+    const studentLink = await openLink(db.client, linkFrom(sent.at(-1)!), { birthYear: '2012' })
+    if (studentLink.kind !== 'ready') throw new Error('expected a session')
+    const student = async () => (await resolveSession(db.client, studentLink.session, 'act'))!
+    await recordConsent(db.client, await student(), { disclosureVersion: '2026-10-v1' }, meta)
+    expect(await submitSignature(db.client, await student(), { values: { MinorDateOfBirth: '04-May-2012' }, signatureText: 'Sam Rivera' }, meta))
+      .toMatchObject({ ok: true, agreementComplete: true })
+    const envelope = db.table('docusign_envelopes').find((e) => e.id === row.id)!
+    expect(envelope.status).toBe('completed')
+    const pdf = await PDFDocument.load(db.objects.get(`${SIGNED_BUCKET}/${envelope.signed_pdf_path}`)!)
+    expect(pdf.getPageCount()).toBeGreaterThan(1)
   })
 
   it('treats case, accents and spacing as the same name', () => {

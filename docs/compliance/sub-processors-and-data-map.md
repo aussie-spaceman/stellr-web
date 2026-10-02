@@ -20,7 +20,7 @@ DPA status: "Standard" means the provider's own data processing addendum governs
 | Checkr | Background checks for adult mentors and volunteers | Name, email, work location; what the candidate gives Checkr directly | No (adults only) | United States (to confirm) | (to confirm) | `lib/background-provider/checkr.ts` |
 | Printful | Store orders | Name, delivery address | Possibly (to confirm) | (to confirm) | (to confirm) | `lib/store/` (`api.printful.com`) |
 | Discord | Community chat, opt-in | Discord username and posts | Possibly | (to confirm) | (to confirm) | No integration in code |
-| Timestamp authority (DigiCert by default) | Trusted timestamp on sealed PDFs, from mid-October 2026 | A hash only; no personal data | No | (to confirm) | Not needed (no personal data) | `lib/esign/native/seal.ts` (in progress) |
+| Timestamp authority (DigiCert by default) | Trusted timestamp on sealed PDFs, from mid-October 2026 | A hash only; no personal data | No | (to confirm) | Not needed (no personal data) | `lib/esign/native/seal.ts` |
 | Sanity | Content management | None | No | (to confirm) | Not needed | `lib/sanity.ts` |
 | HubSpot | Lead capture, enquiries | Name, email, enquiry; `hubspotutk` cookie | Possibly (e.g. scholarship enquiries) (to confirm) | (to confirm) | (to confirm) | `lib/hubspot.ts` |
 | Google Analytics, Tag Manager, Ads | Aggregate analytics; ad measurement with consent | Usage data, cookie identifiers; not on private routes | Possibly (cookie ids only) | (to confirm) | (to confirm) | `app/layout.tsx` |
@@ -83,6 +83,6 @@ flowchart TD
 
 Notes on the map:
 
-- The daily job is `runEsignMaintenance` (`lib/esign/maintenance.ts`), run from the `docusign-form-data` cron at 09:15 UTC (`vercel.json`): usage, finalise, reconcile, outbox, archive, replicate, export, integrity, retention, heartbeat. A `seal` step (certificate seal with trusted timestamp, before `replicate`) was being added, uncommitted, on 2 Oct (`lib/esign/native/certificate-seal.ts`).
+- The daily job is `runEsignMaintenance` (`lib/esign/maintenance.ts`), run from the `docusign-form-data` cron at 09:15 UTC (`vercel.json`): usage, finalise, reconcile, outbox, archive, replicate, export, integrity, retention, heartbeat. A `seal` step (certificate seal with trusted timestamp) runs after `archive` and before `replicate` (`lib/esign/native/certificate-seal.ts`).
 - `deletion_archive` and roster spreadsheets have no deletion path in code. See README, Conflicts found.
 - DocuSign keeps its own copy of what it signed; `purgeExpired` does not reach it.

@@ -35,7 +35,7 @@ Systems that hold or process personal data. "In code" means the repo calls or co
 | Google Tag Manager / Analytics / Ads, Meta, LinkedIn | Analytics and ad measurement | Yes (`app/layout.tsx`) | Not loaded on private routes |
 | Motion | Booking pages for calls; bookings read back from Google Calendar (`lib/motion-bookings.ts`) | Yes | Not in Privacy §7.1 (to confirm) |
 | Discord | Community chat | No integration found | Members give their handle |
-| Timestamp authority (DigiCert by default) | Trusted timestamp on sealed PDFs | In progress (`lib/esign/native/seal.ts`, uncommitted on 2 Oct) | Receives a hash only |
+| Timestamp authority (DigiCert by default) | Trusted timestamp on sealed PDFs | Built (`lib/esign/native/seal.ts`, d94aa50); needs a CA-issued seal certificate in production | Receives a hash only |
 | GitHub | Source code, CI (`.github/workflows/ci.yml`) | Yes | No production data |
 | Anthropic, OpenAI, Perplexity APIs | AEO prompt panel script (`scripts/aeo-prompt-panel.ts`) | Yes | Public prompts only, no personal data |
 
@@ -62,7 +62,7 @@ Systems that hold or process personal data. "In code" means the repo calls or co
 - **In transit:** TLS for every site and every provider API (Vercel and providers; to confirm HSTS settings on the domain).
 - **At rest:** provider-level disk encryption at Supabase, Google, Resend and the others (to confirm each provider's statement).
 - **Off-site copy:** AES-256-GCM before upload, format `SEB1 | IV | tag | ciphertext`; tampering fails decryption (`lib/esign/backup-crypto.ts`). Google never holds the key.
-- **Integrity of signed records:** SHA-256 recorded on each stored PDF; a hash-chained, append-only audit trail (`esign_audit_events`, trigger `esign_audit_events_guard`); certificate-based PAdES seal with a trusted timestamp in progress (`lib/esign/native/seal.ts`, `certificate-seal.ts`; a daily `seal` step applies it retroactively, uncommitted on 2 Oct).
+- **Integrity of signed records:** SHA-256 recorded on each stored PDF; a hash-chained, append-only audit trail (`esign_audit_events`, trigger `esign_audit_events_guard`); certificate-based PAdES seal with a trusted timestamp (`lib/esign/native/seal.ts`, `certificate-seal.ts`; applied at completion, and retroactively by the daily `seal` step).
 
 ## 6. Signing-link security
 

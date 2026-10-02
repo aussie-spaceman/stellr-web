@@ -38,15 +38,17 @@ export function sha256Hex(bytes: Uint8Array | ArrayBuffer): string {
 export async function sanitisePdf(input: Uint8Array | ArrayBuffer): Promise<{ bytes: Uint8Array; pageCount: number }> {
   const source = await PDFDocument.load(input, { updateMetadata: false })
   if (source.isEncrypted) throw new Error('Encrypted PDFs cannot be used as agreement templates')
-  const clean = await PDFDocument.create({ updateMetadata: false })
-  const pages = await clean.copyPages(source, source.getPageIndices())
-  for (const page of pages) {
-    // Annotations (links, form widgets, embedded actions) and page-level
-    // actions are dropped: the engine draws every field itself.
+  // Annotations (links, form widgets, embedded actions, and any signature an
+  // exported document still carries, such as DocuSign's own envelope seal)
+  // and page-level actions are dropped BEFORE copying: copying first would
+  // bring their objects along, unreferenced but still in the file.
+  for (const page of source.getPages()) {
     page.node.delete(PDFName.of('Annots'))
     page.node.delete(PDFName.of('AA'))
-    clean.addPage(page)
   }
+  const clean = await PDFDocument.create({ updateMetadata: false })
+  const pages = await clean.copyPages(source, source.getPageIndices())
+  for (const page of pages) clean.addPage(page)
   clean.setProducer('Stellr signing')
   clean.setCreator('Stellr signing')
   return { bytes: await clean.save({ useObjectStreams: true }), pageCount: pages.length }

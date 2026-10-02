@@ -777,6 +777,15 @@ export async function finaliseAgreement(db: SupabaseClient, envelopeRowId: strin
 
     await appendAudit(db, { envelopeRow: envelopeRowId, event: 'completed' })
 
+    // The certificate seal, before anyone is sent their copy. Not fatal: the
+    // hash seal above already stands, and the daily run seals it later.
+    try {
+      const { applyCertificateSeal } = await import('@/lib/esign/native/certificate-seal')
+      await applyCertificateSeal(db, envelopeRowId, now)
+    } catch (sealErr) {
+      console.error(`[esign-flow] certificate seal for ${envelopeRowId} deferred:`, sealErr instanceof Error ? sealErr.message : sealErr)
+    }
+
     const { onEnvelopeCompleted, COMPLETED_ENVELOPE_COLUMNS } = await import('@/lib/esign/completion')
     const { data: done } = await db.from('docusign_envelopes').select(COMPLETED_ENVELOPE_COLUMNS).eq('id', envelopeRowId).maybeSingle()
     if (done) await onEnvelopeCompleted(db, done as never)

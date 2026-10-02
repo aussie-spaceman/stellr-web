@@ -223,10 +223,18 @@ export async function purgeExpired(
         .select('signature_image_path')
         .eq('envelope_row', row.id)
         .not('signature_image_path', 'is', null)
+      // A certificate seal keeps the hash-sealed original beside the sealed
+      // copy; the audit trail is where its path is recorded.
+      const { data: seals } = await db
+        .from('esign_audit_events')
+        .select('detail')
+        .eq('envelope_row', row.id)
+        .eq('event', 'sealed')
       const paths = [
         row.signed_pdf_path,
         row.certificate_path,
         ...(drawn ?? []).map((d) => d.signature_image_path as string | null),
+        ...(seals ?? []).map((s) => (s.detail as { previousPath?: string } | null)?.previousPath ?? null),
       ].filter((p): p is string => !!p)
       if (paths.length) {
         const { error: storageError } = await db.storage.from(SIGNED_BUCKET).remove(paths)

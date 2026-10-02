@@ -5,6 +5,7 @@ import { expireUnsigned, purgeExpired } from '@/lib/esign/retention'
 import { syncDocusignUsage } from '@/lib/esign/routing'
 import { drainOutbox } from '@/lib/esign/outbox'
 import { finaliseStalled } from '@/lib/esign/native/flow'
+import { sealPending } from '@/lib/esign/native/certificate-seal'
 import { retryFailedIssues } from '@/lib/esign/reconcile'
 import { backupConfigured } from '@/lib/esign/backup-crypto'
 import { driveBackupStore, type BackupStore } from '@/lib/esign/backup-store'
@@ -20,11 +21,11 @@ import { checkHeartbeat } from '@/lib/esign/heartbeat'
 // dev deployment.
 
 export type MaintenanceStep =
-  | 'usage' | 'finalise' | 'reconcile' | 'outbox' | 'archive'
+  | 'usage' | 'finalise' | 'reconcile' | 'outbox' | 'archive' | 'seal'
   | 'replicate' | 'export' | 'integrity' | 'retention' | 'heartbeat'
 
 export const ALL_STEPS: MaintenanceStep[] = [
-  'usage', 'finalise', 'reconcile', 'outbox', 'archive', 'replicate', 'export', 'integrity', 'retention', 'heartbeat',
+  'usage', 'finalise', 'reconcile', 'outbox', 'archive', 'seal', 'replicate', 'export', 'integrity', 'retention', 'heartbeat',
 ]
 
 export interface MaintenanceOptions {
@@ -81,6 +82,11 @@ export async function runEsignMaintenance(
   await step('outbox', async () => (opts.dryRun ? { skipped: 'dry run' } : drainOutbox(db)))
 
   await step('archive', () => archivePending(db, { limit: ARCHIVE_BATCH, dryRun: opts.dryRun }))
+
+  // Certificate seal for anything still carrying only the hash seal, including
+  // agreements signed before the certificate was set up. Before 'replicate',
+  // so the off-site copy is the sealed file.
+  await step('seal', () => sealPending(db, { limit: ARCHIVE_BATCH, dryRun: opts.dryRun }))
 
   await step('replicate', async () => {
     if (!store) return noStore

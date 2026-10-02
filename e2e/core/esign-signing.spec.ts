@@ -2,6 +2,7 @@ import { expect, test } from '../fixtures/test'
 import { attachConsoleGuard } from '../fixtures/console-guard'
 import { storageStatePath } from '../fixtures/users'
 import AxeBuilder from '@axe-core/playwright'
+import { execFileSync } from 'node:child_process'
 import type { Page } from '@playwright/test'
 
 /** WCAG 2.1 A and AA, on the signing page's own content (not the site chrome around it). */
@@ -173,12 +174,28 @@ test.describe('Stellr signing', () => {
     const download = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Download your signed copy' }).click()
     expect((await download).suggestedFilename()).toMatch(/\.pdf$/)
+    const copy = await (await download).path()
 
     // ── The record ────────────────────────────────────────────────────────
     const record = await readAgreement(agreement.rowId)
-    expect(record.envelope).toMatchObject({ status: 'completed', seal_kind: 'hash', signers_completed: 2 })
+    expect(record.envelope).toMatchObject({ status: 'completed', signers_completed: 2 })
+    // A certificate seal where one is configured (locally); the hash seal otherwise (CI).
+    expect(['hash', 'pades', 'pades-t']).toContain(record.envelope.seal_kind)
+    if (record.envelope.seal_kind !== 'hash') {
+      // The copy the signer downloaded checks out on its own, with no database.
+      let out: string
+      try {
+        out = execFileSync('npx', ['tsx', 'scripts/esign-seal.ts', 'verify', copy], { encoding: 'utf8', stdio: 'pipe' })
+      } catch (err) {
+        const e = err as { stdout?: string; stderr?: string }
+        throw new Error(`Seal verification failed:\n${e.stdout ?? ''}\n${e.stderr ?? ''}`)
+      }
+      expect(out).toContain('Bytes unchanged since sealing: YES')
+      expect(out).toContain('Seal signature valid:          YES')
+      if (record.envelope.seal_kind === 'pades-t') expect(out).toMatch(/Trusted timestamp:\s+\d{4}-\d{2}-\d{2}T/)
+    }
     expect(record.envelope.signed_pdf_sha256).toMatch(/^[0-9a-f]{64}$/)
-    expect(record.envelope.signed_pdf_path).toMatch(/^native\/\d{4}\/[0-9a-f-]{36}\/signed\.pdf$/)
+    expect(record.envelope.signed_pdf_path).toMatch(/^native\/\d{4}\/[0-9a-f-]{36}\/(signed|sealed)\.pdf$/)
     expect(record.envelope.completion_notified_at).not.toBeNull()
     expect(record.recipients.map((r) => [r.role_name, r.status])).toEqual([['Guardian', 'completed'], ['Minor', 'completed']])
     expect(record.recipients[0].signer_values).toMatchObject({ MediaOptOut: 'true', GuardianPhone: '555 0142' })

@@ -15,8 +15,27 @@ import { extractPages, pageWords } from '@/lib/esign/native/pdf-text'
 // the tests on a synthetic document.
 
 export interface TemplateIssue {
-  check: 'wording' | 'coverage' | 'placement'
+  check: 'wording' | 'coverage' | 'placement' | 'clean'
   message: string
+}
+
+/**
+ * No signature, form or script left in the template. A DocuSign export can
+ * carry DocuSign's own envelope signature; kept, every agreement built on it
+ * would show a second, broken signature in a PDF reader.
+ */
+export async function checkClean(template: Uint8Array): Promise<TemplateIssue[]> {
+  const { PDFDocument, PDFDict, PDFName } = await import('pdf-lib')
+  const doc = await PDFDocument.load(template, { updateMetadata: false })
+  const found = new Set<string>()
+  for (const [, obj] of doc.context.enumerateIndirectObjects()) {
+    if (!(obj instanceof PDFDict)) continue
+    if (obj.has(PDFName.of('ByteRange')) || obj.get(PDFName.of('FT')) === PDFName.of('Sig')) found.add('a digital signature')
+    if (obj.get(PDFName.of('Subtype')) === PDFName.of('Widget')) found.add('a form field')
+    if (obj.get(PDFName.of('S')) === PDFName.of('JavaScript')) found.add('a script')
+  }
+  if (doc.catalog.has(PDFName.of('AcroForm'))) found.add('a form')
+  return [...found].map((what) => ({ check: 'clean' as const, message: `The template still contains ${what}. Convert it again: the clean rebuild removes it.` }))
 }
 
 export async function compareWording(source: Uint8Array, template: Uint8Array): Promise<TemplateIssue[]> {

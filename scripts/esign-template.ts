@@ -107,10 +107,12 @@ async function client() {
 
 async function publish(key: string) {
   const { parseFieldMap } = await import('../lib/esign/native/template')
-  const { sha256Hex } = await import('../lib/esign/native/render')
+  const { sanitisePdf, sha256Hex } = await import('../lib/esign/native/render')
   const title = arg('--title')
   if (!title) throw new Error('--title is required (the document name signers see)')
-  const pdf = fs.readFileSync(path.join(OUT, `${key}.pdf`))
+  // Cleaned again on the way up (it is idempotent), so a file converted by an
+  // older version of the converter, or edited by hand, cannot be published dirty.
+  const pdf = Buffer.from((await sanitisePdf(fs.readFileSync(path.join(OUT, `${key}.pdf`)))).bytes)
   const map = parseFieldMap(JSON.parse(fs.readFileSync(path.join(OUT, `${key}.fields.json`), 'utf8')))
   const htmlPath = path.join(OUT, `${key}.html`)
   const textHtml = fs.existsSync(htmlPath) ? fs.readFileSync(htmlPath, 'utf8') : null
@@ -138,7 +140,7 @@ async function publish(key: string) {
 /** Runs the template checks; returns the number of problems found. */
 async function check(key: string, version: number | null): Promise<number> {
   const { parseFieldMap } = await import('../lib/esign/native/template')
-  const { checkPlacement, compareCoverage, compareWording } = await import('../lib/esign/native/template-check')
+  const { checkClean, checkPlacement, compareCoverage, compareWording } = await import('../lib/esign/native/template-check')
   let pdf: Uint8Array
   let map
   if (version) {
@@ -154,8 +156,8 @@ async function check(key: string, version: number | null): Promise<number> {
     map = parseFieldMap(JSON.parse(fs.readFileSync(path.join(OUT, `${key}.fields.json`), 'utf8')))
   }
 
-  const issues = await checkPlacement(pdf, map)
-  const ran = ['placement']
+  const issues = [...await checkClean(pdf), ...await checkPlacement(pdf, map)]
+  const ran = ['clean', 'placement']
   if (arg('--pdf')) {
     issues.push(...await compareWording(fs.readFileSync(path.resolve(arg('--pdf') as string)), pdf))
     ran.push('wording')

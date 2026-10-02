@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { PDFDocument, StandardFonts } from 'pdf-lib'
+import { PDFDocument, PDFHexString, PDFName, StandardFonts } from 'pdf-lib'
 import { sanitisePdf } from './render'
 import { parseFieldMap } from './template'
-import { checkPlacement, compareCoverage, compareWording } from './template-check'
+import { checkClean, checkPlacement, compareCoverage, compareWording } from './template-check'
 import { extractPages } from './pdf-text'
 
 async function sourcePdf(clause = 'The participant agrees to follow the event rules.'): Promise<Uint8Array> {
@@ -68,6 +68,26 @@ describe('compareCoverage', () => {
 
   it('passes the same map', () => {
     expect(compareCoverage(map, map)).toEqual([])
+  })
+})
+
+describe('checkClean', () => {
+  /** A page carrying a signature field, as a DocuSign export can. */
+  async function signedSource(): Promise<Uint8Array> {
+    const doc = await PDFDocument.load(await sourcePdf())
+    const sig = doc.context.obj({ Type: 'Sig', Filter: 'Adobe.PPKLite', ByteRange: [0, 10, 20, 30], Contents: PDFHexString.of('00') })
+    const widget = doc.context.register(doc.context.obj({ Type: 'Annot', Subtype: 'Widget', FT: 'Sig', Rect: [0, 0, 0, 0], V: doc.context.register(sig) }))
+    doc.getPage(0).node.set(PDFName.of('Annots'), doc.context.obj([widget]))
+    return doc.save()
+  }
+
+  it('finds a leftover signature, and the clean rebuild removes it', async () => {
+    const dirty = await signedSource()
+    expect((await checkClean(dirty)).map((i) => i.message)).toEqual([
+      expect.stringMatching(/digital signature/),
+      expect.stringMatching(/form field/),
+    ])
+    expect(await checkClean((await sanitisePdf(dirty)).bytes)).toEqual([])
   })
 })
 

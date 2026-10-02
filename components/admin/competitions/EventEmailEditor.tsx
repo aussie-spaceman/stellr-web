@@ -14,6 +14,7 @@ import {
   type EventEmailRow,
 } from '@/lib/event-emails/types'
 import { scheduledSendDate } from '@/lib/event-emails/schedule'
+import { EventEmailCatchUp } from './EventEmailCatchUp'
 
 interface Preview {
   recipients: { email: string; name: string; roles: (keyof typeof ROLE_LABEL)[]; reasons: AudienceKey[] }[]
@@ -208,6 +209,10 @@ export function EventEmailEditor({
               ? 'Sending now.'
               : 'Skipped — the event had already happened when this was due.'}
         </p>
+      )}
+
+      {email.status === 'sent' && (
+        <EventEmailCatchUp eventSlug={eventSlug} emailId={email.id} onSent={() => onChanged(email, { refreshHistory: true })} />
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">

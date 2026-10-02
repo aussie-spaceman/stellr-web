@@ -6,6 +6,7 @@ import { getEventBySlug } from '@/lib/sanity'
 import { sendEventEmail } from '@/lib/event-emails/send'
 import { scheduleDecision } from '@/lib/event-emails/schedule'
 import { todayInMountain } from '@/lib/event-emails/render'
+import { runCatchUps } from '@/lib/event-emails/catch-up'
 
 export const maxDuration = 60
 
@@ -14,6 +15,9 @@ export const maxDuration = 60
 // i.e. ~9am, 11am and 1pm Mountain. One big send takes most of a 60s function
 // (Resend allows ~2 emails/second), and Hobby crons run at most daily, so each
 // slot sends what fits and leaves the rest for the next slot.
+//
+// After the scheduled sends, each slot also catches up late registrants on
+// emails already sent to All participants (lib/event-emails/catch-up.ts).
 
 /** Don't start another email once this much of the budget is gone. */
 const START_BUDGET_MS = 15_000
@@ -40,14 +44,17 @@ export async function GET(req: NextRequest) {
   }
 
   const eventDates = new Map<string, string | null>()
-  const result = { due: 0, sent: 0, skipped: 0, deferred: 0 }
-  for (const row of rows ?? []) {
-    const slug = row.event_slug as string
+  const eventDate = async (slug: string) => {
     if (!eventDates.has(slug)) {
       const e = (await getEventBySlug(slug).catch(() => null)) as { date?: string } | null
       eventDates.set(slug, e?.date ?? null)
     }
-    const decision = scheduleDecision(eventDates.get(slug), row.schedule_days_before as number, today)
+    return eventDates.get(slug) ?? null
+  }
+  const result = { due: 0, sent: 0, skipped: 0, deferred: 0, catchUpEmailed: 0, catchUpDeferred: 0 }
+  for (const row of rows ?? []) {
+    const slug = row.event_slug as string
+    const decision = scheduleDecision(await eventDate(slug), row.schedule_days_before as number, today)
     if (decision === 'wait') continue
     if (decision === 'skip') {
       await db.from('event_emails').update({ status: 'skipped' }).eq('id', row.id).eq('status', 'scheduled')
@@ -64,6 +71,11 @@ export async function GET(req: NextRequest) {
     if (out.ok) result.sent++
     else run.fail(row.id as string, out.error)
   }
+
+  const catchUps = await runCatchUps(db, eventDate, () => Date.now() - started <= START_BUDGET_MS, today)
+  result.catchUpEmailed = catchUps.emailed
+  result.catchUpDeferred = catchUps.deferred
+  for (const e of catchUps.errors) run.fail(`catch-up:${e.id}`, e.error)
 
   await run.finish(result)
   return NextResponse.json(result)

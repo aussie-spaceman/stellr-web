@@ -9,6 +9,8 @@ import {
   type ProviderState,
 } from '@/lib/esign/routing'
 import { canIssue } from '@/lib/esign'
+import { backupConfigured } from '@/lib/esign/backup-crypto'
+import { dailyBudget, outboxDepth } from '@/lib/esign/outbox'
 
 // What the admin "E-signature engine" card shows, and the changes it may make.
 
@@ -63,6 +65,10 @@ export interface EngineSummary {
   storage: StorageSummary
   restricted: number
   lastRuns: { job: string; started_at: string; ok: boolean | null }[]
+  /** Off-site encrypted copies: whether configured, and how many records still lack one. */
+  backup: { configured: boolean; unreplicated: number }
+  /** Stellr signing emails waiting for the daily budget. */
+  outbox: { waiting: number; dailyBudget: number }
 }
 
 export async function loadEngineSummary(db: SupabaseClient, now = new Date()): Promise<EngineSummary> {
@@ -86,7 +92,7 @@ export async function loadEngineSummary(db: SupabaseClient, now = new Date()): P
 
   const envelopes = () => db.from('docusign_envelopes').select('id', { count: 'exact', head: true })
 
-  const [unarchived, failing, documents, restricted, runs] = await Promise.all([
+  const [unarchived, failing, documents, restricted, runs, unreplicated, waiting] = await Promise.all([
     envelopes().eq('status', 'completed').is('reused_from', null).is('archived_at', null),
     envelopes().eq('status', 'completed').is('archived_at', null).gt('archive_attempts', 0),
     db.from('docusign_envelopes')
@@ -98,6 +104,8 @@ export async function loadEngineSummary(db: SupabaseClient, now = new Date()): P
       .in('job', ['esign-maintenance', 'docusign-reminders', 'docusign-form-data'])
       .order('started_at', { ascending: false })
       .limit(6),
+    envelopes().not('archived_at', 'is', null).is('replicated_at', null),
+    outboxDepth(db).catch(() => 0),
   ])
 
   return {
@@ -116,6 +124,8 @@ export async function loadEngineSummary(db: SupabaseClient, now = new Date()): P
     ),
     restricted: restricted.count ?? 0,
     lastRuns: (runs.data ?? []) as { job: string; started_at: string; ok: boolean | null }[],
+    backup: { configured: backupConfigured(), unreplicated: unreplicated.count ?? 0 },
+    outbox: { waiting, dailyBudget: dailyBudget() },
   }
 }
 

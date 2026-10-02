@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { SIGNED_BUCKET } from '@/lib/esign/storage'
+import { removeReplicas } from '@/lib/esign/replicate'
+import type { BackupStore } from '@/lib/esign/backup-store'
 
 // What happens to signed agreements when the people they belong to are deleted,
 // and when their retention period ends.
@@ -86,7 +88,7 @@ export interface PurgeResult {
  */
 export async function purgeExpired(
   db: SupabaseClient,
-  opts: { limit: number; dryRun?: boolean; now?: Date },
+  opts: { limit: number; dryRun?: boolean; now?: Date; store?: BackupStore | null },
 ): Promise<PurgeResult> {
   const now = opts.now ?? new Date()
   const { data, error } = await db
@@ -104,6 +106,8 @@ export async function purgeExpired(
   const failed: { id: string; error: string }[] = []
   for (const row of rows) {
     try {
+      // Off-site copies first: a record deleted here must not live on there.
+      if (opts.store) await removeReplicas(opts.store, row.id)
       const paths = [row.signed_pdf_path, row.certificate_path].filter((p): p is string => !!p)
       if (paths.length) {
         const { error: storageError } = await db.storage.from(SIGNED_BUCKET).remove(paths)

@@ -21,6 +21,7 @@ vi.mock('@/lib/cron-runs', () => ({
 vi.mock('@/lib/docusign', () => ({ resendEnvelope }))
 // The Stellr signing outbox drains in this cron's slot; it has its own tests.
 vi.mock('@/lib/esign/outbox', () => ({ drainOutbox: vi.fn(async () => ({ sent: 0, deferred: 0, failed: 0, waiting: 0 })) }))
+vi.mock('@/lib/esign/heartbeat', () => ({ checkHeartbeat: vi.fn(async () => ({ quiet: [] })) }))
 vi.mock('@/lib/docusign-agreements', () => ({ AGREEMENT_LABEL: { minor: 'Parental Consent Form' } }))
 vi.mock('@/lib/docusign-recipients', () => ({
   syncEnvelopeRecipients: async () => [

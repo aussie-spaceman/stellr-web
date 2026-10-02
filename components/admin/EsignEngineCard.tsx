@@ -154,6 +154,48 @@ export function EsignEngineCard() {
         </div>
       </dl>
 
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
+        <div>
+          <dt className="text-content-muted">Signing emails waiting</dt>
+          <dd className={summary.outbox.waiting > summary.outbox.dailyBudget ? 'font-semibold text-danger' : 'text-ink'}>
+            {summary.outbox.waiting}
+            {summary.outbox.waiting > 0 && ` (sends up to ${summary.outbox.dailyBudget} a day)`}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-content-muted">Off-site backup</dt>
+          <dd className={summary.backup.configured ? 'text-ink' : 'font-semibold text-danger'}>
+            {summary.backup.configured
+              ? summary.backup.unreplicated > 0 ? `${summary.backup.unreplicated} waiting to be copied` : 'Up to date'
+              : 'Not set up'}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-content-muted">Storage used</dt>
+          <dd className="text-ink">
+            {(summary.storage.bytes / 1024 ** 2).toFixed(1)} of {(summary.storage.limitBytes / 1024 ** 2).toFixed(0)} MB
+          </dd>
+        </div>
+        <div>
+          <dt className="text-content-muted">Kept after deletion requests</dt>
+          <dd className="text-ink">{summary.restricted}</dd>
+        </div>
+      </dl>
+
+      {!summary.backup.configured && (
+        <p className="text-sm text-danger" role="status">
+          Signed records have no off-site copy, and the database has no backups on the current plan. Set
+          ESIGN_BACKUP_KEY and ESIGN_BACKUP_DRIVE_FOLDER_ID.
+        </p>
+      )}
+
+      {summary.outbox.waiting > summary.outbox.dailyBudget && (
+        <p className="text-sm text-danger" role="status">
+          More signing emails are waiting than can go out today. Families will get their links over the next
+          {' '}{Math.ceil(summary.outbox.waiting / Math.max(1, summary.outbox.dailyBudget))} days, or sooner from their account if they have one.
+        </p>
+      )}
+
       {summary.storage.warn && (
         <p className="text-sm text-danger" role="status">
           Signed records use {(summary.storage.bytes / 1024 ** 2).toFixed(0)} MB of the{' '}

@@ -70,6 +70,7 @@ export function fakeSupabase(
     let head = false
     let orderBy: { col: string; asc: boolean }[] = []
     let limitN: number | null = null
+    let rangeFrom = 0
     let single: 'single' | 'maybe' | null = null
 
     const b = {
@@ -109,6 +110,7 @@ export function fakeSupabase(
       or(expr: string) { filters.push(parseOr(expr)); return b },
       order(c: string, o?: { ascending?: boolean }) { orderBy.push({ col: c, asc: o?.ascending !== false }); return b },
       limit(n: number) { limitN = n; return b },
+      range(from: number, to: number) { rangeFrom = from; limitN = to - from + 1; return b },
       single() { single = 'single'; return b },
       maybeSingle() { single = 'maybe'; return b },
       then<T>(resolve: (v: { data: unknown; error: { message: string } | null; count?: number | null }) => T, reject?: (e: unknown) => T) {
@@ -145,7 +147,7 @@ export function fakeSupabase(
         for (const { col, asc } of [...orderBy].reverse()) {
           out = [...out].sort((a, z) => (asc ? 1 : -1) * cmp(a[col], z[col]))
         }
-        if (limitN !== null) out = out.slice(0, limitN)
+        if (limitN !== null) out = out.slice(rangeFrom, rangeFrom + limitN)
         if (countMode) return { data: head ? null : out, error: null, count: out.length }
         return shape(out)
       }

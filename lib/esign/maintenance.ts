@@ -6,6 +6,11 @@ import { syncDocusignUsage } from '@/lib/esign/routing'
 import { drainOutbox } from '@/lib/esign/outbox'
 import { finaliseStalled } from '@/lib/esign/native/flow'
 import { retryFailedIssues } from '@/lib/esign/reconcile'
+import { backupConfigured } from '@/lib/esign/backup-crypto'
+import { driveBackupStore, type BackupStore } from '@/lib/esign/backup-store'
+import { exportTables, replicatePending } from '@/lib/esign/replicate'
+import { checkIntegrity } from '@/lib/esign/integrity'
+import { checkHeartbeat } from '@/lib/esign/heartbeat'
 
 // The daily housekeeping for signed agreements, as one job with independent
 // steps: a failing step is recorded and the rest still run.
@@ -14,15 +19,21 @@ import { retryFailedIssues } from '@/lib/esign/reconcile'
 // "Run maintenance now" action, which is the only way to exercise it on the
 // dev deployment.
 
-export type MaintenanceStep = 'usage' | 'archive' | 'retention' | 'outbox' | 'finalise' | 'reconcile'
+export type MaintenanceStep =
+  | 'usage' | 'finalise' | 'reconcile' | 'outbox' | 'archive'
+  | 'replicate' | 'export' | 'integrity' | 'retention' | 'heartbeat'
 
-export const ALL_STEPS: MaintenanceStep[] = ['usage', 'finalise', 'reconcile', 'outbox', 'archive', 'retention']
+export const ALL_STEPS: MaintenanceStep[] = [
+  'usage', 'finalise', 'reconcile', 'outbox', 'archive', 'replicate', 'export', 'integrity', 'retention', 'heartbeat',
+]
 
 export interface MaintenanceOptions {
   dryRun?: boolean
   steps?: MaintenanceStep[]
   /** Records a per-step failure (the cron run ledger's `fail`). */
   onError?: (step: MaintenanceStep, err: unknown) => void
+  /** Overrides the off-site store (tests). */
+  store?: BackupStore | null
 }
 
 const ARCHIVE_BATCH = 20
@@ -45,6 +56,14 @@ export async function runEsignMaintenance(
     }
   }
 
+  // The off-site store, when configured. Without it the backup steps say so
+  // rather than failing, so a deployment without the key still runs the rest.
+  let store: BackupStore | null = opts.store ?? null
+  if (opts.store === undefined && backupConfigured()) {
+    try { store = driveBackupStore() } catch (err) { opts.onError?.('replicate', err) }
+  }
+  const noStore = { skipped: 'off-site backup not configured (ESIGN_BACKUP_KEY, ESIGN_BACKUP_DRIVE_FOLDER_ID)' }
+
   await step('usage', async () => {
     if (opts.dryRun) return { skipped: 'dry run' }
     const docusign = getProvider('docusign')
@@ -63,7 +82,25 @@ export async function runEsignMaintenance(
 
   await step('archive', () => archivePending(db, { limit: ARCHIVE_BATCH, dryRun: opts.dryRun }))
 
-  await step('retention', () => purgeExpired(db, { limit: PURGE_BATCH, dryRun: opts.dryRun }))
+  await step('replicate', async () => {
+    if (!store) return noStore
+    if (opts.dryRun) return { skipped: 'dry run' }
+    return replicatePending(db, store)
+  })
+
+  await step('export', async () => {
+    if (!store) return noStore
+    if (opts.dryRun) return { skipped: 'dry run' }
+    return exportTables(db, store)
+  })
+
+  await step('integrity', async () => (opts.dryRun ? { skipped: 'dry run' } : checkIntegrity(db)))
+
+  await step('retention', () => purgeExpired(db, { limit: PURGE_BATCH, dryRun: opts.dryRun, store }))
+
+  // This job checks the others; the reminder cron checks this one.
+  await step('heartbeat', async () =>
+    opts.dryRun ? { skipped: 'dry run' } : checkHeartbeat(db, ['docusign-reminders', 'event-emails']))
 
   return result
 }

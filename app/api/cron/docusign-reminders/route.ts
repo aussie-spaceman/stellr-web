@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import type { AgreementType } from '@/lib/docusign'
 import { remindEnvelopeRow } from '@/lib/esign/operations'
 import { drainOutbox } from '@/lib/esign/outbox'
+import { checkHeartbeat } from '@/lib/esign/heartbeat'
 import { AGREEMENT_LABEL } from '@/lib/docusign-agreements'
 import { syncEnvelopeRecipients } from '@/lib/docusign-recipients'
 import { describeEnvelope, roleLabel } from '@/lib/docusign-status'
@@ -187,6 +188,8 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     run.fail('outbox', err)
   }
+  // The daily housekeeping job checks this cron; this cron checks it.
+  await checkHeartbeat(db, ['esign-maintenance', 'docusign-form-data']).catch((err) => run.fail('heartbeat', err))
 
   console.log(`[cron] docusign-reminders: processed ${processed} of ${envelopes.length} (${skippedBounced} skipped — bounced address)`)
   await run.finish({ processed, eligible: envelopes.length, skippedBounced, outbox })

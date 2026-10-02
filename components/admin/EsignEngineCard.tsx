@@ -83,6 +83,31 @@ export function EsignEngineCard() {
     }
   }
 
+  async function membershipBackfill(dryRun: boolean) {
+    setBusy(true)
+    setMsg(null)
+    try {
+      const res = await fetch('/api/admin/esign/membership-backfill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun, limit: 25 }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Failed')
+      setMsg({
+        text: dryRun
+          ? `${data.outstanding} of ${data.candidates} members have no membership agreement signed or on its way.`
+          : `Sent ${data.issued} membership agreement${data.issued === 1 ? '' : 's'}; ${Math.max(0, data.outstanding - data.issued)} still to go. Emails go out within the daily signing budget.`,
+        error: false,
+      })
+      if (!dryRun) await load()
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : 'Failed', error: true })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (!summary) {
     return (
       <section className="rounded-xl border border-line bg-white p-5 text-sm text-content-muted">
@@ -263,6 +288,16 @@ export function EsignEngineCard() {
         <Button variant="softBlue" disabled={busy} onClick={() => runMaintenance(false)}>
           Store signed documents now
         </Button>
+        {summary.nativeAvailable && (
+          <>
+            <Button variant="softBlue" disabled={busy} onClick={() => membershipBackfill(true)}>
+              Members without a membership agreement
+            </Button>
+            <Button variant="softBlue" disabled={busy} onClick={() => membershipBackfill(false)}>
+              Send it to the next 25
+            </Button>
+          </>
+        )}
       </div>
 
       {msg && (

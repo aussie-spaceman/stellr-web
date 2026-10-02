@@ -112,3 +112,30 @@ export async function dispatchMembershipAgreement(db: SupabaseClient, memberId: 
 export async function membershipAgreementOutstanding(db: SupabaseClient, memberId: string): Promise<boolean> {
   return !(await agreementOnFile(db, memberId)) && !(await agreementInFlight(db, memberId))
 }
+
+/**
+ * Whether the member area is held until the agreement is signed. Off unless
+ * MEMBERSHIP_AGREEMENT_ENFORCE is 'true': what is blocked, and from when, is
+ * the owner's decision (plan, Phase 3). Until then the gate only reports.
+ */
+export function membershipAgreementEnforced(): boolean {
+  return process.env.MEMBERSHIP_AGREEMENT_ENFORCE === 'true'
+}
+
+export type MembershipGate =
+  | { state: 'clear' }
+  /** Out for signature: the member can sign from their account page. */
+  | { state: 'awaiting_signature' }
+  /** Nothing signed and nothing sent. */
+  | { state: 'not_issued' }
+
+/**
+ * The gate for one member. Volunteers sign the mentor agreement instead, and
+ * a member still onboarding has not been asked yet: both are clear.
+ */
+export async function membershipGate(db: SupabaseClient, memberId: string): Promise<MembershipGate> {
+  const { data } = await db.from('members').select('date_of_birth, event_role').eq('id', memberId).maybeSingle()
+  if (!data?.date_of_birth || data.event_role === 'volunteer') return { state: 'clear' }
+  if (await agreementOnFile(db, memberId)) return { state: 'clear' }
+  return (await agreementInFlight(db, memberId)) ? { state: 'awaiting_signature' } : { state: 'not_issued' }
+}

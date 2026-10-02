@@ -80,12 +80,16 @@ test.describe('the admin consent-forms view', () => {
 
   test('counts it as outstanding in the summary and filters', async ({ page }) => {
     await page.goto('/admin/docusigns')
-    const body = await page.locator('body').innerText()
 
     // The counters are derived separately from the row, so they can disagree
     // with it — an envelope shown as awaiting while "Signed" counts it done.
-    expect(body, 'the completed filter must not claim this envelope').toMatch(/Completed \(0\)/i)
-    expect(body, 'it should sit under Delivered').toMatch(/Delivered \(1\)/i)
+    // Checked through the filters rather than exact counts: other specs add
+    // agreements to the same dev database while this one runs.
+    const fixtureRow = page.locator('tbody tr', { hasText: ENVELOPE_ROW })
+    await page.getByRole('button', { name: /^Completed \(\d+\)$/ }).click()
+    await expect(fixtureRow, 'the completed filter must not claim this envelope').toHaveCount(0)
+    await page.getByRole('button', { name: /^Delivered \(\d+\)$/ }).click()
+    await expect(fixtureRow.first(), 'it should sit under Delivered').toBeVisible()
   })
 })
 

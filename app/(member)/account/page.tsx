@@ -10,6 +10,8 @@ import { BillingHistory } from '@/components/member/BillingHistory'
 import { DocusignsSection } from '@/components/member/DocusignsSection'
 import { ComplianceSection } from '@/components/member/ComplianceSection'
 import { MyRegistrations } from '@/components/member/MyRegistrations'
+import { ScholarshipHistory } from '@/components/member/ScholarshipHistory'
+import { listMemberScholarships, toHistoryItems } from '@/lib/scholarships'
 import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
 import { AddressBook } from '@/components/account/AddressBook'
 import { OrdersList } from '@/components/account/OrdersList'
@@ -98,6 +100,10 @@ export default async function AccountPage({
     .eq('member_id', member.id)
     .order('created_at', { ascending: false })
     .limit(30)
+
+  // Scholarships they've applied for, and where each one stands. Kept as
+  // history: an accepted or past scholarship stays listed.
+  const scholarships = toHistoryItems(await listMemberScholarships(db, { id: member.id, email: member.email }))
 
   // Current event registrations, with Company assignment when set (PRD 6.7)
   const { data: myParticipantRows } = await db
@@ -238,6 +244,7 @@ export default async function AccountPage({
               />
             </div>
             <MyRegistrations registrations={myRegistrations} />
+            <ScholarshipHistory items={scholarships} audience="member" />
             {volunteer && (
               <VolunteeringSection
                 assignments={volunteerAssignments}

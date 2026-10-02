@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   alternates: { canonical: '/scholarship' },
   title: 'Scholarships',
   description:
-    "Cost should never be the reason you don't compete. Apply for a Stellr scholarship and we'll cover the participation fee for the competition or workshop you're applying to.",
+    "Cost should never be the reason you don't compete. Apply for a Stellr scholarship to cover part or all of the participation fee for the competition or workshop you're applying to.",
 }
 
 export const revalidate = 3600
@@ -31,7 +31,7 @@ const infoCards = [
     tileBg: 'bg-primary-soft',
     iconColor: 'text-primary',
     title: 'What it covers',
-    body: "The full participation fee for the Stellr competition or workshop you're applying to.",
+    body: "Part or all of the participation fee for the Stellr competition or workshop you're applying to — up to the full cost.",
   },
   {
     Icon: Team,
@@ -59,7 +59,7 @@ export default async function ScholarshipPage() {
           </h1>
           <p className="mt-5 text-lg text-hero-lead leading-relaxed max-w-[620px]">
             Stellr is committed to inclusive events where every student can take part and do their best work.
-            If participation fees stand in the way, apply for a scholarship — we&rsquo;ll cover the cost.
+            If participation fees stand in the way, apply for a scholarship — it can cover up to the full cost.
           </p>
         </div>
       </section>

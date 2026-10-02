@@ -9,6 +9,7 @@ import {
   RegistrationCheckoutError,
   payPageUrl,
 } from '@/lib/registration-checkout'
+import { findOfferForRegistration } from '@/lib/scholarships'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -42,7 +43,9 @@ export async function POST(req: NextRequest) {
   }
 
   const event = await getEventBySlug(reg.event_slug).catch(() => null)
-  if (event && !registrationIsOpen(event)) {
+  // A scholarship offer holds the student's place past the close of
+  // registration, as it does on the registration form.
+  if (event && !registrationIsOpen(event) && !(await findOfferForRegistration(db, reg.id))) {
     return NextResponse.json({ error: 'Registration for this event has closed.' }, { status: 403 })
   }
 

@@ -126,8 +126,8 @@ describe('executeRefund — fixes that came with it', () => {
   it('two earlier refund rows still read as already refunded', async () => {
     seed({
       event_refunds: [
-        { id: 'e1', participant_id: 'p1', refund_type: 'cash' },
-        { id: 'e2', participant_id: 'p1', refund_type: 'credit' },
+        { id: 'e1', participant_id: 'p1', refund_type: 'cash', kind: 'cancellation' },
+        { id: 'e2', participant_id: 'p1', refund_type: 'credit', kind: 'cancellation' },
       ],
     })
 
@@ -135,6 +135,16 @@ describe('executeRefund — fixes that came with it', () => {
 
     expect(r).toMatchObject({ type: 'none', detail: 'Already refunded' })
     expect(creditRows()).toHaveLength(0)
+  })
+
+  it('a scholarship reimbursement does not count as already refunded on cancellation', async () => {
+    seed({
+      event_refunds: [{ id: 'e1', participant_id: 'p1', refund_type: 'cash', kind: 'scholarship' }],
+    })
+
+    const r = await executeRefund('p1', 'credit', 'admin-1')
+
+    expect(r.detail).not.toBe('Already refunded')
   })
 
   it('a failed credit insert is reported as manual_required, not as issued', async () => {

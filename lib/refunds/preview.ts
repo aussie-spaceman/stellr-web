@@ -45,6 +45,10 @@ export async function previewRefund(participantId: string): Promise<RefundPrevie
     .select('id')
     .eq('participant_id', participantId)
     .in('refund_type', ['cash', 'credit'])
+    // A scholarship reimbursement is not a cancellation refund: the student is
+    // still registered, and cancelling later still owes the policy refund on
+    // what remains (Stripe's remaining-refundable cap applies below).
+    .eq('kind', 'cancellation')
     .limit(1)
   // limit(1), not maybeSingle(): two or more rows made maybeSingle() error and
   // the participant read as "not refunded".

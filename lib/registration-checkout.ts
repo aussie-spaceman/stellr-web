@@ -3,6 +3,13 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type Stripe from 'stripe'
 import { getEventBySlug } from '@/lib/sanity'
 import { assertLiveCredentials } from '@/lib/env-guards'
+import { notifyCommunityAdmins } from '@/lib/notify'
+import {
+  discountedCents,
+  findOfferForRegistration,
+  isScholarshipPercent,
+  resolveScholarshipCoupon,
+} from '@/lib/scholarships'
 
 // The one place that knows how to build a Stripe Checkout for a registration.
 //
@@ -26,6 +33,7 @@ export type RegistrationCheckoutErrorCode =
   | 'not_card'
   | 'no_price'
   | 'nothing_to_pay'
+  | 'scholarship_unavailable'
 
 export class RegistrationCheckoutError extends Error {
   constructor(public code: RegistrationCheckoutErrorCode, message: string) {
@@ -163,11 +171,40 @@ export async function createRegistrationCheckout(
   // DocuSign sandbox envelopes that were not binding signatures.
   assertLiveCredentials('stripe')
 
+  // A scholarship on this registration is applied here, as its Stripe coupon,
+  // so every way of paying — the form, the pay link, the billing tab, an admin
+  // resend — charges the amount the offer email stated. Stripe refuses a
+  // session with both `discounts` and `allow_promotion_codes`, so a scholarship
+  // checkout has no code box. If the coupon can't be resolved, stop: charging
+  // a scholarship student the full fee is worse than a delayed payment.
+  let discounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined
+  const offer = await findOfferForRegistration(db, reg.id)
+  if (offer && isScholarshipPercent(offer.percent_off)) {
+    try {
+      discounts = [{ coupon: await resolveScholarshipCoupon(stripe, offer.percent_off) }]
+    } catch (e) {
+      console.error('[registration-checkout] scholarship coupon unavailable:', e)
+      await notifyCommunityAdmins({
+        type: 'action',
+        body: `A scholarship checkout for ${reg.event_title} could not apply its ${offer.percent_off}% coupon: ${(e as Error).message}. The student cannot pay until this is fixed in Stripe.`,
+        referenceType: 'scholarship_application',
+        referenceId: offer.id,
+      }).catch(() => {})
+      throw new RegistrationCheckoutError(
+        'scholarship_unavailable',
+        'We couldn’t apply your scholarship just now. The Stellr team has been told — please try again later, or reply to your scholarship email.',
+      )
+    }
+    metadata.scholarshipId = offer.id
+    amountCents = discountedCents(amountCents, offer.percent_off)
+  }
+
   const customerEmail = opts.customerEmail === undefined ? defaultEmail : opts.customerEmail
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
-    // Surfaces the "Add promotion code" field for codes set up in Stripe.
-    allow_promotion_codes: true,
+    // Surfaces the "Add promotion code" field for codes set up in Stripe —
+    // except on a scholarship checkout, which carries its coupon already.
+    ...(discounts ? { discounts } : { allow_promotion_codes: true }),
     line_items: lineItems,
     client_reference_id: reg.id,
     ...(customerEmail ? { customer_email: customerEmail } : {}),
@@ -201,7 +238,7 @@ interface PendingAddonLine {
   unitCents: number
 }
 
-async function pendingAddonLines(db: SupabaseClient, registrationId: string): Promise<PendingAddonLine[]> {
+export async function pendingAddonLines(db: SupabaseClient, registrationId: string): Promise<PendingAddonLine[]> {
   const { data: order } = await db
     .from('store_orders')
     .select('id')

@@ -5,19 +5,51 @@ import { formatDateRange } from '@/lib/utils'
 import { getRegistrationPrefill } from '@/lib/registration-prefill'
 import { supabaseServer } from '@/lib/supabase'
 import { listEventAddons } from '@/lib/store/event-merch'
-import IndividualRegistrationForm from '@/components/forms/IndividualRegistrationForm'
+import IndividualRegistrationForm, { type ScholarshipFormOffer } from '@/components/forms/IndividualRegistrationForm'
+import { findOfferByToken, discountedCents, formatUsd } from '@/lib/scholarships'
+import { stripeClient } from '@/lib/stripe'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { participationTypeFor } from '@/lib/analytics'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 
 interface PageProps {
   params: Promise<{ slug: string }>
+  searchParams: Promise<{ scholarship?: string }>
 }
 
-export default async function IndividualRegistrationPage({ params }: PageProps) {
+// Email 2 of a scholarship offer lands here with ?scholarship=<token>. A token
+// for a different event, or an offer no longer open, is ignored — the page is
+// then the ordinary public form.
+async function loadScholarshipOffer(
+  token: string | undefined,
+  slug: string,
+  stripePriceId: string | undefined,
+): Promise<ScholarshipFormOffer | null> {
+  if (!token) return null
+  const offer = await findOfferByToken(supabaseServer(), token).catch(() => null)
+  if (!offer || offer.event_slug !== slug || offer.percent_off == null) return null
+  let dueLabel: string | null = null
+  const stripe = stripeClient()
+  if (stripePriceId && stripe && offer.percent_off < 100) {
+    const price = await stripe.prices.retrieve(stripePriceId).catch(() => null)
+    if (price?.unit_amount != null) dueLabel = formatUsd(discountedCents(price.unit_amount, offer.percent_off))
+  }
+  return {
+    token,
+    percent: offer.percent_off,
+    firstName: offer.first_name,
+    lastName: offer.last_name,
+    email: offer.email,
+    dueLabel,
+  }
+}
+
+export default async function IndividualRegistrationPage({ params, searchParams }: PageProps) {
   const { slug } = await params
+  const { scholarship: scholarshipToken } = await searchParams
   const event = await getEventBySlug(slug).catch(() => null)
   if (!event) notFound()
+  const scholarship = await loadScholarshipOffer(scholarshipToken, slug, event.stripePriceId)
 
   const prefill = await getRegistrationPrefill().catch(() => null)
   const addons = await listEventAddons(supabaseServer(), slug).catch(() => [])
@@ -75,6 +107,7 @@ export default async function IndividualRegistrationPage({ params }: PageProps) 
           addons={addons}
           gradeMin={band.min}
           gradeMax={band.max}
+          scholarship={scholarship}
         />
         <MissionFundingNote className="mt-10" />
       </div>

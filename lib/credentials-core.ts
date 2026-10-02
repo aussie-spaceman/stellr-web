@@ -1,4 +1,5 @@
 import { SITE_URL } from '@/lib/env'
+import { ageOn, isMinorOn } from '@/lib/age'
 
 // ── Verifiable credentials: pure helpers ─────────────────────────────────────
 // Edge-safe (no Node crypto, no DocuSign): imported by the OG image and badge
@@ -71,28 +72,9 @@ export function normaliseCredentialNumber(input: string): string | null {
 
 // ── Age ──────────────────────────────────────────────────────────────────────
 
-/**
- * Dates of birth are date-only strings (YYYY-MM-DD). Parsing one with `new
- * Date()` yields UTC midnight, which is the previous evening in every US
- * timezone, so the parts are read straight from the string and compared with
- * `on` in UTC. A day's drift around midnight is immaterial; a systematic
- * off-by-one on every birthday is not.
- */
-export function ageOn(dateOfBirth: string, on = new Date()): number {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOfBirth)
-  if (!m) return 0
-  const [y, mo, d] = [Number(m[1]), Number(m[2]) - 1, Number(m[3])]
-  let age = on.getUTCFullYear() - y
-  const beforeBirthday =
-    on.getUTCMonth() < mo || (on.getUTCMonth() === mo && on.getUTCDate() < d)
-  if (beforeBirthday) age -= 1
-  return age
-}
-
-export function isMinorOn(dateOfBirth: string | null | undefined, on = new Date()): boolean {
-  if (!dateOfBirth) return false
-  return ageOn(dateOfBirth, on) < 18
-}
+// Defined in lib/age.ts so e-signing and credentials share one definition;
+// re-exported here for the existing importers.
+export { ageOn, isMinorOn }
 
 /**
  * LinkedIn's minimum age is 16. The buttons are hidden below that regardless
@@ -105,9 +87,27 @@ export function canUseLinkedIn(dateOfBirth: string | null | undefined, on = new 
   return ageOn(dateOfBirth, on) >= 16
 }
 
-export type ShareConsent = 'not_required' | 'granted' | 'declined' | 'none'
+/**
+ * Credential pages of a child under 13 always stay private, whatever the
+ * consent form says (Privacy Policy §2, §7.4; D5, 2 Oct). An unknown date of
+ * birth is treated the same way: we cannot rule out a child, so we do not
+ * publish. Both are read from the live DOB, not the `is_minor` flag stored at
+ * issue, which goes stale.
+ */
+export const MIN_PUBLIC_CREDENTIAL_AGE = 13
 
-export type ShareBlock = 'revoked' | 'withdrawn' | 'expired' | 'minor_no_consent' | 'minor_declined'
+export function ageBlock(
+  dateOfBirth: string | null | undefined,
+  on = new Date(),
+): 'under_13' | 'dob_unknown' | null {
+  if (!dateOfBirth || !/^\d{4}-\d{2}-\d{2}/.test(dateOfBirth)) return 'dob_unknown'
+  return ageOn(dateOfBirth, on) < MIN_PUBLIC_CREDENTIAL_AGE ? 'under_13' : null
+}
+
+export type ShareConsent = 'not_required' | 'granted' | 'declined' | 'none' | 'under_13' | 'dob_unknown'
+
+export type ShareBlock =
+  | 'revoked' | 'withdrawn' | 'expired' | 'minor_no_consent' | 'minor_declined' | 'under_13' | 'dob_unknown'
 
 /** Whether this credential may be made public / shared, and if not, why. */
 export function canShare(
@@ -116,6 +116,7 @@ export function canShare(
 ): { ok: true } | { ok: false; reason: ShareBlock } {
   const state = credentialState(c)
   if (state !== 'valid') return { ok: false, reason: state }
+  if (consent === 'under_13' || consent === 'dob_unknown') return { ok: false, reason: consent }
   if (consent === 'declined') return { ok: false, reason: 'minor_declined' }
   if (consent === 'none') return { ok: false, reason: 'minor_no_consent' }
   return { ok: true }

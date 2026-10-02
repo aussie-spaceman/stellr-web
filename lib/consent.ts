@@ -1,3 +1,5 @@
+import { noAdsActive } from '@/lib/no-ads'
+
 // ── Consent state ────────────────────────────────────────────────────────────
 // Shared between the pre-GTM default script and the banner. Consent is a
 // *browser* fact, not a server one, so it lives in localStorage and is replayed
@@ -108,6 +110,9 @@ export function writeConsent(ads: boolean): ConsentDecision {
  */
 export function applyConsent(ads: boolean): void {
   if (typeof window === 'undefined') return
+  // Never grant advertising on a student page or in a student's browser
+  // (Privacy Policy §9.4). The choice is still stored for other pages.
+  if (ads && noAdsActive()) ads = false
   const signal: ConsentSignal = ads ? 'granted' : 'denied'
   const update = {
     ad_storage: signal,

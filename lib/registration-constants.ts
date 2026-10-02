@@ -1,3 +1,5 @@
+import { ageOn, isValidDob } from '@/lib/age'
+
 export const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
 export const GENDERS = ['Male', 'Female', 'Other']
 // Every school grade an event can admit. The list a given form OFFERS is
@@ -32,7 +34,7 @@ export const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'G
  */
 export function deriveAgeBracket(dob: string, grade?: string): 'High School' | 'College' | 'Adult' {
   if (!dob) return 'Adult'
-  const age = Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000))
+  const age = isValidDob(dob) ? ageOn(dob) : Number.NaN
   if (age < 18 || (grade && SCHOOL_GRADES.includes(grade))) return 'High School'
   if (grade?.startsWith('College') || grade === 'Grad / PhD') return 'College'
   return 'Adult'

@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { formatDateShort } from '@/lib/utils'
+import { isMinorOn } from '@/lib/age'
 import { describeEnvelope, PILL_CLASSES, type RecipientLike } from '@/lib/docusign-status'
+import { downloadSignedRecord } from '@/lib/esign/download-client'
+import { slug } from '@/lib/esign/filenames'
 
 interface Envelope {
   id: string
@@ -20,6 +23,8 @@ interface Envelope {
   signers_completed?: number | null
   /** Per-recipient state (migration 148) — who still has to sign. */
   recipients?: RecipientLike[]
+  /** Stellr signing: it is this member's turn, and they can sign from here. */
+  signNowUrl?: string | null
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -28,6 +33,7 @@ const TYPE_LABEL: Record<string, string> = {
   mentor: 'Mentor Participation Agreement',
   // Volunteers sign the mentor document (lib/docusign-agreements AGREEMENT_LABEL).
   volunteer: 'Mentor Participation Agreement',
+  membership: 'Membership Agreement',
 }
 
 interface Props {
@@ -73,12 +79,7 @@ function EnvelopeProgressBadge({ env }: { env: Envelope }) {
 
 const fmt = formatDateShort
 
-function isStillMinor(dob: string | null | undefined): boolean {
-  if (!dob) return false
-  const d = new Date(dob)
-  const eighteenth = new Date(d.getFullYear() + 18, d.getMonth(), d.getDate())
-  return new Date() < eighteenth
-}
+const isStillMinor = (dob: string | null | undefined) => isMinorOn(dob)
 
 function memberHasGraduated(dob: string | null | undefined, role: string | null | undefined): boolean {
   if (!isStillMinor(dob)) return true
@@ -128,15 +129,7 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
       : `/api/members/docusigns/${id}/download`
     const prefix = type === 'adult' || type === 'mentor' || type === 'volunteer' ? 'agreement' : 'consent'
     try {
-      const res = await fetch(downloadUrl)
-      if (!res.ok) throw new Error('Download failed')
-      const blob = await res.blob()
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href     = url
-      a.download = `${prefix}-${subjectName.replace(/\s+/g, '-').toLowerCase()}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
+      await downloadSignedRecord(downloadUrl, `${prefix}-${slug(subjectName)}.pdf`)
     } catch (e) {
       console.error(e)
     } finally {
@@ -153,7 +146,7 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
   return (
     <div className="bg-white rounded-xl border border-brand-border p-6">
       <h2 className="text-base font-semibold text-brand-blue-dark mb-1">Agreements &amp; Consent Forms</h2>
-      <p className="text-xs text-brand-muted-soft mb-4">Your DocuSign participation agreements and parental consent forms.</p>
+      <p className="text-xs text-brand-muted-soft mb-4">Your signed agreements and parental consent forms.</p>
 
       {graduated && hasMinorForms && (
         <div className="mb-4 rounded-lg bg-brand-blue/5 border border-brand-blue/30 px-4 py-3 text-xs text-brand-blue">
@@ -201,6 +194,14 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
               </div>
               <div className="flex items-center gap-3 shrink-0 mt-0.5">
                 <EnvelopeProgressBadge env={env} />
+                {env.signNowUrl && (
+                  <a
+                    href={env.signNowUrl}
+                    className="rounded-control bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-deep"
+                  >
+                    Sign now
+                  </a>
+                )}
                 {env.status === 'completed' && (
                   <button
                     onClick={() => handleDownload(env.id, env.minor_name, type)}

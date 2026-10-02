@@ -24,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params
   const db = supabaseServer()
   const { data: env } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, envelope_type, status, reused_from, member_id, participant_id, minor_name')
     .eq('id', id)
     .maybeSingle()
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (env.reused_from) return NextResponse.json({ error: 'Set this on the original consent form, not the coverage record' }, { status: 400 })
 
   const { error } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .update({ credential_sharing_opt_out: body.optOut, updated_at: new Date().toISOString() })
     .eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

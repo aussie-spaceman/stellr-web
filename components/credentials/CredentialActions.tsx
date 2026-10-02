@@ -17,6 +17,8 @@ const BLOCK_COPY: Record<ShareBlock, string> = {
   expired:          'This credential has expired, so it can no longer be shared.',
   minor_no_consent: 'Sharing needs a signed Stellr consent form on file. It is part of the paperwork for your next Stellr event — nothing extra to do.',
   minor_declined:   'Your parent or guardian has asked that this stay private. If that changes, they can email privacy@stellreducation.org.',
+  under_13:         'Credentials stay private until you turn 13. It is still yours, and you can share it from here once you do.',
+  dob_unknown:      'Add your date of birth to your Stellr profile to share this credential.',
 }
 
 interface Props {

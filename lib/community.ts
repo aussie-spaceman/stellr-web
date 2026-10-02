@@ -51,6 +51,8 @@ export interface CommunityMember {
   /** Age bracket ('adult' | 'high_school' | 'college'), or null when unset.
    *  Drives per-bracket training requirements (community_space_training). */
   age_bracket: string | null
+  /** YYYY-MM-DD, or null for an invited member who has not onboarded. */
+  date_of_birth?: string | null
   /**
    * DOB or gender is missing — a hand-created or webhook-created row whose owner
    * has not been through /account/onboarding yet. Member surfaces redirect there,
@@ -146,6 +148,7 @@ async function resolveMember(allowImpersonation: boolean): Promise<CommunityMemb
     isAdmin,
     event_role: (member.event_role as string | null) ?? null,
     age_bracket: (member.age_bracket as string | null) ?? null,
+    date_of_birth: (member.date_of_birth as string | null) ?? null,
     hasPaidTier,
     activeTierName: primaryTier?.name ?? null,
     activeTierIds,

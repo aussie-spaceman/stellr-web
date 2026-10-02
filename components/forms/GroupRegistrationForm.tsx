@@ -9,6 +9,7 @@ import { useAuth } from '@clerk/nextjs'
 import { useSignIn } from '@clerk/nextjs/legacy'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import FieldError from '@/components/forms/FieldError'
+import { joinLinkStorageKey } from '@/components/forms/JoinLinkButton'
 import { SchoolSearchInput, SchoolSelection, schoolSelectionState } from '@/components/member/SchoolSearchInput'
 import { T_SHIRT_SIZES, GENDERS, COLLEGE_GRADES, ETHNICITIES, DIETARY, EMERGENCY_RELATIONSHIPS, deriveAgeBracket } from '@/lib/registration-constants'
 import { inferStudentGrade, DEFAULT_GRADE_BAND } from '@/lib/grade-logic'
@@ -826,7 +827,12 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         // Surface the Sheet for the spreadsheet/email-link flows, or whenever some
         // participants were deferred for later completion (partial add-now).
         if (spreadsheetUrl && (detailsMethod !== 'add_now' || remaining > 0)) params.set('spreadsheet', encodeURIComponent(spreadsheetUrl))
-        if (joinUrl && remaining > 0) params.set('join', encodeURIComponent(joinUrl))
+        // The join link is a key to the group: it goes to the confirmation page
+        // through this tab's session storage, never the address bar, which
+        // analytics would record.
+        if (joinUrl && remaining > 0) {
+          try { window.sessionStorage.setItem(joinLinkStorageKey(registrationId), joinUrl) } catch { /* emailed too */ }
+        }
         if (remaining > 0) params.set('remaining', String(remaining))
         router.push(`/register/${eventSlug}/confirmation?${params.toString()}`)
       }
@@ -1169,11 +1175,12 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
 
       {/* FERPA School Data Processing Agreement */}
       <div className={`bg-white rounded-xl border p-6 space-y-3 ${dpaError ? 'border-red-300' : 'border-line'}`}>
-        <h3 className="font-semibold text-brand-blue-dark">School Data Processing Agreement</h3>
+        <h3 className="font-semibold text-brand-blue-dark">School Data Terms</h3>
         <p className="text-sm text-content-body">
-          By registering a group of students, your school is sharing education records (including student names,
-          dates of birth, grades, and school details) with Stellr Education. Under FERPA, this requires your
-          school to act as a &ldquo;school official&rdquo; and agree to Stellr&apos;s data processing terms.
+          Registering a group shares your students&apos; details (such as names, dates of birth, grades and
+          school details) with Stellr Education. Our School Data Terms set out how we use and protect them:
+          only to run the event, never for advertising, and deleted at your school&apos;s request when
+          students withdraw. Each student&apos;s parent or guardian is also asked to sign a consent form.
         </p>
         <label className="flex items-start gap-3 cursor-pointer">
           <input
@@ -1183,16 +1190,19 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
             className="mt-0.5 rounded border-line text-brand-blue flex-shrink-0"
           />
           <span className="text-sm text-content-body">
-            I confirm that I am authorised to share student data on behalf of my school, and I agree to
+            I confirm that I am authorised to share student data on behalf of my school, and I accept
             Stellr Education&apos;s{' '}
+            <a href="/school-data-terms" target="_blank" rel="noopener noreferrer" className="text-brand-blue underline">
+              School Data Terms
+            </a>{' '}
+            and{' '}
             <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-brand-blue underline">
               Privacy Policy
             </a>{' '}
-            and school data processing terms, including the use of DocuSign to collect parental consent
-            for minor participants.
+            for my school.
           </span>
         </label>
-        {dpaError && <p className="text-xs text-red-500">You must accept the School Data Processing Agreement to submit this registration.</p>}
+        {dpaError && <p className="text-xs text-red-500">Accept the School Data Terms to submit this registration.</p>}
       </div>
 
       {detailsMethod === 'add_now' && deferredCount() > 0 && (

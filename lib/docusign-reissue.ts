@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { classifyAgreement, resendEnvelope, voidEnvelope } from './docusign'
+import { classifyAgreement } from './docusign'
 import { dispatchAgreement, type DispatchOutcome } from './docusign-agreements'
+import { remindEnvelopeRow, voidEnvelopeRow } from './esign/operations'
 import { maskEmail } from './utils'
 
 // "Reissue DocuSign" for one event participant — the roster action, the bulk
@@ -49,8 +50,8 @@ export async function reissueParticipantAgreement(
   if (opts.eventSlug && reg.event_slug !== opts.eventSlug) return { kind: 'not_found' }
 
   const { data: env } = await db
-    .from('docusign_envelopes')
-    .select('id, envelope_id, status, reused_from')
+    .from('agreements')
+    .select('id, envelope_id, provider, status, reused_from')
     .eq('participant_id', participantId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -65,16 +66,16 @@ export async function reissueParticipantAgreement(
 
   if (env && LIVE.has(env.status)) {
     const { data: bounced } = await db
-      .from('docusign_envelope_recipients')
+      .from('agreement_recipients')
       .select('email')
       .eq('envelope_row', env.id)
       .eq('status', 'autoresponded')
     if (!bounced?.length) {
-      const recipients = await resendEnvelope(env.envelope_id)
+      const recipients = await remindEnvelopeRow(db, env)
       // Deliberately NOT reminder_sent_at — that column drives the cron's
       // chase cadence (see app/api/admin/docusigns/[id]/resend).
       const now = new Date().toISOString()
-      await db.from('docusign_envelopes').update({ last_manual_resend_at: now, updated_at: now }).eq('id', env.id)
+      await db.from('agreements').update({ last_manual_resend_at: now, updated_at: now }).eq('id', env.id)
       return { kind: 'resent', envelopeRowId: env.id, recipients }
     }
     if (!opts.allowNewEnvelope) {
@@ -87,12 +88,12 @@ export async function reissueParticipantAgreement(
       }
     }
     try {
-      await voidEnvelope(env.envelope_id, 'Re-issued by administrator after a bounced email')
+      await voidEnvelopeRow(db, env, 'Re-issued by administrator after a bounced email')
     } catch (err) {
       // Already finished on DocuSign's side — the row will catch up via Connect.
       console.error(`[docusign-reissue] void failed for ${env.id}:`, err)
     }
-    await db.from('docusign_envelopes').update({ status: 'voided', updated_at: new Date().toISOString() }).eq('id', env.id)
+    await db.from('agreements').update({ status: 'voided', updated_at: new Date().toISOString() }).eq('id', env.id)
   } else {
     if (!classifyAgreement(p.event_role as string | null, p.date_of_birth as string | null)) {
       return { kind: 'nothing_to_do', reason: 'not_required', message: 'No agreement is required for this participant' }

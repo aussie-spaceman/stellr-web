@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { isMinorOn } from '@/lib/age'
 import { ParticipantForm } from './ParticipantForm'
 import { EnvelopeStatusBadge } from './DocusignsSection'
 import { displayEventRole } from '@/lib/member-enums'
@@ -260,12 +261,7 @@ function JoinedTeamsView({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function participantIsMinor(dob: string): boolean {
-  if (!dob) return false
-  const d = new Date(dob)
-  const eighteenth = new Date(d.getFullYear() + 18, d.getMonth(), d.getDate())
-  return new Date() < eighteenth
-}
+const participantIsMinor = (dob: string) => isMinorOn(dob)
 
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000

@@ -10,7 +10,7 @@
 // which is the only thing anyone needs to know.
 //
 // Everything here is pure. Callers pass the envelope row plus its recipients
-// (docusign_envelope_recipients, migration 148); this module decides what it means.
+// (agreement_recipients, migration 148); this module decides what it means.
 
 export type DocusignPill =
   | 'not_required'
@@ -38,6 +38,12 @@ export interface RecipientLike {
   status: string
   /** Null on a 'sent' recipient = never opened the signing link. */
   delivered_at?: string | null
+  /**
+   * Stellr signing only: it is this signer's turn, but their signing email is
+   * still in the queue (the daily email limit was reached). Not "never opened":
+   * they have nothing to open yet.
+   */
+  unsent?: boolean
 }
 
 export interface EnvelopeDescription {
@@ -60,6 +66,8 @@ export interface EnvelopeDescription {
    * there is nothing to open yet.
    */
   queued: RecipientLike[]
+  /** Outstanding signers whose signing email has not gone out yet (Stellr signing). */
+  unsent: RecipientLike[]
 }
 
 const PILL_LABELS: Record<DocusignPill, string> = {
@@ -97,6 +105,7 @@ export function roleLabel(roleName: string | null | undefined): string {
     case 'mentor':               return 'mentor'
     case 'volunteer':            return 'volunteer'
     case 'stellrrepresentative': return 'Stellr counter-signature'
+    case 'member':               return 'member'
     default:                     return 'signer'
   }
 }
@@ -128,7 +137,7 @@ export function describeMissingEnvelope(required: boolean): EnvelopeDescription 
     pill:  required ? 'not_issued' : 'not_required',
     label: PILL_LABELS[required ? 'not_issued' : 'not_required'],
     detail: required ? 'Paperwork is required but no envelope has been issued' : null,
-    waitingOn: [], bounced: [], neverOpened: [], queued: [],
+    waitingOn: [], bounced: [], neverOpened: [], queued: [], unsent: [],
   }
 }
 
@@ -145,9 +154,10 @@ export function describeEnvelope(
   )
   const queued = waitingOn.filter((r) => r.status === QUEUED_RECIPIENT_STATUS)
   const active = waitingOn.filter((r) => r.status !== QUEUED_RECIPIENT_STATUS)
-  const neverOpened = active.filter((r) => !r.delivered_at)
+  const unsent = active.filter((r) => r.unsent)
+  const neverOpened = active.filter((r) => !r.delivered_at && !r.unsent)
 
-  const base = { waitingOn, bounced, neverOpened, queued }
+  const base = { waitingOn, bounced, neverOpened, queued, unsent }
 
   // Coverage rows carry paperwork signed for an earlier event; they are complete
   // by construction and have no recipients of their own.
@@ -187,9 +197,13 @@ export function describeEnvelope(
   let detail: string | null = null
   if (waitingOn.length > 0) {
     const parts: string[] = []
-    if (active.length > 0) {
-      const never = neverOpened.length === active.length
-      parts.push(`Awaiting ${joinNames(active)}${never ? ' — never opened' : ''}`)
+    const emailed = active.filter((r) => !r.unsent)
+    if (emailed.length > 0) {
+      const never = neverOpened.length === emailed.length
+      parts.push(`Awaiting ${joinNames(emailed)}${never ? ' — never opened' : ''}`)
+    }
+    if (unsent.length > 0) {
+      parts.push(`Signing email to ${joinNames(unsent)} not sent yet — goes out within a day (daily email limit)`)
     }
     if (queued.length > 0) {
       const before = active.length > 0

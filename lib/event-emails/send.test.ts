@@ -92,6 +92,22 @@ describe('sendEventEmail', () => {
     expect(db.state.sends[0]).toMatchObject({ trigger: 'schedule', subject: 'CO SDC: DocuSign', recipient_count: 2, sent_count: 2, docusign_resent: 1 })
   })
 
+  it('does not re-send a Stellr signing agreement when the email itself carries the signing link', async () => {
+    resolveAudience.mockResolvedValue({
+      recipients: [R('a@example.com', 'Al')],
+      docusignParticipantIds: ['p-docusign', 'p-native'],
+      nativeParticipantIds: ['p-native'],
+    } as never)
+    const db = fakeDb({ ...EMAIL, body_json: markdownToTiptap('Hi {{first_name}}\n\n{{agreement_link}}') })
+    await sendEventEmail(db as never, 'e1', { trigger: 'manual', spacingMs: 0 })
+    expect(reissue.mock.calls.map((c) => c[1])).toEqual(['p-docusign'])
+
+    // Without the link in the email, both are re-sent as before.
+    reissue.mockClear()
+    await sendEventEmail(fakeDb(EMAIL) as never, 'e1', { trigger: 'manual', spacingMs: 0 })
+    expect(reissue.mock.calls.map((c) => c[1])).toEqual(['p-docusign', 'p-native'])
+  })
+
   it('cannot send the same email twice', async () => {
     const db = fakeDb(EMAIL)
     await sendEventEmail(db as never, 'e1', { trigger: 'manual', spacingMs: 0 })

@@ -31,9 +31,16 @@ const ENVELOPE_ROW = 'Ada Student'
 const OUTSTANDING = 'Ada Student'
 const ALREADY_SIGNED = 'Grace Teacher'
 
-/** The status cell of the fixture's row — column index 4, headed STATUS. */
-const statusCell = (page: import('@playwright/test').Page) =>
-  page.locator('tbody tr', { hasText: ENVELOPE_ROW }).first().locator('td').nth(4)
+/**
+ * The status cell of the fixture's row, found by its column heading rather than
+ * a fixed index (the Engine column, added for Stellr signing, moved it).
+ */
+const statusCell = async (page: import('@playwright/test').Page) => {
+  const table = page.locator('table', { has: page.locator('th', { hasText: /^Status$/i }) })
+  const headers = await table.locator('thead th').allInnerTexts()
+  const index = headers.findIndex((h) => /^status$/i.test(h.trim()))
+  return table.locator('tbody tr', { hasText: ENVELOPE_ROW }).first().locator('td').nth(index)
+}
 
 test.describe('the admin consent-forms view', () => {
   test.use({ storageState: storageStatePath('admin') })
@@ -45,15 +52,15 @@ test.describe('the admin consent-forms view', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
 
     // The whole point of the remediation: a state between sent and complete.
-    await expect(statusCell(page)).toContainText(/partially complete/i)
-    await expect(statusCell(page)).toContainText(/1 of 2/i)
+    await expect(await statusCell(page)).toContainText(/partially complete/i)
+    await expect(await statusCell(page)).toContainText(/1 of 2/i)
 
     expect(consoleErrors, '/admin/docusigns logged console errors').toEqual([])
   })
 
   test('names the minor as outstanding, not the guardian who signed', async ({ page }) => {
     await page.goto('/admin/docusigns')
-    const status = statusCell(page)
+    const status = await statusCell(page)
 
     // This is the regression. Before the fix the row spoke for the guardian.
     await expect(status).toContainText(new RegExp(`awaiting\\s+${OUTSTANDING}`, 'i'))
@@ -67,18 +74,22 @@ test.describe('the admin consent-forms view', () => {
     // so a bare /complete/ match would be satisfied by the very state this is
     // meant to reject. Only a status that *starts* by claiming completion is
     // the failure, and "awaiting" must still be present.
-    await expect(statusCell(page)).not.toContainText(/^\s*completed\b/i)
-    await expect(statusCell(page)).toContainText(/awaiting/i)
+    await expect(await statusCell(page)).not.toContainText(/^\s*completed\b/i)
+    await expect(await statusCell(page)).toContainText(/awaiting/i)
   })
 
   test('counts it as outstanding in the summary and filters', async ({ page }) => {
     await page.goto('/admin/docusigns')
-    const body = await page.locator('body').innerText()
 
     // The counters are derived separately from the row, so they can disagree
     // with it — an envelope shown as awaiting while "Signed" counts it done.
-    expect(body, 'the completed filter must not claim this envelope').toMatch(/Completed \(0\)/i)
-    expect(body, 'it should sit under Delivered').toMatch(/Delivered \(1\)/i)
+    // Checked through the filters rather than exact counts: other specs add
+    // agreements to the same dev database while this one runs.
+    const fixtureRow = page.locator('tbody tr', { hasText: ENVELOPE_ROW })
+    await page.getByRole('button', { name: /^Completed \(\d+\)$/ }).click()
+    await expect(fixtureRow, 'the completed filter must not claim this envelope').toHaveCount(0)
+    await page.getByRole('button', { name: /^Delivered \(\d+\)$/ }).click()
+    await expect(fixtureRow.first(), 'it should sit under Delivered').toBeVisible()
   })
 })
 
@@ -120,7 +131,7 @@ test.describe('the envelope fixture itself', () => {
     // recipients are signed, every assertion above would pass against a case
     // that cannot exhibit the bug — coverage lost with the suite still green.
     await page.goto('/admin/docusigns')
-    const status = await statusCell(page).innerText()
+    const status = await (await statusCell(page)).innerText()
 
     expect(status, 'the fixture must remain 1-of-2 signed').toMatch(/1 of 2/i)
     expect(status, 'and must still have an outstanding signer').toMatch(/awaiting/i)

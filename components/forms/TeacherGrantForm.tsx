@@ -500,7 +500,7 @@ export default function TeacherGrantForm({
         <div className="space-y-4">
           <p className="text-sm text-content-secondary bg-primary-soft border border-primary/20 rounded-control px-4 py-3">
             Submitting this form registers you as a Stellr{' '}
-            <span className="font-semibold text-ink">Educator</span> — our free membership for
+            <span className="font-semibold text-ink">Educator</span>{' '}— our free membership for
             teachers. If you already have a Stellr account we&rsquo;ll match it by email address
             and update it rather than create a second one.
           </p>

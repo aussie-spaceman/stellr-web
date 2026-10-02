@@ -1,4 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
+import { isMinorOn } from '@/lib/age'
 import type { CommunityMember } from '@/lib/community'
 import { logActivity } from '@/lib/activity-log'
 import { registrationPaid } from '@/lib/payment-status'
@@ -30,11 +31,7 @@ export function accessGatesEnforced(): boolean {
   return process.env.ACCESS_GATES_ENFORCE === 'true'
 }
 
-function isMinor(dob: string | null): boolean {
-  if (!dob) return false
-  const age = (Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000)
-  return age < 18
-}
+const isMinor = (dob: string | null) => isMinorOn(dob)
 
 /**
  * Payment + DocuSign gate status for a member's access to a competition. Payment
@@ -88,7 +85,7 @@ export async function eventAccessGates(member: CommunityMember, eventSlug: strin
   // DocuSign: load the members' envelopes; a required one that isn't complete blocks.
   const participantIds = mine.map((m) => m.row.id)
   const { data: envs } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('participant_id, status')
     .eq('event_slug', eventSlug)
     .in('participant_id', participantIds)
@@ -144,7 +141,7 @@ export async function reportEnrollmentGate(
   let hasCompleted = false
   if (pids.length) {
     const { count } = await db
-      .from('docusign_envelopes')
+      .from('agreements')
       .select('id', { count: 'exact', head: true })
       .in('participant_id', pids)
       .eq('status', 'completed')

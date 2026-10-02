@@ -32,7 +32,7 @@ type Tab = typeof TABS[number]
 export default async function AccountPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>
+  searchParams: Promise<{ tab?: string; agreement?: string }>
 }) {
   const { userId } = await auth()
   if (!userId) redirect('/sign-in')
@@ -179,7 +179,7 @@ export default async function AccountPage({
       ])
     : [[], {} as Record<string, VolunteerStatus>, {} as Record<string, VolunteerTrainingProgress>]
 
-  const { tab: rawTab } = await searchParams
+  const { tab: rawTab, agreement } = await searchParams
   const isGroupManager =
     managesGroup ||
     member.event_role === 'teacher' ||
@@ -260,7 +260,14 @@ export default async function AccountPage({
               />
             )}
             <EventHistory participations={member.event_participations ?? []} editable />
-            <DocusignsSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
+            {/* An admin viewing as this member downloads through the admin
+                route, where the download is recorded against the admin. */}
+            {agreement === 'required' && (
+              <p role="status" className="rounded-xl border border-pathway-amber bg-pathway-amber-bg px-4 py-3 text-sm text-brand-gold-ink">
+                Please sign your Stellr Education membership agreement below to use the community. For a member under 18, a parent or guardian signs first.
+              </p>
+            )}
+            <DocusignsSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} adminDownload={!!viewAsId} />
             <ComplianceSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
             <div className="rounded-xl border border-brand-border bg-white p-5">
               <AddressBook />

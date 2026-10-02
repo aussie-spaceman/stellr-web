@@ -1,7 +1,7 @@
 import Stripe from 'stripe'
 import { clerkClient } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
-import { voidEnvelope } from '@/lib/docusign'
+import { voidEnvelopeRow } from '@/lib/esign/operations'
 import type { DeleteMode, EntityDef, ExternalCleanupKind, ExternalResult } from './types'
 import { stripeClient } from '@/lib/stripe'
 
@@ -91,8 +91,8 @@ async function cleanupDocusignForEnvelope(envelopeId: string): Promise<ExternalR
   try {
     const db = supabaseServer()
     const { data: row } = await db
-      .from('docusign_envelopes')
-      .select('envelope_id, status')
+      .from('agreements')
+      .select('envelope_id, provider, status')
       .eq('id', envelopeId)
       .maybeSingle()
 
@@ -103,19 +103,19 @@ async function cleanupDocusignForEnvelope(envelopeId: string): Promise<ExternalR
     if (status === 'completed' || status === 'declined' || status === 'voided') {
       return { kind: 'docusign', ok: true, detail: `Envelope ${status}; nothing to void` }
     }
-    await voidEnvelope(dsId)
+    await voidEnvelopeRow(db, { envelope_id: dsId, provider: row?.provider as string | null | undefined })
     return { kind: 'docusign', ok: true, detail: `Voided envelope ${dsId}` }
   } catch (e) {
     return { kind: 'docusign', ok: false, detail: e instanceof Error ? e.message : 'DocuSign cleanup failed' }
   }
 }
 
-// Voids every in-flight envelope whose docusign_envelopes row matches
+// Voids every in-flight envelope whose agreements row matches
 // `column = value` (e.g. member_id, participant_id).
 async function cleanupDocusignByColumn(column: string, value: string): Promise<ExternalResult[]> {
   const db = supabaseServer()
   const { data: envs } = await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id')
     .eq(column, value)
   const out: ExternalResult[] = []
@@ -126,7 +126,7 @@ async function cleanupDocusignByColumn(column: string, value: string): Promise<E
 }
 
 // Dispatches the external cleanups declared on the entity. `id` is the local row
-// id (member id, docusign_envelopes id, participant id, registration id, etc.).
+// id (member id, agreements id, participant id, registration id, etc.).
 export async function runExternalCleanup(def: EntityDef, id: string, mode: DeleteMode): Promise<ExternalResult[]> {
   const kinds: ExternalCleanupKind[] = def.external ?? []
   const results: ExternalResult[] = []

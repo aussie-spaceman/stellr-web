@@ -15,6 +15,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { formatDateShort } from '@/lib/utils'
+import { isMinorOn } from '@/lib/age'
 
 // Student roles never require a background check (even at 18+). Kept as an
 // export because the roster and volunteer code use it to mean "is a student".
@@ -84,12 +85,8 @@ export interface ComplianceSummary {
   check: BackgroundCheck | null
 }
 
-function isMinor(dateOfBirth: string | null | undefined, ref: Date = new Date()): boolean {
-  if (!dateOfBirth) return false // unknown DOB → treat as adult (safer: require check)
-  const dob = new Date(dateOfBirth)
-  const age = (ref.getTime() - dob.getTime()) / (365.25 * 24 * 3600 * 1000)
-  return age < 18
-}
+// Unknown DOB → treated as an adult (safer: requires the check).
+const isMinor = (dateOfBirth: string | null | undefined, ref?: Date) => isMinorOn(dateOfBirth, ref)
 
 /**
  * Does this member need a background check or a verified license to take part?

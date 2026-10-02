@@ -1,9 +1,10 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail, EmailSendError } from '@/lib/email'
 import { SITE_URL } from '@/lib/env'
 import { appendAuditQuietly } from '@/lib/esign/native/audit'
 import { mintToken, signingUrl } from '@/lib/esign/native/tokens'
-import { signatureRequestEmail } from '@/lib/esign/emails'
+import { signatureBundleEmail, signatureRequestEmail } from '@/lib/esign/emails'
 import type { NativeRecipient } from '@/lib/esign/native/flow'
 
 // Signing emails go through a daily budget. Resend's free plan allows 100
@@ -12,6 +13,9 @@ import type { NativeRecipient } from '@/lib/esign/native/flow'
 // links, confirmations and alerts. What does not fit waits here, guardians
 // first, and goes out with the next send: the daily crons, any signing
 // activity, an admin opening the consent-forms page, or "Send now".
+//
+// A parent with several forms waiting (siblings in one registration) gets one
+// email with a link for each, which also spends one send rather than several.
 
 const DEFAULT_DAILY_BUDGET = 60
 
@@ -67,6 +71,30 @@ export interface SendResult {
   failed: number
 }
 
+// ── Batching ─────────────────────────────────────────────────────────────────
+//
+// A group registration issues one agreement per participant, one after
+// another. Sent as they are issued, a parent of two would get two emails.
+// Inside batchInvites the invitations wait (they are already in the outbox)
+// and go out together at the end, grouped by address.
+
+const batch = new AsyncLocalStorage<NativeRecipient[]>()
+
+export async function batchInvites<T>(db: SupabaseClient, fn: () => Promise<T>): Promise<T> {
+  if (batch.getStore()) return fn() // already batching: the outer call sends
+  const held: NativeRecipient[] = []
+  try {
+    return await batch.run(held, fn)
+  } finally {
+    if (held.length) {
+      await sendInvites(db, held).catch((err) => {
+        // They stay in the outbox for the next drain.
+        console.error('[esign-outbox] batched send failed:', err instanceof Error ? err.message : err)
+      })
+    }
+  }
+}
+
 /**
  * Emails each signer their link, while today's budget lasts. Never throws: a
  * signer whose email could not go is left in the outbox (invite_sent_at null)
@@ -77,71 +105,116 @@ export async function sendInvites(
   recipients: NativeRecipient[],
   opts: { reminder?: boolean; now?: Date } = {},
 ): Promise<SendResult> {
+  const held = batch.getStore()
+  if (held && !opts.reminder) {
+    held.push(...recipients)
+    return { sent: 0, deferred: recipients.length, failed: 0 }
+  }
+
   const now = opts.now ?? new Date()
   const result: SendResult = { sent: 0, deferred: 0, failed: 0 }
-  // Guardians (routing order 1) before anyone else.
-  const queue = [...recipients].sort((a, b) => a.routing_order - b.routing_order)
   const envelopes = new Map<string, EnvelopeForEmail | null>()
+  const envelopeFor = async (id: string) => {
+    if (!envelopes.has(id)) {
+      const { data } = await db
+        .from('docusign_envelopes')
+        .select('id, envelope_type, event_title, minor_name, status, prefill')
+        .eq('id', id)
+        .maybeSingle()
+      envelopes.set(id, (data as EnvelopeForEmail | null) ?? null)
+    }
+    return envelopes.get(id) ?? null
+  }
 
-  for (let i = 0; i < queue.length; i++) {
-    const r = queue[i]
+  // One email per unit: a parent's forms together, everyone else on their own.
+  // Guardians (routing order 1) first.
+  const units: NativeRecipient[][] = []
+  const byParent = new Map<string, NativeRecipient[]>()
+  for (const r of [...recipients].sort((a, b) => a.routing_order - b.routing_order)) {
+    if (ROLE[r.role_name] !== 'guardian') { units.push([r]); continue }
+    const key = r.email.trim().toLowerCase()
+    const unit = byParent.get(key)
+    if (unit) unit.push(r)
+    else { const u = [r]; byParent.set(key, u); units.push(u) }
+  }
+  const remaining = (from: number) => units.slice(from).reduce((n, u) => n + u.length, 0)
+
+  for (let i = 0; i < units.length; i++) {
+    const live: { r: NativeRecipient; env: EnvelopeForEmail }[] = []
+    for (const r of units[i]) {
+      const env = await envelopeFor(r.envelope_row)
+      if (env && ['sent', 'delivered'].includes(env.status)) live.push({ r, env })
+    }
+    if (!live.length) continue
+
     if (!(await claimSend(db, now))) {
-      result.deferred += queue.length - i
+      result.deferred += remaining(i)
       if (opts.reminder) {
         // Put the rest back in the outbox, so they still hear from us.
-        await db.from('docusign_envelope_recipients').update({ invite_sent_at: null }).in('id', queue.slice(i).map((q) => q.id))
+        await db.from('docusign_envelope_recipients').update({ invite_sent_at: null }).in('id', units.slice(i).flat().map((q) => q.id))
       }
       break
     }
 
-    if (!envelopes.has(r.envelope_row)) {
-      const { data } = await db
-        .from('docusign_envelopes')
-        .select('id, envelope_type, event_title, minor_name, status, prefill')
-        .eq('id', r.envelope_row)
-        .maybeSingle()
-      envelopes.set(r.envelope_row, (data as EnvelopeForEmail | null) ?? null)
-    }
-    const env = envelopes.get(r.envelope_row)
-    if (!env || !['sent', 'delivered'].includes(env.status)) continue
-
-    const role = ROLE[r.role_name] ?? 'adult'
-    const expiresAt = r.token_expires_at ?? new Date(now.getTime() + 30 * 86_400_000).toISOString()
-    const content = signatureRequestEmail({
-      role,
-      recipientName: r.name,
-      documentLabel: DOCUMENT_LABEL[env.envelope_type] ?? 'Agreement',
-      eventTitle: env.event_title,
-      subjectName: role === 'guardian' ? (env.prefill?.MinorName || env.prefill?.MemberName || env.minor_name) : null,
-      url: signNowUrlFor({ ...r, token_expires_at: expiresAt }, now.getTime()),
-      expiresAt,
-      reminder: !!opts.reminder,
-      afterGuardian: role === 'student' || (role === 'member' && r.routing_order > 1),
-    })
+    const expiryOf = (r: NativeRecipient) => r.token_expires_at ?? new Date(now.getTime() + 30 * 86_400_000).toISOString()
+    const urlOf = (r: NativeRecipient) => signNowUrlFor({ ...r, token_expires_at: expiryOf(r) }, now.getTime())
+    const subjectOf = (env: EnvelopeForEmail) => env.prefill?.MinorName || env.prefill?.MemberName || env.minor_name || 'your child'
+    const first = live[0]
+    const content = live.length > 1
+      ? signatureBundleEmail({
+          recipientName: first.r.name,
+          reminder: !!opts.reminder,
+          items: live.map(({ r, env }) => ({
+            documentLabel: DOCUMENT_LABEL[env.envelope_type] ?? 'Agreement',
+            eventTitle: env.event_title,
+            subjectName: subjectOf(env),
+            url: urlOf(r),
+            expiresAt: expiryOf(r),
+          })),
+        })
+      : (() => {
+          const role = ROLE[first.r.role_name] ?? 'adult'
+          return signatureRequestEmail({
+            role,
+            recipientName: first.r.name,
+            documentLabel: DOCUMENT_LABEL[first.env.envelope_type] ?? 'Agreement',
+            eventTitle: first.env.event_title,
+            subjectName: role === 'guardian' ? subjectOf(first.env) : null,
+            url: urlOf(first.r),
+            expiresAt: expiryOf(first.r),
+            reminder: !!opts.reminder,
+            afterGuardian: role === 'student' || (role === 'member' && first.r.routing_order > 1),
+          })
+        })()
+    const ids = live.map(({ r }) => r.id)
 
     try {
-      const sent = await sendEmail({ to: r.email, ...content })
+      const sent = await sendEmail({ to: first.r.email, ...content })
       await db
         .from('docusign_envelope_recipients')
         .update({ invite_sent_at: now.toISOString(), invite_email_id: sent.id, invite_error: null, invite_attempts: 0 })
-        .eq('id', r.id)
-      await appendAuditQuietly(db, {
-        envelopeRow: r.envelope_row,
-        recipientRow: r.id,
-        event: 'invite_sent',
-        detail: { reminder: !!opts.reminder, emailId: sent.id },
-      })
-      result.sent++
+        .in('id', ids)
+      for (const { r } of live) {
+        await appendAuditQuietly(db, {
+          envelopeRow: r.envelope_row,
+          recipientRow: r.id,
+          event: 'invite_sent',
+          detail: { reminder: !!opts.reminder, emailId: sent.id, ...(live.length > 1 ? { formsInEmail: live.length } : {}) },
+        })
+      }
+      result.sent += live.length
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      await db
-        .from('docusign_envelope_recipients')
-        .update({ invite_sent_at: null, invite_attempts: ((r as { invite_attempts?: number }).invite_attempts ?? 0) + 1, invite_error: message.slice(0, 500) })
-        .eq('id', r.id)
-      result.failed++
+      for (const { r } of live) {
+        await db
+          .from('docusign_envelope_recipients')
+          .update({ invite_sent_at: null, invite_attempts: ((r as { invite_attempts?: number }).invite_attempts ?? 0) + 1, invite_error: message.slice(0, 500) })
+          .eq('id', r.id)
+      }
+      result.failed += live.length
       // Resend's rate limit or daily quota: everything after this would fail too.
       if (err instanceof EmailSendError && err.isQuota) {
-        result.deferred += queue.length - i - 1
+        result.deferred += remaining(i + 1)
         break
       }
     }

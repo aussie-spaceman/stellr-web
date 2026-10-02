@@ -96,6 +96,73 @@ export function signatureRequestEmail(i: SignatureRequestInput) {
   return { subject, html, text }
 }
 
+export interface SignatureBundleItem {
+  documentLabel: string
+  eventTitle: string | null
+  /** The child or member the document is about. */
+  subjectName: string
+  url: string
+  expiresAt: string
+}
+
+const CONSENT_COVERS = 'Each form records your consent for your child to take part, for the information on it to be used to run the event, and a release of liability. Each also has two choices you can make: to opt out of photo and media use, and to opt out of direct digital communication with your child. Neither affects their participation.'
+const MEMBERSHIP_COVERS = 'The membership agreement sets out what membership includes, how your child\'s information is used, and the choices you can make about it.'
+
+/**
+ * One email to a parent or guardian with several forms to sign (siblings in
+ * one registration), each with its own link. One message, not one per child:
+ * it is easier to act on, and spends one of the day's sends rather than several.
+ */
+export function signatureBundleEmail(i: { recipientName: string; items: SignatureBundleItem[]; reminder: boolean }) {
+  const names = i.items.map((x) => x.subjectName)
+  const joined = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]
+  const events = [...new Set(i.items.map((x) => x.eventTitle).filter(Boolean))] as string[]
+  const forEvent = events.length === 1 ? ` for ${events[0]}` : ''
+  const subject = i.reminder
+    ? `Reminder: ${i.items.length} forms to sign for ${joined}${forEvent}`
+    : `Parent/guardian signature needed: ${i.items.length} forms for ${joined}${forEvent}`
+  const allMembership = i.items.every((x) => x.documentLabel === 'Membership Agreement')
+  const covers = [...new Set(i.items.map((x) => (x.documentLabel === 'Membership Agreement' ? MEMBERSHIP_COVERS : CONSENT_COVERS)))].join(' ')
+  const lead = allMembership
+    ? `${joined} are joining Stellr Education as members. Because they are under 18, we need a parent or legal guardian to read and sign an agreement for each of them.`
+    : `${joined} are taking part${forEvent}. Before they can, we need a parent or legal guardian to read and sign a form for each of them.`
+  const latest = i.items.map((x) => x.expiresAt).sort()[0]
+
+  const html = emailLayout({
+    heading: i.reminder ? 'Signatures are still needed' : 'Your signature is needed',
+    preheader: `${i.items.length} forms${forEvent}. The links work until ${formatDay(latest)}.`,
+    bodyHtml: `
+      <p style="margin:0 0 16px">Hi ${esc(i.recipientName)},</p>
+      <p style="margin:0 0 12px">${esc(lead)}</p>
+      ${i.items.map((x) => `
+      <p style="margin:20px 0 0"><strong>${esc(x.subjectName)}</strong>: ${esc(x.documentLabel)}${x.eventTitle && events.length > 1 ? ` for ${esc(x.eventTitle)}` : ''}</p>
+      ${button(x.url, `Review and sign for ${x.subjectName}`)}`).join('')}
+      <p style="margin:0 0 12px">Each link is just for you and works until ${esc(formatDay(latest))}. Please don't forward them.</p>
+      <p style="margin:0 0 12px"><strong>What this covers.</strong> ${covers}</p>
+      <p style="margin:0 0 12px"><strong>What we record when you sign.</strong> Your name, email, the date and time, and the internet address and browser you sign from, so each signature can be shown to be yours. Our <a href="${esc(SITE_URL)}/privacy" style="color:${BRAND_NAVY}">Privacy Policy</a> explains how we use and protect it.</p>
+      <p style="margin:0 0 12px">If you don't want to sign, you can decline on the signing page, or reply to this email. ${allMembership ? 'Membership needs a signed agreement.' : 'A child can\'t take part without a signed form.'} To sign on paper instead, reply and we'll post them.</p>
+      <p style="margin:0 0 16px">These are signed through Stellr's own signing system at stellreducation.org. You won't hear from DocuSign about them.</p>
+      ${SIGN_OFF_HTML}`,
+  })
+
+  const text = [
+    `Hi ${i.recipientName},`,
+    '',
+    lead,
+    '',
+    ...i.items.flatMap((x) => [`${x.subjectName}, ${x.documentLabel}: ${x.url}`]),
+    '',
+    `Each link is just for you and works until ${formatDay(latest)}. Please don't forward them.`,
+    '',
+    'When you sign we record your name, email, the date and time, and the internet address and browser you sign from. You can opt out of photo and media use and of direct digital communication with your child on each form; neither affects participation. To decline, use the signing page or reply to this email. To sign on paper, reply and we will post the forms.',
+    `Privacy Policy: ${SITE_URL}/privacy`,
+    '',
+    SIGN_OFF_TEXT,
+  ].join('\n')
+
+  return { subject, html, text }
+}
+
 export interface CompletedInput {
   recipientName: string
   documentLabel: string

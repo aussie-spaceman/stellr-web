@@ -15,6 +15,7 @@ import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
 import { createGroupRegistrationSheet, isGoogleSheetsConfigured, type SheetSeedRow } from '@/lib/google-sheets'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
+import { batchInvites } from '@/lib/esign/outbox'
 import { SCHOOL_DATA_TERMS_VERSION, schoolDataTermsSha256 } from '@/lib/school-data-terms'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt, normalizeEmail } from '@/lib/member-enums'
 import { fillBlanksFromStored } from '@/lib/member-sync'
@@ -724,8 +725,10 @@ export async function POST(req: NextRequest) {
     // Each participant gets the right document by age/role: minors → parental
     // consent, adult attendees → Adult agreement, mentors → Mentor agreement.
     // Sequential to avoid DocuSign rate limits; all calls are non-fatal.
+    // Stellr signing invitations go out together at the end, so a parent of
+    // siblings gets one email with a link for each child.
     const partIdByEmail = new Map((insertedParts ?? []).map(r => [r.email, r.id]))
-    for (const row of participantRows) {
+    await batchInvites(db, async () => { for (const row of participantRows) {
       const participantId = partIdByEmail.get(row.email)
       if (!participantId) continue
       await dispatchAgreement(db, {
@@ -747,7 +750,7 @@ export async function POST(req: NextRequest) {
         guardianPhone:     row.emergency_contact_phone,
         relationship:      row.emergency_contact_relationship,
       })
-    }
+    } })
 
     // ── Google Sheet (every group registration gets a linked sheet) ────────────
     // Created up front so the teacher/student-manager can always open it from the

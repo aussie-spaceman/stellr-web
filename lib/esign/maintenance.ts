@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getProvider } from '@/lib/esign'
 import { archivePending } from '@/lib/esign/archive'
-import { purgeExpired } from '@/lib/esign/retention'
+import { expireUnsigned, purgeExpired } from '@/lib/esign/retention'
 import { syncDocusignUsage } from '@/lib/esign/routing'
 import { drainOutbox } from '@/lib/esign/outbox'
 import { finaliseStalled } from '@/lib/esign/native/flow'
@@ -96,7 +96,10 @@ export async function runEsignMaintenance(
 
   await step('integrity', async () => (opts.dryRun ? { skipped: 'dry run' } : checkIntegrity(db)))
 
-  await step('retention', () => purgeExpired(db, { limit: PURGE_BATCH, dryRun: opts.dryRun, store }))
+  await step('retention', async () => ({
+    purged: await purgeExpired(db, { limit: PURGE_BATCH, dryRun: opts.dryRun, store }),
+    unsignedExpired: await expireUnsigned(db, { limit: PURGE_BATCH, dryRun: opts.dryRun }),
+  }))
 
   // This job checks the others; the reminder cron checks this one.
   await step('heartbeat', async () =>

@@ -74,6 +74,114 @@ export async function restrictForRequest(db: SupabaseClient, memberId: string, n
   return restricted
 }
 
+export interface ExpireResult {
+  eligible: number
+  expired: number
+  failed: { id: string; error: string }[]
+}
+
+/** Signing data cleared from every signer of an agreement that never completed. */
+const CLEARED_SIGNING_DATA = {
+  signer_values: null,
+  signature_kind: null,
+  signature_text: null,
+  signature_image_path: null,
+  signed_ip: null,
+  signed_user_agent: null,
+  declined_reason: null,
+  failed_token_attempts: 0,
+}
+
+/**
+ * Stellr signing agreements nobody finished. A link lasts 30 days and each
+ * reminder renews it, so once every outstanding signer's link has run out the
+ * request is abandoned: 30 days after the last reminder or re-send. Such an
+ * agreement is voided, and what the signing collected (typed names, answers,
+ * internet address and browser, and the audit trail that repeats them) is
+ * deleted: an agreement that never completed has no legal effect, so there is
+ * nothing to keep it for. A parent's signature on a form the student never
+ * signed goes too. One "voided" audit event (reason "expired"), with no
+ * personal data, remains.
+ *
+ * The participant and the request itself stay, so the roster still shows the
+ * paperwork as outstanding and an admin can reissue it.
+ */
+export async function expireUnsigned(
+  db: SupabaseClient,
+  opts: { limit: number; dryRun?: boolean; now?: Date },
+): Promise<ExpireResult> {
+  const now = opts.now ?? new Date()
+  const { data: envelopes, error } = await db
+    .from('docusign_envelopes')
+    .select('id')
+    .eq('provider', 'native')
+    .in('status', ['sent', 'delivered'])
+    .lte('sent_at', new Date(now.getTime() - 30 * 86_400_000).toISOString())
+    .order('sent_at', { ascending: true })
+    .limit(opts.limit * 4)
+  if (error) throw new Error(`Unsigned-agreement work list query failed: ${error.message}`)
+  if (!envelopes?.length) return { eligible: 0, expired: 0, failed: [] }
+
+  const { data: recipients, error: rErr } = await db
+    .from('docusign_envelope_recipients')
+    .select('id, envelope_row, status, token_version, token_expires_at, signature_image_path')
+    .in('envelope_row', envelopes.map((e) => e.id as string))
+  if (rErr) throw new Error(`Recipient lookup failed: ${rErr.message}`)
+  const byEnvelope = new Map<string, NonNullable<typeof recipients>>()
+  for (const r of recipients ?? []) {
+    const list = byEnvelope.get(r.envelope_row as string) ?? []
+    list.push(r)
+    byEnvelope.set(r.envelope_row as string, list)
+  }
+
+  const abandoned = envelopes
+    .map((e) => e.id as string)
+    .filter((id) => {
+      const live = (byEnvelope.get(id) ?? []).filter((r) => r.status === 'sent' || r.status === 'delivered')
+      return live.length > 0 && live.every((r) => r.token_expires_at && new Date(r.token_expires_at as string) <= now)
+    })
+    .slice(0, opts.limit)
+  if (opts.dryRun) return { eligible: abandoned.length, expired: 0, failed: [] }
+
+  const { appendAudit } = await import('@/lib/esign/native/audit')
+  let expired = 0
+  const failed: { id: string; error: string }[] = []
+  for (const id of abandoned) {
+    try {
+      const signers = byEnvelope.get(id) ?? []
+      // Void first, under a condition, so a signature landing right now wins.
+      const { data: voided, error: vErr } = await db
+        .from('docusign_envelopes')
+        .update({ status: 'voided', prefill: {}, updated_at: now.toISOString() })
+        .eq('id', id)
+        .in('status', ['sent', 'delivered'])
+        .select('id')
+      if (vErr) throw new Error(`Void failed: ${vErr.message}`)
+      if (!voided?.length) continue
+      for (const r of signers) {
+        const { error: cErr } = await db
+          .from('docusign_envelope_recipients')
+          .update({ ...CLEARED_SIGNING_DATA, token_version: (r.token_version as number) + 1 })
+          .eq('id', r.id)
+        if (cErr) throw new Error(`Clearing signer data failed: ${cErr.message}`)
+      }
+      const images = signers.map((r) => r.signature_image_path as string | null).filter((p): p is string => !!p)
+      if (images.length) await db.storage.from(SIGNED_BUCKET).remove(images)
+      const { error: aErr } = await db.rpc('esign_purge_audit', { p_envelope: id })
+      if (aErr) throw new Error(`Audit trail delete failed: ${aErr.message}`)
+      await appendAudit(db, {
+        envelopeRow: id,
+        event: 'voided',
+        detail: { reason: 'expired', note: 'Not signed within 30 days of the last link; signing data deleted' },
+      })
+      expired++
+    } catch (err) {
+      failed.push({ id, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+  return { eligible: abandoned.length, expired, failed }
+}
+
 export interface PurgeResult {
   eligible: number
   purged: number

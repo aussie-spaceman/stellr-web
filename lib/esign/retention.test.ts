@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { fakeSupabase } from '@/test/fake-supabase'
 import { SIGNED_BUCKET } from './archive'
-import { purgeExpired, retainSignedRecords } from './retention'
+import { expireUnsigned, purgeExpired, retainSignedRecords } from './retention'
 
 const now = new Date('2026-10-02T12:00:00Z')
 
@@ -81,5 +81,79 @@ describe('purgeExpired', () => {
     const db = fakeSupabase({ docusign_envelopes: rows() })
     expect(await purgeExpired(db.client, { limit: 50, now, dryRun: true })).toEqual({ eligible: 1, purged: 0, failed: [] })
     expect(db.table('docusign_envelopes')).toHaveLength(3)
+  })
+})
+
+describe('expireUnsigned', () => {
+  const day = 86_400_000
+  const ago = (d: number) => new Date(now.getTime() - d * day).toISOString()
+  const ahead = (d: number) => new Date(now.getTime() + d * day).toISOString()
+
+  function setup() {
+    const env = (id: string, sentDaysAgo: number, status = 'sent') => ({
+      id, provider: 'native', status, sent_at: ago(sentDaysAgo), prefill: { MinorDateOfBirth: '07-Jun-2014' },
+    })
+    const rcp = (id: string, envelope: string, status: string, expires: string | null, extra = {}) => ({
+      id, envelope_row: envelope, status, token_version: 1, token_expires_at: expires, signature_image_path: null,
+      signer_values: { GuardianPhone: '555' }, signature_text: null, signed_ip: null, signed_user_agent: null, ...extra,
+    })
+    const db = fakeSupabase({
+      docusign_envelopes: [
+        env('abandoned', 60),      // parent signed, student's link ran out
+        env('reminded', 60),       // a reminder renewed the link last week
+        env('recent', 10),         // too new to judge
+        { ...env('docusign', 90), provider: 'docusign' },
+        env('done', 90, 'completed'),
+      ],
+      docusign_envelope_recipients: [
+        rcp('a-parent', 'abandoned', 'completed', null, { signature_text: 'Pat Lee', signed_ip: '203.0.113.9', signed_user_agent: 'UA' }),
+        rcp('a-student', 'abandoned', 'sent', ago(2)),
+        rcp('r-parent', 'reminded', 'sent', ahead(23)),
+        rcp('n-parent', 'recent', 'sent', ago(1)),
+        rcp('d-parent', 'docusign', 'sent', ago(30)),
+        rcp('c-parent', 'done', 'completed', ago(30)),
+      ],
+      esign_audit_events: [
+        { id: 1, envelope_row: 'abandoned', event: 'signed', detail: { signatureText: 'Pat Lee' }, ip: '203.0.113.9' },
+        { id: 2, envelope_row: 'reminded', event: 'issued', detail: {} },
+      ],
+    })
+    db.rpcs.esign_purge_audit = ({ p_envelope }) => {
+      const before = db.table('esign_audit_events').length
+      db.tables.esign_audit_events = db.table('esign_audit_events').filter((e) => e.envelope_row !== p_envelope)
+      return before - db.table('esign_audit_events').length
+    }
+    db.rpcs.esign_append_audit = (args) => {
+      db.table('esign_audit_events').push({ id: 99, envelope_row: args.p_envelope, event: args.p_event, detail: args.p_detail, ip: args.p_ip ?? null })
+      return { id: 99 }
+    }
+    return db
+  }
+
+  it('voids a native agreement whose every outstanding link has run out, and deletes what signing collected', async () => {
+    const db = setup()
+    const result = await expireUnsigned(db.client, { limit: 10, now })
+    expect(result).toEqual({ eligible: 1, expired: 1, failed: [] })
+
+    const envs = Object.fromEntries(db.table('docusign_envelopes').map((e) => [e.id, e]))
+    expect(envs.abandoned).toMatchObject({ status: 'voided', prefill: {} })
+    expect(['reminded', 'recent', 'docusign', 'done'].map((id) => envs[id].status)).toEqual(['sent', 'sent', 'sent', 'completed'])
+
+    // The parent's signature on a form that never completed goes too.
+    const parent = db.table('docusign_envelope_recipients').find((r) => r.id === 'a-parent')!
+    expect(parent).toMatchObject({ signature_text: null, signed_ip: null, signed_user_agent: null, signer_values: null, token_version: 2 })
+    const student = db.table('docusign_envelope_recipients').find((r) => r.id === 'a-student')!
+    expect(student.token_version).toBe(2) // the link is dead
+
+    // The trail that repeated it is replaced by one event holding no personal data.
+    const trail = db.table('esign_audit_events').filter((e) => e.envelope_row === 'abandoned')
+    expect(trail).toEqual([expect.objectContaining({ event: 'voided', ip: null, detail: expect.objectContaining({ reason: 'expired' }) })])
+    expect(db.table('esign_audit_events').some((e) => e.envelope_row === 'reminded')).toBe(true)
+  })
+
+  it('changes nothing on a dry run', async () => {
+    const db = setup()
+    expect(await expireUnsigned(db.client, { limit: 10, now, dryRun: true })).toEqual({ eligible: 1, expired: 0, failed: [] })
+    expect(db.table('docusign_envelopes').find((e) => e.id === 'abandoned')?.status).toBe('sent')
   })
 })

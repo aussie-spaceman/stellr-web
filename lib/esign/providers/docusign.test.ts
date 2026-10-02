@@ -98,8 +98,11 @@ describe('docusignProvider.create', () => {
     stubDocusign(new Response('<html>Bad Gateway</html>', { status: 502 }))
 
     const err = await docusignProvider.create(ctx, adult).catch((e: unknown) => e)
-    expect(err).toBeInstanceOf(DocusignApiError)
-    expect((err as InstanceType<typeof DocusignApiError>).errorCode).toBeNull()
+    // A 502 is DocuSign being down: the caller may fall back to Stellr signing.
+    expect((err as Error).name).toBe('ProviderUnavailableError')
     expect((err as Error).message).toContain('Bad Gateway')
+    const cause = (err as Error).cause
+    expect(cause).toBeInstanceOf(DocusignApiError)
+    expect((cause as InstanceType<typeof DocusignApiError>).errorCode).toBeNull()
   })
 })

@@ -120,3 +120,18 @@ export class AllowanceExhaustedError extends Error {
     this.provider = provider
   }
 }
+
+/**
+ * The engine is down or not answering: a 5xx, a rate limit, a network failure
+ * or a timeout. Not our request's fault, and nothing to remember: the next
+ * agreement tries the engine again. A 4xx (bad request, wrong credentials) is
+ * never this, so a configuration mistake still fails loudly.
+ */
+export class ProviderUnavailableError extends Error {
+  readonly provider: ProviderId
+  constructor(provider: ProviderId, message: string, options?: { cause?: unknown }) {
+    super(message, options)
+    this.name = 'ProviderUnavailableError'
+    this.provider = provider
+  }
+}

@@ -45,6 +45,7 @@ async function getAccessToken(): Promise<string> {
   const jwt = `${input}.${sig}`
 
   const res = await fetch(`${ENV.oauthUrl}/oauth/token`, {
+    signal:  AbortSignal.timeout(DS_TIMEOUT_MS),
     method:  'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body:    `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
@@ -56,10 +57,18 @@ async function getAccessToken(): Promise<string> {
   return tokenCache.accessToken
 }
 
+/**
+ * DocuSign calls give up after this long. A hung request would otherwise run
+ * until the serverless function is killed, taking the registration with it;
+ * timing out lets the caller fall back to Stellr signing instead.
+ */
+const DS_TIMEOUT_MS = 25_000
+
 async function dsRequest(path: string, init: RequestInit = {}): Promise<Response> {
   const token = await getAccessToken()
   const { headers: extraHeaders, ...rest } = init
   return fetch(`${ENV.basePath}/v2.1/accounts/${ENV.accountId}${path}`, {
+    signal: AbortSignal.timeout(DS_TIMEOUT_MS),
     ...rest,
     headers: {
       Authorization:  `Bearer ${token}`,

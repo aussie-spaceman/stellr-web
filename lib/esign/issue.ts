@@ -10,6 +10,7 @@ import {
 } from '@/lib/esign/routing'
 import {
   AllowanceExhaustedError,
+  ProviderUnavailableError,
   type CreateAgreementRequest,
   type CreatedAgreement,
 } from '@/lib/esign/types'
@@ -61,9 +62,18 @@ export async function issueAgreement(
 
   if (decision.provider === 'native') return getProvider('native').create(ctx, req)
 
+  const mayOverflow = state.mode !== 'docusign_only' && state.overflowTypes.includes(req.type)
   try {
     return await getProvider('docusign').create(ctx, req)
   } catch (err) {
+    // DocuSign down or not answering: this agreement goes to Stellr signing,
+    // and the next one tries DocuSign again. Nothing is remembered.
+    if (err instanceof ProviderUnavailableError) {
+      if (!mayOverflow) throw err
+      console.warn(`[esign] DocuSign unavailable, issuing a ${req.type} agreement on Stellr signing:`, err.message.slice(0, 200))
+      await alertOutage(err.message, now)
+      return getProvider('native').create(ctx, req)
+    }
     if (!(err instanceof AllowanceExhaustedError)) throw err
 
     // DocuSign's refusal is the authoritative "allowance spent" signal: our
@@ -71,12 +81,32 @@ export async function issueAgreement(
     // rest of a group registration does not ask DocuSign again.
     const { until, firstTransition } = await markDocusignExhausted(db, state, err.message, now)
 
-    const mayOverflow = state.mode !== 'docusign_only' && state.overflowTypes.includes(req.type)
     if (firstTransition) await alertAllowanceExhausted(until, mayOverflow)
     if (!mayOverflow) throw err
 
     return getProvider('native').create(ctx, req)
   }
+}
+
+// One outage alert per server instance per hour, not one per agreement: a
+// group registration during an outage would otherwise send thirty.
+let lastOutageAlert = 0
+const OUTAGE_ALERT_GAP_MS = 60 * 60_000
+
+async function alertOutage(detail: string, now: Date): Promise<void> {
+  if (now.getTime() - lastOutageAlert < OUTAGE_ALERT_GAP_MS) return
+  lastOutageAlert = now.getTime()
+  const body = 'DocuSign did not respond, so new agreements are being issued by Stellr signing until it does. Nothing needs doing; check status.docusign.com if it continues.'
+  await notifyCommunityAdmins({
+    type: 'action',
+    body,
+    email: { subject: 'DocuSign unavailable: agreements going to Stellr signing', html: `<p>${body}</p>`, text: `${body}\n\n${detail.slice(0, 300)}` },
+  }).catch(() => {})
+}
+
+/** For tests: forget the last outage alert. */
+export function __resetOutageAlert(): void {
+  lastOutageAlert = 0
 }
 
 async function alertAllowanceExhausted(until: Date, overflowing: boolean): Promise<void> {

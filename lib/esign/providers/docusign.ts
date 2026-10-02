@@ -15,6 +15,7 @@ import {
 } from '@/lib/docusign'
 import {
   AllowanceExhaustedError,
+  ProviderUnavailableError,
   type CreateAgreementRequest,
   type EsignProvider,
 } from '@/lib/esign/types'
@@ -31,6 +32,15 @@ function isAllowanceError(err: unknown): boolean {
   // Belt and braces: the code also appears in the body text, which is all a
   // caller has if the response was not the JSON shape dsError expects.
   return err instanceof Error && err.message.includes(ALLOWANCE_ERROR_CODE)
+}
+
+/** DocuSign itself failing, as opposed to our request or our credentials. */
+export function isOutage(err: unknown): boolean {
+  if (err instanceof DocusignApiError) return err.status >= 500 || err.status === 429
+  if (!(err instanceof Error)) return false
+  // fetch() rejects with a TypeError when the network fails, and with a
+  // TimeoutError/AbortError when AbortSignal.timeout fires.
+  return err.name === 'TypeError' || err.name === 'TimeoutError' || err.name === 'AbortError'
 }
 
 function createEnvelope(req: CreateAgreementRequest): Promise<CreatedEnvelope> {
@@ -57,6 +67,9 @@ export const docusignProvider: EsignProvider = {
     } catch (err) {
       if (isAllowanceError(err)) {
         throw new AllowanceExhaustedError('docusign', (err as Error).message, { cause: err })
+      }
+      if (isOutage(err)) {
+        throw new ProviderUnavailableError('docusign', (err as Error).message, { cause: err })
       }
       throw err
     }

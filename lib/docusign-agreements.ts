@@ -23,6 +23,7 @@ export const AGREEMENT_LABEL: Record<AgreementType, string> = {
   // Agreement" beside a document headed "Mentor Participation Agreement" reads
   // as a mistake.
   volunteer: 'Mentor Participation Agreement',
+  membership: 'Membership Agreement',
 }
 
 // Signed paperwork is valid for this long, across all Stellr events.

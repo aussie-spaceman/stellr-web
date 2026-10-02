@@ -246,6 +246,31 @@ export async function markDocusignExhausted(
   }
 }
 
+/**
+ * Stores what DocuSign reports about its own allowance: envelopes sent this
+ * period (including any sent from its web UI) and when the period ends. Run
+ * daily, and on demand from the admin card.
+ */
+export async function syncDocusignUsage(
+  db: SupabaseClient,
+  getUsage: () => Promise<{ sent: number; allowed: number | null; periodEnd: string | null }>,
+  now = new Date(),
+): Promise<{ sent: number; allowed: number | null; periodEnd: string | null }> {
+  const usage = await getUsage()
+  const { error } = await db
+    .from('esign_provider_state')
+    .update({
+      account_sent:       usage.sent,
+      account_allowed:    usage.allowed,
+      account_period_end: usage.periodEnd,
+      account_synced_at:  now.toISOString(),
+      updated_at:         now.toISOString(),
+    })
+    .eq('id', true)
+  if (error) throw new Error(`Recording DocuSign usage failed: ${error.message}`)
+  return usage
+}
+
 /** DocuSign envelopes this app has issued since `since`. Coverage rows are not envelopes. */
 export async function countDocusignIssuedSince(db: SupabaseClient, since: Date): Promise<number> {
   try {

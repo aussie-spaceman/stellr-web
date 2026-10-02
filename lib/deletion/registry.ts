@@ -100,9 +100,10 @@ const ENTITIES: Record<string, EntityDef> = {
   // ---- Registrations / participants --------------------------------------
   // A registration is the unit for "delete a group" (type='group') or an
   // individual registration (type='individual'). Soft delete = withdrawn
-  // (recoverable); hard delete cascades participants, their docusign_envelopes,
-  // sheet_watch_channels and group_join_tokens in the DB. External cleanup
-  // voids any in-flight DocuSign envelopes for every participant first.
+  // (recoverable); hard delete cascades participants, sheet_watch_channels and
+  // group_join_tokens in the DB. External cleanup voids any in-flight
+  // envelopes for every participant first; signed agreements are then kept,
+  // unlinked and restricted, for their retention period (lib/esign/retention).
   registration: {
     type: 'registration',
     table: 'registrations',
@@ -115,8 +116,9 @@ const ENTITIES: Record<string, EntityDef> = {
   },
 
   // A single participant within a registration ("delete a participant from an
-  // event"). No soft-delete column exists, so only hard delete applies; the
-  // participant's docusign_envelopes cascade in the DB and are voided upstream.
+  // event"). No soft-delete column exists, so only hard delete applies. The
+  // participant's in-flight envelopes are voided upstream and removed; signed
+  // ones are kept, unlinked and restricted (lib/esign/retention).
   participant: {
     type: 'participant',
     table: 'participants',
@@ -193,15 +195,26 @@ const ENTITIES: Record<string, EntityDef> = {
   },
 
   // ---- DocuSign ----------------------------------------------------------
+  // A SIGNED agreement cannot be deleted by hand: it is kept for 7 years from
+  // signing and then deleted automatically (lib/esign/retention). The row
+  // counts as its own blocker while it is completed. Unsigned ones (in flight,
+  // declined, voided) delete as before.
   docusign_envelope: {
     type: 'docusign_envelope',
     table: 'docusign_envelopes',
-    label: 'DocuSign record',
+    label: 'Agreement record',
     pk: 'id',
     keyType: 'uuid',
     softDelete: null,
     external: ['docusign'],
-    dependents: [],
+    dependents: [
+      {
+        table: 'docusign_envelopes',
+        fkColumn: 'id',
+        label: 'signed agreement, kept for 7 years from signing and then deleted automatically',
+        activeFilter: { column: 'status', value: 'completed' },
+      },
+    ],
   },
 
   // ---- Community ---------------------------------------------------------

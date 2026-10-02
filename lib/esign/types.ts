@@ -60,6 +60,15 @@ export interface EsignProvider {
     externalId: string,
     opts?: { certificate?: boolean },
   ): Promise<SignedDocument>
+  /** The engine's own count of agreements issued this period, if it has a cap. */
+  getUsage?(ctx: EsignContext): Promise<ProviderUsage>
+}
+
+export interface ProviderUsage {
+  sent: number
+  /** Null when the engine reports no limit. */
+  allowed: number | null
+  periodEnd: string | null
 }
 
 /**

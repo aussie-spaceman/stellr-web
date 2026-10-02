@@ -3,10 +3,14 @@
 import { useState } from 'react'
 import { formatDateShort } from '@/lib/utils'
 import { describeEnvelope, PILL_CLASSES, type RecipientLike } from '@/lib/docusign-status'
+import { downloadSignedRecord } from '@/lib/esign/download-client'
+import { slug } from '@/lib/esign/filenames'
 
 export interface EnvelopeRow {
   id: string
   envelope_id: string
+  /** Signing engine: docusign, or native (Stellr signing). */
+  provider?: string | null
   status: string
   envelope_type?: string
   signer_name: string
@@ -82,16 +86,11 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
   async function handleDownload(env: EnvelopeRow) {
     setDownloading(env.id)
     try {
-      const res = await fetch(`/api/admin/docusigns/${env.id}/download`)
-      if (!res.ok) throw new Error('Download failed')
-      const blob = await res.blob()
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href     = url
-      const prefix = env.envelope_type === 'adult' || env.envelope_type === 'mentor' ? 'agreement' : 'consent'
-      a.download = `${prefix}-${env.minor_name.replace(/\s+/g, '-').toLowerCase()}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
+      const prefix = (env.envelope_type ?? 'minor') === 'minor' ? 'consent' : 'agreement'
+      await downloadSignedRecord(
+        `/api/admin/docusigns/${env.id}/download`,
+        `${prefix}-${slug(env.minor_name || env.signer_name)}.pdf`,
+      )
     } catch (e) {
       setMsg({ text: e instanceof Error ? e.message : 'Download failed', error: true })
     } finally {
@@ -182,7 +181,7 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-brand-hairline bg-brand-canvas text-left">
-                {['Participant', 'Type', 'Event', 'Signer', 'Status', 'Sent', 'Signed', 'Expires', 'Sharing', ''].map(h => (
+                {['Participant', 'Type', 'Engine', 'Event', 'Signer', 'Status', 'Sent', 'Signed', 'Expires', 'Sharing', ''].map(h => (
                   <th key={h} className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide whitespace-nowrap">
                     {h}
                   </th>
@@ -194,6 +193,9 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
                 <tr key={env.id} className="hover:bg-brand-canvas">
                   <td className="px-4 py-3 font-medium text-brand-blue-dark whitespace-nowrap">{env.minor_name}</td>
                   <td className="px-4 py-3 text-brand-muted-soft text-xs whitespace-nowrap capitalize">{env.envelope_type ?? 'minor'}</td>
+                  <td className="px-4 py-3 text-brand-muted-soft text-xs whitespace-nowrap">
+                    {(env.provider ?? 'docusign') === 'native' ? 'Stellr' : 'DocuSign'}
+                  </td>
                   <td className="px-4 py-3 text-brand-muted max-w-[200px]">
                     <span className="block truncate" title={env.event_title}>{env.event_title}</span>
                   </td>

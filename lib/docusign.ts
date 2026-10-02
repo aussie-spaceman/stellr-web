@@ -645,7 +645,10 @@ export function isMinor(dateOfBirth: string): boolean {
   return isMinorOn(dateOfBirth)
 }
 
-export type AgreementType = 'minor' | 'adult' | 'mentor' | 'volunteer'
+// 'membership' is signed by people who join without attending an event. It is
+// only ever issued by the in-app engine, never as a DocuSign envelope, so
+// classifyAgreement (which picks an event's paperwork) never returns it.
+export type AgreementType = 'minor' | 'adult' | 'mentor' | 'volunteer' | 'membership'
 
 // Which DocuSign agreement (if any) a participant needs, based on role and age:
 //   • any student (incl. Student Manager) → minor "Participation Agreement"
@@ -655,10 +658,13 @@ export type AgreementType = 'minor' | 'adult' | 'mentor' | 'volunteer'
 //   • adult registering as a mentor       → mentor participation agreement
 //   • adult in the volunteer program      → volunteer agreement
 //   • any other adult attendee            → adult participation agreement
+/** The agreements an event participant can need: every type but membership. */
+export type EventAgreementType = Exclude<AgreementType, 'membership'>
+
 export function classifyAgreement(
   eventRole: string | null | undefined,
   dateOfBirth: string | null | undefined,
-): AgreementType | null {
+): EventAgreementType | null {
   const role = (eventRole ?? '').toLowerCase().replace(/\s+/g, '_')
   // Student participants always sign the minor agreement — role wins over age,
   // so an 18-year-old senior or student-manager still gets parental consent.

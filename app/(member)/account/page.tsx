@@ -253,7 +253,9 @@ export default async function AccountPage({
               />
             )}
             <EventHistory participations={member.event_participations ?? []} editable />
-            <DocusignsSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
+            {/* An admin viewing as this member downloads through the admin
+                route, where the download is recorded against the admin. */}
+            <DocusignsSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} adminDownload={!!viewAsId} />
             <ComplianceSection dateOfBirth={member.date_of_birth} eventRole={member.event_role} />
             <div className="rounded-xl border border-brand-border bg-white p-5">
               <AddressBook />

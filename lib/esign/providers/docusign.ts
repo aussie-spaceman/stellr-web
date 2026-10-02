@@ -4,6 +4,7 @@ import {
   createConsentEnvelope,
   createMentorAgreementEnvelope,
   createVolunteerAgreementEnvelope,
+  getAccountUsage,
   getEnvelopeCertificate,
   getEnvelopeDocument,
   getEnvelopeFormData,
@@ -72,5 +73,10 @@ export const docusignProvider: EsignProvider = {
     const pdf = await getEnvelopeDocument(externalId)
     const certificate = opts?.certificate ? await getEnvelopeCertificate(externalId) : null
     return { pdf, certificate }
+  },
+
+  async getUsage() {
+    const usage = await getAccountUsage()
+    return { sent: usage.sent, allowed: usage.allowed, periodEnd: usage.periodEnd }
   },
 }

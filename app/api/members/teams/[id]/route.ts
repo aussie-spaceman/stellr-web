@@ -56,6 +56,39 @@ export async function GET(
     return NextResponse.json({ error: 'You do not have access to this team' }, { status: 403 })
   }
 
+  // A participant who does not manage the group sees who is on it and nothing
+  // else. This response used to return every participant row in full — dates
+  // of birth, health conditions, emergency contacts, guardians' emails — plus
+  // every teammate's agreement signer, to any student on the team. Only the
+  // organisers' view (TeacherTeamsView) reads the full detail.
+  if (!owns) {
+    const parts = registration.participants as (Record<string, unknown> & { id: string; member_id?: string | null })[]
+    return NextResponse.json({
+      registration: {
+        id: registration.id,
+        event_slug: registration.event_slug,
+        event_title: registration.event_title,
+        school_name: registration.school_name,
+        status: registration.status,
+        participants: parts.map((p) =>
+          p.member_id === member.id
+            ? p
+            : {
+                id: p.id,
+                first_name: p.first_name,
+                last_name: p.last_name,
+                event_role: p.event_role,
+                event_companies: p.event_companies ?? null,
+              },
+        ),
+        joinUrl: null,
+        docusignEnvelopes: {},
+        viewerRole: null,
+      },
+      watchActive: false,
+    })
+  }
+
   // Watch channel, join token, and DocuSign envelopes are independent — fetch in parallel
   const regAny = registration as Record<string, unknown>
   const participantIds = (registration.participants as { id: string }[]).map(p => p.id)
@@ -79,6 +112,10 @@ export async function GET(
       ? db.from('docusign_envelopes')
           .select('id, participant_id, status, envelope_type, signer_name, signer_email, sent_at, completed_at, reminder_sent_at')
           .in('participant_id', participantIds)
+          // Oldest first, so the map below keeps each participant's newest
+          // agreement: after a void and reissue a participant has two rows,
+          // and an unordered read could show the dead one.
+          .order('created_at', { ascending: true })
       : Promise.resolve({ data: null }),
   ])
 
@@ -122,9 +159,7 @@ export async function GET(
     }
   }
 
-  const viewerRole = owns
-    ? teamViewerRole(member, registration as unknown as TeamViewerRegistration)
-    : null
+  const viewerRole = teamViewerRole(member, registration as unknown as TeamViewerRegistration)
 
   return NextResponse.json({ registration: { ...registration, joinUrl, docusignEnvelopes, viewerRole }, watchActive })
 }

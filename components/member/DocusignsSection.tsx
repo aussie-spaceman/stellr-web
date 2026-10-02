@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { formatDateShort } from '@/lib/utils'
 import { describeEnvelope, PILL_CLASSES, type RecipientLike } from '@/lib/docusign-status'
+import { downloadSignedRecord } from '@/lib/esign/download-client'
+import { slug } from '@/lib/esign/filenames'
 
 interface Envelope {
   id: string
@@ -128,15 +130,7 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
       : `/api/members/docusigns/${id}/download`
     const prefix = type === 'adult' || type === 'mentor' || type === 'volunteer' ? 'agreement' : 'consent'
     try {
-      const res = await fetch(downloadUrl)
-      if (!res.ok) throw new Error('Download failed')
-      const blob = await res.blob()
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href     = url
-      a.download = `${prefix}-${subjectName.replace(/\s+/g, '-').toLowerCase()}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
+      await downloadSignedRecord(downloadUrl, `${prefix}-${slug(subjectName)}.pdf`)
     } catch (e) {
       console.error(e)
     } finally {

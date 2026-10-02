@@ -15,6 +15,7 @@ import { finalizeRegistrationMerch } from '@/lib/store/event-merch'
 import { createGroupRegistrationSheet, isGoogleSheetsConfigured, type SheetSeedRow } from '@/lib/google-sheets'
 import { ensureClerkUserAndSignInToken } from '@/lib/clerk-provisioning'
 import { dispatchAgreement } from '@/lib/docusign-agreements'
+import { SCHOOL_DATA_TERMS_VERSION, schoolDataTermsSha256 } from '@/lib/school-data-terms'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt, normalizeEmail } from '@/lib/member-enums'
 import { fillBlanksFromStored } from '@/lib/member-sync'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
@@ -131,7 +132,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Please select or add your school before registering.' }, { status: 400 })
     }
     if (!school_dpa_agreed) {
-      return NextResponse.json({ error: 'You must accept the School Data Processing Agreement to continue' }, { status: 400 })
+      return NextResponse.json({ error: 'Accept the School Data Terms to continue' }, { status: 400 })
     }
     // A group needs at least 2 students. For a Student Manager that count is
     // "other students" — the SM is student #1 — so 1 other (2 total) is the floor.
@@ -430,6 +431,9 @@ export async function POST(req: NextRequest) {
       details_method,
       withdrawn_at: null,
       school_dpa_agreed_at: new Date().toISOString(),
+      // Which wording was accepted, so it can be produced later exactly.
+      school_data_terms_version: SCHOOL_DATA_TERMS_VERSION,
+      school_data_terms_sha256: schoolDataTermsSha256(),
     }).select('id').single()
 
     if (regError || !registration) {

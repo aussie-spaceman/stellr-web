@@ -22,20 +22,20 @@ export interface EventEmailDefault {
 export const EVENT_EMAIL_DEFAULTS: EventEmailDefault[] = [
   {
     key: 'docusign_outstanding',
-    name: 'Outstanding DocuSign',
+    name: 'Outstanding consent form',
     audiences: ['docusign_outstanding'],
-    subject: '{{event_name}} at {{event_venue}}: your DocuSign is still outstanding',
+    subject: '{{event_name}} at {{event_venue}}: your consent form is still outstanding',
     resendDocusign: true,
     scheduleDaysBefore: 5,
     body: `Hi {{first_name}},
 
 You're receiving this because {{who_is_registered}} registered for {{event_name}} at {{event_venue}} on {{event_date}}.
 
-Our records show the DocuSign agreement for this registration hasn't been completed yet. We need it signed before the event.
+Our records show the consent form or agreement for this registration hasn't been completed yet. We need it signed before the event.
 
-One agreement goes to both the participant (the student) and their nominated parent or legal guardian, and **both** need to sign. We've just re-sent it, so look for an email from **@docusign.net** (not from Stellr) in your inbox, and check your junk folder too.
+For a student, one form goes to their nominated parent or legal guardian and to the student, and **both** need to sign (the parent or guardian first). We've just re-sent it: look for an email from **Stellr Education** or from **@docusign.net**, and check your junk folder too.
 
-Participants can check their DocuSign status any time in the Stellr portal: {{portal_link}}
+Participants can check their status any time in the Stellr portal: {{portal_link}}
 
 If you can't find the email, reply to this message and we'll sort it out.
 

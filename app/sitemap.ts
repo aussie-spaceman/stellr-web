@@ -53,12 +53,14 @@ const staticPaths: { path: string; changeFrequency: MetadataRoute.Sitemap[number
   // Legal.
   { path: '/terms', changeFrequency: 'yearly', priority: 0.3 },
   { path: '/privacy', changeFrequency: 'yearly', priority: 0.3 },
+  { path: '/school-data-terms', changeFrequency: 'yearly', priority: 0.3 },
 ]
 
 /**
  * Public routes deliberately kept out of the sitemap: transactional steps and
  * per-registration screens with no standalone informational value.
  */
+// /school-data-terms is listed with the other legal pages above.
 // Never indexed: /sign and /sign/copy are reached only through a private
 // emailed link (lib/private-routes.ts); without one they show nothing.
 export const STATIC_ROUTE_EXCLUSIONS = ['/store/cart', '/store/success', '/sign', '/sign/copy']

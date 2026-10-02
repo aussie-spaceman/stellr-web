@@ -59,12 +59,13 @@ const nextConfig = {
       { source: '/register/:slug/pay/:path*', headers: privateLink },
       { source: '/register/:slug/join/:path*', headers: privateLink },
       { source: '/api/sign/:path*', headers: privateLink },
-      // The signing page shows the document in a same-origin frame.
+      // The signing page shows the document in a same-origin frame. No
+      // object-src here: on a PDF response it can stop the browser's own viewer.
       {
         source: '/api/sign/document',
         headers: [
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
-          { key: 'Content-Security-Policy', value: "frame-ancestors 'self'; object-src 'none'" },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'self'" },
         ],
       },
       // One Next app serves both hosts, so every public page (/academy,

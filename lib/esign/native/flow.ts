@@ -210,7 +210,7 @@ export async function activateNext(db: SupabaseClient, envelopeRowId: string, no
 
 export type LinkState =
   | { kind: 'invalid' }
-  | { kind: 'verify'; question: 'birth_year'; documentLabel: string }
+  | { kind: 'verify'; question: 'birth_year'; documentLabel: string; aboutSigner: boolean }
   | { kind: 'not_yet' }
   | { kind: 'already_signed'; completed: boolean }
   | { kind: 'ready'; recipient: NativeRecipient; envelope: NativeEnvelope; session: string; sessionExpires: Date }
@@ -258,15 +258,20 @@ export async function openLink(
   // stranger who received it by mistake from reading on.
   const expectedYear = subjectBirthYear(envelope)
   if (expectedYear) {
+    // The student (or young member) is asked about themselves, a parent about their child.
+    const verify = {
+      kind: 'verify', question: 'birth_year', documentLabel: documentLabelFor(envelope),
+      aboutSigner: roleOf(recipient) === 'student' || roleOf(recipient) === 'member',
+    } as const
     const answer = (opts.birthYear ?? '').trim()
-    if (!answer) return { kind: 'verify', question: 'birth_year', documentLabel: documentLabelFor(envelope) }
+    if (!answer) return verify
     if (answer !== expectedYear) {
       await db
         .from('docusign_envelope_recipients')
         .update({ failed_token_attempts: failedChecks + 1 })
         .eq('id', recipient.id)
       if (failedChecks + 1 >= MAX_FAILED_CHECKS) return { kind: 'invalid' }
-      return { kind: 'verify', question: 'birth_year', documentLabel: documentLabelFor(envelope) }
+      return verify
     }
   }
 
@@ -459,7 +464,14 @@ export async function recordConsent(
 
 export type SubmitResult =
   | { ok: true; agreementComplete: boolean; activated: NativeRecipient[] }
-  | { ok: false; status: number; error: string; fieldErrors?: Record<string, string> }
+  | { ok: false; status: number; error: string; fieldErrors?: Record<string, string>; nameOnRecord?: string }
+
+/** Case, accents, punctuation and spacing aside, is this the name we sent the link to? */
+export function sameName(a: string, b: string): boolean {
+  const norm = (s: string) =>
+    s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+  return norm(a) === norm(b)
+}
 
 /**
  * Records the signature. Exactly-once: the signer row moves to completed under
@@ -469,7 +481,7 @@ export type SubmitResult =
 export async function submitSignature(
   db: SupabaseClient,
   ctx: SessionContext,
-  input: { values: Record<string, unknown>; signatureText: string },
+  input: { values: Record<string, unknown>; signatureText: string; confirmDifferentName?: boolean },
   meta: RequestMeta,
   now = new Date(),
 ): Promise<SubmitResult> {
@@ -485,6 +497,18 @@ export async function submitSignature(
   const signatureText = input.signatureText.normalize('NFC').replace(/[\u0000-\u001f\u007f]/g, ' ').trim()
   if (signatureText.length < 2 || signatureText.length > 120) {
     return { ok: false, status: 422, error: 'Type your full name to sign.', fieldErrors: { signature: 'Type your full name to sign.' } }
+  }
+  // A different name is allowed (the name we hold may be misspelled), but only
+  // when the signer confirms it, and the record says so.
+  const nameMatchesRecord = sameName(signatureText, ctx.recipient.name)
+  if (!nameMatchesRecord && !input.confirmDifferentName) {
+    return {
+      ok: false,
+      status: 409,
+      error: 'name_differs',
+      nameOnRecord: ctx.recipient.name,
+      fieldErrors: { signature: `That’s different from the name on this form (${ctx.recipient.name}).` },
+    }
   }
 
   const { data: claimed, error } = await db
@@ -515,6 +539,8 @@ export async function submitSignature(
       role,
       signatureKind: 'typed',
       signatureText,
+      nameOnRecord: ctx.recipient.name,
+      nameMatchesRecord,
       values: checked.values,
       templateSha256: template.pdfSha256,
     },

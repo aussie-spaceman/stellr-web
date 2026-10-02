@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   const ctx = await resolveSession(db, await sessionCookie(), 'act')
   if (!ctx) return invalidLink()
 
-  const body = await readJson<{ values?: unknown; signature?: unknown }>(req)
+  const body = await readJson<{ values?: unknown; signature?: unknown; confirmDifferentName?: unknown }>(req)
   const values = body?.values
   if (!body || typeof values !== 'object' || values === null || Array.isArray(values) || typeof body.signature !== 'string') {
     return json({ error: 'Invalid request' }, 400)
@@ -26,10 +26,10 @@ export async function POST(req: Request) {
   const result = await submitSignature(
     db,
     ctx,
-    { values: values as Record<string, unknown>, signatureText: body.signature },
+    { values: values as Record<string, unknown>, signatureText: body.signature, confirmDifferentName: body.confirmDifferentName === true },
     requestMeta(req),
   )
-  if (!result.ok) return json({ error: result.error, fieldErrors: result.fieldErrors }, result.status)
+  if (!result.ok) return json({ error: result.error, fieldErrors: result.fieldErrors, nameOnRecord: result.nameOnRecord }, result.status)
 
   if (result.activated.length) await sendInvites(db, result.activated)
   return json({ ok: true, complete: result.agreementComplete })

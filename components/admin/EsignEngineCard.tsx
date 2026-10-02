@@ -191,8 +191,7 @@ export function EsignEngineCard() {
 
       {summary.outbox.waiting > summary.outbox.dailyBudget && (
         <p className="text-sm text-danger" role="status">
-          More signing emails are waiting than can go out today. Families will get their links over the next
-          {' '}{Math.ceil(summary.outbox.waiting / Math.max(1, summary.outbox.dailyBudget))} days, or sooner from their account if they have one.
+          {`More signing emails are waiting than can go out today. Families will get their links over the next ${Math.ceil(summary.outbox.waiting / Math.max(1, summary.outbox.dailyBudget))} days, or sooner from their account if they have one.`}
         </p>
       )}
 
@@ -205,7 +204,7 @@ export function EsignEngineCard() {
 
       {summary.archive.failing > 0 && (
         <p className="text-sm text-danger" role="status">
-          {summary.archive.failing} signed document(s) could not be stored yet. They are retried daily.
+          {`${summary.archive.failing} signed document(s) could not be stored yet. They are retried daily.`}
         </p>
       )}
 

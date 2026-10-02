@@ -30,7 +30,7 @@ interface View {
 type Phase =
   | { kind: 'loading' }
   | { kind: 'invalid' }
-  | { kind: 'verify'; documentLabel: string; retry: boolean }
+  | { kind: 'verify'; documentLabel: string; aboutSigner: boolean; retry: boolean }
   | { kind: 'not_yet' }
   | { kind: 'already_signed'; completed: boolean }
   | { kind: 'ready'; view: View }
@@ -69,7 +69,7 @@ export function SigningApp() {
     const { data } = await post('/api/sign/session', { token, birthYear })
     switch (data.state) {
       case 'ready': return loadContext()
-      case 'verify': return setPhase({ kind: 'verify', documentLabel: String(data.documentLabel ?? 'form'), retry: !!data.retry })
+      case 'verify': return setPhase({ kind: 'verify', documentLabel: String(data.documentLabel ?? 'form'), aboutSigner: !!data.aboutSigner, retry: !!data.retry })
       case 'not_yet': return setPhase({ kind: 'not_yet' })
       case 'already_signed': return setPhase({ kind: 'already_signed', completed: !!data.completed })
       default: return setPhase({ kind: 'invalid' })
@@ -77,13 +77,26 @@ export function SigningApp() {
   }, [loadContext])
 
   useEffect(() => {
-    const hash = window.location.hash.slice(1)
-    if (hash) {
+    const take = () => {
+      const hash = window.location.hash.slice(1)
+      if (!hash) return false
       tokenRef.current = decodeURIComponent(hash)
       // The key leaves the address bar and the history entry straight away.
       window.history.replaceState(null, '', window.location.pathname)
+      return true
     }
+    take()
     void openSession()
+    // A second link opened in this tab (a parent with two children) changes
+    // only the fragment, so the page would otherwise stay on the first
+    // document. Start again from the new link.
+    const onHashChange = () => {
+      if (!take()) return
+      setPhase({ kind: 'loading' })
+      void openSession()
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
   }, [openSession])
 
   return (
@@ -92,7 +105,7 @@ export function SigningApp() {
         {phase.kind === 'loading' && <p className="text-content-muted">Opening your document…</p>}
         {phase.kind === 'invalid' && <InvalidLink />}
         {phase.kind === 'verify' && (
-          <VerifyYear documentLabel={phase.documentLabel} retry={phase.retry} onSubmit={(y) => openSession(y)} />
+          <VerifyYear documentLabel={phase.documentLabel} aboutSigner={phase.aboutSigner} retry={phase.retry} onSubmit={(y) => openSession(y)} />
         )}
         {phase.kind === 'not_yet' && (
           <Notice title="Not your turn yet">
@@ -101,9 +114,9 @@ export function SigningApp() {
         )}
         {phase.kind === 'already_signed' && (
           <Notice title="Already signed">
-            This document has been signed with this link. {phase.completed
-              ? 'Your signed copy was emailed to you.'
-              : 'We’ll email you a copy once everyone has signed.'}
+            {`This document has been signed with this link. ${phase.completed
+              ? 'We emailed you a link to download your signed copy.'
+              : 'We’ll email you a link to your copy once everyone has signed.'}`}
           </Notice>
         )}
         {phase.kind === 'ready' && (
@@ -146,15 +159,16 @@ function InvalidLink() {
   )
 }
 
-function VerifyYear({ documentLabel, retry, onSubmit }: { documentLabel: string; retry: boolean; onSubmit: (year: string) => void }) {
+function VerifyYear({ documentLabel, aboutSigner, retry, onSubmit }: { documentLabel: string; aboutSigner: boolean; retry: boolean; onSubmit: (year: string) => void }) {
   const [year, setYear] = useState('')
   const [busy, setBusy] = useState(false)
   return (
     <section className="rounded-ds-card border border-line bg-white p-6 sm:p-8">
       <h1 className="font-display text-2xl font-bold text-ink">One quick check</h1>
       <p className="mt-3 text-content-body">
-        This {documentLabel} includes a young person&rsquo;s details. To make sure it reached the right person, enter
-        the year they were born.
+        {aboutSigner
+          ? `To make sure this ${documentLabel} reached you, enter the year you were born.`
+          : `This ${documentLabel} includes a young person’s details. To make sure it reached the right person, enter the year they were born.`}
       </p>
       <form
         className="mt-6 space-y-4"
@@ -196,6 +210,8 @@ function Signing({ view, onDone, onDeclined, onLost }: {
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [message, setMessage] = useState<string | null>(null)
+  /** The typed name, when it differs from the name on the form and needs confirming. */
+  const [nameDiffers, setNameDiffers] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
 
@@ -218,14 +234,15 @@ function Signing({ view, onDone, onDeclined, onLost }: {
     setStep('read')
   }
 
-  async function sign(signature: string) {
-    setBusy(true); setMessage(null); setErrors({})
-    const { ok, status, data } = await post('/api/sign/submit', { values, signature })
+  async function sign(signature: string, confirmDifferentName = false) {
+    setBusy(true); setMessage(null); setErrors({}); setNameDiffers(null)
+    const { ok, status, data } = await post('/api/sign/submit', { values, signature, confirmDifferentName })
     setBusy(false)
     if (lost(status)) return
     if (!ok) {
       const fieldErrors = (data.fieldErrors ?? {}) as Record<string, string>
       setErrors(fieldErrors)
+      if (data.error === 'name_differs') return setNameDiffers(signature)
       setMessage(String(data.error ?? 'Something went wrong. Please try again.'))
       if (Object.keys(fieldErrors).some((k) => k !== 'signature')) setStep('details')
       return
@@ -307,6 +324,7 @@ function Signing({ view, onDone, onDeclined, onLost }: {
             values={values}
             busy={busy}
             error={errors.signature}
+            nameDiffers={nameDiffers}
             onBack={() => setStep(view.fields.length ? 'details' : 'read')}
             onSign={sign}
           />
@@ -355,9 +373,18 @@ function ConsentStep({ headingRef, attestation, busy, onAgree }: {
           <span>{attestation} I understand that signing in someone else&rsquo;s name is not permitted.</span>
         </label>
       )}
-      <Button disabled={busy || !agreed || (!!attestation && !attested)} onClick={() => onAgree(attested)}>
+      <Button
+        disabled={busy || !agreed || (!!attestation && !attested)}
+        onClick={() => onAgree(attested)}
+        aria-describedby="consent-hint"
+      >
         Continue
       </Button>
+      {(!agreed || (!!attestation && !attested)) && (
+        <p id="consent-hint" className="text-sm text-content-muted">
+          {attestation ? 'Tick both boxes to continue.' : 'Tick the box to continue.'}
+        </p>
+      )}
     </div>
   )
 }
@@ -385,7 +412,7 @@ function ReadStep({ headingRef, textHtml, onNext }: { headingRef: HeadingRef; te
       {textHtml && (
         <div>
           <button type="button" className="text-sm text-primary underline" onClick={() => setShowText((v) => !v)} aria-expanded={showText}>
-            {showText ? 'Hide' : 'Show'} the text version
+            {`${showText ? 'Hide' : 'Show'} the text version`}
           </button>
           {showText && (
             // Sandboxed: the text is shown, nothing in it can run.
@@ -458,14 +485,16 @@ function DetailsStep({ headingRef, fields, values, errors, onChange, onBack, onN
   )
 }
 
-function SignStep({ headingRef, view, values, busy, error, onBack, onSign }: {
+function SignStep({ headingRef, view, values, busy, error, nameDiffers, onBack, onSign }: {
   headingRef: HeadingRef
   view: View
   values: Record<string, string>
   busy: boolean
   error?: string
+  /** Set when the typed name differs from the one on the form. */
+  nameDiffers: string | null
   onBack: () => void
-  onSign: (signature: string) => void
+  onSign: (signature: string, confirmDifferentName?: boolean) => void
 }) {
   const [signature, setSignature] = useState('')
   const [confirmed, setConfirmed] = useState(false)
@@ -499,6 +528,16 @@ function SignStep({ headingRef, view, values, busy, error, onBack, onSign }: {
         />
         <p id="signature-hint" className="mt-1 text-xs text-content-muted">This is your legal signature on the document.</p>
         {error && <p id="signature-error" className="mt-1 text-sm text-danger">{error}</p>}
+        {nameDiffers && nameDiffers === signature && (
+          <div className="mt-3 space-y-2 rounded-control border border-line bg-surface p-3 text-sm text-ink">
+            <p>
+              {`If your name is spelled differently from the form, you can sign as “${nameDiffers}”. Only sign if you are ${view.signerName}; signing in someone else’s name is not permitted.`}
+            </p>
+            <Button type="button" variant="secondary" disabled={busy} onClick={() => onSign(signature, true)}>
+              {`Sign as “${nameDiffers}”`}
+            </Button>
+          </div>
+        )}
       </div>
       <label className="flex items-start gap-3 text-sm text-ink">
         <input type="checkbox" className="mt-1" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
@@ -506,10 +545,19 @@ function SignStep({ headingRef, view, values, busy, error, onBack, onSign }: {
       </label>
       <div className="flex flex-wrap gap-3">
         <Button type="button" variant="secondary" onClick={onBack} disabled={busy}>Back</Button>
-        <Button type="submit" disabled={busy || !confirmed || signature.trim().length < 2}>
+        <Button
+          type="submit"
+          disabled={busy || !confirmed || signature.trim().length < 2}
+          aria-describedby={confirmed && signature.trim().length >= 2 ? undefined : 'sign-hint'}
+        >
           {busy ? 'Signing…' : 'Sign'}
         </Button>
       </div>
+      {(!confirmed || signature.trim().length < 2) && (
+        <p id="sign-hint" className="text-sm text-content-muted">
+          {signature.trim().length < 2 ? 'Type your full name and tick the box to sign.' : 'Tick the box to sign.'}
+        </p>
+      )}
     </form>
   )
 }
@@ -568,7 +616,7 @@ function Done({ complete }: { complete: boolean }) {
       <p className="mt-3 text-content-body">
         {complete
           ? 'Everyone has signed. We’ve emailed you a link to your copy, and you can download it now.'
-          : 'We’ll email you a copy once everyone has signed.'}
+          : 'We’ll email you a link to your copy once everyone has signed.'}
       </p>
       {complete && (
         <div className="mt-6">

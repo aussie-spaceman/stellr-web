@@ -24,7 +24,7 @@ vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins: vi.fn(async () => {}) })
 vi.mock('@/lib/credentials-notify', () => ({ applyGuardianOptOut: vi.fn(async () => {}) }))
 
 import { nativeProvider } from '@/lib/esign/providers/native'
-import { openLink, resolveSession, recordConsent, submitSignature, recordViewed } from './flow'
+import { openLink, resolveSession, recordConsent, sameName, submitSignature, recordViewed } from './flow'
 import { verifyToken } from './tokens'
 import { sendInvites } from '@/lib/esign/outbox'
 import { SIGNED_BUCKET } from '@/lib/esign/storage'
@@ -223,6 +223,33 @@ describe('Stellr signing: a minor’s consent form', () => {
       expect((e as unknown as { attachments?: unknown }).attachments).toBeUndefined()
       expect(verifyToken(linkFrom(e, 'copy'), 'download')).not.toBeNull()
     }
+  })
+
+  it('asks before accepting a signature in a different name, and records that it differed', async () => {
+    const db = await setup()
+    await issue(db)
+    const link = await openLink(db.client, linkFrom(sent[0]), { birthYear: '2012' })
+    if (link.kind !== 'ready') throw new Error('expected a session')
+    await recordConsent(db.client, (await resolveSession(db.client, link.session, 'act'))!, { disclosureVersion: '2026-10-v1', attest: true }, meta)
+    const ctx = async () => (await resolveSession(db.client, link.session, 'act'))!
+    const values = { GuardianPhone: '555 0199' }
+
+    const refused = await submitSignature(db.client, await ctx(), { values, signatureText: 'Someone Else' }, meta)
+    expect(refused).toMatchObject({ ok: false, status: 409, error: 'name_differs', nameOnRecord: 'Pat Rivera' })
+    expect(db.table('docusign_envelope_recipients')[0].status).toBe('sent')
+
+    const accepted = await submitSignature(db.client, await ctx(), { values, signatureText: 'Patricia Rivera', confirmDifferentName: true }, meta)
+    expect(accepted).toMatchObject({ ok: true })
+    const signed = db.table('esign_audit_events').find((e) => e.event === 'signed')!
+    expect(signed.detail).toMatchObject({ signatureText: 'Patricia Rivera', nameOnRecord: 'Pat Rivera', nameMatchesRecord: false })
+  })
+
+  it('treats case, accents and spacing as the same name', () => {
+    expect(sameName('  pat  RIVERA ', 'Pat Rivera')).toBe(true)
+    expect(sameName('Zoë O’Brien', 'Zoe OBrien')).toBe(false)
+    expect(sameName('Zoë O’Brien', 'Zoe O Brien')).toBe(true)
+    expect(sameName('José Núñez', 'Jose Nunez')).toBe(true)
+    expect(sameName('Pat Rivera', 'Sam Rivera')).toBe(false)
   })
 
   it('kills every outstanding link when the agreement is voided', async () => {

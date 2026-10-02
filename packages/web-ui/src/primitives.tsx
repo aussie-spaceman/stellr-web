@@ -13,7 +13,7 @@ export function cn(...parts: Array<string | false | null | undefined>) {
 export type ButtonVariant = 'primary' | 'secondary' | 'outlineWhite' | 'energy' | 'softBlue' | 'softAmber'
 
 const BUTTON_BASE =
-  'inline-flex items-center justify-center gap-2 rounded-control font-subheading font-semibold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2'
+  'inline-flex items-center justify-center gap-2 rounded-control font-subheading font-semibold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60'
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: 'px-6 py-3 bg-primary text-white hover:bg-primary-deep focus:ring-primary',
   secondary: 'px-6 py-3 border-2 border-primary text-primary hover:bg-primary hover:text-white focus:ring-primary',

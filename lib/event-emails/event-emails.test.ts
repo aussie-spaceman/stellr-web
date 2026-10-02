@@ -9,7 +9,7 @@ vi.mock('@/lib/community', () => ({
 const { EVENT_EMAIL_DEFAULTS, markdownToTiptap } = await import('./defaults')
 const { eventMergeVars, recipientMergeVars, renderEventEmail, unknownTokens, formatClock, formatEventDate, tiptapToEmailText } =
   await import('./render')
-const { buildRecipients } = await import('./audiences')
+const { attachAgreementLines, buildRecipients } = await import('./audiences')
 const { scheduleDecision, scheduledSendDate, daysUntil } = await import('./schedule')
 
 type Roster = Parameters<typeof buildRecipients>[0]
@@ -117,6 +117,35 @@ describe('renderEventEmail', () => {
     expect(renderEventEmail(email, vars).html).toContain('<a href="https://www.stellreducation.org/register/x/pay/tok"')
   })
 
+  it('gives each address its own signing link, or says where the form is', () => {
+    const body = { subject: 'Consent', body_json: markdownToTiptap('Hi {{first_name}},\n\n{{agreement_link}}') }
+    const render = (agreements: Parameters<typeof recipientMergeVars>[0]['agreements']) =>
+      renderEventEmail(body, {
+        ...eventMergeVars(EVENT),
+        ...recipientMergeVars({ email: 'pat@example.com', firstName: 'Pat', roles: [], isParticipant: false, participantNames: ['Sam'], payments: [], agreements }),
+      })
+
+    const one = render([{ participantName: 'Sam', provider: 'native', signUrl: 'https://www.stellreducation.org/sign#tok' }])
+    expect(one.text).toContain('You can sign the form here: https://www.stellreducation.org/sign#tok')
+    expect(one.html).toContain('<a href="https://www.stellreducation.org/sign#tok"')
+    expect(one.html).toContain('>Sign now</a>')
+
+    const two = render([
+      { participantName: 'Sam', provider: 'native', signUrl: 'https://www.stellreducation.org/sign#a' },
+      { participantName: 'Lily', provider: 'docusign', signUrl: null },
+    ])
+    expect(two.text).toContain('You can sign Sam’s form here: https://www.stellreducation.org/sign#a')
+    expect(two.text).toContain('Lily’s form comes from DocuSign: look for an email from @docusign.net')
+
+    const student = render([{ participantName: 'your', provider: 'native', signUrl: null, waiting: true }])
+    expect(student.text).toContain('The parent or guardian signs first')
+
+    // Nothing outstanding: no line, and no empty paragraph.
+    const none = render([])
+    expect(none.html).not.toContain('<p style="margin:0 0 16px"></p>')
+    expect(none.text).not.toContain('{{')
+  })
+
   it('flags merge fields it cannot fill', () => {
     expect(unknownTokens('Hi {{firstName}}', markdownToTiptap('{{first_name}} {{schedule_link}}'))).toEqual(['firstName', 'schedule_link'])
   })
@@ -202,6 +231,37 @@ describe('buildRecipients', () => {
     const r = roster(group({}, [participant({ email: 'fam@example.com', emergency_contact_email: 'fam@example.com' })]))
     const [only] = buildRecipients(r, [], ['guardians', 'participants'], noPay).recipients
     expect(only).toMatchObject({ firstName: 'Sam', isParticipant: true, roles: ['participant', 'guardian'] })
+  })
+})
+
+describe('attachAgreementLines', () => {
+  it('matches signers to recipients by address, names whose form it is, and lists the Stellr signing participants', () => {
+    const r = roster(group({}, [
+      participant({ id: 'p1', first_name: 'Luke', email: 'luke@example.com', emergency_contact_email: 'jt@example.com', docusign: 'outstanding' }),
+      participant({ id: 'p2', first_name: 'Lily', email: 'lily@example.com', emergency_contact_email: 'jt@example.com', docusign: 'outstanding' }),
+    ]))
+    const { recipients } = buildRecipients(r, [], ['docusign_outstanding'], noPay)
+    const names: Record<string, string> = { p1: 'Luke', p2: 'Lily' }
+    const native = attachAgreementLines(recipients, [
+      { participantId: 'p1', provider: 'native', email: 'JT@example.com', own: false, signUrl: 'https://x.test/sign#1', waiting: false },
+      { participantId: 'p1', provider: 'native', email: 'luke@example.com', own: true, signUrl: null, waiting: true },
+      { participantId: 'p2', provider: 'docusign', email: 'jt@example.com', own: false, signUrl: null, waiting: false },
+      { participantId: 'p9', provider: 'native', email: 'stranger@example.com', own: false, signUrl: 'https://x.test/sign#9', waiting: false },
+    ], (id) => names[id])
+
+    const parent = recipients.find((x) => x.email === 'jt@example.com')!
+    expect(parent.agreements).toEqual([
+      { participantName: 'Luke', provider: 'native', signUrl: 'https://x.test/sign#1', waiting: false },
+      { participantName: 'Lily', provider: 'docusign', signUrl: null, waiting: false },
+    ])
+    expect(recipients.find((x) => x.email === 'luke@example.com')!.agreements).toEqual([
+      { participantName: 'your', provider: 'native', signUrl: null, waiting: true },
+    ])
+    // Lily's own address gets nothing: her DocuSign row was not listed for her.
+    expect(recipients.find((x) => x.email === 'lily@example.com')!.agreements).toBeUndefined()
+    // A signer who is not in this email's audience is never added to it.
+    expect(recipients.some((x) => x.email === 'stranger@example.com')).toBe(false)
+    expect(native.sort()).toEqual(['p1', 'p9'])
   })
 })
 

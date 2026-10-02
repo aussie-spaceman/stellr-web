@@ -54,8 +54,11 @@ migration that stops `audit_members()` copying `health_conditions` into
 
 **Deadline:** 30 days from receipt, or the school DPA's shorter deadline.
 
-1. **Intake.** Requests arrive at privacy@stellreducation.org (or by phone, (801)
-   810-5848; write it up as an email to that inbox). Within one business day:
+1. **Intake.** Requests arrive three ways: the online form at `/privacy/request`
+   (confirmed by an emailed link; appears in **Admin → Privacy requests** once
+   `verified`), privacy@stellreducation.org, or phone ((801) 810-5848; write it up
+   as an email to that inbox). The 30-day clock starts at receipt (for the form,
+   at `verified_at`). Within one business day:
    - Confirm the requester's authority: the school official on the DPA, the
      parent/guardian who signed the Participation Agreement (match the signer
      email in **Admin → Consent forms**), or the student themselves when they are
@@ -103,12 +106,13 @@ migration that stops `audit_members()` copying `health_conditions` into
    7. **Google Sheets:** delete their row from any registration spreadsheet.
    8. **Stripe:** the customer is kept (payment records, 7 years for tax). Nothing
       to do.
-4. **Keep only the minimal signed-agreement record.** The `docusign_envelopes`
-   row(s) survive the hard delete (member link set to null): student name,
+4. **Keep only the minimal signed-agreement record.** The `agreements`
+   row(s) (formerly `docusign_envelopes`) survive the hard delete (member link set to null): student name,
    signer name and email, dates, agreement, and the signed document in
    DocuSign. That is the record §10 describes; keep it until seven years after
    deactivation. Do not void or delete completed envelopes.
-5. **Close out.** Set the completed date in the log, and email the requester
+5. **Close out.** Set the completed date in the log (and mark the request
+   `completed` in Admin → Privacy requests if it came through the form), and email the requester
    that it is done, listing the minimal record kept and why (Privacy §10).
 
 **Escalate** if day 25 arrives and the request is still open.
@@ -120,11 +124,14 @@ Follow-up ticket: a self-serve deletion request with `received_at`, `due_at`,
 
 There is no in-account toggle yet; the policy offers opt-out **by email** only.
 
-1. **Opt-out emails** to privacy@stellreducation.org from a student aged 13+ or
+1. **Opt-outs on signed forms.** The Participation Agreement has a "I do NOT
+   consent to photo and media use" box (`MediaOptOut`), on both DocuSign and Stellr
+   signing. Anyone who ticked it is on the do-not-use list.
+2. **Opt-out emails** to privacy@stellreducation.org from a student aged 13+ or
    a parent/guardian: log it, reply to confirm, and add the student to the
    **media do-not-use list** that whoever selects event photos for marketing
    checks first. Either opt-out (student or parent) turns the use off.
-2. **New York and Colorado, ages 13–17:** opted **out** until the student opts
+3. **New York and Colorado, ages 13–17:** opted **out** until the student opts
    in by email. Until state of residence is collected, use the school's state as
    the proxy, and treat a student as NY/CO if either applies. Before using any
    student's image, name or work in promotion, check:
@@ -139,7 +146,7 @@ There is no in-account toggle yet; the policy offers opt-out **by email** only.
      AND p.date_of_birth <= (current_date - interval '13 years');
    ```
    Everyone returned is on the do-not-use list unless they have opted in.
-3. Opting out never affects participation.
+4. Opting out never affects participation.
 
 Follow-up ticket: a `media_opt_out` / `media_opt_in` flag, the account toggle
 (default on; default off for NY/CO aged 13–17), state of residence at

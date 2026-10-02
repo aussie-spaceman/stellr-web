@@ -1,3 +1,5 @@
+import { ageOn, isValidDob } from '@/lib/age'
+
 // ── No advertising for students (Privacy Policy §9.4, 2 Oct 2026) ────────────
 // Advertising tags never run on registration pages, the participant platform,
 // or for a signed-in student — whatever the cookie banner says. For a child
@@ -37,13 +39,8 @@ export function isStudentForAds(
   on = new Date(),
 ): boolean {
   if (m.age_bracket === 'high_school') return true
-  const dob = /^(\d{4})-(\d{2})-(\d{2})/.exec(m.date_of_birth ?? '')
-  if (!dob) return true
-  // Imported by client components, so no dependency on credentials-core/env.
-  const [y, mo, d] = [Number(dob[1]), Number(dob[2]) - 1, Number(dob[3])]
-  let age = on.getUTCFullYear() - y
-  if (on.getUTCMonth() < mo || (on.getUTCMonth() === mo && on.getUTCDate() < d)) age -= 1
-  return age < 18
+  if (!isValidDob(m.date_of_birth)) return true
+  return ageOn(m.date_of_birth, on) < 18
 }
 
 /** Browser-side: is advertising off for this page view? */

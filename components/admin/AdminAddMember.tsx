@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { ageOn, isValidDob } from '@/lib/age'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ROLES_FOR_BRACKET, DEFAULT_ROLE_FOR_BRACKET, getEligibleTierNames } from '@/lib/membership-rules'
@@ -40,9 +41,10 @@ function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+// Exact to the day (lib/age): a year subtraction called a 17-year-old born in
+// December 18, and skipped the guardian fields.
 function ageFromDob(dob: string): number | null {
-  if (!dob) return null
-  return new Date().getFullYear() - new Date(dob).getFullYear()
+  return isValidDob(dob) ? ageOn(dob) : null
 }
 
 export function AdminAddMember({ tiers }: Props) {

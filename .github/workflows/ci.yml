@@ -194,6 +194,15 @@ jobs:
       - if: steps.config.outputs.ready == 'true'
         run: npm ci
 
+      # Stellr signing needs a token secret, shared by the server and the spec
+      # that mints test links (e2e/core/esign-signing.spec.ts). A fresh one per
+      # run: it only ever signs links to agreements this run creates on dev.
+      - if: steps.config.outputs.ready == 'true'
+        run: |
+          secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$secret"
+          echo "ESIGN_TOKEN_SECRET=$secret" >> "$GITHUB_ENV"
+
       # Cached by version: a browser download is ~90MB and does not change
       # between runs of the same Playwright release.
       - if: steps.config.outputs.ready == 'true'

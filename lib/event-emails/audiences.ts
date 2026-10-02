@@ -23,6 +23,97 @@ export interface ResolvedAudience {
   recipients: ResolvedRecipient[]
   /** Participants whose DocuSign is outstanding — the resend set. */
   docusignParticipantIds: string[]
+  /**
+   * Of those, the ones whose outstanding agreement is on Stellr signing. An
+   * email carrying {{agreement_link}} already gives them their link, so they
+   * are not sent a second signing email as well.
+   */
+  nativeParticipantIds?: string[]
+}
+
+interface OutstandingSigner {
+  participantId: string | null
+  provider: 'native' | 'docusign'
+  email: string
+  /** The signer is the participant themselves, not their parent. */
+  own: boolean
+  /** Stellr signing only: this signer's link, or null while the parent signs first. */
+  signUrl: string | null
+  waiting: boolean
+}
+
+/**
+ * Everyone who still has to sign an agreement for this event, by address.
+ * Links are minted only for a real send: a preview or a test email to staff
+ * shows a placeholder, so a family's working link never lands in a staff inbox.
+ */
+export async function loadOutstandingSigners(
+  db: SupabaseClient,
+  slug: string,
+  opts: { mintLinks: boolean },
+): Promise<OutstandingSigner[]> {
+  const { data: envelopes } = await db
+    .from('agreements')
+    .select('id, provider, participant_id, signer_email')
+    .eq('event_slug', slug)
+    .in('status', ['sent', 'delivered'])
+    .is('reused_from', null)
+  if (!envelopes?.length) return []
+  const { data: recipients } = await db
+    .from('agreement_recipients')
+    .select('id, envelope_row, email, role_name, status, token_version, token_expires_at')
+    .in('envelope_row', envelopes.map((e) => e.id as string))
+  const byEnvelope = new Map<string, NonNullable<typeof recipients>>()
+  for (const r of recipients ?? []) {
+    const list = byEnvelope.get(r.envelope_row as string) ?? []
+    list.push(r)
+    byEnvelope.set(r.envelope_row as string, list)
+  }
+
+  const { signNowUrlFor } = await import('@/lib/esign/outbox')
+  const out: OutstandingSigner[] = []
+  for (const e of envelopes) {
+    const provider = (e.provider === 'native' ? 'native' : 'docusign') as OutstandingSigner['provider']
+    const rows = byEnvelope.get(e.id as string) ?? []
+    if (!rows.length && e.signer_email) {
+      out.push({ participantId: e.participant_id as string | null, provider, email: e.signer_email as string, own: false, signUrl: null, waiting: false })
+      continue
+    }
+    for (const r of rows) {
+      if (!r.email || ['completed', 'declined', 'voided'].includes(r.status as string)) continue
+      const live = r.status === 'sent' || r.status === 'delivered'
+      out.push({
+        participantId: e.participant_id as string | null,
+        provider,
+        email: r.email as string,
+        own: r.role_name !== 'Guardian',
+        signUrl: provider === 'native' && live
+          ? (opts.mintLinks ? signNowUrlFor(r as never) : '[signing link]')
+          : null,
+        waiting: provider === 'native' && r.status === 'created',
+      })
+    }
+  }
+  return out
+}
+
+/** Adds each recipient's {{agreement_link}} lines; returns the participants on Stellr signing. */
+export function attachAgreementLines(
+  recipients: ResolvedRecipient[],
+  signers: OutstandingSigner[],
+  firstNameOf: (participantId: string) => string | undefined,
+): string[] {
+  const byEmail = new Map(recipients.map((r) => [r.email.toLowerCase(), r]))
+  const native = new Set<string>()
+  for (const s of signers) {
+    if (s.provider === 'native' && s.participantId) native.add(s.participantId)
+    const r = byEmail.get(s.email.trim().toLowerCase())
+    if (!r) continue
+    const participantName = s.own ? 'your' : (s.participantId && firstNameOf(s.participantId)) || 'your child'
+    r.agreements ??= []
+    r.agreements.push({ participantName, provider: s.provider, signUrl: s.signUrl, waiting: s.waiting })
+  }
+  return [...native]
 }
 
 export interface MentorContact { email: string; firstName: string; lastName: string; role: 'volunteer' | 'event_manager' }
@@ -209,7 +300,13 @@ export async function resolveAudience(
       if (g.payLinkSendable) payUrls.set(g.registrationId, payPageUrl(event.slug, await ensurePayToken(db, g.registrationId)))
     }
   }
-  return buildRecipients(roster, mentors, audiences, (g) =>
+  const resolved = buildRecipients(roster, mentors, audiences, (g) =>
     g.payLinkSendable ? payUrls.get(g.registrationId) ?? (opts.mintPayLinks ? null : '[pay link]') : null,
   )
+
+  // {{agreement_link}}: each address's own signing links (minted on a real send only).
+  const firstNames = new Map(roster.groups.flatMap((g) => g.participants.map((p) => [p.id, p.first_name] as const)))
+  const signers = await loadOutstandingSigners(db, event.slug, { mintLinks: !!opts.mintPayLinks })
+  resolved.nativeParticipantIds = attachAgreementLines(resolved.recipients, signers, (id) => firstNames.get(id) ?? undefined)
+  return resolved
 }

@@ -48,7 +48,7 @@ async function main() {
   console.log(APPLY ? 'Mode:     APPLY\n' : 'Mode:     dry run (pass --apply to send)\n')
 
   let q = db
-    .from('docusign_envelopes')
+    .from('agreements')
     .select('id, participant_id, status, sent_at, signers_total, signers_completed')
     .eq('event_slug', EVENT)
     .in('status', ['created', 'sent', 'delivered'])

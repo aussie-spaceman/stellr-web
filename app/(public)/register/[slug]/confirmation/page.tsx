@@ -2,21 +2,21 @@ import Link from 'next/link'
 import { CheckCircle, ExternalLink } from 'lucide-react'
 import { getEventBySlug } from '@/lib/sanity'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
+import { JoinLinkButton } from '@/components/forms/JoinLinkButton'
 
 interface PageProps {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ id?: string; type?: string; payment?: string; spreadsheet?: string; join?: string; remaining?: string; campaign?: string }>
+  searchParams: Promise<{ id?: string; type?: string; payment?: string; spreadsheet?: string; remaining?: string; campaign?: string }>
 }
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.stellreducation.org'
 
 export default async function ConfirmationPage({ params, searchParams }: PageProps) {
   const { slug } = await params
-  const { id, type, spreadsheet, join, remaining, campaign } = await searchParams
+  const { id, type, spreadsheet, remaining, campaign } = await searchParams
   const isGroup = type === 'group'
   const isCampaign = campaign === '1'
   const spreadsheetUrl = spreadsheet ? decodeURIComponent(spreadsheet) : null
-  const joinUrl = join ? decodeURIComponent(join) : null
   // Some declared participants were left for later (partial "add them now").
   const remainingCount = remaining ? parseInt(remaining, 10) || 0 : 0
   const hasRemaining = isGroup && remainingCount > 0
@@ -76,11 +76,7 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
                   Open Google Sheet <ExternalLink size={14} />
                 </a>
               )}
-              {joinUrl && (
-                <a href={joinUrl} target="_blank" rel="noopener noreferrer" className="btn-outline inline-flex items-center justify-center gap-2 text-sm">
-                  Individual completion link <ExternalLink size={14} />
-                </a>
-              )}
+              {id && <JoinLinkButton registrationId={id} />}
               <Link href="/account?tab=teams" className="btn-outline inline-flex items-center justify-center gap-2 text-sm">
                 Member Portal <ExternalLink size={14} />
               </Link>
@@ -123,7 +119,7 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-brand-blue mt-0.5">→</span>
-                DocuSign agreements have been issued to every student registered in this Campaign — and your teacher agreement has just been issued
+                Agreements to sign have been emailed for every student registered in this Campaign — and your teacher agreement has just been issued
               </li>
             </ul>
           ) : isGroup ? (
@@ -149,7 +145,7 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-brand-blue mt-0.5">→</span>
-                Participant agreements issued via DocuSign to each student, unless valid paperwork is already on record
+                Consent forms and agreements emailed for each student to sign (to their parent or guardian first for under-18s), unless valid paperwork is already on record
               </li>
             </ul>
           ) : (
@@ -161,9 +157,10 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
               <li className="flex items-start gap-2">
                 <span className="text-brand-blue mt-0.5">→</span>
                 <span>
-                  <span className="font-medium text-brand-blue-dark">Check your email to sign your DocuSign agreement</span> —
-                  a parental consent form (sent to your parent/guardian for under-18s) or your participation
-                  agreement. Your place isn&apos;t secured until it&apos;s signed.
+                  <span className="font-medium text-brand-blue-dark">Check your email to sign your agreement</span> —
+                  a parental consent form (sent to your parent/guardian first for under-18s) or your participation
+                  agreement. It comes from Stellr Education or from DocuSign. Your place isn&apos;t secured until
+                  it&apos;s signed.
                 </span>
               </li>
               <li className="flex items-start gap-2">

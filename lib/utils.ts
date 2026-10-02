@@ -1,3 +1,5 @@
+import { ageOn } from './age'
+
 /** Full month-day-year, e.g. "July 8, 2026". Handles both bare calendar dates
  *  ("YYYY-MM-DD", rendered in UTC so the day never shifts) and full timestamps
  *  (localised to APP_TIME_ZONE). Uses the fixed app locale/zone so SSR and the
@@ -112,19 +114,14 @@ export function todayInAppZone(): string {
  * hasn't occurred yet this year — e.g. a Dec-2008 DOB reads as 18 in mid-2026
  * when the person is still 17. That misclassification skips the minor→participant
  * role override and the guardian/parental-consent requirement, so age must be
- * exact here. A bare "YYYY-MM-DD" DOB is anchored to UTC to avoid a day shift. */
+ * exact here. The arithmetic lives in lib/age, the one copy; NaN for a date
+ * that cannot be read. */
 export function ageFromDob(dob: string | Date): number {
-  const birth = typeof dob === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dob)
-    ? new Date(dob + 'T00:00:00Z')
+  const birth = typeof dob === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dob)
+    ? new Date(dob.slice(0, 10) + 'T00:00:00Z')
     : new Date(dob)
   if (Number.isNaN(birth.getTime())) return NaN
-  const [ty, tm, td] = todayInAppZone().split('-').map(Number)
-  const by = birth.getUTCFullYear()
-  const bm = birth.getUTCMonth() + 1
-  const bd = birth.getUTCDate()
-  let age = ty - by
-  if (tm < bm || (tm === bm && td < bd)) age -= 1
-  return age
+  return ageOn(birth.toISOString().slice(0, 10))
 }
 
 /** Compact relative time for feeds and notifications: "just now", "5m ago",

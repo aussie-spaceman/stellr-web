@@ -1,31 +1,48 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getEnvelopeRecipients, summariseSigners, type EnvelopeRecipient } from './docusign'
+import { summariseSigners, type EnvelopeRecipient } from './docusign'
 import type { RecipientLike } from './docusign-status'
+import { fetchEnvelopeRecipients } from './esign/operations'
 import { notifyCommunityAdmins } from './notify'
 
-// Persistence for docusign_envelope_recipients (migration 148): pull the signer
+// Persistence for agreement_recipients (migration 148): pull the signer
 // list from DocuSign and mirror it into the DB so every surface can answer "who
 // is outstanding?" without a live API call.
 
 /**
  * Refreshes the recipient rows for one envelope from DocuSign and returns them.
  * Also keeps the legacy signers_total / signers_completed counters on
- * docusign_envelopes current, so anything still reading those stays correct.
+ * agreements current, so anything still reading those stays correct.
  *
  * Upserts on (envelope_row, recipient_id), which is stable across resends — so
  * this is idempotent under DocuSign Connect's at-least-once delivery.
+ *
+ * `provider` is the envelope row's own column; omitted, the row is DocuSign's
+ * (every row written before the column existed).
  */
 export async function syncEnvelopeRecipients(
   db: SupabaseClient,
   envelopeRowId: string,
   envelopeId: string,
+  provider?: string | null,
 ): Promise<EnvelopeRecipient[]> {
-  const recipients = await getEnvelopeRecipients(envelopeId)
+  const recipients = await fetchEnvelopeRecipients(db, { envelope_id: envelopeId, provider })
   if (recipients.length === 0) return recipients
 
   const now = new Date().toISOString()
+
+  // Stellr signing keeps its signer list in this table already: nothing to
+  // mirror, only the legacy counters to keep in step.
+  if (provider === 'native') {
+    const { total, completed } = summariseSigners(recipients)
+    await db
+      .from('agreements')
+      .update({ signers_total: total, signers_completed: completed, updated_at: now })
+      .eq('id', envelopeRowId)
+    return recipients
+  }
+
   const { error } = await db
-    .from('docusign_envelope_recipients')
+    .from('agreement_recipients')
     .upsert(
       recipients.map((r) => ({
         envelope_row:   envelopeRowId,
@@ -46,14 +63,14 @@ export async function syncEnvelopeRecipients(
 
   const { total, completed } = summariseSigners(recipients)
   await db
-    .from('docusign_envelopes')
+    .from('agreements')
     .update({ signers_total: total, signers_completed: completed, updated_at: now })
     .eq('id', envelopeRowId)
 
   return recipients
 }
 
-/** Recipient rows for many envelopes at once, keyed by docusign_envelopes.id. */
+/** Recipient rows for many envelopes at once, keyed by agreements.id. */
 export async function loadRecipientsByEnvelopeRows(
   db: SupabaseClient,
   envelopeRowIds: string[],
@@ -63,8 +80,8 @@ export async function loadRecipientsByEnvelopeRows(
   if (ids.length === 0) return byRow
 
   const { data, error } = await db
-    .from('docusign_envelope_recipients')
-    .select('envelope_row, name, email, role_name, status, delivered_at, routing_order')
+    .from('agreement_recipients')
+    .select('envelope_row, name, email, role_name, status, delivered_at, routing_order, invite_sent_at, envelope:agreements!inner(provider)')
     .in('envelope_row', ids)
     .order('routing_order', { ascending: true })
   if (error) {
@@ -74,9 +91,17 @@ export async function loadRecipientsByEnvelopeRows(
     return byRow
   }
 
-  for (const row of data ?? []) {
+  for (const raw of data ?? []) {
+    const { envelope, invite_sent_at, ...row } = raw as Record<string, unknown> & {
+      envelope?: { provider?: string } | { provider?: string }[] | null
+      invite_sent_at?: string | null
+    }
+    const provider = (Array.isArray(envelope) ? envelope[0] : envelope)?.provider ?? 'docusign'
+    // Stellr signing emails its own invitations; DocuSign rows never carry
+    // invite_sent_at, and DocuSign emails at the moment it issues.
+    const unsent = provider === 'native' && row.status === 'sent' && !invite_sent_at
     const list = byRow.get(row.envelope_row as string) ?? []
-    list.push(row as RecipientLike)
+    list.push({ ...(row as unknown as RecipientLike), unsent })
     byRow.set(row.envelope_row as string, list)
   }
   return byRow

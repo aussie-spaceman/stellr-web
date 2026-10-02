@@ -1,4 +1,5 @@
 import { supabaseServer } from '@/lib/supabase'
+import { isMinorOn, onDate } from '@/lib/age'
 import { deriveCompliance, loadComplianceRecordsByEmails, type ComplianceState } from '@/lib/compliance'
 import { registrationPaid, paymentPill, type PaymentPillState } from '@/lib/payment-status'
 import { describeEnvelope, describeMissingEnvelope, type DocusignPill } from '@/lib/docusign-status'
@@ -129,12 +130,9 @@ export interface EventRosterData {
   }
 }
 
+/** Under 18 on the day of the event (today when the event has no date). */
 function isMinor(dateOfBirth: string | null, eventDate?: string): boolean {
-  if (!dateOfBirth) return false
-  const dob = new Date(dateOfBirth)
-  const ref = eventDate ? new Date(eventDate) : new Date()
-  const age = (ref.getTime() - dob.getTime()) / (365.25 * 24 * 3600 * 1000)
-  return age < 18
+  return isMinorOn(dateOfBirth, eventDate ? onDate(eventDate) : undefined)
 }
 
 export async function getEventRoster(eventSlug: string, eventDate?: string): Promise<EventRosterData> {
@@ -156,7 +154,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       .neq('status', 'withdrawn')
       .order('created_at', { ascending: true }),
     db
-      .from('docusign_envelopes')
+      .from('agreements')
       .select('id, participant_id, status, signers_total, signers_completed, reused_from')
       .eq('event_slug', eventSlug),
     db

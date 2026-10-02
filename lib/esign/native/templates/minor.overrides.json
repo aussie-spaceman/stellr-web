@@ -1,0 +1,14 @@
+{
+  "$comment": "Parental consent (minors). Names and labels for the fields DocuSign never named, keyed by position (page@x,y) so they survive the template being copied between accounts. Checked against Participation Agreement - Minors V2-1; re-check against the production V2-2 export before publishing.",
+  "optionalRoles": ["student"],
+  "fields": {
+    "p2@50,454": {
+      "name": "MediaOptOut",
+      "label": "I do NOT consent to photo and media use (participation is not affected)"
+    },
+    "p2@47,611": {
+      "name": "DigitalCommsOptOut",
+      "label": "I do NOT consent to direct digital communications with my child"
+    }
+  }
+}

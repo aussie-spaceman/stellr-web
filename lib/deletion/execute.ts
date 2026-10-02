@@ -3,6 +3,7 @@ import { getEntityDef } from './registry'
 import { deletionPreflight } from './preflight'
 import { runExternalCleanup } from './external'
 import { archiveEntity } from './archive'
+import { retainSignedRecords } from '@/lib/esign/retention'
 import { tombstoneCredentialsFor } from '@/lib/credentials'
 import { executeRefund, type RefundChoice, type RefundResult } from '@/lib/refunds/execute'
 import type { DeleteMode, DeletionResult, EntityDef } from './types'
@@ -73,6 +74,13 @@ export async function executeDeletion(
     const { error } = await db.from(def.table).update(resolveSoftSet(def)).eq(def.pk, id)
     if (error) throw new Error(`Soft delete failed: ${error.message}`)
     return { entity, id, mode, deleted: true, externalResults, refunds }
+  }
+
+  // Signed agreements outlive the person for their retention period: restrict
+  // them and drop only the unsigned ones, before any row is removed (the
+  // participant FK is SET NULL, so the signed rows survive the delete below).
+  if (def.type === 'participant' || def.type === 'registration' || def.type === 'member') {
+    await retainSignedRecords(db, { kind: def.type, id })
   }
 
   // Hard purge: snapshot first, then delete primary + spanned rows.

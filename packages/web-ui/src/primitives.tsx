@@ -10,10 +10,12 @@ export function cn(...parts: Array<string | false | null | undefined>) {
 /* ── Button ───────────────────────────────────────────────────────────────
  * Polymorphic: pass `href` (+ optional `as={Link}`) for a link, else a button.
  * Keeps the package framework-agnostic — the app injects its router's Link. */
-export type ButtonVariant = 'primary' | 'secondary' | 'outlineWhite' | 'energy' | 'softBlue' | 'softAmber'
+export type ButtonVariant =
+  | 'primary' | 'secondary' | 'outlineWhite' | 'energy' | 'softBlue' | 'softAmber'
+  | 'primaryStrong' | 'secondaryStrong'
 
 const BUTTON_BASE =
-  'inline-flex items-center justify-center gap-2 rounded-control font-subheading font-semibold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2'
+  'inline-flex items-center justify-center gap-2 rounded-control font-subheading font-semibold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60'
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: 'px-6 py-3 bg-primary text-white hover:bg-primary-deep focus:ring-primary',
   secondary: 'px-6 py-3 border-2 border-primary text-primary hover:bg-primary hover:text-white focus:ring-primary',
@@ -21,6 +23,11 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   energy: 'px-6 py-3 bg-pathway-amber text-white hover:bg-[#C2722A] focus:ring-pathway-amber',
   softBlue: 'px-4 py-3 bg-primary-soft text-primary hover:bg-primary/15',
   softAmber: 'px-4 py-3 bg-pathway-amber-bg text-brand-gold-ink hover:bg-pathway-amber/15',
+  // WCAG 2.1 AA for 14px text. White on `primary` is 4.45:1, just under the
+  // 4.5:1 AA needs at this size; on `primary-deep` it is about 6.1:1. Used
+  // where AA is required (the signing pages).
+  primaryStrong: 'px-6 py-3 bg-primary-deep text-white hover:bg-ink focus:ring-primary-deep',
+  secondaryStrong: 'px-6 py-3 border-2 border-primary-deep text-primary-deep hover:bg-primary-deep hover:text-white focus:ring-primary-deep',
 }
 
 type ButtonOwnProps = {

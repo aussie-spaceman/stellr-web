@@ -16,12 +16,17 @@ export default function TermsPage() {
           Effective Date: 18-Jun-2026 &nbsp;·&nbsp; Last Updated: 02-Oct-2026
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
-          <strong>Recent update (02-Oct-2026):</strong> Students can now create a Stellr account
-          themselves. Section 4 defines a <strong>Minor</strong> by the age of majority in your state,
-          explains pending accounts until a parent or legal guardian signs, and adds new Sections 4.5
-          (adult students still in high school) and 4.6 (when a student is no longer a Minor).
-          Sections 1, 5.1, 6.4, 8, 11.3 and 20 were updated to match.
-          <br />
+          <strong>Recent update (02-Oct-2026):</strong>{' '}Students can now create a Stellr account
+          themselves. Section 4 defines a <strong>Minor</strong> by the age of majority in your
+          state, explains pending accounts until a parent or legal guardian signs, and adds new
+          Sections 4.5 (adult students still in high school) and 4.6 (when a student is no longer
+          a Minor). Consent forms and agreements can now be signed through Stellr&rsquo;s own
+          signing system as well as DocuSign, and Section 22 adds how electronic signing works and
+          your right to paper. Section 4.3 points to our new School Data Terms, Section 11.3
+          describes the photo and media opt-outs, and Sections 1, 5.1, 6.4, 8 and 20 were updated
+          to match.
+        </p>
+        <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
           <strong>Earlier update (23 Sep 2026):</strong> New Section 5.1 covers{' '}
           <strong>credentials</strong> — the verifiable record we issue for course completions and
           event participation — including your right to display and share them, our right to revoke
@@ -181,24 +186,30 @@ export default function TermsPage() {
           If you register a minor, create or supervise a minor&rsquo;s account, or accept these Terms
           for a minor, you represent that you are the minor&rsquo;s parent or legal guardian, or an
           authorized school official with the right to do so. You agree to these Terms on the
-          minor&rsquo;s behalf and are responsible for their use of the Services. Where a participant
-          is under 18, we require verifiable parental or guardian consent before confirming
-          participation, collected electronically as described in our{' '}
+          minor&rsquo;s behalf and are responsible for their use of the Services. A participant under
+          18 needs the signed consent of a parent or legal guardian to take part, collected
+          electronically as described in our{' '}
           <Link href="/privacy" className="text-brand-blue hover:underline">
             Privacy Policy
           </Link>
-          . A student who registers must give their true date of birth and the real contact details
-          of their parent or legal guardian, and must not complete or sign the Participation
-          Agreement on their behalf. We may take reasonable steps to confirm that consent came from a
-          genuine parent or legal guardian, and we may suspend or close an account registered with
-          false details.
+          . Signing a consent form or agreement for a child you are not the parent or legal guardian
+          of is not permitted, and a form signed that way is not valid consent. A student who
+          registers must give their true date of birth and the real contact details of their parent
+          or legal guardian, and must not complete or sign the Participation Agreement on their
+          behalf. We may take reasonable steps to confirm that consent came from a genuine parent or
+          legal guardian, and we may suspend or close an account registered with false details.
         </p>
         <h3 className="text-lg font-semibold text-brand-blue-dark">4.3 Educators and group registrations</h3>
         <p>
           If you are a teacher or school representative registering a group of students, you represent
-          that you are authorized to do so and have obtained any consents your school requires. Where
-          student records are involved, we handle them consistent with FERPA and our Privacy Policy,
-          and we enter into a data processing agreement with the school where applicable.
+          that you are authorized to do so and have obtained any consents your school requires. When
+          you register a group you accept our{' '}
+          <Link href="/school-data-terms" className="text-brand-blue hover:underline">
+            School Data Terms
+          </Link>{' '}
+          on the school&rsquo;s behalf; they set out how we use and protect the student information
+          you share, consistent with FERPA and our Privacy Policy. A school that needs its own data
+          agreement can ask us at privacy@stellreducation.org.
         </p>
         <h3 className="text-lg font-semibold text-brand-blue-dark">4.4 Your account</h3>
         <p>
@@ -492,8 +503,10 @@ export default function TermsPage() {
         </p>
         <h3 className="text-lg font-semibold text-brand-blue-dark">11.3 Publicity and opt-out</h3>
         <p>
-          We will seek consent before publishing identifiable photographs of minors, and you may ask
-          us to stop using identifiable submissions or images of a minor, consistent with our{' '}
+          The parent or guardian consent form for a participant under 18 includes our photo and media
+          permission, with a box to opt out; opting out does not affect participation, and we do not
+          publish identifiable images of a participant whose parent or guardian has opted out. Anyone
+          may ask us to stop using identifiable submissions or images of a minor, consistent with our{' '}
           <Link href="/privacy" className="text-brand-blue hover:underline">
             Privacy Policy
           </Link>
@@ -541,8 +554,9 @@ export default function TermsPage() {
         </h2>
         <p>
           The Services rely on and link to third parties — for example, Stripe (payments), DocuSign
-          (parental consent), Discord (community), LinkedIn (where you choose to share a
-          credential), and our hosting and infrastructure providers — and
+          (electronic signatures, until our contract with DocuSign ends in 2027), Discord
+          (community), LinkedIn (where you choose to share a credential), and the hosting and
+          infrastructure providers listed in our Privacy Policy — and
           may link to partner, sponsor, university, or host organization websites. Your use of a
           third-party service is governed by that party&rsquo;s own terms and privacy policy. We are
           not responsible for third-party services or websites, and including a link does not mean we
@@ -653,9 +667,9 @@ export default function TermsPage() {
         </h2>
         <p>
           We may update these Terms from time to time. When we do, we will post the revised version
-          with a new &ldquo;Last Updated&rdquo; date, and for material changes we will provide
-          additional notice (for example, by email or a notice in the Services). Changes take effect
-          when posted unless we say otherwise. If you continue to use the Services after changes take
+          on this page with a new &ldquo;Last Updated&rdquo; date and a notice at the top summarising
+          what changed. As with our Privacy Policy, we announce changes on our website rather than by
+          email. Changes take effect when posted unless we say otherwise. If you continue to use the Services after changes take
           effect, you accept the revised Terms. If you do not agree, please stop using the Services.
           Changes that affect how we handle the personal information of a Minor follow Section 14 of
           our{' '}
@@ -717,6 +731,20 @@ export default function TermsPage() {
           <strong>Electronic communications.</strong> By using the Services, you agree that we may
           communicate with you electronically, and that electronic agreements, notices, and records
           satisfy any legal requirement that they be in writing.
+        </p>
+        <p>
+          <strong>Electronic signatures.</strong> Consent forms and agreements are signed
+          electronically, through Stellr&rsquo;s own signing system or through DocuSign. Before you
+          sign, we show you what signing electronically means and ask you to agree to it. Your
+          electronic signature has the same effect as a handwritten one. You may instead sign on
+          paper, or ask for a paper copy of anything you have signed, at no cost, by writing to
+          privacy@stellreducation.org; you may withdraw your agreement to sign electronically the same
+          way, which does not undo a signature already given. Every signer can download a copy of the
+          signed document, and we keep it as described in our{' '}
+          <Link href="/privacy" className="text-brand-blue hover:underline">
+            Privacy Policy
+          </Link>
+          .
         </p>
         <p>
           <strong>Notices.</strong> We may provide notices to you by email or through the Services. You

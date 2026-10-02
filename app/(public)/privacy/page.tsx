@@ -242,10 +242,13 @@ export default function PrivacyPage() {
         <p className="text-sm text-brand-grey-mid">
           Forms signed through Stellr&rsquo;s own signing system are generated and held by Stellr.
           Forms signed through DocuSign are held by DocuSign, and we keep our own copy of each,
-          including DocuSign&rsquo;s certificate of completion. We do not record anything about how
-          a signature was physically made: a typed signature is stored as text, and we keep no
-          handwriting, timing or pressure data. Signing records are used only to obtain and prove
-          the signature. They are not used for marketing or analytics.
+          including DocuSign&rsquo;s certificate of completion. A typed signature is stored as text.
+          If you choose to draw your signature instead, we keep the finished picture of it, with
+          the signed form, and nothing about how it was drawn: no timing, pressure or pen-stroke
+          data. Each completed form is sealed with Stellr&rsquo;s digital certificate and a trusted
+          timestamp; the timestamp service receives only a fingerprint (hash), never the form.
+          Signing records are used only to obtain and prove the signature. They are not used for
+          marketing or analytics.
         </p>
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">3.11 Credentials</h3>
@@ -637,8 +640,8 @@ export default function PrivacyPage() {
                 ['Medical and dietary information', 'Duration of account, so it is ready for future events. You can remove it at any time'],
                 ['Payment transaction records', '7 years (US tax/accounting requirements)'],
                 ['Signed consent forms and agreements, and their signing records (names, emails, internet address, browser, timestamps, audit trail)', '7 years from the date of signing, then deleted automatically. If you ask us to delete your information before then, we keep the signed record only so it can be produced if a claim is made, and use it for nothing else'],
-                ['Encrypted backup copies of signed agreements', 'Deleted with the original'],
-                ['Requests to sign that are never completed', 'Cancelled when the link expires or the registration is withdrawn; deleted with the participant record'],
+                ['Encrypted backup copies of signed agreements', 'Deleted with the original. Our nightly encrypted database copies, which may also contain it, are each kept for 30 days'],
+                ['Requests to sign that are never completed', 'Cancelled 30 days after the last signing link we sent, and everything entered on the form (including any partial signature) deleted then; the request itself is deleted with the participant record'],
                 ['Parent/guardian contact information', 'Duration of account, or until the associated minor participant record is deleted. The copy within a signed consent form is kept with that form'],
                 ['Photos and videos', 'Until you request removal, or indefinitely'],
                 ['Credentials', 'Duration of account. If you ask us to erase your data, the credential number is kept so a copy can be checked, but your name is removed and the page shows the credential as withdrawn'],

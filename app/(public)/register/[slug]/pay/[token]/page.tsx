@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getEventBySlug } from '@/lib/sanity'
 import { registrationIsOpen } from '@/lib/registration'
 import { maskEmail } from '@/lib/utils'
+import { findOfferForRegistration } from '@/lib/scholarships'
 import PayNowButton from './PayNowButton'
 
 // The durable "pay later" page for a registration created without payment.
@@ -97,7 +98,10 @@ export default async function RegistrationPayPage({ params, searchParams }: Page
   }
 
   const event = await getEventBySlug(slug).catch(() => null)
-  if (event && !registrationIsOpen(event)) {
+  // A scholarship offer holds the student's place past the close of
+  // registration (the pay route allows it on the same rule).
+  const scholarship = await findOfferForRegistration(db, reg.id)
+  if (event && !registrationIsOpen(event) && !scholarship) {
     return (
       <Shell icon="⏰" title="Registration has closed">
         <p className="text-content-body mb-6">Registration for <strong>{reg.event_title}</strong> is no longer open, so this payment link has stopped working. Reply to your registration email if you think that&apos;s a mistake.</p>
@@ -143,6 +147,9 @@ export default async function RegistrationPayPage({ params, searchParams }: Page
           <div className="bg-surface rounded-lg px-4 py-3 mb-6">
             <div className="text-xs uppercase tracking-wide text-content-body">Amount due</div>
             <div className="text-3xl font-display font-bold text-ink">{amountLabel}</div>
+            {scholarship?.percent_off != null && (
+              <div className="text-sm text-content-body mt-1">Includes your {scholarship.percent_off}% scholarship — no code needed</div>
+            )}
           </div>
           <PayNowButton token={token} amountLabel={amountLabel} />
           <p className="text-xs text-content-body mt-6">

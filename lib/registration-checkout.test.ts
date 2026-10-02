@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { getEventBySlug, assertLiveCredentials } = vi.hoisted(() => ({
+const { getEventBySlug, assertLiveCredentials, notifyCommunityAdmins } = vi.hoisted(() => ({
   getEventBySlug: vi.fn(async (_slug: string) => ({ stripePriceId: 'price_fee' } as { stripePriceId?: string })),
   assertLiveCredentials: vi.fn(),
+  notifyCommunityAdmins: vi.fn(async (_input: unknown) => {}),
 }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug }))
 vi.mock('@/lib/env-guards', () => ({ assertLiveCredentials }))
+vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins }))
 
 import {
   createRegistrationCheckout,
@@ -35,6 +37,8 @@ function makeDb(opts: {
   participant?: { first_name: string; last_name: string; email: string } | null
   participantCount?: number
   addons?: { name: string; qty: number; unit_amount_cents: number }[]
+  /** An offered scholarship on the registration. */
+  offer?: { id: string; percent_off: number } | null
 }) {
   const updates: Record<string, unknown>[] = []
   let regState = opts.registration ? { id: 'reg-1', event_slug: 'nevada-2027', event_title: 'Nevada 2027', ...opts.registration } : null
@@ -86,16 +90,44 @@ function makeDb(opts: {
         }
         return chain
       }
+      if (table === 'scholarship_applications') {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          maybeSingle: async () => ({ data: opts.offer ?? null, error: null }),
+        }
+        return chain
+      }
       throw new Error(`unexpected table ${table}`)
     },
   }
   return { db: db as never, updates }
 }
 
-function makeStripe(unitAmount: number | null = 7500) {
+function makeStripe(
+  unitAmount: number | null = 7500,
+  coupons: { byId?: Record<string, { id: string; valid: boolean; percent_off: number | null }>; byPromo?: Record<string, { id: string; valid: boolean; percent_off: number | null }> } = {},
+) {
   const create = vi.fn(async (_p: unknown) => ({ id: 'cs_1', url: 'https://checkout.stripe.test/cs_1' }))
   const retrieve = vi.fn(async (_id: string) => ({ unit_amount: unitAmount }))
-  return { stripe: { checkout: { sessions: { create } }, prices: { retrieve } } as never, create, retrieve }
+  const couponRetrieve = vi.fn(async (id: string) => {
+    const c = coupons.byId?.[id]
+    if (!c) throw Object.assign(new Error('No such coupon'), { code: 'resource_missing' })
+    return c
+  })
+  const promoList = vi.fn(async ({ code }: { code: string }) => ({
+    data: coupons.byPromo?.[code] ? [{ promotion: { coupon: coupons.byPromo[code] } }] : [],
+  }))
+  return {
+    stripe: {
+      checkout: { sessions: { create } },
+      prices: { retrieve },
+      coupons: { retrieve: couponRetrieve },
+      promotionCodes: { list: promoList },
+    } as never,
+    create,
+    retrieve,
+  }
 }
 
 const URLS = { successUrl: 'https://www.stellreducation.org/ok', cancelUrl: 'https://www.stellreducation.org/cancel' }
@@ -245,6 +277,60 @@ describe('createRegistrationCheckout — guards', () => {
     expect(err).toBeInstanceOf(RegistrationCheckoutError)
     expect(err.code).toBe(code)
     expect(create).not.toHaveBeenCalled()
+  })
+})
+
+describe('createRegistrationCheckout — scholarship', () => {
+  const individual = {
+    registration: { type: 'individual', status: 'pending' } as Reg,
+    participant: { first_name: 'Ethan', last_name: 'L', email: 'ethan@example.com' },
+  }
+
+  it('pre-applies the level\'s coupon and drops the promotion-code box', async () => {
+    const { db } = makeDb({ ...individual, offer: { id: 'sch-1', percent_off: 50 } })
+    const { stripe, create } = makeStripe(16500, { byId: { SCHOLARSHIP50: { id: 'SCHOLARSHIP50', valid: true, percent_off: 50 } } })
+
+    const result = await createRegistrationCheckout(db, stripe, 'reg-1', URLS)
+
+    expect(result.amountCents).toBe(8250)
+    const params = create.mock.calls[0][0] as Record<string, unknown>
+    expect(params.discounts).toEqual([{ coupon: 'SCHOLARSHIP50' }])
+    expect(params).not.toHaveProperty('allow_promotion_codes')
+    expect(params.metadata).toMatchObject({ registrationId: 'reg-1', scholarshipId: 'sch-1' })
+  })
+
+  it('finds the coupon behind a promotion code when the code is not a coupon id', async () => {
+    const { db } = makeDb({ ...individual, offer: { id: 'sch-1', percent_off: 67 } })
+    const { stripe, create } = makeStripe(7500, { byPromo: { SCHOLARSHIP67: { id: 'cpn_x', valid: true, percent_off: 67 } } })
+
+    await createRegistrationCheckout(db, stripe, 'reg-1', URLS)
+
+    expect((create.mock.calls[0][0] as { discounts: unknown }).discounts).toEqual([{ coupon: 'cpn_x' }])
+  })
+
+  it('accepts a coupon set up to two decimals (33.33% for the 33% level)', async () => {
+    const { db } = makeDb({ ...individual, offer: { id: 'sch-1', percent_off: 33 } })
+    const { stripe, create } = makeStripe(7500, { byId: { SCHOLARSHIP33: { id: 'SCHOLARSHIP33', valid: true, percent_off: 33.33 } } })
+
+    await createRegistrationCheckout(db, stripe, 'reg-1', URLS)
+
+    expect((create.mock.calls[0][0] as { discounts: unknown }).discounts).toEqual([{ coupon: 'SCHOLARSHIP33' }])
+  })
+
+  it.each([
+    ['missing', {}],
+    ['the wrong percentage', { byId: { SCHOLARSHIP33: { id: 'SCHOLARSHIP33', valid: true, percent_off: 30 } } }],
+    ['expired', { byId: { SCHOLARSHIP33: { id: 'SCHOLARSHIP33', valid: false, percent_off: 33 } } }],
+  ])('refuses to charge, and alerts admins, when the coupon is %s', async (_label, coupons) => {
+    const { db } = makeDb({ ...individual, offer: { id: 'sch-1', percent_off: 33 } })
+    const { stripe, create } = makeStripe(7500, coupons)
+
+    const err = await createRegistrationCheckout(db, stripe, 'reg-1', URLS).catch((e) => e)
+
+    expect(err).toBeInstanceOf(RegistrationCheckoutError)
+    expect(err.code).toBe('scholarship_unavailable')
+    expect(create).not.toHaveBeenCalled()
+    expect(notifyCommunityAdmins).toHaveBeenCalledOnce()
   })
 })
 

@@ -24,6 +24,9 @@ import {
   payPageUrl,
 } from '@/lib/registration-checkout'
 import { sendPayLinkEmail } from '@/lib/registration-pay-link'
+import { pendingAddonLines } from '@/lib/registration-checkout'
+import { confirmRegistration } from '@/lib/registration-confirm'
+import { attachOfferToRegistration, findOfferByToken } from '@/lib/scholarships'
 
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 // Where a registrant lands afterwards — the member portal, with a flag the
@@ -61,10 +64,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    // Arrived from a scholarship offer email (?scholarship=<token>). The offer
+    // must be live and for this event; a stale link is refused rather than
+    // silently registering the student at full price.
+    const scholarship = body.scholarship_token
+      ? await findOfferByToken(supabaseServer(), body.scholarship_token)
+      : null
+    if (body.scholarship_token && (!scholarship || scholarship.event_slug !== event_slug)) {
+      return NextResponse.json(
+        { error: 'This scholarship link is no longer valid. Reply to your scholarship email and we’ll sort it out.' },
+        { status: 400 },
+      )
+    }
+
     // Registration window gate — reject before creating any records / sending
-    // DocuSign if the event's registration isn't currently open (FR-EVT).
+    // DocuSign if the event's registration isn't currently open (FR-EVT). An
+    // offered scholarship holds the student's place, so it isn't gated.
     const eventForGate = await getEventBySlug(event_slug).catch(() => null)
-    if (eventForGate && !registrationIsOpen(eventForGate)) {
+    if (eventForGate && !registrationIsOpen(eventForGate) && !scholarship) {
       return NextResponse.json({ error: 'Registration is not open for this event.' }, { status: 403 })
     }
 
@@ -90,6 +107,27 @@ export async function POST(req: NextRequest) {
     })
     if (dup.kind !== 'none') {
       const regId = dup.registration.registrationId
+      // They had already registered (or started to) before using the offer
+      // link: attach the scholarship to that registration, and with a full
+      // scholarship confirm it now if nothing else is owed.
+      if (scholarship && dup.registration.type === 'individual' && dup.kind !== 'in_group') {
+        const { data: existingReg } = await db
+          .from('registrations')
+          .select('id, status, amount_due_cents')
+          .eq('id', regId)
+          .maybeSingle()
+        if (existingReg) {
+          await attachOfferToRegistration(db, scholarship, existingReg as { id: string; status: string; amount_due_cents: number | null }, null)
+          if (
+            scholarship.percent_off === 100 &&
+            (existingReg as { status: string }).status === 'pending' &&
+            (await pendingAddonLines(db, regId)).length === 0
+          ) {
+            await confirmRegistration(regId, false)
+            return NextResponse.json({ registrationId: regId, checkoutUrl: null, signInToken: null }, { status: 200 })
+          }
+        }
+      }
       // An unfinished GROUP registration isn't resumed from the individual form
       // — the organiser has the pay link in their confirmation email and under
       // Account → Teams.
@@ -302,6 +340,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to save participant details' }, { status: 500 })
     }
 
+    // A scholarship offer now has its registration: link it, and record the
+    // discounted amount due (the checkout below applies the coupon itself).
+    if (scholarship) {
+      await attachOfferToRegistration(db, scholarship, { id: regId, status: 'pending', amount_due_cents: amountDueCents }, memberId)
+    }
+
     // Record this registration in event_participations so it appears in the
     // "Event Activity" lists on the member portal and admin member page.
     await recordEventParticipation(db, { memberId, eventSlug: event_slug, eventTitle: event_title, registrationId: regId })
@@ -360,6 +404,14 @@ export async function POST(req: NextRequest) {
     const addonLines = await prepareRegistrationAddons(db, event_slug, body.merch_addons ?? [])
     if (addonLines.length > 0) {
       await addRegistrationAddons(db, regId, addonLines, memberId)
+    }
+
+    // A full scholarship with no paid add-ons: nothing to collect, so confirm
+    // the registration here rather than sending the student through a $0
+    // checkout. Same confirmation step and email as a paid one.
+    if (scholarship?.percent_off === 100 && addonLines.length === 0) {
+      await confirmRegistration(regId, false)
+      return NextResponse.json({ registrationId: regId, checkoutUrl: null, signInToken }, { status: 201 })
     }
 
     if (!stripe) {

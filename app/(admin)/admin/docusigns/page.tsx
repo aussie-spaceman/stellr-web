@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
 import { DocusignTable, type EnvelopeRow } from '@/components/admin/DocusignTable'
 import { EsignEngineCard } from '@/components/admin/EsignEngineCard'
+import { NeedsPaperwork } from '@/components/admin/NeedsPaperwork'
+import { loadPaperworkGaps } from '@/lib/esign/needs-paperwork'
 import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
 
 export const metadata = { title: 'Admin — Consent Forms' }
@@ -31,6 +33,12 @@ export default async function AdminDocusignsPage() {
     ...e,
     recipients: recipientsByEnvelope.get(e.id as string) ?? [],
   })) as EnvelopeRow[]
+
+  // A failed lookup must not take the whole page down: the list just shows empty.
+  const gaps = await loadPaperworkGaps(db).catch((err) => {
+    console.error('[admin/docusigns] needs-paperwork lookup failed:', err)
+    return []
+  })
 
   const pending   = (envelopes ?? []).filter(e => e.status === 'sent' || e.status === 'delivered').length
   const completed = (envelopes ?? []).filter(e => e.status === 'completed').length
@@ -64,6 +72,8 @@ export default async function AdminDocusignsPage() {
       </div>
 
       <EsignEngineCard />
+
+      <NeedsPaperwork gaps={gaps} />
 
       <DocusignTable initial={rows} />
     </div>

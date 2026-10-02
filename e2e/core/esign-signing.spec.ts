@@ -175,6 +175,7 @@ test.describe('Agreement documents (admin)', () => {
   test('lists each version and previews it blank and with its fields labelled', async ({ page }) => {
     const consoleErrors = attachConsoleGuard(page)
     await page.goto('/admin/docusigns')
+    await expect(page.getByRole('heading', { name: 'Needs paperwork' })).toBeVisible()
     await page.getByRole('link', { name: 'Agreement documents' }).click()
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Agreement documents')
 

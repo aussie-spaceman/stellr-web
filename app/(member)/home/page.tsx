@@ -226,7 +226,7 @@ export default async function HomePage() {
       <section className="app-card p-5">
         <div className="mb-3.5 flex items-center justify-between">
           <h3 className="flex items-center gap-2 font-subheading text-base font-semibold text-brand-blue-dark">
-            <span className="h-[11px] w-[11px] rounded-full bg-brand-blue" /> What&apos;s new in your spaces
+            <span className="h-[11px] w-[11px] rounded-full bg-brand-blue" />{' '}What&apos;s new in your spaces
           </h3>
           <Link href="/community" className="font-subheading text-xs font-semibold text-brand-blue">All spaces →</Link>
         </div>

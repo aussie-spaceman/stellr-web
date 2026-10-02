@@ -234,7 +234,7 @@ export default async function CompetitionsPage() {
 
           <p className="text-lg text-content-secondary mt-6 max-w-3xl leading-relaxed">
             Students step into the role of a professional engineering team. They&rsquo;re handed a
-            real-world brief — a <strong className="text-ink">Request for Proposal (RFP)</strong> — and
+            real-world brief — a <strong className="text-ink">Request for Proposal (RFP)</strong>{' '}— and
             have to research, design, and justify a working solution, then pitch it. It&rsquo;s a genuine
             industry simulation, scaled for the classroom.
           </p>

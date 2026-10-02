@@ -23,8 +23,8 @@
  * Dietary information is NOT touched: it follows standard retention.
  *
  * Run (monthly — docs/RUNBOOK-privacy-retention-and-deletion.md):
- *   npm run retention:medical-sql                 # prints SQL to stdout
- *   npm run retention:medical-sql -- --keep <participant-uuid>[,<uuid>…]
+ *   npm run -s retention:medical-sql                 # prints SQL to stdout
+ *   npm run -s retention:medical-sql -- --keep <participant-uuid>[,<uuid>…]
  */
 
 import * as dotenv from 'dotenv'

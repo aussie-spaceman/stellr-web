@@ -2,8 +2,8 @@
  * Survey data retention: 7 years after account deactivation (handover §7;
  * retention schedule row 27). Deletion is full — responses, answers,
  * invitations and privacy switches go through survey_purge_person(), nothing
- * de-identified is kept (§14.3). Legacy Google Forms imports carry no
- * identity and are not in scope.
+ * de-identified is kept (§14.3). Legacy Google Forms data is not imported
+ * (David, 2 Oct 2026), so there is none to purge.
  *
  * The clock, per person:
  *   - Has an account (the invitation or response is linked to a member, or the
@@ -11,8 +11,9 @@
  *     the account is still inactive (`is_active = false`). Every deactivation
  *     path sets both — admin Deactivate, the deletion registry's soft delete,
  *     Clerk `user.deleted` — and reactivation through onboarding clears
- *     `deleted_at`, so a returning member's clock stops. An inactive member
- *     with no `deleted_at` has no clock; the report counts them.
+ *     `deleted_at`, so a returning member's clock stops. Inactive members
+ *     with no `deleted_at` were backfilled to 2 Oct 2026 (migration
+ *     20261003020253); the report counts any that appear later.
  *   - No account, keyed to a participant row (one row per event): 7 years
  *     after 31 December of the event's year.
  *   - No account, keyed only to an email (a teacher who registered a group):
@@ -21,7 +22,8 @@
  *     sent to it is due — the purge matches on the address, so it must not
  *     reach a newer survey.
  *
- * The "no account" rule is a proposal awaiting David's decision.
+ * Rules confirmed by David on 2 Oct 2026. Deletion stays off on production
+ * (SURVEY_RETENTION_APPLY unset) until nearer the first due dates.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { purgeSurveyDataFor } from './purge'

@@ -93,8 +93,8 @@ Items marked **David** need his answer; none of them block the build.
 ### Open — for David
 1. **No V2.3 minors template exists**, so no minor is invited until one is published with `esign_templates.document_version = 'V2.3'` and a `QuoteOptOut` checkbox. DocuSign-signed V2.3 agreements cannot be recognised.
 2. Sign off: intro wording (`lib/survey/definitions/post_event.v1.json` → `intro`), email copy (`lib/survey/emails.ts`), mentor/adult questions (D7). Then publish: `npm run survey:definition -- lib/survey/definitions/post_event.v1.json --publish` (add `--prod` on prod). Nothing is scheduled on prod until a definition is published.
-3. Prod: two migrations (`20261002235036`, `20261003002925`), env `SURVEY_TOKEN_SECRET` (32+ chars; else falls back to `ESIGN_TOKEN_SECRET`), optional `SURVEY_DAILY_EMAIL_BUDGET`.
-4. Legacy import: approve `docs/survey/legacy-mapping.md`, then `npm run survey:import-legacy -- --sheet 2024 --apply` (dev first).
+3. Prod: three migrations (`20261002235036`, `20261003002925`, and from the follow-ups branch `20261003020253` — the `deleted_at` backfill), env `SURVEY_TOKEN_SECRET` (32+ chars; else falls back to `ESIGN_TOKEN_SECRET`), optional `SURVEY_DAILY_EMAIL_BUDGET`.
+4. ~~Legacy import~~ **Decided 2 Oct: do not import the legacy Google Forms data.** `scripts/survey-import-legacy.ts` and `docs/survey/legacy-mapping.md` are not to be run.
 5. Handover §13: teachers who registered but didn't attend are surveyed (default); `volunteer` → mentor path.
 6. Time zone is derived from state; add a Sanity `timeZone` field if that is ever wrong.
 
@@ -122,13 +122,15 @@ Items marked **David** need his answer; none of them block the build.
 - Screenshots (local only): `/admin/media`, and the Survey-tab gate switch + warning (event data mocked onto a Sanity event, since the e2e/demo events aren't in Sanity; the switch posted `{action:'gate_certificate', on:true}`).
 - One leftover `e2e-survey-*` event from this session's first (failed) run was removed with the fixture's `remove`.
 
-### Decisions for David
-1. **No-account retention rule** (proposed above: 7 years after the end of the event year; email-only recipients wait for their latest survey and are skipped if a member has the address). Confirm, or choose another clock.
-2. **Turning deletion on.** The cron only reports until `SURVEY_RETENTION_APPLY=true` is set on prod. Nothing is due before 2033 (account holders) / 2034 (no account), so this can wait; read the monthly `cron_runs` row (`job = 'survey-retention'`) meanwhile.
-3. **Inactive members with no `deleted_at`** have no clock and are never purged; the report counts them. Backfill a date, or accept.
-4. **Legacy Google Forms imports** carry no identity and are never purged by this job, though free text could name someone. Keep indefinitely, or set a date?
-5. **Gate and minors.** As specified, the gate applies to everyone invited, minors included, and to invitees who opted out of reminders or whose email bounced. Exempt minors (one line in `certificateGate`)?
-6. **Media defaults are cautious**: a minor with no agreement on file is "no"; a minor whose media box we can't see is "check"; a minor of unknown age at a NY/CO school is "no". On prod, DocuSign-signed minors show "check" until the V2.3 read-back below is live. Confirm, or relax.
-7. **Adults** (mentors, teachers): only their own agreement's media box and their switch apply; no NY/CO default. Confirm.
-8. **Email opt-outs** stay on a manual list. A follow-up could let an admin set `allow_media = false` on a member from a privacy request.
-9. **V2.3 agreements branch overlap.** `feat/esign-agreements-v2-3` (applied on dev, not prod) adds `agreements.media_opt_out` / `agreement_version` and the DocuSign read-back. `lib/survey/media.ts` reads those columns when they exist and ignores them otherwise, so either branch can merge first; once both are in, the survey consent loader (`lib/survey/consent.ts`) should move to those columns too, and the version formats (`V2.3` on templates vs `2.3` on agreements) need one convention.
+### Decisions for David — answered 2 Oct 2026
+Answers in **bold** after each item.
+
+1. **No-account retention rule** (proposed above: 7 years after the end of the event year; email-only recipients wait for their latest survey and are skipped if a member has the address). Confirm, or choose another clock. **Agreed.**
+2. **Turning deletion on.** The cron only reports until `SURVEY_RETENTION_APPLY=true` is set on prod. Nothing is due before 2033 (account holders) / 2034 (no account), so this can wait; read the monthly `cron_runs` row (`job = 'survey-retention'`) meanwhile. **Agreed: stays off for now.**
+3. **Inactive members with no `deleted_at`** have no clock and are never purged; the report counts them. Backfill a date, or accept. **Backfill with today's date** → migration `20261003020253_members_backfill_deleted_at.sql` sets `deleted_at = 2026-10-02` where `is_active = false AND deleted_at IS NULL`. Applied to dev (1 row; ledger row realigned to the filename); prod applies with the survey migrations on promotion.
+4. **Legacy Google Forms imports** carry no identity and are never purged by this job, though free text could name someone. Keep indefinitely, or set a date? **Do not import the legacy data at all** (§5 item 4), so nothing to retain.
+5. **Gate and minors.** As specified, the gate applies to everyone invited, minors included, and to invitees who opted out of reminders or whose email bounced. Exempt minors (one line in `certificateGate`)? **Do not exempt minors.**
+6. **Media defaults are cautious**: a minor with no agreement on file is "no"; a minor whose media box we can't see is "check"; a minor of unknown age at a NY/CO school is "no". On prod, DocuSign-signed minors show "check" until the V2.3 read-back below is live. Confirm, or relax. **Agreed.**
+7. **Adults** (mentors, teachers): only their own agreement's media box and their switch apply; no NY/CO default. Confirm. **Agreed.**
+8. **Email opt-outs** stay on a manual list. A follow-up could let an admin set `allow_media = false` on a member from a privacy request. **Agreed; no follow-up for now.**
+9. **V2.3 agreements branch overlap.** `feat/esign-agreements-v2-3` (applied on dev, not prod) adds `agreements.media_opt_out` / `agreement_version` and the DocuSign read-back. `lib/survey/media.ts` reads those columns when they exist and ignores them otherwise, so either branch can merge first; once both are in, the survey consent loader (`lib/survey/consent.ts`) should move to those columns too, and the version formats (`V2.3` on templates vs `2.3` on agreements) need one convention. **Agreed.**

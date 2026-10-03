@@ -91,7 +91,7 @@ Items marked **David** need his answer; none of them block the build.
 - `next build` was **not** run locally (the dev server shares `.next`); CI decides.
 
 ### Open — for David
-1. **No V2.3 minors template exists**, so no minor is invited until one is published with `esign_templates.document_version = 'V2.3'` and a `QuoteOptOut` checkbox. DocuSign-signed V2.3 agreements cannot be recognised.
+1. **V2.3 minors template:** on dev, minor v3 ("Participation Agreement — Student / Minor", from the DocuSign-replacement session, PR #280) has `QuoteOptOut` and was labelled `document_version = 'V2.3'` on 3 Oct. Prod still needs the same template published and labelled; until then no minor is invited there. Any later minors version must be labelled too. DocuSign-signed V2.3 agreements cannot be recognised.
 2. Sign off: intro wording (`lib/survey/definitions/post_event.v1.json` → `intro`), email copy (`lib/survey/emails.ts`), mentor/adult questions (D7). Then publish: `npm run survey:definition -- lib/survey/definitions/post_event.v1.json --publish` (add `--prod` on prod). Nothing is scheduled on prod until a definition is published.
 3. Prod: two migrations (`20261002235036`, `20261003002925`), env `SURVEY_TOKEN_SECRET` (32+ chars; else falls back to `ESIGN_TOKEN_SECRET`), optional `SURVEY_DAILY_EMAIL_BUDGET`.
 4. Legacy import: approve `docs/survey/legacy-mapping.md`, then `npm run survey:import-legacy -- --sheet 2024 --apply` (dev first).

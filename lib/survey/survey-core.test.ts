@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import raw from './definitions/post_event.v1.json'
-import { catalogEntries, definitionSha256, normaliseDefinition, questionsFor, ROLES } from './definition'
+import { catalogEntries, normaliseDefinition, questionsFor, ROLES } from './definition'
+import { definitionSha256 } from './definition-hash'
 import { evaluateShowIf, parseShowIf, visiblePages, visibleQuestions, type SurveyContext } from './branching'
 import { flattenAnswers, missingRequired, sanitiseDraft } from './answers'
 

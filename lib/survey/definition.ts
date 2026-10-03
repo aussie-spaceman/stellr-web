@@ -8,8 +8,6 @@
  * is never rewritten; everything here is derived on read, so a published
  * definition's hash keeps meaning what respondents saw.
  */
-import { createHash } from 'node:crypto'
-
 export const ROLES = ['student', 'mentor', 'adult'] as const
 export type RespondentRole = (typeof ROLES)[number]
 
@@ -230,22 +228,6 @@ export function questionsFor(def: SurveyDefinition, role: RespondentRole): Quest
 export function withRuntimeOptions(q: Question, sources: Partial<Record<OptionsSource, Option[]>>): Question {
   if (!q.optionsSource) return q
   return { ...q, options: sources[q.optionsSource] ?? [] }
-}
-
-/** Stable JSON (sorted keys) so the same definition always hashes the same. */
-export function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
-  if (value && typeof value === 'object') {
-    const entries = Object.keys(value as Record<string, unknown>)
-      .sort()
-      .map((k) => `${JSON.stringify(k)}:${stableStringify((value as Record<string, unknown>)[k])}`)
-    return `{${entries.join(',')}}`
-  }
-  return JSON.stringify(value)
-}
-
-export function definitionSha256(raw: unknown): string {
-  return createHash('sha256').update(stableStringify(raw)).digest('hex')
 }
 
 export interface CatalogEntry {

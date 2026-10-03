@@ -96,7 +96,8 @@ export function SurveyApp({ apiBase, view, signedIn }: { apiBase: string; view: 
   }, [save, page?.id, answers])
 
   useEffect(() => {
-    if (phase === 'page' || phase === 'confirm') headingRef.current?.focus()
+    window.scrollTo({ top: 0 })
+    if (phase === 'page' || phase === 'confirm') headingRef.current?.focus({ preventScroll: true })
   }, [phase, index])
 
   const go = async (to: number) => {
@@ -104,7 +105,6 @@ export function SurveyApp({ apiBase, view, signedIn }: { apiBase: string; view: 
     const target = pages[to]
     await save(target?.id, answers)
     setIndex(to)
-    window.scrollTo({ top: 0 })
   }
 
   const next = async () => {
@@ -113,6 +113,7 @@ export function SurveyApp({ apiBase, view, signedIn }: { apiBase: string; view: 
     if (Object.keys(missing).length) {
       setErrors(missing)
       setMessage('Please answer the questions marked required.')
+      document.getElementById(`q-${Object.keys(missing)[0]}`)?.scrollIntoView({ block: 'center' })
       return
     }
     if (index >= pages.length - 1) {
@@ -178,6 +179,9 @@ export function SurveyApp({ apiBase, view, signedIn }: { apiBase: string; view: 
 
         {phase === 'page' && page && (
           <div className="space-y-5">
+            <h1 ref={headingRef} tabIndex={-1} className="font-display text-xl font-bold text-ink outline-none">
+              {fillTemplate(def.intro.heading, ctx)}
+            </h1>
             <Progress value={progress} label={`Page ${index + 1} of ${pages.length}`} />
             {message && <p role="alert" className="rounded-control border border-danger bg-white px-4 py-3 text-sm text-danger">{message}</p>}
             <form
@@ -188,9 +192,6 @@ export function SurveyApp({ apiBase, view, signedIn }: { apiBase: string; view: 
               }}
               noValidate
             >
-              <h1 ref={headingRef} tabIndex={-1} className="sr-only">
-                {fillTemplate(def.intro.heading, ctx)}, page {index + 1} of {pages.length}
-              </h1>
               {page.questions.map((q) => (
                 <QuestionField
                   key={q.key}
@@ -338,7 +339,7 @@ function QuestionField({ q, value, error, onChange }: { q: Question; value: Answ
 
   if (q.type === 'nps') {
     return (
-      <fieldset aria-describedby={describedBy}>
+      <fieldset id={id} aria-describedby={describedBy}>
         <legend>{label}</legend>
         {help}
         <div className="mt-3 grid grid-cols-6 gap-2 sm:grid-cols-11">
@@ -360,7 +361,7 @@ function QuestionField({ q, value, error, onChange }: { q: Question; value: Answ
   if (q.type === 'grid') {
     const v = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as Record<string, string>
     return (
-      <fieldset aria-describedby={describedBy}>
+      <fieldset id={id} aria-describedby={describedBy}>
         <legend>{label}</legend>
         {help}
         <div className="mt-3 space-y-4">
@@ -396,13 +397,13 @@ function QuestionField({ q, value, error, onChange }: { q: Question; value: Answ
       onChange([...v.filter((x) => !exclusive.has(x)), o.key])
     }
     return (
-      <fieldset aria-describedby={describedBy}>
+      <fieldset id={id} aria-describedby={describedBy}>
         <legend>{label}</legend>
         {help}
         <div className="mt-3 space-y-2">
           {(q.options ?? []).map((o) => (
             <label key={o.key} className={`flex cursor-pointer items-start gap-3 rounded-control border px-3 py-3 ${v.includes(o.key) ? 'border-primary-deep bg-primary-soft' : 'border-line bg-white'}`}>
-              <input type="checkbox" className="mt-1 h-5 w-5" checked={v.includes(o.key)} onChange={() => toggle(o)} />
+              <input type="checkbox" value={o.key} className="mt-1 h-5 w-5" checked={v.includes(o.key)} onChange={() => toggle(o)} />
               <span className="text-ink">{o.label}</span>
             </label>
           ))}
@@ -414,7 +415,7 @@ function QuestionField({ q, value, error, onChange }: { q: Question; value: Answ
 
   // single
   return (
-    <fieldset aria-describedby={describedBy}>
+    <fieldset id={id} aria-describedby={describedBy}>
       <legend>{label}</legend>
       {help}
       <div className="mt-3 space-y-2">
@@ -434,7 +435,7 @@ function Choice({ name, checked, label, onSelect, compact }: { name: string; che
         checked ? 'border-primary-deep bg-primary-soft font-semibold text-primary-deep' : 'border-line bg-white text-ink'
       }`}
     >
-      <input type="radio" name={name} checked={checked} onChange={onSelect} className={compact ? 'sr-only' : 'h-5 w-5'} />
+      <input type="radio" name={name} value={label} checked={checked} onChange={onSelect} className={compact ? 'sr-only' : 'h-5 w-5'} />
       <span>{label}</span>
     </label>
   )

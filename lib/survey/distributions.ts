@@ -12,6 +12,7 @@ import type { SurveyEvent } from './events'
 import { buildRecipientPlan, type Audience, type RecipientPlan } from './recipients'
 import { hashToken, surveyToken } from './tokens'
 import { writeAudit } from './audit'
+import { isProd } from '@/lib/env'
 
 export const SURVEY_KEY = 'post_event'
 
@@ -52,6 +53,25 @@ export async function latestPublishedDefinition(db: SupabaseClient, key = SURVEY
     .limit(1)
     .maybeSingle()
   if (error) throw new Error(`Reading survey definitions failed: ${error.message}`)
+  return (data as DefinitionRow | null) ?? null
+}
+
+/**
+ * The definition new surveys use: the latest published one. Outside production
+ * (APP_ENV=dev) the latest draft stands in when nothing is published, so the
+ * flow can be tested before the wording is signed off and frozen.
+ */
+export async function usableDefinition(db: SupabaseClient, key = SURVEY_KEY): Promise<DefinitionRow | null> {
+  const published = await latestPublishedDefinition(db, key)
+  if (published || isProd()) return published
+  const { data } = await db
+    .from('survey_definitions')
+    .select('id, key, version, title, definition, status')
+    .eq('key', key)
+    .eq('status', 'draft')
+    .order('version', { ascending: false })
+    .limit(1)
+    .maybeSingle()
   return (data as DefinitionRow | null) ?? null
 }
 
@@ -127,7 +147,7 @@ export async function ensureDistribution(db: SupabaseClient, event: SurveyEvent,
   if (event.cancelled) return { action: 'skipped', reason: 'cancelled' }
   // Backfill and creation cover events still to come (event-local today counts).
   if (event.lastDay < localDate(now, event.timeZone)) return { action: 'skipped', reason: 'past event' }
-  const def = await latestPublishedDefinition(db)
+  const def = await usableDefinition(db)
   if (!def) return { action: 'skipped', reason: 'no published survey definition' }
 
   const opensAt = autoOpensAt(event.lastDay, event.timeZone)

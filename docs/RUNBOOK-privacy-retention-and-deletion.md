@@ -32,7 +32,7 @@ Medical information is `participants.health_conditions` (per event) and
    participant UUID(s) whose medical record must be kept.
 2. **Generate the SQL** from a checkout with `.env.local`:
    ```bash
-   npm run retention:medical-sql -- --keep <participant-uuid>,<participant-uuid> > /tmp/medical-retention.sql
+   npm run -s retention:medical-sql -- --keep <participant-uuid>,<participant-uuid> > /tmp/medical-retention.sql
    ```
    Omit `--keep` if there are no incidents. The script reads event dates from
    Sanity (production dataset) and never connects to a database.

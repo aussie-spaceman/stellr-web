@@ -17,7 +17,7 @@ export default function TermsPage() {
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
           <strong>Recent update (02-Oct-2026):</strong>{' '}Students can now create a Stellr account
-          themselves. Section 4 defines a <strong>Minor</strong> by the age of majority in your
+          themselves. Section 4 defines a <strong>Minor</strong>{' '}by the age of majority in your
           state, explains pending accounts until a parent or legal guardian signs, and adds new
           Sections 4.5 (adult students still in high school) and 4.6 (when a student is no longer
           a Minor). Consent forms and agreements can now be signed through Stellr&rsquo;s own
@@ -733,7 +733,7 @@ export default function TermsPage() {
           satisfy any legal requirement that they be in writing.
         </p>
         <p>
-          <strong>Electronic signatures.</strong> Consent forms and agreements are signed
+          <strong>Electronic signatures.</strong>{' '}Consent forms and agreements are signed
           electronically, through Stellr&rsquo;s own signing system or through DocuSign. Before you
           sign, we show you what signing electronically means and ask you to agree to it. Your
           electronic signature has the same effect as a handwritten one. You may instead sign on

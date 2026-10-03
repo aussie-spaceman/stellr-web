@@ -97,7 +97,7 @@ export default function PrivacyPage() {
             internet address and browser of each signature, so it can be checked later.
           </li>
           <li>
-            <strong>Participants under 13:</strong> We do not knowingly collect personal information
+            <strong>Participants under 13:</strong>{' '}We do not knowingly collect personal information
             from a child under 13 without the parental consent described above. A student under 13
             signs their own section of a form only after their parent or guardian has signed. If we
             discover we have collected a child&rsquo;s information without consent, we will delete
@@ -261,7 +261,7 @@ export default function PrivacyPage() {
           <li>Pages visited and features used within our platform</li>
           <li>Cookies and similar tracking technologies (see Section 9)</li>
           <li>
-            The <strong>organisation</strong> — for example a school, district, or company —
+            The <strong>organisation</strong>{' '}— for example a school, district, or company —
             associated with your IP address. This is inferred on our educator and partner pages
             only, and only where you have accepted advertising cookies. It tells us that
             &ldquo;someone at this school district read our educators page,&rdquo; not who you are
@@ -548,7 +548,7 @@ export default function PrivacyPage() {
         </p>
         <ul className="list-disc pl-6 space-y-2">
           <li>
-            <strong>From a school or teacher</strong> registering a group. We act as a &ldquo;school
+            <strong>From a school or teacher</strong>{' '}registering a group. We act as a &ldquo;school
             official&rdquo; under a data processing agreement with the school: our{' '}
             <a href="/school-data-terms" className="text-brand-blue hover:underline">School Data Terms</a>
             , which the registering teacher accepts on the school&rsquo;s behalf, or the

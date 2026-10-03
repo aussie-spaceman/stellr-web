@@ -58,6 +58,7 @@ const SECTIONS: Section[] = [
       { href: '/admin/staff', label: 'Staff roles' },
       { href: '/admin/docusigns', label: 'Consent forms' },
       { href: '/admin/privacy-requests', label: 'Privacy requests' },
+      { href: '/admin/media', label: 'Media do-not-use' },
       { href: '/admin/compliance', label: 'Background checks' },
       { href: '/admin/email', label: 'Email' },
       { href: '/admin/store', label: 'Store' },

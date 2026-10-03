@@ -14,7 +14,7 @@ promise in the published policy. Skipping one makes the policy untrue.**
 | Medical information deleted within 90 days after the event, unless needed for an incident record | §8, §10 | Part A, monthly | No — ticket |
 | Deletion requests (school, parent, student) completed within 30 days, or a school DPA's shorter deadline | §10, §12 | Part B, per request | No — ticket |
 | Only a minimal signed-agreement record kept after deletion | §10, §12 | Part B step 4 | No — ticket |
-| Students aged 13+ (and parents) can opt out of promotional media use by email; NY/CO students aged 13–17 are opted out until they opt in | §2, Terms §11.3 | Part C | No — ticket |
+| Students aged 13+ (and parents) can opt out of promotional media use by email; NY/CO students aged 13–17 are opted out until they opt in | §2, Terms §11.3 | Part C: Admin → Media do-not-use and the roster's `media_ok` column; email opt-outs still manual | Partly |
 | Dietary information follows standard retention (no longer cleared after events) | §8, §10 | Nothing clears it | n/a |
 | Seven years after deactivation | §10 | The clock is `members.deleted_at` (set by every deactivation path: admin Deactivate, deletion-registry soft delete, Clerk `user.deleted`). First purge falls due in 2033 | Ticket |
 
@@ -137,49 +137,42 @@ Follow-up ticket: a self-serve deletion request with `received_at`, `due_at`,
 
 ## Part C — Media opt-outs (photos, videos, name, work in promotion)
 
-Students aged 13+ now have two switches in their account (Account → Profile →
-"Quotes, photos and media", table `member_privacy_prefs`): quoting of survey
-answers and photo/media use. Both default on, and off for NY/CO 13–17-year-olds
-until they turn them on. Nothing reads `allow_media` automatically yet — add
-anyone with `allow_media = false` to the do-not-use list:
-```sql
-SELECT m.first_name, m.last_name, m.email FROM member_privacy_prefs p
-JOIN members m ON m.id = p.member_id WHERE p.allow_media = false;
-```
-Opt-out **by email** still works as below.
+**Before using anyone's photo, video, name or work in promotion, check Admin →
+Operations → Media do-not-use** (`/admin/media`; filter by event; Download CSV).
+The event roster export carries the same answer per person in its `media_ok`
+column (`yes` / `no` / `check`) with the reason beside it. Both come from one
+rule (`lib/survey/media.ts`), which combines:
 
-1. **Opt-outs on signed forms.** The Participation Agreement has a "I do NOT
-   consent to photo and media use" box (`MediaOptOut`), on both DocuSign and Stellr
-   signing. Anyone who ticked it is on the do-not-use list.
-2. **Opt-out emails** to privacy@stellreducation.org from a student aged 13+ or
-   a parent/guardian: log it, reply to confirm, and add the student to the
-   **media do-not-use list** that whoever selects event photos for marketing
-   checks first. Either opt-out (student or parent) turns the use off.
-3. **New York and Colorado, ages 13–17:** opted **out** until the student opts
-   in by email. Until state of residence is collected, use the school's state as
-   the proxy, and treat a student as NY/CO if either applies. Before using any
-   student's image, name or work in promotion, check:
-   ```sql
-   SELECT p.first_name, p.last_name, p.date_of_birth, s.state AS school_state, r.event_slug
-   FROM participants p
-   JOIN registrations r ON r.id = p.registration_id
-   LEFT JOIN schools s ON lower(s.name) = lower(coalesce(p.school_name, r.school_name))
-   WHERE (upper(s.state) IN ('NY', 'CO', 'NEW YORK', 'COLORADO')
-          OR upper(r.school_address_state) IN ('NY', 'CO', 'NEW YORK', 'COLORADO'))
-     AND p.date_of_birth > (current_date - interval '18 years')
-     AND p.date_of_birth <= (current_date - interval '13 years');
-   ```
-   Everyone returned is on the do-not-use list unless they have opted in.
-4. Opting out never affects participation.
+1. **Withdrawn consent** — an agreement restricted after a withdrawal or
+   deletion request: no.
+2. **Opt-outs on signed forms** — the "I do NOT consent to photo and media use"
+   box (`MediaOptOut`) on the person's agreement (the guardian's, for a minor):
+   no. Read from Stellr-signed forms now, and from DocuSign forms once the V2.3
+   agreements work (`agreements.media_opt_out`) is live. A minor whose DocuSign
+   form was never read back shows **check**: open the signed PDF in Admin →
+   Consent forms and add them by hand if the box is ticked.
+3. **The student's own switch** (Account → Profile → "Quotes, photos and
+   media", `member_privacy_prefs.allow_media`): off is no; on overrides the
+   NY/CO default below, never a parent's opt-out.
+4. **A minor with no signed agreement on file**: no.
+5. **New York and Colorado, ages 13–17** (or a minor whose age is unknown):
+   opted out until the student turns the switch on or opts in by email. School
+   state stands in for state of residence; NY/CO if any of the person's known
+   school states is.
+
+**Opt-out emails** to privacy@stellreducation.org from a student aged 13+ or a
+parent/guardian are not in the data: log them, reply to confirm, and keep them
+on a short manual list beside the export. Either opt-out (student or parent)
+turns the use off. Opting out never affects participation.
 
 Survey quotes: the "Quotable answers" export (Admin → Surveys) applies the
 parent's `QuoteOptOut`, the student's switch, the NY/CO default, "Don't quote
 this response" and withdrawals at the moment of export. To withdraw one quote on
 request, paste its response id under "Withdraw a quote" on that page.
 
-Follow-up ticket: the account toggle exists (above); still to do: state of residence at
-registration, a `MediaOptOut` checkbox read back from DocuSign like
-`CredentialSharingOptOut`, and a column in the roster export.
+Follow-up ticket: state of residence at registration (school state is the
+proxy), and email opt-ins/opt-outs recorded in the account rather than on a
+manual list. The DocuSign read-back ships with the V2.3 agreements work.
 
 ## Part D — School DPA deletion requests (I14)
 

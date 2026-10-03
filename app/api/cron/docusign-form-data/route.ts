@@ -27,7 +27,8 @@ export async function GET(req: NextRequest) {
   const { data, error } = await db
     .from('agreements')
     .select(OPT_OUT_ENVELOPE_COLUMNS)
-    .eq('envelope_type', 'minor')
+    // Every agreement with an opt-out on it (V2.3: the media release is on all of them).
+    .in('envelope_type', ['minor', 'adult', 'mentor', 'volunteer'])
     .eq('status', 'completed')
     .is('reused_from', null)
     .is('form_data_read_at', null)

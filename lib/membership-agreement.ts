@@ -1,12 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isMinorOn } from '@/lib/age'
-import { agreementExpiry, dispatchTyped, type DispatchResult } from '@/lib/docusign-agreements'
+import { denormalizeGrade } from '@/lib/member-enums'
+import { agreementValid, dispatchTyped, type DispatchResult } from '@/lib/docusign-agreements'
 
 // The Membership Agreement, for people who join Stellr without first attending
 // an event (self-serve sign-up, an admin invite, /join). Always issued on
 // Stellr signing: it never spends a DocuSign envelope. An adult signs it
 // themselves; for an under-18, their parent or guardian signs first and then
-// the member.
+// the member. A Minor signs the Student / Minor agreement (V2.3), which covers
+// membership and every event, and is recorded as one.
 //
 // Defaults agreed in the plan (docs/PLAN-esign-2026-10-02.md §7):
 //  • not issued while a valid signed event agreement is on file;
@@ -26,6 +28,7 @@ interface MemberForAgreement {
   email: string | null
   phone: string | null
   date_of_birth: string | null
+  grade: string | null
   ec_first_name: string | null
   ec_last_name: string | null
   ec_email: string | null
@@ -34,21 +37,21 @@ interface MemberForAgreement {
 }
 
 const MEMBER_COLUMNS =
-  'id, first_name, last_name, email, phone, date_of_birth, ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship'
+  'id, first_name, last_name, email, phone, date_of_birth, grade, ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship'
 
-/** A signed agreement of any kind, still within its three-year validity. */
+/** A signed agreement of any kind that is still valid under its own terms. */
 async function agreementOnFile(db: SupabaseClient, memberId: string, now = new Date()): Promise<boolean> {
   const { data } = await db
     .from('agreements')
-    .select('completed_at')
+    .select('completed_at, envelope_type, agreement_version')
     .eq('member_id', memberId)
     .eq('status', 'completed')
     .in('envelope_type', COVERING_TYPES)
     .order('completed_at', { ascending: false })
     .limit(1)
     .maybeSingle()
-  const completedAt = (data as { completed_at?: string | null } | null)?.completed_at
-  return !!completedAt && agreementExpiry(completedAt) > now
+  const row = data as { completed_at: string | null; envelope_type: string; agreement_version: string | null } | null
+  return !!row && agreementValid(row, now)
 }
 
 /** Any agreement out for signature for this member: paperwork is already on its way. */
@@ -98,6 +101,7 @@ export async function dispatchMembershipAgreement(db: SupabaseClient, memberId: 
       dateOfBirth: member.date_of_birth ?? undefined,
       ...(minor
         ? {
+            grade: member.grade ? (denormalizeGrade(member.grade) ?? member.grade) : undefined,
             guardianName,
             guardianEmail: member.ec_email ?? undefined,
             guardianPhone: member.ec_phone ?? undefined,

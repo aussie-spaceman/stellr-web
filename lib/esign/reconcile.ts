@@ -45,13 +45,13 @@ export async function retryFailedIssues(
         const r = await reissueParticipantAgreement(db, row.participant_id, { allowNewEnvelope: true })
         outcome = r.kind === 'reissued' ? r.outcome : r.kind
       } else if (row.member_id && (row.envelope_type === 'volunteer' || row.envelope_type === 'mentor')) {
+        const { dispatchVolunteerAgreement, VOLUNTEER_MEMBER_COLUMNS } = await import('@/lib/volunteer')
         const { data: member } = await db
           .from('members')
-          .select('id, first_name, last_name, email, phone, date_of_birth')
+          .select(VOLUNTEER_MEMBER_COLUMNS)
           .eq('id', row.member_id)
           .maybeSingle()
         if (member) {
-          const { dispatchVolunteerAgreement } = await import('@/lib/volunteer')
           outcome = await dispatchVolunteerAgreement(db, member as never)
         }
       } else if (row.member_id && row.envelope_type === 'membership') {

@@ -177,6 +177,7 @@ async function syncFromSheet(
         guardianEmail:     row.ec_email || undefined,
         guardianPhone:     row.ec_phone || undefined,
         relationship:      row.ec_relationship || undefined,
+        grade:             row.grade || undefined,
       })
       // Everyone on the sheet, not just this run's new rows: the helper skips
       // anyone already emailed, so people entered before this existed are picked

@@ -1,17 +1,41 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { SIGNED_BUCKET } from '@/lib/esign/storage'
+import { retainUntil, SIGNED_BUCKET } from '@/lib/esign/storage'
 import { removeReplicas } from '@/lib/esign/replicate'
 import type { BackupStore } from '@/lib/esign/backup-store'
 
 // What happens to signed agreements when the people they belong to are deleted,
 // and when their retention period ends.
 //
-// The rule (owner's decision, 2 Oct 2026; Privacy Policy §10): a signed
-// agreement is kept for 7 years from signing, then deleted. Deleting a
-// participant, a registration or a member before then does not delete the
-// agreement: it is unlinked and RESTRICTED — kept only so it can be produced if
-// a claim is made, shown to nobody, used for nothing. Unsigned agreements carry
+// The rule (Participation Agreements V2.3, 2 Oct 2026; Privacy Policy §10): a
+// signed agreement is kept for the life of the membership and 7 years after the
+// account is deactivated, then deleted. One with no account behind it is kept 7
+// years from signing. Deleting a participant, a registration or a member, or a
+// deletion request, does not delete the agreement: it is unlinked and
+// RESTRICTED, reduced to a minimal record (names, dates and the signed
+// document), kept only so it can be produced if a claim is made, shown to
+// nobody, used for nothing. Its 7 years start then. Unsigned agreements carry
 // no such duty and go with the person.
+
+/** What a restricted record keeps besides names, dates and the signed document: nothing. */
+const MINIMISED_AGREEMENT = { prefill: {} }
+const MINIMISED_SIGNER = { signer_values: null, signed_ip: null, signed_user_agent: null }
+
+/**
+ * Starts the 7-year clock on a member's signed agreements when their account
+ * is deactivated. Records that already have an end date keep it. Throws on a
+ * database error.
+ */
+export async function startRetentionClock(db: SupabaseClient, memberId: string, now = new Date()): Promise<number> {
+  const { data, error } = await db
+    .from('agreements')
+    .update({ retain_until: retainUntil(now.toISOString()), updated_at: now.toISOString() })
+    .eq('member_id', memberId)
+    .eq('status', 'completed')
+    .is('retain_until', null)
+    .select('id')
+  if (error) throw new Error(`Starting the retention period failed: ${error.message}`)
+  return data?.length ?? 0
+}
 
 export type RetentionScope =
   | { kind: 'participant'; id: string }
@@ -41,12 +65,33 @@ export async function retainSignedRecords(
 
   const { data: restricted, error: restrictError } = await db
     .from('agreements')
-    .update({ restricted_at: now.toISOString(), updated_at: now.toISOString() })
+    .update({ restricted_at: now.toISOString(), updated_at: now.toISOString(), ...MINIMISED_AGREEMENT })
     .in(column, ids)
     .eq('status', 'completed')
     .is('restricted_at', null)
     .select('id')
   if (restrictError) throw new Error(`Restricting signed agreements failed: ${restrictError.message}`)
+
+  // The 7 years run from now for records whose clock had not started (those
+  // linked to an open account). One already counting keeps its date.
+  const { error: clockError } = await db
+    .from('agreements')
+    .update({ retain_until: retainUntil(now.toISOString()) })
+    .in(column, ids)
+    .eq('status', 'completed')
+    .is('retain_until', null)
+  if (clockError) throw new Error(`Starting the retention period failed: ${clockError.message}`)
+
+  // Only the minimal record stays: what each signer typed and the device
+  // details beyond the signed document's own certificate page go.
+  const restrictedIds = (restricted ?? []).map((r) => (r as { id: string }).id)
+  if (restrictedIds.length) {
+    const { error: signerError } = await db
+      .from('agreement_recipients')
+      .update(MINIMISED_SIGNER)
+      .in('envelope_row', restrictedIds)
+    if (signerError) throw new Error(`Reducing signer data failed: ${signerError.message}`)
+  }
 
   // A member keeps their unsigned rows' history through member_id = NULL as
   // before; only a participant's dead paperwork is removed with them.

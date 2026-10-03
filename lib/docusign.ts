@@ -168,6 +168,8 @@ export interface EnvelopeParams {
   eventTitle:      string
   schoolName?:     string
   schoolState?:    string
+  /** The student's grade (V2.3 "Grade" field). */
+  grade?:          string
 }
 
 // Envelope creation reports how many signers it was issued with so the
@@ -217,6 +219,9 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<CreatedE
       { tabLabel: 'MinorRelationship', value: p.relationship   ?? '' },
       { tabLabel: 'SchoolName',       value: p.schoolName      ?? '' },
       { tabLabel: 'SchoolState',      value: p.schoolState     ?? '' },
+      // Added with the V2.3 agreement (2 Oct 2026).
+      { tabLabel: 'MinorEmail',       value: p.minorEmail      ?? '' },
+      { tabLabel: 'MinorGrade',       value: p.grade           ?? '' },
     ]
     // Per-recipient email subjects. The envelope-level subject was identical for
     // both roles, so a family received two near-identical DocuSign emails and
@@ -373,11 +378,13 @@ function mentorAgreementRoles(p: MentorAgreementParams): object[] {
         { tabLabel: 'MentorEmail', value: p.email       },
         { tabLabel: 'MentorPhone', value: p.phone ?? '' },
         { tabLabel: 'EventTitle',  value: p.eventTitle  },
+        { tabLabel: 'EmergencyContactName',  value: p.emergencyContactName  ?? '' },
+        { tabLabel: 'EmergencyContactPhone', value: p.emergencyContactPhone ?? '' },
       ],
     },
     emailNotification: {
-      emailSubject: `Your signature: Mentor Participation Agreement — ${fullName}`,
-      emailBody:    `${p.firstName}, please review and sign your Mentor Participation Agreement. You need it on file before you can support a Stellr event.`,
+      emailSubject: `Your signature: Mentor and Volunteer Agreement — ${fullName}`,
+      emailBody:    `${p.firstName}, please review and sign your Mentor and Volunteer Agreement. You need it on file before you can support a Stellr event.`,
       supportedLanguage: 'en',
     },
   }]
@@ -388,8 +395,8 @@ function mentorAgreementRoles(p: MentorAgreementParams): object[] {
       email:        ENV.stellrRepEmail,
       routingOrder: '1',
       emailNotification: {
-        emailSubject: `Stellr counter-signature: Mentor Participation Agreement — ${fullName}`,
-        emailBody:    `Counter-sign ${fullName}'s Mentor Participation Agreement (${p.email}). This is the Stellr signature only: ${p.firstName} receives a separate email to sign their own part.`,
+        emailSubject: `Stellr counter-signature: Mentor and Volunteer Agreement — ${fullName}`,
+        emailBody:    `Counter-sign ${fullName}'s Mentor and Volunteer Agreement (${p.email}). This is the Stellr signature only: ${p.firstName} receives a separate email to sign their own part.`,
         supportedLanguage: 'en',
       },
     })
@@ -403,6 +410,16 @@ export interface MentorAgreementParams {
   email:      string
   phone?:     string
   eventTitle: string
+  /** For the age of majority (V2.3 §3A): a Mentor under it needs a parent's signature too. */
+  dateOfBirth?: string | null
+  state?:       string | null
+  emergencyContactName?:  string
+  emergencyContactPhone?: string
+  /** Required when the Mentor is under the age of majority. */
+  guardianName?:  string
+  guardianEmail?: string
+  guardianPhone?: string
+  relationship?:  string
 }
 
 export async function createMentorAgreementEnvelope(p: MentorAgreementParams): Promise<CreatedEnvelope> {
@@ -413,7 +430,7 @@ export async function createMentorAgreementEnvelope(p: MentorAgreementParams): P
 
   const body = {
     status:       'sent',
-    emailSubject: `Mentor Participation Agreement — ${p.eventTitle}`,
+    emailSubject: `Mentor and Volunteer Agreement — ${p.eventTitle}`,
     templateId:   ENV.mentorTemplateId,
     templateRoles,
   }
@@ -424,13 +441,7 @@ export async function createMentorAgreementEnvelope(p: MentorAgreementParams): P
   return { envelopeId: data.envelopeId, signerCount }
 }
 
-export interface VolunteerAgreementParams {
-  firstName:  string
-  lastName:   string
-  email:      string
-  phone?:     string
-  eventTitle: string
-}
+export type VolunteerAgreementParams = MentorAgreementParams
 
 /**
  * Volunteers sign the MENTOR agreement.
@@ -455,7 +466,7 @@ export async function createVolunteerAgreementEnvelope(p: VolunteerAgreementPara
 
   const body = {
     status:       'sent',
-    emailSubject: `Mentor Participation Agreement — ${p.eventTitle}`,
+    emailSubject: `Mentor and Volunteer Agreement — ${p.eventTitle}`,
     templateId:   ENV.mentorTemplateId,
     templateRoles,
   }
@@ -659,28 +670,30 @@ export function isMinor(dateOfBirth: string): boolean {
 // classifyAgreement (which picks an event's paperwork) never returns it.
 export type AgreementType = 'minor' | 'adult' | 'mentor' | 'volunteer' | 'membership'
 
-// Which DocuSign agreement (if any) a participant needs, based on role and age:
-//   • any student (incl. Student Manager) → minor "Participation Agreement"
-//     (parental consent), REGARDLESS of age — students are treated as minors
-//     for paperwork, with their emergency contact acting as the guardian signer
-//   • other under-18 participant          → minor parental-consent form
-//   • adult registering as a mentor       → mentor participation agreement
-//   • adult in the volunteer program      → volunteer agreement
-//   • any other adult attendee            → adult participation agreement
+// Which agreement (if any) a participant needs, based on role and age
+// (Participation Agreements V2.3, 2 Oct 2026):
+//   • any student (incl. Student Manager) → Student / Minor agreement,
+//     REGARDLESS of age — a student still in high school is a Minor under the
+//     agreement, and one past the age of majority signs it with a parent
+//     co-signing
+//   • a mentor or volunteer                → Mentor and Volunteer Agreement, at
+//     any age; one under the age of majority has a parent co-sign it (§3A)
+//   • any other person under the age of majority → Student / Minor agreement
+//   • any other adult attendee             → Educator / Chaperone agreement
+// The age of majority depends on the state the person lives in (lib/age).
 /** The agreements an event participant can need: every type but membership. */
 export type EventAgreementType = Exclude<AgreementType, 'membership'>
 
 export function classifyAgreement(
   eventRole: string | null | undefined,
   dateOfBirth: string | null | undefined,
+  state?: string | null,
 ): EventAgreementType | null {
   const role = (eventRole ?? '').toLowerCase().replace(/\s+/g, '_')
-  // Student participants always sign the minor agreement — role wins over age,
-  // so an 18-year-old senior or student-manager still gets parental consent.
   if (role === 'participant' || role === 'school_student_manager') return 'minor'
-  if (dateOfBirth && isMinor(dateOfBirth)) return 'minor'
   if (role === 'mentor') return 'mentor'
   if (role === 'volunteer') return 'volunteer'
+  if (dateOfBirth && isMinorOn(dateOfBirth, undefined, state)) return 'minor'
   if (!role) return null
   return 'adult'
 }

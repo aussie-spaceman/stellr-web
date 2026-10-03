@@ -5,6 +5,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { normalizeEmail } from '@/lib/member-enums'
 import { claimPendingSpaceInvites } from '@/lib/spaces'
 import { syncMemberClassificationRole } from '@/lib/member-roles'
+import { startRetentionClock } from '@/lib/esign/retention'
 
 // Clerk sends user.created / user.updated / user.deleted events here.
 // This keeps the members table in sync with Clerk identity records.
@@ -141,10 +142,15 @@ export async function POST(req: Request) {
 
   if (type === 'user.deleted') {
     // Soft-delete: retain data, revoke access
-    await db
+    const { data: deactivated } = await db
       .from('members')
       .update({ is_active: false, deleted_at: new Date().toISOString(), clerk_user_id: null })
       .eq('clerk_user_id', data.id)
+      .select('id')
+    // Signed agreements are kept 7 years from deactivation (V2.3).
+    for (const m of deactivated ?? []) {
+      await startRetentionClock(db, (m as { id: string }).id).catch((err) => console.error('[clerk] retention clock failed:', err))
+    }
   }
 
   return NextResponse.json({ received: true })

@@ -1,11 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchEnvelopeFieldValues } from '@/lib/esign/operations'
-import { readCredentialOptOut } from '@/lib/docusign-form-data'
+import { OPT_OUT_COLUMNS, readCheckbox, readCredentialOptOut } from '@/lib/docusign-form-data'
 import { applyGuardianOptOut } from '@/lib/credentials-notify'
 import { logActivity } from '@/lib/activity-log'
 
 // Reads the guardian's credential-sharing opt-out off a completed minor consent
-// envelope and records it. Called from the Connect webhook on completion, and
+// envelope and records it, with the media, quote and digital-communications
+// opt-outs on any agreement that carries them (V2.3). Called from the Connect webhook on completion, and
 // from the docusign-form-data cron for any envelope whose read failed.
 //
 // Rules:
@@ -35,21 +36,31 @@ export async function recordCredentialOptOutFromForm(
   db: SupabaseClient,
   env: OptOutEnvelope,
 ): Promise<'opted_out' | 'no_opt_out' | 'tab_absent' | 'skipped' | 'failed'> {
-  if ((env.envelope_type ?? 'minor') !== 'minor' || env.reused_from) return 'skipped'
+  if (env.reused_from) return 'skipped'
+  const minor = (env.envelope_type ?? 'minor') === 'minor'
+  // Only the agreements that carry an opt-out are read: the Student / Minor
+  // agreement (all four) and, from V2.3, the others' media release.
+  if (!minor && !['adult', 'mentor', 'volunteer'].includes(env.envelope_type ?? '')) return 'skipped'
 
-  let ticked: boolean | null
+  let fields: { name: string; value: string }[]
   try {
-    ticked = readCredentialOptOut(await fetchEnvelopeFieldValues(db, env))
+    fields = await fetchEnvelopeFieldValues(db, env)
   } catch (err) {
     // Left unstamped: the cron retries. The stored default (no opt-out) stands
     // meanwhile, which is the decided model.
     console.error('[docusign-optout] form_data read failed:', err)
     return 'failed'
   }
+  const ticked = minor ? readCredentialOptOut(fields) : null
 
   const now = new Date().toISOString()
   const update: Record<string, unknown> = { form_data_read_at: now, updated_at: now }
   if (ticked) update.credential_sharing_opt_out = true
+  // A ticked box is recorded; an unticked or absent one leaves the column as
+  // it is, so an opt-out recorded another way is never cleared here.
+  for (const [tab, column] of Object.entries(OPT_OUT_COLUMNS)) {
+    if (readCheckbox(fields, tab)) update[column] = true
+  }
   const { error } = await db.from('agreements').update(update).eq('id', env.id)
   if (error) {
     console.error('[docusign-optout] write failed:', error.message)

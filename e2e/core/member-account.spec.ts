@@ -1,6 +1,7 @@
 import { clerk } from '@clerk/testing/playwright'
 import { expect, test } from '../fixtures/test'
 import { storageStatePath } from '../fixtures/users'
+import { signInAs } from '../fixtures/sign-in'
 import { attachConsoleGuard } from '../fixtures/console-guard'
 
 /**
@@ -51,31 +52,40 @@ test('community is reachable with an active membership', async ({ page }) => {
   await expect(page).not.toHaveURL(/\/sign-up/)
 })
 
-test('signing out ends the session', async ({ page, context }) => {
-  await page.goto('/account')
-  await expect(page).toHaveURL(/\/account/)
+test.describe('signing out', () => {
+  // A session of its own. Signing out of the saved one ends it on Clerk's side,
+  // and every other spec signed in as Ada shares that session: on 3 Oct this
+  // test signed registration-docusign's "Ada can load her account" out whenever
+  // it happened to run first.
+  test.use({ storageState: { cookies: [], origins: [] } })
 
-  // Sign out through Clerk's testing helper, which waits for the Clerk client
-  // to load and for the sign-out to complete.
-  //
-  // WHY (15 Sept 2026): this test used to call `window.Clerk?.signOut()` from
-  // page.evaluate. On a page served from storageState the HTML arrives before
-  // Clerk's script does, so that optional chain was sometimes a silent no-op —
-  // nothing was signed out. Clearing cookies did not save it: on a Clerk
-  // development instance the client keeps its dev-browser token in
-  // localStorage and the middleware handshake re-mints the cookies, so the
-  // next /account rendered fully signed in as Ada. That is what the failure
-  // snapshot on #81 showed. The flake was never revocation timing; the
-  // assertion was waiting for a sign-out that had not happened.
-  await clerk.signOut({ page })
+  test('signing out ends the session', async ({ page, context, baseURL }) => {
+    await signInAs(page, 'member', baseURL)
+    await page.goto('/account')
+    await expect(page).toHaveURL(/\/account/)
 
-  // Belt to braces: the request must be rejected because the SESSION is gone,
-  // not because the browser happened to forget it.
-  await context.clearCookies()
+    // Sign out through Clerk's testing helper, which waits for the Clerk client
+    // to load and for the sign-out to complete.
+    //
+    // WHY (15 Sept 2026): this test used to call `window.Clerk?.signOut()` from
+    // page.evaluate. On a page served from storageState the HTML arrives before
+    // Clerk's script does, so that optional chain was sometimes a silent no-op —
+    // nothing was signed out. Clearing cookies did not save it: on a Clerk
+    // development instance the client keeps its dev-browser token in
+    // localStorage and the middleware handshake re-mints the cookies, so the
+    // next /account rendered fully signed in as Ada. That is what the failure
+    // snapshot on #81 showed. The flake was never revocation timing; the
+    // assertion was waiting for a sign-out that had not happened.
+    await clerk.signOut({ page })
 
-  // proxy.ts protects /account(.*) with auth.protect(), which sends a guest to
-  // sign-in. Assert that destination positively — a negative on a fixed window
-  // is how the earlier version passed while proving nothing.
-  await page.goto('/account')
-  await expect(page).toHaveURL(/\/sign-in/, { timeout: 15_000 })
+    // Belt to braces: the request must be rejected because the SESSION is gone,
+    // not because the browser happened to forget it.
+    await context.clearCookies()
+
+    // proxy.ts protects /account(.*) with auth.protect(), which sends a guest to
+    // sign-in. Assert that destination positively — a negative on a fixed window
+    // is how the earlier version passed while proving nothing.
+    await page.goto('/account')
+    await expect(page).toHaveURL(/\/sign-in/, { timeout: 15_000 })
+  })
 })

@@ -27,7 +27,7 @@ vi.mock('./email', () => ({
 }))
 vi.mock('./notify', () => ({ notifyCommunityAdmins }))
 
-import { agreementCovers, agreementExpiry, dispatchAgreement } from './docusign-agreements'
+import { agreementCovers, agreementExpiry, agreementVersionFor, dispatchAgreement } from './docusign-agreements'
 import { AGREEMENT_VERSION } from './esign/native/plan'
 
 interface Fixture {
@@ -325,9 +325,25 @@ describe('V2.3 validity: a minor agreement lasts while current, others 3 years',
     expect(inserts[0].payload).toMatchObject({ reused_from: 'env-minor-signed', agreement_version: AGREEMENT_VERSION })
   })
 
-  it('stamps the current version on every new agreement', async () => {
-    const { db, inserts } = makeDb({})
-    await dispatchAgreement(db, ADULT)
-    expect(inserts[0].payload.agreement_version).toBe(AGREEMENT_VERSION)
+  it('records a DocuSign agreement as V2.3 only once its templates are declared updated', async () => {
+    const before = process.env.DOCUSIGN_AGREEMENT_VERSION
+    try {
+      delete process.env.DOCUSIGN_AGREEMENT_VERSION
+      const first = makeDb({})
+      await dispatchAgreement(first.db, ADULT)
+      expect(first.inserts[0].payload.agreement_version).toBeNull()
+
+      process.env.DOCUSIGN_AGREEMENT_VERSION = '2.3'
+      const second = makeDb({})
+      await dispatchAgreement(second.db, ADULT)
+      expect(second.inserts[0].payload.agreement_version).toBe('2.3')
+    } finally {
+      if (before === undefined) delete process.env.DOCUSIGN_AGREEMENT_VERSION
+      else process.env.DOCUSIGN_AGREEMENT_VERSION = before
+    }
+  })
+
+  it('records Stellr signing agreements as the current version', () => {
+    expect(agreementVersionFor('native')).toBe(AGREEMENT_VERSION)
   })
 })

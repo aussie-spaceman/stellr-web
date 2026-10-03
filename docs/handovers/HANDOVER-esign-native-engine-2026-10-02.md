@@ -79,7 +79,10 @@ drive) as the latest and correct versions. The engine now follows them:
   `lib/age.ageOfMajority`), or a student at any age. State = the school's.
 - **Minor agreement validity**: no end date; reused only on the current
   version (`agreement_version`, `AGREEMENT_VERSION = '2.3'`), so families
-  re-sign only when the agreement changes. Pre-V2.3 rows are not reused.
+  re-sign only when the agreement changes. Pre-V2.3 rows are not reused
+  (accepted by David: returning families sign V2.3 once). Stellr signing rows
+  record 2.3; DocuSign rows record `DOCUSIGN_AGREEMENT_VERSION`, which stays
+  unset until David has updated the DocuSign templates (expected 3 Oct).
   Adults, mentors, volunteers keep 3 years. `agreementExpiry` / `agreementValid`
   / `agreementCovers` in `lib/docusign-agreements.ts`.
 - **Mentor under the age of majority** (§3A): a parent (the emergency

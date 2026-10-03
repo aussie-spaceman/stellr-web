@@ -564,9 +564,7 @@ async function recordEnvelope(
     minor_name:        `${ctx.firstName} ${ctx.lastName}`,
     signers_total:     envelope.signerCount,
     signers_completed: 0,
-    // Both engines issue the V2.3 documents (the DocuSign templates were
-    // updated to them on 2 Oct 2026), so every new row carries this version.
-    agreement_version: AGREEMENT_VERSION,
+    agreement_version: agreementVersionFor(envelope.provider),
     ...envelope.rowFields,
   }
   if (!envelope.afterRecord) {
@@ -579,6 +577,18 @@ async function recordEnvelope(
   if (error || !data) throw new Error(`Recording the agreement failed: ${error?.message ?? 'no row'}`)
   const after = await envelope.afterRecord(db, (data as { id: string }).id)
   return { signNowUrl: after?.signNowUrl ?? null }
+}
+
+/**
+ * The agreement version a new row was issued on. Stellr signing issues the
+ * current documents. DocuSign issues whatever its templates hold, which are
+ * edited by hand in DocuSign: DOCUSIGN_AGREEMENT_VERSION names that version
+ * once they are updated, and until then a DocuSign row records none (an older
+ * version), so a minor's form signed on the old template is not reused as V2.3.
+ */
+export function agreementVersionFor(provider: ProviderId): string | null {
+  if (provider === 'native') return AGREEMENT_VERSION
+  return process.env.DOCUSIGN_AGREEMENT_VERSION?.trim() || null
 }
 
 /**

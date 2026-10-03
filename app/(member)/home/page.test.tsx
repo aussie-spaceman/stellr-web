@@ -33,6 +33,9 @@ vi.mock('@/lib/community-feed', () => ({
 vi.mock('@/components/campaigns/DashboardCampaigns', () => ({
   DashboardCampaigns: () => null,
 }))
+vi.mock('@/components/survey/DashboardSurveys', () => ({
+  DashboardSurveys: () => null,
+}))
 
 import { getMemberEvents, getMemberEventCatalog } from '@/lib/event-portal'
 

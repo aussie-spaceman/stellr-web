@@ -5,6 +5,7 @@ import { runExternalCleanup } from './external'
 import { archiveEntity } from './archive'
 import { retainSignedRecords } from '@/lib/esign/retention'
 import { tombstoneCredentialsFor } from '@/lib/credentials'
+import { purgeSurveyDataFor } from '@/lib/survey/purge'
 import { executeRefund, type RefundChoice, type RefundResult } from '@/lib/refunds/execute'
 import type { DeleteMode, DeletionResult, EntityDef } from './types'
 
@@ -81,6 +82,12 @@ export async function executeDeletion(
   // participant FK is SET NULL, so the signed rows survive the delete below).
   if (def.type === 'participant' || def.type === 'registration' || def.type === 'member') {
     await retainSignedRecords(db, { kind: def.type, id })
+  }
+
+  // Survey responses are deleted outright, never archived or de-identified
+  // (lib/survey/purge.ts). Before the snapshot, so none of it lands there.
+  if (def.type === 'participant' || def.type === 'registration' || def.type === 'member') {
+    await purgeSurveyDataFor(db, def.type, id, opts.deletedBy ?? 'deletion')
   }
 
   // Hard purge: snapshot first, then delete primary + spanned rows.

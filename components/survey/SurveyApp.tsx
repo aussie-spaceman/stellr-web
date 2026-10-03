@@ -157,7 +157,7 @@ export function SurveyApp({ apiBase, view, signedIn }: { apiBase: string; view: 
   const progress = phase === 'confirm' ? 100 : Math.round((index / Math.max(1, pages.length)) * 100)
 
   return (
-    <main className="min-h-screen bg-surface px-4 py-8 sm:py-14">
+    <div className="min-h-screen bg-surface px-4 py-8 sm:py-14">
       <div className="mx-auto max-w-2xl" aria-live="polite">
         {phase === 'intro' && (
           <section className="rounded-ds-card border border-line bg-white p-6 sm:p-8">
@@ -241,7 +241,7 @@ export function SurveyApp({ apiBase, view, signedIn }: { apiBase: string; view: 
           <SurveyAfterSubmit eventTitle={ctx.event_title} signedIn={signedIn} justSubmitted={!view.submittedAt} />
         )}
       </div>
-    </main>
+    </div>
   )
 }
 

@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default async function StopRemindersPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
   return (
-    <main className="min-h-screen bg-surface px-4 py-10 sm:py-16">
+    <div className="min-h-screen bg-surface px-4 py-10 sm:py-16">
       <section className="mx-auto max-w-2xl rounded-ds-card border border-line bg-white p-6 sm:p-8">
         <p className="font-subheading text-xs font-semibold uppercase tracking-[0.14em] text-primary-deep">Stellr survey</p>
         <h1 className="mt-2 font-display text-2xl font-bold text-ink">Stop survey reminders</h1>
@@ -22,6 +22,6 @@ export default async function StopRemindersPage({ params }: { params: Promise<{ 
         </p>
         <StopRemindersForm token={token} />
       </section>
-    </main>
+    </div>
   )
 }

@@ -13,6 +13,8 @@ import { MyRegistrations } from '@/components/member/MyRegistrations'
 import { ScholarshipHistory } from '@/components/member/ScholarshipHistory'
 import { listMemberScholarships, toHistoryItems } from '@/lib/scholarships'
 import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
+import { PrivacyPrefsForm } from '@/components/survey/PrivacyPrefsForm'
+import { privacyPrefsFor } from '@/lib/survey/privacy-prefs'
 import { AddressBook } from '@/components/account/AddressBook'
 import { OrdersList } from '@/components/account/OrdersList'
 import { EntitlementsSummary } from '@/components/account/EntitlementsSummary'
@@ -86,6 +88,8 @@ export default async function AccountPage({
     const clerkUserRaw = await currentUser()
     clerkUser = clerkUserRaw ? { imageUrl: clerkUserRaw.imageUrl ?? null } : null
   }
+
+  const privacyPrefs = await privacyPrefsFor(db, member)
 
   const { data: directoryPrefs } = await db
     .from('member_directory_prefs')
@@ -243,6 +247,12 @@ export default async function AccountPage({
                 initial={directoryPrefs ?? { is_visible: false, show_school: true, show_region: true }}
               />
             </div>
+            {privacyPrefs.eligible && (
+              <div className="rounded-xl border border-brand-border bg-white p-5">
+                <h2 className="mb-4 text-base font-semibold text-brand-blue-dark">Quotes, photos and media</h2>
+                <PrivacyPrefsForm initial={privacyPrefs} readOnly={!!viewAsId} />
+              </div>
+            )}
             <MyRegistrations registrations={myRegistrations} />
             <ScholarshipHistory items={scholarships} audience="member" />
             {volunteer && (

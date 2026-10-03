@@ -41,19 +41,19 @@ export function SurveyLoader({ apiBase, signedIn }: { apiBase: string; signedIn:
 
   if (state === 'loading') {
     return (
-      <main className="min-h-screen bg-surface px-4 py-10 sm:py-16">
+      <div className="min-h-screen bg-surface px-4 py-10 sm:py-16">
         <p className="mx-auto max-w-2xl text-content-muted">Opening your survey…</p>
-      </main>
+      </div>
     )
   }
   if (view && (state === 'open' || state === 'submitted')) {
     if (state === 'submitted') {
       return (
-        <main className="min-h-screen bg-surface px-4 py-10 sm:py-16">
+        <div className="min-h-screen bg-surface px-4 py-10 sm:py-16">
           <div className="mx-auto max-w-2xl">
             <SurveyAfterSubmit eventTitle={view.context.event_title} signedIn={signedIn} justSubmitted={false} />
           </div>
-        </main>
+        </div>
       )
     }
     return <SurveyApp apiBase={apiBase} view={view} signedIn={signedIn} />

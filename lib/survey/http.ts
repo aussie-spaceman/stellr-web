@@ -45,5 +45,5 @@ export async function resolveSession(req: Request, ref: Ref, opts: { write: bool
   if (!inv) return json(404, 'Survey not found.')
   const session = await loadSession(db, inv)
   if (!session) return json(404, 'This survey isn’t available.')
-  return { db, session, from: 'dashboard' }
+  return { db, session, from: new URL(req.url).searchParams.get('from') === 'qr' ? 'qr' : 'dashboard' }
 }

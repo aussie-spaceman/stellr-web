@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   Home, Trophy, MessageSquare, FolderOpen, Users,
-  GraduationCap, Heart, Star, Radio, ClipboardList, Award,
+  GraduationCap, Heart, Star, Radio, ClipboardList, ClipboardCheck, Award,
 } from 'lucide-react'
 
 type NavItem = { label: string; href: string; icon: typeof Home }
@@ -28,6 +28,8 @@ const ACADEMY_ITEMS: NavItem[] = [
   { label: 'Hosting',   href: '/community/hosting',   icon: Radio         },
   // Course completions and event participation, with the LinkedIn share flow.
   { label: 'Credentials', href: '/community/credentials', icon: Award       },
+  // Post-event surveys: open ones to answer, submitted ones read-only.
+  { label: 'Surveys',     href: '/community/surveys',     icon: ClipboardCheck },
 ]
 
 // Role-scoped sections (Spaces design). Teachers additionally see Teacher Tools.

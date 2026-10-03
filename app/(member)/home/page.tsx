@@ -10,6 +10,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { ProgressRing } from '@/components/ui/ProgressRing'
 import { WelcomeBanner } from '@/components/community/WelcomeBanner'
 import { DashboardCampaigns } from '@/components/campaigns/DashboardCampaigns'
+import { DashboardSurveys } from '@/components/survey/DashboardSurveys'
 
 export const metadata = { title: 'Home' }
 
@@ -85,6 +86,9 @@ export default async function HomePage() {
           {firstName} <span className="text-star-gold">✦</span>
         </h1>
       </header>
+
+      {/* Post-event survey, while one is open for this member */}
+      <DashboardSurveys />
 
       {/* Campaign registrations: registered campaigns, register-another, gated material */}
       <div className="mb-8">

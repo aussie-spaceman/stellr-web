@@ -170,5 +170,25 @@ BEGIN
   EXCEPTION WHEN raise_exception THEN v_ok := true; END;
   IF NOT v_ok THEN RAISE EXCEPTION 'FAIL 10: access log deletable'; END IF;
 
+  -- 11. Linking a participant to an account re-associates their survey rows --
+  DECLARE
+    v_part uuid;
+    v_reg uuid;
+    v_inv2 uuid;
+  BEGIN
+    INSERT INTO public.registrations (event_slug, event_title, type, status) VALUES ('dbcheck-event', 'DB check', 'individual', 'confirmed') RETURNING id INTO v_reg;
+    INSERT INTO public.participants (registration_id, first_name, last_name, email, phone, date_of_birth, gender, t_shirt_size, school_name, age_bracket, event_role)
+    VALUES (v_reg, 'Db', 'Check', 'dbcheck2@example.com', '0', '2010-01-01', '', 'M', '', 'high_school', 'participant') RETURNING id INTO v_part;
+    INSERT INTO public.survey_invitations (distribution_id, recipient_key, participant_id, respondent_role, email, token_hash)
+    VALUES (v_dist, 'email:dbcheck2@example.com', v_part, 'student', 'dbcheck2@example.com', md5(random()::text)) RETURNING id INTO v_inv2;
+    INSERT INTO public.survey_responses (invitation_id, definition_id, distribution_id, participant_id, respondent_role)
+    VALUES (v_inv2, v_def, v_dist, v_part, 'student');
+    UPDATE public.participants SET member_id = v_member_b WHERE id = v_part;
+    SELECT count(*) INTO v_n FROM public.survey_responses WHERE participant_id = v_part AND member_id = v_member_b;
+    IF v_n <> 1 THEN RAISE EXCEPTION 'FAIL 11a: response not re-associated'; END IF;
+    SELECT count(*) INTO v_n FROM public.survey_invitations WHERE id = v_inv2 AND member_id = v_member_b;
+    IF v_n <> 1 THEN RAISE EXCEPTION 'FAIL 11b: invitation not re-associated'; END IF;
+  END;
+
   RAISE EXCEPTION 'SURVEY_DB_CHECKS_PASSED';
 END $$;

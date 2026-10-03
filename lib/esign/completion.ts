@@ -5,6 +5,7 @@ import { recordCredentialOptOutFromForm, type OptOutEnvelope } from '@/lib/docus
 import { sendEmail, docusignCompletedToMinorEmail, docusignCompletedToSignerEmail } from '@/lib/email'
 import { logActivity } from '@/lib/activity-log'
 import { archiveEnvelope } from '@/lib/esign/archive'
+import { retainUntilOnCompletion } from '@/lib/esign/storage'
 import { AUTH_APP_URL, SITE_URL } from '@/lib/env'
 import { agreementCompletedEmail } from '@/lib/esign/emails'
 import { DOWNLOAD_LINK_TTL_SECONDS, downloadUrl, mintToken } from '@/lib/esign/native/tokens'
@@ -61,6 +62,16 @@ export async function onEnvelopeCompleted(
   // Keep our own copy of the signed record. Non-fatal: a failure is counted on
   // the row and the daily job retries it.
   await archiveEnvelope(db, envelope)
+
+  // A record with no member account starts its retention clock at signing;
+  // one linked to an account waits until the account closes (V2.3).
+  if (!envelope.member_id && envelope.completed_at) {
+    await db
+      .from('agreements')
+      .update({ retain_until: retainUntilOnCompletion(envelope.completed_at, null) })
+      .eq('id', envelope.id)
+      .is('retain_until', null)
+  }
 
   const { data: claimed } = await db
     .from('agreements')

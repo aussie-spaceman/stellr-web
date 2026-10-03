@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { fakeSupabase } from '@/test/fake-supabase'
 import { SIGNED_BUCKET } from './archive'
-import { expireUnsigned, purgeExpired, retainSignedRecords } from './retention'
+import { expireUnsigned, purgeExpired, retainSignedRecords, startRetentionClock } from './retention'
 
 const now = new Date('2026-10-02T12:00:00Z')
 
@@ -46,12 +46,42 @@ describe('retainSignedRecords', () => {
     expect(db.table('agreements')).toHaveLength(4)
   })
 
+  it('keeps only a minimal record, kept 7 years from now (V2.3)', async () => {
+    const db = fakeSupabase({
+      agreements: envelopes().map((e) => ({ ...e, retain_until: null, prefill: { MinorName: 'Kid' } })),
+      agreement_recipients: [
+        { id: 'r1', envelope_row: 'signed', name: 'Pat', signer_values: { MediaOptOut: 'true' }, signed_ip: '1.2.3.4', signed_user_agent: 'UA' },
+      ],
+    })
+    await retainSignedRecords(db.client, { kind: 'member', id: 'm1' }, now)
+    const row = db.table('agreements').find((r) => r.id === 'signed')
+    expect(row).toMatchObject({ retain_until: '2033-10-02T12:00:00.000Z', prefill: {} })
+    expect(db.table('agreement_recipients')[0]).toMatchObject({ name: 'Pat', signer_values: null, signed_ip: null, signed_user_agent: null })
+    // Someone else's record is untouched.
+    expect(db.table('agreements').find((r) => r.id === 'other')).toMatchObject({ retain_until: null })
+  })
+
   it('stops the delete when the database refuses, rather than losing signed records', async () => {
     const db = fakeSupabase(
       { agreements: envelopes() },
       { failOn: (table, action) => (table === 'agreements' && action === 'update' ? 'permission denied' : null) },
     )
     await expect(retainSignedRecords(db.client, { kind: 'participant', id: 'p1' }, now)).rejects.toThrow(/permission denied/)
+  })
+})
+
+describe('startRetentionClock', () => {
+  it('starts 7 years on a deactivated member’s signed records, keeping any date already set', async () => {
+    const db = fakeSupabase({
+      agreements: [
+        { id: 'a', member_id: 'm1', status: 'completed', retain_until: null },
+        { id: 'b', member_id: 'm1', status: 'completed', retain_until: '2040-01-01T00:00:00.000Z' },
+        { id: 'c', member_id: 'm1', status: 'sent', retain_until: null },
+      ],
+    })
+    expect(await startRetentionClock(db.client, 'm1', now)).toBe(1)
+    const byId = Object.fromEntries(db.table('agreements').map((r) => [r.id, r.retain_until]))
+    expect(byId).toEqual({ a: '2033-10-02T12:00:00.000Z', b: '2040-01-01T00:00:00.000Z', c: null })
   })
 })
 

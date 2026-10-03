@@ -49,6 +49,7 @@ async function main() {
       relationship: 'Parent',
       schoolName: 'E2E Middle School',
       schoolState: 'CO',
+      grade: '8',
     }
     const created = await nativeProvider.create({ db }, { type: 'minor', params } as never)
     const { data: row, error } = await db.from('agreements').insert({
@@ -80,6 +81,7 @@ async function main() {
       birthYear: '2014',
       guardianName: params.guardianName,
       studentName: `${params.minorFirstName} ${params.minorLastName}`,
+      studentEmail: params.minorEmail,
     }
   }
 

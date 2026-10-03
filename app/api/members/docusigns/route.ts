@@ -29,7 +29,7 @@ export async function GET() {
 
   const { data: envelopes } = await db
     .from('agreements')
-    .select('id, envelope_id, provider, status, envelope_type, signer_name, signer_email, minor_name, event_title, event_slug, sent_at, completed_at, reminder_sent_at, reused_from, signers_total, signers_completed')
+    .select('id, envelope_id, provider, status, envelope_type, signer_name, signer_email, minor_name, event_title, event_slug, sent_at, completed_at, reminder_sent_at, reused_from, signers_total, signers_completed, agreement_version')
     .eq('member_id', member.id)
     // Kept only for legal claims after a deletion request: not shown.
     .is('restricted_at', null)

@@ -74,7 +74,7 @@ The consent form includes the photo and media permission with a box to opt out. 
 
 ## 9. Retention
 
-Signed agreements: 7 years from signing, then deleted (`purgeExpired`). Medical and dietary: on the member record for the life of the account, removable at any time. Full schedule: `retention-schedule.md`. Accepted residual risk: 7 years is shorter than a young participant's claim period (plan Residual risk 2).
+Signed agreements: duration of membership and 7 years after the account is deactivated, then deleted (`purgeExpired`; Participation Agreements V2.3). After a deletion request only a minimal record (names, dates, signed document) is kept. Medical and dietary: on the member record for the life of the account, removable at any time. Full schedule: `retention-schedule.md`. Accepted residual risk: 7 years is shorter than a young participant's claim period (plan Residual risk 2).
 
 ## 10. Security
 

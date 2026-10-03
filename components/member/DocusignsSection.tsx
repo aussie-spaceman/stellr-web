@@ -6,11 +6,13 @@ import { isMinorOn } from '@/lib/age'
 import { describeEnvelope, PILL_CLASSES, type RecipientLike } from '@/lib/docusign-status'
 import { downloadSignedRecord } from '@/lib/esign/download-client'
 import { slug } from '@/lib/esign/filenames'
+import { AGREEMENT_TITLE } from '@/lib/esign/native/plan'
 
 interface Envelope {
   id: string
   status: string
   envelope_type?: string
+  agreement_version?: string | null
   signer_name: string
   signer_email: string
   minor_name: string
@@ -27,13 +29,13 @@ interface Envelope {
   signNowUrl?: string | null
 }
 
+// The documents' own titles (V2.3). Volunteers sign the mentor document.
 const TYPE_LABEL: Record<string, string> = {
-  minor:  'Parental Consent',
-  adult:  'Participation Agreement',
-  mentor: 'Mentor Participation Agreement',
-  // Volunteers sign the mentor document (lib/docusign-agreements AGREEMENT_LABEL).
-  volunteer: 'Mentor Participation Agreement',
-  membership: 'Membership Agreement',
+  minor: AGREEMENT_TITLE.minor,
+  adult: AGREEMENT_TITLE.adult,
+  mentor: AGREEMENT_TITLE.mentor,
+  volunteer: AGREEMENT_TITLE.mentor,
+  membership: AGREEMENT_TITLE.membership,
 }
 
 interface Props {
@@ -87,7 +89,10 @@ function memberHasGraduated(dob: string | null | undefined, role: string | null 
   return false
 }
 
-function getExpiryInfo(completedAt: string): { label: string; urgency: 'ok' | 'soon' | 'expired' } {
+function getExpiryInfo(completedAt: string, type: string, version: string | null | undefined): { label: string; urgency: 'ok' | 'soon' | 'expired' } {
+  // A minor's V2.3 agreement has no end date: it lasts while they are a Minor
+  // and is replaced only when the agreement changes.
+  if (type === 'minor' && version) return { label: `Version ${version} · valid while a Minor`, urgency: 'ok' }
   const expires = new Date(completedAt)
   expires.setFullYear(expires.getFullYear() + 3)
   const now = new Date()
@@ -159,7 +164,7 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
         {envelopes.map(env => {
           const type       = env.envelope_type ?? 'minor'
           const isMinorEnv = type === 'minor'
-          const expiry     = env.completed_at ? getExpiryInfo(env.completed_at) : null
+          const expiry     = env.completed_at ? getExpiryInfo(env.completed_at, type, env.agreement_version) : null
           // Hide expiry only on historical minor consent (the member has aged out);
           // adult/mentor agreements always show their current expiry.
           const showExpiry = expiry && !(isMinorEnv && graduated)

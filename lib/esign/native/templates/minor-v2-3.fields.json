@@ -1,0 +1,249 @@
+{
+  "roles": [
+    {
+      "role": "guardian",
+      "order": 1
+    },
+    {
+      "role": "student",
+      "order": 2,
+      "optional": true
+    }
+  ],
+  "fields": [
+    {
+      "name": "MediaOptOut",
+      "label": "I DO NOT consent to photo and media use (participation is not affected)",
+      "role": "guardian",
+      "type": "checkbox",
+      "source": "signer",
+      "page": 4,
+      "x": 62,
+      "y": 129
+    },
+    {
+      "name": "QuoteOptOut",
+      "label": "I DO NOT consent to my child's survey responses being quoted (participation is not affected)",
+      "role": "guardian",
+      "type": "checkbox",
+      "source": "signer",
+      "page": 4,
+      "x": 62,
+      "y": 370.8
+    },
+    {
+      "name": "CredentialSharingOptOut",
+      "label": "I DO NOT consent to my child's name and achievements appearing on a public Stellr credential page",
+      "role": "guardian",
+      "type": "checkbox",
+      "source": "signer",
+      "page": 5,
+      "x": 62,
+      "y": 135
+    },
+    {
+      "name": "DigitalCommsOptOut",
+      "label": "I DO NOT consent to direct digital communications with my child",
+      "role": "guardian",
+      "type": "checkbox",
+      "source": "signer",
+      "page": 5,
+      "x": 62,
+      "y": 299.4
+    },
+    {
+      "name": "MinorName",
+      "label": "Student full name",
+      "role": "guardian",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "MinorName",
+      "page": 8,
+      "x": 156,
+      "y": 394.2,
+      "w": 220,
+      "required": true
+    },
+    {
+      "name": "MinorDateOfBirth",
+      "label": "Student date of birth (DD-MMM-YYYY)",
+      "role": "guardian",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "MinorDateOfBirth",
+      "page": 8,
+      "x": 214,
+      "y": 412.3,
+      "w": 160,
+      "required": true
+    },
+    {
+      "name": "MinorEmail",
+      "label": "Student email address",
+      "role": "guardian",
+      "type": "email",
+      "source": "prefill",
+      "prefillKey": "MinorEmail",
+      "page": 8,
+      "x": 176,
+      "y": 430.4,
+      "w": 220
+    },
+    {
+      "name": "SchoolName",
+      "label": "School name",
+      "role": "guardian",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "SchoolName",
+      "page": 8,
+      "x": 132,
+      "y": 448.5,
+      "w": 230,
+      "required": true
+    },
+    {
+      "name": "MinorGrade",
+      "label": "Grade",
+      "role": "guardian",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "MinorGrade",
+      "page": 8,
+      "x": 98,
+      "y": 466.6,
+      "w": 230
+    },
+    {
+      "name": "SchoolState",
+      "label": "State of residence",
+      "role": "guardian",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "SchoolState",
+      "page": 8,
+      "x": 158,
+      "y": 484.7,
+      "w": 200,
+      "required": true
+    },
+    {
+      "name": "guardian_full_name",
+      "label": "Parent or guardian full name",
+      "role": "guardian",
+      "type": "full_name",
+      "source": "system",
+      "page": 8,
+      "x": 117,
+      "y": 520.9,
+      "w": 230
+    },
+    {
+      "name": "MinorRelationship",
+      "label": "Relationship to the student",
+      "role": "guardian",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "MinorRelationship",
+      "page": 8,
+      "x": 178,
+      "y": 539,
+      "w": 120,
+      "required": true
+    },
+    {
+      "name": "GuardianEmail",
+      "label": "Parent or guardian email",
+      "role": "guardian",
+      "type": "email",
+      "source": "prefill",
+      "prefillKey": "GuardianEmail",
+      "page": 8,
+      "x": 137,
+      "y": 557.1,
+      "w": 230,
+      "required": true
+    },
+    {
+      "name": "GuardianPhone",
+      "label": "Parent or guardian phone",
+      "role": "guardian",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "GuardianPhone",
+      "page": 8,
+      "x": 140,
+      "y": 575.2,
+      "w": 230,
+      "required": true
+    },
+    {
+      "name": "EmergencyContactName",
+      "label": "Emergency contact name (if different)",
+      "role": "guardian",
+      "type": "text",
+      "source": "signer",
+      "page": 8,
+      "x": 248,
+      "y": 593.3,
+      "w": 170
+    },
+    {
+      "name": "EmergencyContactPhone",
+      "label": "Emergency contact phone (if different)",
+      "role": "guardian",
+      "type": "text",
+      "source": "signer",
+      "page": 8,
+      "x": 195,
+      "y": 611.4,
+      "w": 200
+    },
+    {
+      "name": "guardian_signature",
+      "label": "Parent or guardian signature",
+      "role": "guardian",
+      "type": "signature",
+      "source": "signer",
+      "page": 8,
+      "x": 114,
+      "y": 617.5,
+      "w": 230,
+      "h": 22,
+      "required": true
+    },
+    {
+      "name": "guardian_date_signed",
+      "label": "Date signed",
+      "role": "guardian",
+      "type": "date_signed",
+      "source": "system",
+      "page": 8,
+      "x": 384,
+      "y": 629.5
+    },
+    {
+      "name": "student_signature",
+      "label": "Student signature",
+      "role": "student",
+      "type": "signature",
+      "source": "signer",
+      "page": 9,
+      "x": 153,
+      "y": 48.5,
+      "w": 230,
+      "h": 22,
+      "required": true
+    },
+    {
+      "name": "student_date_signed",
+      "label": "Date signed",
+      "role": "student",
+      "type": "date_signed",
+      "source": "system",
+      "page": 9,
+      "x": 423,
+      "y": 60.5
+    }
+  ]
+}

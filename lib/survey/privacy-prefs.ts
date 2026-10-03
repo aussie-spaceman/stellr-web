@@ -2,8 +2,9 @@
  * Students' own quote and photo/media permissions (Minors Agreement V2.3
  * §1.7), shown in account settings to students aged 13 and over.
  *
- *   Quoting: on by default; off by default for 13–17-year-olds in NY or CO.
- *   Photo/media: on by default (opt-out, as on the agreement).
+ *   Quoting and photo/media: on by default (the agreement's opt-out model);
+ *   off by default for 13–17-year-olds in NY or CO until they turn it on
+ *   (handover §7; privacy runbook Part C).
  * A stored null means "the default" so the default can follow the student
  * (turning 18, moving school) without a migration. A parent's opt-out on the
  * agreement overrides either toggle — that is applied where the permission is
@@ -44,7 +45,7 @@ export async function privacyPrefsFor(
   return {
     eligible: showsPrivacyToggles(m),
     allowQuotes: (data?.allow_quotes as boolean | null) ?? quotesDefault,
-    allowMedia: (data?.allow_media as boolean | null) ?? true,
+    allowMedia: (data?.allow_media as boolean | null) ?? quotesDefault,
     quotesDefault,
   }
 }

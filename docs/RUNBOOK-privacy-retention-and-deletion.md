@@ -69,13 +69,28 @@ migration that stops `audit_members()` copying `health_conditions` into
    - Reply to acknowledge and give the due date.
 2. **Find everything.** Admin → Members → the student. Note member id, Clerk
    user, participant rows (one per event), credentials, uploads, community
-   posts.
+   posts, post-event survey responses (Admin → Surveys; one per event).
 3. **Delete, in this order.**
    1. **Admin → Members → Delete → Hard delete** (type DELETE). This removes the
       member row and its cascades, deletes the Clerk login (unless staff),
       cancels any Stripe subscription, voids in-flight DocuSign envelopes, and
       withdraws credentials (name removed; number kept so a copy can be checked,
       shown as withdrawn).
+   1a. **Post-event surveys** go with the hard delete of a member, participant
+      or registration: `lib/survey/purge.ts` calls `survey_purge_person()`,
+      which deletes the responses, answers, invitations and quote/media
+      settings outright — nothing de-identified is kept (handover §14.3) —
+      and leaves a content-free row in `audit_log` (`table_name =
+      'survey_purge'`). For someone with **no account and no hard delete**
+      (e.g. a parent asking about a student's participant row only), run it
+      by hand:
+      ```sql
+      SELECT survey_purge_person(NULL, ARRAY['<participant-uuid>']::uuid[],
+                                 ARRAY['<their email>'], '<your name>: request <id>');
+      ```
+      Aggregates already published are unaffected. A single answer (a name
+      volunteered in free text) can instead be blanked with
+      `SELECT survey_redact_answer('<response-uuid>', '<question_key>', '<you>', '<reason>');`.
    2. **Participant rows** are kept by the hard delete (member link set to
       null). Clear their personal data in the SQL editor:
       ```sql
@@ -122,7 +137,16 @@ Follow-up ticket: a self-serve deletion request with `received_at`, `due_at`,
 
 ## Part C — Media opt-outs (photos, videos, name, work in promotion)
 
-There is no in-account toggle yet; the policy offers opt-out **by email** only.
+Students aged 13+ now have two switches in their account (Account → Profile →
+"Quotes, photos and media", table `member_privacy_prefs`): quoting of survey
+answers and photo/media use. Both default on, and off for NY/CO 13–17-year-olds
+until they turn them on. Nothing reads `allow_media` automatically yet — add
+anyone with `allow_media = false` to the do-not-use list:
+```sql
+SELECT m.first_name, m.last_name, m.email FROM member_privacy_prefs p
+JOIN members m ON m.id = p.member_id WHERE p.allow_media = false;
+```
+Opt-out **by email** still works as below.
 
 1. **Opt-outs on signed forms.** The Participation Agreement has a "I do NOT
    consent to photo and media use" box (`MediaOptOut`), on both DocuSign and Stellr
@@ -148,8 +172,12 @@ There is no in-account toggle yet; the policy offers opt-out **by email** only.
    Everyone returned is on the do-not-use list unless they have opted in.
 4. Opting out never affects participation.
 
-Follow-up ticket: a `media_opt_out` / `media_opt_in` flag, the account toggle
-(default on; default off for NY/CO aged 13–17), state of residence at
+Survey quotes: the "Quotable answers" export (Admin → Surveys) applies the
+parent's `QuoteOptOut`, the student's switch, the NY/CO default, "Don't quote
+this response" and withdrawals at the moment of export. To withdraw one quote on
+request, paste its response id under "Withdraw a quote" on that page.
+
+Follow-up ticket: the account toggle exists (above); still to do: state of residence at
 registration, a `MediaOptOut` checkbox read back from DocuSign like
 `CredentialSharingOptOut`, and a column in the roster export.
 

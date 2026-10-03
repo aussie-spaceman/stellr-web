@@ -8,6 +8,8 @@ import { computeStats, type InvitationCount, type Nps, type Pct } from '@/lib/su
 import { logSurveyAccess } from '@/lib/survey/audit'
 import { formatInZone } from '@/lib/survey/timezone'
 import { WithdrawQuoteForm } from '@/components/admin/surveys/WithdrawQuoteForm'
+import { usableDefinition } from '@/lib/survey/distributions'
+import { normaliseDefinition, questionsFor, ROLES } from '@/lib/survey/definition'
 
 // /admin/surveys — every event's post-event survey, the fundraising headline
 // numbers (handover §8) filterable by event and year, the exports (A3) and
@@ -65,6 +67,15 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
     if (i.status === 'submitted') c.submitted++
     counts.set(key, c)
   }
+
+  // Option keys (int_mentoring) → the wording respondents saw.
+  const defRow = await usableDefinition(db)
+  const optionLabel = new Map<string, string>()
+  if (defRow) {
+    const def = normaliseDefinition(defRow.definition)
+    for (const role of ROLES) for (const qn of questionsFor(def, role)) for (const o of qn.options ?? []) optionLabel.set(o.key, o.label)
+  }
+  const label = (k: string) => optionLabel.get(k) ?? k
 
   const rows = await loadLongRows(db, { eventSlug, year })
   const stats = computeStats(rows, [...counts.values()])
@@ -139,7 +150,7 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
         />
         <Table title="Parents: fair monthly mentoring price" rows={Object.entries(stats.priceBand).map(([k, v]) => [k, String(v)])} />
         {Object.entries(stats.interests).map(([key, counts]) => (
-          <Table key={key} title={`Interest: ${INTEREST_LABEL[key] ?? key}`} rows={Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, String(v)])} />
+          <Table key={key} title={`Interest: ${INTEREST_LABEL[key] ?? key}`} rows={Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => [label(k), String(v)])} />
         ))}
         <Table
           title="Response rate by event and role"

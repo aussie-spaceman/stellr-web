@@ -123,7 +123,7 @@ export function computeStats(rows: LongRow[], invitations: InvitationCount[] = [
         fgOf++
         const yes = g === 'Yes' ? 1 : 0
         fg += yes
-        const genderKey = get('demo_gender')?.value_text ?? first.profile_gender ?? 'Not recorded'
+        const genderKey = get('demo_gender')?.value_text || first.profile_gender || 'Not recorded'
         const gl = GENDER_LABEL[genderKey] ?? genderKey
         const gs = (fgGender[gl] ??= [0, 0])
         gs[0] += yes

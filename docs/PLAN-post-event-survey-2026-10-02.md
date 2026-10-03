@@ -66,3 +66,42 @@ Items marked **David** need his answer; none of them block the build.
 2. David on a phone, each path ≤ 5–6 min; signs off intro + reminder copy.
 3. Publish v1 on prod (separate approval), apply prod migration (David runs it).
 4. First live event; retire the Google Form after it.
+
+## 5. Status — 2 Oct 2026 (branch `feat/post-event-survey`, not pushed)
+
+### Built
+| Handover item | Where |
+|---|---|
+| A1 auto schedule, go-live on last day 00:00 event-local, close +30 d, earlier go-live / send now (admin + assigned event manager), reschedule on date change, flag manual overrides, pause, close early, audiences, resend, late participants, preview incl. no-email list, awaiting-V2.3 count, headcount-only adults | `lib/survey/{schedule,distributions,run,recipients,admin}.ts`, `app/api/cron/surveys`, Sanity webhook, `EventSurveyPanel` (event page → Survey tab) |
+| A2 participant + member on every response, backfill on account link, completion table | `survey_invitations/responses`, trigger `survey_follow_participant_member`, `lib/survey/member.ts` |
+| A3 stable keys + catalog, long-format view, CSV long/wide by survey/event/year, legacy import | `survey_answers_long`, `lib/survey/export.ts`, `/admin/surveys`, `scripts/survey-import-legacy.ts` + `docs/survey/legacy-mapping.md` |
+| A4 branded landing page, post-submit credential/account CTA, dashboard card, My surveys, `opened_from` | `app/(public)/survey/[token]`, `components/survey/*`, `/community/surveys` |
+| P1 autosave (page change + 10 s), resume, reminder cadence, stop-reminders link + one-click header | `SurveyApp`, `lib/survey/schedule.ts#dueReminder`, `lib/survey/send.ts` |
+| P2 confirm before submit; DB-enforced immutability | `survey_responses_freeze`, `survey_answers_immutable`, `survey_submit_response()` |
+| P3 history, own responses only (app check + RLS) | `/community/surveys/[id]`, RLS policies |
+| §7 minor rule, V2.3 gate, §4 email routing, quote eligibility at export, §2 attribution, NY/CO defaults, withdrawal (admin + member), account switches | `lib/survey/{minor,consent,quotes,withdraw,privacy-prefs}.ts` |
+| §8 analytics | `lib/survey/analytics.ts`, `/admin/surveys` |
+| Compliance plumbing | `survey_purge_person()` in hard delete, `survey_access_log`, audit_log writes, runbook Part B/C, retention rows 27–28 |
+
+### Verified
+- `supabase/tests/survey_db_checks.sql` on dev: checks 1–10 passed together; 11 (member-link trigger) passed as its own run.
+- Unit: 81 survey tests; whole suite 1,334 passed. `tsc`, `lint:tokens`, `lint:migrations` clean.
+- Playwright `e2e/core/survey.spec.ts` (7 incl. auth) against this worktree's dev server: link → save → resume → submit → read-only (with axe on intro and a page), stop reminders, dashboard → submit → My surveys, admin preview → send live → completion table.
+- Browser walkthrough on a 375 px phone viewport (dev seed `npm run survey:seed-dev -- --open`).
+- `next build` was **not** run locally (the dev server shares `.next`); CI decides.
+
+### Open — for David
+1. **No V2.3 minors template exists**, so no minor is invited until one is published with `esign_templates.document_version = 'V2.3'` and a `QuoteOptOut` checkbox. DocuSign-signed V2.3 agreements cannot be recognised.
+2. Sign off: intro wording (`lib/survey/definitions/post_event.v1.json` → `intro`), email copy (`lib/survey/emails.ts`), mentor/adult questions (D7). Then publish: `npm run survey:definition -- lib/survey/definitions/post_event.v1.json --publish` (add `--prod` on prod). Nothing is scheduled on prod until a definition is published.
+3. Prod: two migrations (`20261002235036`, `20261003002925`), env `SURVEY_TOKEN_SECRET` (32+ chars; else falls back to `ESIGN_TOKEN_SECRET`), optional `SURVEY_DAILY_EMAIL_BUDGET`.
+4. Legacy import: approve `docs/survey/legacy-mapping.md`, then `npm run survey:import-legacy -- --sheet 2024 --apply` (dev first).
+5. Handover §13: teachers who registered but didn't attend are surveyed (default); `volunteer` → mentor path.
+6. Time zone is derived from state; add a Sanity `timeZone` field if that is ever wrong.
+
+### Not done / follow-ups
+- D1 certificate gate: `gate_certificate` column exists (default off); nothing enforces it and there is no UI switch.
+- Pending-account (§7.2) and ward status are not modelled anywhere; home state is approximated by school state.
+- `allow_media` is stored and shown; nothing consumes it yet (runbook Part C query).
+- Title I / NCES, HubSpot sync of interest answers, 12-month follow-up (out of scope per §12).
+- Retention: no time-based purge of survey data at 7 years after deactivation (no deactivation date exists).
+- Reminder dedupe uses conditional updates on the invitation, not `sent_reminders` (its unique key cannot dedupe rows without a member).

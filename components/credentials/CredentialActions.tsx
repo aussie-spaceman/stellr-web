@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Linkedin, Share2, Copy, Check, FileDown, Eye, EyeOff, Info } from 'lucide-react'
+import { Linkedin, Share2, Copy, Check, FileDown, Eye, EyeOff, Info, ClipboardList } from 'lucide-react'
 import { Button, Eyebrow } from '@stellr/web-ui'
 import { pushDataLayer } from '@/lib/analytics'
 import type { CredentialVisibility, ShareBlock, CredentialEventKind } from '@/lib/credentials-core'
@@ -32,6 +32,20 @@ interface Props {
   addToProfileUrl: string
   shareUrl: string
   manual: { name: string; organization: string; issueDate: string; credentialId: string; credentialUrl: string }
+  /** The event holds its certificate until the holder's survey is in (lib/survey/certificate-gate.ts). */
+  surveyFirst?: { href: string; eventTitle: string } | null
+}
+
+function SurveyFirst({ href, eventTitle }: { href: string; eventTitle: string }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Button variant="softBlue" className="!py-2" href={href}>
+        <ClipboardList size={16} aria-hidden="true" />
+        Finish the survey to download
+      </Button>
+      <span className="text-xs text-content-muted">The {eventTitle} survey takes about five minutes; the certificate unlocks when you submit.</span>
+    </div>
+  )
 }
 
 export function CredentialActions(p: Props) {
@@ -130,10 +144,14 @@ export function CredentialActions(p: Props) {
       {/* The certificate is the holder's own copy — private or not. */}
       {!isPublic && (
         <div className="mt-4">
-          <Button variant="softBlue" className="!py-2" href={`/api/credentials/${encodeURIComponent(p.number)}/pdf`}>
-            <FileDown size={16} aria-hidden="true" />
-            Download certificate
-          </Button>
+          {p.surveyFirst ? (
+            <SurveyFirst {...p.surveyFirst} />
+          ) : (
+            <Button variant="softBlue" className="!py-2" href={`/api/credentials/${encodeURIComponent(p.number)}/pdf`}>
+              <FileDown size={16} aria-hidden="true" />
+              Download certificate
+            </Button>
+          )}
         </div>
       )}
 
@@ -170,11 +188,18 @@ export function CredentialActions(p: Props) {
               {copied === 'link' ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
               {copied === 'link' ? 'Copied' : 'Copy link'}
             </Button>
-            <Button variant="softBlue" className="!py-2" href={`/api/credentials/${encodeURIComponent(p.number)}/pdf`}>
-              <FileDown size={16} aria-hidden="true" />
-              Download PDF
-            </Button>
+            {!p.surveyFirst && (
+              <Button variant="softBlue" className="!py-2" href={`/api/credentials/${encodeURIComponent(p.number)}/pdf`}>
+                <FileDown size={16} aria-hidden="true" />
+                Download PDF
+              </Button>
+            )}
           </div>
+          {p.surveyFirst && (
+            <div className="mt-4">
+              <SurveyFirst {...p.surveyFirst} />
+            </div>
+          )}
 
           {p.linkedInOk ? (
             <div className="mt-5">

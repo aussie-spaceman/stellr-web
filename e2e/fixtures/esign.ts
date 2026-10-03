@@ -35,6 +35,7 @@ export interface TestAgreement {
   birthYear: string
   guardianName: string
   studentName: string
+  studentEmail: string
 }
 
 function cli<T>(...args: string[]): T {

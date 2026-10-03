@@ -336,6 +336,7 @@ export async function POST(req: NextRequest) {
     guardianEmail:     person.ec_email ?? undefined,
     guardianPhone:     person.ec_phone ?? undefined,
     relationship:      person.ec_relationship ?? undefined,
+    grade:             person.grade,
   })
 
   // Count total members who have completed their join

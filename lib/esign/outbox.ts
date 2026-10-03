@@ -1,3 +1,4 @@
+import { AGREEMENT_TITLE } from '@/lib/esign/native/plan'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail, EmailSendError } from '@/lib/email'
@@ -36,12 +37,13 @@ async function claimSend(db: SupabaseClient, now = new Date()): Promise<boolean>
   return data === true
 }
 
+// The documents' own titles (V2.3).
 const DOCUMENT_LABEL: Record<string, string> = {
-  minor: 'Parental Consent Form',
-  adult: 'Participation Agreement',
-  mentor: 'Mentor Participation Agreement',
-  volunteer: 'Mentor Participation Agreement',
-  membership: 'Membership Agreement',
+  minor: AGREEMENT_TITLE.minor,
+  adult: AGREEMENT_TITLE.adult,
+  mentor: AGREEMENT_TITLE.mentor,
+  volunteer: AGREEMENT_TITLE.mentor,
+  membership: AGREEMENT_TITLE.membership,
 }
 
 const ROLE: Record<string, 'guardian' | 'student' | 'adult' | 'mentor' | 'member'> = {

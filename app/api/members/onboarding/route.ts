@@ -5,7 +5,7 @@ import { fireCampaignEvent } from '@/lib/email-campaigns'
 import { applyGrantTrigger } from '@/lib/membership-grants'
 import { normalizeEmail } from '@/lib/member-enums'
 import { logActivity } from '@/lib/activity-log'
-import { grantVolunteerRole, dispatchVolunteerAgreement } from '@/lib/volunteer'
+import { grantVolunteerRole, dispatchVolunteerAgreement, VOLUNTEER_MEMBER_COLUMNS } from '@/lib/volunteer'
 import { syncMemberClassificationRole } from '@/lib/member-roles'
 import { onboardingRequirements, emergencyContactComplete } from '@/lib/onboarding-requirements'
 import { sendAccountConfirmation, notifyStaffOfRegistration } from '@/lib/registration-notify'
@@ -239,7 +239,7 @@ export async function POST(req: Request) {
     await grantVolunteerRole(db, memberId, { actorType: 'member', actorMemberId: memberId }, 'registration')
     const { data: volunteerMember } = await db
       .from('members')
-      .select('id, first_name, last_name, email, phone, date_of_birth')
+      .select(VOLUNTEER_MEMBER_COLUMNS)
       .eq('id', memberId)
       .maybeSingle()
     if (volunteerMember) await dispatchVolunteerAgreement(db, volunteerMember)

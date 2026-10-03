@@ -749,6 +749,7 @@ export async function POST(req: NextRequest) {
         guardianEmail:     row.emergency_contact_email,
         guardianPhone:     row.emergency_contact_phone,
         relationship:      row.emergency_contact_relationship,
+        grade:             row.grade,
       })
     } })
 

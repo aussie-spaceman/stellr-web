@@ -74,7 +74,8 @@ describe('createVolunteerAgreementEnvelope', () => {
     // The template defines 'Mentor' — a 'Volunteer' role would match nothing.
     expect(signer.roleName).toBe('Mentor')
     const labels = (signer.tabs?.textTabs ?? []).map(t => t.tabLabel).sort()
-    expect(labels).toEqual(['EventTitle', 'MentorEmail', 'MentorName', 'MentorPhone'])
+    // Emergency contact added with the V2.3 Mentor and Volunteer Agreement.
+    expect(labels).toEqual(['EmergencyContactName', 'EmergencyContactPhone', 'EventTitle', 'MentorEmail', 'MentorName', 'MentorPhone'])
     expect(signer.tabs?.textTabs?.find(t => t.tabLabel === 'MentorPhone')?.value).toBe(PARAMS.phone)
     expect(signer.tabs?.textTabs?.find(t => t.tabLabel === 'MentorName')?.value).toBe('Grace Hopper')
   })

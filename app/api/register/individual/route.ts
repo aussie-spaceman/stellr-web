@@ -378,6 +378,7 @@ export async function POST(req: NextRequest) {
       guardianEmail:     emergency_contact_email,
       guardianPhone:     emergency_contact_phone,
       relationship:      emergency_contact_relationship,
+      grade:             normalizeGrade(grade),
     })
 
     // Provision a Clerk account + sign-in token so a brand-new registrant is

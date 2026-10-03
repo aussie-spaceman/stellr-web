@@ -120,9 +120,11 @@ migration that stops `audit_members()` copying `health_conditions` into
 Follow-up ticket: a self-serve deletion request with `received_at`, `due_at`,
 `completed_at` on `deletion_requests`, and an executor that does steps 3.2–3.7.
 
-## Part C — Media opt-outs (photos, videos, name, work in promotion)
+## Part C — Media and survey-quote opt-outs (photos, videos, name, work, quotes)
 
 There is no in-account toggle yet; the policy offers opt-out **by email** only.
+The same do-not-use list covers **survey quotes** (D17, Privacy §2 and §3.12,
+Terms §11.3) as well as photos, videos, name and work.
 
 1. **Opt-outs on signed forms.** The Participation Agreement has a "I do NOT
    consent to photo and media use" box (`MediaOptOut`), on both DocuSign and Stellr
@@ -146,9 +148,21 @@ There is no in-account toggle yet; the policy offers opt-out **by email** only.
      AND p.date_of_birth <= (current_date - interval '13 years');
    ```
    Everyone returned is on the do-not-use list unless they have opted in.
-4. Opting out never affects participation.
+4. **Quoting a survey response** in promotional material (website, social, press,
+   grant applications):
+   - Only from a question the survey said could be quoted.
+   - Attribution: **first name + last initial, grade, and school or state**. Never
+     a full name, contact details or date of birth.
+   - **Under 13: anonymous only** (no name, school or state; grade alone is fine).
+   - Light edits for length, spelling and grammar are fine; never change the meaning.
+   - Skip anyone on the do-not-use list (steps 1–3, including NY/CO aged 13–17
+     who have not opted in). Their answers may still appear in combined,
+     non-identifying results.
+5. Opting out never affects participation.
 
-Follow-up ticket: a `media_opt_out` / `media_opt_in` flag, the account toggle
+Follow-up ticket (in progress on `feat/post-event-survey`: `member_privacy_prefs`
+quote and media toggles, `QuoteOptOut` read from the agreement, quote eligibility
+at export). Remaining: a `media_opt_out` / `media_opt_in` flag, the account toggle
 (default on; default off for NY/CO aged 13–17), state of residence at
 registration, a `MediaOptOut` checkbox read back from DocuSign like
 `CredentialSharingOptOut`, and a column in the roster export.

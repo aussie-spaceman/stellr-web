@@ -168,6 +168,7 @@ export async function POST(
     guardianEmail:     participant.emergency_contact_email ?? undefined,
     guardianPhone:     participant.emergency_contact_phone ?? undefined,
     relationship:      participant.emergency_contact_relationship ?? undefined,
+    grade:             participant.grade ?? undefined,
   })
 
   // Individual payment link (or free-event "no payment required" notice), same

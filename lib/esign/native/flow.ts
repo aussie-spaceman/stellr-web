@@ -10,7 +10,7 @@ import {
   mintToken,
   verifyToken,
 } from '@/lib/esign/native/tokens'
-import { archivePaths, putImmutable, retainUntil, sha256Hex, SIGNED_BUCKET } from '@/lib/esign/storage'
+import { archivePaths, putImmutable, retainUntilOnCompletion, sha256Hex, SIGNED_BUCKET } from '@/lib/esign/storage'
 
 // Stellr signing, from issue to sealed record. Each signer moves through:
 //
@@ -768,7 +768,7 @@ export async function finaliseAgreement(db: SupabaseClient, envelopeRowId: strin
         certificate_bytes: auditFile.byteLength,
         archived_at: completedAt,
         seal_kind: 'hash',
-        retain_until: retainUntil(completedAt),
+        retain_until: retainUntilOnCompletion(completedAt, envelope.member_id),
         issue_error: null,
         updated_at: completedAt,
       })

@@ -23,7 +23,7 @@ export default function TermsPage() {
           a Minor). Consent forms and agreements can now be signed through Stellr&rsquo;s own
           signing system as well as DocuSign, and Section 22 adds how electronic signing works and
           your right to paper. Section 4.3 points to our new School Data Terms, Section 11.3
-          describes the photo and media opt-outs, and Sections 1, 5.1, 6.4, 8 and 20 were updated
+          describes the photo, media and survey-quote opt-outs, and Sections 1, 5.1, 6.4, 8 and 20 were updated
           to match.
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
@@ -512,8 +512,8 @@ export default function TermsPage() {
           </Link>
           . Some uses already published or distributed may not be fully reversible. Credential pages
           are covered separately in Section 5.1. Students aged 13 or over may also opt out of
-          Stellr&rsquo;s use of their photos, videos, name, and work themselves, as described in our
-          Privacy Policy. For students aged 13 to 17 who live in a state that requires the
+          Stellr&rsquo;s use of their photos, videos, name, work, and quotes from their survey
+          responses themselves, as described in our Privacy Policy. For students aged 13 to 17 who live in a state that requires the
           student&rsquo;s own agreement first (currently New York and Colorado), we do not use these
           until the student agrees.
         </p>

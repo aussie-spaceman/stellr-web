@@ -15,6 +15,7 @@ import {
   type CreatedAgreement,
 } from '@/lib/esign/types'
 import { notifyCommunityAdmins } from '@/lib/notify'
+import { isMinorOn } from '@/lib/age'
 
 // Issues one agreement on whichever engine should take it. The single place
 // the choice is made, so no caller knows or cares which engine that is.
@@ -29,6 +30,16 @@ export async function issueAgreement(
   // The membership agreement never spends a DocuSign envelope.
   if (req.type === 'membership') {
     if (!nativeAvailable) throw new Error('Stellr signing is not configured, so the membership agreement cannot be issued')
+    return getProvider('native').create(ctx, req)
+  }
+
+  // A Mentor under the age of majority needs a parent's signature too (V2.3
+  // §3A). Stellr signing adds that signer; the DocuSign mentor template has no
+  // parent role, so this agreement goes to Stellr signing or nowhere.
+  if (needsParentCoSign(req)) {
+    if (!nativeAvailable) {
+      throw new Error('A Mentor under the age of majority needs a parent to co-sign, which only Stellr signing can issue, and it is not configured')
+    }
     return getProvider('native').create(ctx, req)
   }
 
@@ -86,6 +97,11 @@ export async function issueAgreement(
 
     return getProvider('native').create(ctx, req)
   }
+}
+
+function needsParentCoSign(req: CreateAgreementRequest): boolean {
+  if (req.type !== 'mentor' && req.type !== 'volunteer') return false
+  return isMinorOn(req.params.dateOfBirth ?? null, undefined, req.params.state ?? null)
 }
 
 // One outage alert per server instance per hour, not one per agreement: a

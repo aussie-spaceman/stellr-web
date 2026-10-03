@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
 import { isAdminClaims } from '@/lib/admin-auth'
+import { startRetentionClock } from '@/lib/esign/retention'
 
 function humanizeFields(keys: string[]): string {
   return keys.map((k) => k.replace(/^ec_/, 'emergency ').replace(/_/g, ' ')).join(', ')
@@ -135,6 +136,10 @@ export async function DELETE(
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: 'Delete failed' }, { status: 500 })
+
+  // Signed agreements are kept 7 years from deactivation (V2.3). A failure
+  // here leaves them with no end date, the safe side, so it is logged only.
+  await startRetentionClock(db, id).catch((err) => console.error('[members] retention clock failed:', err))
 
   const actor = await actorFromAuth()
   await logActivity({

@@ -121,6 +121,11 @@ export async function revokeVolunteerRole(
   }
 }
 
+/** The Mentor and Volunteer Agreement always runs three years (V2.3). */
+function mentorExpiry(completedAt: string): Date {
+  return agreementExpiry(completedAt, 'mentor') as Date
+}
+
 export interface VolunteerMemberRow {
   id: string
   first_name: string | null
@@ -128,7 +133,18 @@ export interface VolunteerMemberRow {
   email: string | null
   phone: string | null
   date_of_birth: string | null
+  // The emergency contact: printed on the Mentor and Volunteer Agreement, and
+  // the parent who co-signs for one under the age of majority (V2.3 §3A).
+  ec_first_name?: string | null
+  ec_last_name?: string | null
+  ec_email?: string | null
+  ec_phone?: string | null
+  ec_relationship?: string | null
 }
+
+/** The member columns dispatchVolunteerAgreement reads. */
+export const VOLUNTEER_MEMBER_COLUMNS =
+  'id, first_name, last_name, email, phone, date_of_birth, ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship'
 
 /**
  * Issue (or reuse) the Volunteer Agreement for a member, recorded against the
@@ -166,6 +182,11 @@ export async function dispatchVolunteerAgreement(
     phone:         member.phone,
     dateOfBirth:   member.date_of_birth,
     eventRole:     'volunteer',
+    guardianFirstName: member.ec_first_name ?? null,
+    guardianLastName:  member.ec_last_name ?? null,
+    guardianEmail:     member.ec_email ?? null,
+    guardianPhone:     member.ec_phone ?? null,
+    relationship:      member.ec_relationship ?? null,
   })
 }
 
@@ -205,7 +226,7 @@ export async function getVolunteerStatuses(
   for (const m of members) {
     const mine = (envelopes ?? []).filter((e) => e.member_id === m.id)
     const complete = mine.some(
-      (e) => e.status === 'completed' && e.completed_at && agreementExpiry(e.completed_at) > now,
+      (e) => e.status === 'completed' && e.completed_at && mentorExpiry(e.completed_at) > now,
     )
     const inFlight = mine.some((e) => ['created', 'sent', 'delivered'].includes(e.status))
     const records = compliance.get((m.email ?? '').toLowerCase())
@@ -322,10 +343,10 @@ export function pickVolunteerAgreement<T extends Omit<VolunteerAgreementRecord, 
       (b.completed_at ?? b.sent_at ?? '').localeCompare(a.completed_at ?? a.sent_at ?? ''),
     )[0]
   const withExpiry = (r: T | undefined) =>
-    r ? { ...r, expires_at: r.completed_at ? agreementExpiry(r.completed_at).toISOString() : null } : null
+    r ? { ...r, expires_at: r.completed_at ? mentorExpiry(r.completed_at).toISOString() : null } : null
 
   const valid = rows.filter(
-    (r) => r.status === 'completed' && r.completed_at && agreementExpiry(r.completed_at) > now,
+    (r) => r.status === 'completed' && r.completed_at && mentorExpiry(r.completed_at) > now,
   )
   if (valid.length) return withExpiry(newest(valid))
   const open = rows.filter((r) => ['created', 'sent', 'delivered'].includes(r.status))

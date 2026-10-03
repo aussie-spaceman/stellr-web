@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ageOn, appToday, isMinorOn, isUnder13On, isValidDob, onDate } from './age'
+import { ageOfMajority, ageOn, appToday, isMinorOn, isUnder13On, isValidDob, onDate } from './age'
 
 const on = new Date('2026-10-02T12:00:00Z')
 
@@ -27,6 +27,26 @@ describe('isMinorOn', () => {
   it('is false when the date of birth is unknown', () => {
     expect(isMinorOn(null, on)).toBe(false)
     expect(isMinorOn('', on)).toBe(false)
+  })
+
+  it('uses the age of majority where the person lives (V2.3: AL/NE 19, MS 21)', () => {
+    // 18 years and 364 days old.
+    expect(isMinorOn('2007-10-03', on, 'AL')).toBe(true)
+    expect(isMinorOn('2007-10-03', on, 'Nebraska')).toBe(true)
+    expect(isMinorOn('2007-10-03', on, 'CO')).toBe(false)
+    expect(isMinorOn('2007-10-02', on, 'AL')).toBe(false)
+    expect(isMinorOn('2005-10-03', on, 'ms')).toBe(true)
+    expect(isMinorOn('2005-10-02', on, 'MS')).toBe(false)
+  })
+})
+
+describe('ageOfMajority', () => {
+  it('is 18 unless the state says otherwise, or is unknown', () => {
+    expect(ageOfMajority('AL')).toBe(19)
+    expect(ageOfMajority(' ne ')).toBe(19)
+    expect(ageOfMajority('Mississippi')).toBe(21)
+    expect(ageOfMajority('CO')).toBe(18)
+    expect(ageOfMajority(null)).toBe(18)
   })
 })
 

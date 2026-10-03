@@ -3,7 +3,7 @@ import { getEntityDef } from './registry'
 import { deletionPreflight } from './preflight'
 import { runExternalCleanup } from './external'
 import { archiveEntity } from './archive'
-import { retainSignedRecords } from '@/lib/esign/retention'
+import { retainSignedRecords, startRetentionClock } from '@/lib/esign/retention'
 import { tombstoneCredentialsFor } from '@/lib/credentials'
 import { executeRefund, type RefundChoice, type RefundResult } from '@/lib/refunds/execute'
 import type { DeleteMode, DeletionResult, EntityDef } from './types'
@@ -73,6 +73,8 @@ export async function executeDeletion(
   if (mode === 'soft') {
     const { error } = await db.from(def.table).update(resolveSoftSet(def)).eq(def.pk, id)
     if (error) throw new Error(`Soft delete failed: ${error.message}`)
+    // A deactivated account's signed agreements are kept 7 more years (V2.3).
+    if (def.type === 'member') await startRetentionClock(db, id)
     return { entity, id, mode, deleted: true, externalResults, refunds }
   }
 

@@ -1,0 +1,93 @@
+{
+  "roles": [
+    {
+      "role": "adult",
+      "order": 1
+    }
+  ],
+  "fields": [
+    {
+      "name": "MediaOptOut",
+      "label": "I DO NOT consent to photo and media use",
+      "role": "adult",
+      "type": "checkbox",
+      "source": "signer",
+      "page": 3,
+      "x": 62,
+      "y": 366
+    },
+    {
+      "name": "adult_full_name",
+      "label": "Full name",
+      "role": "adult",
+      "type": "full_name",
+      "source": "system",
+      "page": 4,
+      "x": 123,
+      "y": 267.2,
+      "w": 230
+    },
+    {
+      "name": "TeacherEmail",
+      "label": "Email address",
+      "role": "adult",
+      "type": "email",
+      "source": "prefill",
+      "prefillKey": "TeacherEmail",
+      "page": 4,
+      "x": 143,
+      "y": 285.3,
+      "w": 230,
+      "required": true
+    },
+    {
+      "name": "TeacherPhone",
+      "label": "Phone number",
+      "role": "adult",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "TeacherPhone",
+      "page": 4,
+      "x": 146,
+      "y": 303.4,
+      "w": 230,
+      "required": true
+    },
+    {
+      "name": "SchoolName",
+      "label": "School or institution name",
+      "role": "adult",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "SchoolName",
+      "page": 4,
+      "x": 192,
+      "y": 321.5,
+      "w": 230,
+      "required": true
+    },
+    {
+      "name": "adult_signature",
+      "label": "Signature",
+      "role": "adult",
+      "type": "signature",
+      "source": "signer",
+      "page": 4,
+      "x": 120,
+      "y": 327.6,
+      "w": 230,
+      "h": 22,
+      "required": true
+    },
+    {
+      "name": "adult_date_signed",
+      "label": "Date signed",
+      "role": "adult",
+      "type": "date_signed",
+      "source": "system",
+      "page": 4,
+      "x": 402,
+      "y": 339.6
+    }
+  ]
+}

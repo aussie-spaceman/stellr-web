@@ -67,6 +67,37 @@ DocuSign until the steps below are done: the engine ships with
 7. **DocuSign account**: switch off "attach documents to completion email" and
    the AI data-sharing default.
 
+## Aligned to the Participation Agreements V2.3 (2 Oct, branch `feat/esign-agreements-v2-3`)
+
+David supplied the V2.3 Word files (Adults, Mentors, Minors; Governance shared
+drive) as the latest and correct versions. The engine now follows them:
+
+- **Titles**: Participation Agreement — Student / Minor; — Educator /
+  Chaperone; Mentor and Volunteer Agreement (`AGREEMENT_TITLE`, emails, portal,
+  admin, DocuSign subjects).
+- **"Minor"**: under the state's age of majority (AL/NE 19, MS 21, else 18;
+  `lib/age.ageOfMajority`), or a student at any age. State = the school's.
+- **Minor agreement validity**: no end date; reused only on the current
+  version (`agreement_version`, `AGREEMENT_VERSION = '2.3'`), so families
+  re-sign only when the agreement changes. Pre-V2.3 rows are not reused.
+  Adults, mentors, volunteers keep 3 years. `agreementExpiry` / `agreementValid`
+  / `agreementCovers` in `lib/docusign-agreements.ts`.
+- **Mentor under the age of majority** (§3A): a parent (the emergency
+  contact) signs first, always on Stellr signing (`lib/esign/issue.ts`).
+- **Membership for a Minor**: the Student / Minor agreement, recorded as
+  `minor`, so it covers their events too.
+- **New fields**: MinorEmail, MinorGrade, QuoteOptOut (minor); emergency
+  contact (mentor); MentorAddress (mentor, signer-entered).
+- **Opt-outs**: `media_opt_out`, `quote_opt_out`, `digital_comms_opt_out`
+  read back on completion (both engines) and shown in Admin → Consent forms.
+- **Retention**: membership + 7 years after deactivation
+  (`startRetentionClock` on deactivation; `retainUntilOnCompletion`); a
+  deletion request keeps only a minimal record. Disclosure is now versioned
+  (`2026-10-v2`).
+- Migration `20261002235609_esign_agreements_v2_3.sql` (dev applied, ledger
+  aligned). Dev templates minor/adult/mentor v3 active, with text versions
+  generated from the .docx.
+
 ## Open
 
 See `tracker/2026-10-02-esign-native-engine.md`. Decisions only David can

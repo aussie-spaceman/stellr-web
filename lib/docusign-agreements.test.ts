@@ -27,7 +27,8 @@ vi.mock('./email', () => ({
 }))
 vi.mock('./notify', () => ({ notifyCommunityAdmins }))
 
-import { dispatchAgreement } from './docusign-agreements'
+import { agreementCovers, agreementExpiry, dispatchAgreement } from './docusign-agreements'
+import { AGREEMENT_VERSION } from './esign/native/plan'
 
 interface Fixture {
   /** Envelope already attached to this exact participant row. */
@@ -277,5 +278,56 @@ describe('dispatchAgreement — mentor and volunteer are the same document', () 
   it('an ADULT agreement is not coverage for a volunteer', async () => {
     const { db } = makeDb({ completedEnvelope: { ...SIGNED, envelope_type: 'adult' } })
     expect(await dispatchAgreement(db, VOLUNTEER)).toBe('issued')
+  })
+})
+
+describe('V2.3 validity: a minor agreement lasts while current, others 3 years', () => {
+  const at = '2026-01-15T00:00:00Z'
+  const later = new Date('2032-01-01T00:00:00Z')
+
+  it('a V2.3 minor agreement has no end date; older ones and adults keep 3 years', () => {
+    expect(agreementExpiry(at, 'minor', '2.3')).toBeNull()
+    expect(agreementExpiry(at, 'minor', null)?.toISOString()).toBe('2029-01-15T00:00:00.000Z')
+    expect(agreementExpiry(at, 'adult', '2.3')?.toISOString()).toBe('2029-01-15T00:00:00.000Z')
+    expect(agreementExpiry(at, 'mentor', '2.3')?.toISOString()).toBe('2029-01-15T00:00:00.000Z')
+  })
+
+  it('reuses a minor agreement only on the current version, at any age of the signature', () => {
+    expect(agreementCovers({ completed_at: at, envelope_type: 'minor', agreement_version: AGREEMENT_VERSION }, later)).toBe(true)
+    expect(agreementCovers({ completed_at: at, envelope_type: 'minor', agreement_version: null }, new Date('2026-02-01'))).toBe(false)
+    expect(agreementCovers({ completed_at: at, envelope_type: 'minor', agreement_version: '2.2' }, new Date('2026-02-01'))).toBe(false)
+  })
+
+  it('reuses an adult agreement for 3 years whatever its version', () => {
+    expect(agreementCovers({ completed_at: at, envelope_type: 'adult', agreement_version: null }, new Date('2028-12-31'))).toBe(true)
+    expect(agreementCovers({ completed_at: at, envelope_type: 'adult', agreement_version: AGREEMENT_VERSION }, later)).toBe(false)
+  })
+
+  const STUDENT = {
+    ...ADULT, firstName: 'Kid', email: 'kid@example.com', dateOfBirth: '2012-05-01', eventRole: 'participant',
+    guardianFirstName: 'Pat', guardianLastName: 'Lovelace', guardianEmail: 'pat@example.com',
+  }
+  const SIGNED_MINOR = {
+    id: 'env-minor-signed', completed_at: '2024-01-15T00:00:00Z', envelope_type: 'minor',
+    signer_name: 'Pat', signer_email: 'pat@example.com', reused_from: null,
+  }
+
+  it('asks a family to sign again when their agreement predates V2.3', async () => {
+    const { db } = makeDb({ completedEnvelope: { ...SIGNED_MINOR, agreement_version: null } })
+    await dispatchAgreement(db, STUDENT)
+    expect(createConsent).toHaveBeenCalledTimes(1)
+  })
+
+  it('reuses a V2.3 agreement however long ago it was signed, carrying its version', async () => {
+    const { db, inserts } = makeDb({ completedEnvelope: { ...SIGNED_MINOR, agreement_version: AGREEMENT_VERSION } })
+    expect(await dispatchAgreement(db, STUDENT)).toBe('on_file')
+    expect(createConsent).not.toHaveBeenCalled()
+    expect(inserts[0].payload).toMatchObject({ reused_from: 'env-minor-signed', agreement_version: AGREEMENT_VERSION })
+  })
+
+  it('stamps the current version on every new agreement', async () => {
+    const { db, inserts } = makeDb({})
+    await dispatchAgreement(db, ADULT)
+    expect(inserts[0].payload.agreement_version).toBe(AGREEMENT_VERSION)
   })
 })

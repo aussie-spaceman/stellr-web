@@ -50,10 +50,27 @@ export function ageOn(dateOfBirth: string, on = appToday()): number {
   return age
 }
 
-export function isMinorOn(dateOfBirth: string | null | undefined, on = appToday()): boolean {
+/**
+ * The age of majority in a US state (Participation Agreements V2.3, "Minor"):
+ * 19 in Alabama and Nebraska, 21 in Mississippi, 18 everywhere else and when
+ * the state is not known. Accepts a two-letter code or the full name.
+ */
+export function ageOfMajority(state?: string | null): number {
+  const s = (state ?? '').trim().toUpperCase()
+  if (s === 'AL' || s === 'ALABAMA' || s === 'NE' || s === 'NEBRASKA') return 19
+  if (s === 'MS' || s === 'MISSISSIPPI') return 21
+  return 18
+}
+
+/**
+ * Under the age of majority on `on`. Pass the state where the person lives
+ * when it is known; without it, 18 applies. (Students still in high school
+ * are Minors at any age under the agreements; callers decide that by role.)
+ */
+export function isMinorOn(dateOfBirth: string | null | undefined, on = appToday(), state?: string | null): boolean {
   // Unknown or unreadable: not assumed a minor (every caller already treats it so).
   if (!isValidDob(dateOfBirth)) return false
-  return ageOn(dateOfBirth, on) < 18
+  return ageOn(dateOfBirth, on) < ageOfMajority(state)
 }
 
 /** Under 13: the age below which a parent's consent has to come first. */

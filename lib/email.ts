@@ -662,11 +662,18 @@ export function docusignOnFileEmail({
   firstName, eventTitle, agreementLabel, signedOn, expiresOn,
 }: {
   firstName: string; eventTitle: string; agreementLabel: string
-  signedOn: string; expiresOn: string
+  /** Null for a minor's agreement (V2.3), which has no fixed end date. */
+  signedOn: string; expiresOn: string | null
 }) {
   const fmt = (iso: string) =>
     new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/Denver' })
   const subject = `No action needed — ${agreementLabel} already on record`
+  const validityText = expiresOn
+    ? `Signed agreements are valid for 3 years across all Stellr events. Yours is valid until ${fmt(expiresOn)}; we'll ask for a new one only after it expires.`
+    : "It covers every Stellr event while the student is a Minor. We'll ask for a new one only if the agreement changes."
+  const validityHtml = expiresOn
+    ? `Signed agreements are valid for 3 years across all Stellr events. Yours is valid until <strong>${fmt(expiresOn)}</strong>; we'll ask for a new one only after it expires.`
+    : validityText
   const html = emailLayout({
     heading: 'Paperwork Already on Record',
     bodyHtml: `
@@ -675,10 +682,10 @@ export function docusignOnFileEmail({
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
           <p style="margin:0;font-weight:600;color:#14532d">No signature required — your existing agreement covers this event.</p>
         </div>
-        <p style="color:#6b7280;font-size:14px">Signed agreements are valid for 3 years across all Stellr events. Yours is valid until <strong>${fmt(expiresOn)}</strong>; we'll ask for a new one only after it expires. You can view or download it any time from your member portal.</p>
+        <p style="color:#6b7280;font-size:14px">${validityHtml} You can view or download it any time from your member portal.</p>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
   })
-  const text = `Hi ${firstName},\n\nThe ${agreementLabel} signed on ${fmt(signedOn)} is already on your Stellr member record, so no new paperwork is needed for ${eventTitle}.\n\nSigned agreements are valid for 3 years across all Stellr events — yours is valid until ${fmt(expiresOn)}. You can view or download it from your member portal.\n\n— Stellr Education`
+  const text = `Hi ${firstName},\n\nThe ${agreementLabel} signed on ${fmt(signedOn)} is already on your Stellr member record, so no new paperwork is needed for ${eventTitle}.\n\n${validityText} You can view or download it from your member portal.\n\n— Stellr Education`
   return { subject, html, text }
 }
 
@@ -694,7 +701,7 @@ export function groupPaymentConfirmedEmail({
         <p>Hi ${teacherFirstName},</p>
         <p>We've received your payment for <strong>${eventTitle}</strong>. Your group registration is now confirmed.</p>
         <p style="color:#6b7280;font-size:14px">Reference #: <span style="font-family:monospace">${registrationId}</span></p>
-        <p style="color:#6b7280;font-size:14px">We'll be in touch with event details closer to the date. Participant agreements and parental permission forms are issued via DocuSign if not already on record — signed paperwork stays valid for 3 years across Stellr events.</p>`,
+        <p style="color:#6b7280;font-size:14px">We'll be in touch with event details closer to the date. Each participant's agreement is sent for signature if one isn't already on record. A student's agreement covers every Stellr event while they're a Minor; an adult's stays valid for 3 years.</p>`,
   })
   const text = `Hi ${teacherFirstName},\n\nPayment received for ${eventTitle}. Your group registration is confirmed.\n\nReference #: ${registrationId}\n\n— Stellr Education`
   return { subject, html, text }

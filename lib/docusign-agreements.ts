@@ -13,21 +13,23 @@ import {
 } from './email'
 import { notifyCommunityAdmins } from './notify'
 import { SandboxCredentialsError } from './env-guards'
+import { AGREEMENT_TITLE, AGREEMENT_VERSION } from './esign/native/plan'
+import { denormalizeGrade } from './member-enums'
 
-// Human-readable label per agreement type, used in emails and the portal UI.
+// Human-readable label per agreement type, used in emails and the portal UI:
+// the documents' own titles (Participation Agreements V2.3, 2 Oct 2026).
 export const AGREEMENT_LABEL: Record<AgreementType, string> = {
-  minor:     'Parental Consent Form',
-  adult:     'Participation Agreement',
-  mentor:    'Mentor Participation Agreement',
+  minor:     AGREEMENT_TITLE.minor,
+  adult:     AGREEMENT_TITLE.adult,
+  mentor:    AGREEMENT_TITLE.mentor,
   // Volunteers execute the mentor document (Stellr, 9 Sept 2026), so the label
-  // names what they actually receive — an email promising a "Volunteer
-  // Agreement" beside a document headed "Mentor Participation Agreement" reads
-  // as a mistake.
-  volunteer: 'Mentor Participation Agreement',
-  membership: 'Membership Agreement',
+  // names what they actually receive.
+  volunteer: AGREEMENT_TITLE.mentor,
+  membership: AGREEMENT_TITLE.membership,
 }
 
-// Signed paperwork is valid for this long, across all Stellr events.
+// An adult's, mentor's or volunteer's signed paperwork is valid for this long,
+// across all Stellr events. A minor's has no fixed end (see agreementCovers).
 const AGREEMENT_VALIDITY_YEARS = 3
 
 // Mentors and volunteers execute the same document (the mentor template —
@@ -56,10 +58,46 @@ export function coveringTypes(type: AgreementType): AgreementType[] {
  */
 export type DispatchOutcome = 'issued' | 'on_file' | 'in_flight' | 'not_required' | 'failed'
 
-export function agreementExpiry(completedAt: string): Date {
+/**
+ * When signed paperwork stops being valid. Three years for every agreement
+ * signed before V2.3, and for adults, mentors and volunteers. A minor's V2.3
+ * agreement has no fixed end: it lasts until the student is no longer a Minor,
+ * their membership closes, consent is withdrawn or a newer version is signed
+ * (§ Term), so this returns null for it.
+ */
+export function agreementExpiry(
+  completedAt: string,
+  type: AgreementType = 'adult',
+  version: string | null = null,
+): Date | null {
+  if (type === 'minor' && version) return null
   const d = new Date(completedAt)
   d.setFullYear(d.getFullYear() + AGREEMENT_VALIDITY_YEARS)
   return d
+}
+
+/** Signed paperwork still valid on `now`, under its own terms. */
+export function agreementValid(
+  row: { completed_at: string | null; envelope_type: string; agreement_version?: string | null },
+  now = new Date(),
+): boolean {
+  if (!row.completed_at) return false
+  const expires = agreementExpiry(row.completed_at, row.envelope_type as AgreementType, row.agreement_version ?? null)
+  return expires === null || expires > now
+}
+
+/**
+ * Whether signed paperwork can be reused for a new event. Adults, mentors and
+ * volunteers: while it is valid. A minor: only the current version, because
+ * families are asked to sign again when the agreement changes and at no other
+ * time (V2.3). Rows from before versions were recorded are an older version.
+ */
+export function agreementCovers(
+  row: { completed_at: string | null; envelope_type: string; agreement_version?: string | null },
+  now = new Date(),
+): boolean {
+  if (row.envelope_type === 'minor') return !!row.completed_at && row.agreement_version === AGREEMENT_VERSION
+  return agreementValid(row, now)
 }
 
 export interface ParticipantContext {
@@ -82,6 +120,8 @@ export interface ParticipantContext {
   guardianEmail?:     string | null
   guardianPhone?:     string | null
   relationship?:      string | null
+  /** The student's grade, for the Student / Minor agreement. */
+  grade?:             string | null
 }
 
 /** What was issued, and how the signer in front of us can sign right now. */
@@ -106,7 +146,9 @@ export async function dispatchAgreementDetailed(
   db: SupabaseClient,
   ctx: ParticipantContext,
 ): Promise<DispatchResult> {
-  const type = classifyAgreement(ctx.eventRole, ctx.dateOfBirth)
+  // The age of majority depends on where the person lives (V2.3 "Minor");
+  // the school's state is the best record of that the registration has.
+  const type = classifyAgreement(ctx.eventRole, ctx.dateOfBirth, ctx.schoolState)
   if (!type) return { outcome: 'not_required' }
   return issueOrReuse(db, ctx, type)
 }
@@ -163,7 +205,7 @@ async function issueOrReuse(
           eventTitle:     ctx.eventTitle,
           agreementLabel: AGREEMENT_LABEL[type],
           signedOn:       onFile.completedAt,
-          expiresOn:      agreementExpiry(onFile.completedAt).toISOString(),
+          expiresOn:      agreementExpiry(onFile.completedAt, onFile.type, onFile.version)?.toISOString() ?? null,
         }))
         return { outcome: 'on_file' }
       }
@@ -204,6 +246,7 @@ async function issueOrReuse(
           eventTitle:       ctx.eventTitle,
           schoolName:       ctx.schoolName ?? undefined,
           schoolState:      ctx.schoolState ?? undefined,
+          grade:            ctx.grade ? (denormalizeGrade(ctx.grade) ?? ctx.grade) : undefined,
         },
       })
       const recorded = await recordEnvelope(db, ctx, type, envelope, guardianName, ctx.guardianEmail)
@@ -233,13 +276,30 @@ async function issueOrReuse(
       phone: ctx.phone ?? undefined, eventTitle: ctx.eventTitle,
     }
     const accounts = { memberId: ctx.memberId }
+    // The emergency contact a registration collects is also the parent who
+    // co-signs for a Mentor under the age of majority (V2.3 §3A).
+    const contactName = [ctx.guardianFirstName, ctx.guardianLastName].filter(Boolean).join(' ').trim()
     const envelope = type === 'adult'
       ? await issueAgreement(db, {
           type: 'adult',
           accounts,
           params: { ...signer, schoolName: ctx.schoolName ?? undefined, schoolState: ctx.schoolState ?? undefined },
         })
-      : await issueAgreement(db, { type, accounts, params: signer })
+      : await issueAgreement(db, {
+          type,
+          accounts,
+          params: {
+            ...signer,
+            dateOfBirth:           ctx.dateOfBirth ?? null,
+            state:                 ctx.schoolState ?? null,
+            emergencyContactName:  contactName || undefined,
+            emergencyContactPhone: ctx.guardianPhone ?? undefined,
+            guardianName:          contactName || undefined,
+            guardianEmail:         ctx.guardianEmail ?? undefined,
+            guardianPhone:         ctx.guardianPhone ?? undefined,
+            relationship:          ctx.relationship ?? undefined,
+          },
+        })
     const recorded = await recordEnvelope(db, ctx, type, envelope, signerName, ctx.email)
     if (envelope.provider === 'docusign') {
       await safeEmail(ctx.email, docusignSentToSignerEmail({
@@ -395,52 +455,60 @@ interface ValidAgreement {
   completedAt: string
   signerName:  string
   signerEmail: string
+  type:        AgreementType
+  version:     string | null
 }
 
-// Newest unexpired completed agreement of the given type (or one executing the
-// same document — see coveringTypes) on the member's record, resolved to the root signed envelope (a coverage row's reused_from
-// always points at the originally signed row, so one hop suffices).
+interface SignedRow {
+  id: string
+  completed_at: string
+  signer_name: string
+  signer_email: string
+  envelope_type: string
+  agreement_version: string | null
+  reused_from: string | null
+}
+
+// Newest completed agreement of the given type (or one executing the same
+// document — see coveringTypes) on the member's record that still covers a new
+// event (agreementCovers), resolved to the root signed envelope (a coverage
+// row's reused_from always points at the originally signed row, so one hop
+// suffices).
 async function findValidAgreement(
   db: SupabaseClient,
   memberId: string,
   type: AgreementType,
 ): Promise<ValidAgreement | null> {
-  const cutoff = new Date()
-  cutoff.setFullYear(cutoff.getFullYear() - AGREEMENT_VALIDITY_YEARS)
-
   const { data, error } = await db
     .from('agreements')
-    .select('id, completed_at, signer_name, signer_email, reused_from')
+    .select('id, completed_at, signer_name, signer_email, envelope_type, agreement_version, reused_from')
     .eq('member_id', memberId)
     .in('envelope_type', coveringTypes(type))
     .eq('status', 'completed')
-    .gte('completed_at', cutoff.toISOString())
     .order('completed_at', { ascending: false })
     .limit(1)
     .maybeSingle()
   if (error || !data) return null
 
-  if (!data.reused_from) {
-    return {
-      id:          data.id,
-      completedAt: data.completed_at,
-      signerName:  data.signer_name,
-      signerEmail: data.signer_email,
-    }
+  let row = data as SignedRow
+  if (row.reused_from) {
+    const { data: root } = await db
+      .from('agreements')
+      .select('id, completed_at, signer_name, signer_email, envelope_type, agreement_version, reused_from')
+      .eq('id', row.reused_from)
+      .eq('status', 'completed')
+      .maybeSingle()
+    if (!root) return null
+    row = root as SignedRow
   }
-
-  const { data: root } = await db
-    .from('agreements')
-    .select('id, completed_at, signer_name, signer_email')
-    .eq('id', data.reused_from)
-    .eq('status', 'completed')
-    .maybeSingle()
-  if (!root) return null
+  if (!agreementCovers(row)) return null
   return {
-    id:          root.id,
-    completedAt: root.completed_at,
-    signerName:  root.signer_name,
-    signerEmail: root.signer_email,
+    id:          row.id,
+    completedAt: row.completed_at,
+    signerName:  row.signer_name,
+    signerEmail: row.signer_email,
+    type:        row.envelope_type as AgreementType,
+    version:     row.agreement_version,
   }
 }
 
@@ -468,6 +536,7 @@ async function recordCoverage(
     minor_name:        `${ctx.firstName} ${ctx.lastName}`,
     completed_at:      source.completedAt,
     reused_from:       source.id,
+    agreement_version: source.version,
     signers_total:     1,
     signers_completed: 1,
   })
@@ -495,6 +564,9 @@ async function recordEnvelope(
     minor_name:        `${ctx.firstName} ${ctx.lastName}`,
     signers_total:     envelope.signerCount,
     signers_completed: 0,
+    // Both engines issue the V2.3 documents (the DocuSign templates were
+    // updated to them on 2 Oct 2026), so every new row carries this version.
+    agreement_version: AGREEMENT_VERSION,
     ...envelope.rowFields,
   }
   if (!envelope.afterRecord) {
@@ -523,15 +595,18 @@ export async function dispatchTyped(
   if (type !== 'membership') return issueOrReuse(db, ctx, type)
   if (!membership) throw new Error('Membership details are required for the membership agreement')
   try {
-    if (await hasOpenEnvelopeForEvent(db, ctx, type)) return { outcome: 'in_flight' }
+    if (await hasOpenEnvelopeForEvent(db, ctx, membership.guardianEmail ? 'minor' : type)) return { outcome: 'in_flight' }
     const envelope = await issueAgreement(db, {
       type: 'membership',
       accounts: { memberId: ctx.memberId },
       params: { ...membership, firstName: ctx.firstName, lastName: ctx.lastName, email: ctx.email, phone: ctx.phone ?? undefined },
     })
     const minor = !!membership.guardianEmail
+    // A Minor joining signs the Student / Minor agreement (V2.3), which covers
+    // membership and every event, so it is recorded as one: their next event
+    // finds it on file instead of sending the family a second copy.
     const recorded = await recordEnvelope(
-      db, ctx, type, envelope,
+      db, ctx, minor ? 'minor' : type, envelope,
       minor ? membership.guardianName ?? '' : `${ctx.firstName} ${ctx.lastName}`,
       minor ? membership.guardianEmail ?? '' : ctx.email,
     )

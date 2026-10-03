@@ -3,11 +3,14 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('@/lib/env', () => ({ SITE_URL: 'https://www.stellreducation.org' }))
 // docusign-agreements pulls in email/notify/docusign; only agreementExpiry is
 // needed here and it is pure.
+// Pre-V2.3 rows (no agreement_version) keep their 3 years; that is what these
+// fixtures are.
 vi.mock('@/lib/docusign-agreements', () => ({
-  agreementExpiry: (completedAt: string) => {
-    const d = new Date(completedAt)
+  agreementValid: (row: { completed_at: string | null }, now = new Date()) => {
+    if (!row.completed_at) return false
+    const d = new Date(row.completed_at)
     d.setFullYear(d.getFullYear() + 3)
-    return d
+    return d > now
   },
 }))
 

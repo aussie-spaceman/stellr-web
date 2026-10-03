@@ -75,6 +75,25 @@ describe('issueAgreement when the allowance is spent', () => {
   })
 })
 
+describe('issueAgreement for a Mentor under the age of majority', () => {
+  const mentor = (dateOfBirth: string, state: string) => ({
+    type: 'mentor' as const,
+    params: { eventTitle: 'E', firstName: 'M', lastName: 'N', email: 'm@example.test', dateOfBirth, state, guardianName: 'P N', guardianEmail: 'p@example.test' },
+  })
+
+  it('always goes to Stellr signing, which adds the parent; DocuSign has no parent role', async () => {
+    vi.useFakeTimers().setSystemTime(new Date('2026-10-02T12:00:00Z'))
+    const db = setup(['adult'])
+    docusignCreate.mockResolvedValue({ provider: 'docusign', externalId: 'ds-1', signerCount: 1 })
+    // 18 in Alabama (majority 19).
+    expect(await issueAgreement(db.client, mentor('2008-01-01', 'AL'))).toMatchObject({ provider: 'native' })
+    expect(docusignCreate).not.toHaveBeenCalled()
+    // 18 in Colorado is an adult: routed as usual.
+    expect(await issueAgreement(db.client, mentor('2008-01-01', 'CO'))).toMatchObject({ provider: 'docusign' })
+    vi.useRealTimers()
+  })
+})
+
 describe('isOutage', () => {
   it('is DocuSign failing, not our request', () => {
     expect(isOutage(new DocusignApiError('x', 503, null))).toBe(true)

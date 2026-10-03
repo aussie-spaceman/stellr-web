@@ -11,7 +11,11 @@ const { dispatch, logActivity } = vi.hoisted(() => ({
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: async () => ({ sessionClaims: { admin: true } }) }))
 vi.mock('@/lib/admin-auth', () => ({ isAdminClaims: (c: { admin?: boolean } | null) => !!c?.admin }))
-vi.mock('@/lib/volunteer', () => ({ dispatchVolunteerAgreement: dispatch, VOLUNTEER_PROGRAM_TITLE: 'Stellr Volunteer Program' }))
+vi.mock('@/lib/volunteer', () => ({
+  dispatchVolunteerAgreement: dispatch,
+  VOLUNTEER_PROGRAM_TITLE: 'Stellr Volunteer Program',
+  VOLUNTEER_MEMBER_COLUMNS: 'id, first_name, last_name, email, phone, date_of_birth',
+}))
 vi.mock('@/lib/activity-log', () => ({ actorFromAuth: async () => ({ actorType: 'admin' }), logActivity }))
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({

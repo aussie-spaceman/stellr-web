@@ -16,7 +16,7 @@ promise in the published policy. Skipping one makes the policy untrue.**
 | Only a minimal signed-agreement record kept after deletion | §10, §12 | Part B step 4 | No — ticket |
 | Students aged 13+ (and parents) can opt out of promotional media use by email; NY/CO students aged 13–17 are opted out until they opt in | §2, Terms §11.3 | Part C: Admin → Media do-not-use and the roster's `media_ok` column; email opt-outs still manual | Partly |
 | Dietary information follows standard retention (no longer cleared after events) | §8, §10 | Nothing clears it | n/a |
-| Seven years after deactivation | §10 | The clock is `members.deleted_at` (set by every deactivation path: admin Deactivate, deletion-registry soft delete, Clerk `user.deleted`). First purge falls due in 2033 | Ticket |
+| Seven years after deactivation | §10 | The clock is `members.deleted_at` (set by every deactivation path: admin Deactivate, deletion-registry soft delete, Clerk `user.deleted`). First purge falls due in 2033. Survey data: `npm run survey:retention` / monthly cron `/api/cron/survey-retention` (retention schedule row 27) | Survey data: reported monthly, deletes only once `SURVEY_RETENTION_APPLY=true`; everything else: ticket |
 
 ---
 

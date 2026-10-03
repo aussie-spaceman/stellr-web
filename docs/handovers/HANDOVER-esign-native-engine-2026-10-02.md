@@ -98,8 +98,11 @@ drive) as the latest and correct versions. The engine now follows them:
   deletion request keeps only a minimal record. Disclosure is now versioned
   (`2026-10-v2`).
 - Migration `20261002235609_esign_agreements_v2_3.sql` (dev applied, ledger
-  aligned). Dev templates minor/adult/mentor v3 active, with text versions
-  generated from the .docx.
+  aligned). Dev templates minor/adult/mentor v3 published and approved, with
+  text versions generated from the .docx. **v2 is active on dev until this
+  branch lands**: activating v3 early broke every other PR's e2e on the shared
+  dev DB (3 Oct). On merge, make v3 active (`update esign_templates set active
+  = (version = 3) where key in ('minor','adult','mentor') and version in (2, 3)`).
 
 ## Open
 

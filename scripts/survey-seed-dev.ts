@@ -6,6 +6,8 @@
  *   npm run survey:seed-dev -- --open    …and send it live now, printing each link
  *   npm run survey:seed-dev -- --reset   delete everything the demo created
  *
+ * Uses the minors template labelled V2.3 on dev (it must exist). Creates no template.
+ *
  * Event "survey-demo-2026" (Nebraska, so the age of majority is 19):
  *   Alex  16  V2.3 agreement, own email           → invited (student)
  *   Bea   15  V2.3 agreement, §4 comms opt-out     → invited via guardian
@@ -26,7 +28,6 @@ if (existsSync('.env.local')) process.loadEnvFile('.env.local')
 const DEV_PROJECT_REF = 'xvxlhbxtiwxpopoqjygm'
 const SLUG = 'survey-demo-2026'
 const TITLE = 'Survey Demo SDC 2026'
-const TEMPLATE_VERSION = 900
 const DOMAIN = 'survey-demo.example.com'
 
 async function main() {
@@ -41,28 +42,16 @@ async function main() {
 
   if (args.includes('--reset')) return reset(db)
 
-  // Dev-only minors-agreement template labelled V2.3 (none exists yet anywhere).
+  // The minors agreement labelled V2.3 (lib/survey/consent.ts gates on the label).
   const { data: tpl, error: tplErr } = await db
     .from('esign_templates')
-    .upsert(
-      {
-        key: 'minor',
-        version: TEMPLATE_VERSION,
-        title: 'DEV ONLY — survey test, Minors Agreement V2.3',
-        pdf_path: 'dev/survey-test.pdf',
-        pdf_sha256: 'dev',
-        page_count: 1,
-        field_map: { fields: [] },
-        disclosure_version: 'dev',
-        source: 'dev-survey-seed',
-        active: false,
-        document_version: 'V2.3',
-      },
-      { onConflict: 'key,version', ignoreDuplicates: false },
-    )
     .select('id')
+    .eq('key', 'minor')
+    .eq('document_version', 'V2.3')
+    .order('version', { ascending: false })
+    .limit(1)
     .single()
-  if (tplErr) throw new Error(`template: ${tplErr.message}`)
+  if (tplErr || !tpl) throw new Error('No minors template labelled V2.3 on dev (esign_templates.document_version). Publish one first.')
 
   const { data: existingReg } = await db.from('registrations').select('id').eq('event_slug', SLUG).maybeSingle()
   let regId = existingReg?.id as string | undefined
@@ -245,7 +234,7 @@ async function reset(db: import('@supabase/supabase-js').SupabaseClient) {
     await db.from('event_participations').delete().eq('member_id', mentor.id)
     await db.from('members').delete().eq('id', mentor.id)
   }
-  console.log('Demo event removed. (The dev-only V2.3 test template stays: its label is frozen by design.)')
+  console.log('Demo event removed.')
 }
 
 main().catch((err) => {

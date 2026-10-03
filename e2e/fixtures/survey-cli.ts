@@ -27,15 +27,16 @@ async function main() {
   if (command === 'create') {
     const slug = `e2e-survey-${randomBytes(4).toString('hex')}`
     const title = `E2E Survey ${slug.slice(-8)}`
+    // The minors agreement labelled V2.3 (lib/survey/consent.ts gates on the label).
     const { data: tpl, error: tplErr } = await db
       .from('esign_templates')
-      .upsert(
-        { key: 'minor', version: 900, title: 'DEV ONLY — survey test, Minors Agreement V2.3', pdf_path: 'dev/survey-test.pdf', pdf_sha256: 'dev', page_count: 1, field_map: { fields: [] }, disclosure_version: 'dev', source: 'dev-survey-seed', active: false, document_version: 'V2.3' },
-        { onConflict: 'key,version' },
-      )
       .select('id')
+      .eq('key', 'minor')
+      .eq('document_version', 'V2.3')
+      .order('version', { ascending: false })
+      .limit(1)
       .single()
-    if (tplErr) throw new Error(tplErr.message)
+    if (tplErr || !tpl) throw new Error('No minors template labelled V2.3 on dev (esign_templates.document_version). Publish one first.')
     const { data: reg, error: regErr } = await db
       .from('registrations')
       .insert({ event_slug: slug, event_title: title, type: 'group', status: 'confirmed', school_address_state: 'CO', adult_count: 0 })

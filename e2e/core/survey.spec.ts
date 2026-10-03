@@ -24,8 +24,12 @@ const ANSWERS = {
 }
 
 async function expectAccessible(page: Page, step: string) {
+  // Let colour transitions (buttons, progress bar, save status) finish: axe
+  // sampled a mid-transition colour once (2 Oct), never reproduced in 9 runs.
+  await page.waitForLoadState('networkidle')
+  await page.waitForTimeout(400)
   const { violations } = await new AxeBuilder({ page }).include('main').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()
-  expect(violations.map((v) => `${step}: ${v.id} ${v.help}`)).toEqual([])
+  expect(violations.map((v) => `${step}: ${v.id} ${v.help} — ${v.nodes.slice(0, 4).map((n) => `${n.target.join(' ')} ${n.any[0]?.message ?? ''}`).join(' | ')}`)).toEqual([])
 }
 
 test.describe('Post-event survey', () => {
@@ -60,6 +64,7 @@ test.describe('Post-event survey', () => {
       await page.locator('label').filter({ hasText: /^8$/ }).click()
       await page.getByRole('button', { name: 'Next', exact: true }).click()
       await expect(page.getByText('Page 2 of')).toBeVisible()
+      await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible()
       await expectAccessible(page, 'page 2')
 
       // Leave and come back by the same link: resumes on the saved page.

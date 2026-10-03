@@ -3,13 +3,15 @@ import type { Page } from '@playwright/test'
 import { expect, test } from '../fixtures/test'
 import { attachConsoleGuard } from '../fixtures/console-guard'
 import { storageStatePath } from '../fixtures/users'
-import { createSurveyEvent, removeSurveyEvent, surveyConfigured, surveyPath } from '../fixtures/survey'
+import { createSurveyEvent, issueSurveyCredential, removeSurveyEvent, setCertificateGate, surveyConfigured, surveyPath } from '../fixtures/survey'
 
 /**
  * Post-event survey (docs/PLAN-post-event-survey-2026-10-02.md, handover §10):
  *   1. a student by emailed link: answer, leave, come back to the same page, submit, read-only after
  *   2. a member from the dashboard: submit, then see it in "My surveys"
  *   3. an admin: preview who it reaches, send it live, watch the completion table fill
+ *   4. the certificate gate (D1): held while the survey is open and unanswered, released on submit
+ *   5. photo/media: the admin do-not-use list and the roster's media_ok column
  * Each test makes its own throwaway event (not in Sanity) and removes it after.
  * Opening sends no email from the fixture; the server's own sends go to the
  * dev safelist (or nowhere, with no Resend key).
@@ -120,6 +122,37 @@ test.describe('Post-event survey', () => {
       await expect(page.getByText('Testing the rover')).toBeVisible()
       await expect(page.getByText('Submitted answers can’t be changed.')).toBeVisible()
     })
+
+    test('certificate gate: held until the survey is in, then downloads', async ({ page }) => {
+      const number = issueSurveyCredential(slug)
+      const pdf = `/api/credentials/${number}/pdf`
+
+      // Gate off (the default): the certificate downloads.
+      expect((await page.request.get(pdf, { headers: { accept: 'application/json' } })).status()).toBe(200)
+
+      setCertificateGate(slug, true)
+      const held = await page.request.get(pdf, { headers: { accept: 'application/json' } })
+      expect(held.status()).toBe(403)
+      const { surveyUrl } = await held.json()
+      expect(surveyUrl).toMatch(/^\/community\/surveys\/open\/[0-9a-f-]{36}$/)
+
+      // A browser following the download link lands on Credentials with the reason and the survey link.
+      await page.goto(pdf)
+      await expect(page).toHaveURL(new RegExp(`/community/credentials\\?survey_first=${number}`))
+      await expect(page.getByText(/certificate is ready once your survey is in/)).toBeVisible()
+      await expect(page.getByRole('link', { name: 'Open the survey' })).toHaveAttribute('href', surveyUrl)
+      await expect(page.getByRole('link', { name: 'Finish the survey to download the certificate' })).toHaveAttribute('href', surveyUrl)
+
+      const invitationId = surveyUrl.split('/open/')[1]
+      const res = await page.request.post(`/api/members/surveys/${invitationId}/submit`, {
+        data: { answers: { overall_rating: 'Good', nps: 7, stem_intent_before: 'Likely', stem_intent_after: 'Likely' } },
+      })
+      expect(res.status()).toBe(200)
+
+      const released = await page.request.get(pdf, { headers: { accept: 'application/json' } })
+      expect(released.status()).toBe(200)
+      expect(released.headers()['content-type']).toBe('application/pdf')
+    })
   })
 
   test.describe('admin', () => {
@@ -155,6 +188,39 @@ test.describe('Post-event survey', () => {
 
       await page.goto('/admin/surveys')
       await expect(page.getByRole('link', { name: `E2E Survey ${slug.slice(-8)}` })).toBeVisible()
+    })
+
+    test('certificate gate switch is admins’ and is recorded', async ({ page }) => {
+      const api = `/api/admin/events/${slug}/survey`
+      expect((await (await page.request.get(api)).json()).distribution.gate_certificate).toBe(false)
+      expect((await page.request.post(api, { data: { action: 'gate_certificate', on: true } })).status()).toBe(200)
+      expect((await (await page.request.get(api)).json()).distribution.gate_certificate).toBe(true)
+      expect((await page.request.post(api, { data: { action: 'gate_certificate', on: false } })).status()).toBe(200)
+      expect((await (await page.request.get(api)).json()).distribution.gate_certificate).toBe(false)
+    })
+
+    test('photo/media: roster media_ok column and the do-not-use list', async ({ page }) => {
+      // Ada is 16 at a CO school with no opt-out ticked: off until she opts in.
+      // Sam is an adult: yes.
+      const csv = await (await page.request.get(`/api/admin/events/${slug}/export`)).text()
+      const [header, ...lines] = csv.split('\n')
+      const cols = header.split(',')
+      const at = cols.indexOf('media_ok')
+      expect(at).toBeGreaterThan(-1)
+      const mediaOf = (first: string) => lines.find((l) => l.includes(`,${first},`))?.split(',')[at]
+      expect(mediaOf('Ada')).toBe('no')
+      expect(mediaOf('Sam')).toBe('yes')
+
+      await page.goto(`/admin/media?event=${slug}`)
+      await expect(page.getByRole('heading', { name: 'Media do-not-use' })).toBeVisible()
+      const ada = page.getByRole('row').filter({ hasText: 'Ada Student' })
+      await expect(ada).toContainText('Do not use')
+      await expect(ada).toContainText('NY/CO, 13–17')
+      await expect(page.getByRole('row').filter({ hasText: 'Sam Tester' })).toHaveCount(0)
+
+      const list = await page.request.get(`/api/admin/media/do-not-use?event=${slug}`)
+      expect(list.status()).toBe(200)
+      expect(await list.text()).toMatch(/^media_ok,Reason,First Name/)
     })
   })
 })

@@ -21,7 +21,8 @@
  *     with the V2.3 agreements branch (migration 20261002235609). It is read
  *     when the column exists and ignored when it doesn't, so this works
  *     whichever branch reaches an environment first.
- *   - A DocuSign form whose box was never read back is "check": open the
+ *   - A form whose media box we can't see (DocuSign not read back, or an
+ *     older Stellr template without it) is "check": open the
  *     signed PDF (Admin → Consent forms).
  * State is the school's state (no home state is collected); NY/CO applies if
  * any known school state is NY or CO, as runbook Part C says. Opt-outs sent by
@@ -47,7 +48,7 @@ export const MEDIA_REASON_LABEL: Record<MediaReason, string> = {
   opted_out_on_agreement: 'Opted out on the signed agreement',
   student_off: 'Turned photo/media off in their account',
   no_agreement: 'Minor with no signed agreement on file',
-  form_unread: 'DocuSign form not read back: check the signed PDF',
+  form_unread: 'Media box not on file: check the signed form',
   opted_in: 'Turned photo/media on in their account',
   ny_co_default: 'NY/CO, 13–17: off until they opt in',
   default: 'No opt-out on file',

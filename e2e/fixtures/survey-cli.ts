@@ -4,11 +4,14 @@
  *
  *   tsx e2e/fixtures/survey-cli.ts create [--open]   → { slug, distributionId }
  *   tsx e2e/fixtures/survey-cli.ts link <slug> <first name> → "/survey/<token>"
+ *   tsx e2e/fixtures/survey-cli.ts gate <slug> on|off      → certificate gate (D1)
+ *   tsx e2e/fixtures/survey-cli.ts credential <slug>       → Ada's event credential number
  *   tsx e2e/fixtures/survey-cli.ts remove <slug>
  *
  * Each test gets its own throwaway event (not in Sanity) on the dev database:
  *   Sam — college student, own email           → student path, no consent gate
- *   Ada — the seed member (16), V2.3 agreement → student path via dashboard
+ *   Ada — the seed member (16), V2.3 agreement → student path via dashboard;
+ *         school state CO, so photo/media is off by default (NY/CO 13–17)
  * Opening it sends no email: the Resend key is dropped for this process.
  */
 import { createClient } from '@supabase/supabase-js'
@@ -58,7 +61,7 @@ async function main() {
       .select('id')
       .single()
     if (agErr) throw new Error(agErr.message)
-    await db.from('agreement_recipients').insert({ envelope_row: ag.id, recipient_id: '1', role_name: 'Guardian', name: 'Guardian', email: `guardian.${slug}@example.com`, status: 'completed', signer_values: { DigitalCommsOptOut: 'false', QuoteOptOut: 'false' } })
+    await db.from('agreement_recipients').insert({ envelope_row: ag.id, recipient_id: '1', role_name: 'Guardian', name: 'Guardian', email: `guardian.${slug}@example.com`, status: 'completed', signer_values: { DigitalCommsOptOut: 'false', QuoteOptOut: 'false', MediaOptOut: 'false' } })
 
     const { ensureDistribution, setEarlierGoLive } = await import('../../lib/survey/distributions')
     const { localDate } = await import('../../lib/survey/timezone')
@@ -83,9 +86,27 @@ async function main() {
     return `/survey/${surveyToken(inv.id as string, inv.token_version as number)}`
   }
 
+  if (command === 'gate') {
+    const [slug, on] = args
+    const { error } = await db.from('survey_distributions').update({ gate_certificate: on === 'on' }).eq('event_slug', slug)
+    if (error) throw new Error(error.message)
+    return true
+  }
+
+  if (command === 'credential') {
+    const [slug] = args
+    const { data: p } = await db.from('participants').select('id, registrations!inner(event_slug, event_title)').eq('member_id', ADA).eq('registrations.event_slug', slug).single()
+    const number = `STL-2099-E2${randomBytes(3).toString('hex').toUpperCase()}` // year 2099 marks it as e2e
+    const title = (p!.registrations as unknown as { event_title: string }).event_title
+    const { error } = await db.from('credentials').insert({ number, source: 'event', member_id: ADA, participant_id: p!.id, event_slug: slug, recipient_name: 'Ada Student', title, award_type: 'participation', is_minor: true })
+    if (error) throw new Error(error.message)
+    return number
+  }
+
   if (command === 'remove') {
     const [slug] = args
     if (!slug?.startsWith('e2e-survey-')) throw new Error('refusing to remove a non-e2e event')
+    await db.from('credentials').delete().eq('event_slug', slug).like('number', 'STL-2099-E2%')
     const { data: regs } = await db.from('registrations').select('id').eq('event_slug', slug)
     const regIds = (regs ?? []).map((r) => r.id as string)
     const { data: parts } = regIds.length ? await db.from('participants').select('id').in('registration_id', regIds) : { data: [] }

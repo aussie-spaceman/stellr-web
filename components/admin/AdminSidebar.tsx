@@ -30,7 +30,10 @@ const SECTIONS: Section[] = [
   },
   {
     label: 'Competitions', href: '/admin/competitions', color: '#E0922F', icon: Trophy,
-    items: [{ href: '/admin/competitions', label: 'Competitions' }],
+    items: [
+      { href: '/admin/competitions', label: 'Competitions' },
+      { href: '/admin/surveys', label: 'Surveys' },
+    ],
   },
   {
     label: 'Community', href: '/admin/community/spaces', color: '#3f78d6', icon: MessagesSquare,

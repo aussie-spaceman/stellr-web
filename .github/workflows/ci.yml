@@ -38,21 +38,30 @@ jobs:
     outputs:
       code: ${{ steps.diff.outputs.code }}
     steps:
+      # Full history so any push's `before` resolves, but no blobs: the diff
+      # below compares trees only. The pack is ~1 GB of old video blobs
+      # (public/videos/, moved to Vercel Blob on 21 Sept); fetching them took
+      # this job from ~20 s to past its 5-minute timeout on 5 Oct, and the
+      # cancelled job silently skipped e2e. Blobless, the history is ~2 MB.
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - id: diff
         env:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
+        # --no-renames: a rename lists only its new path, so moving a file from
+        # app/ into docs/ would read as docs-only. It also keeps the diff to
+        # trees, so the blobless checkout never has to fetch a blob.
         run: |
           if [ "$EVENT" = pull_request ]; then
             # The checkout is GitHub's merge commit: parent 1 is the base.
-            files=$(git diff --name-only HEAD^1 HEAD)
+            files=$(git diff --name-only --no-renames HEAD^1 HEAD)
           elif [ "$EVENT" = push ] && [ -n "$BEFORE" ] && ! echo "$BEFORE" | grep -qE '^0+$' \
                && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            files=$(git diff --name-only "$BEFORE" HEAD)
+            files=$(git diff --name-only --no-renames "$BEFORE" HEAD)
           else
             files=""
           fi
@@ -116,7 +125,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [verify, changes]
     # Skipped (reported as passing) for docs-only changes — see `changes`.
-    if: needs.changes.outputs.code == 'true'
+    # Fails closed: only an explicit code=false skips. If `changes` itself
+    # fails or times out, its output is empty and e2e runs — on 5 Oct a
+    # timed-out `changes` skipped e2e on every PR while `verify` showed green.
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.changes.outputs.code != 'false' }}
     timeout-minutes: 20
 
     # One e2e job at a time across the whole repo, not per ref. Every run, from

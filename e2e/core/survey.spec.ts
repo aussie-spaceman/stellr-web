@@ -138,17 +138,29 @@ test.describe('Post-event survey', () => {
     })
 
     test('preview counts, send live, completion table updates', async ({ page }) => {
+      // Load a page first: Clerk refreshes its short-lived session cookie on
+      // navigation, not on API calls, so a request straight after a long
+      // queue (CI) arrives signed out.
+      await page.goto('/admin/surveys')
+      await expect(page.getByRole('heading', { name: 'Surveys', exact: true })).toBeVisible()
+
       const api = `/api/admin/events/${slug}/survey`
-      const before = await (await page.request.get(api)).json()
+      const getView = async () => {
+        const res = await page.request.get(api)
+        const body = await res.json().catch(() => ({}))
+        expect(res.status(), JSON.stringify(body)).toBe(200)
+        return body
+      }
+      const before = await getView()
       expect(before.status).toBe('scheduled')
       expect(before.preview.byRole.student).toBe(2)
       expect(before.preview.awaitingConsent).toEqual([])
       expect(before.totals.invited).toBe(0)
 
       const sent = await page.request.post(api, { data: { action: 'send_now' } })
-      expect(sent.status()).toBe(200)
+      expect(sent.status(), await sent.text()).toBe(200)
 
-      const after = await (await page.request.get(api)).json()
+      const after = await getView()
       expect(after.status).toBe('open')
       expect(after.distribution.opens_at_source).toBe('manual')
       expect(after.totals.invited).toBe(2)

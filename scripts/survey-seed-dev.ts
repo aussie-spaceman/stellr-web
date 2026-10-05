@@ -42,16 +42,8 @@ async function main() {
 
   if (args.includes('--reset')) return reset(db)
 
-  // The minors agreement labelled V2.3 (lib/survey/consent.ts gates on the label).
-  const { data: tpl, error: tplErr } = await db
-    .from('esign_templates')
-    .select('id')
-    .eq('key', 'minor')
-    .eq('document_version', 'V2.3')
-    .order('version', { ascending: false })
-    .limit(1)
-    .single()
-  if (tplErr || !tpl) throw new Error('No minors template labelled V2.3 on dev (esign_templates.document_version). Publish one first.')
+  // The current minors template (optional link; the survey reads agreement_version).
+  const { data: tpl } = await db.from('esign_templates').select('id').eq('key', 'minor').eq('active', true).maybeSingle()
 
   const { data: existingReg } = await db.from('registrations').select('id').eq('event_slug', SLUG).maybeSingle()
   let regId = existingReg?.id as string | undefined
@@ -126,7 +118,11 @@ async function main() {
           signer_email: `guardian.${name.toLowerCase()}@${DOMAIN}`,
           minor_name: `${name} Demo`,
           completed_at: new Date().toISOString(),
-          template_id: tpl.id,
+          template_id: tpl?.id ?? null,
+          agreement_version: '2.3',
+          digital_comms_opt_out: String(values.DigitalCommsOptOut) === 'true',
+          quote_opt_out: String(values.QuoteOptOut) === 'true',
+          media_opt_out: String(values.MediaOptOut) === 'true',
         })
         .select('id')
         .single()

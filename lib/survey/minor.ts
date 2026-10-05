@@ -10,15 +10,12 @@
  *     reading, and the one lib/no-ads.ts already takes.
  * Age itself always comes from lib/age.ts.
  */
-import { ageOn, appToday, isValidDob, onDate } from '@/lib/age'
+import { ageOfMajority as ageOfMajorityByState, ageOn, appToday, isValidDob, onDate } from '@/lib/age'
 import { normaliseState } from '@/lib/locations'
 
-/** Age of majority by state: 19 in Alabama and Nebraska, 21 in Mississippi, else 18. */
+/** Age of majority by state (lib/age.ts, V2.3): accepts a code or any spelling normaliseState knows. */
 export function ageOfMajority(state: string | null | undefined): number {
-  const code = state ? normaliseState(state) : undefined
-  if (code === 'AL' || code === 'NE') return 19
-  if (code === 'MS') return 21
-  return 18
+  return ageOfMajorityByState(state ? normaliseState(state) ?? state : null)
 }
 
 const HIGH_SCHOOL_GRADES = new Set(['grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12'])

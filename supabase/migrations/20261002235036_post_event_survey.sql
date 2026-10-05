@@ -17,31 +17,9 @@
 -- under RLS keyed on the Clerk JWT subject (defence in depth, migration 047's
 -- pattern).
 
--- ── 0. Agreement document versions ───────────────────────────────────────────
--- Minors are surveyed only under Participation Agreement – Minors V2.3 or
--- later. Template rows carry only an integer version, so the document's own
--- label is recorded beside it. Once set it cannot change.
-ALTER TABLE public.esign_templates
-  ADD COLUMN IF NOT EXISTS document_version text
-  CHECK (document_version IS NULL OR document_version ~ '^V[0-9]+(\.[0-9]+)*$');
-
-COMMENT ON COLUMN public.esign_templates.document_version IS
-  'The agreement document''s own version label, e.g. V2.3. Set once; gates survey invitations for minors (lib/survey/consent.ts).';
-
-CREATE OR REPLACE FUNCTION public.esign_templates_freeze_document_version()
-RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF OLD.document_version IS NOT NULL AND NEW.document_version IS DISTINCT FROM OLD.document_version THEN
-    RAISE EXCEPTION 'esign_templates: document_version of % v% is set and cannot be changed', OLD.key, OLD.version;
-  END IF;
-  RETURN NEW;
-END $$;
-
-DROP TRIGGER IF EXISTS esign_templates_freeze_document_version ON public.esign_templates;
-CREATE TRIGGER esign_templates_freeze_document_version
-  BEFORE UPDATE OF document_version ON public.esign_templates
-  FOR EACH ROW EXECUTE FUNCTION public.esign_templates_freeze_document_version();
-REVOKE EXECUTE ON FUNCTION public.esign_templates_freeze_document_version() FROM PUBLIC;
+-- Which minors may be surveyed (V2.3 or later) is read from
+-- agreements.agreement_version and the opt-out columns added by
+-- 20261002235609_esign_agreements_v2_3.sql (lib/survey/consent.ts).
 
 -- ── 1. Definitions ───────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.survey_definitions (

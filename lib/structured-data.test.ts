@@ -403,18 +403,21 @@ describe('buildCampaignJsonLd', () => {
 // nulls. This is the check that was missing when the bare `superEvent` stub and
 // the dateless series shipped.
 describe('the published graph', () => {
-  const graphs: Record<string, unknown> = {
+  // Built inside each test, not at collection time: the series window is "as
+  // of today", and only inside a test is the clock fixed (beforeEach). Built
+  // here it used the real date, and broke once Colorado's 3 Oct date passed.
+  const buildGraphs = (): Record<string, unknown> => ({
     event: buildEventJsonLd(colorado, colorado.slug.current, {
       price: { kind: 'priced', cents: 7500, currency: 'usd' },
       series: members,
     }),
     campaign: buildCampaignJsonLd(campaign, campaign.slug.current, { series: members }),
     competitions: buildCompetitionSeriesJsonLd(members),
-  }
+  })
 
-  for (const [name, graph] of Object.entries(graphs)) {
+  for (const name of ['event', 'campaign', 'competitions']) {
     it(`has no missing fields in any Event node on ${name}`, () => {
-      const nodes = eventNodes(graph)
+      const nodes = eventNodes(buildGraphs()[name])
       expect(nodes.length).toBeGreaterThan(0)
       for (const node of nodes) {
         const missing = [...REQUIRED, ...RECOMMENDED].filter((f) => node[f] === undefined)
@@ -423,7 +426,7 @@ describe('the published graph', () => {
     })
 
     it(`serialises no nulls on ${name}`, () => {
-      expect(nullPaths(graph)).toEqual([])
+      expect(nullPaths(buildGraphs()[name])).toEqual([])
     })
   }
 })

@@ -27,16 +27,8 @@ async function main() {
   if (command === 'create') {
     const slug = `e2e-survey-${randomBytes(4).toString('hex')}`
     const title = `E2E Survey ${slug.slice(-8)}`
-    // The minors agreement labelled V2.3 (lib/survey/consent.ts gates on the label).
-    const { data: tpl, error: tplErr } = await db
-      .from('esign_templates')
-      .select('id')
-      .eq('key', 'minor')
-      .eq('document_version', 'V2.3')
-      .order('version', { ascending: false })
-      .limit(1)
-      .single()
-    if (tplErr || !tpl) throw new Error('No minors template labelled V2.3 on dev (esign_templates.document_version). Publish one first.')
+    // The current minors template (optional link; the survey reads agreement_version).
+    const { data: tpl } = await db.from('esign_templates').select('id').eq('key', 'minor').eq('active', true).maybeSingle()
     const { data: reg, error: regErr } = await db
       .from('registrations')
       .insert({ event_slug: slug, event_title: title, type: 'group', status: 'confirmed', school_address_state: 'CO', adult_count: 0 })
@@ -55,7 +47,7 @@ async function main() {
     const ada = parts!.find((p) => p.first_name === 'Ada')!.id
     const { data: ag, error: agErr } = await db
       .from('agreements')
-      .insert({ participant_id: ada, member_id: ADA, event_slug: slug, event_title: title, envelope_id: `e2e-${slug}`, envelope_type: 'minor', status: 'completed', provider: 'native', signer_name: 'Guardian', signer_email: `guardian.${slug}@example.com`, minor_name: 'Ada Student', completed_at: new Date().toISOString(), template_id: tpl.id })
+      .insert({ participant_id: ada, member_id: ADA, event_slug: slug, event_title: title, envelope_id: `e2e-${slug}`, envelope_type: 'minor', status: 'completed', provider: 'native', signer_name: 'Guardian', signer_email: `guardian.${slug}@example.com`, minor_name: 'Ada Student', completed_at: new Date().toISOString(), template_id: tpl?.id ?? null, agreement_version: '2.3' })
       .select('id')
       .single()
     if (agErr) throw new Error(agErr.message)

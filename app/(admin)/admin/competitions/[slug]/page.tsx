@@ -10,6 +10,8 @@ import EventRoster from '@/components/admin/EventRoster'
 import EventManagerAssignments from '@/components/admin/EventManagerAssignments'
 import { EventVolunteersPanel } from '@/components/admin/competitions/EventVolunteersPanel'
 import { EventEmailsPanel } from '@/components/admin/competitions/EventEmailsPanel'
+import { EventSurveyPanel } from '@/components/admin/competitions/EventSurveyPanel'
+import { AUTH_APP_URL } from '@/lib/env'
 import EventCompanies, { type CompanyRow } from '@/components/admin/EventCompanies'
 import EventBadges from '@/components/admin/EventBadges'
 import EventCertificates from '@/components/admin/EventCertificates'
@@ -24,11 +26,12 @@ import { ContainerTraining, type ContentRow, type ModuleOption } from '@/compone
 export const metadata = { title: 'Admin — Event' }
 export const dynamic = 'force-dynamic'
 
-type Tab = 'overview' | 'roster' | 'emails' | 'training' | 'settings'
+type Tab = 'overview' | 'roster' | 'emails' | 'survey' | 'training' | 'settings'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'roster', label: 'Roster' },
   { id: 'emails', label: 'Email Reminders' },
+  { id: 'survey', label: 'Survey' },
   { id: 'training', label: 'Training' },
   { id: 'settings', label: 'Settings' },
 ]
@@ -165,9 +168,10 @@ export default async function AdminEventDetailPage({
     }
   }
 
-  // ── Visible tabs (campaigns skip Settings and Email Reminders — a campaign
-  //    has its own proposal emails, and no venue or event day to count down to)
-  const visibleTabs = isCampaign ? TABS.filter((t) => t.id !== 'settings' && t.id !== 'emails') : TABS
+  // ── Visible tabs (campaigns skip Settings, Email Reminders and Survey — a
+  //    campaign has its own proposal emails, and no event day to count down to
+  //    or survey after)
+  const visibleTabs = isCampaign ? TABS.filter((t) => t.id !== 'settings' && t.id !== 'emails' && t.id !== 'survey') : TABS
 
   const baseHref = `/admin/competitions/${slug}`
 
@@ -303,6 +307,9 @@ export default async function AdminEventDetailPage({
       {tab === 'emails' && !isCampaign && (
         <EventEmailsPanel eventSlug={slug} eventDate={event.date ?? null} />
       )}
+
+      {/* ── Post-event survey (live events only) ─────────────────────────────── */}
+      {tab === 'survey' && !isCampaign && <EventSurveyPanel eventSlug={slug} appUrl={AUTH_APP_URL} />}
 
       {/* ── Training ───────────────────────────────────────────────────────── */}
       {tab === 'training' && (

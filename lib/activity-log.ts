@@ -23,6 +23,7 @@ export type ActivityCategory =
   | 'community'
   | 'school'
   | 'compliance'
+  | 'survey'
 
 export type ActorType = 'admin' | 'member' | 'system' | 'stripe' | 'docusign'
 

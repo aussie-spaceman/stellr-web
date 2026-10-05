@@ -61,7 +61,7 @@ flowchart TD
 
   DS -- completed --> ARC[Archive<br/>lib/esign/archive.ts]
   S --> FIN[Finalise and seal<br/>flow.ts finaliseAgreement]
-  FIN --> BKT[(Bucket signed-agreements<br/>PDF + certificate or audit.json<br/>retain_until = +7 years)]
+  FIN --> BKT[(Bucket signed-agreements<br/>PDF + certificate or audit.json<br/>retain_until = deactivation +7 years)]
   ARC --> BKT
 
   BKT -- nightly, AES-256-GCM --> GD[(Google shared drive<br/>per-record copies)]

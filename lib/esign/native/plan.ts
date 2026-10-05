@@ -9,6 +9,17 @@ import type { Role } from '@/lib/esign/native/template'
 
 export type TemplateKey = 'minor' | 'adult' | 'mentor' | 'membership_adult' | 'membership_minor'
 
+/** The documents' own titles (Participation Agreements V2.3, 2 Oct 2026). */
+export const AGREEMENT_TITLE = {
+  minor: 'Participation Agreement — Student / Minor',
+  adult: 'Participation Agreement — Educator / Chaperone',
+  mentor: 'Mentor and Volunteer Agreement',
+  membership: 'Membership Agreement',
+} as const
+
+/** The version of each agreement now issued, recorded on every agreement row (agreement_version). */
+export const AGREEMENT_VERSION = '2.3'
+
 /** DocuSign's role names, kept on recipient rows so every status surface reads them the same way. */
 export const ROLE_NAME: Record<Role, string> = {
   guardian: 'Guardian',
@@ -62,10 +73,12 @@ export function planAgreement(req: CreateAgreementRequest): IssuePlan {
       }
       return {
         templateKey: 'minor',
-        label: 'Parental Consent Form',
+        label: AGREEMENT_TITLE.minor,
         prefill: {
           MinorName: minorName,
           MinorDateOfBirth: formatFormDate(p.minorDateOfBirth),
+          MinorEmail: lower(p.minorEmail),
+          MinorGrade: clean(p.grade),
           EventTitle: clean(p.eventTitle),
           GuardianName: clean(p.guardianName),
           GuardianEmail: lower(p.guardianEmail),
@@ -86,7 +99,7 @@ export function planAgreement(req: CreateAgreementRequest): IssuePlan {
       const name = `${clean(p.firstName)} ${clean(p.lastName)}`.trim()
       return {
         templateKey: 'adult',
-        label: 'Participation Agreement',
+        label: AGREEMENT_TITLE.adult,
         prefill: {
           TeacherName: name,
           TeacherEmail: lower(p.email),
@@ -106,21 +119,33 @@ export function planAgreement(req: CreateAgreementRequest): IssuePlan {
     case 'volunteer': {
       const p = req.params
       const name = `${clean(p.firstName)} ${clean(p.lastName)}`.trim()
+      const mentor: PlannedSigner = { role: 'mentor', name, email: lower(p.email), memberId, order: 2 }
+      // §3A: a Mentor under the age of majority where they live needs a
+      // parent or legal guardian to sign too, and the parent signs first.
+      const underMajority = isMinorOn(p.dateOfBirth ?? null, undefined, p.state ?? null)
+      if (underMajority && (!clean(p.guardianEmail) || !clean(p.guardianName))) {
+        throw new Error('A parent or guardian name and email are required for a Mentor under the age of majority')
+      }
+      const guardian: PlannedSigner | null = underMajority
+        ? { role: 'guardian', name: clean(p.guardianName), email: lower(p.guardianEmail), memberId: null, order: 1 }
+        : null
       return {
         templateKey: 'mentor',
-        label: 'Mentor Participation Agreement',
+        label: AGREEMENT_TITLE.mentor,
         prefill: {
           MentorName: name,
           MentorEmail: lower(p.email),
           MentorPhone: clean(p.phone),
           EventTitle: clean(p.eventTitle),
+          EmergencyContactName: clean(p.emergencyContactName),
+          EmergencyContactPhone: clean(p.emergencyContactPhone),
         },
-        names: { mentor: name },
+        names: { mentor: name, ...(guardian ? { guardian: guardian.name } : {}) },
         // Stellr's counter-signature is applied by the engine on completion,
         // under the standing authorisation, so it is not a signer here.
-        signers: [{ role: 'mentor', name, email: lower(p.email), memberId, order: 1 }],
-        minorSubject: false,
-        subjectBirthYear: null,
+        signers: guardian ? [guardian, mentor] : [mentor],
+        minorSubject: underMajority,
+        subjectBirthYear: underMajority ? yearOf(p.dateOfBirth ?? undefined) : null,
       }
     }
 
@@ -143,14 +168,25 @@ export function planAgreement(req: CreateAgreementRequest): IssuePlan {
         if (!clean(p.guardianEmail) || !clean(p.guardianName)) {
           throw new Error('A parent or guardian name and email are required for an under-18 membership agreement')
         }
+        // V2.3: the Student / Minor agreement covers membership as well as
+        // every event, so a Minor joining signs that same document.
         return {
-          templateKey: 'membership_minor',
-          label: 'Membership Agreement',
-          prefill,
-          names: { guardian: clean(p.guardianName), member: name },
+          templateKey: 'minor',
+          label: AGREEMENT_TITLE.minor,
+          prefill: {
+            MinorName: name,
+            MinorDateOfBirth: formatFormDate(p.dateOfBirth),
+            MinorEmail: lower(p.email),
+            MinorGrade: clean(p.grade),
+            GuardianName: clean(p.guardianName),
+            GuardianEmail: lower(p.guardianEmail),
+            GuardianPhone: clean(p.guardianPhone),
+            MinorRelationship: clean(p.relationship),
+          },
+          names: { guardian: clean(p.guardianName), student: name },
           signers: [
             { role: 'guardian', name: clean(p.guardianName), email: lower(p.guardianEmail), memberId: null, order: 1 },
-            { ...member, order: 2 },
+            { role: 'student', name, email: lower(p.email), memberId: p.memberId, order: 2 },
           ],
           minorSubject: true,
           subjectBirthYear: yearOf(p.dateOfBirth),
@@ -158,7 +194,7 @@ export function planAgreement(req: CreateAgreementRequest): IssuePlan {
       }
       return {
         templateKey: 'membership_adult',
-        label: 'Membership Agreement',
+        label: AGREEMENT_TITLE.membership,
         prefill,
         names: { member: name },
         signers: [member],

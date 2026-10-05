@@ -1,0 +1,190 @@
+{
+  "roles": [
+    {
+      "role": "guardian",
+      "order": 1,
+      "optional": true
+    },
+    {
+      "role": "mentor",
+      "order": 2
+    },
+    {
+      "role": "stellr",
+      "order": 3
+    }
+  ],
+  "fields": [
+    {
+      "name": "mentor_full_name_parties",
+      "label": "Full name",
+      "role": "mentor",
+      "type": "full_name",
+      "source": "system",
+      "page": 1,
+      "x": 123,
+      "y": 197.6,
+      "w": 230
+    },
+    {
+      "name": "MentorAddress",
+      "label": "Primary address",
+      "role": "mentor",
+      "type": "text",
+      "source": "signer",
+      "page": 1,
+      "x": 153,
+      "y": 215.7,
+      "w": 260,
+      "required": true
+    },
+    {
+      "name": "MediaOptOut",
+      "label": "I DO NOT consent to use of my name and image",
+      "role": "mentor",
+      "type": "checkbox",
+      "source": "signer",
+      "page": 4,
+      "x": 62,
+      "y": 361.9
+    },
+    {
+      "name": "mentor_full_name",
+      "label": "Full name",
+      "role": "mentor",
+      "type": "full_name",
+      "source": "system",
+      "page": 4,
+      "x": 123,
+      "y": 556.4,
+      "w": 230
+    },
+    {
+      "name": "mentor_signature",
+      "label": "Signature",
+      "role": "mentor",
+      "type": "signature",
+      "source": "signer",
+      "page": 4,
+      "x": 120,
+      "y": 562.5,
+      "w": 230,
+      "h": 22,
+      "required": true
+    },
+    {
+      "name": "mentor_date_signed",
+      "label": "Date signed",
+      "role": "mentor",
+      "type": "date_signed",
+      "source": "system",
+      "page": 4,
+      "x": 402,
+      "y": 574.5
+    },
+    {
+      "name": "EmergencyContactName",
+      "label": "Emergency contact name",
+      "role": "mentor",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "EmergencyContactName",
+      "page": 4,
+      "x": 198,
+      "y": 592.6,
+      "w": 200,
+      "required": true
+    },
+    {
+      "name": "EmergencyContactPhone",
+      "label": "Emergency contact phone",
+      "role": "mentor",
+      "type": "text",
+      "source": "prefill",
+      "prefillKey": "EmergencyContactPhone",
+      "page": 4,
+      "x": 201,
+      "y": 610.7,
+      "w": 200,
+      "required": true
+    },
+    {
+      "name": "guardian_full_name",
+      "label": "Parent or guardian full name",
+      "role": "guardian",
+      "type": "full_name",
+      "source": "system",
+      "page": 4,
+      "x": 123,
+      "y": 646.9,
+      "w": 230
+    },
+    {
+      "name": "guardian_signature",
+      "label": "Parent or guardian signature",
+      "role": "guardian",
+      "type": "signature",
+      "source": "signer",
+      "page": 4,
+      "x": 120,
+      "y": 653,
+      "w": 230,
+      "h": 22,
+      "required": true
+    },
+    {
+      "name": "guardian_date_signed",
+      "label": "Date signed",
+      "role": "guardian",
+      "type": "date_signed",
+      "source": "system",
+      "page": 4,
+      "x": 402,
+      "y": 665
+    },
+    {
+      "name": "stellr_name",
+      "label": "Name",
+      "role": "stellr",
+      "type": "full_name",
+      "source": "system",
+      "page": 4,
+      "x": 103,
+      "y": 701.2,
+      "w": 230
+    },
+    {
+      "name": "stellr_title",
+      "label": "Position or role",
+      "role": "stellr",
+      "type": "title",
+      "source": "system",
+      "page": 5,
+      "x": 143,
+      "y": 60.5,
+      "w": 230
+    },
+    {
+      "name": "stellr_signature",
+      "label": "Signature",
+      "role": "stellr",
+      "type": "signature",
+      "source": "system",
+      "page": 5,
+      "x": 120,
+      "y": 66.6,
+      "w": 230,
+      "h": 22
+    },
+    {
+      "name": "stellr_date_signed",
+      "label": "Date signed",
+      "role": "stellr",
+      "type": "date_signed",
+      "source": "system",
+      "page": 5,
+      "x": 402,
+      "y": 78.6
+    }
+  ]
+}

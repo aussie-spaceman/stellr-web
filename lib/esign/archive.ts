@@ -1,14 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchSignedDocument } from '@/lib/esign/operations'
 import { slug } from '@/lib/esign/filenames'
-import { SIGNED_BUCKET, archivePaths, putImmutable, retainUntil } from '@/lib/esign/storage'
+import { SIGNED_BUCKET, archivePaths, putImmutable } from '@/lib/esign/storage'
 
 // Signed agreements are kept in this app, not only at the engine that issued
 // them. Until October 2026 both download routes fetched the executed PDF from
 // DocuSign on every request, so the day the account lapsed every signed
 // consent form would have become unreachable. Layout: lib/esign/storage.ts.
 
-export { SIGNED_BUCKET, RETENTION_YEARS, archivePaths, putImmutable, retainUntil, sha256Hex } from '@/lib/esign/storage'
+export { SIGNED_BUCKET, RETENTION_YEARS, archivePaths, putImmutable, retainUntil, retainUntilOnCompletion, sha256Hex } from '@/lib/esign/storage'
 
 /** Archive attempts after which the retry job stops and reports the envelope. */
 export const MAX_ARCHIVE_ATTEMPTS = 10
@@ -68,7 +68,8 @@ export async function archiveEnvelope(db: SupabaseClient, row: ArchivableRow): P
       archive_error:     null,
       updated_at:        now,
     }
-    if (row.completed_at) update.retain_until = retainUntil(row.completed_at)
+    // retain_until is set on completion (onEnvelopeCompleted), not here: a
+    // record linked to an open account has none until the account closes.
     const { error } = await db.from('agreements').update(update).eq('id', row.id)
     if (error) throw new Error(`Recording the archive failed: ${error.message}`)
     return { kind: 'archived', path: paths.pdf, sha256 }

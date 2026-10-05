@@ -28,6 +28,8 @@ export interface MembershipAgreementParams {
   email: string
   phone?: string
   dateOfBirth?: string
+  /** A Minor's grade, for the Student / Minor agreement they sign. */
+  grade?: string
   guardianName?: string
   guardianEmail?: string
   guardianPhone?: string

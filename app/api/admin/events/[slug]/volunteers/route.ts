@@ -4,7 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
 import { getEventBySlug } from '@/lib/sanity'
 import { ensureEventContainer } from '@/lib/container-sync'
-import { getVolunteerStatuses, grantVolunteerRole, dispatchVolunteerAgreement } from '@/lib/volunteer'
+import { getVolunteerStatuses, grantVolunteerRole, dispatchVolunteerAgreement, VOLUNTEER_MEMBER_COLUMNS } from '@/lib/volunteer'
 import { logActivity, actorFromAuth } from '@/lib/activity-log'
 import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 
@@ -152,7 +152,7 @@ export async function POST(req: Request, { params }: Ctx) {
   // alerts admins inside dispatchAgreement and the assignment still stands.
   const { data: member } = await db
     .from('members')
-    .select('id, first_name, last_name, email, phone, date_of_birth')
+    .select(VOLUNTEER_MEMBER_COLUMNS)
     .eq('id', memberId)
     .maybeSingle()
   const agreement = member ? await dispatchVolunteerAgreement(db, member) : 'no_email'

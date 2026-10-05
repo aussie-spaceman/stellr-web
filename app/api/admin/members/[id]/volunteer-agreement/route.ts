@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { actorFromAuth, logActivity } from '@/lib/activity-log'
-import { dispatchVolunteerAgreement, VOLUNTEER_PROGRAM_TITLE } from '@/lib/volunteer'
+import { dispatchVolunteerAgreement, VOLUNTEER_PROGRAM_TITLE, VOLUNTEER_MEMBER_COLUMNS } from '@/lib/volunteer'
 
 // Admin (re-)issue of the Volunteer Agreement (PRD §15: "issue the Volunteer
 // DocuSign to new Volunteers"). Signup normally dispatches it automatically;
@@ -20,7 +20,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const db = supabaseServer()
   const { data: member } = await db
     .from('members')
-    .select('id, first_name, last_name, email, phone, date_of_birth')
+    .select(VOLUNTEER_MEMBER_COLUMNS)
     .eq('id', id)
     .maybeSingle()
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })

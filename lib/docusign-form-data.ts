@@ -32,7 +32,23 @@ const CHECKED = new Set(['x', 'true', 'on', 'checked', 'yes', '1'])
  * contractually documented.
  */
 export function readCredentialOptOut(fields: { name: string; value: string }[]): boolean | null {
-  const matches = fields.filter((f) => f.name.toLowerCase() === CREDENTIAL_OPT_OUT_TAB.toLowerCase())
+  return readCheckbox(fields, CREDENTIAL_OPT_OUT_TAB)
+}
+
+/** Any "I do NOT consent" checkbox by tab label: true ticked, false not, null absent. */
+export function readCheckbox(fields: { name: string; value: string }[], tab: string): boolean | null {
+  const matches = fields.filter((f) => f.name.toLowerCase() === tab.toLowerCase())
   if (matches.length === 0) return null
   return matches.some((f) => CHECKED.has(f.value.trim().toLowerCase()))
 }
+
+/**
+ * The other opt-outs on the V2.3 agreements, by tab label, and the column
+ * each is recorded in. Media is on every agreement; quotes and direct digital
+ * communications are on the Student / Minor agreement only.
+ */
+export const OPT_OUT_COLUMNS = {
+  MediaOptOut: 'media_opt_out',
+  QuoteOptOut: 'quote_opt_out',
+  DigitalCommsOptOut: 'digital_comms_opt_out',
+} as const

@@ -11,6 +11,7 @@ import {
   archivePending,
   loadSignedRecord,
   putImmutable,
+  retainUntilOnCompletion,
   sha256Hex,
   type StoredRecordRow,
 } from './archive'
@@ -39,7 +40,7 @@ beforeEach(() => {
 })
 
 describe('archiveEnvelope', () => {
-  it('stores the signed PDF and certificate, and records path, hash and retention', async () => {
+  it('stores the signed PDF and certificate, and records path and hash', async () => {
     const db = fakeSupabase({ agreements: [completed()] })
     const outcome = await archiveEnvelope(db.client, completed())
 
@@ -51,7 +52,13 @@ describe('archiveEnvelope', () => {
     expect(row.signed_pdf_sha256).toBe(sha256Hex(pdf))
     expect(row.certificate_path).toBe('docusign/2026/row-1/certificate.pdf')
     expect(row.archived_at).toBeTruthy()
-    expect(row.retain_until).toBe('2033-09-20T10:00:00.000Z')
+    // Retention is set on completion, by account (V2.3), not by the archive.
+    expect(row.retain_until).toBeUndefined()
+  })
+
+  it('starts retention at signing only for a record with no account', () => {
+    expect(retainUntilOnCompletion('2026-09-20T10:00:00.000Z', null)).toBe('2033-09-20T10:00:00.000Z')
+    expect(retainUntilOnCompletion('2026-09-20T10:00:00.000Z', 'member-1')).toBeNull()
   })
 
   it('keeps names out of object paths', async () => {

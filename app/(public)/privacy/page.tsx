@@ -20,7 +20,7 @@ export default function PrivacyPage() {
           still in high school; students&rsquo; own opt-out choices; deletion within 30 days on
           request; our children&rsquo;s data retention policy; credential pages for children under
           13; FERPA protections for all student data; cookies on student pages, including for
-          children under 13 (Sections 2, 3.10, 5, 7.1, 7.4, 7.7, 8, 9, 10, 12, 14). Consent forms
+          children under 13; survey responses and how we quote them (Sections 2, 3.10, 3.12, 5, 7.1, 7.4, 7.7, 8, 9, 10, 12, 14). Consent forms
           and agreements can also now be signed through <strong>Stellr&rsquo;s own signing
           system</strong> as well as DocuSign (Sections 2, 3.10, 4, 5 and 7.1): when you sign, we
           record your name, email, the date and time, and the internet address and browser you
@@ -97,7 +97,7 @@ export default function PrivacyPage() {
             internet address and browser of each signature, so it can be checked later.
           </li>
           <li>
-            <strong>Participants under 13:</strong> We do not knowingly collect personal information
+            <strong>Participants under 13:</strong>{' '}We do not knowingly collect personal information
             from a child under 13 without the parental consent described above. A student under 13
             signs their own section of a form only after their parent or guardian has signed. If we
             discover we have collected a child&rsquo;s information without consent, we will delete
@@ -158,9 +158,10 @@ export default function PrivacyPage() {
           <li>
             <strong>Students&rsquo; own choices (age 13 and over).</strong> Students aged 13 or over
             make their own choices about uses of their information that are not needed to run their
-            account, events, and courses. We use their photos, videos, name, and work in our
-            promotional materials unless they or their parent or legal guardian opt out, which they
-            can do at any time by emailing{' '}
+            account, events, and courses. We use their photos, videos, name, work, and quotes from
+            their survey responses (attributed by first name and last initial, grade, and school or
+            state; anonymous for children under 13) in our promotional materials unless they or
+            their parent or legal guardian opt out, which they can do at any time by emailing{' '}
             <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
               privacy@stellreducation.org
             </a>
@@ -261,7 +262,7 @@ export default function PrivacyPage() {
           <li>Pages visited and features used within our platform</li>
           <li>Cookies and similar tracking technologies (see Section 9)</li>
           <li>
-            The <strong>organisation</strong> — for example a school, district, or company —
+            The <strong>organisation</strong>{' '}— for example a school, district, or company —
             associated with your IP address. This is inferred on our educator and partner pages
             only, and only where you have accepted advertising cookies. It tells us that
             &ldquo;someone at this school district read our educators page,&rdquo; not who you are
@@ -323,6 +324,11 @@ export default function PrivacyPage() {
           </li>
         </ul>
 
+        <h3 className="text-lg font-semibold text-brand-blue-dark">3.12 Survey and Feedback Responses</h3>
+        <ul className="list-disc pl-6 space-y-1">
+          <li>Answers participants give in Stellr surveys and feedback forms</li>
+        </ul>
+
         {/* 4. How We Collect */}
         <h2 className="text-xl font-bold text-brand-blue-dark">4. How We Collect Information</h2>
         <p>We collect personal information in the following ways:</p>
@@ -360,6 +366,7 @@ export default function PrivacyPage() {
                 ['Processing registration payments and refunds', 'Billing history'],
                 ['Publishing competition results, photos, and highlights', 'Photos, videos, name'],
                 ['Issuing verifiable credentials, and showing a credential page publicly when you choose to (credential pages of children under 13 are never public)', 'Name, credential details, date of birth (to apply the age rules in Section 7.4), parental consent record for students under 18'],
+                ['Improving programs, and quoting survey responses in promotional materials (attributed by first name and last initial, grade, and school or state; anonymous for children under 13; subject to opt-out)', 'Survey and feedback responses; first name, last initial, grade, school or state'],
                 ['Improving our Services through analytics', 'Technical and usage data'],
                 ['Understanding which schools and organisations are interested in partnering with us', 'Technical data and inferred organisation — educator and partner pages only, with advertising consent'],
                 ['Complying with legal obligations', 'All categories as required'],
@@ -548,7 +555,7 @@ export default function PrivacyPage() {
         </p>
         <ul className="list-disc pl-6 space-y-2">
           <li>
-            <strong>From a school or teacher</strong> registering a group. We act as a &ldquo;school
+            <strong>From a school or teacher</strong>{' '}registering a group. We act as a &ldquo;school
             official&rdquo; under a data processing agreement with the school: our{' '}
             <a href="/school-data-terms" className="text-brand-blue hover:underline">School Data Terms</a>
             , which the registering teacher accepts on the school&rsquo;s behalf, or the
@@ -737,6 +744,7 @@ export default function PrivacyPage() {
                 ['Event photos and videos', 'Until removal is requested; reviewed every 2 years, and deleted when no longer needed'],
                 ['Credentials', 'Duration of account. If you ask us to erase your data, the credential number is kept so a copy can be checked, but your name is removed and the page shows the credential as withdrawn'],
                 ['Credential page activity (views and share clicks)', 'Duration of the credential; deleted with it'],
+                ['Survey and feedback responses', 'Same as account and competition records'],
                 ['Technical/usage logs', 'Generally 12 months, with minor exceptions on a platform-specific basis'],
               ].map(([type, period]) => (
                 <tr key={type} className="even:bg-surface">

@@ -110,10 +110,17 @@ test.describe('Stellr signing', () => {
     await expect(phone).toBeFocused()
     await expectAccessible(page, 'details with an error')
     await phone.fill('555 0142')
-    // Photo and media release is an opt-out, unticked unless the parent ticks it.
-    const mediaOptOut = page.getByLabel(/do NOT consent to photo and media use/)
+    // The V2.3 additions are pre-filled from the registration.
+    await expect(page.getByLabel(/Student email address/)).toHaveValue(agreement.studentEmail)
+    await expect(page.getByLabel(/^Grade/)).toHaveValue('8')
+    // Photo and media release is an opt-out, unticked unless the parent ticks it;
+    // so is quoting the student's survey answers (new in V2.3).
+    const mediaOptOut = page.getByLabel(/do not consent to photo and media use/i)
     await expect(mediaOptOut).not.toBeChecked()
     await mediaOptOut.check()
+    const quoteOptOut = page.getByLabel(/do not consent to my child's survey responses being quoted/i)
+    await expect(quoteOptOut).not.toBeChecked()
+    await quoteOptOut.check()
     await page.getByRole('button', { name: 'Continue', exact: true }).click()
 
     await expect(page.getByRole('heading', { name: 'Review and sign' })).toBeVisible()
@@ -149,7 +156,8 @@ test.describe('Stellr signing', () => {
     await page.getByLabel(/agree to receive and sign this document electronically/).check()
     await page.getByRole('button', { name: 'Continue', exact: true }).click()
     await page.getByRole('button', { name: /I’ve read it/ }).click()
-    await page.getByRole('button', { name: 'Continue', exact: true }).click()
+    // V2.3 asks the student for nothing but their signature: no details step.
+    await expect(page.getByRole('heading', { name: 'Review and sign' })).toBeVisible()
     await page.getByLabel(/I have read the .* and agree to it/).check()
     await page.locator('#signature').fill(agreement.studentName)
 
@@ -198,7 +206,9 @@ test.describe('Stellr signing', () => {
     expect(record.envelope.signed_pdf_path).toMatch(/^native\/\d{4}\/[0-9a-f-]{36}\/(signed|sealed)\.pdf$/)
     expect(record.envelope.completion_notified_at).not.toBeNull()
     expect(record.recipients.map((r) => [r.role_name, r.status])).toEqual([['Guardian', 'completed'], ['Minor', 'completed']])
-    expect(record.recipients[0].signer_values).toMatchObject({ MediaOptOut: 'true', GuardianPhone: '555 0142' })
+    expect(record.recipients[0].signer_values).toMatchObject({ MediaOptOut: 'true', QuoteOptOut: 'true', GuardianPhone: '555 0142' })
+    // Read back onto the record, where staff see them (V2.3).
+    expect(record.envelope).toMatchObject({ media_opt_out: true, quote_opt_out: true, digital_comms_opt_out: false })
     expect(record.chainBrokenAt).toBeNull()
     const signed = record.events.filter((e) => e.event === 'signed')
     expect(signed.map((e) => (e.detail as { nameMatchesRecord: boolean }).nameMatchesRecord)).toEqual([true, true])
@@ -239,7 +249,7 @@ test.describe('Agreement documents (admin)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Agreement documents')
 
     // Open the parental consent form's newest version.
-    await page.getByRole('link', { name: 'Parental Consent Form' }).first().click()
+    await page.getByRole('link', { name: 'Participation Agreement — Student / Minor' }).first().click()
     await expect(page.getByRole('heading', { level: 2 })).toContainText(/version \d+/)
     await expect(page.locator('iframe')).toHaveCount(2)
     await expect(page.getByRole('cell', { name: /MediaOptOut/ })).toBeVisible()
@@ -258,7 +268,7 @@ test.describe('Agreement documents (admin)', () => {
   test('the field editor draws the document, moves a field by keyboard and by drag, and previews it', async ({ page }) => {
     const consoleErrors = attachConsoleGuard(page)
     await page.goto('/admin/docusigns/templates')
-    await page.getByRole('link', { name: 'Parental Consent Form' }).first().click()
+    await page.getByRole('link', { name: 'Participation Agreement — Student / Minor' }).first().click()
     await page.getByRole('link', { name: 'Edit fields (saves a new version)' }).click()
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Edit fields, starting from minor v')
     await expect(page.getByRole('img', { name: 'Page 1' })).toBeVisible()

@@ -135,7 +135,7 @@ export function RecordSession({
                 onClick={() => setOpen(false)}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/20"
               >
-                <X className="h-4 w-4" /> End &amp; close
+                <X className="h-4 w-4" />{' '}End &amp; close
               </button>
             </div>
             <VideoRoom

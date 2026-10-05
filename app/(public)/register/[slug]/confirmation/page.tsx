@@ -157,7 +157,7 @@ export default async function ConfirmationPage({ params, searchParams }: PagePro
               <li className="flex items-start gap-2">
                 <span className="text-brand-blue mt-0.5">→</span>
                 <span>
-                  <span className="font-medium text-brand-blue-dark">Check your email to sign your agreement</span> —
+                  <span className="font-medium text-brand-blue-dark">Check your email to sign your agreement</span>{' '}—
                   a parental consent form (sent to your parent/guardian first for under-18s) or your participation
                   agreement. It comes from Stellr Education or from DocuSign. Your place isn&apos;t secured until
                   it&apos;s signed.

@@ -32,7 +32,7 @@ Medical information is `participants.health_conditions` (per event) and
    participant UUID(s) whose medical record must be kept.
 2. **Generate the SQL** from a checkout with `.env.local`:
    ```bash
-   npm run retention:medical-sql -- --keep <participant-uuid>,<participant-uuid> > /tmp/medical-retention.sql
+   npm run -s retention:medical-sql -- --keep <participant-uuid>,<participant-uuid> > /tmp/medical-retention.sql
    ```
    Omit `--keep` if there are no incidents. The script reads event dates from
    Sanity (production dataset) and never connects to a database.
@@ -135,7 +135,7 @@ migration that stops `audit_members()` copying `health_conditions` into
 Follow-up ticket: a self-serve deletion request with `received_at`, `due_at`,
 `completed_at` on `deletion_requests`, and an executor that does steps 3.2–3.7.
 
-## Part C — Media opt-outs (photos, videos, name, work in promotion)
+## Part C — Media and survey-quote opt-outs (photos, videos, name, work, quotes)
 
 Students aged 13+ now have two switches in their account (Account → Profile →
 "Quotes, photos and media", table `member_privacy_prefs`): quoting of survey
@@ -146,7 +146,9 @@ anyone with `allow_media = false` to the do-not-use list:
 SELECT m.first_name, m.last_name, m.email FROM member_privacy_prefs p
 JOIN members m ON m.id = p.member_id WHERE p.allow_media = false;
 ```
-Opt-out **by email** still works as below.
+Opt-out **by email** still works as below. The same do-not-use list covers
+**survey quotes** (D17, Privacy §2 and §3.12, Terms §11.3) as well as photos,
+videos, name and work.
 
 1. **Opt-outs on signed forms.** The Participation Agreement has a "I do NOT
    consent to photo and media use" box (`MediaOptOut`), on both DocuSign and Stellr
@@ -170,16 +172,27 @@ Opt-out **by email** still works as below.
      AND p.date_of_birth <= (current_date - interval '13 years');
    ```
    Everyone returned is on the do-not-use list unless they have opted in.
-4. Opting out never affects participation.
+4. **Quoting a survey response** in promotional material (website, social, press,
+   grant applications):
+   - Only from a question the survey said could be quoted.
+   - Attribution: **first name + last initial, grade, and school or state**. Never
+     a full name, contact details or date of birth.
+   - **Under 13: anonymous only** (no name, school or state; grade alone is fine).
+   - Light edits for length, spelling and grammar are fine; never change the meaning.
+   - Skip anyone on the do-not-use list (steps 1–3, including NY/CO aged 13–17
+     who have not opted in). Their answers may still appear in combined,
+     non-identifying results.
+5. Opting out never affects participation.
 
 Survey quotes: the "Quotable answers" export (Admin → Surveys) applies the
-parent's `QuoteOptOut`, the student's switch, the NY/CO default, "Don't quote
-this response" and withdrawals at the moment of export. To withdraw one quote on
-request, paste its response id under "Withdraw a quote" on that page.
+parent's quote opt-out (`agreements.quote_opt_out`), the student's switch, the
+NY/CO default, "Don't quote this response" and withdrawals at the moment of
+export. To withdraw one quote on request, paste its response id under
+"Withdraw a quote" on that page.
 
-Follow-up ticket: the account toggle exists (above); still to do: state of residence at
-registration, a `MediaOptOut` checkbox read back from DocuSign like
-`CredentialSharingOptOut`, and a column in the roster export.
+Follow-up ticket: the account toggles exist (above) and the agreement's media
+opt-out is read back into `agreements.media_opt_out` (#280); still to do: state
+of residence at registration, and a column in the roster export.
 
 ## Part D — School DPA deletion requests (I14)
 

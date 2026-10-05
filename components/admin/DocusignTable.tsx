@@ -5,6 +5,7 @@ import { formatDateShort } from '@/lib/utils'
 import { describeEnvelope, PILL_CLASSES, type RecipientLike } from '@/lib/docusign-status'
 import { downloadSignedRecord } from '@/lib/esign/download-client'
 import { slug } from '@/lib/esign/filenames'
+import { CorrectSignerEmailButton } from '@/components/admin/CorrectSignerEmailButton'
 
 export interface EnvelopeRow {
   id: string
@@ -284,6 +285,9 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
                       >
                         {resending === env.id ? 'Sending…' : 'Re-send'}
                       </button>
+                    )}
+                    {(env.status === 'sent' || env.status === 'delivered') && !env.reused_from && (
+                      <CorrectSignerEmailButton agreementId={env.id} className="ml-3" />
                     )}
                   </td>
                 </tr>

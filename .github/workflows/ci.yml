@@ -56,6 +56,7 @@ jobs:
         # app/ into docs/ would read as docs-only. It also keeps the diff to
         # trees, so the blobless checkout never has to fetch a blob.
         run: |
+          echo "TEMPORARY: fail-closed test, reverted before merge"; exit 1
           if [ "$EVENT" = pull_request ]; then
             # The checkout is GitHub's merge commit: parent 1 is the base.
             files=$(git diff --name-only --no-renames HEAD^1 HEAD)

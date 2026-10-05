@@ -403,18 +403,22 @@ describe('buildCampaignJsonLd', () => {
 // nulls. This is the check that was missing when the bare `superEvent` stub and
 // the dateless series shipped.
 describe('the published graph', () => {
-  const graphs: Record<string, unknown> = {
-    event: buildEventJsonLd(colorado, colorado.slug.current, {
+  // Built inside each test, not at collection time: the builders read "today",
+  // and only the test body runs under the fixed clock set in beforeEach. Built
+  // up front, these ran on the real date and broke once the Colorado fixture
+  // (3 Oct 2026) was in the past (5 Oct 2026).
+  const graphs: Record<string, () => unknown> = {
+    event: () => buildEventJsonLd(colorado, colorado.slug.current, {
       price: { kind: 'priced', cents: 7500, currency: 'usd' },
       series: members,
     }),
-    campaign: buildCampaignJsonLd(campaign, campaign.slug.current, { series: members }),
-    competitions: buildCompetitionSeriesJsonLd(members),
+    campaign: () => buildCampaignJsonLd(campaign, campaign.slug.current, { series: members }),
+    competitions: () => buildCompetitionSeriesJsonLd(members),
   }
 
-  for (const [name, graph] of Object.entries(graphs)) {
+  for (const [name, build] of Object.entries(graphs)) {
     it(`has no missing fields in any Event node on ${name}`, () => {
-      const nodes = eventNodes(graph)
+      const nodes = eventNodes(build())
       expect(nodes.length).toBeGreaterThan(0)
       for (const node of nodes) {
         const missing = [...REQUIRED, ...RECOMMENDED].filter((f) => node[f] === undefined)
@@ -423,7 +427,7 @@ describe('the published graph', () => {
     })
 
     it(`serialises no nulls on ${name}`, () => {
-      expect(nullPaths(graph)).toEqual([])
+      expect(nullPaths(build())).toEqual([])
     })
   }
 })

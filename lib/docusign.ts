@@ -557,6 +557,141 @@ export async function resendEnvelope(envelopeId: string): Promise<number> {
   return outstanding.length
 }
 
+/** A change to one signer's address (and optionally name) on a live envelope. */
+export interface RecipientCorrection {
+  recipientId: string
+  email: string
+  name?: string
+}
+
+// Envelope states a recipient can still be corrected in.
+const CORRECTABLE_ENVELOPE_STATUSES = new Set(['sent', 'delivered'])
+
+/**
+ * A correction refused for a reason the admin can act on: the envelope or the
+ * signer is finished, the envelope is locked, or DocuSign rejected the
+ * recipient. Status 409 is how the adapter tells these from real failures.
+ */
+function refused(message: string, code: string): DocusignApiError {
+  return new DocusignApiError(message, 409, code)
+}
+
+/**
+ * Corrects one signer's email (and name) on the SAME envelope, through the API.
+ *
+ * This is DocuSign's "Correct". On this account's API plan the web UI allows it
+ * once a month, but the API allows it freely (support case 18095860, 3 Oct
+ * 2026). Unlike void-and-reissue it keeps every signature already given and
+ * uses no envelope from the monthly allowance.
+ *
+ * Only the corrected signer goes in the PUT body, keyed by recipientId: a
+ * partial update, so no roles, tabs or other signers are touched. With
+ * resend_envelope=true DocuSign emails the new address now if it is that
+ * signer's turn; a queued signer (status 'created') gets it when their turn
+ * comes. The flag also re-notifies the envelope's other current signers, which
+ * reads as a reminder: on the demo account (5 Oct 2026) a bounced co-signer
+ * went from 'autoresponded' back to 'sent'. DocuSign answers 200 even when it
+ * rejects the recipient, putting the
+ * reason in recipientUpdateResults[].errorDetails, so that is checked, and the
+ * recipient is read back to prove the address changed.
+ */
+export async function correctRecipient(
+  envelopeId: string,
+  correction: RecipientCorrection,
+): Promise<EnvelopeRecipient> {
+  const envRes = await dsRequest(`/envelopes/${envelopeId}`)
+  if (!envRes.ok) throw await dsError('DocuSign envelope fetch failed', envRes)
+  const envelope = await envRes.json() as { status?: string }
+  const envStatus = (envelope.status ?? '').toLowerCase()
+  if (!CORRECTABLE_ENVELOPE_STATUSES.has(envStatus)) {
+    throw refused(
+      `This envelope is ${envStatus || 'in an unknown state'}; only one still out for signature can be corrected`,
+      'ENVELOPE_NOT_CORRECTABLE',
+    )
+  }
+
+  const target = (await getEnvelopeRecipients(envelopeId)).find((r) => r.recipientId === correction.recipientId)
+  if (!target) throw refused(`Recipient ${correction.recipientId} is not on this envelope`, 'RECIPIENT_NOT_FOUND')
+  if (FINISHED_SIGNER_STATUSES.has(target.status)) {
+    throw refused(
+      `${target.name || 'This signer'} has already ${target.status === 'declined' ? 'declined' : 'signed'}; their address cannot be changed`,
+      'RECIPIENT_FINISHED',
+    )
+  }
+
+  const res = await dsRequest(`/envelopes/${envelopeId}/recipients?resend_envelope=true`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      signers: [{
+        recipientId: correction.recipientId,
+        email:       correction.email,
+        name:        correction.name ?? target.name,
+      }],
+    }),
+  })
+  if (!res.ok) {
+    const err = await dsError('DocuSign recipient correction failed', res)
+    if (err.errorCode === 'ENVELOPE_LOCKED') {
+      throw refused('Someone has this envelope open for correcting in DocuSign; close it there and try again', 'ENVELOPE_LOCKED')
+    }
+    throw err
+  }
+  const body = await res.json() as {
+    recipientUpdateResults?: { errorDetails?: { errorCode?: string; message?: string } }[]
+  }
+  const rejected = (body.recipientUpdateResults ?? [])
+    .map((r) => r.errorDetails)
+    .find((e) => e?.errorCode && e.errorCode !== 'SUCCESS')
+  if (rejected) {
+    throw refused(`DocuSign refused the correction: ${rejected.message ?? rejected.errorCode}`, rejected.errorCode ?? 'UNKNOWN')
+  }
+
+  const recipients = await getEnvelopeRecipients(envelopeId)
+  const after = recipients.find((r) => r.recipientId === correction.recipientId)
+  if (!after || after.email.toLowerCase() !== correction.email.toLowerCase()) {
+    throw new Error(
+      `DocuSign accepted the correction but recipient ${correction.recipientId} still reads ${after?.email ?? '(missing)'}`,
+    )
+  }
+
+  // The form prints addresses too (GuardianEmail is a prefilled email field).
+  // While nobody has signed, the signer's own fields still holding the old
+  // address are rewritten; after a signature the document text is left as it
+  // was signed. Best-effort: the address change above is what matters.
+  if (!recipients.some((r) => FINISHED_SIGNER_STATUSES.has(r.status))) {
+    await rewriteEmailTabs(envelopeId, correction.recipientId, target.email, correction.email).catch((err) =>
+      console.error(`[docusign] prefilled email fields not updated on ${envelopeId}:`, err),
+    )
+  }
+  return after
+}
+
+const EMAIL_TAB_KINDS = ['emailAddressTabs', 'emailTabs', 'textTabs'] as const
+
+async function rewriteEmailTabs(envelopeId: string, recipientId: string, from: string, to: string): Promise<number> {
+  const res = await dsRequest(`/envelopes/${envelopeId}/recipients/${recipientId}/tabs`)
+  if (!res.ok) throw await dsError('DocuSign tabs fetch failed', res)
+  const tabs = await res.json() as Record<string, { tabId?: string; value?: string }[] | undefined>
+  const update: Record<string, { tabId: string; value: string }[]> = {}
+  let count = 0
+  for (const kind of EMAIL_TAB_KINDS) {
+    const hits = (tabs[kind] ?? []).filter(
+      (t) => t.tabId && (t.value ?? '').trim().toLowerCase() === from.trim().toLowerCase(),
+    )
+    if (hits.length) {
+      update[kind] = hits.map((t) => ({ tabId: t.tabId as string, value: to }))
+      count += hits.length
+    }
+  }
+  if (count === 0) return 0
+  const put = await dsRequest(`/envelopes/${envelopeId}/recipients/${recipientId}/tabs`, {
+    method: 'PUT',
+    body: JSON.stringify(update),
+  })
+  if (!put.ok) throw await dsError('DocuSign tabs update failed', put)
+  return count
+}
+
 // Voids an in-flight envelope. DocuSign only allows voiding envelopes that are
 // not yet completed/declined; for those the API returns an error, which the
 // caller should treat as "nothing to void" rather than a hard failure.

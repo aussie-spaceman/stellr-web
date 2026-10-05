@@ -11,6 +11,7 @@ import {
   type RecipientLike,
 } from '@/lib/docusign-status'
 import type { VolunteerAgreementRecord } from '@/lib/volunteer'
+import { CorrectSignerEmailButton } from '@/components/admin/CorrectSignerEmailButton'
 
 export interface MemberAgreement {
   /** Null when no Volunteer / Mentor agreement has ever been issued. */
@@ -114,6 +115,9 @@ export function MemberAgreementPanel({
           >
             {busy ? 'Sending…' : 'Resend'}
           </button>
+        )}
+        {envelope && (envelope.status === 'sent' || envelope.status === 'delivered') && !envelope.reused_from && (
+          <CorrectSignerEmailButton agreementId={envelope.id} />
         )}
         {(!envelope || (!inFlight && (!signed || expired))) && (
           <button

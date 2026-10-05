@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { providerForRow } from '@/lib/esign'
 import type { EnvelopeFormField, EnvelopeRecipient } from '@/lib/docusign'
-import type { SignedDocument } from '@/lib/esign/types'
+import type { RecipientCorrection, SignedDocument } from '@/lib/esign/types'
 
 // Operations on an agreement that already exists, dispatched to the engine
 // that issued it. Callers pass the stored row; they never need to know which
@@ -20,6 +20,15 @@ export function remindEnvelopeRow(db: SupabaseClient, row: EnvelopeRef): Promise
 
 export function voidEnvelopeRow(db: SupabaseClient, row: EnvelopeRef, reason?: string): Promise<void> {
   return providerForRow(row).void({ db }, row.envelope_id, reason)
+}
+
+/** Changes one unfinished signer's email (and name) on the same agreement. */
+export function correctRecipientRow(
+  db: SupabaseClient,
+  row: EnvelopeRef,
+  correction: RecipientCorrection,
+): Promise<EnvelopeRecipient> {
+  return providerForRow(row).correctRecipient({ db }, row.envelope_id, correction)
 }
 
 export function fetchEnvelopeRecipients(db: SupabaseClient, row: EnvelopeRef): Promise<EnvelopeRecipient[]> {

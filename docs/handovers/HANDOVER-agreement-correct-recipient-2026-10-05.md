@@ -73,3 +73,33 @@ the API (`scripts/docusign-label-minor-tabs.ts` pattern) or in a fresh cycle.
 1. Apply `20261005161443_esign_audit_corrected.sql` to production **before** the code merges (`promote`). Prod migrations are run by David.
 2. Promote.
 3. Correct Gabriel Armijo's Minor address (tracker .1), then watch for his signature.
+
+## Close-out (6 Oct 2026)
+
+**Landed:**
+- #285 → dev `8d1969d`; promoted in #287 (`17b6080`, 6 Oct 15:01Z).
+  - #287 also carried the post-event survey #283, another session's work that merged into `dev` minutes earlier.
+  - Its prerequisites were done by David and checked before the merge:
+    - both survey migrations applied, with ledger rows (`db:status --prod`);
+    - `SURVEY_TOKEN_SECRET` set on both Vercel projects (checked with `vercel env ls`, names only).
+- Promotion record and the `main` → `dev` sync: #288 (`589451d`).
+
+**Smoke-check finding, fixed:**
+- The new route answered a signed-out POST with 404, not 401: the guard read the agreement before checking the caller.
+- Fixed in #289 (`8c2ba1e`, auth first).
+- Promoted in #291 (`d9b1d9f`), another session's promotion. Re-checked on prod afterwards: a signed-out POST now gets 401.
+
+**Proven in production:** David corrected Gabriel Armijo's Minor at 15:17Z (tracker .1).
+- The Guardian's signature was kept.
+- The Minor went to `sent` at `chasingtheharvest@gmail.com`.
+- The participant row was updated and `docusign_corrected` logged.
+
+**Gaps, stated honestly:**
+- **Not exercised outside unit tests:**
+  - the native correction (.3);
+  - rewriting DocuSign's prefilled email fields (.9);
+  - `resend_envelope=false` (.4).
+- **No e2e spec covers the correction flow.** It was verified with a one-off Playwright script against a local server, then removed.
+- **I hand-picked the migration timestamp at first** (`20261005160000`), against the repo rule. Before shipping it was regenerated, then aligned to the dev ledger's own version (`20261005161443`).
+- **Ship skill Phase 1's gating question** (checklist confirmation) was not asked separately. The approved plan was taken as the contract.
+- **Test data was changed:** the demo envelope `733f2396` and the dev participant `72e712f7` (.7).

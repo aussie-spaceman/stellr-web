@@ -132,13 +132,13 @@ export async function alertOnNewBounces(
   const lines = newlyBounced.map((r) => `${r.name} <${r.email}>${r.roleName ? ` — ${r.roleName}` : ''}`)
   await notifyCommunityAdmins({
     type: 'action',
-    body: `DocuSign email bounced for ${context.minorName} (${context.eventTitle}): ${lines.join('; ')}. Correct the address and re-issue — reminders will never reach them.`,
+    body: `DocuSign email bounced for ${context.minorName} (${context.eventTitle}): ${lines.join('; ')}. Use Correct email on the event roster: it fixes the address on the same envelope. Reminders will never reach them until then.`,
     referenceType: 'participant',
     referenceId: context.participantId ?? undefined,
     email: {
       subject: `Action needed: DocuSign email bounced for ${context.minorName}`,
-      html: `<p>DocuSign reported a bounced address on the agreement for <strong>${context.minorName}</strong> (${context.eventTitle}):</p><ul>${lines.map((l) => `<li>${l}</li>`).join('')}</ul><p>Reminders will never reach this address. Correct it and re-issue the envelope.</p>`,
-      text: `DocuSign reported a bounced address on the agreement for ${context.minorName} (${context.eventTitle}): ${lines.join('; ')}. Reminders will never reach this address — correct it and re-issue.`,
+      html: `<p>DocuSign reported a bounced address on the agreement for <strong>${context.minorName}</strong> (${context.eventTitle}):</p><ul>${lines.map((l) => `<li>${l}</li>`).join('')}</ul><p>Reminders will never reach this address. Use Correct email on the event roster: it fixes the address on the same envelope, keeps any signature already given and uses no new envelope.</p>`,
+      text: `DocuSign reported a bounced address on the agreement for ${context.minorName} (${context.eventTitle}): ${lines.join('; ')}. Reminders will never reach this address. Use Correct email on the event roster: it fixes the address on the same envelope.`,
     },
   }).catch(() => {})
   // Deliberately swallowed: a failed admin notification must never roll back a

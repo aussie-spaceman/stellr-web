@@ -25,9 +25,23 @@ const ANSWERS = {
   quote_consent: 'no',
 }
 
+/**
+ * Load a page before calling admin APIs: Clerk refreshes its short-lived
+ * session cookie on navigation, not on API calls, so a request made long
+ * after sign-in (CI queues) arrives signed out.
+ */
+async function refreshSession(page: Page) {
+  await page.goto('/admin/surveys')
+  await expect(page.getByRole('heading', { name: 'Surveys', exact: true })).toBeVisible()
+}
+
 async function expectAccessible(page: Page, step: string) {
+  // Let colour transitions (buttons, progress bar, save status) finish: axe
+  // sampled a mid-transition colour once (2 Oct), never reproduced in 9 runs.
+  await page.waitForLoadState('networkidle')
+  await page.waitForTimeout(400)
   const { violations } = await new AxeBuilder({ page }).include('main').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()
-  expect(violations.map((v) => `${step}: ${v.id} ${v.help}`)).toEqual([])
+  expect(violations.map((v) => `${step}: ${v.id} ${v.help} — ${v.nodes.slice(0, 4).map((n) => `${n.target.join(' ')} ${n.any[0]?.message ?? ''}`).join(' | ')}`)).toEqual([])
 }
 
 test.describe('Post-event survey', () => {
@@ -62,6 +76,7 @@ test.describe('Post-event survey', () => {
       await page.locator('label').filter({ hasText: /^8$/ }).click()
       await page.getByRole('button', { name: 'Next', exact: true }).click()
       await expect(page.getByText('Page 2 of')).toBeVisible()
+      await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible()
       await expectAccessible(page, 'page 2')
 
       // Leave and come back by the same link: resumes on the saved page.
@@ -166,17 +181,29 @@ test.describe('Post-event survey', () => {
     })
 
     test('preview counts, send live, completion table updates', async ({ page }) => {
+      // Load a page first: Clerk refreshes its short-lived session cookie on
+      // navigation, not on API calls, so a request straight after a long
+      // queue (CI) arrives signed out.
+      await page.goto('/admin/surveys')
+      await expect(page.getByRole('heading', { name: 'Surveys', exact: true })).toBeVisible()
+
       const api = `/api/admin/events/${slug}/survey`
-      const before = await (await page.request.get(api)).json()
+      const getView = async () => {
+        const res = await page.request.get(api)
+        const body = await res.json().catch(() => ({}))
+        expect(res.status(), JSON.stringify(body)).toBe(200)
+        return body
+      }
+      const before = await getView()
       expect(before.status).toBe('scheduled')
       expect(before.preview.byRole.student).toBe(2)
       expect(before.preview.awaitingConsent).toEqual([])
       expect(before.totals.invited).toBe(0)
 
       const sent = await page.request.post(api, { data: { action: 'send_now' } })
-      expect(sent.status()).toBe(200)
+      expect(sent.status(), await sent.text()).toBe(200)
 
-      const after = await (await page.request.get(api)).json()
+      const after = await getView()
       expect(after.status).toBe('open')
       expect(after.distribution.opens_at_source).toBe('manual')
       expect(after.totals.invited).toBe(2)
@@ -191,6 +218,7 @@ test.describe('Post-event survey', () => {
     })
 
     test('certificate gate switch is admins’ and is recorded', async ({ page }) => {
+      await refreshSession(page)
       const api = `/api/admin/events/${slug}/survey`
       expect((await (await page.request.get(api)).json()).distribution.gate_certificate).toBe(false)
       expect((await page.request.post(api, { data: { action: 'gate_certificate', on: true } })).status()).toBe(200)
@@ -202,6 +230,7 @@ test.describe('Post-event survey', () => {
     test('photo/media: roster media_ok column and the do-not-use list', async ({ page }) => {
       // Ada is 16 at a CO school with no opt-out ticked: off until she opts in.
       // Sam is an adult: yes.
+      await refreshSession(page)
       const csv = await (await page.request.get(`/api/admin/events/${slug}/export`)).text()
       const [header, ...lines] = csv.split('\n')
       const cols = header.split(',')

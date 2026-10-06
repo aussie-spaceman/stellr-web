@@ -78,6 +78,10 @@ const KNOWN_PREFILL: Record<string, string> = {
   MinorName: 'Student name',
   MinorDateOfBirth: 'Student date of birth',
   MinorRelationship: 'Relationship to the student',
+  MinorEmail: 'Student email',
+  MinorGrade: 'Grade',
+  EmergencyContactName: 'Emergency contact name',
+  EmergencyContactPhone: 'Emergency contact phone',
   GuardianName: 'Parent or guardian name',
   GuardianEmail: 'Parent or guardian email',
   GuardianPhone: 'Parent or guardian phone',
@@ -96,12 +100,13 @@ const KNOWN_PREFILL: Record<string, string> = {
 }
 
 /** Field names the app reads back after signing. Their meaning is fixed. */
-export const READ_BACK_FIELDS = ['CredentialSharingOptOut', 'MediaOptOut', 'DigitalCommsOptOut'] as const
+export const READ_BACK_FIELDS = ['CredentialSharingOptOut', 'MediaOptOut', 'QuoteOptOut', 'DigitalCommsOptOut'] as const
 
 /** Labels for signer fields DocuSign templates already name. */
 const KNOWN_SIGNER_FIELDS: Record<string, string> = {
   CredentialSharingOptOut: 'I do NOT want my child\'s Stellr credential pages to be public',
   MediaOptOut: 'I do NOT consent to photo and media use',
+  QuoteOptOut: 'I do NOT consent to survey responses being quoted',
   DigitalCommsOptOut: 'I do NOT consent to direct digital communications with my child',
 }
 

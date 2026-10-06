@@ -62,6 +62,8 @@ export interface RosterParticipant {
   docusign_label: string
   /** Who is still outstanding, e.g. "Awaiting Tamara Buk (parent/guardian)". */
   docusign_detail: string | null
+  /** The participant's latest agreement while it is out for signing (for "Correct email"). */
+  correctable_agreement_id: string | null
   // Background-check / license clearance for adult non-students (PRD §13).
   // 'not_required' for students and minors; the roster renders it as n/a.
   compliance_pill: ComplianceState
@@ -320,6 +322,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
         docusign,
         docusign_label:  description.label,
         docusign_detail: description.detail,
+        correctable_agreement_id: env && !env.reused_from && (env.status === 'sent' || env.status === 'delivered') ? env.id : null,
         payment_pill,
         docusign_pill,
         compliance_pill,

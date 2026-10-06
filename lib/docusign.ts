@@ -168,6 +168,8 @@ export interface EnvelopeParams {
   eventTitle:      string
   schoolName?:     string
   schoolState?:    string
+  /** The student's grade (V2.3 "Grade" field). */
+  grade?:          string
 }
 
 // Envelope creation reports how many signers it was issued with so the
@@ -217,6 +219,9 @@ export async function createConsentEnvelope(p: EnvelopeParams): Promise<CreatedE
       { tabLabel: 'MinorRelationship', value: p.relationship   ?? '' },
       { tabLabel: 'SchoolName',       value: p.schoolName      ?? '' },
       { tabLabel: 'SchoolState',      value: p.schoolState     ?? '' },
+      // Added with the V2.3 agreement (2 Oct 2026).
+      { tabLabel: 'MinorEmail',       value: p.minorEmail      ?? '' },
+      { tabLabel: 'MinorGrade',       value: p.grade           ?? '' },
     ]
     // Per-recipient email subjects. The envelope-level subject was identical for
     // both roles, so a family received two near-identical DocuSign emails and
@@ -373,11 +378,13 @@ function mentorAgreementRoles(p: MentorAgreementParams): object[] {
         { tabLabel: 'MentorEmail', value: p.email       },
         { tabLabel: 'MentorPhone', value: p.phone ?? '' },
         { tabLabel: 'EventTitle',  value: p.eventTitle  },
+        { tabLabel: 'EmergencyContactName',  value: p.emergencyContactName  ?? '' },
+        { tabLabel: 'EmergencyContactPhone', value: p.emergencyContactPhone ?? '' },
       ],
     },
     emailNotification: {
-      emailSubject: `Your signature: Mentor Participation Agreement — ${fullName}`,
-      emailBody:    `${p.firstName}, please review and sign your Mentor Participation Agreement. You need it on file before you can support a Stellr event.`,
+      emailSubject: `Your signature: Mentor and Volunteer Agreement — ${fullName}`,
+      emailBody:    `${p.firstName}, please review and sign your Mentor and Volunteer Agreement. You need it on file before you can support a Stellr event.`,
       supportedLanguage: 'en',
     },
   }]
@@ -388,8 +395,8 @@ function mentorAgreementRoles(p: MentorAgreementParams): object[] {
       email:        ENV.stellrRepEmail,
       routingOrder: '1',
       emailNotification: {
-        emailSubject: `Stellr counter-signature: Mentor Participation Agreement — ${fullName}`,
-        emailBody:    `Counter-sign ${fullName}'s Mentor Participation Agreement (${p.email}). This is the Stellr signature only: ${p.firstName} receives a separate email to sign their own part.`,
+        emailSubject: `Stellr counter-signature: Mentor and Volunteer Agreement — ${fullName}`,
+        emailBody:    `Counter-sign ${fullName}'s Mentor and Volunteer Agreement (${p.email}). This is the Stellr signature only: ${p.firstName} receives a separate email to sign their own part.`,
         supportedLanguage: 'en',
       },
     })
@@ -403,6 +410,16 @@ export interface MentorAgreementParams {
   email:      string
   phone?:     string
   eventTitle: string
+  /** For the age of majority (V2.3 §3A): a Mentor under it needs a parent's signature too. */
+  dateOfBirth?: string | null
+  state?:       string | null
+  emergencyContactName?:  string
+  emergencyContactPhone?: string
+  /** Required when the Mentor is under the age of majority. */
+  guardianName?:  string
+  guardianEmail?: string
+  guardianPhone?: string
+  relationship?:  string
 }
 
 export async function createMentorAgreementEnvelope(p: MentorAgreementParams): Promise<CreatedEnvelope> {
@@ -413,7 +430,7 @@ export async function createMentorAgreementEnvelope(p: MentorAgreementParams): P
 
   const body = {
     status:       'sent',
-    emailSubject: `Mentor Participation Agreement — ${p.eventTitle}`,
+    emailSubject: `Mentor and Volunteer Agreement — ${p.eventTitle}`,
     templateId:   ENV.mentorTemplateId,
     templateRoles,
   }
@@ -424,13 +441,7 @@ export async function createMentorAgreementEnvelope(p: MentorAgreementParams): P
   return { envelopeId: data.envelopeId, signerCount }
 }
 
-export interface VolunteerAgreementParams {
-  firstName:  string
-  lastName:   string
-  email:      string
-  phone?:     string
-  eventTitle: string
-}
+export type VolunteerAgreementParams = MentorAgreementParams
 
 /**
  * Volunteers sign the MENTOR agreement.
@@ -455,7 +466,7 @@ export async function createVolunteerAgreementEnvelope(p: VolunteerAgreementPara
 
   const body = {
     status:       'sent',
-    emailSubject: `Mentor Participation Agreement — ${p.eventTitle}`,
+    emailSubject: `Mentor and Volunteer Agreement — ${p.eventTitle}`,
     templateId:   ENV.mentorTemplateId,
     templateRoles,
   }
@@ -544,6 +555,141 @@ export async function resendEnvelope(envelopeId: string): Promise<number> {
   )
   if (!resendRes.ok) throw new Error(`DocuSign resend failed: ${await resendRes.text()}`)
   return outstanding.length
+}
+
+/** A change to one signer's address (and optionally name) on a live envelope. */
+export interface RecipientCorrection {
+  recipientId: string
+  email: string
+  name?: string
+}
+
+// Envelope states a recipient can still be corrected in.
+const CORRECTABLE_ENVELOPE_STATUSES = new Set(['sent', 'delivered'])
+
+/**
+ * A correction refused for a reason the admin can act on: the envelope or the
+ * signer is finished, the envelope is locked, or DocuSign rejected the
+ * recipient. Status 409 is how the adapter tells these from real failures.
+ */
+function refused(message: string, code: string): DocusignApiError {
+  return new DocusignApiError(message, 409, code)
+}
+
+/**
+ * Corrects one signer's email (and name) on the SAME envelope, through the API.
+ *
+ * This is DocuSign's "Correct". On this account's API plan the web UI allows it
+ * once a month, but the API allows it freely (support case 18095860, 3 Oct
+ * 2026). Unlike void-and-reissue it keeps every signature already given and
+ * uses no envelope from the monthly allowance.
+ *
+ * Only the corrected signer goes in the PUT body, keyed by recipientId: a
+ * partial update, so no roles, tabs or other signers are touched. With
+ * resend_envelope=true DocuSign emails the new address now if it is that
+ * signer's turn; a queued signer (status 'created') gets it when their turn
+ * comes. The flag also re-notifies the envelope's other current signers, which
+ * reads as a reminder: on the demo account (5 Oct 2026) a bounced co-signer
+ * went from 'autoresponded' back to 'sent'. DocuSign answers 200 even when it
+ * rejects the recipient, putting the
+ * reason in recipientUpdateResults[].errorDetails, so that is checked, and the
+ * recipient is read back to prove the address changed.
+ */
+export async function correctRecipient(
+  envelopeId: string,
+  correction: RecipientCorrection,
+): Promise<EnvelopeRecipient> {
+  const envRes = await dsRequest(`/envelopes/${envelopeId}`)
+  if (!envRes.ok) throw await dsError('DocuSign envelope fetch failed', envRes)
+  const envelope = await envRes.json() as { status?: string }
+  const envStatus = (envelope.status ?? '').toLowerCase()
+  if (!CORRECTABLE_ENVELOPE_STATUSES.has(envStatus)) {
+    throw refused(
+      `This envelope is ${envStatus || 'in an unknown state'}; only one still out for signature can be corrected`,
+      'ENVELOPE_NOT_CORRECTABLE',
+    )
+  }
+
+  const target = (await getEnvelopeRecipients(envelopeId)).find((r) => r.recipientId === correction.recipientId)
+  if (!target) throw refused(`Recipient ${correction.recipientId} is not on this envelope`, 'RECIPIENT_NOT_FOUND')
+  if (FINISHED_SIGNER_STATUSES.has(target.status)) {
+    throw refused(
+      `${target.name || 'This signer'} has already ${target.status === 'declined' ? 'declined' : 'signed'}; their address cannot be changed`,
+      'RECIPIENT_FINISHED',
+    )
+  }
+
+  const res = await dsRequest(`/envelopes/${envelopeId}/recipients?resend_envelope=true`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      signers: [{
+        recipientId: correction.recipientId,
+        email:       correction.email,
+        name:        correction.name ?? target.name,
+      }],
+    }),
+  })
+  if (!res.ok) {
+    const err = await dsError('DocuSign recipient correction failed', res)
+    if (err.errorCode === 'ENVELOPE_LOCKED') {
+      throw refused('Someone has this envelope open for correcting in DocuSign; close it there and try again', 'ENVELOPE_LOCKED')
+    }
+    throw err
+  }
+  const body = await res.json() as {
+    recipientUpdateResults?: { errorDetails?: { errorCode?: string; message?: string } }[]
+  }
+  const rejected = (body.recipientUpdateResults ?? [])
+    .map((r) => r.errorDetails)
+    .find((e) => e?.errorCode && e.errorCode !== 'SUCCESS')
+  if (rejected) {
+    throw refused(`DocuSign refused the correction: ${rejected.message ?? rejected.errorCode}`, rejected.errorCode ?? 'UNKNOWN')
+  }
+
+  const recipients = await getEnvelopeRecipients(envelopeId)
+  const after = recipients.find((r) => r.recipientId === correction.recipientId)
+  if (!after || after.email.toLowerCase() !== correction.email.toLowerCase()) {
+    throw new Error(
+      `DocuSign accepted the correction but recipient ${correction.recipientId} still reads ${after?.email ?? '(missing)'}`,
+    )
+  }
+
+  // The form prints addresses too (GuardianEmail is a prefilled email field).
+  // While nobody has signed, the signer's own fields still holding the old
+  // address are rewritten; after a signature the document text is left as it
+  // was signed. Best-effort: the address change above is what matters.
+  if (!recipients.some((r) => FINISHED_SIGNER_STATUSES.has(r.status))) {
+    await rewriteEmailTabs(envelopeId, correction.recipientId, target.email, correction.email).catch((err) =>
+      console.error(`[docusign] prefilled email fields not updated on ${envelopeId}:`, err),
+    )
+  }
+  return after
+}
+
+const EMAIL_TAB_KINDS = ['emailAddressTabs', 'emailTabs', 'textTabs'] as const
+
+async function rewriteEmailTabs(envelopeId: string, recipientId: string, from: string, to: string): Promise<number> {
+  const res = await dsRequest(`/envelopes/${envelopeId}/recipients/${recipientId}/tabs`)
+  if (!res.ok) throw await dsError('DocuSign tabs fetch failed', res)
+  const tabs = await res.json() as Record<string, { tabId?: string; value?: string }[] | undefined>
+  const update: Record<string, { tabId: string; value: string }[]> = {}
+  let count = 0
+  for (const kind of EMAIL_TAB_KINDS) {
+    const hits = (tabs[kind] ?? []).filter(
+      (t) => t.tabId && (t.value ?? '').trim().toLowerCase() === from.trim().toLowerCase(),
+    )
+    if (hits.length) {
+      update[kind] = hits.map((t) => ({ tabId: t.tabId as string, value: to }))
+      count += hits.length
+    }
+  }
+  if (count === 0) return 0
+  const put = await dsRequest(`/envelopes/${envelopeId}/recipients/${recipientId}/tabs`, {
+    method: 'PUT',
+    body: JSON.stringify(update),
+  })
+  if (!put.ok) throw await dsError('DocuSign tabs update failed', put)
+  return count
 }
 
 // Voids an in-flight envelope. DocuSign only allows voiding envelopes that are
@@ -659,28 +805,30 @@ export function isMinor(dateOfBirth: string): boolean {
 // classifyAgreement (which picks an event's paperwork) never returns it.
 export type AgreementType = 'minor' | 'adult' | 'mentor' | 'volunteer' | 'membership'
 
-// Which DocuSign agreement (if any) a participant needs, based on role and age:
-//   • any student (incl. Student Manager) → minor "Participation Agreement"
-//     (parental consent), REGARDLESS of age — students are treated as minors
-//     for paperwork, with their emergency contact acting as the guardian signer
-//   • other under-18 participant          → minor parental-consent form
-//   • adult registering as a mentor       → mentor participation agreement
-//   • adult in the volunteer program      → volunteer agreement
-//   • any other adult attendee            → adult participation agreement
+// Which agreement (if any) a participant needs, based on role and age
+// (Participation Agreements V2.3, 2 Oct 2026):
+//   • any student (incl. Student Manager) → Student / Minor agreement,
+//     REGARDLESS of age — a student still in high school is a Minor under the
+//     agreement, and one past the age of majority signs it with a parent
+//     co-signing
+//   • a mentor or volunteer                → Mentor and Volunteer Agreement, at
+//     any age; one under the age of majority has a parent co-sign it (§3A)
+//   • any other person under the age of majority → Student / Minor agreement
+//   • any other adult attendee             → Educator / Chaperone agreement
+// The age of majority depends on the state the person lives in (lib/age).
 /** The agreements an event participant can need: every type but membership. */
 export type EventAgreementType = Exclude<AgreementType, 'membership'>
 
 export function classifyAgreement(
   eventRole: string | null | undefined,
   dateOfBirth: string | null | undefined,
+  state?: string | null,
 ): EventAgreementType | null {
   const role = (eventRole ?? '').toLowerCase().replace(/\s+/g, '_')
-  // Student participants always sign the minor agreement — role wins over age,
-  // so an 18-year-old senior or student-manager still gets parental consent.
   if (role === 'participant' || role === 'school_student_manager') return 'minor'
-  if (dateOfBirth && isMinor(dateOfBirth)) return 'minor'
   if (role === 'mentor') return 'mentor'
   if (role === 'volunteer') return 'volunteer'
+  if (dateOfBirth && isMinorOn(dateOfBirth, undefined, state)) return 'minor'
   if (!role) return null
   return 'adult'
 }

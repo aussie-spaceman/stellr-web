@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@stellr/web-ui'
-import { DISCLOSURE_PARAGRAPHS, DISCLOSURE_TITLE } from '@/lib/esign/disclosure'
+import { disclosureParagraphs, DISCLOSURE_TITLE } from '@/lib/esign/disclosure'
 import { PdfViewer } from './PdfViewer'
 import { SignaturePad } from './SignaturePad'
 
@@ -317,7 +317,7 @@ function Signing({ view, onDone, onDeclined, onLost, onRenew }: {
 
       <section className="rounded-ds-card border border-line bg-white p-6 sm:p-8">
         {step === 'consent' && (
-          <ConsentStep headingRef={headingRef} attestation={view.attestation} busy={busy} onAgree={consent} />
+          <ConsentStep headingRef={headingRef} disclosureVersion={view.disclosureVersion} attestation={view.attestation} busy={busy} onAgree={consent} />
         )}
         {step === 'read' && (
           <ReadStep
@@ -375,7 +375,8 @@ function StepHeading({ headingRef, children }: { headingRef: HeadingRef; childre
   )
 }
 
-function ConsentStep({ headingRef, attestation, busy, onAgree }: {
+function ConsentStep({ headingRef, disclosureVersion, attestation, busy, onAgree }: {
+  disclosureVersion: string
   headingRef: HeadingRef
   attestation: string | null
   busy: boolean
@@ -387,7 +388,7 @@ function ConsentStep({ headingRef, attestation, busy, onAgree }: {
     <div className="space-y-4">
       <StepHeading headingRef={headingRef}>{DISCLOSURE_TITLE}</StepHeading>
       <div className="space-y-3 text-sm text-content-body">
-        {DISCLOSURE_PARAGRAPHS.map((p) => <p key={p.slice(0, 24)}>{p}</p>)}
+        {disclosureParagraphs(disclosureVersion).map((p) => <p key={p.slice(0, 24)}>{p}</p>)}
         <p>
           <a className="text-primary-deep underline" href="/privacy" target="_blank" rel="noopener noreferrer">Read our Privacy Policy</a>
         </p>

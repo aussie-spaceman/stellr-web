@@ -31,6 +31,7 @@ const PURE_EXPORTS = new Set([
   'MentorAgreementParams',
   'VolunteerAgreementParams',
   'CreatedEnvelope',
+  'RecipientCorrection',
   'AccountUsage',
   'classifyAgreement',
   'isMinor',

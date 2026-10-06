@@ -22,7 +22,7 @@ export default async function AdminDocusignsPage() {
   // roster called the same row "Partially Complete" (4 Sept 2026).
   const { data: envelopes } = await db
     .from('agreements')
-    .select('id, envelope_id, provider, status, envelope_type, signer_name, signer_email, minor_name, event_title, event_slug, sent_at, completed_at, declined_at, reminder_sent_at, reminder_count, participant_id, member_id, reused_from, signers_total, signers_completed, credential_sharing_opt_out')
+    .select('id, envelope_id, provider, status, envelope_type, signer_name, signer_email, minor_name, event_title, event_slug, sent_at, completed_at, declined_at, reminder_sent_at, reminder_count, participant_id, member_id, reused_from, signers_total, signers_completed, credential_sharing_opt_out, media_opt_out, quote_opt_out, digital_comms_opt_out, agreement_version')
     .order('sent_at', { ascending: false })
 
   const recipientsByEnvelope = await loadRecipientsByEnvelopeRows(

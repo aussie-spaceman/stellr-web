@@ -37,7 +37,7 @@ export async function reissueParticipantAgreement(
 ): Promise<ReissueResult> {
   const { data: p } = await db
     .from('participants')
-    .select(`id, member_id, first_name, last_name, email, phone, date_of_birth, event_role, school_name,
+    .select(`id, member_id, first_name, last_name, email, phone, date_of_birth, event_role, school_name, grade,
       emergency_contact_first_name, emergency_contact_last_name, emergency_contact_email,
       emergency_contact_phone, emergency_contact_relationship,
       registrations!inner(event_slug, event_title, school_name, school_address_state)`)
@@ -84,7 +84,8 @@ export async function reissueParticipantAgreement(
         reason: 'bounced',
         message:
           `The email to ${bounced.map((b) => maskEmail(b.email as string)).join(', ')} bounced. ` +
-          'Correct the address on the participant first; the old envelope is then voided and a new one issued.',
+          'Use Correct email instead: it fixes the address on this envelope, keeps any signature and uses no new envelope. ' +
+          'Continue only if that failed; the old envelope is then voided and a new one issued to the participant record as it stands.',
       }
     }
     try {
@@ -95,7 +96,7 @@ export async function reissueParticipantAgreement(
     }
     await db.from('agreements').update({ status: 'voided', updated_at: new Date().toISOString() }).eq('id', env.id)
   } else {
-    if (!classifyAgreement(p.event_role as string | null, p.date_of_birth as string | null)) {
+    if (!classifyAgreement(p.event_role as string | null, p.date_of_birth as string | null, reg.school_address_state as string | null)) {
       return { kind: 'nothing_to_do', reason: 'not_required', message: 'No agreement is required for this participant' }
     }
     if (!opts.allowNewEnvelope) {
@@ -126,6 +127,7 @@ export async function reissueParticipantAgreement(
     guardianEmail:     p.emergency_contact_email as string | null,
     guardianPhone:     p.emergency_contact_phone as string | null,
     relationship:      p.emergency_contact_relationship as string | null,
+    grade:             (p.grade as string | null) ?? null,
   })
   return { kind: 'reissued', outcome }
 }

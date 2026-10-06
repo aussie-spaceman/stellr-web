@@ -1,5 +1,6 @@
 import {
   DocusignApiError,
+  correctRecipient,
   createAdultAgreementEnvelope,
   createConsentEnvelope,
   createMentorAgreementEnvelope,
@@ -15,6 +16,7 @@ import {
 } from '@/lib/docusign'
 import {
   AllowanceExhaustedError,
+  CorrectionRefusedError,
   ProviderUnavailableError,
   type CreateAgreementRequest,
   type EsignProvider,
@@ -83,6 +85,19 @@ export const docusignProvider: EsignProvider = {
   // wording still applies to callers that have none.
   void: (_ctx, externalId, reason) =>
     reason === undefined ? voidEnvelope(externalId) : voidEnvelope(externalId, reason),
+
+  async correctRecipient(_ctx, externalId, correction) {
+    try {
+      return await correctRecipient(externalId, correction)
+    } catch (err) {
+      // 409 is lib/docusign's marker for a refusal the admin can act on
+      // (finished, locked, or the recipient rejected inside a 200).
+      if (err instanceof DocusignApiError && err.status === 409) {
+        throw new CorrectionRefusedError('docusign', err.message, err.errorCode ?? 'REFUSED', { cause: err })
+      }
+      throw err
+    }
+  },
 
   getFieldValues: (_ctx, externalId) => getEnvelopeFormData(externalId),
 

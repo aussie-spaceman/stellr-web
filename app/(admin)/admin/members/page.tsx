@@ -58,7 +58,7 @@ export default async function AdminMembersPage({
       <div className="flex items-center justify-between">
         <div>
           <p className="eyebrow flex items-center gap-2 text-brand-blue">
-            <span className="h-2 w-2 rounded-full bg-brand-blue-bright" /> Members &amp; membership
+            <span className="h-2 w-2 rounded-full bg-brand-blue-bright" />{' '}Members &amp; membership
           </p>
           <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Members</h1>
           <p className="text-sm text-brand-muted-soft mt-0.5">{count ?? 0} matching</p>

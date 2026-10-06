@@ -17,13 +17,13 @@ export default function TermsPage() {
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
           <strong>Recent update (02-Oct-2026):</strong>{' '}Students can now create a Stellr account
-          themselves. Section 4 defines a <strong>Minor</strong> by the age of majority in your
+          themselves. Section 4 defines a <strong>Minor</strong>{' '}by the age of majority in your
           state, explains pending accounts until a parent or legal guardian signs, and adds new
           Sections 4.5 (adult students still in high school) and 4.6 (when a student is no longer
           a Minor). Consent forms and agreements can now be signed through Stellr&rsquo;s own
           signing system as well as DocuSign, and Section 22 adds how electronic signing works and
           your right to paper. Section 4.3 points to our new School Data Terms, Section 11.3
-          describes the photo and media opt-outs, and Sections 1, 5.1, 6.4, 8 and 20 were updated
+          describes the photo, media and survey-quote opt-outs, and Sections 1, 5.1, 6.4, 8 and 20 were updated
           to match.
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
@@ -512,8 +512,8 @@ export default function TermsPage() {
           </Link>
           . Some uses already published or distributed may not be fully reversible. Credential pages
           are covered separately in Section 5.1. Students aged 13 or over may also opt out of
-          Stellr&rsquo;s use of their photos, videos, name, and work themselves, as described in our
-          Privacy Policy. For students aged 13 to 17 who live in a state that requires the
+          Stellr&rsquo;s use of their photos, videos, name, work, and quotes from their survey
+          responses themselves, as described in our Privacy Policy. For students aged 13 to 17 who live in a state that requires the
           student&rsquo;s own agreement first (currently New York and Colorado), we do not use these
           until the student agrees.
         </p>
@@ -733,7 +733,7 @@ export default function TermsPage() {
           satisfy any legal requirement that they be in writing.
         </p>
         <p>
-          <strong>Electronic signatures.</strong> Consent forms and agreements are signed
+          <strong>Electronic signatures.</strong>{' '}Consent forms and agreements are signed
           electronically, through Stellr&rsquo;s own signing system or through DocuSign. Before you
           sign, we show you what signing electronically means and ask you to agree to it. Your
           electronic signature has the same effect as a handwritten one. You may instead sign on

@@ -46,13 +46,13 @@ export function WelcomeBanner({ firstName }: { firstName: string }) {
       </p>
       <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-brand-muted">
         <span className="flex items-center gap-2">
-          <Trophy className="h-4 w-4 text-brand-orange-alt" /> Your next competition &amp; prep
+          <Trophy className="h-4 w-4 text-brand-orange-alt" />{' '}Your next competition &amp; prep
         </span>
         <span className="flex items-center gap-2">
           <GraduationCap className="h-4 w-4 text-brand-orange" /> Training to finish
         </span>
         <span className="flex items-center gap-2">
-          <MessagesSquare className="h-4 w-4 text-brand-blue" /> What&apos;s new in your spaces
+          <MessagesSquare className="h-4 w-4 text-brand-blue" />{' '}What&apos;s new in your spaces
         </span>
       </div>
     </div>

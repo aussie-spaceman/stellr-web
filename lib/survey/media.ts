@@ -17,10 +17,8 @@
  * Where the opt-out is read (2 Oct 2026):
  *   - Stellr-signed forms: the signers' checkbox values
  *     (agreement_recipients.signer_values.MediaOptOut).
- *   - `agreements.media_opt_out`, read back from DocuSign as well, arrives
- *     with the V2.3 agreements branch (migration 20261002235609). It is read
- *     when the column exists and ignored when it doesn't, so this works
- *     whichever branch reaches an environment first.
+ *   - `agreements.media_opt_out`, read back from DocuSign as well (#280,
+ *     migration 20261002235609, in production since 3 Oct).
  *   - A form whose media box we can't see (DocuSign not read back, or an
  *     older Stellr template without it) is "check": open the
  *     signed PDF (Admin → Consent forms).
@@ -182,7 +180,7 @@ export async function loadMediaAgreements(
     if (r.signer_values) values.set(r.envelope_row, [...(values.get(r.envelope_row) ?? []), r.signer_values])
   }
 
-  // agreements.media_opt_out (V2.3 branch). Absent column → no facts, no error.
+  // agreements.media_opt_out and the read-back markers (#280).
   const columns = new Map<string, ColumnFacts>()
   for (let i = 0; i < ids.length; i += CHUNK) {
     const { data, error } = await db.from('agreements').select('id, media_opt_out, form_data_read_at, agreement_version').in('id', ids.slice(i, i + CHUNK))

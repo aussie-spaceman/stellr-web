@@ -3,29 +3,26 @@
  * Agreement – Minors V2.3, §1.1/§1.2 collection, §1.7/§2 quoting, §4 direct
  * digital communications), and quote eligibility at export time.
  *
- * Sources (2 Oct 2026):
- *   - Version: agreements.template_id → esign_templates.document_version.
- *     DocuSign-signed rows have no template and so no version: they never
- *     meet V2.3.
- *   - Opt-outs: the guardian's checkbox values on the original agreement
- *     (agreement_recipients.signer_values, 'true'/'false' by field name).
- *     DigitalCommsOptOut and MediaOptOut exist on today's minor template;
- *     QuoteOptOut is the name the V2.3 §2 checkbox must carry.
- *   - Withdrawal: an agreement restricted after a withdrawal or deletion
- *     request (agreements.restricted_at) no longer counts.
+ * Everything is read from the signed agreement row (#280): `agreement_version`
+ * ('2.3' on every in-app signature; DocuSign rows carry DOCUSIGN_AGREEMENT_VERSION)
+ * and the guardian's ticked boxes, read back into `quote_opt_out`,
+ * `digital_comms_opt_out` and `media_opt_out` for both signing engines.
+ * Rows from before versions were recorded have no version and never meet V2.3.
+ * An agreement restricted after a withdrawal or deletion request
+ * (`restricted_at`) no longer counts.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { agreementExpiry } from '@/lib/docusign-agreements'
+import { agreementValid } from '@/lib/docusign-agreements'
 import { normaliseState } from '@/lib/locations'
 
-export const SURVEY_MIN_MINOR_AGREEMENT = 'V2.3'
-export const QUOTE_OPT_OUT_FIELD = 'QuoteOptOut'
-export const DIGITAL_COMMS_OPT_OUT_FIELD = 'DigitalCommsOptOut'
-export const MEDIA_OPT_OUT_FIELD = 'MediaOptOut'
+export const SURVEY_MIN_MINOR_AGREEMENT = '2.3'
 
-/** Compare "V2.3"-style labels; null sorts below everything. */
+/** Compare "2.3" / "V2.3"-style versions; null or unreadable sorts below everything. */
 export function compareDocVersion(a: string | null | undefined, b: string | null | undefined): number {
-  const parse = (v: string | null | undefined) => (v && /^V\d+(\.\d+)*$/.test(v) ? v.slice(1).split('.').map(Number) : null)
+  const parse = (v: string | null | undefined) => {
+    const m = /^v?(\d+(?:\.\d+)*)$/i.exec((v ?? '').trim())
+    return m ? m[1].split('.').map(Number) : null
+  }
   const pa = parse(a)
   const pb = parse(b)
   if (!pa || !pb) return pa ? 1 : pb ? -1 : 0
@@ -43,7 +40,7 @@ export function meetsSurveyAgreement(version: string | null | undefined): boolea
 export interface MinorConsent {
   agreementId: string | null
   agreementVersion: string | null
-  /** A current, unrestricted minor agreement at V2.3 or later. */
+  /** A valid, unrestricted minor agreement at V2.3 or later. */
   coversSurveys: boolean
   restricted: boolean
   digitalCommsOptOut: boolean
@@ -65,8 +62,6 @@ export const NO_CONSENT: MinorConsent = {
   guardianName: null,
 }
 
-const ticked = (values: Record<string, string> | null | undefined, field: string) => values?.[field] === 'true'
-
 export interface ConsentSubject {
   key: string
   memberId: string | null
@@ -77,10 +72,14 @@ interface AgreementRow {
   id: string
   member_id: string | null
   participant_id: string | null
+  envelope_type: string
   completed_at: string | null
   reused_from: string | null
   restricted_at: string | null
-  template_id: string | null
+  agreement_version: string | null
+  quote_opt_out: boolean | null
+  digital_comms_opt_out: boolean | null
+  media_opt_out: boolean | null
 }
 
 /**
@@ -99,7 +98,7 @@ export async function loadMinorConsents(
   const participantIds = [...new Set(subjects.map((s) => s.participantId).filter(Boolean))] as string[]
 
   const rows: AgreementRow[] = []
-  const cols = 'id, member_id, participant_id, completed_at, reused_from, restricted_at, template_id'
+  const cols = 'id, member_id, participant_id, envelope_type, completed_at, reused_from, restricted_at, agreement_version, quote_opt_out, digital_comms_opt_out, media_opt_out'
   for (const [col, ids] of [['member_id', memberIds], ['participant_id', participantIds]] as const) {
     for (let i = 0; i < ids.length; i += 200) {
       const { data, error } = await db
@@ -129,32 +128,20 @@ export async function loadMinorConsents(
       .filter((r) => (s.memberId && r.member_id === s.memberId) || (s.participantId && r.participant_id === s.participantId))
       .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
     const top = mine[0] ? resolve(mine[0]) : null
-    if (top?.completed_at && agreementExpiry(top.completed_at) > now) signed.set(s.key, top)
-  }
-
-  const templateIds = [...new Set([...signed.values()].map((r) => r.template_id).filter(Boolean))] as string[]
-  const versions = new Map<string, string | null>()
-  if (templateIds.length) {
-    const { data, error } = await db.from('esign_templates').select('id, document_version').in('id', templateIds)
-    if (error) throw new Error(`Reading template versions failed: ${error.message}`)
-    for (const t of data ?? []) versions.set(t.id as string, (t.document_version as string | null) ?? null)
+    if (top && agreementValid(top, now)) signed.set(s.key, top)
   }
 
   const signedIds = [...new Set([...signed.values()].map((r) => r.id))]
-  const guardians = new Map<string, { email: string | null; name: string | null; values: Record<string, string> | null }>()
+  const guardians = new Map<string, { email: string | null; name: string | null }>()
   for (let i = 0; i < signedIds.length; i += 200) {
     const { data, error } = await db
       .from('agreement_recipients')
-      .select('envelope_row, role_name, email, name, signer_values')
+      .select('envelope_row, role_name, email, name')
       .in('envelope_row', signedIds.slice(i, i + 200))
       .ilike('role_name', 'guardian')
     if (error) throw new Error(`Reading guardian signers failed: ${error.message}`)
     for (const g of data ?? []) {
-      guardians.set(g.envelope_row as string, {
-        email: (g.email as string | null) ?? null,
-        name: (g.name as string | null) ?? null,
-        values: (g.signer_values as Record<string, string> | null) ?? null,
-      })
+      guardians.set(g.envelope_row as string, { email: (g.email as string | null) ?? null, name: (g.name as string | null) ?? null })
     }
   }
 
@@ -164,17 +151,16 @@ export async function loadMinorConsents(
       out.set(s.key, NO_CONSENT)
       continue
     }
-    const version = a.template_id ? versions.get(a.template_id) ?? null : null
     const g = guardians.get(a.id)
     const restricted = !!a.restricted_at
     out.set(s.key, {
       agreementId: a.id,
-      agreementVersion: version,
-      coversSurveys: !restricted && meetsSurveyAgreement(version),
+      agreementVersion: a.agreement_version,
+      coversSurveys: !restricted && meetsSurveyAgreement(a.agreement_version),
       restricted,
-      digitalCommsOptOut: ticked(g?.values, DIGITAL_COMMS_OPT_OUT_FIELD),
-      quoteOptOut: ticked(g?.values, QUOTE_OPT_OUT_FIELD),
-      mediaOptOut: ticked(g?.values, MEDIA_OPT_OUT_FIELD),
+      digitalCommsOptOut: a.digital_comms_opt_out === true,
+      quoteOptOut: a.quote_opt_out === true,
+      mediaOptOut: a.media_opt_out === true,
       guardianEmail: g?.email ?? null,
       guardianName: g?.name ?? null,
     })

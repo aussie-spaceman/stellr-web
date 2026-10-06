@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { agreementExpiry } from '@/lib/docusign-agreements'
+import { agreementValid } from '@/lib/docusign-agreements'
 import {
   CREDENTIAL_COLUMNS,
   ageBlock,
@@ -68,7 +68,7 @@ export async function consentForMinor(
 
   const { data } = await db
     .from('agreements')
-    .select('id, completed_at, credential_sharing_opt_out, reused_from')
+    .select('id, completed_at, envelope_type, agreement_version, credential_sharing_opt_out, reused_from')
     .or(filters)
     .eq('envelope_type', 'minor')
     .eq('status', 'completed')
@@ -76,7 +76,7 @@ export async function consentForMinor(
     .limit(1)
     .maybeSingle()
   if (!data?.completed_at) return 'none'
-  if (agreementExpiry(data.completed_at) < now) return 'none'
+  if (!agreementValid(data, now)) return 'none'
 
   let optOut = Boolean(data.credential_sharing_opt_out)
   if (data.reused_from) {

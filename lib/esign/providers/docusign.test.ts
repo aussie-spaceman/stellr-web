@@ -106,3 +106,30 @@ describe('docusignProvider.create', () => {
     expect((cause as InstanceType<typeof DocusignApiError>).errorCode).toBeNull()
   })
 })
+
+describe('docusignProvider.correctRecipient', () => {
+  it('turns a refusal into CorrectionRefusedError and passes outages through', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL) => {
+      const target = String(url)
+      if (target.includes('/oauth/token')) {
+        return new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ status: 'completed' }), { status: 200 })
+    }))
+    const { docusignProvider, CorrectionRefusedError } = await loadAdapter()
+    const err = await docusignProvider
+      .correctRecipient(ctx, 'env-1', { recipientId: '1', email: 'a@example.test' })
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(CorrectionRefusedError)
+    expect(err).toMatchObject({ provider: 'docusign', code: 'ENVELOPE_NOT_CORRECTABLE' })
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL) =>
+      String(url).includes('/oauth/token')
+        ? new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 }), { status: 200 })
+        : new Response('upstream down', { status: 503 })))
+    const outage = await docusignProvider
+      .correctRecipient(ctx, 'env-1', { recipientId: '1', email: 'a@example.test' })
+      .catch((e: unknown) => e)
+    expect(outage).not.toBeInstanceOf(CorrectionRefusedError)
+  })
+})

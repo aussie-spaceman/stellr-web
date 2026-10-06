@@ -32,7 +32,7 @@ Medical information is `participants.health_conditions` (per event) and
    participant UUID(s) whose medical record must be kept.
 2. **Generate the SQL** from a checkout with `.env.local`:
    ```bash
-   npm run retention:medical-sql -- --keep <participant-uuid>,<participant-uuid> > /tmp/medical-retention.sql
+   npm run -s retention:medical-sql -- --keep <participant-uuid>,<participant-uuid> > /tmp/medical-retention.sql
    ```
    Omit `--keep` if there are no incidents. The script reads event dates from
    Sanity (production dataset) and never connects to a database.
@@ -135,7 +135,7 @@ migration that stops `audit_members()` copying `health_conditions` into
 Follow-up ticket: a self-serve deletion request with `received_at`, `due_at`,
 `completed_at` on `deletion_requests`, and an executor that does steps 3.2–3.7.
 
-## Part C — Media opt-outs (photos, videos, name, work in promotion)
+## Part C — Media and survey-quote opt-outs (photos, videos, name, work, quotes)
 
 **Before using anyone's photo, video, name or work in promotion, check Admin →
 Operations → Media do-not-use** (`/admin/media`; filter by event; Download CSV).
@@ -146,11 +146,10 @@ rule (`lib/survey/media.ts`), which combines:
 1. **Withdrawn consent** — an agreement restricted after a withdrawal or
    deletion request: no.
 2. **Opt-outs on signed forms** — the "I do NOT consent to photo and media use"
-   box (`MediaOptOut`) on the person's agreement (the guardian's, for a minor):
-   no. Read from Stellr-signed forms now, and from DocuSign forms once the V2.3
-   agreements work (`agreements.media_opt_out`) is live. A minor whose DocuSign
-   form was never read back shows **check**: open the signed PDF in Admin →
-   Consent forms and add them by hand if the box is ticked.
+   box on the person's agreement (the guardian's, for a minor), read back into
+   `agreements.media_opt_out` for Stellr-signed and DocuSign forms (#280): no.
+   A minor whose DocuSign form was never read back shows **check**: open the
+   signed PDF in Admin → Consent forms and add them by hand if the box is ticked.
 3. **The student's own switch** (Account → Profile → "Quotes, photos and
    media", `member_privacy_prefs.allow_media`): off is no; on overrides the
    NY/CO default below, never a parent's opt-out.
@@ -160,19 +159,33 @@ rule (`lib/survey/media.ts`), which combines:
    state stands in for state of residence; NY/CO if any of the person's known
    school states is.
 
+The same do-not-use list covers **survey quotes** (D17, Privacy §2 and §3.12,
+Terms §11.3) as well as photos, videos, name and work.
+
 **Opt-out emails** to privacy@stellreducation.org from a student aged 13+ or a
 parent/guardian are not in the data: log them, reply to confirm, and keep them
 on a short manual list beside the export. Either opt-out (student or parent)
 turns the use off. Opting out never affects participation.
 
+**Quoting a survey response** in promotional material (website, social, press,
+grant applications):
+- Only from a question the survey said could be quoted.
+- Attribution: **first name + last initial, grade, and school or state**. Never
+  a full name, contact details or date of birth.
+- **Under 13: anonymous only** (no name, school or state; grade alone is fine).
+- Light edits for length, spelling and grammar are fine; never change the meaning.
+- Skip anyone on the do-not-use list. Their answers may still appear in
+  combined, non-identifying results.
+
 Survey quotes: the "Quotable answers" export (Admin → Surveys) applies the
-parent's `QuoteOptOut`, the student's switch, the NY/CO default, "Don't quote
-this response" and withdrawals at the moment of export. To withdraw one quote on
-request, paste its response id under "Withdraw a quote" on that page.
+parent's quote opt-out (`agreements.quote_opt_out`), the student's switch, the
+NY/CO default, "Don't quote this response" and withdrawals at the moment of
+export. To withdraw one quote on request, paste its response id under
+"Withdraw a quote" on that page.
 
 Follow-up ticket: state of residence at registration (school state is the
 proxy), and email opt-ins/opt-outs recorded in the account rather than on a
-manual list. The DocuSign read-back ships with the V2.3 agreements work.
+manual list.
 
 ## Part D — School DPA deletion requests (I14)
 

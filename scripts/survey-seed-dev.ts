@@ -6,6 +6,8 @@
  *   npm run survey:seed-dev -- --open    …and send it live now, printing each link
  *   npm run survey:seed-dev -- --reset   delete everything the demo created
  *
+ * Uses the minors template labelled V2.3 on dev (it must exist). Creates no template.
+ *
  * Event "survey-demo-2026" (Nebraska, so the age of majority is 19):
  *   Alex  16  V2.3 agreement, own email           → invited (student)
  *   Bea   15  V2.3 agreement, §4 comms opt-out     → invited via guardian
@@ -26,7 +28,6 @@ if (existsSync('.env.local')) process.loadEnvFile('.env.local')
 const DEV_PROJECT_REF = 'xvxlhbxtiwxpopoqjygm'
 const SLUG = 'survey-demo-2026'
 const TITLE = 'Survey Demo SDC 2026'
-const TEMPLATE_VERSION = 900
 const DOMAIN = 'survey-demo.example.com'
 
 async function main() {
@@ -41,28 +42,8 @@ async function main() {
 
   if (args.includes('--reset')) return reset(db)
 
-  // Dev-only minors-agreement template labelled V2.3 (none exists yet anywhere).
-  const { data: tpl, error: tplErr } = await db
-    .from('esign_templates')
-    .upsert(
-      {
-        key: 'minor',
-        version: TEMPLATE_VERSION,
-        title: 'DEV ONLY — survey test, Minors Agreement V2.3',
-        pdf_path: 'dev/survey-test.pdf',
-        pdf_sha256: 'dev',
-        page_count: 1,
-        field_map: { fields: [] },
-        disclosure_version: 'dev',
-        source: 'dev-survey-seed',
-        active: false,
-        document_version: 'V2.3',
-      },
-      { onConflict: 'key,version', ignoreDuplicates: false },
-    )
-    .select('id')
-    .single()
-  if (tplErr) throw new Error(`template: ${tplErr.message}`)
+  // The current minors template (optional link; the survey reads agreement_version).
+  const { data: tpl } = await db.from('esign_templates').select('id').eq('key', 'minor').eq('active', true).maybeSingle()
 
   const { data: existingReg } = await db.from('registrations').select('id').eq('event_slug', SLUG).maybeSingle()
   let regId = existingReg?.id as string | undefined
@@ -137,7 +118,11 @@ async function main() {
           signer_email: `guardian.${name.toLowerCase()}@${DOMAIN}`,
           minor_name: `${name} Demo`,
           completed_at: new Date().toISOString(),
-          template_id: tpl.id,
+          template_id: tpl?.id ?? null,
+          agreement_version: '2.3',
+          digital_comms_opt_out: String(values.DigitalCommsOptOut) === 'true',
+          quote_opt_out: String(values.QuoteOptOut) === 'true',
+          media_opt_out: String(values.MediaOptOut) === 'true',
         })
         .select('id')
         .single()
@@ -245,7 +230,7 @@ async function reset(db: import('@supabase/supabase-js').SupabaseClient) {
     await db.from('event_participations').delete().eq('member_id', mentor.id)
     await db.from('members').delete().eq('id', mentor.id)
   }
-  console.log('Demo event removed. (The dev-only V2.3 test template stays: its label is frozen by design.)')
+  console.log('Demo event removed.')
 }
 
 main().catch((err) => {

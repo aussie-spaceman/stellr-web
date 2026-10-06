@@ -13,17 +13,31 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const SIGNED_BUCKET = 'signed-agreements'
 
-/** Signed agreements are kept this long after signing (Privacy Policy §10). */
+/**
+ * Signed agreements are kept for the life of the membership and this long
+ * after it ends (Participation Agreements V2.3; Privacy Policy §10).
+ */
 export const RETENTION_YEARS = 7
 
 export function sha256Hex(bytes: ArrayBuffer | Uint8Array): string {
   return createHash('sha256').update(new Uint8Array(bytes as ArrayBuffer)).digest('hex')
 }
 
-export function retainUntil(completedAt: string): string {
-  const d = new Date(completedAt)
+/** Seven years on from `from`: the end of retention once its clock has started. */
+export function retainUntil(from: string): string {
+  const d = new Date(from)
   d.setUTCFullYear(d.getUTCFullYear() + RETENTION_YEARS)
   return d.toISOString()
+}
+
+/**
+ * retain_until for a record as it completes. One linked to a member account is
+ * kept while the account is open, so it has no end date yet: the clock starts
+ * when the account is deactivated or a deletion request is met
+ * (startRetentionClock). One with no account starts its clock at signing.
+ */
+export function retainUntilOnCompletion(completedAt: string, memberId: string | null | undefined): string | null {
+  return memberId ? null : retainUntil(completedAt)
 }
 
 export function archivePaths(row: { id: string; provider?: string | null; completed_at?: string | null }) {

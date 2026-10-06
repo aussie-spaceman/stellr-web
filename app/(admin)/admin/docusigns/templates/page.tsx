@@ -7,6 +7,18 @@ import { formatDateShort } from '@/lib/utils'
 import { parseFieldMap } from '@/lib/esign/native/template'
 import { ApproveTemplateVersion } from '@/components/admin/ApproveTemplateVersion'
 
+/**
+ * A version's fields, or null when its field map cannot be read. One bad row
+ * (a hand-inserted draft) must not take down the list of every document.
+ */
+function fieldsOf(fieldMap: unknown) {
+  try {
+    return parseFieldMap(fieldMap).fields
+  } catch {
+    return null
+  }
+}
+
 export const metadata = { title: 'Admin — Agreement documents' }
 
 // The documents Stellr signing sends, every version. Picking one shows the
@@ -47,7 +59,7 @@ export default async function AgreementTemplatesPage({ searchParams }: { searchP
   const versions = (data ?? []) as VersionRow[]
   const { v } = await searchParams
   const selected = versions.find((r) => r.id === v) ?? null
-  const fields = selected ? parseFieldMap(selected.field_map).fields : []
+  const fields = selected ? (fieldsOf(selected.field_map) ?? []) : []
 
   return (
     <div className="space-y-6">
@@ -93,7 +105,7 @@ export default async function AgreementTemplatesPage({ searchParams }: { searchP
                     : r.approved_at ? <span className="text-content-muted">Approved, not in use</span>
                     : <span className="text-content-muted">Draft</span>}
                 </td>
-                <td className="px-4 py-2 text-ink">{parseFieldMap(r.field_map).fields.length}</td>
+                <td className="px-4 py-2 text-ink">{fieldsOf(r.field_map)?.length ?? <span className="text-danger">Unreadable field map</span>}</td>
                 <td className="px-4 py-2 text-ink">{formatDateShort(r.created_at)}</td>
                 <td className="px-4 py-2 font-mono text-xs text-content-muted">{r.pdf_sha256.slice(0, 12)}</td>
               </tr>

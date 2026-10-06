@@ -5,6 +5,7 @@ import { formatDateShort } from '@/lib/utils'
 import { describeEnvelope, PILL_CLASSES, type RecipientLike } from '@/lib/docusign-status'
 import { downloadSignedRecord } from '@/lib/esign/download-client'
 import { slug } from '@/lib/esign/filenames'
+import { CorrectSignerEmailButton } from '@/components/admin/CorrectSignerEmailButton'
 
 export interface EnvelopeRow {
   id: string
@@ -13,6 +14,7 @@ export interface EnvelopeRow {
   provider?: string | null
   status: string
   envelope_type?: string
+  agreement_version?: string | null
   signer_name: string
   signer_email: string
   minor_name: string
@@ -36,6 +38,10 @@ export interface EnvelopeRow {
    * the form itself can record it.
    */
   credential_sharing_opt_out?: boolean
+  // The other "I DO NOT consent" boxes on the V2.3 agreements.
+  media_opt_out?: boolean
+  quote_opt_out?: boolean
+  digital_comms_opt_out?: boolean
 }
 
 // Status text, colour and the "who is outstanding" line all come from
@@ -63,7 +69,9 @@ function fmt(iso: string | null) {
 
 const FILTER_OPTIONS = ['all', 'sent', 'delivered', 'completed', 'declined', 'voided'] as const
 
-function fmtExpiry(completedAt: string): { label: string; cls: string } {
+function fmtExpiry(completedAt: string, type: string, version: string | null | undefined): { label: string; cls: string } {
+  // A minor's V2.3 agreement has no end date (lib/docusign-agreements agreementExpiry).
+  if (type === 'minor' && version) return { label: `No end date (v${version})`, cls: 'text-brand-muted-soft' }
   const expires = new Date(completedAt)
   expires.setFullYear(expires.getFullYear() + 3)
   const now = new Date()
@@ -74,6 +82,16 @@ function fmtExpiry(completedAt: string): { label: string; cls: string } {
   const label  = years > 0 ? (rem > 0 ? `${years}yr ${rem}mo` : `${years}yr`) : `${months}mo`
   const cls    = months < 6 ? 'text-amber-600 font-medium' : 'text-brand-muted-soft'
   return { label: `${label} (${formatDateShort(expires)})`, cls }
+}
+
+/** What the signer said no to on the form, read back after signing. */
+function optOutSummary(env: EnvelopeRow): string {
+  const out = [
+    env.media_opt_out && 'Photos',
+    env.quote_opt_out && 'Quotes',
+    env.digital_comms_opt_out && 'Messages',
+  ].filter(Boolean)
+  return out.length ? out.join(', ') : '—'
 }
 
 export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
@@ -181,7 +199,7 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-brand-hairline bg-brand-canvas text-left">
-                {['Participant', 'Type', 'Engine', 'Event', 'Signer', 'Status', 'Sent', 'Signed', 'Expires', 'Sharing', ''].map(h => (
+                {['Participant', 'Type', 'Engine', 'Event', 'Signer', 'Status', 'Sent', 'Signed', 'Expires', 'Sharing', 'Opt-outs', ''].map(h => (
                   <th key={h} className="px-4 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide whitespace-nowrap">
                     {h}
                   </th>
@@ -222,7 +240,7 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
                   <td className="px-4 py-3 text-brand-muted-soft text-xs whitespace-nowrap">{fmt(env.completed_at)}</td>
                   <td className="px-4 py-3 text-xs whitespace-nowrap">
                     {env.completed_at
-                      ? (() => { const { label, cls } = fmtExpiry(env.completed_at); return <span className={cls}>{label}</span> })()
+                      ? (() => { const { label, cls } = fmtExpiry(env.completed_at, env.envelope_type ?? 'minor', env.agreement_version); return <span className={cls}>{label}</span> })()
                       : <span className="text-brand-muted-soft">—</span>
                     }
                   </td>
@@ -246,6 +264,9 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
                       <span className="text-brand-muted-soft">—</span>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-xs whitespace-nowrap text-brand-muted">
+                    {optOutSummary(env)}
+                  </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap space-x-3">
                     {env.status === 'completed' && (
                       <button
@@ -264,6 +285,9 @@ export function DocusignTable({ initial }: { initial: EnvelopeRow[] }) {
                       >
                         {resending === env.id ? 'Sending…' : 'Re-send'}
                       </button>
+                    )}
+                    {(env.status === 'sent' || env.status === 'delivered') && !env.reused_from && (
+                      <CorrectSignerEmailButton agreementId={env.id} className="ml-3" />
                     )}
                   </td>
                 </tr>

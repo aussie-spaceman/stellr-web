@@ -30,15 +30,8 @@ async function main() {
   if (command === 'create') {
     const slug = `e2e-survey-${randomBytes(4).toString('hex')}`
     const title = `E2E Survey ${slug.slice(-8)}`
-    const { data: tpl, error: tplErr } = await db
-      .from('esign_templates')
-      .upsert(
-        { key: 'minor', version: 900, title: 'DEV ONLY — survey test, Minors Agreement V2.3', pdf_path: 'dev/survey-test.pdf', pdf_sha256: 'dev', page_count: 1, field_map: { fields: [] }, disclosure_version: 'dev', source: 'dev-survey-seed', active: false, document_version: 'V2.3' },
-        { onConflict: 'key,version' },
-      )
-      .select('id')
-      .single()
-    if (tplErr) throw new Error(tplErr.message)
+    // The current minors template (optional link; the survey reads agreement_version).
+    const { data: tpl } = await db.from('esign_templates').select('id').eq('key', 'minor').eq('active', true).maybeSingle()
     const { data: reg, error: regErr } = await db
       .from('registrations')
       .insert({ event_slug: slug, event_title: title, type: 'group', status: 'confirmed', school_address_state: 'CO', adult_count: 0 })
@@ -57,7 +50,7 @@ async function main() {
     const ada = parts!.find((p) => p.first_name === 'Ada')!.id
     const { data: ag, error: agErr } = await db
       .from('agreements')
-      .insert({ participant_id: ada, member_id: ADA, event_slug: slug, event_title: title, envelope_id: `e2e-${slug}`, envelope_type: 'minor', status: 'completed', provider: 'native', signer_name: 'Guardian', signer_email: `guardian.${slug}@example.com`, minor_name: 'Ada Student', completed_at: new Date().toISOString(), template_id: tpl.id })
+      .insert({ participant_id: ada, member_id: ADA, event_slug: slug, event_title: title, envelope_id: `e2e-${slug}`, envelope_type: 'minor', status: 'completed', provider: 'native', signer_name: 'Guardian', signer_email: `guardian.${slug}@example.com`, minor_name: 'Ada Student', completed_at: new Date().toISOString(), template_id: tpl?.id ?? null, agreement_version: '2.3' })
       .select('id')
       .single()
     if (agErr) throw new Error(agErr.message)

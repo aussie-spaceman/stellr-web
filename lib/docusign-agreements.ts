@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { classifyAgreement, type AgreementType, type EventAgreementType } from './docusign'
 import { issueAgreement } from './esign/issue'
-import type { CreatedAgreement, MembershipAgreementParams, ProviderId } from './esign/types'
+import { ISSUE_FAILED_PREFIX, type CreatedAgreement, type MembershipAgreementParams, type ProviderId } from './esign/types'
 import { escapeHtml as esc } from './email-layout'
 import {
   sendEmail,
@@ -354,8 +354,7 @@ async function issueOrReuse(
   }
 }
 
-/** Prefix of the synthetic envelope_id on a row recording an issue that failed on every engine. */
-export const ISSUE_FAILED_PREFIX = 'failed:'
+export { ISSUE_FAILED_PREFIX }
 
 async function recordIssueFailure(
   db: SupabaseClient,

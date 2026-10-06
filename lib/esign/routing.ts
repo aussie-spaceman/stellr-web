@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { CreateAgreementRequest, ProviderId } from '@/lib/esign/types'
+import { ISSUE_FAILED_PREFIX, type CreateAgreementRequest, type ProviderId } from '@/lib/esign/types'
 
 // Which signing engine takes a new agreement.
 //
@@ -117,14 +117,16 @@ export interface RoutingDecision {
 
 /**
  * Envelopes DocuSign will accept this period before we stop asking: the plan's
- * cap, or the allowance DocuSign itself reports if that is lower, less the
- * reserve.
+ * cap less the reserve.
+ *
+ * The allowance DocuSign's account endpoint reports (accountAllowed) is not
+ * used. On an API plan it is the web-UI sending allowance, not the API's: the
+ * Starter plan reports 1 against an API allowance of 40, which zeroed the cap
+ * and would have sent every agreement past DocuSign. Its refusal remains the
+ * authoritative "spent" signal.
  */
 export function effectiveCap(state: ProviderState): number {
-  const cap = state.accountAllowed === null
-    ? state.monthlyCap
-    : Math.min(state.monthlyCap, state.accountAllowed)
-  return Math.max(0, cap - state.reserve)
+  return Math.max(0, state.monthlyCap - state.reserve)
 }
 
 /** Our best estimate of envelopes used this period. Errs high. */
@@ -273,7 +275,11 @@ export async function syncDocusignUsage(
   return usage
 }
 
-/** DocuSign envelopes this app has issued since `since`. Coverage rows are not envelopes. */
+/**
+ * DocuSign envelopes this app has issued since `since`. Coverage rows are not
+ * envelopes, and neither are the rows recording an issue that failed (they
+ * carry the provider column's default, 'docusign', but nothing was sent).
+ */
 export async function countDocusignIssuedSince(db: SupabaseClient, since: Date): Promise<number> {
   try {
     const { count, error } = await db
@@ -281,6 +287,7 @@ export async function countDocusignIssuedSince(db: SupabaseClient, since: Date):
       .select('id', { count: 'exact', head: true })
       .eq('provider', 'docusign')
       .is('reused_from', null)
+      .not('envelope_id', 'like', `${ISSUE_FAILED_PREFIX}%`)
       .gte('sent_at', since.toISOString())
     if (error) throw new Error(error.message)
     return count ?? 0

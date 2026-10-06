@@ -6,6 +6,7 @@ import {
   dueReminder,
   effectiveStatus,
   eventLastDay,
+  lateOpenDeadline,
   reconcileWithEvent,
   type CadenceInvitation,
   type ScheduleState,
@@ -153,6 +154,23 @@ describe('reminder cadence', () => {
     expect(dueReminder(inv({ status: 'started', resume_reminder_count: 1, last_reminder_at: at(6.1).toISOString() }), dist, at(7), at(4).toISOString())).toBeNull()
     expect(dueReminder(inv({ status: 'started', resume_reminder_count: 1, last_reminder_at: at(6.1).toISOString() }), dist, at(8.2), at(4).toISOString())).toBe('resume')
     expect(dueReminder(inv({ status: 'started', resume_reminder_count: 2 }), dist, at(20), at(4).toISOString())).toBeNull()
+  })
+})
+
+describe('opening after the event', () => {
+  const tz = 'America/Denver'
+  const lastDay = '2026-10-04' // 00:00 MDT = 06:00Z
+
+  it('is allowed from the last day until its automatic window would have closed', () => {
+    expect(lateOpenDeadline(lastDay, tz, D('2026-10-04T05:59:00Z'))).toBeNull()
+    expect(lateOpenDeadline(lastDay, tz, D('2026-10-06T18:00:00Z'))?.toISOString()).toBe('2026-11-03T06:00:00.000Z')
+    expect(lateOpenDeadline(lastDay, tz, D('2026-11-03T05:59:00Z'))).not.toBeNull()
+    expect(lateOpenDeadline(lastDay, tz, D('2026-11-03T06:00:00Z'))).toBeNull()
+  })
+
+  it('gives a full 30 days from the late opening', () => {
+    const now = D('2026-10-06T18:00:00Z')
+    expect(closesAtFor(now).getTime() - now.getTime()).toBe(30 * DAY)
   })
 })
 

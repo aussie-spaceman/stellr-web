@@ -38,10 +38,11 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
   const db = supabaseServer()
   const { data: dists } = await db
     .from('survey_distributions')
-    .select('id, event_slug, event_title, event_date, event_time_zone, status, opens_at, closes_at, survey_definitions(key, version)')
+    .select('id, definition_id, event_slug, event_title, event_date, event_time_zone, status, opens_at, closes_at, survey_definitions(key, version)')
     .order('event_date', { ascending: false })
   const distributions = (dists ?? []) as unknown as {
     id: string
+    definition_id: string
     event_slug: string
     event_title: string | null
     event_date: string
@@ -97,6 +98,9 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
         <p className="mt-0.5 text-sm text-brand-muted-soft">
           Post-event surveys for every event. Numbers below are app responses only; legacy Google Forms imports are in the exports under their own keys.
         </p>
+        <Link href="/admin/surveys/questions" className="mt-2 inline-block text-sm font-medium text-primary hover:underline">
+          View the questions →
+        </Link>
       </div>
 
       <form className="flex flex-wrap items-end gap-3 text-sm" method="get">
@@ -189,7 +193,13 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
                   <td className="px-3 py-2 text-xs text-brand-muted-soft">{formatInZone(d.opens_at, d.event_time_zone)}</td>
                   <td className="px-3 py-2 text-xs text-brand-muted-soft">{formatInZone(d.closes_at, d.event_time_zone)}</td>
                   <td className="px-3 py-2 text-xs text-brand-muted-soft">
-                    {d.survey_definitions ? `${d.survey_definitions.key} v${d.survey_definitions.version}` : '—'}
+                    {d.survey_definitions ? (
+                      <Link className="text-brand-blue hover:underline" href={`/admin/surveys/questions?id=${d.definition_id}`}>
+                        {d.survey_definitions.key} v{d.survey_definitions.version}
+                      </Link>
+                    ) : (
+                      '—'
+                    )}
                   </td>
                 </tr>
               ))}

@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module'
 import { dirname } from 'node:path'
+import { ensureDOMMatrix } from '@/lib/esign/native/dommatrix'
 
 // Reads the text on each page of a PDF, with where it sits. Used to check that
 // a template keeps every word of its source document and that rendered values
@@ -17,6 +18,8 @@ let pdfjs: Promise<PdfJs> | null = null
 let standardFontDataUrl = ''
 
 function load(): Promise<PdfJs> {
+  // Must precede the import: pdf.js constructs a DOMMatrix at module load.
+  ensureDOMMatrix()
   pdfjs ??= import('pdfjs-dist/legacy/build/pdf.mjs').then((m) => {
     const require = createRequire(import.meta.url)
     m.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')

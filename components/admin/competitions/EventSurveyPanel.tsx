@@ -100,10 +100,10 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
           <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Post-event survey</h2>
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${pill.className}`}>{pill.label}</span>
           {view.definition && (
-            <span className="text-xs text-brand-muted-soft">
+            <a className="text-xs text-brand-muted-soft underline hover:text-primary" href={`/admin/surveys/questions?id=${d.definition_id}`}>
               {view.definition.key} v{view.definition.version}
               {view.definition.status === 'draft' && ' (draft — dev only)'}
-            </span>
+            </a>
           )}
         </div>
         {d.schedule_flag === 'event_date_changed' && (

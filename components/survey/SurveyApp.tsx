@@ -15,13 +15,16 @@ import { SurveyAfterSubmit } from './SurveyAfterSubmit'
 // 10 s after the last edit; the same link (or the dashboard) resumes on the
 // page they left. Submitting asks for confirmation first, then nothing can be
 // changed — the server and the database both refuse.
+//
+// `preview` (admin question viewer) runs the same pages with nothing sent to
+// the server: no saving, no submitting.
 
 const AUTOSAVE_MS = 10_000
 
 type Phase = 'intro' | 'page' | 'confirm' | 'done'
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
-export function SurveyApp({ apiBase, view, signedIn }: { apiBase: string; view: ClientView; signedIn: boolean }) {
+export function SurveyApp({ apiBase, view, signedIn, preview = false }: { apiBase: string; view: ClientView; signedIn: boolean; preview?: boolean }) {
   const def = view.definition
   const ctx = view.context
   const [answers, setAnswers] = useState<Answers>(view.answers ?? {})
@@ -43,6 +46,7 @@ export function SurveyApp({ apiBase, view, signedIn }: { apiBase: string; view: 
     async (pageId: string | undefined, current: Answers) => {
       if (timer.current) clearTimeout(timer.current)
       dirty.current = false
+      if (preview) return true
       setSaveState('saving')
       try {
         const res = await fetch(apiBase, {
@@ -65,7 +69,7 @@ export function SurveyApp({ apiBase, view, signedIn }: { apiBase: string; view: 
         return false
       }
     },
-    [apiBase],
+    [apiBase, preview],
   )
 
   // Autosave 10 s after the last edit.
@@ -125,6 +129,10 @@ export function SurveyApp({ apiBase, view, signedIn }: { apiBase: string; view: 
   }
 
   const submit = async () => {
+    if (preview) {
+      setPhase('done')
+      return
+    }
     setSubmitting(true)
     setMessage(null)
     try {
@@ -159,6 +167,11 @@ export function SurveyApp({ apiBase, view, signedIn }: { apiBase: string; view: 
   return (
     <div className="min-h-screen bg-surface px-4 py-8 sm:py-14">
       <div className="mx-auto max-w-2xl" aria-live="polite">
+        {preview && (
+          <p className="mb-4 rounded-control border border-pathway-amber bg-pathway-amber-bg px-4 py-2 text-sm text-brand-gold-ink">
+            Preview. Nothing you enter is saved or submitted.
+          </p>
+        )}
         {phase === 'intro' && (
           <section className="rounded-ds-card border border-line bg-white p-6 sm:p-8">
             <p className="font-subheading text-xs font-semibold uppercase tracking-[0.14em] text-primary-deep">Stellr survey · about {minutes} min</p>
@@ -237,7 +250,19 @@ export function SurveyApp({ apiBase, view, signedIn }: { apiBase: string; view: 
           </section>
         )}
 
-        {phase === 'done' && (
+        {phase === 'done' && preview && (
+          <section className="rounded-ds-card border border-line bg-white p-6 sm:p-8">
+            <h1 className="font-display text-2xl font-bold text-ink">End of the preview</h1>
+            <p className="mt-3 text-content-body">A real respondent would now see the thank-you page. Nothing was saved.</p>
+            <div className="mt-6">
+              <Button variant="secondaryStrong" type="button" onClick={() => { setAnswers({}); setIndex(0); setPhase('intro') }}>
+                Start the preview again
+              </Button>
+            </div>
+          </section>
+        )}
+
+        {phase === 'done' && !preview && (
           <SurveyAfterSubmit eventTitle={ctx.event_title} signedIn={signedIn} justSubmitted={!view.submittedAt} />
         )}
       </div>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import type { AdminSurveyView, CompletionRow } from '@/lib/survey/admin'
-import { formatInZone } from '@/lib/survey/timezone'
+import { formatDateInZone, formatInZone, zonedTimeToUtc } from '@/lib/survey/timezone'
 
 // The event's "Survey" tab (handover A1/A2): when the post-event survey goes
 // live and closes, who it will reach, bringing it forward, pausing or closing
@@ -100,14 +100,14 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
       <section className="space-y-3 rounded-xl border border-brand-border bg-white p-4" aria-labelledby="survey-late-heading">
         <h2 id="survey-late-heading" className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Post-event survey</h2>
         <p className="text-sm text-ink">
-          This event ended on {late.lastDay} without a survey. You can open one until <strong>{when(late.deadline, lateTz)}</strong>. It stays open for 30 days from when you open it.
+          This event ended on {formatDateInZone(zonedTimeToUtc(late.lastDay, lateTz, 12), lateTz)} without a survey. You can open one until <strong>{when(late.deadline, lateTz)}</strong>. It stays open for 30 days from when you open it.
         </p>
         {!view.isAdmin ? (
           <p className="text-sm text-brand-muted-soft">Ask an admin to open it.</p>
         ) : (
           <>
             <p className="text-sm text-brand-muted">
-              {invitable} people will be invited: {late.byRole.student - (acceptOlder ? 0 : late.olderAgreements)} students, {late.byRole.mentor} mentors, {late.byRole.adult} adults.
+              {invitable === 1 ? '1 person' : `${invitable} people`} will be invited: {late.byRole.student - (acceptOlder ? 0 : late.olderAgreements)} students, {late.byRole.mentor} mentors, {late.byRole.adult} adults.
             </p>
             {late.olderAgreements > 0 && (
               <label className="flex items-start gap-2 text-sm text-ink">
@@ -132,7 +132,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
             ) : (
               <div role="dialog" aria-modal="false" className="rounded-xl border border-brand-border bg-white p-4 shadow-card">
                 <p className="text-sm text-ink">
-                  Open the survey now and email {invitable} people. It will close <strong>{when(late.closesIfOpenedNow, lateTz)}</strong>.
+                  Open the survey now and email {invitable === 1 ? '1 person' : `${invitable} people`}. It will close <strong>{when(late.closesIfOpenedNow, lateTz)}</strong>.
                 </p>
                 <div className="mt-3 flex gap-2">
                   <button

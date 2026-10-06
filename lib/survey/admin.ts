@@ -6,8 +6,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { distributionForEvent, ensureDistribution, planFor, statusNow, type DistributionRow } from './distributions'
 import { loadSurveyEvent } from './events'
-import { autoOpensAt, closesAtFor } from './schedule'
-import type { RecipientPlan } from './recipients'
+import { autoOpensAt, closesAtFor, lateOpenDeadline } from './schedule'
+import { buildRecipientPlan, type RecipientPlan } from './recipients'
 
 export interface CompletionRow {
   invitationId: string
@@ -40,7 +40,23 @@ export interface AdminSurveyView {
     invitable: number
     unreachable: RecipientPlan['unreachable']
     awaitingConsent: RecipientPlan['awaitingConsent']
+    olderAgreementAccepted: number
     headcountOnlyAdults: number
+  } | null
+  /**
+   * An event that ended without a survey, still inside its 30-day window: an
+   * admin may open one now. Counts assume every audience; `olderAgreements`
+   * is how many more minors the pre-V2.3 override would add.
+   */
+  lateOpen: {
+    lastDay: string
+    timeZone: string
+    deadline: string
+    closesIfOpenedNow: string
+    invitable: number
+    byRole: Record<'student' | 'mentor' | 'adult', number>
+    olderAgreements: number
+    awaitingConsent: number
   } | null
   totals: { invited: number; sent: number; opened: number; started: number; submitted: number; queued: number; optedOut: number }
   rows: CompletionRow[]
@@ -59,7 +75,26 @@ export async function adminSurveyView(db: SupabaseClient, slug: string, now = ne
   }
 
   const empty = { invited: 0, sent: 0, opened: 0, started: 0, submitted: 0, queued: 0, optedOut: 0 }
-  if (!d) return { distribution: null, status: null, autoOpensAt: null, reason: reason ?? 'not scheduled', definition: null, preview: null, totals: empty, rows: [] }
+  if (!d) {
+    let lateOpen: AdminSurveyView['lateOpen'] = null
+    const deadline = event?.lastDay && !event.cancelled && reason === 'past event' ? lateOpenDeadline(event.lastDay, event.timeZone, now) : null
+    if (event?.lastDay && deadline) {
+      const plan = await buildRecipientPlan(db, slug, event.lastDay, ['student', 'mentor', 'adult'], { acceptOlderMinorAgreements: true })
+      const byRole = { student: 0, mentor: 0, adult: 0 }
+      for (const p of plan.invitable) byRole[p.role]++
+      lateOpen = {
+        lastDay: event.lastDay,
+        timeZone: event.timeZone,
+        deadline: deadline.toISOString(),
+        closesIfOpenedNow: closesAtFor(now).toISOString(),
+        invitable: plan.invitable.length,
+        byRole,
+        olderAgreements: plan.olderAgreementAccepted,
+        awaitingConsent: plan.awaitingConsent.length,
+      }
+    }
+    return { distribution: null, status: null, autoOpensAt: null, reason: reason ?? 'not scheduled', definition: null, preview: null, lateOpen, totals: empty, rows: [] }
+  }
 
   const { data: defRow } = await db.from('survey_definitions').select('key, version, status').eq('id', d.definition_id).maybeSingle()
   const status = statusNow(d, now)
@@ -72,6 +107,7 @@ export async function adminSurveyView(db: SupabaseClient, slug: string, now = ne
     invitable: plan.invitable.length,
     unreachable: plan.unreachable,
     awaitingConsent: plan.awaitingConsent,
+    olderAgreementAccepted: plan.olderAgreementAccepted,
     headcountOnlyAdults: plan.headcountOnlyAdults,
   }
 
@@ -145,6 +181,7 @@ export async function adminSurveyView(db: SupabaseClient, slug: string, now = ne
     reason: null,
     definition: defRow ? { key: defRow.key as string, version: defRow.version as number, status: defRow.status as string } : null,
     preview,
+    lateOpen: null,
     totals,
     rows,
   }

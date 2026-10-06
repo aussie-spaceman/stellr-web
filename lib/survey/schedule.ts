@@ -52,6 +52,19 @@ export function checkManualOpensAt(requested: Date, autoOpens: Date, now: Date):
   return { ok: true, opensAt: requested }
 }
 
+/**
+ * An event that ended without a survey (it ran before a definition was
+ * published) can still have one opened by hand, for a full 30 days from then,
+ * while its automatic window would not yet have closed. Returns that automatic
+ * close, or null when it is too late, or too early (before 00:00 on the last
+ * day, when the normal schedule applies).
+ */
+export function lateOpenDeadline(lastDay: string, tz: string, now: Date): Date | null {
+  const auto = autoOpensAt(lastDay, tz)
+  const autoClose = closesAtFor(auto)
+  return auto.getTime() <= now.getTime() && now.getTime() < autoClose.getTime() ? autoClose : null
+}
+
 export interface ScheduleState {
   status: DistributionStatus
   opens_at: string

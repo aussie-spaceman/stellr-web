@@ -107,6 +107,8 @@ export interface RecipientPlan {
   invitable: PlannedInvitation[]
   unreachable: Unreachable[]
   awaitingConsent: AwaitingConsent[]
+  /** Minors invited under a pre-V2.3 agreement because the event's override is on. */
+  olderAgreementAccepted: number
   /** registrations.adult_count beyond the adults named on the roster. */
   headcountOnlyAdults: number
   notSurveyed: number
@@ -131,6 +133,15 @@ export function consentFor(consents: Map<string, MinorConsent>, p: Pick<Person, 
 
 const nameOf = (p: Person) => [p.firstName, p.lastName].filter(Boolean).join(' ').trim() || p.email || 'Unnamed'
 
+export interface PlanOptions {
+  /**
+   * The event's admin override (survey_distributions.minor_agreement_override):
+   * a valid, unrestricted minor agreement of any version counts for the
+   * invitation. Quoting is unaffected; it still needs V2.3.
+   */
+  acceptOlderMinorAgreements?: boolean
+}
+
 /**
  * Pure planning step: people + consents → invitations, gaps and holds.
  * `eventDay` is the event's last day, the date ages are taken on.
@@ -141,9 +152,10 @@ export function planRecipients(
   audiences: Audience[],
   eventDay: string,
   headcountOnlyAdults = 0,
+  opts: PlanOptions = {},
 ): RecipientPlan {
   const want = new Set(audiences)
-  const plan: RecipientPlan = { invitable: [], unreachable: [], awaitingConsent: [], headcountOnlyAdults, notSurveyed: 0 }
+  const plan: RecipientPlan = { invitable: [], unreachable: [], awaitingConsent: [], olderAgreementAccepted: 0, headcountOnlyAdults, notSurveyed: 0 }
 
   // Collapse the same person across sources (member first, then email).
   type Merged = { person: Person; role: RespondentRole; relationship: AdultRelationship | null; sources: Person['source'][] }
@@ -207,7 +219,8 @@ export function planRecipients(
     let sendVia: 'self' | 'guardian' = 'self'
     if (isMinor) {
       const c = consentFor(consents, p)
-      if (!c.coversSurveys) {
+      const acceptedOlder = !c.coversSurveys && !!opts.acceptOlderMinorAgreements && !!c.agreementId && !c.restricted
+      if (!c.coversSurveys && !acceptedOlder) {
         plan.awaitingConsent.push({
           name: base.name,
           participantId: p.participantId,
@@ -226,6 +239,7 @@ export function planRecipients(
         email = guardian
         sendVia = 'guardian'
       }
+      if (acceptedOlder && email) plan.olderAgreementAccepted++
     }
     if (!email) {
       plan.unreachable.push({ ...base, reason: 'no_email' })
@@ -420,6 +434,7 @@ export async function buildRecipientPlan(
   slug: string,
   eventDay: string,
   audiences: Audience[],
+  opts: PlanOptions = {},
 ): Promise<RecipientPlan> {
   const { people, headcountOnlyAdults } = await loadEventPeople(db, slug)
   const subjects = new Map<string, { key: string; memberId: string | null; participantId: string | null }>()
@@ -429,5 +444,5 @@ export async function buildRecipientPlan(
     if (p.participantId) subjects.set(`participant:${p.participantId}`, { key: `participant:${p.participantId}`, memberId: null, participantId: p.participantId })
   }
   const consents = await loadMinorConsents(db, [...subjects.values()])
-  return planRecipients(people, consents, audiences, eventDay, headcountOnlyAdults)
+  return planRecipients(people, consents, audiences, eventDay, headcountOnlyAdults, opts)
 }

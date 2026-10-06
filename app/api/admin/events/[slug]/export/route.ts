@@ -2,21 +2,26 @@ import { NextResponse } from 'next/server'
 import { requireEventAccess } from '@/lib/event-access'
 import { getEventRoster } from '@/lib/event-admin'
 import { toCsv } from '@/lib/csv'
+import { supabaseServer } from '@/lib/supabase'
+import { MEDIA_REASON_LABEL, mediaForParticipants } from '@/lib/survey/media'
 
 // GET /api/admin/events/[slug]/export — roster CSV (admins + assigned event managers)
+// media_ok: may Stellr use this person's photo/media (lib/survey/media.ts) —
+// yes, no, or check (read the signed form); the reason is beside it.
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const access = await requireEventAccess(slug)
   if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
 
   const roster = await getEventRoster(slug)
+  const media = await mediaForParticipants(supabaseServer(), roster.groups.flatMap((g) => g.participants.map((p) => p.id)))
 
   const header = [
     'Registration Type', 'Group', 'First Name', 'Last Name', 'Email', 'Role', 'School', 'Grade',
     'Gender', 'Date of Birth', 'Shirt Size', 'Dietary Requirements', 'Health Conditions',
     'Emergency Contact First Name', 'Emergency Contact Last Name', 'Emergency Contact Relationship',
     'Emergency Contact Email', 'Emergency Contact Phone',
-    'Paid', 'Payment Status', 'DocuSign', 'DocuSign Status', 'Checked In At',
+    'Paid', 'Payment Status', 'DocuSign', 'DocuSign Status', 'Checked In At', 'media_ok', 'Media Note',
   ]
   const rows = roster.groups.flatMap((g) =>
     g.participants.map((p) => [
@@ -43,6 +48,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
       p.docusign,
       p.docusign_pill,
       p.checked_in_at ?? '',
+      media.get(p.id)?.status ?? 'check',
+      MEDIA_REASON_LABEL[media.get(p.id)?.reason ?? 'form_unread'],
     ])
   )
 

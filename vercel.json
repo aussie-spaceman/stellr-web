@@ -91,6 +91,10 @@
     {
       "path": "/api/cron/surveys",
       "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/cron/survey-retention",
+      "schedule": "0 3 2 * *"
     }
   ]
 }

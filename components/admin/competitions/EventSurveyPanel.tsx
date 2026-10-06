@@ -32,6 +32,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
   const [notice, setNotice] = useState<string | null>(null)
   const [goLive, setGoLive] = useState('')
   const [confirm, setConfirm] = useState<null | { kind: 'send_now' | 'set_go_live' | 'close'; opensAt?: Date }>(null)
+  const [confirmGate, setConfirmGate] = useState(false)
   const [qr, setQr] = useState<string | null>(null)
   const api = `/api/admin/events/${eventSlug}/survey`
 
@@ -68,6 +69,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
     } finally {
       setBusy(null)
       setConfirm(null)
+      setConfirmGate(false)
     }
   }
 
@@ -207,6 +209,42 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
           </div>
         )}
       </section>
+
+      {/* D1 certificate gate — admins only, default off */}
+      {view.isAdmin && (
+        <section className="space-y-2" aria-labelledby="survey-gate-heading">
+          <h2 id="survey-gate-heading" className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Certificate gate</h2>
+          <label className="flex items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={d.gate_certificate}
+              disabled={!!busy}
+              onChange={(e) => (e.target.checked ? setConfirmGate(true) : void act('gate_certificate', { on: false }))}
+            />
+            Hold this event’s certificates until the person submits the survey
+          </label>
+          <p className="text-xs text-brand-muted-soft">
+            {d.gate_certificate
+              ? 'On. While the survey is open, anyone invited who hasn’t submitted is sent to the survey instead of the download. It lifts once they submit, and for everyone when the survey closes.'
+              : 'Off (recommended). Certificates download as normal, and the survey is offered after.'}
+          </p>
+          {confirmGate && (
+            <div role="dialog" aria-modal="false" className="rounded-xl border border-pathway-amber bg-pathway-amber-bg p-4">
+              <p className="text-sm text-ink">
+                Gating raises response rates, but it skews the answers (people rush to unlock the download) and puts pressure on minors, who shouldn’t have to answer a survey to get their certificate. Use it only when you have a reason to.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button type="button" className="rounded-lg bg-brand-blue px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60" disabled={!!busy} onClick={() => void act('gate_certificate', { on: true })}>
+                  {busy ? 'Working…' : 'Turn the gate on'}
+                </button>
+                <button type="button" className="rounded-lg border border-brand-border bg-white px-3 py-1.5 text-sm text-brand-muted" onClick={() => setConfirmGate(false)}>
+                  Keep it off
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Audiences + preview */}
       {view.preview && (

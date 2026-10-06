@@ -15,4 +15,6 @@ export function surveyConfigured(): boolean {
 
 export const createSurveyEvent = (open: boolean) => cli<{ slug: string; distributionId: string }>('create', ...(open ? ['--open'] : []))
 export const surveyPath = (slug: string, firstName: string) => cli<string>('link', slug, firstName)
+export const setCertificateGate = (slug: string, on: boolean) => cli<boolean>('gate', slug, on ? 'on' : 'off')
+export const issueSurveyCredential = (slug: string) => cli<string>('credential', slug)
 export const removeSurveyEvent = (slug: string) => cli<boolean>('remove', slug)

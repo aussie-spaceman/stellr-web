@@ -40,6 +40,7 @@ const CONTRACT = {
     tabs: [
       { label: 'TeacherPhone', role: 'Adult', type: 'text' },
       { label: 'SchoolName',   role: 'Adult', type: 'text' },
+      { label: 'MediaOptOut',  role: 'Adult', type: 'checkbox', unticked: true },
     ],
   },
   mentor: {

@@ -17,7 +17,7 @@
  *
  *   npx tsx scripts/docusign-label-minor-tabs.ts --list                       # every field, changes nothing
  *   npx tsx scripts/docusign-label-minor-tabs.ts                              # dry run, minor template
- *   npx tsx scripts/docusign-label-minor-tabs.ts --doc mentor                 # dry run, mentor template
+ *   npx tsx scripts/docusign-label-minor-tabs.ts --doc mentor                 # dry run, mentor template (or --doc adult)
  *   npx tsx scripts/docusign-label-minor-tabs.ts --env-file .env.docusign-prod.local --apply
  *   npx tsx scripts/docusign-label-minor-tabs.ts --template <guid>            # a different template
  *   npx tsx scripts/docusign-label-minor-tabs.ts --doc mentor --dump m.json   # the template JSON, for the checker
@@ -44,9 +44,10 @@ const ENV = {
   userId:    process.env.DOCUSIGN_USER_ID ?? '',
   privateKey: (process.env.DOCUSIGN_PRIVATE_KEY ?? '').replace(/\\n/g, '\n'),
 }
-const DOC = (arg('--doc') ?? 'minor') as 'minor' | 'mentor'
+type Doc = 'minor' | 'mentor' | 'adult'
+const DOC = (arg('--doc') ?? 'minor') as Doc
 const TEMPLATE_ID = arg('--template')
-  ?? (DOC === 'mentor' ? process.env.DOCUSIGN_MENTOR_TEMPLATE_ID : process.env.DOCUSIGN_TEMPLATE_ID)
+  ?? { minor: process.env.DOCUSIGN_TEMPLATE_ID, mentor: process.env.DOCUSIGN_MENTOR_TEMPLATE_ID, adult: process.env.DOCUSIGN_ADULT_TEMPLATE_ID }[DOC]
   ?? ''
 
 // kinds: the tab collections a match may come from. A dateTabs match is
@@ -54,7 +55,7 @@ const TEMPLATE_ID = arg('--template')
 // DD-MMM-YYYY value the form prints and the app sends.
 // required: set the field's Required flag too (omitted: left as it is).
 interface Target { label: string; role: string; page: number; y: number; kinds: string[]; required?: boolean }
-const TARGET_SETS: Record<'minor' | 'mentor', Target[]> = {
+const TARGET_SETS: Record<Doc, Target[]> = {
   // Participation Agreement — Student / Minor, V2.3.
   minor: [
     { label: 'MediaOptOut',             role: 'Guardian', page: 4, y: 128, kinds: ['checkboxTabs'] },
@@ -80,6 +81,12 @@ const TARGET_SETS: Record<'minor' | 'mentor', Target[]> = {
     { label: 'EmergencyContactName',    role: 'Mentor', page: 4, y: 520, kinds: ['textTabs'] },
     { label: 'EmergencyContactPhone',   role: 'Mentor', page: 4, y: 539, kinds: ['textTabs'] },
   ],
+  // Participation Agreement — Educator / Chaperone, V2.3.
+  adult: [
+    { label: 'MediaOptOut',             role: 'Adult', page: 3, y: 364, kinds: ['checkboxTabs'] },
+    { label: 'TeacherPhone',            role: 'Adult', page: 4, y: 298, kinds: ['textTabs'] },
+    { label: 'SchoolName',              role: 'Adult', page: 4, y: 315, kinds: ['textTabs'] },
+  ],
 }
 const TARGETS = TARGET_SETS[DOC]
 
@@ -87,8 +94,9 @@ const TARGETS = TARGET_SETS[DOC]
 // signing (lib/esign/issue.ts), so on DocuSign the parent block must stay
 // empty; fields there for the Mentor role would make every adult fill it in.
 interface Removal { what: string; role: string; page: number; y: number; kind: string }
-const REMOVAL_SETS: Record<'minor' | 'mentor', Removal[]> = {
+const REMOVAL_SETS: Record<Doc, Removal[]> = {
   minor: [],
+  adult: [],
   mentor: [
     { what: 'parent block: full name',  role: 'Mentor', page: 4, y: 573, kind: 'textTabs' },
     { what: 'parent block: signature',  role: 'Mentor', page: 4, y: 593, kind: 'textTabs' },

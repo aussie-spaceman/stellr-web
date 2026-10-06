@@ -55,19 +55,42 @@ export async function logActivity(
   try {
     if (!input.memberId) return
     const db = client ?? supabaseServer()
-    const { error } = await db.from('member_activity_log').insert({
-      member_id: input.memberId,
-      actor_type: input.actorType ?? 'system',
-      actor_member_id: input.actorMemberId ?? null,
-      actor_label: input.actorLabel ?? null,
-      category: input.category,
-      action: input.action,
-      summary: input.summary,
-      metadata: input.metadata ?? {},
-    })
+    const { error } = await db.from('member_activity_log').insert(toRow(input))
     if (error) console.error('[activity-log] insert error:', error)
   } catch (err) {
     console.error('[activity-log] logActivity threw:', err)
+  }
+}
+
+/**
+ * Append many entries in one insert (a batch job logging per member). Same
+ * best-effort contract as logActivity; entries without a memberId are dropped.
+ */
+export async function logActivities(
+  inputs: LogActivityInput[],
+  client?: SupabaseClient,
+): Promise<void> {
+  try {
+    const rows = inputs.filter((input) => input.memberId).map(toRow)
+    if (!rows.length) return
+    const db = client ?? supabaseServer()
+    const { error } = await db.from('member_activity_log').insert(rows)
+    if (error) console.error('[activity-log] batch insert error:', error)
+  } catch (err) {
+    console.error('[activity-log] logActivities threw:', err)
+  }
+}
+
+function toRow(input: LogActivityInput) {
+  return {
+    member_id: input.memberId,
+    actor_type: input.actorType ?? 'system',
+    actor_member_id: input.actorMemberId ?? null,
+    actor_label: input.actorLabel ?? null,
+    category: input.category,
+    action: input.action,
+    summary: input.summary,
+    metadata: input.metadata ?? {},
   }
 }
 

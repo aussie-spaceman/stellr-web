@@ -13,6 +13,7 @@ import { buildRecipientPlan, type Audience, type RecipientPlan } from './recipie
 import { hashToken, surveyToken } from './tokens'
 import { writeAudit } from './audit'
 import { isProd } from '@/lib/env'
+import { logActivities } from '@/lib/activity-log'
 
 export const SURVEY_KEY = 'post_event'
 
@@ -348,9 +349,24 @@ export async function materialiseInvitations(db: SupabaseClient, d: Distribution
     const { data, error: insErr } = await db
       .from('survey_invitations')
       .upsert(rows.slice(i, i + 200), { onConflict: 'distribution_id,recipient_key', ignoreDuplicates: true })
-      .select('id')
+      .select('id, member_id')
     if (insErr) throw new Error(`Creating invitations failed: ${insErr.message}`)
     created += data?.length ?? 0
+    // Only rows this call created come back (duplicates are ignored), so a
+    // re-run never logs the same invitation twice.
+    await logActivities(
+      (data ?? [])
+        .filter((r) => r.member_id)
+        .map((r) => ({
+          memberId: r.member_id as string,
+          actorType: 'system' as const,
+          category: 'survey' as const,
+          action: 'survey_invited',
+          summary: `Invited to the ${d.event_title ?? d.event_slug} survey`,
+          metadata: { invitation_id: r.id, distribution_id: d.id, event_slug: d.event_slug },
+        })),
+      db,
+    )
   }
   return created
 }

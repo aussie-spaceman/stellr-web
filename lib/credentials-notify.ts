@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail, credentialIssuedEmail, credentialsMadePrivateEmail } from '@/lib/email'
 import { shareConsentFor, canShare, credentialUrl, unpublishCredentialsFor, type CredentialRow } from '@/lib/credentials'
+import { familyCredentialUrl } from '@/lib/credentials-link'
 
 // The "you've earned a credential" email, addressed the way the DocuSign
 // notices are: an adult hears directly; a minor's guardian is the addressee
@@ -32,6 +33,7 @@ export async function sendCredentialIssuedEmail(
       title:    row.title,
       issuer:   row.issuer,
       url:      credentialUrl(row.number),
+      viewUrl:  familyCredentialUrl(row),
       isMinor:  row.is_minor,
       canShare: canShare(row, consent).ok,
     })

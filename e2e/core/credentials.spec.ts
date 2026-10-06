@@ -2,6 +2,7 @@ import type { APIRequestContext } from '@playwright/test'
 import { expect, test } from '../fixtures/test'
 import { storageStatePath } from '../fixtures/users'
 import { attachConsoleGuard } from '../fixtures/console-guard'
+import { createHmac } from 'node:crypto'
 
 /**
  * Credentials: the wallet, the public page and the LinkedIn share flow.
@@ -21,6 +22,13 @@ import { attachConsoleGuard } from '../fixtures/console-guard'
 
 const GRACE = '/credentials/STL-2026-E2EGRACE'
 const ADA = '/credentials/STL-2026-E2EADA01'
+const ADA_ID = '00000000-0000-4000-e000-000000000002' // supabase/seed.sql
+
+// The family link's token, minted the way lib/credentials-link.ts does (same
+// secret order), so the spec also pins the format the emails carry.
+const LINK_SECRET = process.env.CREDENTIAL_LINK_SECRET || process.env.SURVEY_TOKEN_SECRET || process.env.ESIGN_TOKEN_SECRET
+const familyToken = (id: string) =>
+  createHmac('sha256', LINK_SECRET!).update(`stellr-credential|view|${id}`).digest('base64url')
 
 // The click POSTs, then router.refresh() re-renders the server page before the
 // label changes. On a cold CI server that round trip has run past the default
@@ -126,6 +134,27 @@ test.describe('as a verifier (signed out)', () => {
     // Ada's, not Grace's: the suite is fullyParallel and Grace's owner test
     // has hers public for a moment. Ada's cannot be published at all.
     await page.goto(ADA)
+    await expect(page.getByRole('heading', { level: 1, name: 'This credential is private' })).toBeVisible()
+    await expect(page.getByText('Ada Student')).toHaveCount(0)
+  })
+
+  // The issued email's link (lib/credentials-link.ts): a guardian with no
+  // login sees their child's private credential, read-only. Needs the same
+  // token secret here and on the server (CI sets ESIGN_TOKEN_SECRET).
+  test('the family link from the email opens a private credential read-only', async ({ page }) => {
+    test.skip(!LINK_SECRET || LINK_SECRET.length < 32, 'no credential link secret in this environment')
+    const consoleErrors = attachConsoleGuard(page)
+    await page.goto(`${ADA}?k=${familyToken(ADA_ID)}`)
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Seed Regional Challenge')
+    await expect(page.getByText('Ada Student').first()).toBeVisible()
+    await expect(page.getByText(/You can see it because you opened the link in Stellr/)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Make public' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Add to LinkedIn profile' })).toHaveCount(0)
+    expect(consoleErrors, 'family view logged console errors').toEqual([])
+  })
+
+  test('a wrong family link shows the private state', async ({ page }) => {
+    await page.goto(`${ADA}?k=${'A'.repeat(43)}`)
     await expect(page.getByRole('heading', { level: 1, name: 'This credential is private' })).toBeVisible()
     await expect(page.getByText('Ada Student')).toHaveCount(0)
   })

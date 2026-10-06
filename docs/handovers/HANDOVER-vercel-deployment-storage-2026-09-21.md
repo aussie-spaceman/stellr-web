@@ -43,6 +43,11 @@ retain fewer deployments to free up storage"). The *count* lever is therefore
 Vercel's now and already at its floor. The only lever left in the repo was
 output size per deployment, and 90% of it was testimonial MP4s.
 
+> **6 Oct correction:** the 3 + 3 retention described above did not apply to
+> these projects. When read on 6 Oct, both projects retained deployments for
+> 30 days (`deploymentsToKeep: 10`), and the dev project held 146 builds. See
+> `docs/ENV-MATRIX.md` § "Function Storage again".
+
 ## 3. What changed (PR: `chore/media-to-blob`)
 
 **Media moved to Vercel Blob.** A public store `stellr-media`

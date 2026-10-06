@@ -47,6 +47,21 @@ shipped 515 MB of `/public` media. The media now lives in Vercel Blob — see
 `NEXT_PUBLIC_MEDIA_BASE_URL` in §3 and
 `docs/handovers/HANDOVER-vercel-deployment-storage-2026-09-21.md`.
 
+**Function Storage again (6 Oct 2026).** Builds are retained for days, not
+"3 per project": both projects had `deploymentExpiration` at 30 days with
+`deploymentsToKeep: 10`, and the dev project had piled up 146 builds (~42 MB
+of functions each) by the time Function Storage hit 75%. Three changes followed:
+- Old builds were purged, leaving 10 on prod and 5 on dev.
+- `stellr-web-dev` retention was set to 1 week (cancelled builds: 1 day). This
+  was done via `PATCH /v9/projects/<id>/deployment-expiration` with
+  `{"expiration":"1w","expirationProduction":"1w","expirationCanceled":"1d","expirationErrored":"1w"}`.
+  Hobby accepts it. Prod stays at 30 days for rollback depth.
+- `vercel-ignore-build.sh` skips **docs-only `dev` pushes** on the dev project:
+  only `docs/`, `.claude/` or root `*.md` changed since the last successful dev
+  build. Put `[build]` in a commit message to force one. Docs-only `main` pushes
+  still build, because that is how a missing production deployment gets
+  re-triggered.
+
 ## 1. The variable that decides everything
 
 | Variable | Production | Dev | Notes |

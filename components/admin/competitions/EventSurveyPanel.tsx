@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import type { AdminSurveyView, CompletionRow } from '@/lib/survey/admin'
-import { formatInZone } from '@/lib/survey/timezone'
+import { formatDateInZone, formatInZone, zonedTimeToUtc } from '@/lib/survey/timezone'
 
 // The event's "Survey" tab (handover A1/A2): when the post-event survey goes
 // live and closes, who it will reach, bringing it forward, pausing or closing
@@ -33,6 +33,9 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
   const [goLive, setGoLive] = useState('')
   const [confirm, setConfirm] = useState<null | { kind: 'send_now' | 'set_go_live' | 'close'; opensAt?: Date }>(null)
   const [confirmGate, setConfirmGate] = useState(false)
+  const [acceptOlder, setAcceptOlder] = useState(false)
+  const [confirmLate, setConfirmLate] = useState(false)
+  const [confirmOverride, setConfirmOverride] = useState(false)
   const [qr, setQr] = useState<string | null>(null)
   const api = `/api/admin/events/${eventSlug}/survey`
 
@@ -70,6 +73,8 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
       setBusy(null)
       setConfirm(null)
       setConfirmGate(false)
+      setConfirmLate(false)
+      setConfirmOverride(false)
     }
   }
 
@@ -81,10 +86,72 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
   if (error && !view) return <p className="text-sm text-danger">{error}</p>
   if (!view) return <p className="text-sm text-brand-muted-soft">Loading the survey…</p>
   if (!d) {
+    const late = view.lateOpen
+    if (!late) {
+      return (
+        <div className="rounded-xl border border-dashed border-brand-border bg-white px-4 py-6 text-sm text-brand-muted-soft">
+          No survey is scheduled for this event ({view.reason}). Surveys are scheduled automatically for upcoming dated events once a survey definition is published.
+        </div>
+      )
+    }
+    const lateTz = late.timeZone
+    const invitable = acceptOlder ? late.invitable : late.invitable - late.olderAgreements
     return (
-      <div className="rounded-xl border border-dashed border-brand-border bg-white px-4 py-6 text-sm text-brand-muted-soft">
-        No survey is scheduled for this event ({view.reason}). Surveys are scheduled automatically for upcoming dated events once a survey definition is published.
-      </div>
+      <section className="space-y-3 rounded-xl border border-brand-border bg-white p-4" aria-labelledby="survey-late-heading">
+        <h2 id="survey-late-heading" className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Post-event survey</h2>
+        <p className="text-sm text-ink">
+          This event ended on {formatDateInZone(zonedTimeToUtc(late.lastDay, lateTz, 12), lateTz)} without a survey. You can open one until <strong>{when(late.deadline, lateTz)}</strong>. It stays open for 30 days from when you open it.
+        </p>
+        {!view.isAdmin ? (
+          <p className="text-sm text-brand-muted-soft">Ask an admin to open it.</p>
+        ) : (
+          <>
+            <p className="text-sm text-brand-muted">
+              {invitable === 1 ? '1 person' : `${invitable} people`} will be invited: {late.byRole.student - (acceptOlder ? 0 : late.olderAgreements)} students, {late.byRole.mentor} mentors, {late.byRole.adult} adults.
+            </p>
+            {late.olderAgreements > 0 && (
+              <label className="flex items-start gap-2 text-sm text-ink">
+                <input type="checkbox" className="mt-1" checked={acceptOlder} disabled={!!busy} onChange={(e) => setAcceptOlder(e.target.checked)} />
+                <span>
+                  Also invite the {late.olderAgreements} minors whose agreement was signed before V2.3
+                  <span className="block text-xs text-brand-muted-soft">
+                    For this event only. Their answers are never quotable, because quoting needs V2.3. The change is logged.
+                  </span>
+                </span>
+              </label>
+            )}
+            {late.awaitingConsent > 0 && (
+              <p className="text-xs text-brand-muted-soft">{late.awaitingConsent} minors have no valid signed agreement and won’t be invited.</p>
+            )}
+            {notice && <p role="status" className="text-sm text-enviro-green-text">{notice}</p>}
+            {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+            {!confirmLate ? (
+              <button type="button" className="rounded-lg bg-brand-blue px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60" disabled={!!busy} onClick={() => setConfirmLate(true)}>
+                Open survey now
+              </button>
+            ) : (
+              <div role="dialog" aria-modal="false" className="rounded-xl border border-brand-border bg-white p-4 shadow-card">
+                <p className="text-sm text-ink">
+                  Open the survey now and email {invitable === 1 ? '1 person' : `${invitable} people`}. It will close <strong>{when(late.closesIfOpenedNow, lateTz)}</strong>.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    className="rounded-lg bg-brand-blue px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
+                    disabled={!!busy}
+                    onClick={() => void act('open_after_event', { acceptOlderMinorAgreements: acceptOlder && late.olderAgreements > 0 })}
+                  >
+                    {busy ? 'Working…' : 'Confirm'}
+                  </button>
+                  <button type="button" className="rounded-lg border border-brand-border bg-white px-3 py-1.5 text-sm text-brand-muted" onClick={() => setConfirmLate(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </section>
     )
   }
 
@@ -246,6 +313,42 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
         </section>
       )}
 
+      {/* Pre-V2.3 minor agreements — admins only, per event (David, 6 Oct 2026) */}
+      {view.isAdmin && (d.minor_agreement_override || (view.preview?.awaitingConsent.some((a) => a.reason === 'older_version') ?? false)) && (
+        <section className="space-y-2" aria-labelledby="survey-override-heading">
+          <h2 id="survey-override-heading" className="text-sm font-semibold uppercase tracking-wide text-brand-muted">Minors’ agreements</h2>
+          <label className="flex items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={d.minor_agreement_override}
+              disabled={!!busy || status === 'closed'}
+              onChange={(e) => (e.target.checked ? setConfirmOverride(true) : void act('minor_agreement_override', { on: false }))}
+            />
+            Also invite minors whose agreement was signed before V2.3
+          </label>
+          <p className="text-xs text-brand-muted-soft">
+            {d.minor_agreement_override
+              ? `On${d.minor_agreement_override_set_at ? ` since ${when(d.minor_agreement_override_set_at, tz)}` : ''}. Their answers are never quotable, because quoting needs V2.3. Turning it off invites nobody new but doesn’t withdraw invitations already sent.`
+              : 'Off. Minors are invited only under Participation Agreement – Minors V2.3 or later.'}
+          </p>
+          {confirmOverride && (
+            <div role="dialog" aria-modal="false" className="rounded-xl border border-pathway-amber bg-pathway-amber-bg p-4">
+              <p className="text-sm text-ink">
+                For this event only, minors with a valid agreement signed before V2.3 will be invited to the survey. Their answers won’t be quotable. The change is logged.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button type="button" className="rounded-lg bg-brand-blue px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60" disabled={!!busy} onClick={() => void act('minor_agreement_override', { on: true })}>
+                  {busy ? 'Working…' : 'Accept earlier agreements'}
+                </button>
+                <button type="button" className="rounded-lg border border-brand-border bg-white px-3 py-1.5 text-sm text-brand-muted" onClick={() => setConfirmOverride(false)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Audiences + preview */}
       {view.preview && (
         <section className="space-y-3">
@@ -270,6 +373,9 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
             {view.preview.invitable} people will be invited
             {status === 'open' ? ' (anyone added to the event before the close date is invited automatically)' : ''}.
           </p>
+          {view.preview.olderAgreementAccepted > 0 && (
+            <p className="text-sm text-brand-muted-soft">{view.preview.olderAgreementAccepted} of them are minors invited under an agreement signed before V2.3. Their answers aren’t quotable.</p>
+          )}
           {view.preview.headcountOnlyAdults > 0 && (
             <p className="text-sm text-brand-muted-soft">{view.preview.headcountOnlyAdults} adults are recorded only as a headcount on a registration and can’t be surveyed.</p>
           )}

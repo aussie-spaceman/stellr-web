@@ -8,6 +8,8 @@ import { ROLES_FOR_BRACKET, DEFAULT_ROLE_FOR_BRACKET, getEligibleTierNames } fro
 import { EventHistory } from '@/components/member/EventHistory'
 import { ScholarshipHistory } from '@/components/member/ScholarshipHistory'
 import type { ScholarshipHistoryItem } from '@/lib/scholarships'
+import { MemberSurveysPanel } from '@/components/admin/MemberSurveysPanel'
+import type { MemberSurveyItem } from '@/lib/survey/history'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { TERMINAL_SESSION_STATUSES } from '@/lib/deletion/registry'
 import { MemberMembershipManager } from '@/components/admin/MemberMembershipManager'
@@ -99,6 +101,8 @@ interface Props {
   agreement: MemberAgreement | null
   /** Scholarship applications and offers, newest first. */
   scholarships: ScholarshipHistoryItem[]
+  /** Post-event survey invitations; null when the viewer isn't an admin. */
+  surveys: MemberSurveyItem[] | null
 }
 
 const TIER_TOOLTIPS: Record<string, string> = {
@@ -135,7 +139,7 @@ function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, sessions, membershipId, activity, compliance, agreement, scholarships }: Props) {
+export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, allergyOptions, registrations, sessions, membershipId, activity, compliance, agreement, scholarships, surveys }: Props) {
   const router = useRouter()
   const [enteringPortal, setEnteringPortal] = useState(false)
   const [inviteSentAt, setInviteSentAt] = useState(member.account_invite_sent_at)
@@ -563,6 +567,9 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
           {/* Scholarships — offered %, and whether they accepted / attended */}
           <ScholarshipHistory items={scholarships} audience="admin" />
 
+          {/* Post-event surveys — status per event, answers for submitted ones */}
+          {surveys && <MemberSurveysPanel memberId={member.id} items={surveys} />}
+
           {/* Group registrations (teacher / student manager) */}
           {registrations.length > 0 && (
             <div className="bg-white rounded-xl border border-brand-border p-6">
@@ -658,7 +665,11 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
             <p className="text-xs text-brand-muted-soft mb-4">
               Every change recorded against this profile. The member sees this same history in their account.
             </p>
-            <ActivityTimeline items={activity} fetchUrl={`/api/admin/members/${member.id}/activity`} />
+            <ActivityTimeline
+              items={activity}
+              fetchUrl={`/api/admin/members/${member.id}/activity`}
+              links={{ audience: 'admin', memberId: member.id }}
+            />
           </div>
         </div>
 

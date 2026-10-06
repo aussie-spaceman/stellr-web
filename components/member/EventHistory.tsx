@@ -1,8 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { RequestDeletionButton } from '@/components/member/RequestDeletionButton'
+// Type only: lib/survey/history reaches the Sanity client through the schedule rules.
+import type { SurveyChip } from '@/lib/survey/history'
 
 interface Participation {
   id: string
@@ -23,6 +26,8 @@ interface Props {
   editable?: boolean
   /** Admin-mode: supply the member id for the POST endpoint */
   adminMemberId?: string
+  /** The member's own post-event survey per event, keyed by event slug. */
+  surveys?: Record<string, SurveyChip>
 }
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -31,7 +36,7 @@ function blankForm() {
   return { event_year: '', event_location: '', team_name: '', award: '' }
 }
 
-export function EventHistory({ participations: initialParticipations, editable = false, adminMemberId }: Props) {
+export function EventHistory({ participations: initialParticipations, editable = false, adminMemberId, surveys }: Props) {
   const router = useRouter()
   const [items, setItems] = useState(initialParticipations)
   const [adding, setAdding] = useState(false)
@@ -191,6 +196,7 @@ export function EventHistory({ participations: initialParticipations, editable =
                 {p.team_name && (
                   <p className="text-xs text-brand-muted-soft mt-0.5">Team: {p.team_name}</p>
                 )}
+                {p.event_slug && surveys?.[p.event_slug] && <SurveyStatus chip={surveys[p.event_slug]} />}
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {p.status === 'pending' && (
@@ -230,5 +236,27 @@ export function EventHistory({ participations: initialParticipations, editable =
         </div>
       )}
     </div>
+  )
+}
+
+function SurveyStatus({ chip }: { chip: SurveyChip }) {
+  const [label, action, href] =
+    chip.kind === 'submitted'
+      ? ['Survey submitted', 'View answers', `/community/surveys/${chip.responseId}`]
+      : ['Survey open', chip.started ? 'Finish' : 'Start', `/community/surveys/open/${chip.invitationId}`]
+  return (
+    <p className="mt-1.5 text-xs">
+      <span
+        className={`inline-flex rounded-full px-2 py-0.5 font-semibold ${
+          chip.kind === 'submitted' ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-primary-soft text-primary-deep'
+        }`}
+      >
+        {label}
+      </span>
+      {' · '}
+      <Link href={href} className="font-semibold text-primary hover:text-primary-deep">
+        {action} →
+      </Link>
+    </p>
   )
 }

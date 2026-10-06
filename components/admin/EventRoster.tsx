@@ -10,6 +10,7 @@ import type { CompanyRow } from '@/components/admin/EventCompanies'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { SendPayLinkButton } from '@/components/admin/SendPayLinkButton'
 import { ReissueDocusignButton } from '@/components/admin/ReissueDocusignButton'
+import { CorrectSignerEmailButton } from '@/components/admin/CorrectSignerEmailButton'
 import { displayEventRole } from '@/lib/member-enums'
 
 // Pills with paperwork still to chase. 'issued'/'partial' resend the live
@@ -407,6 +408,15 @@ export default function EventRoster({
                           >
                             {isAdmin ? 'Checkr Report' : 'Clearance PDF'}
                           </a>
+                        )}
+                        {/* Fixes a typo or bounce on the same envelope: keeps
+                            signatures and uses no monthly envelope, so it comes
+                            before Reissue (which voids and starts again). */}
+                        {p.correctable_agreement_id && (
+                          <CorrectSignerEmailButton
+                            agreementId={p.correctable_agreement_id}
+                            emphasise={p.docusign_pill === 'bounced'}
+                          />
                         )}
                         {REISSUABLE_PILLS.has(p.docusign_pill) && (
                           <ReissueDocusignButton eventSlug={eventSlug} participantId={p.id} />

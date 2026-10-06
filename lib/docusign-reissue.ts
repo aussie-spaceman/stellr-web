@@ -84,7 +84,8 @@ export async function reissueParticipantAgreement(
         reason: 'bounced',
         message:
           `The email to ${bounced.map((b) => maskEmail(b.email as string)).join(', ')} bounced. ` +
-          'Correct the address on the participant first; the old envelope is then voided and a new one issued.',
+          'Use Correct email instead: it fixes the address on this envelope, keeps any signature and uses no new envelope. ' +
+          'Continue only if that failed; the old envelope is then voided and a new one issued to the participant record as it stands.',
       }
     }
     try {

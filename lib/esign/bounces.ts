@@ -37,7 +37,7 @@ export async function handleResendEvent(db: SupabaseClient, event: ResendEvent):
     .eq('id', rows[0].envelope_row as string)
     .maybeSingle()
   const about = env?.minor_name || env?.signer_name || 'a participant'
-  const body = `A Stellr signing email to ${maskEmail(rows[0].email as string)} bounced (${rows.length > 1 ? `${rows.length} forms` : 'the form'} for ${about}${env?.event_title ? `, ${env.event_title}` : ''}). Correct the address on the event roster and send it again.`
+  const body = `A Stellr signing email to ${maskEmail(rows[0].email as string)} bounced (${rows.length > 1 ? `${rows.length} forms` : 'the form'} for ${about}${env?.event_title ? `, ${env.event_title}` : ''}). Use Correct email on the event roster to fix the address; the form is sent again to the new one.`
   await notifyCommunityAdmins({
     type: 'action',
     body,

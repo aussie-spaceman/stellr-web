@@ -99,12 +99,14 @@ interface SendEmailOptions {
   html: string
   text: string
   attachments?: EmailAttachment[]
+  /** Extra MIME headers, e.g. List-Unsubscribe for one-click opt-out. */
+  headers?: Record<string, string>
 }
 
 /** Resend's id for the message, when one was sent. */
 export interface SentEmail { id: string | null }
 
-export async function sendEmail({ to, from, cc, replyTo, subject, html, text, attachments }: SendEmailOptions): Promise<SentEmail> {
+export async function sendEmail({ to, from, cc, replyTo, subject, html, text, attachments, headers }: SendEmailOptions): Promise<SentEmail> {
   if (!RESEND_API_KEY) {
     console.log('[email] No RESEND_API_KEY — would have sent to:', to?.replace(/^.*@/, '…@'), subject)
     return { id: null }
@@ -134,6 +136,7 @@ export async function sendEmail({ to, from, cc, replyTo, subject, html, text, at
       subject: routed.subjectPrefix + subject,
       html,
       text,
+      ...(headers && Object.keys(headers).length ? { headers } : {}),
       ...(attachments && attachments.length
         ? {
             attachments: attachments.map((a) => ({

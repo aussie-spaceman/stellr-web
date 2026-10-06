@@ -3,6 +3,8 @@ import { supabaseServer } from '@/lib/supabase'
 import { syncEventSpace } from '@/lib/event-space-sync'
 import { fireObjectCreatedRules } from '@/lib/object-created-rules'
 import { safeStrEqual } from '@/lib/secret-compare'
+import { ensureDistribution } from '@/lib/survey/distributions'
+import { loadSurveyEvent } from '@/lib/survey/events'
 
 // POST /api/admin/sanity/event-sync — Sanity → Supabase access-structure sync
 // (HANDOFF-CODE-REVIEW §7). Sanity is the source of truth for event CONTENT;
@@ -66,9 +68,28 @@ export async function POST(req: Request) {
     containerId: sync.containerId ?? undefined,
   })
 
+  // Post-event survey: schedule it for a new event, or follow a date change /
+  // cancellation (lib/survey/distributions.ts). The cron sweep does the same,
+  // so a failure here is logged, not fatal. Sanity is re-read rather than
+  // trusting the payload, which carries no date.
+  let survey: string | null = null
+  if (objectType === 'event') {
+    try {
+      const event = await loadSurveyEvent(slug)
+      if (event) {
+        const r = await ensureDistribution(db, event)
+        survey = r.action === 'skipped' ? `skipped: ${r.reason}` : r.action
+      }
+    } catch (err) {
+      console.error('[event-sync] survey schedule failed:', err)
+      survey = 'error'
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     slug,
+    survey,
     containerId: sync.containerId,
     eventSpaceId: sync.spaceId,
     created: sync.created,

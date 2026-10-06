@@ -7,7 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 export type AuditEvent =
   | 'issued' | 'invite_sent' | 'viewed' | 'consented' | 'attested' | 'field_completed'
   | 'signed' | 'declined' | 'countersigned' | 'sealed' | 'completed' | 'voided'
-  | 'reminded' | 'downloaded' | 'restricted' | 'archived'
+  | 'reminded' | 'downloaded' | 'restricted' | 'archived' | 'corrected'
 
 export interface AuditEntry {
   envelopeRow: string

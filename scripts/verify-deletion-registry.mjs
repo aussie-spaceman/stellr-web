@@ -43,6 +43,10 @@ const CHECKS = [
   ['store_products', 'status'], ['store_variants', 'product_id'],
   ['store_tier_discounts', 'product_id'], ['store_event_discounts', 'product_id'],
   ['store_orders', 'status'], ['member_addresses', 'id'],
+  // post-event survey (purged by survey_purge_person on a hard delete)
+  ['survey_invitations', 'member_id'], ['survey_invitations', 'participant_id'],
+  ['survey_responses', 'member_id'], ['survey_responses', 'participant_id'],
+  ['member_privacy_prefs', 'member_id'],
 ]
 
 let ok = 0, bad = 0

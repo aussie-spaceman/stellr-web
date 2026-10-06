@@ -88,7 +88,7 @@ export const PILL_CLASSES: Record<DocusignPill, string> = {
   issued:       'bg-red-100 text-red-700',
   partial:      'bg-orange-100 text-orange-700',
   // Red, not orange: a bounced address never resolves by waiting. Someone has to
-  // correct the address and re-issue.
+  // correct the address ("Correct email": same envelope, nothing re-issued).
   bounced:      'bg-red-100 text-red-700',
   declined:     'bg-red-100 text-red-700',
   voided:       'bg-brand-hairline text-brand-muted-soft',
@@ -186,7 +186,7 @@ export function describeEnvelope(
     return {
       pill: 'bounced',
       label: PILL_LABELS.bounced,
-      detail: `Email bounced for ${joinNames(bounced)} — correct the address and re-issue`,
+      detail: `Email bounced for ${joinNames(bounced)}. Use Correct email (no new envelope needed)`,
       ...base,
     }
   }

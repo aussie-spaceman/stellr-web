@@ -150,6 +150,17 @@ export async function getAllEvents() {
   `)
 }
 
+// Live events with what the post-event survey schedule needs: the last day,
+// where (for the time zone) and whether it is cancelled (lib/survey/events.ts).
+export async function getEventsForSurveySchedule() {
+  if (!client) return null
+  return client.fetch(`
+    *[_type == "event" && defined(slug.current) && defined(date) && (activityType == "live_event" || !defined(activityType))] {
+      title, slug, date, endDate, activityType, state, country, status
+    }
+  `)
+}
+
 export async function getAllCampaigns() {
   if (!client) return null
   // Ordered by school year asc, then season asc ('fall' < 'spring'

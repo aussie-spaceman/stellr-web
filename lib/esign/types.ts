@@ -5,7 +5,10 @@ import type {
   EnvelopeParams,
   EnvelopeRecipient,
   MentorAgreementParams,
+  RecipientCorrection,
 } from '@/lib/docusign'
+
+export type { RecipientCorrection }
 
 // The seam between "an agreement has to be signed" and whichever engine signs
 // it. Everything outside lib/esign/providers/ talks to a signing engine through
@@ -91,6 +94,13 @@ export interface EsignProvider {
   remind(ctx: EsignContext, externalId: string): Promise<number>
   /** Cancels an agreement nobody has finished signing. */
   void(ctx: EsignContext, externalId: string, reason?: string): Promise<void>
+  /**
+   * Changes one unfinished signer's email (and name) on the same agreement,
+   * keeping every signature already given, and sends the new address its
+   * signing email when it is that signer's turn. Returns the signer as it now
+   * stands. Throws CorrectionRefusedError when the change is not allowed.
+   */
+  correctRecipient(ctx: EsignContext, externalId: string, correction: RecipientCorrection): Promise<EnvelopeRecipient>
   /** Every field value the signers entered, keyed by field name. */
   getFieldValues(ctx: EsignContext, externalId: string): Promise<EnvelopeFormField[]>
   getSignedDocument(
@@ -135,5 +145,22 @@ export class ProviderUnavailableError extends Error {
     super(message, options)
     this.name = 'ProviderUnavailableError'
     this.provider = provider
+  }
+}
+
+/**
+ * A signer correction the engine will not make, for a reason the admin can act
+ * on: the agreement or the signer is finished, the agreement is locked, or the
+ * engine rejected the new address. Every other failure stays a plain Error.
+ */
+export class CorrectionRefusedError extends Error {
+  readonly provider: ProviderId
+  /** A stable reason code (DocuSign's errorCode, or the engine's own). */
+  readonly code: string
+  constructor(provider: ProviderId, message: string, code: string, options?: { cause?: unknown }) {
+    super(message, options)
+    this.name = 'CorrectionRefusedError'
+    this.provider = provider
+    this.code = code
   }
 }

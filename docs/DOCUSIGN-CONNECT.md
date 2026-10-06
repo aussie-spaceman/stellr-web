@@ -13,14 +13,14 @@ DocuSign status pills on the Event Management roster and the member portal.
 ## Data flow
 
 ```
-DocuSign  ──(event POST)──▶  /api/webhooks/docusign  ──▶  docusign_envelopes  ──▶  status pills
+DocuSign  ──(event POST)──▶  /api/webhooks/docusign  ──▶  agreements + agreement_recipients  ──▶  status pills
 ```
 
 Handler: [`app/api/webhooks/docusign/route.ts`](../app/api/webhooks/docusign/route.ts). It:
 
 1. Verifies the `x-docusign-signature-1` HMAC header against `DOCUSIGN_CONNECT_HMAC_KEY` (rejects with **401** on mismatch).
 2. On **envelope** events (`envelope-sent`, `envelope-completed`, `envelope-declined`, `envelope-voided`, …) → updates the row's `status`; on `envelope-completed` sets `signers_completed = signers_total`.
-3. On the **recipient** event `recipient-completed` → re-counts signers via the DocuSign recipients API ([`getEnvelopeSignerProgress`](../lib/docusign.ts)) and writes `signers_total` / `signers_completed`. Idempotent — it recounts rather than increments, so duplicate deliveries are safe.
+3. On the **recipient** event `recipient-completed` → re-reads the signer list via the DocuSign recipients API ([`syncEnvelopeRecipients`](../lib/docusign-recipients.ts)), mirrors it into `agreement_recipients`, and writes `signers_total` / `signers_completed`. Idempotent — it recounts rather than increments, so duplicate deliveries are safe.
 4. On `envelope-completed` for an original **minor** envelope → reads `GET /envelopes/{id}/form_data` ([`getEnvelopeFormData`](../lib/docusign.ts)) for the guardian's `CredentialSharingOptOut` checkbox ([`lib/docusign-optout.ts`](../lib/docusign-optout.ts)). Ticked → `credential_sharing_opt_out = true`, any public credential pages go private and the family is emailed. Every successful read stamps `form_data_read_at`; a failed read leaves it null and `/api/cron/docusign-form-data` retries daily for 7 days. An unticked box never clears an opt-out an admin recorded.
 
 The pill arithmetic ([`lib/event-admin.ts`](../lib/event-admin.ts), and the portal's `DocusignsSection`):
@@ -44,6 +44,18 @@ The pill arithmetic ([`lib/event-admin.ts`](../lib/event-admin.ts), and the port
   - Recipient: **Recipient Signed/Completed** ← sends `recipient-completed`. **This one is required for the 🟠 "partially complete" pill.** Without it the count never moves off `0` until the whole envelope completes, so a 2-signer minor consent jumps 🔴 → 🟢 and never shows 🟠.
   - Recipient: **Delivered** ← `recipient-delivered`. Distinguishes "has never opened the signing link" from "opened it and hasn't signed". Drives the "never opened" wording in the roster and the chase emails.
   - Recipient: **AutoResponded** ← `recipient-autoresponded`. This is DocuSign reporting a **bounced address**. Without it a dead guardian email is indistinguishable from a slow one and gets chased forever; with it the roster shows 🔴 Email Bounced and admins are alerted once.
+  - Optional: Envelope **Corrected** and Recipient **Resent**. A correction made in the app
+    ("Correct email", [`lib/agreement-correction.ts`](../lib/agreement-correction.ts)) syncs
+    the recipients itself, so these only matter for a correction made in DocuSign's own
+    UI. Any event the handler does not map still runs the recipient sync first.
+
+> **Corrections go through the API, not the DocuSign web UI.** This account is on a
+> Basic/Starter API plan: the web portal allows one send, correction or template save per
+> billing cycle and then shows "Envelope Limit Reached" (support case 18095860, 3 Oct 2026).
+> The API is not limited the same way. Fix a signer's address with **Correct email** on the
+> event roster, the Agreements table or the member panel, or with
+> `npx tsx scripts/agreement-correct-recipient.ts`. It keeps signatures already given and
+> uses no envelope; re-issue (void + new envelope) is the fallback.
 
 > Live configurations (9 Sept 2026): production `21769859`, sandbox `22193922`.
 > Both point at the `www` endpoint. Delete the sandbox one once remediation is finished —

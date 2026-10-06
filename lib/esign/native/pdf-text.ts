@@ -1,5 +1,4 @@
-import { createRequire } from 'node:module'
-import { dirname } from 'node:path'
+import { join } from 'node:path'
 import { ensureDOMMatrix } from '@/lib/esign/native/dommatrix'
 
 // Reads the text on each page of a PDF, with where it sits. Used to check that
@@ -15,18 +14,28 @@ export interface PageText {
 
 type PdfJs = typeof import('pdfjs-dist/legacy/build/pdf.mjs')
 let pdfjs: Promise<PdfJs> | null = null
-let standardFontDataUrl = ''
+
+// Metrics for the 14 standard PDF fonts (Helvetica and friends), shipped with
+// pdf.js and copied into the function bundle by next.config.mjs
+// (outputFileTracingIncludes). Found from the project root, as the signing
+// fonts are (render.ts): inside the Next server bundle, webpack rewrites
+// require.resolve to return a module id, a number, not a path.
+const standardFontDataUrl = join(process.cwd(), 'node_modules/pdfjs-dist/standard_fonts/')
 
 function load(): Promise<PdfJs> {
-  // Must precede the import: pdf.js constructs a DOMMatrix at module load.
-  ensureDOMMatrix()
-  pdfjs ??= import('pdfjs-dist/legacy/build/pdf.mjs').then((m) => {
-    const require = createRequire(import.meta.url)
-    m.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')
-    // Metrics for the 14 standard PDF fonts (Helvetica and friends), shipped with pdf.js.
-    standardFontDataUrl = `${dirname(require.resolve('pdfjs-dist/package.json'))}/standard_fonts/`
-    return m
-  })
+  pdfjs ??= (async () => {
+    // Must precede the import: pdf.js constructs a DOMMatrix at module load.
+    ensureDOMMatrix()
+    // pdf.js runs its "fake worker" in-process from globalThis.pdfjsWorker when
+    // set, and otherwise imports GlobalWorkerOptions.workerSrc, which must be a
+    // path string. Handing it the module avoids the path altogether; on
+    // production the path was a webpack module id and every template check
+    // failed with "Invalid `workerSrc` type" (6 Oct 2026).
+    // @ts-expect-error pdfjs-dist ships no types for the worker build
+    const worker = await import('pdfjs-dist/legacy/build/pdf.worker.mjs')
+    ;(globalThis as { pdfjsWorker?: unknown }).pdfjsWorker ??= worker
+    return import('pdfjs-dist/legacy/build/pdf.mjs')
+  })()
   return pdfjs
 }
 

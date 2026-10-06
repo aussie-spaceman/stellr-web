@@ -1,11 +1,11 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { Badge } from '@stellr/web-ui'
 import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
 import { submittedResponseFor } from '@/lib/survey/member'
 import { formatDateShort } from '@/lib/utils'
 import { WithdrawMyQuote } from '@/components/survey/WithdrawMyQuote'
+import { SurveyAnswerList } from '@/components/survey/SurveyAnswerList'
 
 export const metadata = { title: 'Survey answers' }
 export const dynamic = 'force-dynamic'
@@ -26,17 +26,9 @@ export default async function SurveyAnswersPage({ params }: { params: Promise<{ 
       <h1 className="mt-2 font-heading uppercase text-title text-brand-blue-dark">{item.eventTitle}</h1>
       <p className="mt-1 text-sm text-brand-muted-soft">Submitted {formatDateShort(item.submittedAt)}. Submitted answers can’t be changed.</p>
 
-      <dl className="mt-6 divide-y divide-line-light rounded-ds-card border border-line bg-white">
-        {lines.map((l) => (
-          <div key={l.question.key} className="p-4">
-            <dt className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
-              {l.question.label}
-              {l.question.quotable && <Badge className="bg-pathway-amber-bg text-brand-gold-ink">{l.question.labelTag ?? 'may be quoted'}</Badge>}
-            </dt>
-            <dd className="mt-1 whitespace-pre-line text-content-body">{l.display}</dd>
-          </div>
-        ))}
-      </dl>
+      <div className="mt-6">
+        <SurveyAnswerList lines={lines} />
+      </div>
 
       <div className="mt-6 rounded-ds-card border border-line bg-white p-5">
         <h2 className="font-display text-lg font-bold text-ink">Quoting</h2>

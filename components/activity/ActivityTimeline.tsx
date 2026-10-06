@@ -1,10 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { formatDateShort, formatDateTime } from '@/lib/utils'
+import { activityHref, type ActivityAudience } from '@/lib/activity-links'
 import {
   Award, User, ShieldCheck, Calendar, CreditCard,
-  FileText, Users, GraduationCap, Activity as ActivityIcon,
+  FileText, Users, GraduationCap, ClipboardCheck, Activity as ActivityIcon,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -25,6 +27,8 @@ interface Props {
   /** GET endpoint for paging — supports ?before=<created_at> & ?limit. */
   fetchUrl: string
   pageSize?: number
+  /** Whose view this is, so entries that link (a survey response) open the right page. */
+  links?: ActivityAudience
 }
 
 const CATEGORY: Record<string, { label: string; icon: LucideIcon; cls: string }> = {
@@ -36,6 +40,7 @@ const CATEGORY: Record<string, { label: string; icon: LucideIcon; cls: string }>
   docusign: { label: 'Consent form', icon: FileText, cls: 'bg-purple-50 text-purple-600' },
   community: { label: 'Community', icon: Users, cls: 'bg-rose-50 text-rose-600' },
   school: { label: 'School', icon: GraduationCap, cls: 'bg-teal-50 text-teal-600' },
+  survey: { label: 'Survey', icon: ClipboardCheck, cls: 'bg-primary-soft text-primary-deep' },
 }
 
 const ACTOR_LABEL: Record<string, string> = {
@@ -59,7 +64,7 @@ function relativeTime(iso: string): string {
   return formatDateShort(iso)
 }
 
-export function ActivityTimeline({ items: initial, fetchUrl, pageSize = 30 }: Props) {
+export function ActivityTimeline({ items: initial, fetchUrl, pageSize = 30, links }: Props) {
   const [items, setItems] = useState<ActivityItem[]>(initial)
   const [loading, setLoading] = useState(false)
   const [exhausted, setExhausted] = useState(initial.length < pageSize)
@@ -96,6 +101,7 @@ export function ActivityTimeline({ items: initial, fetchUrl, pageSize = 30 }: Pr
           const Icon = cat.icon
           const actor = item.actor_label || ACTOR_LABEL[item.actor_type] || 'System'
           const last = i === items.length - 1
+          const href = activityHref(item, links)
           return (
             <li key={item.id} className="relative flex gap-3 pb-5">
               {!last && <span className="absolute left-[15px] top-8 bottom-0 w-px bg-brand-border" aria-hidden />}
@@ -103,7 +109,15 @@ export function ActivityTimeline({ items: initial, fetchUrl, pageSize = 30 }: Pr
                 <Icon className="h-4 w-4" />
               </span>
               <div className="min-w-0 flex-1 pt-0.5">
-                <p className="text-sm text-brand-blue-dark">{item.summary}</p>
+                <p className="text-sm text-brand-blue-dark">
+                  {href ? (
+                    <Link href={href} className="hover:text-primary hover:underline">
+                      {item.summary}
+                    </Link>
+                  ) : (
+                    item.summary
+                  )}
+                </p>
                 <p className="mt-0.5 text-xs text-brand-muted-soft">
                   <span className="font-medium text-brand-muted-soft">{cat.label}</span>
                   {' · '}

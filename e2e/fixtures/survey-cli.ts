@@ -112,6 +112,8 @@ async function main() {
       await db.from('survey_invitations').delete().eq('distribution_id', d.id)
       await db.from('survey_distributions').delete().eq('id', d.id)
     }
+    // Ada's activity history: the invited / submitted entries for this event.
+    await db.from('member_activity_log').delete().eq('category', 'survey').eq('metadata->>event_slug', slug)
     if (pids.length) {
       const { data: ags } = await db.from('agreements').select('id').in('participant_id', pids)
       const agIds = (ags ?? []).map((a) => a.id as string)

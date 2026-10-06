@@ -5,7 +5,7 @@ import { GitBranch, Info } from 'lucide-react'
 import { Badge } from '@stellr/web-ui'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
-import { normaliseDefinition, ROLES, type Question, type RespondentRole, type SurveyDefinition } from '@/lib/survey/definition'
+import { normaliseDefinition, ROLES, versionName, type Question, type RespondentRole, type SurveyDefinition } from '@/lib/survey/definition'
 import { fillTemplate } from '@/lib/survey/branching'
 import { answerFormat, branchCounts, describeShowIf, pageTitle, skipNote, TYPE_LABELS } from '@/lib/survey/describe'
 import { formatDateShort } from '@/lib/utils'
@@ -86,7 +86,7 @@ export default async function SurveyQuestionsPage({ searchParams }: { searchPara
                     className={`block rounded-xl border px-3 py-2 text-sm ${active ? 'border-primary bg-primary-soft' : 'border-brand-border bg-white hover:border-primary'}`}
                   >
                     <span className="font-semibold text-ink">
-                      {r.title} · v{r.version}
+                      {r.title} · {versionName(r.version, (r.definition as { version_label?: string } | null)?.version_label)}
                     </span>
                     <span className="block text-xs text-brand-muted-soft">
                       {STATUS_LABEL[r.status] ?? r.status}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import type { AdminSurveyView, CompletionRow } from '@/lib/survey/admin'
+import { versionName } from '@/lib/survey/definition'
 import { formatDateInZone, formatInZone, zonedTimeToUtc } from '@/lib/survey/timezone'
 
 // The event's "Survey" tab (handover A1/A2): when the post-event survey goes
@@ -168,7 +169,7 @@ export function EventSurveyPanel({ eventSlug, appUrl }: { eventSlug: string; app
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${pill.className}`}>{pill.label}</span>
           {view.definition && (
             <a className="text-xs text-brand-muted-soft underline hover:text-primary" href={`/admin/surveys/questions?id=${d.definition_id}`}>
-              {view.definition.key} v{view.definition.version}
+              {view.definition.key} {versionName(view.definition.version, view.definition.versionLabel)}
               {view.definition.status === 'draft' && ' (draft — dev only)'}
             </a>
           )}

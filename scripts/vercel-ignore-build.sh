@@ -22,6 +22,9 @@
 # do deploy: every `dev` push reaches the production project too, and every
 # `main` push reaches the dev project, and one of each pair must be skipped.
 #
+# On the dev project, a `dev` push that changes only docs is skipped too (see
+# below).
+#
 # Anything unrecognised builds, and says why, so a misconfiguration shows up as
 # a stray deployment in the dashboard rather than as silence. Project IDs are in
 # docs/ENV-MATRIX.md.
@@ -45,10 +48,42 @@ if [ -z "$ref" ]; then
   exit 1
 fi
 
-if [ "$ref" = "$wanted" ]; then
-  echo "vercel-ignore-build: ${ref} on this project — building"
-  exit 1
+if [ "$ref" != "$wanted" ]; then
+  echo "vercel-ignore-build: this project builds '${wanted}' only; '${ref}' skipped"
+  exit 0
 fi
 
-echo "vercel-ignore-build: this project builds '${wanted}' only; '${ref}' skipped"
-exit 0
+# Docs-only `dev` pushes are skipped on the dev project (6 Oct 2026). Every
+# retained build holds ~42 MB of functions, and builds are kept for days, so they
+# fill Hobby's 10 GB Function Storage. On 6 Oct the dev project held 146 builds
+# and 82 of them changed nothing but docs: close-outs, handovers and promotion
+# records. The rule matches CI's `changes` job (.github/workflows/ci.yml):
+# `docs/`, `.claude/`, root `*.md`. Nothing at runtime reads those paths.
+#
+# Production is deliberately left out. A docs-only push to `main` is how a
+# missing production deployment gets re-triggered (#197, 24 Sept).
+#
+# VERCEL_GIT_PREVIOUS_SHA is the last *successful* deployment on this branch.
+# Skipped builds don't count as successful, so the diff covers every change since
+# the last real build. If that commit is missing from Vercel's shallow clone, or
+# anything else fails to resolve, the build goes ahead. Put `[build]` in the
+# commit message to force a build.
+if [ "$project" = "$DEV_PROJECT_ID" ]; then
+  prev="${VERCEL_GIT_PREVIOUS_SHA:-}"
+  case "${VERCEL_GIT_COMMIT_MESSAGE:-}" in
+    *"[build]"*)
+      echo "vercel-ignore-build: [build] in the commit message — building"
+      exit 1 ;;
+  esac
+  if [ -n "$prev" ] && git cat-file -e "${prev}^{commit}" 2>/dev/null \
+     && files=$(git diff --name-only --no-renames "$prev" HEAD 2>/dev/null) \
+     && [ -n "$files" ] \
+     && ! printf '%s\n' "$files" | grep -qvE '^(docs/|\.claude/)|^[^/]+\.md$'; then
+    echo "vercel-ignore-build: docs-only change since ${prev:0:7} — skipped"
+    printf '%s\n' "$files" | sed 's/^/  /'
+    exit 0
+  fi
+fi
+
+echo "vercel-ignore-build: ${ref} on this project — building"
+exit 1

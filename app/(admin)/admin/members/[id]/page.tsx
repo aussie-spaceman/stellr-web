@@ -1,5 +1,7 @@
+import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { notFound } from 'next/navigation'
+import { isAdminClaims } from '@/lib/admin-auth'
 import { AdminMemberDetail } from '@/components/admin/AdminMemberDetail'
 import { loadComplianceForMember } from '@/lib/compliance'
 import type { MemberCompliance } from '@/components/admin/MemberCompliancePanel'
@@ -7,6 +9,8 @@ import type { MemberAgreement } from '@/components/admin/MemberAgreementPanel'
 import { loadVolunteerAgreement } from '@/lib/volunteer'
 import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
 import { listMemberScholarships, toHistoryItems } from '@/lib/scholarships'
+import { memberSurveyRows } from '@/lib/survey/member'
+import { toMemberSurveyItems, type MemberSurveyItem } from '@/lib/survey/history'
 
 export const metadata = { title: 'Admin — Member Detail' }
 
@@ -152,6 +156,20 @@ export default async function AdminMemberPage({
     await listMemberScholarships(db, { id, email: (member as { email?: string | null }).email ?? null }),
   )
 
+  // Post-event surveys: survey data is admin-only, so not for event managers
+  // even if they reach this page. Statuses only here; answers are a click away
+  // (and that view is logged).
+  const { sessionClaims } = await auth()
+  let surveys: MemberSurveyItem[] | null = null
+  if (isAdminClaims(sessionClaims)) {
+    surveys = await memberSurveyRows(db, id)
+      .then((rows) => toMemberSurveyItems(rows))
+      .catch((err) => {
+        console.error('[admin member] surveys failed:', err)
+        return []
+      })
+  }
+
   return (
     <AdminMemberDetail
       member={member}
@@ -166,6 +184,7 @@ export default async function AdminMemberPage({
       compliance={compliance}
       agreement={agreement}
       scholarships={scholarships}
+      surveys={surveys}
     />
   )
 }

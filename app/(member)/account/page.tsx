@@ -15,6 +15,8 @@ import { listMemberScholarships, toHistoryItems } from '@/lib/scholarships'
 import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
 import { PrivacyPrefsForm } from '@/components/survey/PrivacyPrefsForm'
 import { privacyPrefsFor } from '@/lib/survey/privacy-prefs'
+import { memberSurveyRows } from '@/lib/survey/member'
+import { surveyChipsByEvent, type SurveyChip } from '@/lib/survey/history'
 import { AddressBook } from '@/components/account/AddressBook'
 import { OrdersList } from '@/components/account/OrdersList'
 import { EntitlementsSummary } from '@/components/account/EntitlementsSummary'
@@ -198,6 +200,18 @@ export default async function AccountPage({
   else if (rawTab === 'billing' && showBilling) activeTab = 'billing'
   else if (rawTab === 'activity') activeTab = 'activity'
 
+  // Post-event survey per event, for the event history: submitted (view the
+  // answers) or open now (start). Profile tab only; never blocks the page.
+  const surveyChips: Record<string, SurveyChip> =
+    activeTab === 'profile'
+      ? await memberSurveyRows(db, member.id)
+          .then((rows) => surveyChipsByEvent(rows))
+          .catch((err) => {
+            console.error('[account] survey status failed:', err)
+            return {}
+          })
+      : {}
+
   const tabLinks: { key: Tab; label: string }[] = [
     { key: 'profile', label: 'Profile' },
     ...(showTeams ? [{ key: 'teams' as Tab, label: 'Teams' }] : []),
@@ -269,7 +283,7 @@ export default async function AccountPage({
                 training={volunteerTraining[member.id] ?? { completed: 0, total: 0 }}
               />
             )}
-            <EventHistory participations={member.event_participations ?? []} editable />
+            <EventHistory participations={member.event_participations ?? []} editable surveys={surveyChips} />
             {/* An admin viewing as this member downloads through the admin
                 route, where the download is recorded against the admin. */}
             {agreement === 'required' && (
@@ -319,7 +333,7 @@ export default async function AccountPage({
           <p className="mb-4 text-xs text-brand-muted-soft">
             A record of changes to your membership, profile and account.
           </p>
-          <ActivityTimeline items={activity ?? []} fetchUrl="/api/members/me/activity" />
+          <ActivityTimeline items={activity ?? []} fetchUrl="/api/members/me/activity" links={{ audience: 'member' }} />
         </div>
       )}
     </div>

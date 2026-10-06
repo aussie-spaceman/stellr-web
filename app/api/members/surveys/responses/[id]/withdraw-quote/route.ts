@@ -16,6 +16,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!/^[0-9a-f-]{36}$/.test(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const db = supabaseServer()
   if (!(await submittedResponseFor(db, member.id, id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  await withdrawQuote(db, id, member.id, 'member')
+  await withdrawQuote(db, id, member.id, 'member', { actorType: 'member', actorMemberId: member.id })
   return NextResponse.json({ ok: true })
 }

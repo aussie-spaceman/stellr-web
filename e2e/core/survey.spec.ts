@@ -141,6 +141,11 @@ test.describe('Post-event survey', () => {
       await page.getByRole('listitem').filter({ hasText: title }).getByRole('link', { name: /View answers/ }).click()
       await expect(page.getByText('Testing the rover')).toBeVisible()
       await expect(page.getByText('Submitted answers can’t be changed.')).toBeVisible()
+
+      // The submission is in the account's activity history, linked to the answers.
+      const answersPath = new URL(page.url()).pathname
+      await page.goto('/account?tab=activity')
+      await expect(page.getByRole('link', { name: `Submitted the ${title} survey` })).toHaveAttribute('href', answersPath)
     })
 
     test('certificate gate: held until the survey is in, then downloads', async ({ page }) => {

@@ -69,6 +69,8 @@ export interface Page {
 export interface SurveyDefinition {
   key: string
   version: number
+  /** How the version is named to people ("1.1"); the stored version stays an integer. */
+  versionLabel: string
   title: string
   targetMinutes: Record<RespondentRole, number>
   intro: { heading: string; bodyStudent: string; bodyAdult: string }
@@ -103,6 +105,7 @@ interface RawQuestion {
 interface RawDefinition {
   key: string
   version: number
+  version_label?: string
   title: string
   target_minutes?: Partial<Record<RespondentRole, number>>
   scales: Record<string, string[] | { min: number; max: number; min_label: string; max_label: string }>
@@ -208,6 +211,7 @@ export function normaliseDefinition(raw: unknown): SurveyDefinition {
   return {
     key: def.key,
     version: def.version,
+    versionLabel: def.version_label || String(def.version),
     title: def.title,
     targetMinutes: {
       student: def.target_minutes?.student ?? 5,
@@ -217,6 +221,14 @@ export function normaliseDefinition(raw: unknown): SurveyDefinition {
     intro: { heading: def.intro.heading, bodyStudent: def.intro.body_student, bodyAdult: def.intro.body_adult },
     branches,
   }
+}
+
+/**
+ * "v1.1": the version as people name it. Versions are stored as integers
+ * (post_event v1.1 is version 2), so a definition may carry a display label.
+ */
+export function versionName(version: number, label?: string | null): string {
+  return `v${label || version}`
 }
 
 /** Every question in a branch, page order. */

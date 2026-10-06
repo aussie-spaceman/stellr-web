@@ -2,8 +2,11 @@
  * survey-definition.ts — load a survey definition JSON into survey_definitions,
  * optionally publish it, and refresh survey_question_catalog.
  *
- *   npm run survey:definition -- lib/survey/definitions/post_event.v1.json
- *   npm run survey:definition -- lib/survey/definitions/post_event.v1.json --publish
+ *   npm run survey:definition -- lib/survey/definitions/post_event.v1.1.json
+ *   npm run survey:definition -- lib/survey/definitions/post_event.v1.1.json --publish
+ *
+ * post_event v1.1 is stored as version 2 (versions are integers); its
+ * `version_label` is what admins see.
  *
  * A draft can be re-loaded as often as wanted. Publishing freezes it (a
  * database trigger refuses any later change): wording changes after that are a
@@ -47,7 +50,7 @@ async function main() {
   const db = supabaseServer()
 
   const row = await upsertDefinitionDraft(db, raw, sha)
-  console.log(`${raw.key} v${raw.version}: ${row.status} (${row.id}), sha256 ${sha.slice(0, 12)}…`)
+  console.log(`${raw.key} v${raw.version_label ?? raw.version} (version ${raw.version}): ${row.status} (${row.id}), sha256 ${sha.slice(0, 12)}…`)
 
   if (publish && row.status === 'draft') {
     const { error } = await db

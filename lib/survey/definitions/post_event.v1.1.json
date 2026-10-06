@@ -1,0 +1,781 @@
+{
+  "key": "post_event",
+  "version": 2,
+  "version_label": "1.1",
+  "title": "Stellr Post-Event Survey",
+  "target_minutes": {
+    "student": 5,
+    "mentor": 4,
+    "adult": 4
+  },
+  "scales": {
+    "rating5": [
+      "Poor",
+      "Fair",
+      "Good",
+      "Very good",
+      "Excellent"
+    ],
+    "nps": {
+      "min": 0,
+      "max": 10,
+      "min_label": "Not at all likely",
+      "max_label": "Extremely likely"
+    },
+    "likely5": [
+      "Very unlikely",
+      "Unlikely",
+      "Not sure",
+      "Likely",
+      "Very likely"
+    ],
+    "extent4": [
+      "Not at all",
+      "Slightly",
+      "Somewhat",
+      "A great deal"
+    ],
+    "quality4na": [
+      "Poor",
+      "Fair",
+      "Good",
+      "Excellent",
+      "Not applicable"
+    ],
+    "ease5": [
+      "Very difficult",
+      "Difficult",
+      "Okay",
+      "Easy",
+      "Very easy"
+    ],
+    "return5": [
+      "Definitely",
+      "Probably",
+      "Not sure",
+      "Probably not",
+      "Definitely not"
+    ]
+  },
+  "intro": {
+    "heading": "Tell us about {event_title}",
+    "body_student": "This takes about 5 minutes. Your answers save as you go, so you can finish later. Your answers are linked to your Stellr account and seen only by Stellr staff. We share results publicly only as combined totals. Answers marked \"may be quoted\" could appear in Stellr materials as your first name, last initial, grade and school or state (for example, \"Jordan M., Grade 11, Nebraska\"), unless you or your parent have opted out. You can also tick \"Don't quote this response\" at the end. Once you submit, answers can't be changed.",
+    "body_adult": "This takes about 3-4 minutes. Your answers save as you go, so you can finish later. Your answers are linked to your Stellr record and seen only by Stellr staff. We share results publicly only as combined totals, and we'll only quote you if you say yes at the end. Once you submit, answers can't be changed.",
+    "status": "DRAFT - needs David's sign-off"
+  },
+  "context_fields_never_asked": [
+    "role",
+    "event_slug",
+    "event_year",
+    "first_time (from event_participations)",
+    "demographics already on profile"
+  ],
+  "branches": {
+    "student": [
+      {
+        "page": "experience",
+        "questions": [
+          {
+            "key": "overall_rating",
+            "type": "single",
+            "scale": "rating5",
+            "required": true,
+            "label": "Overall, how would you rate this event?"
+          },
+          {
+            "key": "nps",
+            "type": "nps",
+            "required": true,
+            "label": "How likely are you to recommend this event to a friend or classmate?"
+          }
+        ]
+      },
+      {
+        "page": "stem_intent",
+        "questions": [
+          {
+            "key": "stem_intent_before",
+            "type": "single",
+            "scale": "likely5",
+            "required": true,
+            "label": "BEFORE this event, how likely were you to study or work in a STEM field?"
+          },
+          {
+            "key": "stem_intent_after",
+            "type": "single",
+            "scale": "likely5",
+            "required": true,
+            "label": "NOW, after this event, how likely are you to study or work in a STEM field?"
+          },
+          {
+            "key": "first_stem_pro",
+            "type": "single",
+            "options": [
+              "Yes",
+              "No",
+              "Not sure"
+            ],
+            "required": false,
+            "label": "Was this your first time working directly with a STEM professional (engineer, scientist, or university or industry expert)?"
+          }
+        ]
+      },
+      {
+        "page": "skills",
+        "questions": [
+          {
+            "key": "skills",
+            "type": "grid",
+            "scale": "extent4",
+            "required": false,
+            "label": "How much did this event help you…",
+            "rows": [
+              {
+                "key": "skill_teamwork",
+                "label": "Work effectively as part of a team"
+              },
+              {
+                "key": "skill_oral_comm",
+                "label": "Present and speak confidently"
+              },
+              {
+                "key": "skill_problem_solving",
+                "label": "Break down complex problems and find solutions"
+              },
+              {
+                "key": "skill_creativity",
+                "label": "Come up with new ideas"
+              },
+              {
+                "key": "skill_time_mgmt",
+                "label": "Prioritize tasks and manage time"
+              },
+              {
+                "key": "skill_resilience",
+                "label": "Bounce back from setbacks"
+              },
+              {
+                "key": "skill_confidence",
+                "label": "Believe you can succeed in STEM"
+              },
+              {
+                "key": "skill_networking",
+                "label": "Connect with STEM professionals and peers"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "page": "logistics",
+        "questions": [
+          {
+            "ref": "logistics_grid"
+          }
+        ]
+      },
+      {
+        "page": "about_you",
+        "questions": [
+          {
+            "key": "heard_about",
+            "type": "single",
+            "show_if": "first_time == true",
+            "required": false,
+            "label": "How did you first hear about Stellr?",
+            "options": [
+              "Teacher",
+              "Friend or classmate",
+              "Parent or family",
+              "Stellr website",
+              "Social media",
+              "Email",
+              "School club",
+              "Other"
+            ]
+          },
+          {
+            "key": "first_gen",
+            "type": "single",
+            "required": false,
+            "label": "Will you be the first person in your immediate family to attend college?",
+            "options": [
+              "Yes",
+              "No",
+              "Not sure",
+              "Prefer not to say"
+            ]
+          },
+          {
+            "key": "demo_gender",
+            "type": "single",
+            "show_if": "profile.gender is null",
+            "required": false,
+            "label": "Gender",
+            "options_source": "members.gender enum + Prefer not to say"
+          },
+          {
+            "key": "demo_ethnicity",
+            "type": "multi",
+            "show_if": "profile.ethnicity is empty",
+            "required": false,
+            "label": "Race/ethnicity (select all that apply)",
+            "options_source": "ethnicity_options + Prefer not to say"
+          },
+          {
+            "key": "demo_grade",
+            "type": "single",
+            "show_if": "profile.grade is null",
+            "required": false,
+            "label": "Grade",
+            "options_source": "members.grade enum"
+          },
+          {
+            "key": "demo_school",
+            "type": "school_lookup",
+            "show_if": "profile.school is null",
+            "required": false,
+            "label": "School"
+          }
+        ]
+      },
+      {
+        "page": "whats_next",
+        "questions": [
+          {
+            "key": "interests",
+            "type": "multi",
+            "required": false,
+            "label": "Which of these would you be interested in? (select any)",
+            "options": [
+              {
+                "key": "int_mentoring",
+                "label": "Year-round mentoring with a STEM professional"
+              },
+              {
+                "key": "int_workshops",
+                "label": "Online workshops and skills sessions"
+              },
+              {
+                "key": "int_campaign",
+                "label": "A Stellr design project in my class (Campaign)"
+              },
+              {
+                "key": "int_ambassador",
+                "label": "Becoming a Stellr student ambassador"
+              },
+              {
+                "key": "int_membership",
+                "label": "Stellr membership (resources and community)"
+              },
+              {
+                "key": "int_merch",
+                "label": "Stellr merch"
+              },
+              {
+                "key": "int_houston_2027",
+                "label": "Attending the Finals event next summer"
+              },
+              {
+                "key": "int_none",
+                "label": "None of these",
+                "exclusive": true
+              }
+            ]
+          },
+          {
+            "key": "return_intent",
+            "type": "single",
+            "scale": "return5",
+            "extra_options": [
+              "I'm graduating, so not eligible"
+            ],
+            "required": false,
+            "label": "Would you take part in a Stellr event again?"
+          }
+        ]
+      },
+      {
+        "page": "your_words",
+        "questions": [
+          {
+            "key": "highlight",
+            "type": "text_long",
+            "max_chars": 600,
+            "required": false,
+            "label": "What was the highlight of the event for you?",
+            "quotable": true,
+            "label_tag": "may be quoted"
+          },
+          {
+            "key": "improve",
+            "type": "text_long",
+            "max_chars": 600,
+            "required": false,
+            "label": "What one thing should we change for next time?",
+            "quotable": false
+          }
+        ]
+      },
+      {
+        "page": "consent",
+        "questions": [
+          {
+            "ref": "no_quote_this_response"
+          },
+          {
+            "ref": "quote_consent",
+            "show_if": "is_minor == false"
+          },
+          {
+            "ref": "followup_consent"
+          }
+        ]
+      }
+    ],
+    "mentor": [
+      {
+        "page": "experience",
+        "questions": [
+          {
+            "key": "overall_rating",
+            "type": "single",
+            "scale": "rating5",
+            "required": true,
+            "label": "Overall, how would you rate this event?"
+          },
+          {
+            "key": "nps",
+            "type": "nps",
+            "required": true,
+            "label": "How likely are you to recommend mentoring with Stellr to a colleague?"
+          }
+        ]
+      },
+      {
+        "page": "your_time",
+        "questions": [
+          {
+            "key": "hours_prep",
+            "type": "number",
+            "min": 0,
+            "max": 200,
+            "unit": "hours",
+            "required": false,
+            "label": "Roughly how many hours did you spend preparing before the event?"
+          },
+          {
+            "key": "hours_event",
+            "type": "number",
+            "min": 0,
+            "max": 100,
+            "unit": "hours",
+            "required": false,
+            "label": "Roughly how many hours did you spend at the event?"
+          },
+          {
+            "key": "employer",
+            "type": "text_short",
+            "required": false,
+            "label": "Employer (optional)"
+          }
+        ]
+      },
+      {
+        "page": "logistics",
+        "questions": [
+          {
+            "ref": "logistics_grid",
+            "extra_rows": [
+              {
+                "key": "log_judging_tools",
+                "label": "Judging materials and scoring tools"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "page": "whats_next",
+        "questions": [
+          {
+            "key": "recurring_mentoring",
+            "type": "single",
+            "required": false,
+            "label": "Would you mentor students year-round (about 1 hour a month, virtual)?",
+            "options": [
+              "Yes",
+              "Maybe, tell me more",
+              "No"
+            ]
+          },
+          {
+            "key": "employer_support",
+            "type": "multi",
+            "required": false,
+            "label": "Could your employer support Stellr in any of these ways? (select any)",
+            "options": [
+              {
+                "key": "emp_matching",
+                "label": "Matching gifts"
+              },
+              {
+                "key": "emp_volunteer_grants",
+                "label": "Volunteer-hour grants"
+              },
+              {
+                "key": "emp_sponsorship",
+                "label": "Event sponsorship"
+              },
+              {
+                "key": "emp_intro",
+                "label": "I could introduce Stellr to our community/CSR contact"
+              },
+              {
+                "key": "emp_not_sure",
+                "label": "Not sure",
+                "exclusive": true
+              }
+            ]
+          },
+          {
+            "key": "portal_ease",
+            "type": "single",
+            "scale": "ease5",
+            "required": false,
+            "label": "How easy was the Stellr web app to use (registration, materials, judging)?"
+          },
+          {
+            "key": "improve",
+            "type": "text_long",
+            "max_chars": 600,
+            "required": false,
+            "label": "What one thing should we change for next time?"
+          }
+        ]
+      },
+      {
+        "page": "consent",
+        "questions": [
+          {
+            "key": "testimonial",
+            "type": "text_long",
+            "max_chars": 400,
+            "required": false,
+            "label": "In a sentence or two, what would you tell a colleague about mentoring with Stellr?",
+            "quotable": true,
+            "label_tag": "may be quoted"
+          },
+          {
+            "ref": "quote_consent"
+          }
+        ]
+      }
+    ],
+    "adult": [
+      {
+        "page": "experience",
+        "questions": [
+          {
+            "key": "adult_relationship",
+            "type": "single",
+            "required": true,
+            "skip_if_known_from": "participants.event_role",
+            "label": "How were you involved?",
+            "options": [
+              {
+                "key": "parent",
+                "label": "Parent or guardian"
+              },
+              {
+                "key": "teacher",
+                "label": "Teacher or school staff"
+              },
+              {
+                "key": "other",
+                "label": "Other chaperone or support"
+              }
+            ]
+          },
+          {
+            "key": "overall_rating",
+            "type": "single",
+            "scale": "rating5",
+            "required": true,
+            "label": "Overall, how would you rate this event?"
+          },
+          {
+            "key": "nps",
+            "type": "nps",
+            "required": true,
+            "label": "How likely are you to recommend this event to another family or school?"
+          },
+          {
+            "key": "value_for_money",
+            "type": "single",
+            "scale": "rating5",
+            "required": false,
+            "label": "How would you rate the event's value for the cost?"
+          }
+        ]
+      },
+      {
+        "page": "web",
+        "questions": [
+          {
+            "key": "heard_about",
+            "type": "single",
+            "show_if": "first_time == true",
+            "required": false,
+            "label": "How did you first hear about Stellr?",
+            "options": [
+              "My student",
+              "Teacher or school",
+              "Stellr website",
+              "Social media",
+              "Email",
+              "Friend or colleague",
+              "Mailed letter",
+              "Other"
+            ]
+          },
+          {
+            "key": "registration_ease",
+            "type": "single",
+            "scale": "ease5",
+            "required": false,
+            "label": "How easy was registration and the Stellr web app to use?",
+            "extra_options": [
+              "Not applicable"
+            ]
+          },
+          {
+            "key": "web_missing",
+            "type": "text_short",
+            "max_chars": 300,
+            "required": false,
+            "label": "Was there anything you looked for on our website or app and couldn't find?"
+          }
+        ]
+      },
+      {
+        "page": "logistics",
+        "questions": [
+          {
+            "ref": "logistics_grid"
+          }
+        ]
+      },
+      {
+        "page": "whats_next",
+        "questions": [
+          {
+            "key": "interests_parent",
+            "type": "multi",
+            "show_if": "adult_relationship in ['parent','other']",
+            "required": false,
+            "label": "Which of these would interest you for your student? (select any)",
+            "options": [
+              {
+                "key": "int_mentoring",
+                "label": "Year-round mentoring with a STEM professional"
+              },
+              {
+                "key": "int_workshops",
+                "label": "Online workshops and skills sessions"
+              },
+              {
+                "key": "int_membership",
+                "label": "Stellr family membership"
+              },
+              {
+                "key": "int_houston_2027",
+                "label": "Attending the Finals event next summer"
+              },
+              {
+                "key": "int_merch",
+                "label": "Stellr merch"
+              },
+              {
+                "key": "int_none",
+                "label": "None of these",
+                "exclusive": true
+              }
+            ]
+          },
+          {
+            "key": "mentoring_price_band",
+            "type": "single",
+            "show_if": "interests_parent includes 'int_mentoring'",
+            "required": false,
+            "label": "What would you consider a fair monthly price for year-round mentoring?",
+            "options": [
+              "Only if free",
+              "Under $25",
+              "$25–$50",
+              "$50–$100",
+              "Over $100"
+            ]
+          },
+          {
+            "key": "interests_teacher",
+            "type": "multi",
+            "show_if": "adult_relationship == 'teacher'",
+            "required": false,
+            "label": "Which of these would interest you or your school? (select any)",
+            "options": [
+              {
+                "key": "int_campaign",
+                "label": "Running a Stellr Campaign in class (4- or 10-week)"
+              },
+              {
+                "key": "int_residency",
+                "label": "A 5-day Stellr residency at our school/district"
+              },
+              {
+                "key": "int_educator_membership",
+                "label": "Educator membership and resources"
+              },
+              {
+                "key": "int_more_students",
+                "label": "Bringing more students next year"
+              },
+              {
+                "key": "int_houston_2027",
+                "label": "Attending the Finals event next summer"
+              },
+              {
+                "key": "int_none",
+                "label": "None of these",
+                "exclusive": true
+              }
+            ]
+          },
+          {
+            "key": "return_intent",
+            "type": "single",
+            "scale": "return5",
+            "required": false,
+            "label": "Would you attend or bring students to a Stellr event again?"
+          },
+          {
+            "key": "improve",
+            "type": "text_long",
+            "max_chars": 600,
+            "required": false,
+            "label": "What one thing should we change for next time?"
+          }
+        ]
+      },
+      {
+        "page": "consent",
+        "questions": [
+          {
+            "key": "testimonial",
+            "type": "text_long",
+            "max_chars": 400,
+            "required": false,
+            "label": "In a sentence or two, what would you tell another family or school about this event?",
+            "quotable": true,
+            "label_tag": "may be quoted"
+          },
+          {
+            "ref": "quote_consent"
+          }
+        ]
+      }
+    ]
+  },
+  "shared": {
+    "logistics_grid": {
+      "key": "logistics",
+      "type": "grid",
+      "scale": "quality4na",
+      "required": false,
+      "label": "How would you rate…",
+      "rows": [
+        {
+          "key": "log_pre_materials",
+          "label": "Pre-event materials (RFP, Mission Handbook)"
+        },
+        {
+          "key": "log_feedback",
+          "label": "Feedback from judges and mentors"
+        },
+        {
+          "key": "log_schedule",
+          "label": "Schedule and pacing"
+        },
+        {
+          "key": "log_venue",
+          "label": "Venue and facilities"
+        },
+        {
+          "key": "log_food",
+          "label": "Food and snacks"
+        },
+        {
+          "key": "log_registration",
+          "label": "Registration and check-in"
+        }
+      ]
+    },
+    "quote_consent": {
+      "key": "quote_consent",
+      "type": "single",
+      "required": true,
+      "label": "May we quote your comments in Stellr materials?",
+      "options": [
+        {
+          "key": "named",
+          "label": "Yes, with my first name and school/organization"
+        },
+        {
+          "key": "anonymous",
+          "label": "Yes, but anonymously"
+        },
+        {
+          "key": "no",
+          "label": "No"
+        }
+      ],
+      "applies_to": [
+        "mentor",
+        "adult",
+        "student (not a minor)"
+      ]
+    },
+    "followup_consent": {
+      "key": "followup_consent",
+      "type": "boolean",
+      "required": false,
+      "label": "Can we contact you in about a year for a 2-minute follow-up on what you're doing now?"
+    },
+    "no_quote_this_response": {
+      "key": "no_quote_this_response",
+      "type": "boolean",
+      "required": false,
+      "label": "Don't quote this response",
+      "help": "Leave unticked to allow quotes, unless you or your parent have already opted out. You can change your quoting setting any time in your Stellr account.",
+      "show_if": "quote_eligible_by_agreement == true",
+      "note": "Minors are covered by Minors Agreement V2.3 §1.7/§2 opt-out model; no opt-in question. Hide if agreement/opt-outs already make the respondent ineligible."
+    }
+  },
+  "quote_rules": {
+    "source": "Participation Agreement - Minors V2.3 §1.7, §2",
+    "minor_attribution_format": "{first_name} {last_initial}., Grade {grade}, {school_or_state}",
+    "under_13": "no name or identifying detail",
+    "editing": "may shorten and fix spelling/grammar; never change meaning",
+    "ny_co_13_17": "off until student turns on"
+  },
+  "changes_from_seed": [
+    "student consent page: quote_consent shown to students who are not minors (adult students are not covered by the Minors Agreement)"
+  ],
+  "changes_from_v1": [
+    "Students and adults (parents, teachers): the int_houston_2027 option now reads 'Attending the Finals event next summer' (key unchanged, so answers compare with v1).",
+    "Adults: registration_ease gains a 'Not applicable' option (scores null, like other N/A options).",
+    "Mentors and adults: new optional 'testimonial' question on the consent page, asking explicitly for a quote; flagged quotable, and covered by their quote_consent answer.",
+    "Mentor and adult target time 3.5 -> 4 minutes for the extra question.",
+    "Stored as version 2; shown to admins as v1.1 (version_label)."
+  ]
+}

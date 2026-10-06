@@ -7,7 +7,7 @@ The `changes` job checks out with `filter: blob:none`, which dropped its checkou
 
 | # | Item | State | Next | Done |
 |---|---|---|---|---|
-| ci-blobless-checkout.1 | Docs-only change still skips e2e on the new workflow | Not yet seen in CI. Locally, a blobless clone diffing 0b0b404 (docs) listed only `docs/`, so the regex gives `code=false`. This close-out PR is the first docs-only PR on the new workflow. | Read this PR's run: `changes` logs only `docs/` paths and `e2e` is `skipped`. | ☐ |
+| ci-blobless-checkout.1 | Docs-only change still skips e2e on the new workflow | Close-out PR #290 run 37487093926, the first docs-only PR on the new workflow: `changes` 6 s (blobless fetch ~2 s), listed only the three `docs/` files, so `code=false`; `verify` passed; `e2e` **skipped**. | — | ☑ |
 | ci-blobless-checkout.2 | Code change runs e2e; checkout fast | PR #286 run 37345644065: `changes` 8 s (blobless fetch ~2 s), listed `.github/workflows/ci.yml`, `code=true`; `e2e` ran and passed in 4 min 54 s. | — | ☑ |
 | ci-blobless-checkout.3 | Fail-closed when `changes` fails | PR #286 run 37344939883, with a temporary `exit 1` in `changes` (reverted before merge): `changes` = failure, `verify` = success, `e2e` **started**. It was cancelled in its build step, before Playwright, when the revert superseded the run. | — | ☑ |
 | ci-blobless-checkout.4 | `main` still has the old `ci.yml` | Pushes to `main` use `main`'s workflow until the next promote. A promotion PR runs on the dev→main merge commit, so it already has the new one. | Next `promote`: check that the post-merge `main` run shows `changes` in seconds. | ☐ |

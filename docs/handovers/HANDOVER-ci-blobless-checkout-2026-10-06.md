@@ -50,10 +50,12 @@ pack made the job fragile; it wasn't permanently broken.
 - On 5 Oct the superseded PR run (37344939883) was still `in_progress` ~15 s
   after the new push, with its `e2e` holding the repo-wide e2e lock. I
   cancelled it by hand so the waiting `dev` e2e for #283 wasn't displaced
-  (GitHub keeps one pending job per group). The same thing seemed to happen on
-  6 Oct: dev run 37485928741 was still `in_progress` after the e29b687 push
-  run queued. This may be the same issue as tracker row 13.5. It isn't proven
-  that workflow-level `cancel-in-progress` fails; it may only be slow.
+  (GitHub keeps one pending job per group). On 6 Oct, dev run 37485928741 was
+  cancelled 11 s after the e29b687 push run was created (15:20:45 →
+  15:20:56Z). So workflow-level `cancel-in-progress` works but lags by
+  seconds; the 5 Oct case was probably that lag. No action needed. Tracker
+  row 13.5 is the separate issue that cancelling a running e2e mid-suite
+  leaves rows mutated.
 - `changes` isn't a required check. With the fail-closed `if`, it doesn't need
   to be: if it breaks, e2e runs.
 

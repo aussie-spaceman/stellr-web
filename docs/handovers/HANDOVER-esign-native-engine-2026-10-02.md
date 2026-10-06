@@ -120,3 +120,52 @@ the policies and the code that need an owner decision.
 - Fallback drill (`scripts/esign-fallback-drill.ts`): 6/6 on dev.
 - Rename compatibility checked through the API under the old names (read,
   embed through both views, insert, update, delete; anon refused).
+
+## Close-out (6 Oct)
+
+**Where it is.** Everything is in production and inert. #273 was promoted in
+#276 (`f9722fa`, 2 Oct) and the V2.3 alignment #280 in #279 (`29be23e`, 3 Oct).
+All six migrations are in production. `esign_provider_state.mode` is
+`docusign_only`, and neither Vercel project has any `ESIGN_*` variable
+(`vercel env ls`, 6 Oct). DocuSign therefore takes every agreement except the
+two kinds only Stellr signing can issue: the membership agreement, and a mentor
+under the age of majority. Those land in "Needs paperwork" with an admin alert,
+retried daily, until the `ESIGN_*` variables are set (tracker .2; David
+accepted this on 3 Oct).
+
+**After the merge (3–6 Oct).**
+- v3 is active on dev (it matches dev's code now). Minor v3 also carries
+  `document_version = 'V2.3'`, which the post-event survey's gate for minors
+  looks up (tracker .20).
+- #280 also fixed two e2e failures that hit every PR on the shared dev DB:
+  - the admin template list crashed on one unreadable draft;
+  - member-account's sign-out ended the saved Ada session for every other
+    spec. That test now makes its own session (`e2e/fixtures/sign-in.ts`).
+- DocuSign's new editor cannot set data labels, so the three V2.3 DocuSign
+  templates were labelled through the API (#295,
+  `scripts/docusign-label-minor-tabs.ts --doc minor|mentor|adult`, `--list`,
+  `--dump`). The editor had also mislabelled two fields:
+  - the minor quote box carried `CredentialSharingOptOut`, so a quote opt-out
+    would have recorded a credential opt-out;
+  - the mentor emergency phone carried `MentorPhone`, so the mentor's own
+    phone would have printed there.
+  The mentor parent block's three Mentor-role fields were deleted (an
+  under-age mentor never signs on DocuSign). All three templates pass
+  `scripts/check-docusign-template.mjs`, whose contract is now V2.3.
+- `DOCUSIGN_AGREEMENT_VERSION` is set in both projects (David, 6 Oct). It is a
+  Secret, so the value could not be read back.
+
+**Not verified.**
+- No DocuSign V2.3 envelope has been sent from the app yet. The new pre-fill
+  fields, and the read-back of the quote/media/digital-comms opt-outs from
+  DocuSign's form data, are unproven (tracker .19, HIGH). Check the first
+  completed minor, mentor and adult agreement.
+- Stellr signing has never run in production: there are no production
+  templates (tracker .4) and no `ESIGN_*` variables (tracker .2).
+
+**Lessons.**
+- Never activate data on the shared dev DB that dev's code or specs depend
+  on before the matching code has merged. Activating v3 early broke #278 and
+  `main`'s CI for an hour.
+- A production DocuSign template edited in the web UI needs its labels
+  re-checked through the API every time.

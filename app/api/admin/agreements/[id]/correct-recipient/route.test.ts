@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const { requireEventAccess, correct, logActivity, agreementRow } = vi.hoisted(() => ({
-  requireEventAccess: vi.fn(async (_slug?: string): Promise<Record<string, unknown>> => ({ ok: true, isAdmin: false })),
+  requireEventAccess: vi.fn(async (_slug?: string): Promise<Record<string, unknown>> => ({ ok: true, isAdmin: false, assignedSlugs: ['colorado'] })),
   correct: vi.fn(async (_db: unknown, _input: unknown): Promise<unknown> => ({ kind: 'not_found' })),
   logActivity: vi.fn(async (_entry: unknown, _db: unknown) => {}),
   agreementRow: { current: { event_slug: 'colorado' } as Record<string, unknown> | null },
@@ -43,21 +43,27 @@ const CORRECTED = {
 beforeEach(() => {
   vi.clearAllMocks()
   agreementRow.current = { event_slug: 'colorado' }
-  requireEventAccess.mockResolvedValue({ ok: true, isAdmin: false })
+  requireEventAccess.mockResolvedValue({ ok: true, isAdmin: false, assignedSlugs: ['colorado'] })
 })
 
 describe('POST /api/admin/agreements/[id]/correct-recipient', () => {
-  it("checks access to the agreement's own event, and 403s an unassigned event manager", async () => {
-    requireEventAccess.mockResolvedValueOnce({ ok: false, status: 403 })
+  it('401s a signed-out caller before looking the agreement up', async () => {
+    requireEventAccess.mockResolvedValueOnce({ ok: false, status: 401 })
+    agreementRow.current = null
+    expect((await post({ recipientId: '1', email: 'new@example.com' }, 'does-not-exist')).status).toBe(401)
+    expect(correct).not.toHaveBeenCalled()
+  })
+
+  it("403s an event manager on an event that isn't theirs", async () => {
+    requireEventAccess.mockResolvedValueOnce({ ok: true, isAdmin: false, assignedSlugs: ['texas'] })
     expect((await post({ recipientId: '1', email: 'new@example.com' })).status).toBe(403)
-    expect(requireEventAccess).toHaveBeenCalledWith('colorado')
     expect(correct).not.toHaveBeenCalled()
   })
 
   it('keeps an agreement with no event to admins', async () => {
     agreementRow.current = { event_slug: null }
     expect((await post({ recipientId: '1', email: 'new@example.com' })).status).toBe(403)
-    requireEventAccess.mockResolvedValueOnce({ ok: true, isAdmin: true })
+    requireEventAccess.mockResolvedValueOnce({ ok: true, isAdmin: true, assignedSlugs: null })
     correct.mockResolvedValueOnce(CORRECTED)
     expect((await post({ recipientId: '1', email: 'new@example.com' })).status).toBe(200)
   })

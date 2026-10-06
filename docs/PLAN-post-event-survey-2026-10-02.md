@@ -57,7 +57,6 @@ Items marked **David** need his answer; none of them block the build.
 | Member | dashboard card, `/community/surveys`, account privacy toggles |
 | Admin | event tab "Survey", `/admin/surveys` (stats, exports, quotes) |
 | Analysis | view `survey_answers_long`, `lib/survey/analytics.ts`, CSV exports |
-| Legacy import | `scripts/survey-import-legacy.ts`, `docs/survey/legacy-mapping.md` |
 | Deletion | `lib/deletion/execute.ts`, runbook Part B, retention schedule |
 
 ## 4. Rollout
@@ -74,7 +73,7 @@ Items marked **David** need his answer; none of them block the build.
 |---|---|
 | A1 auto schedule, go-live on last day 00:00 event-local, close +30 d, earlier go-live / send now (admin + assigned event manager), reschedule on date change, flag manual overrides, pause, close early, audiences, resend, late participants, preview incl. no-email list, awaiting-V2.3 count, headcount-only adults | `lib/survey/{schedule,distributions,run,recipients,admin}.ts`, `app/api/cron/surveys`, Sanity webhook, `EventSurveyPanel` (event page → Survey tab) |
 | A2 participant + member on every response, backfill on account link, completion table | `survey_invitations/responses`, trigger `survey_follow_participant_member`, `lib/survey/member.ts` |
-| A3 stable keys + catalog, long-format view, CSV long/wide by survey/event/year, legacy import | `survey_answers_long`, `lib/survey/export.ts`, `/admin/surveys`, `scripts/survey-import-legacy.ts` + `docs/survey/legacy-mapping.md` |
+| A3 stable keys + catalog, long-format view, CSV long/wide by survey/event/year (legacy import dropped, see §5 item 4) | `survey_answers_long`, `lib/survey/export.ts`, `/admin/surveys` |
 | A4 branded landing page, post-submit credential/account CTA, dashboard card, My surveys, `opened_from` | `app/(public)/survey/[token]`, `components/survey/*`, `/community/surveys` |
 | P1 autosave (page change + 10 s), resume, reminder cadence, stop-reminders link + one-click header | `SurveyApp`, `lib/survey/schedule.ts#dueReminder`, `lib/survey/send.ts` |
 | P2 confirm before submit; DB-enforced immutability | `survey_responses_freeze`, `survey_answers_immutable`, `survey_submit_response()` |
@@ -94,7 +93,7 @@ Items marked **David** need his answer; none of them block the build.
 1. **V2.3 consent (resolved by #280, in production 3 Oct):** minors are invitable once they have a signed agreement with `agreement_version` 2.3+. For DocuSign-signed forms that needs `DOCUSIGN_AGREEMENT_VERSION` set and the V2.3 tab labels (open on the e-sign side). No template-labelling step remains.
 2. Sign off: intro wording (`lib/survey/definitions/post_event.v1.json` → `intro`), email copy (`lib/survey/emails.ts`), mentor/adult questions (D7). Then publish: `npm run survey:definition -- lib/survey/definitions/post_event.v1.json --publish` (add `--prod` on prod). Nothing is scheduled on prod until a definition is published.
 3. Prod: three migrations (`20261002235036`, `20261003002925`, and from the follow-ups branch `20261003020253` — the `deleted_at` backfill), env `SURVEY_TOKEN_SECRET` (32+ chars; else falls back to `ESIGN_TOKEN_SECRET`), optional `SURVEY_DAILY_EMAIL_BUDGET`.
-4. ~~Legacy import~~ **Decided 2 Oct: do not import the legacy Google Forms data.** `scripts/survey-import-legacy.ts` and `docs/survey/legacy-mapping.md` are not to be run.
+4. ~~Legacy import~~ **Decided 2 Oct: do not import the legacy Google Forms data.** The importer, its mapping and the mapping doc were removed on 6 Oct (#294). The schema still allows `source = 'legacy_import'` and `legacy_*` catalog keys (already in production); nothing writes them.
 5. Handover §13: teachers who registered but didn't attend are surveyed (default); `volunteer` → mentor path.
 6. Time zone is derived from state; add a Sanity `timeZone` field if that is ever wrong.
 

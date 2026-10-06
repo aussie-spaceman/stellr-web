@@ -30,9 +30,14 @@ const ANSWERS = {
  * session cookie on navigation, not on API calls, so a request made long
  * after sign-in (CI queues) arrives signed out.
  */
-async function refreshSession(page: Page) {
-  await page.goto('/admin/surveys')
-  await expect(page.getByRole('heading', { name: 'Surveys', exact: true })).toBeVisible()
+async function refreshSession(page: Page, as: 'admin' | 'member' = 'admin') {
+  if (as === 'admin') {
+    await page.goto('/admin/surveys')
+    await expect(page.getByRole('heading', { name: 'Surveys', exact: true })).toBeVisible()
+  } else {
+    await page.goto('/community/surveys')
+    await expect(page.getByRole('heading', { name: 'My surveys', exact: true })).toBeVisible()
+  }
 }
 
 async function expectAccessible(page: Page, step: string) {
@@ -141,6 +146,7 @@ test.describe('Post-event survey', () => {
     test('certificate gate: held until the survey is in, then downloads', async ({ page }) => {
       const number = issueSurveyCredential(slug)
       const pdf = `/api/credentials/${number}/pdf`
+      await refreshSession(page, 'member')
 
       // Gate off (the default): the certificate downloads.
       expect((await page.request.get(pdf, { headers: { accept: 'application/json' } })).status()).toBe(200)

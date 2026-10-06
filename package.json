@@ -43,7 +43,6 @@
     "fix:event-slug": "tsx scripts/fix-event-slug.ts",
     "survey:definition": "tsx scripts/survey-definition.ts",
     "survey:seed-dev": "tsx scripts/survey-seed-dev.ts",
-    "survey:import-legacy": "tsx scripts/survey-import-legacy.ts",
     "survey:retention": "tsx scripts/survey-retention.ts",
     "test": "vitest run",
     "test:watch": "vitest",

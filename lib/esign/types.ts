@@ -164,3 +164,6 @@ export class CorrectionRefusedError extends Error {
     this.code = code
   }
 }
+
+/** Prefix of the synthetic envelope_id on a row recording an issue that failed on every engine. */
+export const ISSUE_FAILED_PREFIX = 'failed:'

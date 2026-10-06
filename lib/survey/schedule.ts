@@ -65,6 +65,17 @@ export function lateOpenDeadline(lastDay: string, tz: string, now: Date): Date |
   return auto.getTime() <= now.getTime() && now.getTime() < autoClose.getTime() ? autoClose : null
 }
 
+/**
+ * A survey that hasn't started (scheduled or paused, nobody invited) follows
+ * the latest published version of its questions; once anyone is invited it
+ * keeps the version it opened with, so every answer in one survey was given to
+ * the same questions.
+ */
+export function shouldAdoptDefinition(d: { status: string; invitations: number; version: number }, latestVersion: number | null): boolean {
+  if (latestVersion === null || latestVersion <= d.version) return false
+  return (d.status === 'scheduled' || d.status === 'paused') && d.invitations === 0
+}
+
 export interface ScheduleState {
   status: DistributionStatus
   opens_at: string

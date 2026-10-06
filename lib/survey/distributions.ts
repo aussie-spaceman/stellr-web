@@ -6,7 +6,7 @@
 import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { normaliseDefinition, type SurveyDefinition } from './definition'
-import { autoOpensAt, checkManualOpensAt, effectiveStatus, lateOpenDeadline, reconcileWithEvent, type ScheduleState } from './schedule'
+import { autoOpensAt, checkManualOpensAt, effectiveStatus, lateOpenDeadline, reconcileWithEvent, shouldAdoptDefinition, type ScheduleState } from './schedule'
 import { localDate } from './timezone'
 import type { SurveyEvent } from './events'
 import { buildRecipientPlan, type Audience, type RecipientPlan } from './recipients'
@@ -126,9 +126,11 @@ export type EnsureResult =
  */
 export async function ensureDistribution(db: SupabaseClient, event: SurveyEvent, now = new Date()): Promise<EnsureResult> {
   if (event.isCampaign) return { action: 'skipped', reason: 'campaign' }
-  const existing = await distributionForEvent(db, event.slug)
+  let existing = await distributionForEvent(db, event.slug)
 
   if (existing) {
+    // A survey that hasn't started moves to the latest published questions.
+    existing = (await adoptLatestDefinition(db, existing)) ?? existing
     const patch = reconcileWithEvent(existing, { lastDay: event.lastDay, timeZone: event.timeZone, cancelled: event.cancelled })
     if (event.title && event.title !== existing.event_title) (patch as Record<string, unknown>).event_title = event.title
     if (!Object.keys(patch).length) return { action: 'unchanged', distribution: existing }
@@ -235,6 +237,44 @@ export async function openAfterEvent(
     data: { event: 'open_after_event', event_slug: event.slug, event_date: event.lastDay, after: row },
   })
   return { ok: true, distribution: created }
+}
+
+/**
+ * Move a survey that hasn't started onto the latest published definition (a
+ * new version published after it was scheduled: post_event v1.1, 6 Oct 2026).
+ * Returns the updated row, or null when nothing changed. Never throws: a
+ * failure leaves the survey on the version it had.
+ */
+async function adoptLatestDefinition(db: SupabaseClient, d: DistributionRow): Promise<DistributionRow | null> {
+  try {
+    if (d.status !== 'scheduled' && d.status !== 'paused') return null
+    const latest = await usableDefinition(db)
+    if (!latest || latest.id === d.definition_id) return null
+    const [{ data: current }, { count }] = await Promise.all([
+      db.from('survey_definitions').select('version').eq('id', d.definition_id).maybeSingle(),
+      db.from('survey_invitations').select('id', { count: 'exact', head: true }).eq('distribution_id', d.id),
+    ])
+    if (!shouldAdoptDefinition({ status: d.status, invitations: count ?? 0, version: (current?.version as number | undefined) ?? Infinity }, latest.version)) return null
+    const { data, error } = await db
+      .from('survey_distributions')
+      .update({ definition_id: latest.id })
+      .eq('id', d.id)
+      .eq('definition_id', d.definition_id)
+      .in('status', ['scheduled', 'paused'])
+      .select('*')
+    if (error || !data?.length) return null
+    await writeAudit(db, {
+      table: 'survey_distributions',
+      recordId: d.id,
+      action: 'UPDATE',
+      actor: 'system:definition-sync',
+      data: { event: 'definition_upgraded', event_slug: d.event_slug, before: { definition_id: d.definition_id, version: current?.version ?? null }, after: { definition_id: latest.id, version: latest.version } },
+    })
+    return data[0] as DistributionRow
+  } catch (err) {
+    console.error('[survey] adopting the latest definition failed:', err)
+    return null
+  }
 }
 
 // ── Admin / event-manager actions ────────────────────────────────────────────

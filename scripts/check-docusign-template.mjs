@@ -17,14 +17,20 @@ import fs from 'fs'
 // type: the DocuSign tab collection the field must live in. 'text' also
 // accepts DocuSign's other free-text kinds; a 'date' tab is rejected because
 // its validation refuses the DD-MMM-YYYY value the app sends.
+// Participation Agreements V2.3 (2 Oct 2026).
 const CONTRACT = {
   minor: {
     roles: ['Guardian', 'Minor'],
     tabs: [
       { label: 'GuardianPhone',           role: 'Guardian', type: 'text' },
       { label: 'MinorRelationship',       role: 'Guardian', type: 'text' },
-      { label: 'CredentialSharingOptOut', role: 'Guardian', type: 'checkbox', unticked: true, optional: true },
+      { label: 'CredentialSharingOptOut', role: 'Guardian', type: 'checkbox', unticked: true },
+      { label: 'MediaOptOut',             role: 'Guardian', type: 'checkbox', unticked: true },
+      { label: 'QuoteOptOut',             role: 'Guardian', type: 'checkbox', unticked: true },
+      { label: 'DigitalCommsOptOut',      role: 'Guardian', type: 'checkbox', unticked: true },
       { label: 'MinorDateOfBirth',        role: 'Minor',    type: 'text' },
+      { label: 'MinorEmail',              role: 'Minor',    type: 'text' },
+      { label: 'MinorGrade',              role: 'Minor',    type: 'text' },
       { label: 'SchoolName',              role: 'Minor',    type: 'text' },
       { label: 'SchoolState',             role: 'Minor',    type: 'text' },
     ],
@@ -38,8 +44,11 @@ const CONTRACT = {
   },
   mentor: {
     roles: ['Mentor', 'StellrRepresentative'],
+    // V2.3 prints no mentor phone line; the emergency contact is prefilled.
     tabs: [
-      { label: 'MentorPhone', role: 'Mentor', type: 'text' },
+      { label: 'EmergencyContactName',  role: 'Mentor', type: 'text' },
+      { label: 'EmergencyContactPhone', role: 'Mentor', type: 'text' },
+      { label: 'MediaOptOut',           role: 'Mentor', type: 'checkbox', unticked: true },
     ],
   },
 }

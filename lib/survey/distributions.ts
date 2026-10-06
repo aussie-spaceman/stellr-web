@@ -6,7 +6,7 @@
 import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { normaliseDefinition, type SurveyDefinition } from './definition'
-import { autoOpensAt, checkManualOpensAt, effectiveStatus, reconcileWithEvent, type ScheduleState } from './schedule'
+import { autoOpensAt, checkManualOpensAt, effectiveStatus, lateOpenDeadline, reconcileWithEvent, type ScheduleState } from './schedule'
 import { localDate } from './timezone'
 import type { SurveyEvent } from './events'
 import { buildRecipientPlan, type Audience, type RecipientPlan } from './recipients'
@@ -31,6 +31,9 @@ export interface DistributionRow extends ScheduleState {
   closed_at: string | null
   closed_by: string | null
   gate_certificate: boolean
+  minor_agreement_override: boolean
+  minor_agreement_override_set_by: string | null
+  minor_agreement_override_set_at: string | null
   last_run_at: string | null
   created_at: string
 }
@@ -175,6 +178,65 @@ export async function ensureDistribution(db: SupabaseClient, event: SurveyEvent,
   return { action: 'created', distribution: row }
 }
 
+/**
+ * Open a survey for an event that has already ended without one (it ran
+ * before a survey definition was published). Admins only (the route checks).
+ * Opens now, recorded as a manual go-live, and closes 30 days from now
+ * (trigger). Allowed while the event's automatic window would still be open.
+ */
+export async function openAfterEvent(
+  db: SupabaseClient,
+  event: SurveyEvent,
+  opts: { acceptOlderMinorAgreements: boolean },
+  actor: Actor,
+  now = new Date(),
+): Promise<ActionResult> {
+  if (event.isCampaign) return { ok: false, status: 400, error: 'Campaigns don’t have post-event surveys.' }
+  if (event.cancelled) return { ok: false, status: 409, error: 'The event is marked cancelled in Sanity.' }
+  if (!event.lastDay) return { ok: false, status: 400, error: 'The event has no date.' }
+  if (await distributionForEvent(db, event.slug)) return { ok: false, status: 409, error: 'This event already has a survey. Reload the page.' }
+  if (!lateOpenDeadline(event.lastDay, event.timeZone, now)) {
+    return { ok: false, status: 409, error: 'A survey can be opened after the event only within 30 days of its last day.' }
+  }
+  const def = await usableDefinition(db)
+  if (!def) return { ok: false, status: 409, error: 'No survey definition is published.' }
+
+  const iso = now.toISOString()
+  const row = {
+    definition_id: def.id,
+    event_slug: event.slug,
+    event_title: event.title,
+    event_date: event.lastDay,
+    event_time_zone: event.timeZone,
+    opens_at: iso,
+    closes_at: iso, // replaced by the trigger: opens_at + 30 days
+    opens_at_source: 'manual',
+    opened_by: actor.memberId,
+    opened_by_label: actor.label,
+    opens_at_set_at: iso,
+    opened_at: iso,
+    status: 'open',
+    minor_agreement_override: opts.acceptOlderMinorAgreements,
+    minor_agreement_override_set_by: opts.acceptOlderMinorAgreements ? actor.label : null,
+    minor_agreement_override_set_at: opts.acceptOlderMinorAgreements ? iso : null,
+  }
+  const { data, error } = await db
+    .from('survey_distributions')
+    .upsert(row, { onConflict: 'event_slug,definition_id', ignoreDuplicates: true })
+    .select('*')
+  if (error) return { ok: false, status: 500, error: error.message }
+  if (!data?.length) return { ok: false, status: 409, error: 'This event already has a survey. Reload the page.' }
+  const created = data[0] as DistributionRow
+  await writeAudit(db, {
+    table: 'survey_distributions',
+    recordId: created.id,
+    action: 'INSERT',
+    actor: actor.label,
+    data: { event: 'open_after_event', event_slug: event.slug, event_date: event.lastDay, after: row },
+  })
+  return { ok: true, distribution: created }
+}
+
 // ── Admin / event-manager actions ────────────────────────────────────────────
 
 export interface Actor {
@@ -279,6 +341,24 @@ export async function resumeDistribution(db: SupabaseClient, d: DistributionRow,
   return patchDistribution(db, d, { status: 'scheduled', paused_at: null, schedule_flag: d.schedule_flag === 'event_cancelled' ? 'event_cancelled' : d.schedule_flag }, actor, 'resume', ['paused'])
 }
 
+/**
+ * Accept (or stop accepting) minor agreements signed before V2.3 for this
+ * event's invitations (admin decision, David 6 Oct 2026). Widens who is
+ * invited from the next run on; turning it off invites nobody new but does not
+ * withdraw invitations already sent. Quoting still needs V2.3.
+ */
+export async function setMinorAgreementOverride(db: SupabaseClient, d: DistributionRow, on: boolean, actor: Actor, now = new Date()): Promise<ActionResult> {
+  if (d.status === 'closed') return { ok: false, status: 409, error: 'This survey is closed.' }
+  return patchDistribution(
+    db,
+    d,
+    { minor_agreement_override: on, minor_agreement_override_set_by: actor.label, minor_agreement_override_set_at: now.toISOString() },
+    actor,
+    on ? 'minor_agreement_override_on' : 'minor_agreement_override_off',
+    ['scheduled', 'open', 'paused'],
+  )
+}
+
 export async function closeEarly(db: SupabaseClient, d: DistributionRow, actor: Actor, now = new Date()): Promise<ActionResult> {
   if (d.status === 'closed') return { ok: false, status: 409, error: 'This survey is already closed.' }
   return patchDistribution(db, d, { status: 'closed', closed_at: now.toISOString(), closed_by: actor.label }, actor, 'close_early', ['scheduled', 'open', 'paused'])
@@ -373,7 +453,7 @@ export async function materialiseInvitations(db: SupabaseClient, d: Distribution
 
 /** Recipient plan for a distribution (the preview and the go-live job share it). */
 export function planFor(db: SupabaseClient, d: DistributionRow): Promise<RecipientPlan> {
-  return buildRecipientPlan(db, d.event_slug, d.event_date, d.audiences)
+  return buildRecipientPlan(db, d.event_slug, d.event_date, d.audiences, { acceptOlderMinorAgreements: d.minor_agreement_override })
 }
 
 /** Definition JSON → version row, publishing it if asked (scripts/survey-definition.ts). */

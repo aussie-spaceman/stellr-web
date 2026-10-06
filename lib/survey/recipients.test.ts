@@ -67,6 +67,48 @@ describe('planRecipients', () => {
     ])
   })
 
+  it('invites minors with a pre-V2.3 agreement only when the event override is on', () => {
+    const people = [
+      person({ participantId: 'p1', email: 'a@example.com' }),
+      person({ participantId: 'p2', email: 'b@example.com', firstName: 'Bo' }),
+      person({ participantId: 'p3', email: 'c@example.com', firstName: 'Cy' }),
+      person({ participantId: 'p4', email: 'd@example.com', firstName: 'Di' }),
+    ]
+    const consents = new Map([
+      ['participant:p1', v23()],
+      ['participant:p2', v23({ agreementId: 'a2', agreementVersion: null, coversSurveys: false })],
+      ['participant:p4', v23({ agreementId: 'a4', agreementVersion: null, coversSurveys: false, restricted: true })],
+    ])
+    const off = planRecipients(people, consents, [...all], DAY)
+    expect(off.invitable.map((i) => i.participantId)).toEqual(['p1'])
+    expect(off.olderAgreementAccepted).toBe(0)
+
+    const on = planRecipients(people, consents, [...all], DAY, 0, { acceptOlderMinorAgreements: true })
+    expect(on.invitable.map((i) => i.participantId).sort()).toEqual(['p1', 'p2'])
+    expect(on.olderAgreementAccepted).toBe(1)
+    // No agreement, or a withdrawn one, still holds the minor back.
+    expect(on.awaitingConsent.map((a) => [a.participantId, a.reason])).toEqual([
+      ['p3', 'no_agreement'],
+      ['p4', 'restricted'],
+    ])
+  })
+
+  it('never makes a pre-V2.3 agreement quotable', () => {
+    const facts: QuoteFacts = {
+      isMinor: true,
+      age: 16,
+      state: 'CO',
+      agreementVersion: null,
+      agreementRestricted: false,
+      parentQuoteOptOut: false,
+      studentAllowQuotes: true,
+      noQuote: false,
+      quoteConsent: null,
+      withdrawn: false,
+    }
+    expect(quoteEligibility(facts).eligible).toBe(false)
+  })
+
   it('sends a minor\'s invitation to the guardian alone after a §4 opt-out', () => {
     const plan = planRecipients(
       [person({ participantId: 'p1', email: 'kid@example.com' })],

@@ -9,13 +9,16 @@ import {
   closeEarly,
   distributionForEvent,
   loadDefinition,
+  openAfterEvent,
   pauseDistribution,
   resetGoLive,
   resumeDistribution,
   setAudiences,
   setEarlierGoLive,
+  setMinorAgreementOverride,
   type Actor,
 } from '@/lib/survey/distributions'
+import { loadSurveyEvent } from '@/lib/survey/events'
 import { runOne } from '@/lib/survey/run'
 import { resendInvitation, type InvitationRow } from '@/lib/survey/send'
 
@@ -25,6 +28,8 @@ import { resendInvitation, type InvitationRow } from '@/lib/survey/send'
 //   POST { action, … } → send_now | set_go_live {at} | reset_go_live | pause |
 //        resume | close | audiences {audiences} | resend {invitationId} |
 //        gate_certificate {on}
+//        Admins only: open_after_event {acceptOlderMinorAgreements} (an event
+//        that ended without a survey) | minor_agreement_override {on}
 // Every change is written to audit_log; viewing the table to survey_access_log.
 
 type Ctx = { params: Promise<{ slug: string }> }
@@ -52,6 +57,8 @@ const Body = z.discriminatedUnion('action', [
   z.object({ action: z.literal('audiences'), audiences: z.array(z.enum(['student', 'mentor', 'adult'])).min(1) }),
   z.object({ action: z.literal('resend'), invitationId: z.string().uuid() }),
   z.object({ action: z.literal('gate_certificate'), on: z.boolean() }),
+  z.object({ action: z.literal('open_after_event'), acceptOlderMinorAgreements: z.boolean() }),
+  z.object({ action: z.literal('minor_agreement_override'), on: z.boolean() }),
 ])
 
 export async function POST(req: Request, { params }: Ctx) {
@@ -63,10 +70,26 @@ export async function POST(req: Request, { params }: Ctx) {
   const body = parsed.data
 
   const db = supabaseServer()
-  const d = await distributionForEvent(db, slug)
-  if (!d) return NextResponse.json({ error: 'This event has no survey yet.' }, { status: 404 })
   const me = await getSignedInMember().catch(() => null)
   const actor: Actor = { memberId: me?.id ?? null, label: access.userId }
+
+  if (body.action === 'open_after_event') {
+    if (!access.isAdmin) return NextResponse.json({ error: 'Admins only.' }, { status: 403 })
+    const event = await loadSurveyEvent(slug)
+    if (!event) return NextResponse.json({ error: 'Event not found.' }, { status: 404 })
+    const r = await openAfterEvent(db, event, { acceptOlderMinorAgreements: body.acceptOlderMinorAgreements }, actor)
+    if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
+    try {
+      const run = await runOne(db, r.distribution.id)
+      return NextResponse.json({ ok: true, run })
+    } catch (err) {
+      // Open regardless; the cron sends whatever this pass could not.
+      return NextResponse.json({ ok: true, warning: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
+  const d = await distributionForEvent(db, slug)
+  if (!d) return NextResponse.json({ error: 'This event has no survey yet.' }, { status: 404 })
 
   switch (body.action) {
     case 'send_now': {
@@ -109,6 +132,11 @@ export async function POST(req: Request, { params }: Ctx) {
       await db.from('survey_distributions').update({ gate_certificate: body.on }).eq('id', d.id)
       await writeAudit(db, { table: 'survey_distributions', recordId: d.id, action: 'UPDATE', actor: actor.label, data: { event: 'gate_certificate', on: body.on } })
       return NextResponse.json({ ok: true })
+    }
+    case 'minor_agreement_override': {
+      if (!access.isAdmin) return NextResponse.json({ error: 'Admins only.' }, { status: 403 })
+      const r = await setMinorAgreementOverride(db, d, body.on, actor)
+      return r.ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: r.error }, { status: r.status })
     }
     case 'resend': {
       const { data: inv } = await db.from('survey_invitations').select('*').eq('id', body.invitationId).eq('distribution_id', d.id).maybeSingle()

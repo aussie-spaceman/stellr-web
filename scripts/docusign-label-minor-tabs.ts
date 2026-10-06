@@ -9,15 +9,18 @@
  * ("Text 831ad02b-…") and every prefilled field arrives blank. The API can
  * still set them.
  *
- * Fields are found by role, page and vertical position — the printed line on
- * Participation Agreement - Minors V2-2, page 4 (and the page 3 credential
- * opt-out) — not by their auto-generated labels, which change on every edit.
- * Each target must match exactly one field or nothing is changed.
+ * Fields are found by role, page and vertical position on the Participation
+ * Agreements V2.3 (2 Oct 2026), as DocuSign lays them out — not by their
+ * auto-generated labels, which change on every edit. Each target must match
+ * exactly one field or nothing is changed. `--list` prints every field with
+ * its position, which is where these positions came from (6 Oct 2026).
  *
- *   npx tsx scripts/docusign-label-minor-tabs.ts                    # dry run, .env.local account
- *   npx tsx scripts/docusign-label-minor-tabs.ts --apply
- *   npx tsx scripts/docusign-label-minor-tabs.ts --env-file .env.docusign-prod --apply
- *   npx tsx scripts/docusign-label-minor-tabs.ts --template <guid>  # a different template
+ *   npx tsx scripts/docusign-label-minor-tabs.ts --list                       # every field, changes nothing
+ *   npx tsx scripts/docusign-label-minor-tabs.ts                              # dry run, minor template
+ *   npx tsx scripts/docusign-label-minor-tabs.ts --doc mentor                 # dry run, mentor template (or --doc adult)
+ *   npx tsx scripts/docusign-label-minor-tabs.ts --env-file .env.docusign-prod.local --apply
+ *   npx tsx scripts/docusign-label-minor-tabs.ts --template <guid>            # a different template
+ *   npx tsx scripts/docusign-label-minor-tabs.ts --doc mentor --dump m.json   # the template JSON, for the checker
  *
  * Then download the template JSON and run scripts/check-docusign-template.mjs.
  */
@@ -41,21 +44,66 @@ const ENV = {
   userId:    process.env.DOCUSIGN_USER_ID ?? '',
   privateKey: (process.env.DOCUSIGN_PRIVATE_KEY ?? '').replace(/\\n/g, '\n'),
 }
-const TEMPLATE_ID = arg('--template') ?? process.env.DOCUSIGN_TEMPLATE_ID ?? ''
+type Doc = 'minor' | 'mentor' | 'adult'
+const DOC = (arg('--doc') ?? 'minor') as Doc
+const TEMPLATE_ID = arg('--template')
+  ?? { minor: process.env.DOCUSIGN_TEMPLATE_ID, mentor: process.env.DOCUSIGN_MENTOR_TEMPLATE_ID, adult: process.env.DOCUSIGN_ADULT_TEMPLATE_ID }[DOC]
+  ?? ''
 
 // kinds: the tab collections a match may come from. A dateTabs match is
 // replaced by a text tab — the date field's MM/DD/YYYY validation refuses the
 // DD-MMM-YYYY value the form prints and the app sends.
-interface Target { label: string; role: 'Guardian' | 'Minor'; page: number; y: number; kinds: string[] }
-const TARGETS: Target[] = [
-  { label: 'MinorDateOfBirth',        role: 'Minor',    page: 4, y: 271, kinds: ['textTabs', 'dateTabs'] },
-  { label: 'SchoolName',              role: 'Minor',    page: 4, y: 306, kinds: ['textTabs'] },
-  { label: 'SchoolState',             role: 'Minor',    page: 4, y: 338, kinds: ['textTabs'] },  // "State of Residence"
-  { label: 'MinorRelationship',       role: 'Guardian', page: 4, y: 444, kinds: ['textTabs'] },
-  { label: 'GuardianEmail',           role: 'Guardian', page: 4, y: 480, kinds: ['emailAddressTabs'] },
-  { label: 'GuardianPhone',           role: 'Guardian', page: 4, y: 509, kinds: ['textTabs'] },
-  { label: 'CredentialSharingOptOut', role: 'Guardian', page: 3, y: 214, kinds: ['checkboxTabs'] },
-]
+// required: set the field's Required flag too (omitted: left as it is).
+interface Target { label: string; role: string; page: number; y: number; kinds: string[]; required?: boolean }
+const TARGET_SETS: Record<Doc, Target[]> = {
+  // Participation Agreement — Student / Minor, V2.3.
+  minor: [
+    { label: 'MediaOptOut',             role: 'Guardian', page: 4, y: 128, kinds: ['checkboxTabs'] },
+    { label: 'QuoteOptOut',             role: 'Guardian', page: 4, y: 371, kinds: ['checkboxTabs'] },
+    { label: 'CredentialSharingOptOut', role: 'Guardian', page: 5, y: 135, kinds: ['checkboxTabs'] },
+    { label: 'DigitalCommsOptOut',      role: 'Guardian', page: 5, y: 302, kinds: ['checkboxTabs'] },
+    { label: 'MinorDateOfBirth',        role: 'Minor',    page: 8, y: 359, kinds: ['textTabs', 'dateTabs'] },
+    { label: 'MinorEmail',              role: 'Minor',    page: 8, y: 376, kinds: ['textTabs'] },
+    { label: 'SchoolName',              role: 'Minor',    page: 8, y: 394, kinds: ['textTabs'] },
+    { label: 'MinorGrade',              role: 'Minor',    page: 8, y: 412, kinds: ['textTabs'] },
+    { label: 'SchoolState',             role: 'Minor',    page: 8, y: 429, kinds: ['textTabs'] },  // "State of residence"
+    { label: 'MinorRelationship',       role: 'Guardian', page: 8, y: 483, kinds: ['textTabs'] },
+    { label: 'GuardianEmail',           role: 'Guardian', page: 8, y: 505, kinds: ['emailAddressTabs'] },
+    { label: 'GuardianPhone',           role: 'Guardian', page: 8, y: 520, kinds: ['textTabs'] },
+    // "(if different)": the parent may leave both blank.
+    { label: 'EmergencyContactName',    role: 'Guardian', page: 8, y: 539, kinds: ['textTabs'], required: false },
+    { label: 'EmergencyContactPhone',   role: 'Guardian', page: 8, y: 555, kinds: ['textTabs'], required: false },
+  ],
+  // Mentor and Volunteer Agreement, V2.3.
+  mentor: [
+    { label: 'MentorAddress',           role: 'Mentor', page: 1, y: 211, kinds: ['textTabs'] },
+    { label: 'MediaOptOut',             role: 'Mentor', page: 4, y: 294, kinds: ['checkboxTabs'] },
+    { label: 'EmergencyContactName',    role: 'Mentor', page: 4, y: 520, kinds: ['textTabs'] },
+    { label: 'EmergencyContactPhone',   role: 'Mentor', page: 4, y: 539, kinds: ['textTabs'] },
+  ],
+  // Participation Agreement — Educator / Chaperone, V2.3.
+  adult: [
+    { label: 'MediaOptOut',             role: 'Adult', page: 3, y: 364, kinds: ['checkboxTabs'] },
+    { label: 'TeacherPhone',            role: 'Adult', page: 4, y: 298, kinds: ['textTabs'] },
+    { label: 'SchoolName',              role: 'Adult', page: 4, y: 315, kinds: ['textTabs'] },
+  ],
+}
+const TARGETS = TARGET_SETS[DOC]
+
+// Fields to delete. A Mentor under the age of majority always signs on Stellr
+// signing (lib/esign/issue.ts), so on DocuSign the parent block must stay
+// empty; fields there for the Mentor role would make every adult fill it in.
+interface Removal { what: string; role: string; page: number; y: number; kind: string }
+const REMOVAL_SETS: Record<Doc, Removal[]> = {
+  minor: [],
+  adult: [],
+  mentor: [
+    { what: 'parent block: full name',  role: 'Mentor', page: 4, y: 573, kind: 'textTabs' },
+    { what: 'parent block: signature',  role: 'Mentor', page: 4, y: 593, kind: 'textTabs' },
+    { what: 'parent block: date',       role: 'Mentor', page: 4, y: 593, kind: 'dateSignedTabs' },
+  ],
+}
+const REMOVALS = REMOVAL_SETS[DOC]
 const Y_TOLERANCE = 12
 
 type Tab = Record<string, string | undefined> & { tabId: string; tabLabel?: string }
@@ -104,11 +152,33 @@ async function main() {
     process.exit(1)
   }
   console.log(`Environment: ${ENV.basePath.includes('demo.docusign.net') ? 'SANDBOX / DEMO' : 'PRODUCTION'}`)
-  console.log(`Template:    ${TEMPLATE_ID}`)
+  console.log(`Template:    ${TEMPLATE_ID} (${DOC})`)
   console.log(`Mode:        ${APPLY ? 'APPLY' : 'dry run (pass --apply to change the template)'}\n`)
 
   const token = await getToken()
   const { signers = [] } = await api(token, '/recipients?include_tabs=true') as { signers?: Signer[] }
+
+  // --dump <file>: the template as JSON, for scripts/check-docusign-template.mjs.
+  const dump = arg('--dump')
+  if (dump) {
+    const fs = await import('fs')
+    fs.writeFileSync(dump, JSON.stringify(await api(token, '?include=recipients,tabs'), null, 2))
+    console.log(`Wrote ${dump}`)
+    return
+  }
+
+  // --list: every field on the template, by role, page and position, so the
+  // TARGETS for a new layout can be read off rather than guessed.
+  if (process.argv.includes('--list')) {
+    for (const s of signers) {
+      console.log(`\nRole "${s.roleName}" (recipient ${s.recipientId})`)
+      const rows = Object.entries(s.tabs ?? {}).flatMap(([kind, tabs]) =>
+        (tabs ?? []).map((tab) => ({ kind, page: Number(tab.pageNumber), y: Number(tab.yPosition), x: Number(tab.xPosition), label: tab.tabLabel ?? '', required: tab.required })))
+      rows.sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x)
+      for (const r of rows) console.log(`  p${r.page} y${String(r.y).padStart(4)} x${String(r.x).padStart(4)}  ${r.kind.padEnd(18)} ${r.label}${r.required === 'true' ? '  (required)' : ''}`)
+    }
+    return
+  }
 
   // Resolve every target first; change nothing unless all resolve cleanly.
   const plan: { t: Target; signer: Signer; kind: string; tab: Tab }[] = []
@@ -125,9 +195,17 @@ async function main() {
     }
     plan.push({ t, signer, ...hits[0] })
   }
+  const removals: { r: Removal; signer: Signer; tab: Tab }[] = []
+  for (const r of REMOVALS) {
+    const signer = signers.find((s) => s.roleName === r.role)
+    const hits = (signer?.tabs?.[r.kind] ?? []).filter((tab) =>
+      Number(tab.pageNumber) === r.page && Math.abs(Number(tab.yPosition) - r.y) <= Y_TOLERANCE)
+    if (!signer || hits.length > 1) { errors.push(`remove ${r.what}: expected at most 1 ${r.kind} for ${r.role} on page ${r.page} near y=${r.y}, found ${hits.length}`); continue }
+    if (hits.length === 1) removals.push({ r, signer, tab: hits[0] })
+  }
   if (errors.length) {
     for (const e of errors) console.log(`❌ ${e}`)
-    console.log('\nNothing changed. The template layout differs from V2-2 — update TARGETS.')
+    console.log('\nNothing changed. The template layout differs from what TARGETS expect: run --list and update them.')
     process.exit(1)
   }
 
@@ -136,12 +214,14 @@ async function main() {
     const replace = kind === 'dateTabs'
     const needsLabel = tab.tabLabel !== t.label
     const needsClear = kind === 'textTabs' && !!tab.value
-    if (!replace && !needsLabel && !needsClear) { console.log(`✓ ${t.label} already correct`); continue }
+    const needsRequired = t.required !== undefined && String(t.required) !== String(tab.required)
+    if (!replace && !needsLabel && !needsClear && !needsRequired) { console.log(`✓ ${t.label} already correct`); continue }
     changes++
     const what = [
       replace ? 'replace Date field with a Text field' : null,
       needsLabel ? `label "${tab.tabLabel}" → "${t.label}"` : null,
       needsClear || (replace && tab.value) ? `clear default text "${tab.value}"` : null,
+      needsRequired ? `required ${tab.required} → ${t.required}` : null,
     ].filter(Boolean).join('; ')
     console.log(`${APPLY ? '→' : '•'} ${t.label} (${t.role}, p${t.page}, y ${tab.yPosition}): ${what}`)
     if (!APPLY) continue
@@ -163,15 +243,26 @@ async function main() {
       })
     } else {
       const patch: Record<string, string> = { tabId: tab.tabId, tabLabel: t.label }
+      if (t.required !== undefined) patch.required = String(t.required)
       if (kind === 'textTabs') patch.value = ''
       if (kind === 'checkboxTabs') patch.name = t.label
       await api(token, `/recipients/${rid}/tabs`, { method: 'PUT', body: JSON.stringify({ [kind]: [patch] }) })
     }
   }
 
+  for (const { r, signer, tab } of removals) {
+    changes++
+    console.log(`${APPLY ? '→' : '•'} delete ${r.what} (${r.role}, p${r.page}, y ${tab.yPosition}, ${r.kind} "${tab.tabLabel}")`)
+    if (!APPLY) continue
+    await api(token, `/recipients/${signer.recipientId}/tabs`, {
+      method: 'DELETE',
+      body: JSON.stringify({ [r.kind]: [{ tabId: tab.tabId }] }),
+    })
+  }
+
   console.log(changes === 0
     ? '\nNothing to change.'
-    : APPLY ? `\n✅ ${changes} field(s) updated. Download the template JSON and run scripts/check-docusign-template.mjs minor <file>.`
+    : APPLY ? `\n✅ ${changes} field(s) updated. Download the template JSON and run scripts/check-docusign-template.mjs ${DOC} <file>.`
             : `\n${changes} field(s) would change. Re-run with --apply.`)
 }
 

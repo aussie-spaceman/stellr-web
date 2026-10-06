@@ -34,7 +34,7 @@ export interface AdminSurveyView {
   autoOpensAt: string | null
   /** Why there is no distribution, when there isn't one. */
   reason: string | null
-  definition: { key: string; version: number; status: string } | null
+  definition: { key: string; version: number; versionLabel: string | null; status: string } | null
   preview: {
     byRole: Record<'student' | 'mentor' | 'adult', number>
     invitable: number
@@ -96,7 +96,7 @@ export async function adminSurveyView(db: SupabaseClient, slug: string, now = ne
     return { distribution: null, status: null, autoOpensAt: null, reason: reason ?? 'not scheduled', definition: null, preview: null, lateOpen, totals: empty, rows: [] }
   }
 
-  const { data: defRow } = await db.from('survey_definitions').select('key, version, status').eq('id', d.definition_id).maybeSingle()
+  const { data: defRow } = await db.from('survey_definitions').select('key, version, status, version_label:definition->>version_label').eq('id', d.definition_id).maybeSingle()
   const status = statusNow(d, now)
 
   const plan = await planFor(db, d)
@@ -179,7 +179,7 @@ export async function adminSurveyView(db: SupabaseClient, slug: string, now = ne
     status,
     autoOpensAt: autoOpensAt(d.event_date, d.event_time_zone).toISOString(),
     reason: null,
-    definition: defRow ? { key: defRow.key as string, version: defRow.version as number, status: defRow.status as string } : null,
+    definition: defRow ? { key: defRow.key as string, version: defRow.version as number, versionLabel: (defRow.version_label as string | null) ?? null, status: defRow.status as string } : null,
     preview,
     lateOpen: null,
     totals,

@@ -7,6 +7,7 @@ import {
   effectiveStatus,
   eventLastDay,
   lateOpenDeadline,
+  shouldAdoptDefinition,
   reconcileWithEvent,
   type CadenceInvitation,
   type ScheduleState,
@@ -154,6 +155,22 @@ describe('reminder cadence', () => {
     expect(dueReminder(inv({ status: 'started', resume_reminder_count: 1, last_reminder_at: at(6.1).toISOString() }), dist, at(7), at(4).toISOString())).toBeNull()
     expect(dueReminder(inv({ status: 'started', resume_reminder_count: 1, last_reminder_at: at(6.1).toISOString() }), dist, at(8.2), at(4).toISOString())).toBe('resume')
     expect(dueReminder(inv({ status: 'started', resume_reminder_count: 2 }), dist, at(20), at(4).toISOString())).toBeNull()
+  })
+})
+
+describe('following a newer survey version', () => {
+  it('moves a survey nobody has been invited to', () => {
+    expect(shouldAdoptDefinition({ status: 'scheduled', invitations: 0, version: 1 }, 2)).toBe(true)
+    expect(shouldAdoptDefinition({ status: 'paused', invitations: 0, version: 1 }, 2)).toBe(true)
+  })
+
+  it('keeps the version once a survey has started, or when nothing newer exists', () => {
+    expect(shouldAdoptDefinition({ status: 'open', invitations: 0, version: 1 }, 2)).toBe(false)
+    expect(shouldAdoptDefinition({ status: 'closed', invitations: 0, version: 1 }, 2)).toBe(false)
+    expect(shouldAdoptDefinition({ status: 'scheduled', invitations: 3, version: 1 }, 2)).toBe(false)
+    expect(shouldAdoptDefinition({ status: 'scheduled', invitations: 0, version: 2 }, 2)).toBe(false)
+    expect(shouldAdoptDefinition({ status: 'scheduled', invitations: 0, version: 2 }, 1)).toBe(false)
+    expect(shouldAdoptDefinition({ status: 'scheduled', invitations: 0, version: 1 }, null)).toBe(false)
   })
 })
 

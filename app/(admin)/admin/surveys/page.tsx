@@ -9,7 +9,7 @@ import { logSurveyAccess } from '@/lib/survey/audit'
 import { formatInZone } from '@/lib/survey/timezone'
 import { WithdrawQuoteForm } from '@/components/admin/surveys/WithdrawQuoteForm'
 import { usableDefinition } from '@/lib/survey/distributions'
-import { normaliseDefinition, questionsFor, ROLES } from '@/lib/survey/definition'
+import { normaliseDefinition, questionsFor, ROLES, versionName } from '@/lib/survey/definition'
 
 // /admin/surveys — every event's post-event survey, the fundraising headline
 // numbers (handover §8) filterable by event and year, the exports (A3) and
@@ -38,7 +38,7 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
   const db = supabaseServer()
   const { data: dists } = await db
     .from('survey_distributions')
-    .select('id, definition_id, event_slug, event_title, event_date, event_time_zone, status, opens_at, closes_at, survey_definitions(key, version)')
+    .select('id, definition_id, event_slug, event_title, event_date, event_time_zone, status, opens_at, closes_at, survey_definitions(key, version, version_label:definition->>version_label)')
     .order('event_date', { ascending: false })
   const distributions = (dists ?? []) as unknown as {
     id: string
@@ -50,7 +50,7 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
     status: string
     opens_at: string
     closes_at: string
-    survey_definitions: { key: string; version: number } | null
+    survey_definitions: { key: string; version: number; version_label: string | null } | null
   }[]
 
   // Invitation counts by event and role (response rates).
@@ -195,7 +195,7 @@ export default async function AdminSurveysPage({ searchParams }: { searchParams:
                   <td className="px-3 py-2 text-xs text-brand-muted-soft">
                     {d.survey_definitions ? (
                       <Link className="text-brand-blue hover:underline" href={`/admin/surveys/questions?id=${d.definition_id}`}>
-                        {d.survey_definitions.key} v{d.survey_definitions.version}
+                        {d.survey_definitions.key} {versionName(d.survey_definitions.version, d.survey_definitions.version_label)}
                       </Link>
                     ) : (
                       '—'

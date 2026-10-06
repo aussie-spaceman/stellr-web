@@ -57,7 +57,6 @@ Items marked **David** need his answer; none of them block the build.
 | Member | dashboard card, `/community/surveys`, account privacy toggles |
 | Admin | event tab "Survey", `/admin/surveys` (stats, exports, quotes) |
 | Analysis | view `survey_answers_long`, `lib/survey/analytics.ts`, CSV exports |
-| Legacy import | `scripts/survey-import-legacy.ts`, `docs/survey/legacy-mapping.md` |
 | Deletion | `lib/deletion/execute.ts`, runbook Part B, retention schedule |
 
 ## 4. Rollout
@@ -74,7 +73,7 @@ Items marked **David** need his answer; none of them block the build.
 |---|---|
 | A1 auto schedule, go-live on last day 00:00 event-local, close +30 d, earlier go-live / send now (admin + assigned event manager), reschedule on date change, flag manual overrides, pause, close early, audiences, resend, late participants, preview incl. no-email list, awaiting-V2.3 count, headcount-only adults | `lib/survey/{schedule,distributions,run,recipients,admin}.ts`, `app/api/cron/surveys`, Sanity webhook, `EventSurveyPanel` (event page → Survey tab) |
 | A2 participant + member on every response, backfill on account link, completion table | `survey_invitations/responses`, trigger `survey_follow_participant_member`, `lib/survey/member.ts` |
-| A3 stable keys + catalog, long-format view, CSV long/wide by survey/event/year, legacy import | `survey_answers_long`, `lib/survey/export.ts`, `/admin/surveys`, `scripts/survey-import-legacy.ts` + `docs/survey/legacy-mapping.md` |
+| A3 stable keys + catalog, long-format view, CSV long/wide by survey/event/year (legacy import dropped, see §5 item 4) | `survey_answers_long`, `lib/survey/export.ts`, `/admin/surveys` |
 | A4 branded landing page, post-submit credential/account CTA, dashboard card, My surveys, `opened_from` | `app/(public)/survey/[token]`, `components/survey/*`, `/community/surveys` |
 | P1 autosave (page change + 10 s), resume, reminder cadence, stop-reminders link + one-click header | `SurveyApp`, `lib/survey/schedule.ts#dueReminder`, `lib/survey/send.ts` |
 | P2 confirm before submit; DB-enforced immutability | `survey_responses_freeze`, `survey_answers_immutable`, `survey_submit_response()` |
@@ -93,8 +92,8 @@ Items marked **David** need his answer; none of them block the build.
 ### Open — for David
 1. **V2.3 consent (resolved by #280, in production 3 Oct):** minors are invitable once they have a signed agreement with `agreement_version` 2.3+. For DocuSign-signed forms that needs `DOCUSIGN_AGREEMENT_VERSION` set and the V2.3 tab labels (open on the e-sign side). No template-labelling step remains.
 2. Sign off: intro wording (`lib/survey/definitions/post_event.v1.json` → `intro`), email copy (`lib/survey/emails.ts`), mentor/adult questions (D7). Then publish: `npm run survey:definition -- lib/survey/definitions/post_event.v1.json --publish` (add `--prod` on prod). Nothing is scheduled on prod until a definition is published.
-3. Prod: two migrations (`20261002235036`, `20261003002925`), env `SURVEY_TOKEN_SECRET` (32+ chars; else falls back to `ESIGN_TOKEN_SECRET`), optional `SURVEY_DAILY_EMAIL_BUDGET`.
-4. Legacy import: approve `docs/survey/legacy-mapping.md`, then `npm run survey:import-legacy -- --sheet 2024 --apply` (dev first).
+3. Prod: three migrations (`20261002235036`, `20261003002925`, and from the follow-ups branch `20261003020253` — the `deleted_at` backfill), env `SURVEY_TOKEN_SECRET` (32+ chars; else falls back to `ESIGN_TOKEN_SECRET`), optional `SURVEY_DAILY_EMAIL_BUDGET`.
+4. ~~Legacy import~~ **Decided 2 Oct: do not import the legacy Google Forms data.** The importer, its mapping and the mapping doc were removed on 6 Oct (#294). The schema still allows `source = 'legacy_import'` and `legacy_*` catalog keys (already in production); nothing writes them.
 5. Handover §13: teachers who registered but didn't attend are surveyed (default); `volunteer` → mentor path.
 6. Time zone is derived from state; add a Sanity `timeZone` field if that is ever wrong.
 
@@ -105,3 +104,32 @@ Items marked **David** need his answer; none of them block the build.
 - Title I / NCES, HubSpot sync of interest answers, 12-month follow-up (out of scope per §12).
 - Retention: no time-based purge of survey data at 7 years after deactivation (no deactivation date exists).
 - Reminder dedupe uses conditional updates on the invitation, not `sent_reminders` (its unique key cannot dedupe rows without a member).
+
+## 6. Follow-ups — status (2 Oct 2026, branch `feat/post-event-survey-followups`, local, not pushed; merges after `feat/post-event-survey`)
+
+### Built
+| Item | Where |
+|---|---|
+| D1 certificate gate, per event, default off. Admin-only switch on the event's Survey tab with a confirm that warns gating skews answers and pressures minors. Holds an **event** certificate only while that event's survey is open and the holder has an invitation not yet submitted; never when paused, closed (by date or early) or not invited. The PDF route refuses: a browser is sent to Credentials with a notice and the survey link, an API caller gets 403 + `surveyUrl`. Credentials list and the owner's credential page link to the survey instead of the PDF. | `lib/survey/certificate-gate.ts` (pure `certificateGate()` + loaders), `app/api/credentials/[number]/pdf/route.ts`, `app/(member)/community/credentials/page.tsx`, `app/(public)/credentials/[number]/page.tsx`, `components/credentials/CredentialActions.tsx`, `EventSurveyPanel` |
+| Photo/media: one resolver for "may Stellr use this person's image/media" — withdrawn consent → no; `MediaOptOut` on the signed agreement (guardian's for a minor) → no; student's `allow_media` off → no; minor with no agreement → no; minor whose media box can't be seen → **check**; switch on → yes; NY/CO 13–17 (or minor of unknown age) → no; else yes. Admin → Operations → **Media do-not-use** (`/admin/media`, event filter, CSV). Roster export gains `media_ok` (yes/no/check) + `Media Note`. Runbook Part C now points at the list instead of the SQL. | `lib/survey/media.ts`, `app/(admin)/admin/media/page.tsx`, `app/api/admin/media/do-not-use/route.ts`, `app/api/admin/events/[slug]/export/route.ts`, `AdminSidebar`, runbook Part C |
+| 7-year retention purge, report-only by default. Account holders: 7 years after `members.deleted_at`, only while `is_active = false` (every deactivation path sets both; onboarding reactivation clears `deleted_at`). No account: 7 years after 31 Dec of the event year (participant row = one event); email-only recipients wait until every survey sent to that address is due and no member has it. Full deletion through `survey_purge_person()` (audit row `survey_purge`). `npm run survey:retention` (report; `--as-of` for what-if reports; `--apply` deletes; prod needs `--prod`); monthly cron `/api/cron/survey-retention` (02 of the month, 03:00 UTC) reports to `cron_runs` and deletes only when `SURVEY_RETENTION_APPLY=true`. **No schema change**, so no migration. Retention schedule row 27 and the runbook table updated. | `lib/survey/retention.ts`, `scripts/survey-retention.ts`, `app/api/cron/survey-retention/route.ts`, `vercel.json`, `package.json` |
+
+### Verified
+- `npx tsc --noEmit -p .`, `npm run lint:tokens`, `npm run lint:migrations`: clean. `npx vitest run`: 148 files, 1,359 tests passed (new: 8 gate, 10 media, 7 retention incl. the planner against an in-memory database).
+- Playwright `e2e/core/survey.spec.ts` against this worktree's own dev server (`E2E_BASE_URL=http://localhost:3117`, `RESEND_API_KEY=`): 10/10 incl. auth. New: gate holds the PDF (403 + survey link; browser → Credentials notice), releases after submit (200 `application/pdf`); admin gate switch round-trips; roster `media_ok` = `no` for a 16-year-old at a CO school, `yes` for an adult; `/admin/media` lists her with the NY/CO reason; CSV route returns the list. The new routes exist only on this branch, so the run was against the right server.
+- Retention on dev: report today = nothing due (4 participant + 1 email-only clocks, first due 2034-01-01); `--as-of 2040-01-01` lists them; `--apply` with `--as-of` is refused. Apply path proven on dev with a synthetic member deactivated 2018-05-01 plus one invitation: purged (audit row `survey_purge`, actor `retention:<user>`), the 6 seed invitations untouched, fixture member removed afterwards. Never run against prod.
+- Screenshots (local only): `/admin/media`, and the Survey-tab gate switch + warning (event data mocked onto a Sanity event, since the e2e/demo events aren't in Sanity; the switch posted `{action:'gate_certificate', on:true}`).
+- One leftover `e2e-survey-*` event from this session's first (failed) run was removed with the fixture's `remove`.
+
+### Decisions for David — answered 2 Oct 2026
+Answers in **bold** after each item.
+
+1. **No-account retention rule** (proposed above: 7 years after the end of the event year; email-only recipients wait for their latest survey and are skipped if a member has the address). Confirm, or choose another clock. **Agreed.**
+2. **Turning deletion on.** The cron only reports until `SURVEY_RETENTION_APPLY=true` is set on prod. Nothing is due before 2033 (account holders) / 2034 (no account), so this can wait; read the monthly `cron_runs` row (`job = 'survey-retention'`) meanwhile. **Agreed: stays off for now.**
+3. **Inactive members with no `deleted_at`** have no clock and are never purged; the report counts them. Backfill a date, or accept. **Backfill with today's date** → migration `20261003020253_members_backfill_deleted_at.sql` sets `deleted_at = 2026-10-02` where `is_active = false AND deleted_at IS NULL`. Applied to dev (1 row; ledger row realigned to the filename); prod applies with the survey migrations on promotion.
+4. **Legacy Google Forms imports** carry no identity and are never purged by this job, though free text could name someone. Keep indefinitely, or set a date? **Do not import the legacy data at all** (§5 item 4), so nothing to retain.
+5. **Gate and minors.** As specified, the gate applies to everyone invited, minors included, and to invitees who opted out of reminders or whose email bounced. Exempt minors (one line in `certificateGate`)? **Do not exempt minors.**
+6. **Media defaults are cautious**: a minor with no agreement on file is "no"; a minor whose media box we can't see is "check"; a minor of unknown age at a NY/CO school is "no". On prod, DocuSign-signed minors show "check" until the V2.3 read-back below is live. Confirm, or relax. **Agreed.**
+7. **Adults** (mentors, teachers): only their own agreement's media box and their switch apply; no NY/CO default. Confirm. **Agreed.**
+8. **Email opt-outs** stay on a manual list. A follow-up could let an admin set `allow_media = false` on a member from a privacy request. **Agreed; no follow-up for now.**
+9. **V2.3 agreements branch overlap.** `feat/esign-agreements-v2-3` (applied on dev, not prod) adds `agreements.media_opt_out` / `agreement_version` and the DocuSign read-back. `lib/survey/media.ts` reads those columns when they exist and ignores them otherwise, so either branch can merge first; once both are in, the survey consent loader (`lib/survey/consent.ts`) should move to those columns too, and the version formats (`V2.3` on templates vs `2.3` on agreements) need one convention. **Agreed.** **Done in #283 (5 Oct):** `lib/survey/consent.ts` reads `agreement_version` and the opt-out columns; the template label was removed, so `2.3` on agreements is the one convention.

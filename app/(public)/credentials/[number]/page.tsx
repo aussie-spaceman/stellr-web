@@ -18,6 +18,7 @@ import { linkedInAddToProfileUrl, linkedInShareUrl, linkedInManualDetails } from
 import { formatDate } from '@/lib/utils'
 import { CredentialBadgeArt } from '@/components/credentials/CredentialBadgeArt'
 import { CredentialActions } from '@/components/credentials/CredentialActions'
+import { certificateGateFor } from '@/lib/survey/certificate-gate'
 
 // The credential page IS the product: the URL on a LinkedIn profile, the link
 // a verifier opens, the card a feed post shows. Private by default; the owner
@@ -93,6 +94,7 @@ export default async function CredentialPage({ params }: Params) {
   const share = canShare(cred, consent)
   const linkedInOk = canUseLinkedIn(cred.date_of_birth)
   const url = credentialUrl(cred.number)
+  const gate = isOwner ? await certificateGateFor(db, member!.id, cred) : { gated: false as const }
   const { label, className, Icon } = STATE_BADGE[state]
   const pills = [cred.issuer, `Issued ${formatDate(cred.issued_at)}`]
   if (cred.role_label) pills.push(cred.role_label)
@@ -166,6 +168,7 @@ export default async function CredentialPage({ params }: Params) {
                 addToProfileUrl={linkedInAddToProfileUrl(cred)}
                 shareUrl={linkedInShareUrl(url)}
                 manual={linkedInManualDetails(cred)}
+                surveyFirst={gate.gated ? { href: gate.surveyUrl, eventTitle: gate.eventTitle } : null}
               />
             )}
           </div>

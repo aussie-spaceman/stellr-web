@@ -7,6 +7,7 @@ import { getCredentialByNumber, recordCredentialEvent } from '@/lib/credentials'
 import { generateCertificatesPdf } from '@/lib/event-pdf'
 import { isAwardType } from '@/lib/event-awards'
 import { downloadArtwork, loadTemplate, placementOf } from '@/lib/event-certificates'
+import { certificateGateFor } from '@/lib/survey/certificate-gate'
 
 // GET /api/credentials/[number]/pdf
 // Streams the owner's certificate for a credential. An event credential prints
@@ -15,7 +16,12 @@ import { downloadArtwork, loadTemplate, placementOf } from '@/lib/event-certific
 // or the course's template (lib/certificate.ts). Owner-only: a verifier gets
 // the page, not the file. Private credentials download too; consent gates
 // publishing, not the holder's own copy.
-export async function GET(_req: Request, { params }: { params: Promise<{ number: string }> }) {
+//
+// Survey gate (handover D1, per event, default off): while the event's survey
+// is open and the holder has an unsubmitted invitation, the event certificate
+// waits for the survey. A browser is sent back to Credentials, which explains
+// and links to the survey; anything else gets 403 with the survey link.
+export async function GET(req: Request, { params }: { params: Promise<{ number: string }> }) {
   const member = await getCurrentMember()
   if (!member) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
@@ -28,6 +34,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ number:
   // An award the judges took back leaves no certificate to print.
   if (cred.status === 'revoked') {
     return NextResponse.json({ error: 'This credential has been revoked.' }, { status: 410 })
+  }
+
+  const gate = await certificateGateFor(db, member.id, cred)
+  if (gate.gated) {
+    if ((req.headers.get('accept') ?? '').includes('text/html')) {
+      return NextResponse.redirect(new URL(`/community/credentials?survey_first=${encodeURIComponent(cred.number)}`, req.url), 303)
+    }
+    return NextResponse.json(
+      { error: `Finish the ${gate.eventTitle} survey to download this certificate.`, surveyUrl: gate.surveyUrl },
+      { status: 403 },
+    )
   }
 
   const filename = `stellr-credential-${cred.number}.pdf`

@@ -1,10 +1,11 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ArrowRight, Eye, EyeOff, Award, FileDown } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, Award, FileDown, ClipboardList } from 'lucide-react'
 import { getCurrentMember } from '@/lib/community'
 import { supabaseServer } from '@/lib/supabase'
 import { listMemberCredentials, credentialState, type CredentialState } from '@/lib/credentials'
 import { formatDateShort } from '@/lib/utils'
+import { certificateGatesFor } from '@/lib/survey/certificate-gate'
 
 export const metadata = { title: 'Credentials' }
 
@@ -12,7 +13,9 @@ export const metadata = { title: 'Credentials' }
 // Sharing lives on the credential page itself (one place for owner and
 // verifier alike), so this is a list, not a second control surface — apart
 // from the certificate download, which is the holder's own copy whether the
-// page is public or not.
+// page is public or not. An event can hold its certificate until the
+// holder's post-event survey is in (lib/survey/certificate-gate.ts, off unless
+// an admin turns it on for that event); that row links to the survey instead.
 
 const STATE_LABEL: Record<CredentialState, { text: string; className: string }> = {
   valid:     { text: 'Valid',     className: 'bg-enviro-green-bg text-enviro-green-text' },
@@ -21,11 +24,17 @@ const STATE_LABEL: Record<CredentialState, { text: string; className: string }> 
   withdrawn: { text: 'Withdrawn', className: 'bg-surface text-content-muted' },
 }
 
-export default async function CredentialsPage() {
+export default async function CredentialsPage({ searchParams }: { searchParams: Promise<{ survey_first?: string }> }) {
   const member = await getCurrentMember()
   if (!member) redirect('/sign-up')
 
-  const rows = await listMemberCredentials(supabaseServer(), member.id)
+  const db = supabaseServer()
+  const rows = await listMemberCredentials(db, member.id)
+  const gates = await certificateGatesFor(db, member.id, rows.filter((c) => c.source === 'event').map((c) => c.event_slug))
+  const gateFor = (c: (typeof rows)[number]) => (c.source === 'event' && c.event_slug ? gates.get(c.event_slug) : undefined)
+  const { survey_first: surveyFirst } = await searchParams
+  const held = surveyFirst ? rows.find((c) => c.number === surveyFirst) : undefined
+  const heldGate = held ? gateFor(held) : undefined
 
   return (
     <div>
@@ -41,6 +50,18 @@ export default async function CredentialsPage() {
           <Link href="/privacy#credentials" className="underline hover:text-ink">How credentials are shared</Link>
         </p>
       </div>
+
+      {heldGate?.gated && (
+        <div role="status" className="mb-6 rounded-ds-card border border-primary/30 bg-primary-soft p-4 text-sm text-ink">
+          <p className="font-semibold">Your {held!.title} certificate is ready once your survey is in.</p>
+          <p className="mt-1 text-content-secondary">
+            The {heldGate.eventTitle} survey takes about five minutes. Submit it and the download unlocks straight away.
+          </p>
+          <Link href={heldGate.surveyUrl} className="mt-3 inline-flex items-center gap-1 font-semibold text-primary hover:underline">
+            Open the survey <ArrowRight size={14} aria-hidden="true" />
+          </Link>
+        </div>
+      )}
 
       {rows.length === 0 ? (
         <div className="rounded-ds-card border border-line bg-white p-8 text-center">
@@ -59,6 +80,7 @@ export default async function CredentialsPage() {
             const state = credentialState(c)
             const s = STATE_LABEL[state]
             const isPublic = c.visibility === 'public'
+            const gate = gateFor(c)
             return (
               <li key={c.id} className="flex items-center hover:bg-surface transition-colors">
                 <Link
@@ -85,7 +107,17 @@ export default async function CredentialsPage() {
                   </span>
                   <ArrowRight size={16} className="text-content-faint" aria-hidden="true" />
                 </Link>
-                {state === 'valid' || state === 'expired' ? (
+                {(state === 'valid' || state === 'expired') && gate?.gated ? (
+                  <Link
+                    href={gate.surveyUrl}
+                    className="mr-3 inline-flex items-center gap-1 rounded-ds-card px-2 py-2 text-xs font-semibold text-primary hover:underline"
+                    aria-label="Finish the survey to download the certificate"
+                    title="Finish the event survey to download the certificate"
+                  >
+                    <ClipboardList size={16} aria-hidden="true" />
+                    <span className="hidden sm:inline">Survey first</span>
+                  </Link>
+                ) : state === 'valid' || state === 'expired' ? (
                   <a
                     href={`/api/credentials/${encodeURIComponent(c.number)}/pdf`}
                     className="mr-3 inline-flex items-center gap-1 rounded-ds-card px-2 py-2 text-xs font-semibold text-primary hover:underline"

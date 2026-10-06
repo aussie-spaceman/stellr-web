@@ -8,7 +8,7 @@
  * A stored null means "the default" so the default can follow the student
  * (turning 18, moving school) without a migration. A parent's opt-out on the
  * agreement overrides either toggle — that is applied where the permission is
- * used (lib/survey/quotes.ts), not here.
+ * used (lib/survey/quotes.ts for quotes, lib/survey/media.ts for media), not here.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ageIfKnown } from './minor'

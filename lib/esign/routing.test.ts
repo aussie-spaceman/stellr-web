@@ -124,11 +124,17 @@ describe('decideProvider', () => {
 })
 
 describe('effectiveCap and estimatedUsage', () => {
-  it('takes the lower of the configured cap and the allowance DocuSign reports', () => {
+  it('is the configured cap less the reserve', () => {
     expect(effectiveCap(state())).toBe(38)
-    expect(effectiveCap(state({ accountAllowed: 30 }))).toBe(28)
-    expect(effectiveCap(state({ accountAllowed: 100 }))).toBe(38)
     expect(effectiveCap(state({ monthlyCap: 1, reserve: 5 }))).toBe(0)
+  })
+
+  it("ignores the allowance DocuSign's account endpoint reports (the web-UI allowance on an API plan)", () => {
+    // Production, 6 Oct 2026: Starter reported 1 allowed against 40 API envelopes.
+    expect(effectiveCap(state({ accountAllowed: 1 }))).toBe(38)
+    expect(effectiveCap(state({ accountAllowed: 100 }))).toBe(38)
+    const s = state({ accountSent: 0, accountAllowed: 1, accountPeriodEnd: '2026-11-06T00:00:00Z' })
+    expect(decideProvider(s, facts({ issuedThisPeriod: 1 })).provider).toBe('docusign')
   })
 
   it('errs high: the larger of the account figure and our own count', () => {

@@ -15,13 +15,20 @@ type Db = ReturnType<typeof supabaseServer>
 
 /** Null when the caller may act on this agreement, otherwise the response to send. */
 async function guard(db: Db, id: string): Promise<NextResponse | null> {
+  // Who is asking comes first: a signed-out caller gets 401 before any
+  // lookup, so the route never says whether an agreement id exists.
+  const access = await requireEventAccess()
+  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+
   const { data: row } = await db.from('agreements').select('event_slug').eq('id', id).maybeSingle()
   if (!row) return NextResponse.json({ error: 'Agreement not found' }, { status: 404 })
-  const slug = (row.event_slug as string | null) || undefined
-  const access = await requireEventAccess(slug)
-  // An agreement with no event (a membership agreement) is admins only.
-  if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
-  if (!slug && !access.isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const slug = (row.event_slug as string | null) || null
+  if (access.isAdmin) return null
+  // Event managers: only their own events. An agreement with no event (a
+  // membership agreement) is admins only.
+  if (!slug || !(access.assignedSlugs ?? []).includes(slug)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
   return null
 }
 

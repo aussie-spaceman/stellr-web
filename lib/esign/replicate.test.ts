@@ -57,6 +57,15 @@ describe('replicatePending', () => {
     expect(db.table('agreements')[0].replicated_at).toBeTruthy()
   })
 
+  it('stops starting records at the deadline, leaving them for the next run', async () => {
+    const db = setup(new TextEncoder().encode('%PDF signed'))
+    const store = memoryBackupStore()
+    expect(await replicatePending(db.client, store, { deadline: Date.now() - 1 })).toEqual({ replicated: 0, failed: [], stoppedEarly: true })
+    expect(store.files.size).toBe(0)
+    expect(db.table('agreements')[0].replicated_at).toBeNull()
+    expect(await replicatePending(db.client, store, { deadline: Date.now() + 60_000 })).toEqual({ replicated: 1, failed: [] })
+  })
+
   it('will not copy a stored record that no longer matches its hash', async () => {
     const db = setup(new TextEncoder().encode('%PDF altered'), 'f'.repeat(64))
     const store = memoryBackupStore()

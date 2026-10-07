@@ -38,8 +38,17 @@ async function readStored(db: SupabaseClient, path: string): Promise<Uint8Array>
 export async function replicatePending(
   db: SupabaseClient,
   store: BackupStore,
-  opts: { limit?: number; now?: Date } = {},
-): Promise<{ replicated: number; failed: { id: string; error: string }[] }> {
+  opts: {
+    limit?: number
+    now?: Date
+    /**
+     * When to stop starting new records (epoch ms). Each takes ~5 s against
+     * Drive, so a full batch outlasts the admin button's 60 s function limit;
+     * what is left is copied by the next run.
+     */
+    deadline?: number
+  } = {},
+): Promise<{ replicated: number; failed: { id: string; error: string }[]; stoppedEarly?: true }> {
   const { data, error } = await db
     .from('agreements')
     .select('id, provider, signed_pdf_path, signed_pdf_sha256, certificate_path')
@@ -52,6 +61,7 @@ export async function replicatePending(
   let replicated = 0
   const failed: { id: string; error: string }[] = []
   for (const row of (data ?? []) as ReplicableRow[]) {
+    if (opts.deadline !== undefined && Date.now() >= opts.deadline) return { replicated, failed, stoppedEarly: true }
     try {
       if (!row.signed_pdf_path) throw new Error('No stored PDF')
       const pdf = await readStored(db, row.signed_pdf_path)

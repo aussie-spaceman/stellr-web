@@ -20,6 +20,8 @@ import { CredentialBadgeArt } from '@/components/credentials/CredentialBadgeArt'
 import { CredentialActions } from '@/components/credentials/CredentialActions'
 import { certificateGateFor } from '@/lib/survey/certificate-gate'
 import { verifyCredentialViewToken, FAMILY_LINK_PARAM } from '@/lib/credentials-link'
+import { viewAsBannerProps } from '@/lib/impersonation'
+import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner'
 
 // The credential page IS the product: the URL on a LinkedIn profile, the link
 // a verifier opens, the card a feed post shows. Private by default; the owner
@@ -31,6 +33,10 @@ import { verifyCredentialViewToken, FAMILY_LINK_PARAM } from '@/lib/credentials-
 // The issued email links here with ?k=<token> (lib/credentials-link.ts), so a
 // guardian with no Stellr login can see their child's private credential.
 // No referrer, so the token never leaves in a Referer header.
+//
+// An admin viewing as a member opens this on the app host (proxy.ts keeps it
+// there while the view-as cookie is set), so it resolves the member, not the
+// admin, and carries the same banner as the portal.
 export const dynamic = 'force-dynamic'
 
 type Params = {
@@ -71,13 +77,15 @@ export default async function CredentialPage({ params, searchParams }: Params) {
   if (!cred) notFound()
 
   const member = await getCurrentMember()
+  const viewAs = await viewAsBannerProps(member)
+  const banner = viewAs ? <ImpersonationBanner {...viewAs} /> : null
   const isOwner = !!member && !!cred.owner_member_id && member.id === cred.owner_member_id
   const state = credentialState(cred)
 
   // ── Withdrawn: the number still answers, the person is gone ─────────────
   if (state === 'withdrawn') {
     return (
-      <Shell eyebrow="Credential" title="This credential has been withdrawn">
+      <Shell eyebrow="Credential" title="This credential has been withdrawn" banner={banner}>
         <p className="text-content-secondary leading-relaxed">
           Credential <span className="font-mono text-ink">{cred.number}</span> was issued by {cred.issuer} and has
           since been withdrawn at the holder&rsquo;s request. It is no longer valid.
@@ -92,7 +100,7 @@ export default async function CredentialPage({ params, searchParams }: Params) {
     cred.visibility === 'private' && !isOwner && verifyCredentialViewToken(cred.id, typeof key === 'string' ? key : null)
   if (cred.visibility === 'private' && !isOwner && !familyView) {
     return (
-      <Shell eyebrow="Credential" title="This credential is private">
+      <Shell eyebrow="Credential" title="This credential is private" banner={banner}>
         <p className="text-content-secondary leading-relaxed">
           Credential <span className="font-mono text-ink">{cred.number}</span>{' '}exists, but its holder has not made it
           public. If it&rsquo;s yours, sign in to Stellr to see it. If it&rsquo;s your child&rsquo;s, open it from the
@@ -117,6 +125,7 @@ export default async function CredentialPage({ params, searchParams }: Params) {
 
   return (
     <>
+      {banner}
       <Hero
         breadcrumb="Verified credential"
         title={cred.title}
@@ -229,9 +238,20 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
-function Shell({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
+function Shell({
+  eyebrow,
+  title,
+  banner,
+  children,
+}: {
+  eyebrow: string
+  title: string
+  banner: React.ReactNode
+  children: React.ReactNode
+}) {
   return (
     <>
+      {banner}
       <Hero breadcrumb={eyebrow} title={title} glow={false} />
       <section className="bg-surface section-padding">
         <div className="container-max max-w-content">{children}</div>

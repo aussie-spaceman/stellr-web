@@ -4,6 +4,7 @@ import { createHmac, timingSafeEqual } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { supabaseServer } from '@/lib/supabase'
+import { IMPERSONATION_COOKIE } from '@/lib/impersonation-cookie'
 
 // Admin "view as member", across the whole member portal.
 //
@@ -25,7 +26,7 @@ import { supabaseServer } from '@/lib/supabase'
 // Impersonation is READ ONLY: assertNotImpersonating() 403s member-facing
 // mutations. See app/api/admin/impersonation.
 
-const COOKIE = 'stellr_impersonate'
+const COOKIE = IMPERSONATION_COOKIE
 
 /** 30 minutes. Long enough to look around, short enough to forget safely. */
 const TTL_SECONDS = 30 * 60
@@ -86,7 +87,7 @@ export function decodeTicket(raw: string | undefined): ImpersonationTicket | nul
   }
 }
 
-export const IMPERSONATION_COOKIE = COOKIE
+export { IMPERSONATION_COOKIE }
 export const IMPERSONATION_TTL_SECONDS = TTL_SECONDS
 
 /**
@@ -188,4 +189,28 @@ export async function resolveRequestMember<T = Record<string, unknown>>(
     .eq('is_active', true)
     .maybeSingle()
   return { member: (data as T) ?? null, unauthorised: false }
+}
+
+/**
+ * What the view-as banner needs, or null when nobody is being viewed as.
+ * `member` is getCurrentMember()'s result, which is already the impersonated
+ * member; the admin behind it is named from the ticket.
+ */
+export async function viewAsBannerProps(
+  member: { first_name: string | null; last_name: string | null; email: string | null } | null,
+): Promise<{ memberId: string; memberName: string; adminName: string | null } | null> {
+  const impersonation = await getImpersonation()
+  if (!impersonation || !member) return null
+  const memberName = [member.first_name, member.last_name].filter(Boolean).join(' ') || member.email || 'this member'
+  let adminName: string | null = null
+  if (impersonation.adminMemberId) {
+    const { data } = await supabaseServer()
+      .from('members')
+      .select('first_name, last_name, email')
+      .eq('id', impersonation.adminMemberId)
+      .maybeSingle()
+    const a = data as { first_name: string | null; last_name: string | null; email: string | null } | null
+    adminName = a ? [a.first_name, a.last_name].filter(Boolean).join(' ') || a.email : null
+  }
+  return { memberId: impersonation.memberId, memberName, adminName }
 }

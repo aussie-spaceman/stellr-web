@@ -32,14 +32,16 @@ describe('planAgreement', () => {
     expect(plan.names.student).toBe('A B')
   })
 
-  it('makes an adult’s membership agreement theirs alone', () => {
+  it('has an adult joining sign the Educator / Chaperone agreement, alone', () => {
     vi.useFakeTimers().setSystemTime(new Date('2026-10-02T12:00:00Z'))
     const plan = planAgreement({
       type: 'membership',
-      params: { memberId: 'm1', firstName: 'Ada', lastName: 'L', email: 'ada@x.test', dateOfBirth: '1990-01-01' },
+      params: { memberId: 'm1', firstName: 'Ada', lastName: 'L', email: 'Ada@X.test', phone: ' 555 ', dateOfBirth: '1990-01-01' },
     })
-    expect(plan.templateKey).toBe('membership_adult')
-    expect(plan.signers.map((s) => [s.role, s.memberId])).toEqual([['member', 'm1']])
+    expect(plan.templateKey).toBe('adult')
+    expect(plan.label).toBe(AGREEMENT_TITLE.adult)
+    expect(plan.signers.map((s) => [s.role, s.memberId])).toEqual([['adult', 'm1']])
+    expect(plan.prefill).toEqual({ TeacherName: 'Ada L', TeacherEmail: 'ada@x.test', TeacherPhone: '555' })
     expect(plan.minorSubject).toBe(false)
   })
 

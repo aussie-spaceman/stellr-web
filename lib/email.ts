@@ -854,13 +854,19 @@ export function campaignBroadcastEmail({
 // addressee — the same split the DocuSign notices use — and the copy speaks to
 // them about the student; the caller Cc's the earner when they have an address.
 export function credentialIssuedEmail({
-  recipientFirstName, guardianFirstName, title, issuer, url, isMinor, canShare,
+  recipientFirstName, guardianFirstName, title, issuer, url, viewUrl, isMinor, canShare,
 }: {
   recipientFirstName: string
   guardianFirstName?: string | null
   title: string
   issuer: string
+  /** The public address — what a verifier checks once the page is public. */
   url: string
+  /**
+   * The family link (lib/credentials-link.ts): opens the page while it is
+   * private, for a reader who is not signed in as the holder. Defaults to url.
+   */
+  viewUrl?: string
   isMinor: boolean
   /** Whether the earner can make the page public today (age/consent). */
   canShare: boolean
@@ -881,6 +887,13 @@ export function credentialIssuedEmail({
 
   // Guardians can say no at any time; this is where most of them will first
   // hear that credential pages exist, so the route to decline is spelled out.
+  // The button opens the page even while it is private. The verifier address
+  // only proves anything once it is public, so the copy says when.
+  const viewHref = viewUrl ?? url
+  const linkLine = toGuardian
+    ? `The button above opens the credential for you while it is private, so please do not forward this email. ${esc(recipientFirstName)} can also see it by signing in to Stellr. Once it is public, anyone can check it is genuine at <a href="${url}">${url}</a>.`
+    : `The button above opens the credential while it is private, so please do not forward this email. Once it is public, anyone can check it is genuine at <a href="${url}">${url}</a>.`
+
   const guardianLine = toGuardian
     ? `If you would prefer ${esc(recipientFirstName)}'s credentials never be shown publicly, email <a href="mailto:privacy@stellreducation.org">privacy@stellreducation.org</a> — any page that is already public will be made private. Once shared on LinkedIn, a credential is governed by LinkedIn's terms, and Stellr cannot remove it there.`
     : null
@@ -895,13 +908,13 @@ export function credentialIssuedEmail({
           <p style="margin:0 0 4px;font-size:18px;font-weight:600;color:#1e1b4b">${esc(title)}</p>
           <p style="margin:0;font-size:14px;color:#4c1d95">Issued by ${esc(issuer)}</p>
         </div>
-        <p style="margin:24px 0"><a href="${url}" style="display:inline-block;background:#3C6DF6;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">View the credential</a></p>
+        <p style="margin:24px 0"><a href="${viewHref}" style="display:inline-block;background:#3C6DF6;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">View the credential</a></p>
         <p style="color:#6b7280;font-size:14px">${sharingLine}</p>
-        <p style="color:#6b7280;font-size:14px">Anyone with the link can check it is genuine at <a href="${url}">${url}</a>.</p>
+        <p style="color:#6b7280;font-size:14px">${linkLine}</p>
         ${guardianLine ? `<p style="color:#6b7280;font-size:14px">${guardianLine}</p>` : ''}
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email.</p>`,
   })
-  const text = `Hi ${toGuardian ? guardianFirstName : recipientFirstName},\n\n${toGuardian ? `${recipientFirstName} has` : 'You have'} earned a verified credential from ${issuer}: ${title}.\n\nView it: ${url}\n\n${sharingLine.replace(/<[^>]+>/g, '')}${guardianLine ? `\n\n${guardianLine.replace(/<[^>]+>/g, '')}` : ''}\n\n— Stellr Education`
+  const text = `Hi ${toGuardian ? guardianFirstName : recipientFirstName},\n\n${toGuardian ? `${recipientFirstName} has` : 'You have'} earned a verified credential from ${issuer}: ${title}.\n\nView it: ${viewHref}\n\n${sharingLine.replace(/<[^>]+>/g, '')}\n\n${linkLine.replace(/<[^>]+>/g, '').replace('The button above', 'The link above')}${guardianLine ? `\n\n${guardianLine.replace(/<[^>]+>/g, '')}` : ''}\n\n— Stellr Education`
   return { subject, html, text }
 }
 

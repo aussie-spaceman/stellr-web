@@ -36,6 +36,12 @@ export interface MaintenanceOptions {
   onError?: (step: MaintenanceStep, err: unknown) => void
   /** Overrides the off-site store (tests). */
   store?: BackupStore | null
+  /**
+   * When the off-site copying should stop (epoch ms), for a caller with a short
+   * function limit. Past it, replication stops starting records and the daily
+   * export is left to the next run.
+   */
+  deadline?: number
 }
 
 const ARCHIVE_BATCH = 20
@@ -92,12 +98,13 @@ export async function runEsignMaintenance(
   await step('replicate', async () => {
     if (!store) return noStore
     if (opts.dryRun) return { skipped: 'dry run' }
-    return replicatePending(db, store)
+    return replicatePending(db, store, { deadline: opts.deadline })
   })
 
   await step('export', async () => {
     if (!store) return noStore
     if (opts.dryRun) return { skipped: 'dry run' }
+    if (opts.deadline !== undefined && Date.now() >= opts.deadline) return { skipped: 'out of time; the next run exports' }
     return exportTables(db, store)
   })
 

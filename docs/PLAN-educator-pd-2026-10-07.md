@@ -114,7 +114,7 @@ CREATE UNIQUE INDEX credentials_pd_once ON public.credentials (member_id, event_
 
 ## Open inputs (not code)
 
-- **The exact NGSS and Common Core codes** for the fixed set. Ideally they match whatever the Cowork certificate prints.
+- ~~The exact NGSS and Common Core codes~~ confirmed 7 Oct (see §7).
 - **The Cowork deliverable:** a background PNG at Letter size (300 dpi), plus where each field sits. Hand the Cowork session the field list in §4.
 - **The event slug and venue** for "STEM School last weekend". Confirm in Sanity at issue time.
 
@@ -178,7 +178,7 @@ CREATE UNIQUE INDEX credentials_pd_once ON public.credentials (member_id, event_
 - **The certificate wraps a long standards list onto two lines** rather than shrinking it below 8pt. The first render printed the Common Core line at about 5pt.
 - **Add member** takes `?return=/admin/…` so the panel's "Not a member yet? Add them first" link comes back to the event. Role already defaults to adult / teacher, and the invite is on by default.
 - **Email:** `credentialIssuedEmail` gains `pdHours`, which adds the licence-renewal line and an "unfinished account" sharing line in place of "paperwork on file". Two emails, unchanged otherwise (decision Q5).
-- **Standards:** `lib/pd-standards.ts`. The set is **proposed, grade-neutral**: NGSS SEP 1, SEP 6, ETS1, and CCSS MP1, MP4, CCRA.SL.1. Confirm it against the Cowork design before the first real issue.
+- **Standards:** `lib/pd-standards.ts`. The set is grade-neutral: NGSS SEP 1, SEP 6, ETS1, and CCSS MP1, MP4, CCRA.SL.1. **Confirmed by David on 7 Oct.**
 
 **Verified on dev (localhost against the dev DB):**
 - Add member flowed into the panel, then Issue 8 hours, then a second issue returned the existing credential.
@@ -194,7 +194,7 @@ CREATE UNIQUE INDEX credentials_pd_once ON public.credentials (member_id, event_
 
 **Open:**
 1. **Cowork artwork.** Upload it, check the preview, and tune `PD_LAYOUT` in `lib/pd-certificate.ts` to it.
-2. **Confirm the standards set.**
+2. ~~Confirm the standards set.~~ Confirmed 7 Oct.
 3. **Prod migration** during `promote` (David).
 4. **Maria Gordon, in production:** create her (teacher, STEM School, invite on), then Educator PD on the Colorado event, 8 hours.
 5. **Her first add-to-LinkedIn click** is the first real check of tracker 11.2 (prefill) and org ID 66274777.

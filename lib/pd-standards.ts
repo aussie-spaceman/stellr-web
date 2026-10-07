@@ -5,8 +5,7 @@
 //
 // Grade-neutral on purpose: events run grades 7–12, so these are the NGSS
 // practices and the Common Core practice/anchor standards rather than
-// grade-banded performance expectations. PROPOSED 7 Oct — confirm against the
-// Cowork certificate design before the first real issue.
+// grade-banded performance expectations. Confirmed by David, 7 Oct 2026.
 // Design: docs/PLAN-educator-pd-2026-10-07.md.
 
 export type PdFramework = 'NGSS' | 'CCSS'

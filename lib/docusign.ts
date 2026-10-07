@@ -703,25 +703,47 @@ export async function voidEnvelope(envelopeId: string, reason = 'Record deleted 
   if (!res.ok) throw new Error(`DocuSign void failed: ${await res.text()}`)
 }
 
-// The values guardians entered on the signed form — used to read the
-// CredentialSharingOptOut checkbox back on completion. DocuSign returns every
-// tab's value here, keyed by tabLabel, regardless of which role owned it.
+// A value a signer entered on the form, by field name.
 export interface EnvelopeFormField { name: string; value: string }
 
-export async function getEnvelopeFormData(envelopeId: string): Promise<EnvelopeFormField[]> {
-  const res = await dsRequest(`/envelopes/${envelopeId}/form_data`)
-  if (!res.ok) throw new Error(`DocuSign form_data fetch failed: ${await res.text()}`)
-  const data = await res.json() as {
-    formData?: { name?: string; value?: string }[]
-    recipientFormData?: { formData?: { name?: string; value?: string }[] }[]
-  }
-  const fields = [
-    ...(data.formData ?? []),
-    ...(data.recipientFormData ?? []).flatMap((r) => r.formData ?? []),
-  ]
-  return fields
-    .filter((f) => typeof f.name === 'string')
-    .map((f) => ({ name: f.name as string, value: f.value ?? '' }))
+/**
+ * Every checkbox on a sent envelope: whether it was ticked, and where it sits.
+ * Read from the recipients' tabs. This replaced GET /form_data, which failed
+ * on every production envelope from at least 2 to 7 Oct 2026, so no opt-out
+ * was ever read back. The position is what names the box (a box's label can't
+ * be trusted; see lib/docusign-form-data nameCheckboxes).
+ */
+export interface EnvelopeCheckbox {
+  documentId: string
+  page: number
+  x: number
+  y: number
+  label: string
+  selected: boolean
+}
+
+export async function getEnvelopeCheckboxes(envelopeId: string): Promise<EnvelopeCheckbox[]> {
+  const res = await dsRequest(`/envelopes/${envelopeId}/recipients?include_tabs=true`)
+  if (!res.ok) throw await dsError('DocuSign recipient tabs fetch failed', res)
+  type Tab = { documentId?: string; pageNumber?: string; xPosition?: string; yPosition?: string; tabLabel?: string; selected?: string }
+  const data = await res.json() as { signers?: { tabs?: { checkboxTabs?: Tab[] } }[] }
+  return (data.signers ?? []).flatMap((s) => s.tabs?.checkboxTabs ?? []).map((t) => ({
+    documentId: t.documentId ?? '1',
+    page:       Number(t.pageNumber ?? 0),
+    x:          Number(t.xPosition ?? 0),
+    y:          Number(t.yPosition ?? 0),
+    label:      t.tabLabel ?? '',
+    selected:   t.selected === 'true',
+  }))
+}
+
+/** One document of an envelope as signed, without the certificate. */
+export async function getEnvelopeDocumentById(envelopeId: string, documentId: string): Promise<ArrayBuffer> {
+  const res = await dsRequest(`/envelopes/${envelopeId}/documents/${encodeURIComponent(documentId)}`, {
+    headers: { Accept: 'application/pdf' },
+  })
+  if (!res.ok) throw await dsError('DocuSign document fetch failed', res)
+  return res.arrayBuffer()
 }
 
 export async function getEnvelopeDocument(envelopeId: string): Promise<ArrayBuffer> {

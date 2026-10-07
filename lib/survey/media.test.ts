@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isNyCo, mediaPermission, type MediaFacts } from './media'
+import { isNyCo, mediaPermission, mediaReasonDetail, type MediaFacts } from './media'
 
 const signed = { exists: true, restricted: false, optOut: false, optOutKnown: true }
 const facts = (over: Partial<MediaFacts> = {}): MediaFacts => ({
@@ -12,8 +12,8 @@ const facts = (over: Partial<MediaFacts> = {}): MediaFacts => ({
 })
 
 describe('media permission resolver', () => {
-  it('defaults to yes for a minor with a signed form and no opt-out', () => {
-    expect(mediaPermission(facts())).toEqual({ status: 'yes', reason: 'default' })
+  it('a minor whose form was read with the box unticked is yes, and says so', () => {
+    expect(mediaPermission(facts())).toEqual({ status: 'yes', reason: 'agreement_no_opt_out' })
   })
 
   it('a guardian opt-out on the agreement wins over the student turning media on', () => {
@@ -52,6 +52,18 @@ describe('media permission resolver', () => {
 
   it('adults need no minor agreement', () => {
     expect(mediaPermission(facts({ isMinor: false, age: 34, states: ['CO'], agreement: { exists: false, restricted: false, optOut: false, optOutKnown: false } }))).toEqual({ status: 'yes', reason: 'default' })
+  })
+
+  it('says who answered and on which form', () => {
+    const minor = { isMinor: true, signedAt: '2026-10-02T15:04:00Z' }
+    expect(mediaReasonDetail({ ...minor, decision: { status: 'no', reason: 'opted_out_on_agreement' } }))
+      .toBe('Parent/guardian ticked “I do NOT consent” to photo and media use on the agreement signed Oct 2, 2026')
+    expect(mediaReasonDetail({ ...minor, decision: { status: 'yes', reason: 'agreement_no_opt_out' } }))
+      .toBe('Parent/guardian left “I do NOT consent” to photo and media use unticked on the agreement signed Oct 2, 2026')
+    expect(mediaReasonDetail({ isMinor: false, signedAt: null, decision: { status: 'no', reason: 'opted_out_on_agreement' } }))
+      .toBe('Ticked “I do NOT consent” to photo and media use on the signed agreement')
+    expect(mediaReasonDetail({ ...minor, decision: { status: 'check', reason: 'form_unread' } }))
+      .toBe('Photo and media answer not read from the agreement signed Oct 2, 2026 yet: open it under Consent forms')
   })
 
   it('reads state names and codes', () => {

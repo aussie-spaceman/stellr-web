@@ -8,13 +8,18 @@ import { runEsignMaintenance } from '@/lib/esign/maintenance'
 // GET /api/cron/docusign-form-data
 // Vercel cron, daily (see vercel.json).
 //
-// Retries the credential-sharing opt-out read for completed minor consent
-// forms whose form data was never read — the webhook read failed, or Connect
-// never delivered the completion. Looks back 7 days; older misses are a
-// manual job (admin Consent forms table).
+// Reads the opt-out boxes (media, quotes, digital communications, credential
+// sharing) off any completed original whose answers are not on file yet: the
+// webhook read failed, Connect never delivered the completion, or the form was
+// signed before the answers were recorded (form_opt_outs, 7 Oct 2026). No
+// age limit, so a read that keeps failing is retried daily and every failure
+// is in cron_runs; newest first, at most BATCH a run.
 
-const LOOKBACK_DAYS = 7
-const DAY_MS = 24 * 60 * 60 * 1000
+const BATCH = 50
+// Each read fetches the signed document and parses it (a second or two). Stop
+// starting reads after this, so the housekeeping below still gets its turn;
+// the rest are read on the next run.
+const READ_BUDGET_MS = 120_000
 
 export async function GET(req: NextRequest) {
   const blocked = guardCron(req)
@@ -22,18 +27,17 @@ export async function GET(req: NextRequest) {
 
   const db = supabaseServer()
   const run = await startCronRun(db, 'docusign-form-data')
-  const since = new Date(Date.now() - LOOKBACK_DAYS * DAY_MS).toISOString()
 
   const { data, error } = await db
     .from('agreements')
     .select(OPT_OUT_ENVELOPE_COLUMNS)
-    // Every agreement with an opt-out on it (V2.3: the media release is on all of them).
+    // Every agreement type carries a media opt-out (the minor form three more).
     .in('envelope_type', ['minor', 'adult', 'mentor', 'volunteer'])
     .eq('status', 'completed')
     .is('reused_from', null)
-    .is('form_data_read_at', null)
-    .gte('completed_at', since)
-    .limit(50)
+    .is('form_opt_outs', null)
+    .order('completed_at', { ascending: false })
+    .limit(BATCH)
   if (error) {
     run.fail('query', error.message)
     await run.finish({ processed: 0 })
@@ -41,8 +45,13 @@ export async function GET(req: NextRequest) {
   }
 
   const results: Record<string, number> = {}
+  const stopAt = Date.now() + READ_BUDGET_MS
   for (const env of (data ?? []) as OptOutEnvelope[]) {
-    const r = await recordCredentialOptOutFromForm(db, env)
+    if (Date.now() >= stopAt) {
+      results.deferred = (results.deferred ?? 0) + 1
+      continue
+    }
+    const r = await recordCredentialOptOutFromForm(db, env, { onError: (err) => run.fail(env.id, err) })
     results[r] = (results[r] ?? 0) + 1
   }
   await run.finish({ processed: data?.length ?? 0, results })

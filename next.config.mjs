@@ -22,8 +22,10 @@ const nextConfig = {
   // lib/event-pdf.ts reads the certificate name face from public/fonts at
   // request time; public/ is not traced into functions on its own.
   outputFileTracingIncludes: {
+    // lib/pd-certificate.ts adds the regular weight for the PD certificate.
     '/api/admin/events/**': ['./public/fonts/Aileron-SemiBold.otf'],
-    '/api/credentials/**': ['./public/fonts/Aileron-SemiBold.otf'],
+    '/api/credentials/**': ['./public/fonts/Aileron-SemiBold.otf', './public/fonts/Aileron-Regular.otf'],
+    '/api/admin/pd-certificate/**': ['./public/fonts/Aileron-SemiBold.otf', './public/fonts/Aileron-Regular.otf'],
     // Stellr signing stamps names and values in Open Sans (lib/esign/native/render.ts).
     '/api/sign/**': ['./public/fonts/esign/OpenSans-Regular.ttf'],
     // The template editor checks documents with pdf.js on the server

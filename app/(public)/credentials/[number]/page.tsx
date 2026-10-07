@@ -22,6 +22,7 @@ import { certificateGateFor } from '@/lib/survey/certificate-gate'
 import { verifyCredentialViewToken, FAMILY_LINK_PARAM } from '@/lib/credentials-link'
 import { viewAsBannerProps } from '@/lib/impersonation'
 import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner'
+import { describeStandard, formatPdHours } from '@/lib/pd-standards'
 
 // The credential page IS the product: the URL on a LinkedIn profile, the link
 // a verifier opens, the card a feed post shows. Private by default; the owner
@@ -122,6 +123,8 @@ export default async function CredentialPage({ params, searchParams }: Params) {
   const pills = [cred.issuer, `Issued ${formatDate(cred.issued_at)}`]
   if (cred.role_label) pills.push(cred.role_label)
   if (cred.award) pills.push(cred.award)
+  const pdHours = cred.source === 'pd' && cred.pd_hours ? Number(cred.pd_hours) : null
+  if (pdHours) pills.push(`${formatPdHours(pdHours)} PD ${pdHours === 1 ? 'hour' : 'hours'}`)
 
   return (
     <>
@@ -181,6 +184,32 @@ export default async function CredentialPage({ params, searchParams }: Params) {
               </div>
             )}
 
+            {pdHours && (
+              <div className="mt-8">
+                <Eyebrow>Professional development</Eyebrow>
+                <p className="mt-2 text-content-secondary leading-relaxed">
+                  {formatPdHours(pdHours)} {pdHours === 1 ? 'hour' : 'hours'}
+                  {cred.activity_title && <> supporting {cred.activity_title}</>}
+                  {cred.activity_date && <> on {formatDate(cred.activity_date)}</>}
+                  {cred.activity_location && <>, {cred.activity_location}</>}.
+                </p>
+              </div>
+            )}
+
+            {cred.standards.length > 0 && (
+              <div className="mt-8">
+                <Eyebrow>Aligned to</Eyebrow>
+                <ul className="mt-3 flex flex-wrap gap-2">
+                  {cred.standards.map(describeStandard).map((s) => (
+                    <li key={s.code} className="rounded-pill border border-line bg-white px-3 py-1 text-sm text-ink">
+                      <span className="font-semibold">{s.code}</span>
+                      {s.label && <span className="text-content-secondary"> · {s.label}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {cred.skills.length > 0 && (
               <div className="mt-8">
                 <Eyebrow>Skills</Eyebrow>
@@ -216,6 +245,7 @@ export default async function CredentialPage({ params, searchParams }: Params) {
               <Row label="Issued by">{cred.issuer}</Row>
               <Row label="Issued on">{formatDate(cred.issued_at)}</Row>
               {cred.expires_at && <Row label="Expires">{formatDate(cred.expires_at)}</Row>}
+              {pdHours && <Row label="PD hours">{formatPdHours(pdHours)}</Row>}
               <Row label="Holder">{cred.recipient_name}</Row>
             </dl>
             <p className="mt-5 text-xs text-content-muted leading-relaxed">

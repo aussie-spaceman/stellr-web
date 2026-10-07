@@ -28,7 +28,7 @@ export interface Artwork {
   mime: string
 }
 
-async function embedArtwork(doc: PDFDocument, artwork: Artwork): Promise<PDFImage | null> {
+export async function embedArtwork(doc: PDFDocument, artwork: Artwork): Promise<PDFImage | null> {
   try {
     if (artwork.mime === 'image/png') return await doc.embedPng(artwork.bytes)
     if (artwork.mime === 'image/jpeg' || artwork.mime === 'image/jpg') return await doc.embedJpg(artwork.bytes)

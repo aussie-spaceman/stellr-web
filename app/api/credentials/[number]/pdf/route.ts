@@ -3,11 +3,13 @@ import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember, signedDownloadUrl } from '@/lib/community'
 import { type CourseTheme } from '@/lib/training-display'
 import { renderCertificatePdf } from '@/lib/certificate'
-import { getCredentialByNumber, recordCredentialEvent } from '@/lib/credentials'
+import { credentialUrl, getCredentialByNumber, recordCredentialEvent } from '@/lib/credentials'
 import { generateCertificatesPdf } from '@/lib/event-pdf'
 import { isAwardType } from '@/lib/event-awards'
 import { downloadArtwork, loadTemplate, placementOf } from '@/lib/event-certificates'
 import { certificateGateFor } from '@/lib/survey/certificate-gate'
+import { PD_ARTWORK_PATH, renderPdCertificatePdf } from '@/lib/pd-certificate'
+import { tokens } from '@/lib/tokens'
 
 // GET /api/credentials/[number]/pdf
 // Streams the owner's certificate for a credential. An event credential prints
@@ -65,6 +67,29 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
       return pdfResponse(out)
     }
     // No artwork for this award yet: fall through to the default design.
+  }
+
+  // Educator PD: the global Cowork artwork with every field drawn on it, or
+  // the plain page until that artwork is uploaded. Never survey-gated.
+  if (cred.source === 'pd' && cred.pd_hours) {
+    const artwork = await downloadArtwork(db, PD_ARTWORK_PATH)
+    const out = await renderPdCertificatePdf(
+      {
+        recipientName:    cred.recipient_name || 'Educator',
+        hours:            Number(cred.pd_hours),
+        eventTitle:       cred.activity_title ?? cred.title,
+        activityDate:     cred.activity_date,
+        activityLocation: cred.activity_location,
+        standards:        cred.standards,
+        number:           cred.number,
+        verifyUrl:        credentialUrl(cred.number).replace(/^https?:\/\//, ''),
+        issuer:           cred.issuer,
+      },
+      artwork,
+      { accentHex: cred.theme === 'environmental' ? tokens.color.enviroGreen : tokens.color.spaceViolet },
+    )
+    void recordCredentialEvent(db, cred.id, 'pdf')
+    return pdfResponse(out)
   }
 
   let templateBytes: ArrayBuffer | null = null

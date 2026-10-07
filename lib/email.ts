@@ -849,12 +849,15 @@ export function campaignBroadcastEmail({
 
 // ── Credentials ───────────────────────────────────────────────────────────────
 
-// Sent when a credential is issued (course completion, event participation).
+const pdHoursLabel = (h: number) => `${Number.isInteger(h) ? h : h.toFixed(1)} ${h === 1 ? 'hour' : 'hours'}`
+
+// Sent when a credential is issued (course completion, event participation,
+// educator PD).
 // No attachment: the link IS the credential. For a minor the guardian is the
 // addressee — the same split the DocuSign notices use — and the copy speaks to
 // them about the student; the caller Cc's the earner when they have an address.
 export function credentialIssuedEmail({
-  recipientFirstName, guardianFirstName, title, issuer, url, viewUrl, isMinor, canShare,
+  recipientFirstName, guardianFirstName, title, issuer, url, viewUrl, isMinor, canShare, pdHours,
 }: {
   recipientFirstName: string
   guardianFirstName?: string | null
@@ -870,6 +873,8 @@ export function credentialIssuedEmail({
   isMinor: boolean
   /** Whether the earner can make the page public today (age/consent). */
   canShare: boolean
+  /** Educator PD credentials: the hours recorded, for the licence-renewal line. */
+  pdHours?: number | null
 }) {
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -879,8 +884,13 @@ export function credentialIssuedEmail({
     ? `${recipientFirstName} has earned a Stellr credential — ${title}`
     : `You've earned a Stellr credential — ${title}`
 
+  const isPd = typeof pdHours === 'number' && pdHours > 0
+  // An educator added by an admin has no date of birth until they finish
+  // their account, and sharing waits on it — so say that, not "paperwork".
   const sharingLine = canShare
     ? `It's private until ${toGuardian ? `${esc(recipientFirstName)} chooses` : 'you choose'} to make it public. From the credential page ${toGuardian ? 'they' : 'you'} can turn that on, copy the link, and add it to LinkedIn (16+).`
+    : isPd
+      ? 'It stays private for now. Once you have finished setting up your Stellr account, you can download the certificate, make the credential public and add it to your LinkedIn profile.'
     : toGuardian
       ? 'It stays private for now. Making it public is covered by the Stellr consent form signed at registration — there is no separate step.'
       : 'It stays private for now. You can turn on sharing from the credential page once the paperwork on file allows it.'
@@ -908,13 +918,14 @@ export function credentialIssuedEmail({
           <p style="margin:0 0 4px;font-size:18px;font-weight:600;color:#1e1b4b">${esc(title)}</p>
           <p style="margin:0;font-size:14px;color:#4c1d95">Issued by ${esc(issuer)}</p>
         </div>
+        ${isPd ? `<p>Thank you for giving your time. Your certificate records <strong>${pdHoursLabel(pdHours!)}</strong> of professional development, aligned to NGSS and Common Core, and you can submit it as evidence toward your teaching license renewal.</p>` : ''}
         <p style="margin:24px 0"><a href="${viewHref}" style="display:inline-block;background:#3C6DF6;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">View the credential</a></p>
         <p style="color:#6b7280;font-size:14px">${sharingLine}</p>
         <p style="color:#6b7280;font-size:14px">${linkLine}</p>
         ${guardianLine ? `<p style="color:#6b7280;font-size:14px">${guardianLine}</p>` : ''}
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email.</p>`,
   })
-  const text = `Hi ${toGuardian ? guardianFirstName : recipientFirstName},\n\n${toGuardian ? `${recipientFirstName} has` : 'You have'} earned a verified credential from ${issuer}: ${title}.\n\nView it: ${viewHref}\n\n${sharingLine.replace(/<[^>]+>/g, '')}\n\n${linkLine.replace(/<[^>]+>/g, '').replace('The button above', 'The link above')}${guardianLine ? `\n\n${guardianLine.replace(/<[^>]+>/g, '')}` : ''}\n\n— Stellr Education`
+  const text = `Hi ${toGuardian ? guardianFirstName : recipientFirstName},\n\n${toGuardian ? `${recipientFirstName} has` : 'You have'} earned a verified credential from ${issuer}: ${title}.${isPd ? `\n\nThank you for giving your time. Your certificate records ${pdHoursLabel(pdHours!)} of professional development, aligned to NGSS and Common Core, and you can submit it as evidence toward your teaching license renewal.` : ''}\n\nView it: ${viewHref}\n\n${sharingLine.replace(/<[^>]+>/g, '')}\n\n${linkLine.replace(/<[^>]+>/g, '').replace('The button above', 'The link above')}${guardianLine ? `\n\n${guardianLine.replace(/<[^>]+>/g, '')}` : ''}\n\n— Stellr Education`
   return { subject, html, text }
 }
 

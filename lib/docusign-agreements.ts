@@ -604,18 +604,19 @@ export async function dispatchTyped(
   if (type !== 'membership') return issueOrReuse(db, ctx, type)
   if (!membership) throw new Error('Membership details are required for the membership agreement')
   try {
-    if (await hasOpenEnvelopeForEvent(db, ctx, membership.guardianEmail ? 'minor' : type)) return { outcome: 'in_flight' }
+    const minor = !!membership.guardianEmail
+    if (await hasOpenEnvelopeForEvent(db, ctx, minor ? 'minor' : 'adult')) return { outcome: 'in_flight' }
     const envelope = await issueAgreement(db, {
       type: 'membership',
       accounts: { memberId: ctx.memberId },
       params: { ...membership, firstName: ctx.firstName, lastName: ctx.lastName, email: ctx.email, phone: ctx.phone ?? undefined },
     })
-    const minor = !!membership.guardianEmail
-    // A Minor joining signs the Student / Minor agreement (V2.3), which covers
-    // membership and every event, so it is recorded as one: their next event
-    // finds it on file instead of sending the family a second copy.
+    // Joining signs the same document as an event (V2.3): a Minor the Student /
+    // Minor agreement, an adult the Educator / Chaperone agreement (David,
+    // 7 Oct 2026). It is recorded as that document, so the member's next event
+    // finds it on file instead of sending a second copy.
     const recorded = await recordEnvelope(
-      db, ctx, minor ? 'minor' : type, envelope,
+      db, ctx, minor ? 'minor' : 'adult', envelope,
       minor ? membership.guardianName ?? '' : `${ctx.firstName} ${ctx.lastName}`,
       minor ? membership.guardianEmail ?? '' : ctx.email,
     )

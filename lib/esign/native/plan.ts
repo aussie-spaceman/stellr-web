@@ -152,18 +152,6 @@ export function planAgreement(req: CreateAgreementRequest): IssuePlan {
     case 'membership': {
       const p = req.params
       const name = `${clean(p.firstName)} ${clean(p.lastName)}`.trim()
-      const prefill = {
-        MemberName: name,
-        MemberEmail: lower(p.email),
-        MemberPhone: clean(p.phone),
-        MemberDateOfBirth: formatFormDate(p.dateOfBirth),
-        GuardianName: clean(p.guardianName),
-        GuardianEmail: lower(p.guardianEmail),
-        GuardianPhone: clean(p.guardianPhone),
-        MinorRelationship: clean(p.relationship),
-      }
-      const member: PlannedSigner = { role: 'member', name, email: lower(p.email), memberId: p.memberId, order: 1 }
-
       if (isMinorOn(p.dateOfBirth)) {
         if (!clean(p.guardianEmail) || !clean(p.guardianName)) {
           throw new Error('A parent or guardian name and email are required for an under-18 membership agreement')
@@ -192,12 +180,19 @@ export function planAgreement(req: CreateAgreementRequest): IssuePlan {
           subjectBirthYear: yearOf(p.dateOfBirth),
         }
       }
+      // An adult joining signs the Educator / Chaperone agreement (David,
+      // 7 Oct 2026): the same document as their events, so it is recorded as
+      // one (dispatchTyped) and their next event finds it on file.
       return {
-        templateKey: 'membership_adult',
-        label: AGREEMENT_TITLE.membership,
-        prefill,
-        names: { member: name },
-        signers: [member],
+        templateKey: 'adult',
+        label: AGREEMENT_TITLE.adult,
+        prefill: {
+          TeacherName: name,
+          TeacherEmail: lower(p.email),
+          TeacherPhone: clean(p.phone),
+        },
+        names: { adult: name },
+        signers: [{ role: 'adult', name, email: lower(p.email), memberId: p.memberId, order: 1 }],
         minorSubject: false,
         subjectBirthYear: null,
       }

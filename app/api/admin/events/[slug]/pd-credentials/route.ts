@@ -55,12 +55,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       .select('id, first_name, last_name, email, date_of_birth, is_active')
       .eq('id', memberId)
       .maybeSingle(),
-    getEventBySlug(slug),
+    eventFor(slug),
   ])
   if (!member || member.is_active === false) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
 
-  const ev = event as { title?: string; type?: string; date?: string | null; venue?: string | null; city?: string | null; state?: string | null }
+  const ev = event
   const eventTitle = ev.title ?? slug
   const place = [ev.city, ev.state].filter(Boolean).join(', ')
   const location = [ev.venue, place].filter(Boolean).join(', ') || null
@@ -104,4 +104,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   }
 
   return NextResponse.json({ ok: true, created: result.created, emailed, credential: result.row })
+}
+
+type EventFacts = { title?: string; type?: string; date?: string | null; venue?: string | null; city?: string | null; state?: string | null }
+
+/**
+ * Title, date and venue come from Sanity. When Sanity has no document for the
+ * slug (or is not configured — CI has no Sanity credentials), fall back to the
+ * title stored on the event's registrations: the certificate then carries no
+ * date or place rather than the issue being refused.
+ */
+async function eventFor(slug: string): Promise<EventFacts | null> {
+  const fromSanity = (await getEventBySlug(slug).catch(() => null)) as EventFacts | null
+  if (fromSanity?.title) return fromSanity
+  const { data } = await supabaseServer()
+    .from('registrations')
+    .select('event_title')
+    .eq('event_slug', slug)
+    .not('event_title', 'is', null)
+    .limit(1)
+    .maybeSingle()
+  return data?.event_title ? { title: data.event_title as string } : null
 }

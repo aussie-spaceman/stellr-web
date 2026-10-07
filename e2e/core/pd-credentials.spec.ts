@@ -7,8 +7,10 @@ import { storageStatePath } from '../fixtures/users'
  * an event; the teacher sees the hours and standards on the credential page
  * and downloads the PD certificate. docs/PLAN-educator-pd-2026-10-07.md.
  *
- * Issued to the seeded teacher Grace on a real Sanity event (the route reads
- * the title, date and venue from Sanity). Her PD rows are deleted before and
+ * Issued to the seeded teacher Grace on an event with registrations on the dev
+ * DB. The route reads title/date/venue from Sanity and falls back to the
+ * registrations' title when Sanity has none — CI has no Sanity credentials
+ * (the first CI run failed "Event not found", 7 Oct). Her PD rows are deleted before and
  * after each test with the service role — in a hook, so a failure part-way
  * cannot leave a live PD credential blocking the next run (see the 24 Sept
  * note in credentials.spec.ts).

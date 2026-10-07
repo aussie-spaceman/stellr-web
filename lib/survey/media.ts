@@ -12,16 +12,19 @@
  *   5. A minor whose form we cannot read the box from       → check by hand
  *   6. The student's own switch turned on                   → yes
  *   7. NY or CO, aged 13–17 (or a minor of unknown age)     → no until they opt in
- *   8. Otherwise                                            → yes
+ *   8. Otherwise                                            → yes (and, where the
+ *      form was read, "left the box unticked on the agreement signed …")
  *
- * Where the opt-out is read (2 Oct 2026):
+ * Where the opt-out is read:
  *   - Stellr-signed forms: the signers' checkbox values
  *     (agreement_recipients.signer_values.MediaOptOut).
- *   - `agreements.media_opt_out`, read back from DocuSign as well (#280,
- *     migration 20261002235609, in production since 3 Oct).
- *   - A form whose media box we can't see (DocuSign not read back, or an
- *     older Stellr template without it) is "check": open the
- *     signed PDF (Admin → Consent forms).
+ *   - DocuSign forms: `agreements.form_opt_outs.MediaOptOut`, read off the
+ *     signed form on completion and by the daily docusign-form-data cron
+ *     (7 Oct 2026; every DocuSign version since June has the box). Before
+ *     that no DocuSign answer had ever been read, which is why every signed
+ *     student showed as "check".
+ *   - A form whose media box hasn't been read (the read failed, or no box was
+ *     found on it) is "check": open the signed PDF (Admin → Consent forms).
  * State is the school's state (no home state is collected); NY/CO applies if
  * any known school state is NY or CO, as runbook Part C says. Opt-outs sent by
  * email are not in the data; they stay on the manual list.
@@ -39,16 +42,18 @@ export type MediaReason =
   | 'form_unread'
   | 'opted_in'
   | 'ny_co_default'
+  | 'agreement_no_opt_out'
   | 'default'
 
 export const MEDIA_REASON_LABEL: Record<MediaReason, string> = {
   consent_withdrawn: 'Consent withdrawn',
-  opted_out_on_agreement: 'Opted out on the signed agreement',
+  opted_out_on_agreement: 'Ticked “I do NOT consent” on the signed agreement (parent/guardian for a minor)',
   student_off: 'Turned photo/media off in their account',
   no_agreement: 'Minor with no signed agreement on file',
-  form_unread: 'Media box not on file: check the signed form',
+  form_unread: 'Media answer not read from the signed form yet: check the form',
   opted_in: 'Turned photo/media on in their account',
   ny_co_default: 'NY/CO, 13–17: off until they opt in',
+  agreement_no_opt_out: 'Left “I do NOT consent” unticked on the signed agreement (parent/guardian for a minor)',
   default: 'No opt-out on file',
 }
 
@@ -58,6 +63,8 @@ export interface MediaAgreementFacts {
   optOut: boolean
   /** We can see the media box on this form (Stellr-signed, or read back from DocuSign). */
   optOutKnown: boolean
+  /** When the form was signed (the original, for a reused agreement). */
+  signedAt?: string | null
 }
 
 export interface MediaFacts {
@@ -75,7 +82,7 @@ export interface MediaDecision {
   reason: MediaReason
 }
 
-const NO_AGREEMENT: MediaAgreementFacts = { exists: false, restricted: false, optOut: false, optOutKnown: false }
+const NO_AGREEMENT: MediaAgreementFacts = { exists: false, restricted: false, optOut: false, optOutKnown: false, signedAt: null }
 
 export function isNyCo(states: (string | null | undefined)[]): boolean {
   return states.some((s) => {
@@ -95,6 +102,7 @@ export function mediaPermission(f: MediaFacts): MediaDecision {
   if (f.studentAllowMedia === true) return { status: 'yes', reason: 'opted_in' }
   const teen = f.age !== null ? f.age >= 13 && f.age <= 17 : f.isMinor
   if (teen && isNyCo(f.states)) return { status: 'no', reason: 'ny_co_default' }
+  if (a.exists && a.optOutKnown) return { status: 'yes', reason: 'agreement_no_opt_out' }
   return { status: 'yes', reason: 'default' }
 }
 
@@ -121,8 +129,8 @@ interface AgreementRow {
 
 interface ColumnFacts {
   media_opt_out: boolean | null
-  form_data_read_at: string | null
-  agreement_version: string | null
+  /** What the read found on the form: { MediaOptOut: true|false, … }; NULL = not read. */
+  form_opt_outs: Record<string, boolean> | null
 }
 
 const AGREEMENT_COLS = 'id, member_id, participant_id, completed_at, reused_from, restricted_at, template_id'
@@ -180,10 +188,10 @@ export async function loadMediaAgreements(
     if (r.signer_values) values.set(r.envelope_row, [...(values.get(r.envelope_row) ?? []), r.signer_values])
   }
 
-  // agreements.media_opt_out and the read-back markers (#280).
+  // agreements.media_opt_out and what the read-back found (form_opt_outs).
   const columns = new Map<string, ColumnFacts>()
   for (let i = 0; i < ids.length; i += CHUNK) {
-    const { data, error } = await db.from('agreements').select('id, media_opt_out, form_data_read_at, agreement_version').in('id', ids.slice(i, i + CHUNK))
+    const { data, error } = await db.from('agreements').select('id, media_opt_out, form_opt_outs').in('id', ids.slice(i, i + CHUNK))
     if (error) break
     for (const r of (data ?? []) as unknown as (ColumnFacts & { id: string })[]) columns.set(r.id, r)
   }
@@ -197,13 +205,14 @@ export async function loadMediaAgreements(
     const signerValues = values.get(a.id) ?? []
     const col = columns.get(a.id)
     const boxOnForm = signerValues.some((v) => 'MediaOptOut' in v)
-    // DocuSign V2.3 forms carry the media box and are read back on completion.
-    const readBack = !!col?.form_data_read_at && /^V?2\.(3|[4-9])|^V?[3-9]/.test(col.agreement_version ?? '')
+    // DocuSign forms: the box as read off the signed form.
+    const readBack = typeof col?.form_opt_outs?.MediaOptOut === 'boolean'
     out.set(s.key, {
       exists: true,
       restricted: !!a.restricted_at,
-      optOut: signerValues.some((v) => ticked(v.MediaOptOut)) || col?.media_opt_out === true,
+      optOut: signerValues.some((v) => ticked(v.MediaOptOut)) || col?.media_opt_out === true || col?.form_opt_outs?.MediaOptOut === true,
       optOutKnown: (!!a.template_id && boxOnForm) || readBack,
+      signedAt: a.completed_at,
     })
   }
   return out
@@ -222,7 +231,32 @@ export interface MediaPerson {
   states: string[]
   age: number | null
   isMinor: boolean
+  /** When the agreement the decision rests on was signed. */
+  signedAt: string | null
   decision: MediaDecision
+}
+
+const signedOn = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : null
+
+/**
+ * The reason in a sentence for this person: who answered, and on which form.
+ * "Parent/guardian ticked …" for a minor, "Ticked …" for an adult signer.
+ */
+export function mediaReasonDetail(p: Pick<MediaPerson, 'isMinor' | 'signedAt' | 'decision'>): string {
+  const on = signedOn(p.signedAt)
+  const form = on ? `the agreement signed ${on}` : 'the signed agreement'
+  const who = p.isMinor ? 'Parent/guardian ' : ''
+  switch (p.decision.reason) {
+    case 'opted_out_on_agreement':
+      return `${who}${p.isMinor ? 'ticked' : 'Ticked'} “I do NOT consent” to photo and media use on ${form}`
+    case 'agreement_no_opt_out':
+      return `${who}${p.isMinor ? 'left' : 'Left'} “I do NOT consent” to photo and media use unticked on ${form}`
+    case 'form_unread':
+      return `Photo and media answer not read from ${form} yet: open it under Consent forms`
+    default:
+      return MEDIA_REASON_LABEL[p.decision.reason]
+  }
 }
 
 interface ParticipantRow {
@@ -312,6 +346,7 @@ async function decide(db: SupabaseClient, parts: ParticipantRow[], memberOnlyIds
       states,
       age,
       isMinor,
+      signedAt: agreements.get(s.key)?.signedAt ?? null,
       decision: mediaPermission({
         isMinor,
         age,
@@ -336,9 +371,13 @@ export async function mediaForParticipants(db: SupabaseClient, participantIds: s
 /**
  * Everyone whose image must not be used (status no), and everyone to check by
  * hand (status check): one row per event participation, plus members who
- * turned media off and have no participant row. Optionally one event.
+ * turned media off and have no participant row. Optionally one event, and
+ * optionally everyone (includeOk), so staff can see each OK and why.
  */
-export async function mediaDoNotUseList(db: SupabaseClient, f: { eventSlug?: string | null } = {}): Promise<{ rows: MediaPerson[]; considered: number }> {
+export async function mediaDoNotUseList(
+  db: SupabaseClient,
+  f: { eventSlug?: string | null; includeOk?: boolean } = {},
+): Promise<{ rows: MediaPerson[]; considered: number }> {
   const parts: ParticipantRow[] = []
   if (f.eventSlug) {
     const { data, error } = await db.from('participants').select(`${PARTICIPANT_COLS.replace('registrations(', 'registrations!inner(')}`).eq('registrations.event_slug', f.eventSlug)
@@ -364,7 +403,7 @@ export async function mediaDoNotUseList(db: SupabaseClient, f: { eventSlug?: str
   const people = await decide(db, parts, memberOnly)
   const rank: Record<MediaStatus, number> = { no: 0, check: 1, yes: 2 }
   const rows = people
-    .filter((p) => p.decision.status !== 'yes')
+    .filter((p) => f.includeOk || p.decision.status !== 'yes')
     .sort((a, b) => rank[a.decision.status] - rank[b.decision.status] || a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName))
   return { rows, considered: people.length }
 }
@@ -374,10 +413,10 @@ export const MEDIA_STATUS_LABEL: Record<MediaStatus, string> = { no: 'Do not use
 /** The list as CSV rows (header first), for the admin download. */
 export function mediaListRows(rows: MediaPerson[]): (string | number | null)[][] {
   return [
-    ['media_ok', 'Reason', 'First Name', 'Last Name', 'Role', 'Age', 'Event', 'School', 'School State'],
+    ['media_ok', 'Reason', 'First Name', 'Last Name', 'Role', 'Age', 'Event', 'School', 'School State', 'Agreement Signed'],
     ...rows.map((r) => [
       r.decision.status,
-      MEDIA_REASON_LABEL[r.decision.reason],
+      mediaReasonDetail(r),
       r.firstName,
       r.lastName,
       r.role,
@@ -385,6 +424,7 @@ export function mediaListRows(rows: MediaPerson[]): (string | number | null)[][]
       r.eventTitle ?? r.eventSlug,
       r.school,
       r.states.join('; '),
+      r.signedAt ? r.signedAt.slice(0, 10) : null,
     ]),
   ]
 }

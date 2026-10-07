@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { Check, ShieldAlert, ShieldOff, Clock } from 'lucide-react'
+import { Check, ShieldAlert, ShieldOff, Clock, Lock } from 'lucide-react'
 import { Hero, Eyebrow, Badge } from '@stellr/web-ui'
 import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
@@ -19,6 +19,7 @@ import { formatDate } from '@/lib/utils'
 import { CredentialBadgeArt } from '@/components/credentials/CredentialBadgeArt'
 import { CredentialActions } from '@/components/credentials/CredentialActions'
 import { certificateGateFor } from '@/lib/survey/certificate-gate'
+import { verifyCredentialViewToken, FAMILY_LINK_PARAM } from '@/lib/credentials-link'
 
 // The credential page IS the product: the URL on a LinkedIn profile, the link
 // a verifier opens, the card a feed post shows. Private by default; the owner
@@ -26,9 +27,16 @@ import { certificateGateFor } from '@/lib/survey/certificate-gate'
 //
 // Never indexed (D4): a K-12 audience, and the value is in the link, not in
 // search. LinkedIn's scraper ignores robots, so previews still render.
+//
+// The issued email links here with ?k=<token> (lib/credentials-link.ts), so a
+// guardian with no Stellr login can see their child's private credential.
+// No referrer, so the token never leaves in a Referer header.
 export const dynamic = 'force-dynamic'
 
-type Params = { params: Promise<{ number: string }> }
+type Params = {
+  params: Promise<{ number: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { number } = await params
@@ -42,6 +50,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     title,
     description,
     robots: { index: false, follow: false },
+    referrer: 'no-referrer',
     alternates: cred ? { canonical: credentialUrl(cred.number) } : undefined,
     openGraph: { title, description, type: 'website', url: cred ? credentialUrl(cred.number) : undefined },
   }
@@ -54,8 +63,9 @@ const STATE_BADGE: Record<CredentialState, { label: string; className: string; I
   withdrawn: { label: 'Withdrawn', className: 'bg-surface text-content-muted', Icon: ShieldOff },
 }
 
-export default async function CredentialPage({ params }: Params) {
+export default async function CredentialPage({ params, searchParams }: Params) {
   const { number } = await params
+  const key = (await searchParams)[FAMILY_LINK_PARAM]
   const db = supabaseServer()
   const cred = await getCredentialByNumber(db, number)
   if (!cred) notFound()
@@ -77,18 +87,23 @@ export default async function CredentialPage({ params }: Params) {
   }
 
   // ── Private: the holder has not turned it on ───────────────────────────
-  if (cred.visibility === 'private' && !isOwner) {
+  // The emailed family link opens it read-only; anything else stops here.
+  const familyView =
+    cred.visibility === 'private' && !isOwner && verifyCredentialViewToken(cred.id, typeof key === 'string' ? key : null)
+  if (cred.visibility === 'private' && !isOwner && !familyView) {
     return (
       <Shell eyebrow="Credential" title="This credential is private">
         <p className="text-content-secondary leading-relaxed">
-          Credential <span className="font-mono text-ink">{cred.number}</span> exists, but its holder has not made it
-          public. If you were sent this link, ask them to turn on sharing from their Stellr account.
+          Credential <span className="font-mono text-ink">{cred.number}</span>{' '}exists, but its holder has not made it
+          public. If it&rsquo;s yours, sign in to Stellr to see it. If it&rsquo;s your child&rsquo;s, open it from the
+          button in the email Stellr sent you.
         </p>
       </Shell>
     )
   }
 
-  if (!isOwner) void recordCredentialEvent(db, cred.id, 'view')
+  // A family view is not a verifier's view; only public opens are counted.
+  if (!isOwner && !familyView) void recordCredentialEvent(db, cred.id, 'view')
 
   const consent = await shareConsentFor(db, cred)
   const share = canShare(cred, consent)
@@ -121,6 +136,18 @@ export default async function CredentialPage({ params }: Params) {
       <section className="bg-surface section-padding">
         <div className="container-max max-w-content grid gap-10 lg:grid-cols-[1fr_320px] items-start">
           <div>
+            {familyView && (
+              <div className="mb-8 flex gap-3 rounded-ds-card border border-line bg-white p-4 text-sm text-content-secondary">
+                <Lock size={18} className="mt-0.5 shrink-0 text-content-muted" aria-hidden="true" />
+                <p className="leading-relaxed">
+                  This credential is private. You can see it because you opened the link in Stellr&rsquo;s email,
+                  so please don&rsquo;t share that link.
+                  {share.ok && (
+                    <> To make it public, {cred.recipient_name.split(' ')[0]} signs in to Stellr and turns on sharing.</>
+                  )}
+                </p>
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <Badge className={className}>
                 <Icon size={14} className="mr-1" aria-hidden="true" />

@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
-import { assignCompanies, type AssignableStudent } from '@/lib/company-assign'
-import { STUDENT_ROLES } from '@/lib/membership-rules'
+import { autoAssign, AssignError } from '@/lib/team-profile/assign'
+import { loadSurveyEvent } from '@/lib/survey/events'
 
 // Company management for an event (admins + assigned event managers).
 //   GET  — list companies with participant counts
 //   PUT  — { count } set number of companies (1-10); trims/creates rows
-//   POST — { action: 'auto_assign' }
+//   POST — { action: 'auto_assign' }  (lib/team-profile/assign.ts: students
+//          with a submitted team profile; hand-placed students stay put)
 //          { action: 'rename', companyId, name }
 //          { action: 'move', participantId, companyId | null }
 
@@ -100,86 +101,24 @@ export async function POST(req: Request, { params }: Params) {
     }
     const { error } = await db
       .from('participants')
-      .update({ company_id: companyId })
+      // A hand placement sticks: Auto-Assign leaves it alone. Moving a student
+      // back to unassigned releases them.
+      .update({ company_id: companyId, company_locked: companyId !== null })
       .eq('id', participantId)
     if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 })
     return NextResponse.json({ ok: true })
   }
 
   if (action === 'auto_assign') {
-    const { data: companies, error: compError } = await db
-      .from('event_companies')
-      .select('id, number')
-      .eq('event_slug', slug)
-      .order('number')
-    if (compError) return NextResponse.json({ error: 'Database error' }, { status: 500 })
-    if (!companies || companies.length === 0) {
-      return NextResponse.json({ error: 'Set the number of companies first' }, { status: 400 })
+    const event = await loadSurveyEvent(slug)
+    try {
+      const result = await autoAssign(db, slug, event?.date ?? null)
+      return NextResponse.json({ ok: true, ...result })
+    } catch (err) {
+      if (err instanceof AssignError) return NextResponse.json({ error: err.message }, { status: 400 })
+      console.error('[companies] auto-assign failed:', err)
+      return NextResponse.json({ error: 'Database error during assignment' }, { status: 500 })
     }
-
-    // Students only — adults and mentors are not placed in Companies
-    const { data: regs, error: regError } = await db
-      .from('registrations')
-      .select('id, type, participants(id, event_role, gender, date_of_birth, member_id)')
-      .eq('event_slug', slug)
-      .neq('status', 'withdrawn')
-    if (regError) return NextResponse.json({ error: 'Database error' }, { status: 500 })
-
-    const students: AssignableStudent[] = []
-    const memberIds: string[] = []
-    for (const reg of regs ?? []) {
-      for (const p of (reg.participants as Record<string, unknown>[]) ?? []) {
-        // Student managers compete as students too, so they're assigned to a
-        // company alongside school students.
-        if (!STUDENT_ROLES.includes(p.event_role as string)) continue
-        const dob = p.date_of_birth as string | null
-        students.push({
-          participantId: p.id as string,
-          groupKey: reg.type === 'group' ? reg.id : null,
-          gender: (p.gender as string | null) ?? null,
-          age: dob ? (Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000) : null,
-          experience: 0,
-        })
-        if (p.member_id) memberIds.push(p.member_id as string)
-      }
-    }
-    if (students.length === 0) {
-      return NextResponse.json({ error: 'No students to assign' }, { status: 400 })
-    }
-
-    // Experience = prior event participations per member
-    if (memberIds.length > 0) {
-      const { data: history } = await db
-        .from('event_participations')
-        .select('member_id')
-        .in('member_id', memberIds)
-      const expByMember = new Map<string, number>()
-      for (const h of history ?? []) {
-        expByMember.set(h.member_id, (expByMember.get(h.member_id) ?? 0) + 1)
-      }
-      const memberByParticipant = new Map<string, string>()
-      for (const reg of regs ?? []) {
-        for (const p of (reg.participants as Record<string, unknown>[]) ?? []) {
-          if (p.member_id) memberByParticipant.set(p.id as string, p.member_id as string)
-        }
-      }
-      for (const s of students) {
-        const memberId = memberByParticipant.get(s.participantId)
-        if (memberId) s.experience = expByMember.get(memberId) ?? 0
-      }
-    }
-
-    const assignment = assignCompanies(students, companies.length)
-    const companyIdByNumber = new Map(companies.map((c) => [c.number, c.id]))
-
-    for (const [participantId, number] of assignment) {
-      const { error } = await db
-        .from('participants')
-        .update({ company_id: companyIdByNumber.get(number) })
-        .eq('id', participantId)
-      if (error) return NextResponse.json({ error: 'Database error during assignment' }, { status: 500 })
-    }
-    return NextResponse.json({ ok: true, assigned: assignment.size })
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

@@ -73,6 +73,8 @@ export interface RosterParticipant {
    * arrive — so this line is what tells staff it went back.
    */
   refund_detail: string | null
+  /** A team profile has been submitted for this student (lib/team-profile). */
+  team_profile_submitted?: boolean
 }
 
 export interface RosterGroup {
@@ -182,6 +184,13 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
   )
   if (regError) throw new Error(`Failed to load registrations: ${regError.message}`)
   if (envError) throw new Error(`Failed to load docusign envelopes: ${envError.message}`)
+
+  const { data: profileRows } = await db
+    .from('team_profiles')
+    .select('participant_id')
+    .eq('event_slug', eventSlug)
+    .not('submitted_at', 'is', null)
+  const profileSubmitted = new Set((profileRows ?? []).map((r) => r.participant_id as string))
 
   // Latest-wins per participant: completed beats anything else
   interface EnvelopeProgress {
@@ -327,6 +336,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
         docusign_pill,
         compliance_pill,
         refund_detail: refundDetail(p.id as string, reg.id as string),
+        team_profile_submitted: profileSubmitted.has(p.id as string),
       }
     })
 

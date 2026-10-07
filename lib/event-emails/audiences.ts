@@ -10,6 +10,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { clerkClient } from '@clerk/nextjs/server'
 import { getEventRoster, type EventRosterData, type RosterGroup } from '@/lib/event-admin'
 import { ensurePayToken, payPageUrl } from '@/lib/registration-checkout'
+import { STUDENT_ROLES } from '@/lib/membership-rules'
 import type { AudienceKey, RecipientRole } from './types'
 import type { PaymentLine, RecipientForRender } from './render'
 
@@ -23,6 +24,8 @@ export interface ResolvedAudience {
   recipients: ResolvedRecipient[]
   /** Participants whose DocuSign is outstanding — the resend set. */
   docusignParticipantIds: string[]
+  /** Students whose team profile is outstanding, for {{team_profile_link}}. */
+  teamProfileParticipantIds?: string[]
   /**
    * Of those, the ones whose outstanding agreement is on Stellr signing. An
    * email carrying {{agreement_link}} already gives them their link, so they
@@ -142,6 +145,7 @@ export function buildRecipients(
   const want = new Set(audiences)
   const byEmail = new Map<string, ResolvedRecipient & { paymentKeys: Set<string> }>()
   const docusignIds = new Set<string>()
+  const teamProfileIds = new Set<string>()
 
   const add = (a: Add) => {
     const email = a.email?.trim().toLowerCase()
@@ -203,6 +207,18 @@ export function buildRecipients(
         add({ ...parent, role: 'guardian', reason: 'docusign_outstanding' })
       }
 
+      // Forms signed (or none needed), team profile not submitted.
+      if (
+        want.has('team_profile_outstanding') &&
+        STUDENT_ROLES.includes(p.event_role ?? '') &&
+        p.docusign !== 'outstanding' &&
+        !p.team_profile_submitted
+      ) {
+        teamProfileIds.add(p.id)
+        add({ ...participant, role: 'participant', reason: 'team_profile_outstanding' })
+        add({ ...parent, role: 'guardian', reason: 'team_profile_outstanding' })
+      }
+
       if (want.has('payment_outstanding') && !p.paid) {
         if (groupPaysAsOne) {
           groupOwes = true
@@ -233,7 +249,26 @@ export function buildRecipients(
   const recipients = [...byEmail.values()]
     .map(({ paymentKeys: _k, ...r }) => r)
     .sort((a, b) => a.name.localeCompare(b.name))
-  return { recipients, docusignParticipantIds: [...docusignIds] }
+  return { recipients, docusignParticipantIds: [...docusignIds], teamProfileParticipantIds: [...teamProfileIds] }
+}
+
+/** Adds each recipient's {{team_profile_link}} lines: the student's own, and their parent's. */
+export function attachTeamProfileLines(
+  recipients: ResolvedRecipient[],
+  roster: EventRosterData,
+  links: Map<string, string>,
+): void {
+  const byEmail = new Map(recipients.map((r) => [r.email.toLowerCase(), r]))
+  for (const g of roster.groups) {
+    for (const p of g.participants) {
+      const url = links.get(p.id)
+      if (!url) continue
+      const own = byEmail.get(p.email?.trim().toLowerCase() ?? '')
+      if (own) (own.teamProfiles ??= []).push({ participantName: own.isParticipant && own.firstName === p.first_name ? 'your' : p.first_name, url })
+      const guardian = p.minor ? byEmail.get(p.emergency_contact_email?.trim().toLowerCase() ?? '') : undefined
+      if (guardian && guardian !== own) (guardian.teamProfiles ??= []).push({ participantName: p.first_name, url })
+    }
+  }
 }
 
 /** Assigned volunteers (event container) plus this event's event managers. */
@@ -308,5 +343,12 @@ export async function resolveAudience(
   const firstNames = new Map(roster.groups.flatMap((g) => g.participants.map((p) => [p.id, p.first_name] as const)))
   const signers = await loadOutstandingSigners(db, event.slug, { mintLinks: !!opts.mintPayLinks })
   resolved.nativeParticipantIds = attachAgreementLines(resolved.recipients, signers, (id) => firstNames.get(id) ?? undefined)
+
+  // {{team_profile_link}}: minting creates the student's profile row, so only on a real send.
+  if (resolved.teamProfileParticipantIds?.length) {
+    const { outstandingProfileLinks } = await import('@/lib/team-profile/store')
+    const links = await outstandingProfileLinks(db, event.slug, resolved.teamProfileParticipantIds, !!opts.mintPayLinks)
+    attachTeamProfileLines(resolved.recipients, roster, links)
+  }
   return resolved
 }

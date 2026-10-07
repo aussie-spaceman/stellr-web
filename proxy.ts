@@ -4,6 +4,7 @@ import { APP_HOST, SITE_URL } from '@/lib/env'
 import { checkRateLimit, clientIp } from '@/lib/rate-limit'
 import { matchCrawler, recordCrawlerHit } from '@/lib/crawlers'
 import { PRIVATE_ROUTE_HEADER, isPrivatePath } from '@/lib/private-routes'
+import { IMPERSONATION_COOKIE } from '@/lib/impersonation-cookie'
 
 const isProtectedRoute = createRouteMatcher(['/account(.*)', '/admin(.*)'])
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
@@ -79,7 +80,12 @@ export default clerkMiddleware(async (auth, req, event) => {
     if (url.pathname === '/events') {
       return NextResponse.rewrite(new URL('/community/events', req.url))
     }
-    if (isPublicOnlyRoute(req)) {
+    // Admin view-as is a host-only cookie on app, so on www the credential page
+    // resolves the admin, not the member, and says "This credential is
+    // private". Keep it on app while viewing as someone; the page re-checks the
+    // cookie and the admin claim, and its canonical URL stays www.
+    const viewAsCredential = isCredentialRoute(req) && req.cookies.has(IMPERSONATION_COOKIE)
+    if (isPublicOnlyRoute(req) && !viewAsCredential) {
       return NextResponse.redirect(new URL(url.pathname + url.search, WWW), 308)
     }
   }

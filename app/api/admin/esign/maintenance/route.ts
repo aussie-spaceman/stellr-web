@@ -17,6 +17,12 @@ import { ALL_STEPS, runEsignMaintenance, type MaintenanceStep } from '@/lib/esig
 
 export const maxDuration = 60
 
+/**
+ * Off-site copying stops starting new records this long into the run, leaving
+ * room for the one in flight and the steps after it inside maxDuration.
+ */
+const COPY_BUDGET_MS = 35_000
+
 const bodySchema = z.object({
   dryRun: z.boolean().optional(),
   steps: z.array(z.enum(ALL_STEPS as [MaintenanceStep, ...MaintenanceStep[]])).optional(),
@@ -29,10 +35,12 @@ export async function POST(req: NextRequest) {
   const parsed = bodySchema.safeParse(await req.json().catch(() => ({})))
   if (!parsed.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
 
+  const deadline = Date.now() + COPY_BUDGET_MS
   const db = supabaseServer()
   const run = await startCronRun(db, 'esign-maintenance-manual')
   const result = await runEsignMaintenance(db, {
     ...parsed.data,
+    deadline,
     onError: (step, err) => run.fail(step, err),
   })
   await run.finish({ ...result, by: userId })

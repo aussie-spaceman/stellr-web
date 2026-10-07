@@ -66,15 +66,26 @@ export function EsignEngineCard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dryRun }),
       })
-      const data = await res.json()
+      // A run cut off by the platform's time limit returns a plain-text error
+      // page, not JSON. Whatever finished before then is kept.
+      const data = await res.json().catch(() => null)
+      if (!data) {
+        throw new Error('The run took too long and was stopped part way. What finished is kept: run it again to carry on.')
+      }
       if (!res.ok) throw new Error(data.error ?? 'Maintenance failed')
       const archive = data.archive as { eligible?: number; archived?: number; failed?: unknown[]; error?: string } | undefined
+      const copies = data.replicate as { replicated?: number; failed?: unknown[]; stoppedEarly?: boolean; error?: string } | undefined
+      const copied = copies && typeof copies.replicated === 'number'
+        ? copies.error
+          ? ` Off-site copy failed: ${copies.error}`
+          : ` Copied ${copies.replicated} off-site${copies.failed?.length ? `; ${copies.failed.length} failed` : ''}${copies.stoppedEarly ? '. More are waiting: run it again to copy the rest.' : '.'}`
+        : ''
       const text = archive?.error
         ? `Archive step failed: ${archive.error}`
         : dryRun
           ? `${archive?.eligible ?? 0} signed document(s) waiting to be stored. Nothing was changed.`
-          : `Stored ${archive?.archived ?? 0} of ${archive?.eligible ?? 0} signed document(s)${archive?.failed?.length ? `; ${archive.failed.length} failed` : ''}.`
-      setMsg({ text, error: Boolean(archive?.error || archive?.failed?.length) })
+          : `Stored ${archive?.archived ?? 0} of ${archive?.eligible ?? 0} signed document(s)${archive?.failed?.length ? `; ${archive.failed.length} failed` : ''}.${copied}`
+      setMsg({ text, error: Boolean(archive?.error || archive?.failed?.length || copies?.error || copies?.failed?.length) })
       await load()
     } catch (e) {
       setMsg({ text: e instanceof Error ? e.message : 'Maintenance failed', error: true })

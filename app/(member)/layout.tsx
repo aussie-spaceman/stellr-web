@@ -4,8 +4,7 @@ import { AppTopBar } from '@/components/layout/AppTopBar'
 import { SiteFooter } from '@/components/layout/SiteFooter'
 import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner'
 import { getCurrentMember } from '@/lib/community'
-import { getImpersonation } from '@/lib/impersonation'
-import { supabaseServer } from '@/lib/supabase'
+import { viewAsBannerProps } from '@/lib/impersonation'
 import { getHostCaps } from '@/lib/sessions'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { isStudentForAds } from '@/lib/no-ads'
@@ -20,42 +19,22 @@ export default async function MemberLayout({ children }: { children: React.React
   // Admin view-as. getCurrentMember() has already resolved to the impersonated
   // member above, so `member` is who the portal is rendering — the banner just
   // has to say so, and name the admin behind it.
-  const impersonation = await getImpersonation()
-  const viewingAsName =
-    impersonation && member
-      ? [member.first_name, member.last_name].filter(Boolean).join(' ') || member.email || 'this member'
-      : null
-  let adminName: string | null = null
-  if (impersonation?.adminMemberId) {
-    const { data } = await supabaseServer()
-      .from('members')
-      .select('first_name, last_name, email')
-      .eq('id', impersonation.adminMemberId)
-      .maybeSingle()
-    const a = data as { first_name: string | null; last_name: string | null; email: string | null } | null
-    adminName = a ? [a.first_name, a.last_name].filter(Boolean).join(' ') || a.email : null
-  }
+  const viewAs = await viewAsBannerProps(member)
   const caps = member ? await getHostCaps(member.id) : null
   const showHosting = !!caps && (caps.canCoach || caps.canMentor)
   const isTeacher = member?.event_role === 'teacher'
   // Not while an admin views as the member: that is the admin's browser.
-  const markStudent = !!member && !impersonation && isStudentForAds({ date_of_birth: member.date_of_birth ?? null, age_bracket: member.age_bracket })
+  const markStudent = !!member && !viewAs && isStudentForAds({ date_of_birth: member.date_of_birth ?? null, age_bracket: member.age_bracket })
 
   return (
     <div className="min-h-screen bg-surface">
       {markStudent && <NoAdsStudentMarker />}
-      {impersonation && member && (
-        <ImpersonationBanner
-          memberId={impersonation.memberId}
-          memberName={viewingAsName ?? 'this member'}
-          adminName={adminName}
-        />
-      )}
+      {viewAs && <ImpersonationBanner {...viewAs} />}
       <div className="flex">
         <AppSidebar canHost={showHosting} isTeacher={isTeacher} />
 
         <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-          <AppTopBar isAdmin={isAdmin} viewingAs={viewingAsName} />
+          <AppTopBar isAdmin={isAdmin} viewingAs={viewAs?.memberName ?? null} />
 
           <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 pb-24 lg:px-8 lg:pb-10">
             {children}

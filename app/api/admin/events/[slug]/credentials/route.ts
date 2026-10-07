@@ -46,7 +46,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
   const regIds = await registrationIds(slug)
   const [settings, { data: rows }, { count: checkedIn }] = await Promise.all([
     loadSettings(slug),
-    db.from('credentials').select(CREDENTIAL_COLUMNS).eq('event_slug', slug).order('recipient_name'),
+    db.from('credentials').select(CREDENTIAL_COLUMNS).eq('event_slug', slug).eq('source', 'event').order('recipient_name'),
     regIds.length
       ? db.from('participants').select('id', { count: 'exact', head: true }).not('checked_in_at', 'is', null).in('registration_id', regIds)
       : Promise.resolve({ count: 0 }),

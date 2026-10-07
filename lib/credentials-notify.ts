@@ -36,6 +36,7 @@ export async function sendCredentialIssuedEmail(
       viewUrl:  familyCredentialUrl(row),
       isMinor:  row.is_minor,
       canShare: canShare(row, consent).ok,
+      pdHours:  row.source === 'pd' ? row.pd_hours : null,
     })
     await sendEmail({
       to: address,

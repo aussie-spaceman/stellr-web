@@ -139,11 +139,17 @@ export interface IssueInput {
   awardType?: string | null
   theme?: CredentialTheme | null
   expiresAt?: string | null
+  /** PD credentials: hours recorded, standards, and the activity's name/day/place. */
+  pdHours?: number | null
+  standards?: string[]
+  activityTitle?: string | null
+  activityDate?: string | null
+  activityLocation?: string | null
 }
 
 /**
  * Idempotent on the partial unique indexes (member+course,
- * participant+event+award):
+ * participant+event+award, member+event for a live PD credential):
  * a re-run returns the existing row with `created: false`. A concurrent first
  * issue is treated the same way — the unique violation is the signal.
  */
@@ -172,6 +178,11 @@ export async function issueCredential(
     award_type:     input.source === 'event' ? input.awardType ?? 'participation' : null,
     theme:          input.theme ?? null,
     expires_at:     input.expiresAt ?? null,
+    pd_hours:          input.source === 'pd' ? input.pdHours ?? null : null,
+    standards:         input.standards ?? [],
+    activity_title:    input.activityTitle ?? null,
+    activity_date:     input.activityDate ?? null,
+    activity_location: input.activityLocation ?? null,
     is_minor:       isMinorOn(input.recipient.dateOfBirth),
   }
 
@@ -203,6 +214,11 @@ async function findExisting(db: SupabaseClient, input: IssueInput): Promise<Cred
       .eq('participant_id', input.participantId)
       .eq('event_slug', input.eventSlug)
       .eq('award_type', input.awardType ?? 'participation')
+  } else if (input.source === 'pd') {
+    // One live PD credential per educator per event (credentials_pd_once): a
+    // revoked one is a correction, not a block, so only issued rows match.
+    if (!input.memberId || !input.eventSlug) throw new Error('[credentials] PD credential needs memberId + eventSlug')
+    q = q.eq('member_id', input.memberId).eq('event_slug', input.eventSlug).eq('status', 'issued')
   } else {
     return null
   }

@@ -6,7 +6,7 @@ import { ageOn, isMinorOn } from '@/lib/age'
 // routes as well as by lib/credentials.ts, which re-exports everything here.
 // Design: docs/PLAN-credentials-linkedin-2026-09-21.md.
 
-export type CredentialSource = 'course' | 'event' | 'manual'
+export type CredentialSource = 'course' | 'event' | 'manual' | 'pd'
 export type CredentialTheme = 'space' | 'environmental' | 'campaign'
 export type CredentialStatus = 'issued' | 'revoked'
 export type CredentialVisibility = 'private' | 'public'
@@ -32,6 +32,14 @@ export interface CredentialRow {
   award_type: string | null
   theme: CredentialTheme | null
   badge_path: string | null
+  /** PD credentials only: hours of professional development recorded. */
+  pd_hours: number | null
+  /** Standards the hours map to, snapshotted at issue (lib/pd-standards). */
+  standards: string[]
+  /** PD credentials: the event, day and place, snapshotted at issue. */
+  activity_title: string | null
+  activity_date: string | null
+  activity_location: string | null
   issued_at: string
   expires_at: string | null
   status: CredentialStatus
@@ -43,7 +51,7 @@ export interface CredentialRow {
 }
 
 export const CREDENTIAL_COLUMNS =
-  'id, number, source, member_id, participant_id, module_id, event_slug, recipient_name, title, description, criteria, skills, issuer, role_label, award, award_type, theme, badge_path, issued_at, expires_at, status, revoked_at, revoked_reason, tombstoned_at, visibility, is_minor'
+  'id, number, source, member_id, participant_id, module_id, event_slug, recipient_name, title, description, criteria, skills, issuer, role_label, award, award_type, theme, badge_path, pd_hours, standards, activity_title, activity_date, activity_location, issued_at, expires_at, status, revoked_at, revoked_reason, tombstoned_at, visibility, is_minor'
 
 /** What a verifier sees: the row's state collapsed to one word. */
 export type CredentialState = 'valid' | 'expired' | 'revoked' | 'withdrawn'

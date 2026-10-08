@@ -112,6 +112,51 @@ export async function listEventStudents(db: SupabaseClient, slug: string): Promi
     .sort(bySurname)
 }
 
+// ── Mentors ──────────────────────────────────────────────────────────────────
+
+export interface EventMentor {
+  member_id: string
+  first_name: string
+  last_name: string
+  email: string | null
+  date_of_birth: string | null
+}
+
+/**
+ * Every volunteer mentor assigned to the event on its Volunteers panel (an
+ * active cohort_members 'volunteer' row on the event-level container), by
+ * surname. Mentors have no participants row; they are members.
+ */
+export async function listEventMentors(db: SupabaseClient, slug: string): Promise<EventMentor[]> {
+  const { data: container } = await db
+    .from('mentoring_cohorts')
+    .select('id')
+    .eq('container_type', 'event_participation')
+    .is('parent_container_id', null)
+    .eq('campaign_ref', slug)
+    .maybeSingle()
+  if (!container?.id) return []
+  const { data, error } = await db
+    .from('cohort_members')
+    .select('member_id, members(first_name, last_name, email, date_of_birth, is_active)')
+    .eq('cohort_id', container.id)
+    .eq('relationship', 'volunteer')
+    .eq('status', 'active')
+  if (error) throw new Error(`[event-certificates] mentors: ${error.message}`)
+  type M = { first_name: string | null; last_name: string | null; email: string | null; date_of_birth: string | null; is_active: boolean | null }
+  return ((data ?? []) as { member_id: string; members: M | M[] | null }[])
+    .map((r) => ({ id: r.member_id, m: Array.isArray(r.members) ? r.members[0] : r.members }))
+    .filter((r): r is { id: string; m: M } => !!r.m && r.m.is_active !== false)
+    .map(({ id, m }) => ({
+      member_id: id,
+      first_name: m.first_name ?? '',
+      last_name: m.last_name ?? '',
+      email: m.email,
+      date_of_birth: m.date_of_birth,
+    }))
+    .sort(bySurname)
+}
+
 export function fullName(p: { first_name: string; last_name: string }): string {
   return `${p.first_name ?? ''} ${p.last_name ?? ''}`.replace(/\s+/g, ' ').trim()
 }

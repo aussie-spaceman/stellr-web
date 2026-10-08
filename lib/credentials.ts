@@ -149,7 +149,7 @@ export interface IssueInput {
 
 /**
  * Idempotent on the partial unique indexes (member+course,
- * participant+event+award, member+event for a live PD credential):
+ * participant+event+award, member+event for a mentor or a live PD credential):
  * a re-run returns the existing row with `created: false`. A concurrent first
  * issue is treated the same way — the unique violation is the signal.
  */
@@ -208,6 +208,10 @@ async function findExisting(db: SupabaseClient, input: IssueInput): Promise<Cred
   if (input.source === 'course') {
     if (!input.memberId || !input.moduleId) throw new Error('[credentials] course credential needs memberId + moduleId')
     q = q.eq('member_id', input.memberId).eq('module_id', input.moduleId)
+  } else if (input.source === 'event' && input.awardType === 'mentor') {
+    // Mentors are members, not participants (credentials_event_mentor_once).
+    if (!input.memberId || !input.eventSlug) throw new Error('[credentials] mentor credential needs memberId + eventSlug')
+    q = q.eq('member_id', input.memberId).eq('event_slug', input.eventSlug).eq('award_type', 'mentor')
   } else if (input.source === 'event') {
     if (!input.participantId || !input.eventSlug) throw new Error('[credentials] event credential needs participantId + eventSlug')
     q = q

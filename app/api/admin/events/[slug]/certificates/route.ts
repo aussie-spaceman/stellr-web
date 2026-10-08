@@ -10,6 +10,7 @@ import {
   fullName,
   listAssignments,
   listEventCompanies,
+  listEventMentors,
   listEventStudents,
   loadTemplates,
   placementOf,
@@ -37,17 +38,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
   const awards: AwardType[] = awardParam === 'all' ? [...AWARD_TYPES] : [awardParam as AwardType]
 
   const db = supabaseServer()
-  const [templates, students, assignments, companies] = await Promise.all([
+  const [templates, students, assignments, companies, mentors] = await Promise.all([
     loadTemplates(db, slug),
     listEventStudents(db, slug),
     listAssignments(db, slug),
     listEventCompanies(db, slug),
+    awards.includes('mentor') ? listEventMentors(db, slug) : Promise.resolve([]),
   ])
 
   const parts: Uint8Array[] = []
   for (const award of awards) {
-    const recipients = recipientsFor(award, students, assignments, companies)
+    const recipients = award === 'mentor' ? mentors : recipientsFor(award, students, assignments, companies)
     if (recipients.length === 0) continue
+    // "All" prints what has artwork for students; mentors without artwork are
+    // left out rather than blocking the students' stack.
+    if (award === 'mentor' && awardParam === 'all' && !templates.mentor) continue
     const label = EVENT_AWARDS[award].label
     const template = templates[award]
     if (!template) {
@@ -68,7 +73,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
   if (parts.length === 0) {
     const none = awardParam === 'participation' || awardParam === 'all'
       ? 'No students to generate certificates for.'
-      : `No one has been given the ${EVENT_AWARDS[awardParam as AwardType].label} yet.`
+      : awardParam === 'mentor'
+        ? 'No mentors are assigned to this event yet. Assign them on the Volunteers panel.'
+        : `No one has been given the ${EVENT_AWARDS[awardParam as AwardType].label} yet.`
     return NextResponse.json({ error: none }, { status: 400 })
   }
 

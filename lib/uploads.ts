@@ -180,8 +180,8 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
     },
   },
 
-  // The one global educator PD certificate background (lib/pd-certificate.ts).
-  // Staged here, then copied to PD_ARTWORK_PATH by /api/admin/pd-certificate.
+  // The educator PD certificate artwork, front or back (lib/pd-certificate-store).
+  // Staged here, then copied to its page (front/back) by /api/admin/pd-certificate.
   'pd-certificate-artwork': {
     bucket: RESOURCES_BUCKET,
     maxBytes: 10 * MB,

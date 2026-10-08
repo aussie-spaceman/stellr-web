@@ -199,3 +199,28 @@ CREATE UNIQUE INDEX credentials_pd_once ON public.credentials (member_id, event_
 4. **Maria Gordon, in production:** create her (teacher, STEM School, invite on), then Educator PD on the Colorado event, 8 hours.
 5. **Her first add-to-LinkedIn click** is the first real check of tracker 11.2 (prefill) and org ID 66274777.
 6. **Onboarding to LinkedIn is unproven end to end** for an admin-created teacher. Nobody has signed in as one. Tracker 15.1 has the same gap.
+
+## 8. Two-page Cowork certificate (8 Oct 2026)
+
+David's first production upload (8 Oct, the older one-page design) printed every plain-page field over a design that already said most of them. The real design arrived as two pages. Changes, all on `feat/pd-certificate-two-page`:
+
+- **Two pages per theme.**
+  - **Front:** the design with gaps for four fields.
+  - **Back:** the standards alignment map, printed as is.
+  - Both are uploaded on the Educator PD panel. The back is optional.
+  - Without a front, the certificate is the plain one-page design.
+- **Four fields on the front, and nothing else drawn:**
+  - teacher name, in Aileron SemiBold, shrunk to fit;
+  - "at <location>", "on <date>" and the hours, in Norwester.
+  - `pdArtworkTexts`, `renderPdCertificatePdf` in `lib/pd-certificate.ts`.
+- **Positioner.** Each field has across, height, widest and size sliders, with a live preview and Save, the same pattern as "Position the name" (`components/admin/PdCertificateArtwork.tsx`).
+  - Sizes are in Canva units on the 2000×1500 design, so Norwester 36 is 36. Award certificates use points instead.
+  - The defaults are measured from the 2027 Space Design Competition mock-up.
+- **Per theme (Space / Environmental).** Uploading an Environmental design never replaces the Space one.
+  - Paths: `community-resources/pd-certificate/<theme>/{front,back,layout.json}`. There is no table.
+  - The panel works on the event's theme. A credential prints on its own `theme`'s artwork.
+  - The old single file `pd-certificate/current` is no longer read.
+- **Standards follow the certificate back** (David: "keep the back as per the image provided"): 17 Common Core codes, grouped as printed. This replaces the 7 Oct NGSS + Common Core set.
+  - The email and page copy now say "Common Core State Standards".
+  - The codes are printed as on the back. HSN-CED.A.3 and HSN-MG.A.3 are officially HSA-CED.A.3 and HSG-MG.A.3; the Cowork session may want to correct the back.
+- `lib/pd-certificate-layout.ts` is the client-safe layout model. `lib/pd-certificate-store.ts` handles storage.

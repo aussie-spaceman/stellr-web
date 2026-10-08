@@ -49,6 +49,9 @@ describe('credentialIssuedEmail — educator PD', () => {
   it('states the hours and the licence-renewal use', () => {
     expect(pd.html).toContain('<strong>8 hours</strong> of professional development')
     expect(pd.html).toContain('teaching license renewal')
+    // 8 Oct: the certificate back maps Common Core only.
+    expect(pd.html).toContain('aligned to Common Core State Standards')
+    expect(pd.html).not.toContain('NGSS')
     expect(pd.text).toContain('8 hours of professional development')
   })
 

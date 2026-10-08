@@ -51,10 +51,28 @@ requests (≤ 2 names) and STEM strengths / areas to work on (10 soft skills).
 
 ## Not done / unproven
 
-1. **Migration not applied to dev or prod.** Auto mode blocked
-   `apply_migration`. Until it is, every team-profile read degrades quietly
-   (roster, account page) and sends fail into logs/cron_runs.
-2. No end-to-end run against a real database: verified by unit tests (algorithm,
-   answers, email copy, time-zone cut-off), typecheck, and Storybook only.
-3. No real email seen in an inbox.
-4. Copy (form, emails, template) is a draft for David's sign-off.
+1. **Migration: applied to dev only (8 Oct, David asked).** The ledger is
+   realigned to `20261007213644`. Read back: 16 columns, RLS on, `service_role`
+   read/write, 5 indexes, and `participants.company_locked` (default false).
+   **Production still needs it before this code is promoted.**
+2. **Exercised against the dev DB on 8 Oct**, with Nevada test students and a
+   throwaway token secret local to the process; the test row was deleted
+   afterwards. Results:
+   - dispatch sent nothing while forms were incomplete (`waiting: 3`);
+   - resend returned a 409 with the "permission form isn't complete" message;
+   - no rows were created before the gate opened;
+   - the minted link was stable;
+   - the real `/team-profile/<token>` page showed the inline error for a
+     missing answer, then submitted;
+   - the row stored every answer exactly, and the planner showed `submitted`.
+
+   **Not exercised:**
+   - an actual email send: there's no `DEV_MAIL_SAFELIST` or token secret
+     locally;
+   - the signed-in admin panel and member page;
+   - Auto-Assign writes (left alone to avoid disturbing the e2e seed event).
+3. The local `.env.local` has no `SURVEY_TOKEN_SECRET` or `ESIGN_TOKEN_SECRET`,
+   so links can't be minted locally without supplying one. Dev and prod on
+   Vercel have them (`credential-family-link` uses `SURVEY_TOKEN_SECRET` in prod).
+4. No real email seen in an inbox.
+5. The copy (form, emails, template) is a draft for David's sign-off.

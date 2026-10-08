@@ -23,6 +23,7 @@ export default function EventCompanies({
   const [count, setCount] = useState(companies.length || 2)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
   const [names, setNames] = useState<Record<string, string>>(
     Object.fromEntries(companies.map((c) => [c.id, c.name ?? '']))
   )
@@ -32,12 +33,20 @@ export default function EventCompanies({
   async function call(init: RequestInit) {
     setBusy(true)
     setError(null)
+    setInfo(null)
     const res = await fetch(api, { headers: { 'Content-Type': 'application/json' }, ...init })
     setBusy(false)
+    const body = await res.json().catch(() => null)
     if (!res.ok) {
-      const body = await res.json().catch(() => null)
       setError(body?.error ?? 'Request failed')
       return false
+    }
+    if (typeof body?.assigned === 'number') {
+      setInfo(
+        `Placed ${body.assigned} student${body.assigned === 1 ? '' : 's'} with team profiles` +
+          (body.kept ? `, kept ${body.kept} placed by hand` : '') +
+          (body.pooled ? `. ${body.pooled} without a team profile are unassigned: see Team profiles for suggestions.` : '.'),
+      )
     }
     router.refresh()
     return true
@@ -69,7 +78,9 @@ export default function EventCompanies({
             onClick={async () => {
               if (
                 companies.some((c) => c.count > 0) &&
-                !window.confirm('Re-running auto-assign will overwrite existing company assignments. Continue?')
+                !window.confirm(
+                  'Re-running Auto-Assign moves every student who has submitted a team profile. Students you placed by hand stay where they are; students without a team profile become unassigned. Continue?',
+                )
               )
                 return
               await call({ method: 'POST', body: JSON.stringify({ action: 'auto_assign' }) })
@@ -83,6 +94,7 @@ export default function EventCompanies({
       </div>
 
       {error && <p className="text-xs text-red-600">{error}</p>}
+      {info && <p className="text-xs text-green-700">{info}</p>}
 
       {companies.length === 0 ? (
         <p className="text-sm text-brand-muted-soft">Set the number of companies (1–10) to get started.</p>

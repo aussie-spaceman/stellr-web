@@ -74,6 +74,18 @@ export async function onEnvelopeCompleted(
       .is('retain_until', null)
   }
 
+  // A student's permission form is the gate for their team profile. Idempotent
+  // (one profile per participant), so a replay is harmless; non-fatal, because
+  // the daily team-profiles sweep sends anything this misses.
+  if (envelope.participant_id) {
+    try {
+      const { dispatchTeamProfiles } = await import('@/lib/team-profile/store')
+      await dispatchTeamProfiles(db, { participantIds: [envelope.participant_id] })
+    } catch (err) {
+      console.error('[esign-completion] team profile dispatch failed:', err)
+    }
+  }
+
   const { data: claimed } = await db
     .from('agreements')
     .update({ completion_notified_at: new Date().toISOString() })

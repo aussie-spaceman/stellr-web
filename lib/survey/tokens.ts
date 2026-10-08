@@ -17,8 +17,13 @@ function secret(): string {
   return s
 }
 
+/** HMAC of "<purpose>.<id>.<version>": shared by survey and team-profile links. */
+export function signedLinkToken(purpose: string, id: string, version: number): string {
+  return createHmac('sha256', secret()).update(`${purpose}.${id}.${version}`).digest('base64url')
+}
+
 export function surveyToken(invitationId: string, version: number): string {
-  return createHmac('sha256', secret()).update(`survey.${invitationId}.${version}`).digest('base64url')
+  return signedLinkToken('survey', invitationId, version)
 }
 
 export function hashToken(token: string): string {

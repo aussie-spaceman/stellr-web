@@ -1,4 +1,4 @@
-// The four starter emails for the "Email Reminders" tab, generalised from the
+// The starter emails for the "Email Reminders" tab, generalised from the
 // Colorado SDC emails sent by hand on 26–28 Sept 2026. Copy approved in the
 // plan review; tone per VOICE.md ("Transactional emails: warm but functional").
 //
@@ -61,6 +61,25 @@ We haven't received payment for this registration yet. Please complete it before
 Participants can also check their registration status in the Stellr portal: {{portal_link}}
 
 If you've already paid, or have a question about the amount, reply to this message and we'll sort it out.
+
+Thanks for helping make {{event_name}} another great event!`,
+  },
+  {
+    key: 'team_profile_outstanding',
+    name: 'Outstanding team profile',
+    audiences: ['team_profile_outstanding'],
+    subject: '{{event_name}}: your team profile is still outstanding',
+    resendDocusign: false,
+    scheduleDaysBefore: 7,
+    body: `Hi {{first_name}},
+
+You're receiving this because {{who_is_registered}} registered for {{event_name}} at {{event_venue}} on {{event_date}}.
+
+We're building the companies for the event, and we don't have a team profile for {{participant_names}} yet. It takes about 5 minutes and helps us make every company a good mix of skills.
+
+{{team_profile_link}}
+
+Answers can be changed until the event starts.
 
 Thanks for helping make {{event_name}} another great event!`,
   },

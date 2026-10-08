@@ -10,6 +10,8 @@ import { BillingHistory } from '@/components/member/BillingHistory'
 import { DocusignsSection } from '@/components/member/DocusignsSection'
 import { ComplianceSection } from '@/components/member/ComplianceSection'
 import { MyRegistrations } from '@/components/member/MyRegistrations'
+import { TeamProfileHistory } from '@/components/member/TeamProfileHistory'
+import { memberHistory, type HistoryEntry } from '@/lib/team-profile/store'
 import { ScholarshipHistory } from '@/components/member/ScholarshipHistory'
 import { listMemberScholarships, toHistoryItems } from '@/lib/scholarships'
 import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
@@ -212,6 +214,18 @@ export default async function AccountPage({
           })
       : {}
 
+  // Team profiles across events. Profile tab only; never blocks the page. An
+  // admin viewing as the member sees the answers but gets no edit link.
+  const teamProfiles: HistoryEntry[] =
+    activeTab === 'profile'
+      ? await memberHistory(db, member.id)
+          .then((rows) => (viewAsId ? rows.map((r) => ({ ...r, editUrl: null })) : rows))
+          .catch((err) => {
+            console.error('[account] team profiles failed:', err)
+            return []
+          })
+      : []
+
   const tabLinks: { key: Tab; label: string }[] = [
     { key: 'profile', label: 'Profile' },
     ...(showTeams ? [{ key: 'teams' as Tab, label: 'Teams' }] : []),
@@ -268,6 +282,7 @@ export default async function AccountPage({
               </div>
             )}
             <MyRegistrations registrations={myRegistrations} />
+            <TeamProfileHistory entries={teamProfiles} />
             <ScholarshipHistory items={scholarships} audience="member" />
             {volunteer && (
               <VolunteeringSection

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CredentialRow } from '@/lib/credentials-core'
 import { EVENT_AWARDS } from '@/lib/event-awards'
 
@@ -38,6 +38,7 @@ const STATE: Record<string, { label: string; cls: string }> = {
 export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug: string; eventTitle: string }) {
   const base = `/api/admin/events/${eventSlug}/credentials`
   const [audience, setAudience] = useState<Audience>('students')
+  const shown = useRef<Audience>('students')
   const [data, setData] = useState<Loaded | null>(null)
   const [form, setForm] = useState<Settings>({ credential_title: '', credential_description: '', credential_criteria: '', credential_skills: [] })
   const [skillsText, setSkillsText] = useState('')
@@ -50,6 +51,7 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
     const res = await fetch(`${base}?audience=${a}`)
     if (!res.ok) { setMsg({ text: 'Could not load credentials.', error: true }); return }
     const d = (await res.json()) as Loaded
+    if (a !== shown.current) return // the filter moved on while this loaded
     setData(d)
     setForm({ ...d.settings, credential_skills: d.settings.credential_skills ?? [] })
     setSkillsText((d.settings.credential_skills ?? []).join(', '))
@@ -65,6 +67,7 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
     setData(null); setMsg(null); setRevoking(null)
     setForm({ credential_title: '', credential_description: '', credential_criteria: '', credential_skills: [] })
     setSkillsText('')
+    shown.current = a
     setAudience(a)
   }
 

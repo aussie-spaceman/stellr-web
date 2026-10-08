@@ -7,6 +7,7 @@ import { requireEventAccess } from '@/lib/event-access'
 //   GET  — settings + live list of checked-in participants (polled by the door screen)
 //   POST — { action: 'open' } | { action: 'close' } | { action: 'regenerate' }
 //          { action: 'manual', participantId } | { action: 'undo', participantId }
+//          { action: 'resources_url', url } — the event's Docs folder ('' clears it)
 
 type Params = { params: Promise<{ slug: string }> }
 
@@ -17,7 +18,7 @@ export async function GET(_req: Request, { params }: Params) {
 
   const db = supabaseServer()
   const [{ data: settings }, { data: regs }, { data: merchRows }] = await Promise.all([
-    db.from('event_settings').select('check_in_token, check_in_open').eq('event_slug', slug).maybeSingle(),
+    db.from('event_settings').select('check_in_token, check_in_open, resources_url').eq('event_slug', slug).maybeSingle(),
     db
       .from('registrations')
       .select('id, participants(id, member_id, first_name, last_name, event_role, t_shirt_size, checked_in_at, check_in_method, merch_collected, event_companies(number, name))')
@@ -56,6 +57,7 @@ export async function GET(_req: Request, { params }: Params) {
   return NextResponse.json({
     checkInOpen: settings?.check_in_open ?? false,
     checkInToken: settings?.check_in_token ?? null,
+    resourcesUrl: settings?.resources_url ?? null,
     participants,
   })
 }
@@ -89,6 +91,25 @@ export async function POST(req: Request, { params }: Params) {
     const { error } = await db.from('event_settings').upsert(update, { onConflict: 'event_slug' })
     if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 })
     return NextResponse.json({ ok: true })
+  }
+
+  if (action === 'resources_url') {
+    const raw = typeof body?.url === 'string' ? body.url.trim() : ''
+    let url: string | null = null
+    if (raw) {
+      try {
+        const parsed = new URL(raw)
+        if (parsed.protocol !== 'https:') throw new Error('not https')
+        url = parsed.toString()
+      } catch {
+        return NextResponse.json({ error: 'Enter a full https:// link' }, { status: 400 })
+      }
+    }
+    const { error } = await db
+      .from('event_settings')
+      .upsert({ event_slug: slug, resources_url: url }, { onConflict: 'event_slug' })
+    if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    return NextResponse.json({ ok: true, resourcesUrl: url })
   }
 
   if (action === 'merch_collected' || action === 'merch_uncollected') {

@@ -182,6 +182,11 @@ describe('pickTemplate', () => {
     expect(pickTemplate(all, { companyId: null, mentor: false })?.id).toBe('e')
   })
 
+  it('keeps a mentor with a company on the mentors design, else their company', () => {
+    expect(pickTemplate(all, { companyId: 'c1', mentor: true })?.id).toBe('m')
+    expect(pickTemplate([everyone, c1], { companyId: 'c1', mentor: true })?.id).toBe('c1')
+  })
+
   it('falls back to a plain badge with no templates, and mentors to everyone', () => {
     expect(pickTemplate([], { companyId: null, mentor: true })).toBeNull()
     expect(pickTemplate([everyone], { companyId: null, mentor: true })?.id).toBe('e')

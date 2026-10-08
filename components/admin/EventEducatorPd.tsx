@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { CredentialRow } from '@/lib/credentials-core'
 import { formatPdHours } from '@/lib/pd-standards'
-import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
+import PdCertificateArtwork from '@/components/admin/PdCertificateArtwork'
 
 // Educator PD panel on the competition Settings tab: record the hours a teacher
 // gave at this event and issue their PD certificate + LinkedIn-ready credential.
@@ -24,7 +24,7 @@ const STATE: Record<string, { label: string; cls: string }> = {
   revoked: { label: 'Revoked', cls: 'bg-red-50 text-red-700' },
 }
 
-export default function EventEducatorPd({ eventSlug }: { eventSlug: string }) {
+export default function EventEducatorPd({ eventSlug, theme }: { eventSlug: string; theme: 'space' | 'environmental' }) {
   const base = `/api/admin/events/${eventSlug}/pd-credentials`
   const [rows, setRows] = useState<CredentialRow[] | null>(null)
   const [canIssue, setCanIssue] = useState(false)
@@ -35,7 +35,6 @@ export default function EventEducatorPd({ eventSlug }: { eventSlug: string }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null)
   const [revoking, setRevoking] = useState<{ id: string; reason: string } | null>(null)
-  const [artwork, setArtwork] = useState<{ hasArtwork: boolean; updatedAt: string | null } | null>(null)
 
   async function load() {
     const res = await fetch(base)
@@ -43,10 +42,6 @@ export default function EventEducatorPd({ eventSlug }: { eventSlug: string }) {
     const d = (await res.json()) as { credentials: CredentialRow[]; canIssue: boolean }
     setRows(d.credentials)
     setCanIssue(d.canIssue)
-    if (d.canIssue) {
-      const a = await fetch('/api/admin/pd-certificate')
-      if (a.ok) setArtwork(await a.json())
-    }
   }
   useEffect(() => { void load() }, [eventSlug]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -111,20 +106,6 @@ export default function EventEducatorPd({ eventSlug }: { eventSlug: string }) {
     } finally { setBusy(null) }
   }
 
-  async function uploadArtwork(file: File) {
-    setBusy('artwork'); setMsg(null)
-    try {
-      const stored = await uploadDirectToStorage(file, 'pd-certificate-artwork')
-      if ('error' in stored) { setMsg({ text: stored.error, error: true }); return }
-      const result = await postUpload('/api/admin/pd-certificate', JSON.stringify({ storagePath: stored.storagePath }), {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      })
-      if ('error' in result) { setMsg({ text: result.error, error: true }); return }
-      setMsg({ text: 'PD certificate artwork saved for every event. Check the preview.' })
-      await load()
-    } finally { setBusy(null) }
-  }
-
   const input = 'rounded-md border border-brand-border px-3 py-2 text-sm text-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-blue'
   const newMemberHref = `/admin/members/new?return=${encodeURIComponent(`/admin/competitions/${eventSlug}?tab=settings`)}`
 
@@ -133,7 +114,7 @@ export default function EventEducatorPd({ eventSlug }: { eventSlug: string }) {
       <div>
         <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Educator PD</h3>
         <p className="text-xs text-brand-muted-soft mt-1">
-          Teachers who supported this event get a PD certificate showing their hours, aligned to NGSS and Common
+          Teachers who supported this event get a PD certificate showing their hours, aligned to Common
           Core, plus a credential they can add to LinkedIn. One per educator per event; to change the hours, revoke
           and issue again.
         </p>
@@ -244,23 +225,8 @@ export default function EventEducatorPd({ eventSlug }: { eventSlug: string }) {
       )}
       {rows && rows.length === 0 && <p className="text-xs text-brand-muted-soft">No PD credentials issued for this event yet.</p>}
 
-      {/* ── Certificate artwork (global) ─────────────────────────────── */}
-      {canIssue && artwork && (
-        <div className="border-t border-brand-hairline pt-4 flex flex-wrap items-center gap-3 text-xs text-brand-muted-soft">
-          <span>
-            Certificate artwork (shared by every event):{' '}
-            {artwork.hasArtwork ? 'uploaded' : 'none yet — certificates use the plain Stellr design'}
-          </span>
-          <a href="/api/admin/pd-certificate/preview" target="_blank" rel="noopener noreferrer" className="font-medium text-brand-blue hover:underline">
-            Preview
-          </a>
-          <label className="font-medium text-brand-blue hover:underline cursor-pointer">
-            {busy === 'artwork' ? 'Uploading…' : artwork.hasArtwork ? 'Replace artwork' : 'Upload artwork'}
-            <input type="file" accept="image/png,image/jpeg" className="hidden" disabled={busy !== null}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadArtwork(f); e.target.value = '' }} />
-          </label>
-        </div>
-      )}
+      {/* ── Certificate artwork (global, admins) ───────────────────── */}
+      {canIssue && <PdCertificateArtwork theme={theme} />}
     </div>
   )
 }

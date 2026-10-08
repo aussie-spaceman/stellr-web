@@ -22,7 +22,7 @@ import { certificateGateFor } from '@/lib/survey/certificate-gate'
 import { verifyCredentialViewToken, FAMILY_LINK_PARAM } from '@/lib/credentials-link'
 import { viewAsBannerProps } from '@/lib/impersonation'
 import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner'
-import { describeStandard, formatPdHours } from '@/lib/pd-standards'
+import { describeStandard, formatPdHours, type PdStandard } from '@/lib/pd-standards'
 
 // The credential page IS the product: the URL on a LinkedIn profile, the link
 // a verifier opens, the card a feed post shows. Private by default; the owner
@@ -199,14 +199,19 @@ export default async function CredentialPage({ params, searchParams }: Params) {
             {cred.standards.length > 0 && (
               <div className="mt-8">
                 <Eyebrow>Aligned to</Eyebrow>
-                <ul className="mt-3 flex flex-wrap gap-2">
-                  {cred.standards.map(describeStandard).map((s) => (
-                    <li key={s.code} className="rounded-pill border border-line bg-white px-3 py-1 text-sm text-ink">
-                      <span className="font-semibold">{s.code}</span>
-                      {s.label && <span className="text-content-secondary"> · {s.label}</span>}
-                    </li>
-                  ))}
-                </ul>
+                {groupStandards(cred.standards).map(([group, items]) => (
+                  <div key={group} className="mt-3">
+                    <p className="text-sm font-semibold text-ink">{group}</p>
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {items.map((s) => (
+                        <li key={s.code} className="rounded-pill border border-line bg-white px-3 py-1 text-sm text-ink">
+                          <span className="font-semibold">{s.code}</span>
+                          {s.label && <span className="text-content-secondary"> · {s.label}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -288,4 +293,11 @@ function Shell({
       </section>
     </>
   )
+}
+
+/** Stored codes under the headings the certificate back uses, in stored order. */
+function groupStandards(codes: string[]): [string, PdStandard[]][] {
+  const groups = new Map<string, PdStandard[]>()
+  for (const s of codes.map(describeStandard)) groups.set(s.group, [...(groups.get(s.group) ?? []), s])
+  return [...groups]
 }

@@ -27,6 +27,7 @@ const WHO: Record<AwardType, string> = {
   overall_champion: 'Every student in the winning company.',
   anita_gale: 'One student per company.',
   dick_edwards: 'One student per company.',
+  mentor: 'Every volunteer mentor assigned on the Volunteers panel.',
 }
 
 export default function EventCertificates({ eventSlug }: { eventSlug: string }) {
@@ -72,7 +73,7 @@ export default function EventCertificates({ eventSlug }: { eventSlug: string }) 
         <div>
           <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Certificates</h3>
           <p className="text-xs text-brand-muted-soft mt-1">
-            Upload the finished artwork for each certificate. Only the student&rsquo;s name is added, centred in the
+            Upload the finished artwork for each certificate. Only the recipient&rsquo;s name is added, centred in the
             space you set.
           </p>
         </div>

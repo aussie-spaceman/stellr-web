@@ -6,6 +6,7 @@ import {
   awardCredentialTitle,
   isAssignedAwardType,
   isAwardType,
+  mentorCredentialTitle,
   replacedSpecialist,
   type Assignment,
 } from './event-awards'
@@ -15,8 +16,9 @@ const a = (awardType: Assignment['awardType'], participantId: string, companyId:
 })
 
 describe('award catalogue', () => {
-  it('has the four certificates, labelled as on the artwork', () => {
-    expect(AWARD_TYPES).toEqual(['participation', 'overall_champion', 'anita_gale', 'dick_edwards'])
+  it('has the five certificates, labelled as on the artwork', () => {
+    expect(AWARD_TYPES).toEqual(['participation', 'overall_champion', 'anita_gale', 'dick_edwards', 'mentor'])
+    expect(EVENT_AWARDS.mentor.label).toBe('Certificate of Appreciation')
     expect(EVENT_AWARDS.overall_champion.label).toBe('Overall Champion')
     expect(EVENT_AWARDS.anita_gale.label).toBe('Anita Gale Award for Creative Vision')
     expect(EVENT_AWARDS.dick_edwards.label).toBe('Dick Edwards Award for Quiet Leadership')
@@ -27,6 +29,13 @@ describe('award catalogue', () => {
     expect(isAwardType('best_hat')).toBe(false)
     expect(isAssignedAwardType('participation')).toBe(false)
     expect(isAssignedAwardType('anita_gale')).toBe(true)
+    // The mentor certificate is never judged or assigned per student.
+    expect(isAwardType('mentor')).toBe(true)
+    expect(isAssignedAwardType('mentor')).toBe(false)
+  })
+
+  it('titles mentor credentials with the event then the role', () => {
+    expect(mentorCredentialTitle('Colorado Space Design Challenge')).toBe('Colorado Space Design Challenge — Volunteer Mentor')
   })
 
   it('titles award credentials with the award then the event', () => {

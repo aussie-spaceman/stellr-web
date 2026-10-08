@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { PDFDocument } from 'pdf-lib'
 import sharp from 'sharp'
-import { formatActivityDate, pdCertificateLines, renderPdCertificatePdf, wrapList, type PdCertificateFields } from './pd-certificate'
+import { DEFAULT_PD_LAYOUT, formatActivityDate, parsePdLayout, pdArtworkTexts, pdCertificateLines, renderPdCertificatePdf, wrapList, type PdCertificateFields } from './pd-certificate'
 import { pdStandardCodes } from './pd-standards'
 
 const FIELDS: PdCertificateFields = {
@@ -26,10 +26,9 @@ describe('pdCertificateLines', () => {
     expect(lines.when).toBe('October 4, 2026 · Sample High School, Springfield, CO')
   })
 
-  it('splits the standards by framework', () => {
-    expect(lines.ngss.startsWith('NGSS: NGSS SEP 1')).toBe(true)
-    expect(lines.ccss.startsWith('Common Core: CCSS.MATH.PRACTICE.MP1')).toBe(true)
-    expect(lines.ngss).not.toContain('CCSS')
+  it('lists the standards by code on the plain page', () => {
+    expect(lines.ccss.startsWith('Common Core: MP1 · MP2')).toBe(true)
+    expect(lines.ngss).toBe('')
   })
 
   it('carries the number and where to verify it', () => {
@@ -55,23 +54,57 @@ describe('formatActivityDate', () => {
 })
 
 describe('renderPdCertificatePdf', () => {
-  it('draws one US Letter landscape page on the plain design', async () => {
-    const bytes = await renderPdCertificatePdf(FIELDS, null)
-    const doc = await PDFDocument.load(bytes)
+  const png = () => sharp({ create: { width: 2000, height: 1500, channels: 3, background: '#fffcf2' } }).png().toBuffer()
+
+  it('draws one plain US Letter landscape page when no artwork is uploaded', async () => {
+    const doc = await PDFDocument.load(await renderPdCertificatePdf(FIELDS, { front: null, back: null }))
     expect(doc.getPageCount()).toBe(1)
-    const { width, height } = doc.getPage(0).getSize()
-    expect([width, height]).toEqual([792, 612])
+    expect(Object.values(doc.getPage(0).getSize())).toEqual([792, 612])
   })
 
-  it('draws on uploaded artwork', async () => {
-    const png = await sharp({ create: { width: 1100, height: 850, channels: 3, background: '#ffffff' } }).png().toBuffer()
-    const bytes = await renderPdCertificatePdf({ ...FIELDS, recipientName: 'A'.repeat(200) }, { bytes: new Uint8Array(png), mime: 'image/png' })
-    const doc = await PDFDocument.load(bytes)
+  // 8 Oct: the first upload printed every plain-page field over a design that
+  // already says them. On artwork, only the four fields are drawn.
+  it('prints front then back, two pages, on uploaded artwork', async () => {
+    const art = { bytes: new Uint8Array(await png()), mime: 'image/png' }
+    const doc = await PDFDocument.load(await renderPdCertificatePdf({ ...FIELDS, recipientName: 'A'.repeat(200) }, { front: art, back: art }))
+    expect(doc.getPageCount()).toBe(2)
+  })
+
+  it('prints the front alone when no back is uploaded', async () => {
+    const art = { bytes: new Uint8Array(await png()), mime: 'image/png' }
+    const doc = await PDFDocument.load(await renderPdCertificatePdf(FIELDS, { front: art, back: null }))
     expect(doc.getPageCount()).toBe(1)
   })
 
   it('refuses artwork it cannot read', async () => {
-    await expect(renderPdCertificatePdf(FIELDS, { bytes: new Uint8Array([1, 2, 3]), mime: 'image/png' })).rejects.toThrow(/could not be read/)
+    const bad = { bytes: new Uint8Array([1, 2, 3]), mime: 'image/png' }
+    await expect(renderPdCertificatePdf(FIELDS, { front: bad, back: null })).rejects.toThrow(/front artwork could not be read/)
+  })
+})
+
+describe('pdArtworkTexts', () => {
+  it('fills the four gaps in the Cowork front', () => {
+    expect(pdArtworkTexts(FIELDS)).toEqual({
+      name: 'Maria Gordon',
+      location: 'at Sample High School, Springfield, CO',
+      date: 'on October 4, 2026',
+      hours: '8',
+    })
+  })
+  it('leaves a gap empty rather than printing "at" with no place', () => {
+    const t = pdArtworkTexts({ ...FIELDS, activityLocation: null, activityDate: null })
+    expect(t.location).toBe('')
+    expect(t.date).toBe('')
+  })
+})
+
+describe('parsePdLayout', () => {
+  it('accepts the defaults and rejects anything incomplete or out of range', () => {
+    expect(parsePdLayout(DEFAULT_PD_LAYOUT)).toEqual(DEFAULT_PD_LAYOUT)
+    expect(parsePdLayout({ ...DEFAULT_PD_LAYOUT, hours: undefined })).toBeNull()
+    expect(parsePdLayout({ ...DEFAULT_PD_LAYOUT, name: { ...DEFAULT_PD_LAYOUT.name, y: 1.5 } })).toBeNull()
+    expect(parsePdLayout({ ...DEFAULT_PD_LAYOUT, date: { ...DEFAULT_PD_LAYOUT.date, size: 'big' } })).toBeNull()
+    expect(parsePdLayout('nope')).toBeNull()
   })
 })
 

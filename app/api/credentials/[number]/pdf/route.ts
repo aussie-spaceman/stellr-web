@@ -5,10 +5,11 @@ import { type CourseTheme } from '@/lib/training-display'
 import { renderCertificatePdf } from '@/lib/certificate'
 import { credentialUrl, getCredentialByNumber, recordCredentialEvent } from '@/lib/credentials'
 import { generateCertificatesPdf } from '@/lib/event-pdf'
-import { isAwardType } from '@/lib/event-awards'
+import { EVENT_AWARDS, isAwardType } from '@/lib/event-awards'
 import { downloadArtwork, loadTemplate, placementOf } from '@/lib/event-certificates'
 import { certificateGateFor } from '@/lib/survey/certificate-gate'
-import { PD_ARTWORK_PATH, renderPdCertificatePdf } from '@/lib/pd-certificate'
+import { renderPdCertificatePdf } from '@/lib/pd-certificate'
+import { loadPdArtwork, loadPdLayout, pdTheme } from '@/lib/pd-certificate-store'
 import { tokens } from '@/lib/tokens'
 
 // GET /api/credentials/[number]/pdf
@@ -69,10 +70,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
     // No artwork for this award yet: fall through to the default design.
   }
 
-  // Educator PD: the global Cowork artwork with every field drawn on it, or
-  // the plain page until that artwork is uploaded. Never survey-gated.
+  // Educator PD: the theme's Cowork front with its four fields drawn, then the
+  // back; or the plain page until that theme has artwork. Never survey-gated.
   if (cred.source === 'pd' && cred.pd_hours) {
-    const artwork = await downloadArtwork(db, PD_ARTWORK_PATH)
+    const theme = pdTheme(cred.theme)
+    const [artwork, layout] = await Promise.all([loadPdArtwork(db, theme), loadPdLayout(db, theme)])
     const out = await renderPdCertificatePdf(
       {
         recipientName:    cred.recipient_name || 'Educator',
@@ -86,7 +88,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
         issuer:           cred.issuer,
       },
       artwork,
-      { accentHex: cred.theme === 'environmental' ? tokens.color.enviroGreen : tokens.color.spaceViolet },
+      { accentHex: cred.theme === 'environmental' ? tokens.color.enviroGreen : tokens.color.spaceViolet, layout },
     )
     void recordCredentialEvent(db, cred.id, 'pdf')
     return pdfResponse(out)
@@ -106,11 +108,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
     }
   }
 
+  const event = cred.source === 'event' ? eventHeading(cred.award_type) : null
   const out = await renderCertificatePdf({
     memberName:  cred.recipient_name || 'Member',
     courseTitle: cred.title,
-    heading:     cred.source === 'event' ? (cred.award_type && cred.award_type !== 'participation' ? 'Certificate of Award' : 'Certificate of Participation') : undefined,
-    lead:        cred.source === 'event' ? (cred.award_type && cred.award_type !== 'participation' ? 'has been awarded' : 'took part in') : undefined,
+    heading:     event?.heading,
+    lead:        event?.lead,
     theme:       (cred.theme as CourseTheme | null) ?? null,
     issuer:      cred.issuer,
     certNumber:  cred.number,
@@ -120,4 +123,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
 
   void recordCredentialEvent(db, cred.id, 'pdf')
   return pdfResponse(out)
+}
+
+/** The default design's wording for an event credential with no artwork. */
+function eventHeading(awardType: string | null): { heading: string; lead: string } {
+  if (awardType === 'mentor') return { heading: EVENT_AWARDS.mentor.label, lead: 'with thanks for their service as' }
+  if (awardType && awardType !== 'participation') return { heading: 'Certificate of Award', lead: 'has been awarded' }
+  return { heading: 'Certificate of Participation', lead: 'took part in' }
 }

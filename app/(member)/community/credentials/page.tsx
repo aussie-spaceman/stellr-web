@@ -41,7 +41,7 @@ export default async function CredentialsPage({ searchParams }: { searchParams: 
       <div className="mb-6">
         <h1 className="font-heading uppercase text-title text-brand-blue-dark">Credentials</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">
-          What you have earned with Stellr — course completions, event participation and awards. Each one has a
+          What you have earned with Stellr — course completions, event participation, mentoring and awards. Each one has a
           certificate to download and a page you can make public, share, and add to LinkedIn.
         </p>
         <p className="mt-2 text-xs text-content-muted">
@@ -93,7 +93,7 @@ export default async function CredentialsPage({ searchParams }: { searchParams: 
                       {c.issuer} · {formatDateShort(c.issued_at)} · <span className="font-mono">{c.number}</span>
                     </p>
                   </div>
-                  {c.award_type && c.award_type !== 'participation' && (
+                  {c.award_type && c.award_type !== 'participation' && c.award_type !== 'mentor' && (
                     <span className="hidden md:inline-flex items-center gap-1 rounded-pill bg-star-gold/20 px-2.5 py-0.5 text-xs font-bold uppercase tracking-[0.05em] text-ink">
                       <Award size={12} aria-hidden="true" /> Award
                     </span>

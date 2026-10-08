@@ -75,7 +75,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       recipient:        { firstName: member.first_name ?? '', lastName: member.last_name ?? '', dateOfBirth: member.date_of_birth ?? null },
       title:            pdCredentialTitle(eventTitle, hours),
       description:      'Recognises an educator who gave their time to support students at a Stellr Education STEM competition.',
-      criteria:         'Supported the event in person. Hours are recorded by Stellr Education staff and mapped to NGSS and Common Core practices.',
+      criteria:         'Supported the event in person. Hours are recorded by Stellr Education staff and mapped to Common Core State Standards.',
       issuer:           'Stellr Education',
       roleLabel:        'Educator',
       theme,

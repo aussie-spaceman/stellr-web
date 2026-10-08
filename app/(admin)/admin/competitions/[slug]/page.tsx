@@ -20,6 +20,7 @@ import EventCertificates from '@/components/admin/EventCertificates'
 import EventAwards from '@/components/admin/EventAwards'
 import EventCredentials from '@/components/admin/EventCredentials'
 import EventEducatorPd from '@/components/admin/EventEducatorPd'
+import { themeFromType } from '@/lib/campaigns'
 import { RefundPolicyEditor } from '@/components/admin/RefundPolicyEditor'
 import { EventMerchandiseEditor } from '@/components/admin/EventMerchandiseEditor'
 import { EventMerchBatch } from '@/components/admin/EventMerchBatch'
@@ -395,7 +396,10 @@ export default async function AdminEventDetailPage({
 
           <EventCredentials eventSlug={slug} eventTitle={event.title} />
 
-          <EventEducatorPd eventSlug={slug} />
+          <EventEducatorPd
+            eventSlug={slug}
+            theme={themeFromType((event as { type?: string }).type) === 'enviro' ? 'environmental' : 'space'}
+          />
         </div>
       )}
     </div>

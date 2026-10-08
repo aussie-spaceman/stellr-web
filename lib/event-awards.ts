@@ -1,18 +1,24 @@
 // ── Event awards: the fixed, global catalogue ────────────────────────────────
-// Four certificates an event can give. Participation goes to every student;
-// the other three are judged at the end of the event and assigned by an admin
-// or event manager (event_award_assignments), then issued as credentials.
+// Five certificates an event can give. Participation goes to every student;
+// mentor (the Certificate of Appreciation) to every volunteer mentor assigned
+// to the event; the other three are judged at the end of the event and
+// assigned by an admin or event manager (event_award_assignments), then
+// issued as credentials.
 // Labels match the certificate artwork word for word — one vocabulary on the
 // print, the credential page and LinkedIn.
 //
 // Pure: imported by client components and route handlers alike.
 
-export const AWARD_TYPES = ['participation', 'overall_champion', 'anita_gale', 'dick_edwards'] as const
+export const AWARD_TYPES = ['participation', 'overall_champion', 'anita_gale', 'dick_edwards', 'mentor'] as const
 export type AwardType = (typeof AWARD_TYPES)[number]
-export type AssignedAwardType = Exclude<AwardType, 'participation'>
+/** Judged awards — the ones an admin assigns per student. */
+export type AssignedAwardType = Exclude<AwardType, 'participation' | 'mentor'>
 
-/** all = every student; team = a whole company; specialist = one per company. */
-export type AwardKind = 'all' | 'team' | 'specialist'
+/**
+ * all = every student; team = a whole company; specialist = one per company;
+ * mentors = every volunteer mentor assigned to the event.
+ */
+export type AwardKind = 'all' | 'team' | 'specialist' | 'mentors'
 
 export interface AwardDef {
   type: AwardType
@@ -54,6 +60,13 @@ export const EVENT_AWARDS: Record<AwardType, AwardDef> = {
       'Leadership comes in many guises; this award is for being the person in the room constantly pushing the team to excel without looking for any credit.',
     criteria: 'Chosen by the judges from their company for quiet leadership.',
   },
+  mentor: {
+    type: 'mentor',
+    label: 'Certificate of Appreciation',
+    kind: 'mentors',
+    description: 'With thanks for volunteering as a mentor: guiding students through the competition with time, expertise, and encouragement.',
+    criteria: 'Volunteered as a mentor at the competition.',
+  },
 }
 
 export const ASSIGNED_AWARD_TYPES: AssignedAwardType[] = ['overall_champion', 'anita_gale', 'dick_edwards']
@@ -64,7 +77,12 @@ export function isAwardType(v: unknown): v is AwardType {
 }
 
 export function isAssignedAwardType(v: unknown): v is AssignedAwardType {
-  return isAwardType(v) && v !== 'participation'
+  return isAwardType(v) && (ASSIGNED_AWARD_TYPES as readonly string[]).includes(v)
+}
+
+/** Credential title for a mentor, unless the event sets its own. */
+export function mentorCredentialTitle(eventTitle: string): string {
+  return `${eventTitle} — Volunteer Mentor`
 }
 
 export function isSpecialist(t: AwardType): boolean {

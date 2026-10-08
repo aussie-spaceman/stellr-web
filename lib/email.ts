@@ -918,14 +918,14 @@ export function credentialIssuedEmail({
           <p style="margin:0 0 4px;font-size:18px;font-weight:600;color:#1e1b4b">${esc(title)}</p>
           <p style="margin:0;font-size:14px;color:#4c1d95">Issued by ${esc(issuer)}</p>
         </div>
-        ${isPd ? `<p>Thank you for giving your time. Your certificate records <strong>${pdHoursLabel(pdHours!)}</strong> of professional development, aligned to NGSS and Common Core, and you can submit it as evidence toward your teaching license renewal.</p>` : ''}
+        ${isPd ? `<p>Thank you for giving your time. Your certificate records <strong>${pdHoursLabel(pdHours!)}</strong> of professional development, aligned to Common Core State Standards, and you can submit it as evidence toward your teaching license renewal.</p>` : ''}
         <p style="margin:24px 0"><a href="${viewHref}" style="display:inline-block;background:#3C6DF6;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">View the credential</a></p>
         <p style="color:#6b7280;font-size:14px">${sharingLine}</p>
         <p style="color:#6b7280;font-size:14px">${linkLine}</p>
         ${guardianLine ? `<p style="color:#6b7280;font-size:14px">${guardianLine}</p>` : ''}
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email.</p>`,
   })
-  const text = `Hi ${toGuardian ? guardianFirstName : recipientFirstName},\n\n${toGuardian ? `${recipientFirstName} has` : 'You have'} earned a verified credential from ${issuer}: ${title}.${isPd ? `\n\nThank you for giving your time. Your certificate records ${pdHoursLabel(pdHours!)} of professional development, aligned to NGSS and Common Core, and you can submit it as evidence toward your teaching license renewal.` : ''}\n\nView it: ${viewHref}\n\n${sharingLine.replace(/<[^>]+>/g, '')}\n\n${linkLine.replace(/<[^>]+>/g, '').replace('The button above', 'The link above')}${guardianLine ? `\n\n${guardianLine.replace(/<[^>]+>/g, '')}` : ''}\n\n— Stellr Education`
+  const text = `Hi ${toGuardian ? guardianFirstName : recipientFirstName},\n\n${toGuardian ? `${recipientFirstName} has` : 'You have'} earned a verified credential from ${issuer}: ${title}.${isPd ? `\n\nThank you for giving your time. Your certificate records ${pdHoursLabel(pdHours!)} of professional development, aligned to Common Core State Standards, and you can submit it as evidence toward your teaching license renewal.` : ''}\n\nView it: ${viewHref}\n\n${sharingLine.replace(/<[^>]+>/g, '')}\n\n${linkLine.replace(/<[^>]+>/g, '').replace('The button above', 'The link above')}${guardianLine ? `\n\n${guardianLine.replace(/<[^>]+>/g, '')}` : ''}\n\n— Stellr Education`
   return { subject, html, text }
 }
 

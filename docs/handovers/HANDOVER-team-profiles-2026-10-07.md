@@ -76,3 +76,49 @@ requests (≤ 2 names) and STEM strengths / areas to work on (10 soft skills).
    Vercel have them (`credential-family-link` uses `SURVEY_TOKEN_SECRET` in prod).
 4. No real email seen in an inbox.
 5. The copy (form, emails, template) is a draft for David's sign-off.
+
+## Close-out (8 Oct 2026)
+
+**State: in production.** #329 → `dev` as `b6c7e46`; promoted in #333 as
+`e7f1bf5` (deployment `dpl_7E8NyASkZKNTJHco2yVizrXy35s8`). The migration is in
+dev and prod. The production checks after READY all passed:
+- www returned 200; app returned a 307 to sign-in;
+- the team-profiles cron returned 401;
+- a junk link showed the "isn't valid" page, and the API returned 404;
+- no runtime errors.
+
+Tracker: `docs/handovers/tracker/2026-10-08-team-profiles.md` (rows
+`team-profiles.1`–`.12`).
+
+### Gaps against the original ask
+- **"Issued upon successful registration"** became "issued once the permission
+  form is complete", per David's answer 6. Not a gap, but worth knowing when
+  someone asks why a registered student has no email: their form isn't signed.
+- **"Previous participant … emailed inviting them to update"**: the pre-filled
+  "check your team profile" email goes only to students with an earlier
+  **submitted** profile. Anyone whose only history predates 8 Oct gets the
+  standard email. Row `.6`.
+- **"Resend button from the event roster page"**: it is on the roster tab, in
+  the Team profiles panel, not in each roster table row. Row `.8`.
+- **"Students can see their responses … over time"**: built (`/account` "My
+  Team Profiles", with the change summary since the previous event) but never
+  loaded signed in. Row `.3`.
+- **Algorithm**: built and unit-tested, never run on real data. Row `.4`.
+- **Copy**: the questions were approved with David's edits. The intro, email and
+  template wording is still a draft. Row `.5`.
+
+### Also done in this session
+Three promotions, each with the prod migration applied first, read back and
+ledger-realigned:
+- #326 (`6d71632`): educator PD + DocuSign opt-out read-back. Closes
+  `educator-pd.3`.
+- #333 (`e7f1bf5`): team profiles.
+- #335 (`8892455`): event check-in v2, another session's #328.
+
+Records: `.claude/releases/promote-2026-10-08{,b,c}.md`.
+
+### First things for the next session
+1. After 09:45 UTC on 9 Oct, read `cron_runs` for `team-profiles` (row `.1`).
+2. Get David's copy sign-off before Nevada families start signing (row `.5`).
+3. Before Nevada on 6 Nov: open the roster tab signed in, then run Auto-Assign
+   on real profiles (rows `.3`, `.4`).

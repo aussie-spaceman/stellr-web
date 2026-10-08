@@ -1,0 +1,18 @@
+# Mentor credentials — 2026-10-08
+
+Slug: `mentor-credentials`. Handover: `HANDOVER-mentor-credentials-2026-10-08.md`. Doc snapshot: `1j8GiDmLFA8HzIjH0-GxY8z1qS0b12LkkrOi-qlC_Lag`.
+PR #342 → `dev` as `95f3f14`; promoted in #343 (`1339f27`). Migration: `20261008120000_mentor_credentials` (dev + prod, read back in prod 8 Oct).
+
+Volunteer mentors assigned on an event's Volunteers panel can now get the Certificate of Appreciation and a verifiable credential. Admins issue it from the Mentors filter on the Participation credentials panel. The page, consent rules, email and LinkedIn share work as they do for students. Production holds 0 mentor credentials so far, and no mentor artwork.
+
+| # | Item | State | Next | Done |
+|---|---|---|---|---|
+| mentor-credentials.1 | Production deploy of #343 | `dpl_8aT3YBYqQBnGozUDCBL2snfK5MM1` READY at 22:07:49Z for `1339f27`. Checks: www 200; app 307 to sign-in; cron guard 401; the new admin endpoints 401 signed out; no runtime errors since 22:07Z | None | ☑ |
+| mentor-credentials.2 | **HIGH** Colorado SDC mentor artwork | Prod `event_certificate_templates` has no `mentor` row (8 Oct read). Mentors would get the plain fallback PDF | David uploads the Certificate of Appreciation artwork in Settings › Certificates for `colorado-space-design-challenge`, then sets the name position in the preview | ☐ |
+| mentor-credentials.3 | **HIGH** Issue Colorado mentor credentials | 4 active assigned volunteers in prod `cohort_members`; 0 mentor credentials (8 Oct read). `event_participations` shows only 3 | After .2: on the Mentors filter, check the count reads 4 and that all 4 really mentored, then click Issue. Revoke anyone who did not | ☐ |
+| mentor-credentials.4 | First real mentor email, page, wallet and LinkedIn | The issued email was only sent on dev (to the dev mail route) and never opened. No prod credential exists; LinkedIn was never clicked | After .3: confirm one mentor's email arrived, open their credential page signed in, and click Add to LinkedIn once | ☐ |
+| mentor-credentials.5 | Ada fixture flips public when e2e runs overlap | A concurrent CI run (#341) made `STL-2026-E2EADA01` public mid-run, and 4 tests in `credentials.spec.ts` failed. I reset it by hand. The cause is a hypothesis: `esign-signing.spec.ts` grants Ada a minor consent | Confirm whether the esign spec completes a minor agreement for Ada. If so, restore it in that spec's afterEach, or give the esign spec its own minor fixture | ☐ |
+| mentor-credentials.6 | "Download all" skip and mentor print on real artwork have no e2e | Unit and e2e tests cover issuing, listing and the PDF without artwork only | Add a spec step: upload a test PNG as mentor artwork on a dev event, then GET `certificates?award=mentor` and expect a PDF. Remove it in afterEach | ☐ |
+| mentor-credentials.7 | Students filter still issues to non-student participants | Pre-existing: the Students POST issues to every registered participant (teachers and parents included, with role labels). Prod has only `participant` rows today | David's call: limit Students to `STUDENT_ROLES`, or leave as is | ☐ |
+| mentor-credentials.8 | Unassigning a mentor keeps their credential | By design: removing a volunteer does not revoke. A revoke is a manual click on the Mentors list | None unless David wants an automatic revoke on unassign | ☐ |
+| mentor-credentials.9 | Auto-merge did not fire on a CLEAN, green #343 | Merged by hand at 22:04Z (approved). Second occurrence (also #320) | Next time, check `gh pr view --json mergeStateStatus` after the checks pass, and merge by hand if it reads CLEAN | ☑ |

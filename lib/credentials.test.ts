@@ -385,3 +385,40 @@ describe('issueCredential — educator PD', () => {
     expect(db.calls[1].insert!.pd_hours).toBeNull()
   })
 })
+
+// Mentor credentials (8 Oct 2026): mentors are members with no participants
+// row, so the lookup is member + event + award — credentials_event_mentor_once.
+describe('issueCredential — volunteer mentor', () => {
+  const input = {
+    source: 'event' as const,
+    awardType: 'mentor',
+    memberId: 'm9',
+    eventSlug: 'co-2026',
+    recipient: { firstName: 'Pauline', lastName: 'Mentor', dateOfBirth: '1980-05-01' },
+    title: 'Sample — Volunteer Mentor',
+    roleLabel: 'Mentor',
+  }
+
+  it('dedupes on member, event and award, never on participant', async () => {
+    const db = makeIssueDb(null)
+    const { created } = await issueCredential(db, input)
+    expect(created).toBe(true)
+    expect(db.calls[0].filters).toEqual({ source: 'event', member_id: 'm9', event_slug: 'co-2026', award_type: 'mentor' })
+    const ins = db.calls[1].insert!
+    expect(ins.award_type).toBe('mentor')
+    expect(ins.participant_id).toBeNull()
+    expect(ins.member_id).toBe('m9')
+    expect(ins.is_minor).toBe(false)
+  })
+
+  it('returns the existing one instead of issuing twice', async () => {
+    const db = makeIssueDb({ id: 'c9', number: 'STL-2026-BBBBBBBB' })
+    const { created } = await issueCredential(db, input)
+    expect(created).toBe(false)
+    expect(db.calls).toHaveLength(1)
+  })
+
+  it('needs a member and an event', async () => {
+    await expect(issueCredential(makeIssueDb(null), { ...input, memberId: null })).rejects.toThrow(/mentor credential needs memberId/)
+  })
+})

@@ -5,7 +5,7 @@ import { type CourseTheme } from '@/lib/training-display'
 import { renderCertificatePdf } from '@/lib/certificate'
 import { credentialUrl, getCredentialByNumber, recordCredentialEvent } from '@/lib/credentials'
 import { generateCertificatesPdf } from '@/lib/event-pdf'
-import { isAwardType } from '@/lib/event-awards'
+import { EVENT_AWARDS, isAwardType } from '@/lib/event-awards'
 import { downloadArtwork, loadTemplate, placementOf } from '@/lib/event-certificates'
 import { certificateGateFor } from '@/lib/survey/certificate-gate'
 import { renderPdCertificatePdf } from '@/lib/pd-certificate'
@@ -108,11 +108,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
     }
   }
 
+  const event = cred.source === 'event' ? eventHeading(cred.award_type) : null
   const out = await renderCertificatePdf({
     memberName:  cred.recipient_name || 'Member',
     courseTitle: cred.title,
-    heading:     cred.source === 'event' ? (cred.award_type && cred.award_type !== 'participation' ? 'Certificate of Award' : 'Certificate of Participation') : undefined,
-    lead:        cred.source === 'event' ? (cred.award_type && cred.award_type !== 'participation' ? 'has been awarded' : 'took part in') : undefined,
+    heading:     event?.heading,
+    lead:        event?.lead,
     theme:       (cred.theme as CourseTheme | null) ?? null,
     issuer:      cred.issuer,
     certNumber:  cred.number,
@@ -122,4 +123,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
 
   void recordCredentialEvent(db, cred.id, 'pdf')
   return pdfResponse(out)
+}
+
+/** The default design's wording for an event credential with no artwork. */
+function eventHeading(awardType: string | null): { heading: string; lead: string } {
+  if (awardType === 'mentor') return { heading: EVENT_AWARDS.mentor.label, lead: 'with thanks for their service as' }
+  if (awardType && awardType !== 'participation') return { heading: 'Certificate of Award', lead: 'has been awarded' }
+  return { heading: 'Certificate of Participation', lead: 'took part in' }
 }

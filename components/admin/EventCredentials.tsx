@@ -1,11 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CredentialRow } from '@/lib/credentials-core'
+import { EVENT_AWARDS } from '@/lib/event-awards'
 
 // Participation credentials panel on the competition admin page: the
 // per-event config (what the credential says), the issue button, and the
 // list of what has been issued with revoke / re-send per row.
+//
+// A Students / Mentors filter switches all three: mentors (the volunteers
+// assigned on the Volunteers panel) have their own wording and get the
+// Certificate of Appreciation credential.
 //
 // Sits beside EventBadges (the print path) and does not replace it.
 
@@ -16,10 +21,13 @@ interface Settings {
   credential_skills: string[]
 }
 
+type Audience = 'students' | 'mentors'
+
 interface Loaded {
   settings: Settings
   credentials: CredentialRow[]
   checkedInCount: number
+  mentorCount: number
 }
 
 const STATE: Record<string, { label: string; cls: string }> = {
@@ -29,6 +37,8 @@ const STATE: Record<string, { label: string; cls: string }> = {
 
 export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug: string; eventTitle: string }) {
   const base = `/api/admin/events/${eventSlug}/credentials`
+  const [audience, setAudience] = useState<Audience>('students')
+  const shown = useRef<Audience>('students')
   const [data, setData] = useState<Loaded | null>(null)
   const [form, setForm] = useState<Settings>({ credential_title: '', credential_description: '', credential_criteria: '', credential_skills: [] })
   const [skillsText, setSkillsText] = useState('')
@@ -37,17 +47,29 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null)
   const [revoking, setRevoking] = useState<{ id: string; reason: string } | null>(null)
 
-  async function load() {
-    const res = await fetch(base)
+  async function load(a: Audience = audience) {
+    const res = await fetch(`${base}?audience=${a}`)
     if (!res.ok) { setMsg({ text: 'Could not load credentials.', error: true }); return }
     const d = (await res.json()) as Loaded
+    if (a !== shown.current) return // the filter moved on while this loaded
     setData(d)
     setForm({ ...d.settings, credential_skills: d.settings.credential_skills ?? [] })
     setSkillsText((d.settings.credential_skills ?? []).join(', '))
     // D2: default to checked-in when the event used check-in at all.
     setMode(d.checkedInCount > 0 ? 'checked_in' : 'all')
   }
-  useEffect(() => { void load() }, [eventSlug]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void load(audience) }, [eventSlug, audience]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear the other audience's list and wording first, so nothing of theirs
+  // is shown — or saved — while this one loads.
+  function switchTo(a: Audience) {
+    if (a === audience) return
+    setData(null); setMsg(null); setRevoking(null)
+    setForm({ credential_title: '', credential_description: '', credential_criteria: '', credential_skills: [] })
+    setSkillsText('')
+    shown.current = a
+    setAudience(a)
+  }
 
   async function saveSettings() {
     setBusy('save'); setMsg(null)
@@ -55,7 +77,7 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
       const res = await fetch(base, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...form, credential_skills: skillsText.split(',').map((s) => s.trim()).filter(Boolean) }),
+        body: JSON.stringify({ ...form, audience, credential_skills: skillsText.split(',').map((s) => s.trim()).filter(Boolean) }),
       })
       const d = (await res.json()) as { error?: string }
       if (!res.ok) throw new Error(d.error ?? 'Save failed')
@@ -67,11 +89,14 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
   }
 
   async function issue() {
-    const who = mode === 'checked_in' ? 'everyone who checked in' : 'every registered participant'
-    if (!window.confirm(`Issue participation credentials to ${who}? Each person is emailed once; anyone who already has one is skipped.`)) return
+    const what = audience === 'mentors' ? 'mentor credentials' : 'participation credentials'
+    const who = audience === 'mentors'
+      ? `every assigned mentor (${data?.mentorCount ?? 0})`
+      : mode === 'checked_in' ? 'everyone who checked in' : 'every registered participant'
+    if (!window.confirm(`Issue ${what} to ${who}? Each person is emailed once; anyone who already has one is skipped.`)) return
     setBusy('issue'); setMsg(null)
     try {
-      const res = await fetch(base, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode }) })
+      const res = await fetch(base, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, audience }) })
       const d = (await res.json()) as { error?: string; created?: number; existing?: number; emailed?: number; considered?: number; failures?: string[] }
       if (!res.ok) throw new Error(d.error ?? 'Issue failed')
       const bits = [`${d.created} issued`, `${d.existing} already held one`, `${d.emailed} emailed`]
@@ -113,13 +138,24 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
 
   return (
     <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Participation credentials</h3>
-        <p className="text-xs text-brand-muted-soft mt-1">
-          A verifiable record per person with its own page, which they can make public and add to LinkedIn (16+).
-          Award credentials are issued from Judging &amp; awards above; every credential for this event is listed
-          here.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Participation credentials</h3>
+          <p className="text-xs text-brand-muted-soft mt-1">
+            A verifiable record per person with its own page, which they can make public and add to LinkedIn (16+).
+            {audience === 'students'
+              ? ' Award credentials are issued from Judging & awards above; every student credential for this event is listed here.'
+              : ' Mentors are the volunteers assigned on the Volunteers panel; theirs is the Certificate of Appreciation.'}
+          </p>
+        </div>
+        <div role="group" aria-label="Show credentials for" className="inline-flex rounded-lg border border-brand-border p-0.5">
+          {(['students', 'mentors'] as const).map((a) => (
+            <button key={a} type="button" onClick={() => switchTo(a)} aria-pressed={audience === a} disabled={busy !== null}
+              className={`text-xs font-medium px-3 py-1.5 rounded-md capitalize ${audience === a ? 'bg-brand-blue text-white' : 'text-brand-blue-dark hover:bg-brand-canvas'}`}>
+              {a}
+            </button>
+          ))}
+        </div>
       </div>
 
       {msg && <p className={`text-xs ${msg.error ? 'text-red-600' : 'text-green-700'}`}>{msg.text}</p>}
@@ -128,17 +164,19 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
       <div className="grid md:grid-cols-2 gap-3">
         <label className="text-xs text-brand-muted-soft space-y-1 md:col-span-2">
           <span>Title (the name on LinkedIn)</span>
-          <input className={input} value={form.credential_title ?? ''} placeholder={`${eventTitle} — Participant`}
+          <input className={input} value={form.credential_title ?? ''} placeholder={audience === 'mentors' ? `${eventTitle} — Volunteer Mentor` : `${eventTitle} — Participant`}
             onChange={(e) => setForm({ ...form, credential_title: e.target.value })} />
         </label>
         <label className="text-xs text-brand-muted-soft space-y-1">
           <span>Description</span>
           <textarea className={input} rows={3} value={form.credential_description ?? ''}
+            placeholder={audience === 'mentors' ? EVENT_AWARDS.mentor.description : undefined}
             onChange={(e) => setForm({ ...form, credential_description: e.target.value })} />
         </label>
         <label className="text-xs text-brand-muted-soft space-y-1">
           <span>How it was earned</span>
           <textarea className={input} rows={3} value={form.credential_criteria ?? ''}
+            placeholder={audience === 'mentors' ? EVENT_AWARDS.mentor.criteria : undefined}
             onChange={(e) => setForm({ ...form, credential_criteria: e.target.value })} />
         </label>
         <label className="text-xs text-brand-muted-soft space-y-1 md:col-span-2">
@@ -147,7 +185,7 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
         </label>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <button onClick={saveSettings} disabled={busy !== null}
+        <button onClick={saveSettings} disabled={busy !== null || !data}
           className="text-xs font-medium px-3 py-2 rounded-md border border-brand-border text-brand-blue-dark hover:bg-brand-canvas disabled:opacity-50">
           {busy === 'save' ? 'Saving…' : 'Save details'}
         </button>
@@ -156,15 +194,21 @@ export default function EventCredentials({ eventSlug, eventTitle }: { eventSlug:
 
       {/* ── Issue ────────────────────────────────────────────────────── */}
       <div className="border-t border-brand-hairline pt-4 flex flex-wrap items-center gap-3">
-        <label className="text-xs text-brand-muted-soft flex items-center gap-2">
-          <span>Issue to</span>
-          <select className="rounded-md border border-brand-border px-2 py-1.5 text-sm text-brand-blue-dark" value={mode}
-            onChange={(e) => setMode(e.target.value as 'checked_in' | 'all')}>
-            <option value="checked_in">Checked-in participants{data ? ` (${data.checkedInCount})` : ''}</option>
-            <option value="all">All registered participants</option>
-          </select>
-        </label>
-        <button onClick={issue} disabled={busy !== null || !data}
+        {audience === 'students' ? (
+          <label className="text-xs text-brand-muted-soft flex items-center gap-2">
+            <span>Issue to</span>
+            <select className="rounded-md border border-brand-border px-2 py-1.5 text-sm text-brand-blue-dark" value={mode}
+              onChange={(e) => setMode(e.target.value as 'checked_in' | 'all')}>
+              <option value="checked_in">Checked-in participants{data ? ` (${data.checkedInCount})` : ''}</option>
+              <option value="all">All registered participants</option>
+            </select>
+          </label>
+        ) : (
+          <span className="text-xs text-brand-muted-soft">
+            Issue to every assigned mentor{data ? ` (${data.mentorCount})` : ''}
+          </span>
+        )}
+        <button onClick={issue} disabled={busy !== null || !data || (audience === 'mentors' && data.mentorCount === 0)}
           className="text-xs font-medium px-3 py-2 rounded-md bg-brand-blue text-white hover:bg-brand-blue-bright disabled:opacity-50">
           {busy === 'issue' ? 'Issuing…' : 'Issue credentials'}
         </button>

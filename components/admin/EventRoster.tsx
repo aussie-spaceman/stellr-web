@@ -12,6 +12,7 @@ import { SendPayLinkButton } from '@/components/admin/SendPayLinkButton'
 import { ReissueDocusignButton } from '@/components/admin/ReissueDocusignButton'
 import { CorrectSignerEmailButton } from '@/components/admin/CorrectSignerEmailButton'
 import { displayEventRole } from '@/lib/member-enums'
+import { STUDENT_ROLES } from '@/lib/membership-rules'
 
 // Pills with paperwork still to chase. 'issued'/'partial' resend the live
 // envelope; the rest need a new one (the server confirms before spending quota).
@@ -348,7 +349,7 @@ export default function EventRoster({
                       <td className="px-4 py-2.5 text-brand-muted">{p.grade ?? '—'}</td>
                       <td className="px-4 py-2.5 text-brand-muted">{p.t_shirt_size ?? '—'}</td>
                       <td className="px-4 py-2.5">
-                        {p.event_role === 'participant' ? (
+                        {STUDENT_ROLES.includes(p.event_role ?? '') ? (
                           companies.length === 0 ? (
                             <span className="text-brand-muted-soft">—</span>
                           ) : (

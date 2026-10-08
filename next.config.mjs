@@ -84,6 +84,8 @@ const nextConfig = {
       { source: '/privacy/request/:path*', headers: privateLink },
       { source: '/survey/:path*', headers: privateLink },
       { source: '/api/survey/:path*', headers: privateLink },
+      { source: '/team-profile/:path*', headers: privateLink },
+      { source: '/api/team-profile/:path*', headers: privateLink },
       // The signing page shows the document in a same-origin frame. No
       // object-src here: on a PDF response it can stop the browser's own viewer.
       {

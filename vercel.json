@@ -81,6 +81,10 @@
       "schedule": "0 19 * * *"
     },
     {
+      "path": "/api/cron/team-profiles",
+      "schedule": "45 9 * * *"
+    },
+    {
       "path": "/api/cron/surveys",
       "schedule": "0 7 * * *"
     },

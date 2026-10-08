@@ -7,6 +7,7 @@ export const AUDIENCES = [
   { key: 'mentors',              label: 'Mentors',                      hint: 'Assigned volunteers and this event’s event managers' },
   { key: 'docusign_outstanding', label: 'Outstanding DocuSigns',        hint: 'The participant and their parent/guardian' },
   { key: 'payment_outstanding',  label: 'Outstanding payments',         hint: 'The participant, their parent/guardian, and the teacher for group registrations' },
+  { key: 'team_profile_outstanding', label: 'Outstanding team profiles', hint: 'Students whose forms are signed but who haven’t submitted a team profile, and their parent/guardian' },
 ] as const
 
 export type AudienceKey = (typeof AUDIENCES)[number]['key']
@@ -85,7 +86,8 @@ export const EVENT_MERGE_FIELDS = [
   { token: 'days_to_go',           example: '7',                             label: 'Days until the event' },
   { token: 'payment_instructions', example: 'You can pay securely here: …',  label: 'Pay link or invoice note (payment emails)' },
   { token: 'agreement_link',       example: 'You can sign the form here: …', label: 'Signing link, or where to find the form (consent emails)' },
-  { token: 'portal_link',          example: 'https://app.stellreducation.org/sign-in', label: 'Stellr portal sign-in' },
+  { token: 'team_profile_link',    example: 'Fill in your team profile here: …', label: 'Team profile link (team profile emails)' },
+  { token: 'portal_link',         example: 'https://app.stellreducation.org/sign-in', label: 'Stellr portal sign-in' },
   { token: 'event_link',           example: 'https://www.stellreducation.org/events/…', label: 'Public event page' },
 ] as const
 

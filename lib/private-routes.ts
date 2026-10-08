@@ -9,6 +9,7 @@
 //   /privacy/request, …/confirm the privacy request form and its emailed
 //                               confirmation link (people describe their families)
 //   /survey/<token>             post-event survey link (token in the path)
+//   /team-profile/<token>       pre-event team profile link (token in the path)
 
 export const PRIVATE_ROUTE_HEADER = 'x-stellr-private-route'
 
@@ -17,6 +18,7 @@ const PRIVATE = [
   /^\/register\/[^/]+\/(pay|join)\//,
   /^\/privacy\/request(\/|$)/,
   /^\/survey\//,
+  /^\/team-profile\//,
 ]
 
 export function isPrivatePath(pathname: string): boolean {

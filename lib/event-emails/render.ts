@@ -84,6 +84,14 @@ export interface RecipientForRender {
   payments: PaymentLine[]
   /** Agreements this address still has to sign, for {{agreement_link}}. */
   agreements?: AgreementLine[]
+  /** Team profiles this address still has to fill in, for {{team_profile_link}}. */
+  teamProfiles?: TeamProfileLine[]
+}
+
+export interface TeamProfileLine {
+  /** Whose profile: a participant's first name, or "your" for the recipient's own. */
+  participantName: string
+  url: string
 }
 
 export interface AgreementLine {
@@ -136,6 +144,19 @@ function agreementText(lines: AgreementLine[]): string {
     .join('\n')
 }
 
+function teamProfileText(lines: TeamProfileLine[]): string {
+  if (lines.length === 0) return ''
+  if (lines.length === 1) {
+    const l = lines[0]
+    return l.participantName === 'your'
+      ? `Fill in your team profile here: ${l.url}`
+      : `${l.participantName}’s team profile: ${l.url}`
+  }
+  return lines
+    .map((l) => `${l.participantName === 'your' ? 'Your' : `${l.participantName}’s`} team profile: ${l.url}`)
+    .join('\n')
+}
+
 function link(href: string, label?: string): string {
   return `<a href="${href}" style="color:#1e3a5f;text-decoration:underline">${label ?? href}</a>`
 }
@@ -147,6 +168,7 @@ export function recipientMergeVars(r: RecipientForRender): Record<string, string
     participant_names:    joinNames(r.participantNames) || r.firstName,
     payment_instructions: paymentText(r.payments),
     agreement_link:       agreementText(r.agreements ?? []),
+    team_profile_link:    teamProfileText(r.teamProfiles ?? []),
   }
 }
 
@@ -230,6 +252,7 @@ export function renderEventEmail(
   // These carry their own markup (link + line breaks).
   if ('payment_instructions' in vars) htmlVars.payment_instructions = linesHtmlFromText(vars.payment_instructions, 'Pay now')
   if ('agreement_link' in vars) htmlVars.agreement_link = linesHtmlFromText(vars.agreement_link, 'Sign now')
+  if ('team_profile_link' in vars) htmlVars.team_profile_link = linesHtmlFromText(vars.team_profile_link, 'Open the team profile')
 
   const subject = substituteTokens(email.subject, vars).replace(/\s+/g, ' ').trim()
   const bodyHtml = substituteTokens(tiptapToEmailHtml(email.body_json), htmlVars)
@@ -255,4 +278,4 @@ function linesHtmlFromText(text: string, label: string): string {
 const paymentHtmlFromText = (text: string) => linesHtmlFromText(text, 'Pay now')
 
 // Exported for tests.
-export const __test = { paymentText, paymentHtmlFromText, agreementText, whoIsRegistered }
+export const __test = { paymentText, paymentHtmlFromText, agreementText, teamProfileText, whoIsRegistered }

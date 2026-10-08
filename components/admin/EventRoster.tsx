@@ -349,7 +349,9 @@ export default function EventRoster({
                       <td className="px-4 py-2.5 text-brand-muted">{p.grade ?? '—'}</td>
                       <td className="px-4 py-2.5 text-brand-muted">{p.t_shirt_size ?? '—'}</td>
                       <td className="px-4 py-2.5">
-                        {STUDENT_ROLES.includes(p.event_role ?? '') ? (
+                        {/* Students (auto-assign places them) and mentors (placed here by
+                            hand) get a company number to be told at check-in. */}
+                        {STUDENT_ROLES.includes(p.event_role ?? '') || p.event_role === 'mentor' ? (
                           companies.length === 0 ? (
                             <span className="text-brand-muted-soft">—</span>
                           ) : (

@@ -26,13 +26,21 @@ describe('parsePdHours', () => {
 })
 
 describe('standards', () => {
-  it('covers both frameworks the certificate names', () => {
-    const frameworks = new Set(PD_STANDARDS.map((s) => s.framework))
-    expect(frameworks).toEqual(new Set(['NGSS', 'CCSS']))
-    expect(pdStandardCodes()).toHaveLength(PD_STANDARDS.length)
+  // 8 Oct: the certificate back is the source of truth — Common Core only, 17
+  // codes, in the order printed. A change to the back must change this list.
+  it('matches the certificate back, code for code', () => {
+    expect(pdStandardCodes()).toEqual([
+      'MP1', 'MP2', 'MP3', 'MP4', 'MP6',
+      'HSN-Q.A.1', 'HSN-Q.A.2', 'HSN-Q.A.3', 'HSN-CED.A.3', 'HSN-MG.A.3',
+      'RST.11-12.7', 'RST.11-12.9', 'WHST.11-12.2', 'WHST.11-12.6', 'SL.11-12.1', 'SL.11-12.4', 'SL.11-12.5',
+    ])
+    expect(new Set(PD_STANDARDS.map((s) => s.framework))).toEqual(new Set(['CCSS']))
+    expect(new Set(PD_STANDARDS.map((s) => s.group)).size).toBe(3)
   })
   it('still describes a code retired from the set', () => {
-    expect(describeStandard('CCSS.MATH.PRACTICE.MP7')).toEqual({ code: 'CCSS.MATH.PRACTICE.MP7', framework: 'CCSS', label: '' })
+    // The 7 Oct set lives on in dev snapshots; it still renders, ungrouped.
+    expect(describeStandard('NGSS SEP 1')).toEqual({ code: 'NGSS SEP 1', framework: 'NGSS', group: 'NGSS', label: '' })
+    expect(describeStandard('MP7')).toEqual({ code: 'MP7', framework: 'CCSS', group: 'Common Core', label: '' })
   })
   it('formats hours without a trailing .0', () => {
     expect(formatPdHours(8)).toBe('8')

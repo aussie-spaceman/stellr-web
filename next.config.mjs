@@ -37,7 +37,18 @@ const nextConfig = {
       './node_modules/pdfjs-dist/standard_fonts/**',
     ],
     '/api/admin/events/**/docusign-reissue': ['./public/fonts/esign/OpenSans-Regular.ttf'],
-    '/api/cron/**': ['./public/fonts/esign/OpenSans-Regular.ttf'],
+    // The DocuSign opt-out read names each checkbox by the text beside it on
+    // the signed document, with pdf.js (lib/esign/providers/docusign.ts): on
+    // completion (the webhook) and in the docusign-form-data cron.
+    '/api/cron/**': [
+      './public/fonts/esign/OpenSans-Regular.ttf',
+      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+      './node_modules/pdfjs-dist/standard_fonts/**',
+    ],
+    '/api/webhooks/docusign': [
+      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+      './node_modules/pdfjs-dist/standard_fonts/**',
+    ],
   },
   serverExternalPackages: ['pdfjs-dist'],
   async headers() {
@@ -73,6 +84,8 @@ const nextConfig = {
       { source: '/privacy/request/:path*', headers: privateLink },
       { source: '/survey/:path*', headers: privateLink },
       { source: '/api/survey/:path*', headers: privateLink },
+      { source: '/team-profile/:path*', headers: privateLink },
+      { source: '/api/team-profile/:path*', headers: privateLink },
       // The signing page shows the document in a same-origin frame. No
       // object-src here: on a PDF response it can stop the browser's own viewer.
       {

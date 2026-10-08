@@ -54,8 +54,9 @@ export async function onEnvelopeCompleted(
   db: SupabaseClient,
   envelope: CompletedEnvelope,
 ): Promise<{ notified: boolean }> {
-  // Guardian's credential-sharing opt-out (minor forms only). Non-fatal: a
-  // failed read leaves form_data_read_at null and the docusign-form-data cron
+  // The opt-out boxes on the form (media on every agreement; quotes, digital
+  // communications and credential sharing on the minor form). Non-fatal: a
+  // failed read leaves form_opt_outs null and the docusign-form-data cron
   // retries it.
   await recordCredentialOptOutFromForm(db, envelope)
 
@@ -71,6 +72,18 @@ export async function onEnvelopeCompleted(
       .update({ retain_until: retainUntilOnCompletion(envelope.completed_at, null) })
       .eq('id', envelope.id)
       .is('retain_until', null)
+  }
+
+  // A student's permission form is the gate for their team profile. Idempotent
+  // (one profile per participant), so a replay is harmless; non-fatal, because
+  // the daily team-profiles sweep sends anything this misses.
+  if (envelope.participant_id) {
+    try {
+      const { dispatchTeamProfiles } = await import('@/lib/team-profile/store')
+      await dispatchTeamProfiles(db, { participantIds: [envelope.participant_id] })
+    } catch (err) {
+      console.error('[esign-completion] team profile dispatch failed:', err)
+    }
   }
 
   const { data: claimed } = await db

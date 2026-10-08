@@ -13,6 +13,8 @@ import { EventEmailsPanel } from '@/components/admin/competitions/EventEmailsPan
 import { EventSurveyPanel } from '@/components/admin/competitions/EventSurveyPanel'
 import { AUTH_APP_URL } from '@/lib/env'
 import EventCompanies, { type CompanyRow } from '@/components/admin/EventCompanies'
+import EventTeamProfiles from '@/components/admin/EventTeamProfiles'
+import { loadCompanyPlan, type CompanyPlan } from '@/lib/team-profile/assign'
 import EventBadges from '@/components/admin/EventBadges'
 import EventCertificates from '@/components/admin/EventCertificates'
 import EventAwards from '@/components/admin/EventAwards'
@@ -92,6 +94,15 @@ export default async function AdminEventDetailPage({
     studentCount = (roster?.groups ?? [])
       .flatMap((g) => g.participants)
       .filter((p) => p.event_role === 'participant' || p.event_role === 'school_student_manager').length
+  }
+
+  // ── Team profiles + best-fit suggestions (roster tab, live events only) ───
+  let companyPlan: CompanyPlan | null = null
+  if (tab === 'roster' && !isCampaign) {
+    companyPlan = await loadCompanyPlan(db, slug, event.date ?? null).catch((err) => {
+      console.error('[competitions] team profile plan failed:', err)
+      return null
+    })
   }
 
   // ── Admin assignments (overview, admins only) ─────────────────────────────
@@ -292,6 +303,7 @@ export default async function AdminEventDetailPage({
           {!isCampaign && roster && (
             <EventCompanies eventSlug={slug} companies={companies} studentCount={studentCount} />
           )}
+          {companyPlan && <EventTeamProfiles eventSlug={slug} plan={companyPlan} />}
           {roster && (
             <EventRoster
               roster={roster}

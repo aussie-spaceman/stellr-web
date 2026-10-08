@@ -149,8 +149,19 @@ export async function dispatchAgreementDetailed(
   // The age of majority depends on where the person lives (V2.3 "Minor");
   // the school's state is the best record of that the registration has.
   const type = classifyAgreement(ctx.eventRole, ctx.dateOfBirth, ctx.schoolState)
-  if (!type) return { outcome: 'not_required' }
-  return issueOrReuse(db, ctx, type)
+  const result: DispatchResult = type ? await issueOrReuse(db, ctx, type) : { outcome: 'not_required' }
+  // Paperwork already on file (or none needed) means the permission gate for
+  // the student's team profile is open now, not when an envelope completes.
+  // dispatchTeamProfiles re-checks eligibility itself; non-fatal.
+  if (ctx.participantId && (result.outcome === 'on_file' || result.outcome === 'not_required')) {
+    try {
+      const { dispatchTeamProfiles } = await import('@/lib/team-profile/store')
+      await dispatchTeamProfiles(db, { participantIds: [ctx.participantId] })
+    } catch (err) {
+      console.error('[agreements] team profile dispatch failed:', err)
+    }
+  }
+  return result
 }
 
 async function issueOrReuse(

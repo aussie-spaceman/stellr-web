@@ -6,23 +6,27 @@ import { markWatermarked } from '@/lib/watermark/pdf'
 import { tokens } from '@/lib/tokens'
 import { coverFit, embedArtwork, fittedSize, type Artwork, type Fit } from '@/lib/event-pdf'
 import { describeStandard, formatPdHours } from '@/lib/pd-standards'
+import { DEFAULT_PD_LAYOUT, PD_DESIGN_HEIGHT, PD_FIELDS, PD_FIELD_FONT, type PdField, type PdLayout } from '@/lib/pd-certificate-layout'
+
+export * from '@/lib/pd-certificate-layout'
 
 // ── Educator PD certificate ──────────────────────────────────────────────────
-// One global background (the Cowork design, stored at PD_ARTWORK_PATH) with the
-// person-specific fields drawn over it. Unlike the award certificates, the
-// artwork cannot say everything: hours, event, date, place, standards and the
-// verification number differ per certificate, so all of them are drawn here.
+// Two pages of Cowork artwork (8 Oct 2026, David):
+//   front — the design with gaps for four fields, drawn here: the teacher's
+//           name (Aileron, shrunk to fit) and the event location, date and
+//           hours of effort (Norwester);
+//   back  — the standards alignment map, printed as is.
+// Field positions are fractions of the FRONT artwork (cover-fitted, as
+// lib/event-pdf.ts does) and are set by an admin with the positioner on the
+// Educator PD panel, stored as JSON beside the artwork (lib/pd-certificate-store).
 //
-// Positions are fractions of the ARTWORK (cover-fitted, as lib/event-pdf.ts
-// does), so a field lands on the same rule however the art is cropped. Tune
-// PD_LAYOUT to the Cowork artwork; nothing else needs to change.
+// Sizes are in the design's own units: the Cowork set is 2000×1500 in Canva, so
+// "Norwester 36" in Canva is size 36 here, whatever resolution the PNG was
+// exported at. Award certificates use print points instead; these do not.
 //
-// With no artwork uploaded the same fields are drawn on a plain page, so a
-// certificate can be issued before the design lands.
-// Design: docs/PLAN-educator-pd-2026-10-07.md §4.
-
-/** Where the current artwork lives in the community-resources bucket. */
-export const PD_ARTWORK_PATH = 'pd-certificate/current'
+// With no front artwork uploaded, a plain one-page certificate is drawn so a
+// credential can still be issued and downloaded.
+// Design: docs/PLAN-educator-pd-2026-10-07.md §4, §8.
 
 const LETTER_LANDSCAPE: [number, number] = [792, 612]
 
@@ -40,6 +44,20 @@ export interface PdCertificateFields {
   issuer: string
 }
 
+// ── Artwork mode: four fields on the Cowork front ────────────────────────────
+
+/** What each field says. "at" / "on" are part of the field, as in the mock-up. */
+export function pdArtworkTexts(f: PdCertificateFields): Record<PdField, string> {
+  const date = formatActivityDate(f.activityDate)
+  const place = f.activityLocation?.trim()
+  return {
+    name: f.recipientName.trim() || 'Educator',
+    location: place ? `at ${place}` : '',
+    date: date ? `on ${date}` : '',
+    hours: formatPdHours(f.hours),
+  }
+}
+
 export type PdSlot = 'name' | 'statement' | 'event' | 'when' | 'ngss' | 'ccss' | 'verify'
 
 export interface SlotPlacement {
@@ -53,6 +71,7 @@ export interface SlotPlacement {
   color: 'ink' | 'muted' | 'accent'
 }
 
+/** The plain page (no artwork uploaded): every field, at fixed positions. */
 export const PD_LAYOUT: Record<PdSlot, SlotPlacement> = {
   name:      { y: 0.40, maxWidth: 0.60, size: 36, weight: 'semibold', color: 'ink' },
   statement: { y: 0.48, maxWidth: 0.70, size: 14, weight: 'regular',  color: 'muted' },
@@ -72,10 +91,8 @@ export function formatActivityDate(isoDate: string | null): string | null {
 }
 
 function standardsLine(codes: string[], framework: 'NGSS' | 'CCSS', heading: string): string {
-  const parts = codes
-    .map(describeStandard)
-    .filter((s) => s.framework === framework)
-    .map((s) => (s.label ? `${s.code} ${s.label}` : s.code))
+  // Codes only: the full wording is on the credential page (and the artwork back).
+  const parts = codes.map(describeStandard).filter((s) => s.framework === framework).map((s) => s.code)
   return parts.length ? `${heading}: ${parts.join(' · ')}` : ''
 }
 
@@ -94,8 +111,8 @@ export function pdCertificateLines(f: PdCertificateFields): Record<PdSlot, strin
   }
 }
 
-// Aileron is the competition print face (CLAUDE.md: print materials only).
-// next.config.mjs traces both weights into the routes that render this.
+// Aileron and Norwester are the competition print faces (CLAUDE.md: print
+// materials only). next.config.mjs traces them into the routes that render this.
 const fontCache = new Map<string, Promise<Uint8Array>>()
 function loadFont(file: string): Promise<Uint8Array> {
   let p = fontCache.get(file)
@@ -155,50 +172,83 @@ function drawSlot(page: PDFPage, text: string, slot: SlotPlacement, fit: Fit, sc
 
 export class PdCertificateArtworkError extends Error {}
 
+export interface PdArtwork {
+  front: Artwork | null
+  back: Artwork | null
+}
+
 /**
- * One US Letter landscape page. `accentHex` follows the event theme on the
- * plain fallback (space violet / enviro green); on artwork it colours only the
- * event title.
+ * US Letter landscape. With front artwork: the front with the four fields
+ * drawn on it, then the back (when uploaded) as is. Without: one plain page.
+ * `accentHex` follows the event theme on the plain page only.
  */
 export async function renderPdCertificatePdf(
   fields: PdCertificateFields,
-  artwork: Artwork | null,
-  { accentHex = tokens.color.primary, layout = PD_LAYOUT }: { accentHex?: string; layout?: Record<PdSlot, SlotPlacement> } = {},
+  artwork: PdArtwork,
+  { accentHex = tokens.color.primary, layout = DEFAULT_PD_LAYOUT }: { accentHex?: string; layout?: PdLayout } = {},
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
   doc.registerFontkit(fontkit)
+  const [pageW, pageH] = LETTER_LANDSCAPE
+
+  if (artwork.front) {
+    const front = await embedArtwork(doc, artwork.front)
+    if (!front) throw new PdCertificateArtworkError('The front artwork could not be read. Upload it again as a PNG or JPEG.')
+    const back = artwork.back ? await embedArtwork(doc, artwork.back) : null
+    if (artwork.back && !back) throw new PdCertificateArtworkError('The back artwork could not be read. Upload it again as a PNG or JPEG.')
+
+    const fonts = {
+      aileron: await doc.embedFont(await loadFont('Aileron-SemiBold.otf'), { subset: false }),
+      norwester: await doc.embedFont(await loadFont('norwester.otf'), { subset: false }),
+    }
+    const page = doc.addPage([pageW, pageH])
+    const fit = coverFit(front.width, front.height, pageW, pageH)
+    page.drawImage(front, fit)
+    // Design units → page points for this fit: the art's own height is 1500 units.
+    const unit = fit.height / PD_DESIGN_HEIGHT
+    const ink = hexToRgb(tokens.color.ink)
+    const texts = pdArtworkTexts(fields)
+    for (const f of PD_FIELDS) {
+      const text = texts[f]
+      if (!text) continue
+      const font = fonts[PD_FIELD_FONT[f]]
+      const p = layout[f]
+      const size = fittedSize((s) => font.widthOfTextAtSize(text, s), p.size * unit, fit.width * p.maxWidth)
+      page.drawText(text, {
+        x: fit.x + fit.width * p.x - font.widthOfTextAtSize(text, size) / 2,
+        y: fit.y + fit.height * (1 - p.y),
+        size,
+        font,
+        color: ink,
+      })
+    }
+    if (back) {
+      const backPage = doc.addPage([pageW, pageH])
+      backPage.drawImage(back, coverFit(back.width, back.height, pageW, pageH))
+    }
+    markWatermarked(doc)
+    return doc.save()
+  }
+
+  // Plain fallback: accent rules, a heading, and every field in PD_LAYOUT.
   const fonts = {
     semibold: await doc.embedFont(await loadFont('Aileron-SemiBold.otf'), { subset: false }),
     regular: await doc.embedFont(await loadFont('Aileron-Regular.otf'), { subset: false }),
   }
-  const [pageW, pageH] = LETTER_LANDSCAPE
   const page = doc.addPage([pageW, pageH])
-  let fit: Fit = { x: 0, y: 0, width: pageW, height: pageH }
-
-  if (artwork) {
-    const image = await embedArtwork(doc, artwork)
-    if (!image) throw new PdCertificateArtworkError('The PD certificate artwork could not be read. Upload it again as a PNG or JPEG.')
-    fit = coverFit(image.width, image.height, pageW, pageH)
-    page.drawImage(image, fit)
-  } else {
-    // Plain fallback: accent rules, the heading the artwork would otherwise carry.
-    const accent = hexToRgb(accentHex)
-    page.drawRectangle({ x: 0, y: pageH - 14, width: pageW, height: 14, color: accent })
-    page.drawRectangle({ x: 0, y: 0, width: pageW, height: 14, color: accent })
-    const heading = (text: string, size: number, y: number, font: PDFFont, hex: string) =>
-      page.drawText(text, { x: pageW / 2 - font.widthOfTextAtSize(text, size) / 2, y, size, font, color: hexToRgb(hex) })
-    heading('STELLR EDUCATION', 13, pageH - 70, fonts.semibold, accentHex)
-    heading('Certificate of Professional Development', 28, pageH - 140, fonts.semibold, tokens.color.ink)
-    heading('This certifies that', 13, pageH - 190, fonts.regular, tokens.color.text.secondary)
-  }
-
-  // Sizes were chosen against US Letter; keep them proportional to the art.
-  const scale = fit.height / pageH
+  const fit: Fit = { x: 0, y: 0, width: pageW, height: pageH }
+  const accent = hexToRgb(accentHex)
+  page.drawRectangle({ x: 0, y: pageH - 14, width: pageW, height: 14, color: accent })
+  page.drawRectangle({ x: 0, y: 0, width: pageW, height: 14, color: accent })
+  const heading = (text: string, size: number, y: number, font: PDFFont, hex: string) =>
+    page.drawText(text, { x: pageW / 2 - font.widthOfTextAtSize(text, size) / 2, y, size, font, color: hexToRgb(hex) })
+  heading('STELLR EDUCATION', 13, pageH - 70, fonts.semibold, accentHex)
+  heading('Certificate of Professional Development', 28, pageH - 140, fonts.semibold, tokens.color.ink)
+  heading('This certifies that', 13, pageH - 190, fonts.regular, tokens.color.text.secondary)
   const lines = pdCertificateLines(fields)
-  for (const slot of Object.keys(layout) as PdSlot[]) {
-    drawSlot(page, lines[slot], layout[slot], fit, scale, fonts, accentHex)
+  for (const slot of Object.keys(PD_LAYOUT) as PdSlot[]) {
+    drawSlot(page, lines[slot], PD_LAYOUT[slot], fit, 1, fonts, accentHex)
   }
-
   markWatermarked(doc)
   return doc.save()
 }

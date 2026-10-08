@@ -8,7 +8,8 @@ import { generateCertificatesPdf } from '@/lib/event-pdf'
 import { isAwardType } from '@/lib/event-awards'
 import { downloadArtwork, loadTemplate, placementOf } from '@/lib/event-certificates'
 import { certificateGateFor } from '@/lib/survey/certificate-gate'
-import { PD_ARTWORK_PATH, renderPdCertificatePdf } from '@/lib/pd-certificate'
+import { renderPdCertificatePdf } from '@/lib/pd-certificate'
+import { loadPdArtwork, loadPdLayout, pdTheme } from '@/lib/pd-certificate-store'
 import { tokens } from '@/lib/tokens'
 
 // GET /api/credentials/[number]/pdf
@@ -69,10 +70,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
     // No artwork for this award yet: fall through to the default design.
   }
 
-  // Educator PD: the global Cowork artwork with every field drawn on it, or
-  // the plain page until that artwork is uploaded. Never survey-gated.
+  // Educator PD: the theme's Cowork front with its four fields drawn, then the
+  // back; or the plain page until that theme has artwork. Never survey-gated.
   if (cred.source === 'pd' && cred.pd_hours) {
-    const artwork = await downloadArtwork(db, PD_ARTWORK_PATH)
+    const theme = pdTheme(cred.theme)
+    const [artwork, layout] = await Promise.all([loadPdArtwork(db, theme), loadPdLayout(db, theme)])
     const out = await renderPdCertificatePdf(
       {
         recipientName:    cred.recipient_name || 'Educator',
@@ -86,7 +88,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
         issuer:           cred.issuer,
       },
       artwork,
-      { accentHex: cred.theme === 'environmental' ? tokens.color.enviroGreen : tokens.color.spaceViolet },
+      { accentHex: cred.theme === 'environmental' ? tokens.color.enviroGreen : tokens.color.spaceViolet, layout },
     )
     void recordCredentialEvent(db, cred.id, 'pdf')
     return pdfResponse(out)

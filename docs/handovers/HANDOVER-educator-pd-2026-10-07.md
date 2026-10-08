@@ -1,6 +1,6 @@
 # HANDOVER — Educator PD credentials (7 Oct 2026)
 
-**Not yet on `dev`, not in production.** PR #320 (`feat/educator-pd-credentials`) is open with squash auto-merge. The first CI run failed on the new e2e spec (fixed in `9314ed5`, CI re-running at close-out). Promotion #318 (`ee441ad`, 7 Oct) did **not** include it. Maria Gordon has **not** been created or issued anything.
+**Update 8 Oct: LIVE in production** (#326 `6d71632`, see the 8 Oct close-out at the end). The paragraph below is the 7 Oct state. PR #320 (`feat/educator-pd-credentials`) is open with squash auto-merge. The first CI run failed on the new e2e spec (fixed in `9314ed5`, CI re-running at close-out). Promotion #318 (`ee441ad`, 7 Oct) did **not** include it. Maria Gordon has **not** been created or issued anything.
 
 Tracker: `tracker/2026-10-07-educator-pd.md` (rows `educator-pd.1–.11`). Design and decisions Q1–Q8: `docs/PLAN-educator-pd-2026-10-07.md`, on the #320 branch until it merges.
 
@@ -75,3 +75,24 @@ The ask: recognise teachers who support events.
 3. **The core deliverable is not done.** Maria has not been issued anything.
 4. **Single-day only.** `activity_date` uses Sanity `date`; a multi-day event's `endDate` is ignored.
 5. **Inbox, out of scope.** Two guardian replies dated 6 Oct are unanswered: Davidson, and the parent of Lily Nylund. Both say they cannot open a credential. They are most likely the family-link issue fixed in #312 and covered by the `credential-family-link` rows.
+
+## Close-out, 8 Oct 2026
+
+**Live in production.**
+- #320 merged into `dev` on 7 Oct as `8a5d818`. CI on `9314ed5` was green, with the PD spec among 75 e2e passes.
+- The prod migration was applied on 7 Oct with David's approval. The ledger was realigned and the schema read back.
+- Promoted on 8 Oct in #326 (`6d71632`, 15:14Z, together with #327). Another session finished that promotion and wrote record #330.
+- Production deployment `dpl_8EKudxtjb3rao3aBW16V2aogu4H2` is READY for that SHA.
+- Signed-out probes: the PD admin routes answer 401/403, not 404.
+
+**Still not done:**
+- **Maria (`educator-pd.4`).** On 8 Oct production had no PD credential and no Maria Gordon member. Her event is `colorado-space-design-challenge` (3 Oct 2026, STEM School, Highlands Ranch, Colorado, single day), so `.9` does not affect her.
+- **Cowork artwork (`.5`).** None in prod storage. That does not block issuing: the PDF is rendered at download, so it picks up the artwork whenever it is uploaded.
+
+**Not verified:**
+- The signed-in admin panel on production. Nobody has opened it yet; issuing Maria is that test.
+- An admin-created teacher going through onboarding to LinkedIn (`.6`).
+- LinkedIn prefill and the org ID (`.7`).
+
+**Gaps in this session's own process:**
+- I asked David for approval to merge #326 and the session ended before an answer. The merge happened in another session, which is fine, but this session did not do Step 7 (verify production). The checks above, run on 8 Oct, stand in for it.

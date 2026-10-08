@@ -43,6 +43,7 @@ export type UploadPurpose =
   | 'training-item-resource'
   | 'training-cert-template'
   | 'event-artwork'
+  | 'pd-certificate-artwork'
   | 'event-email-attachment'
   | 'campaign-proposal'
   | 'community-media'
@@ -176,6 +177,18 @@ export const UPLOAD_PURPOSES: Record<UploadPurpose, PurposeSpec> = {
       if (!access.ok) return deny('Forbidden', access.status)
       if (!EVENT_ARTWORK_KINDS.includes(ctx.kind)) return deny('Unknown artwork kind', 400)
       return { path: `event-artwork/${ctx.slug}/${ctx.kind}-${Date.now()}-${safeName}` }
+    },
+  },
+
+  // The one global educator PD certificate background (lib/pd-certificate.ts).
+  // Staged here, then copied to PD_ARTWORK_PATH by /api/admin/pd-certificate.
+  'pd-certificate-artwork': {
+    bucket: RESOURCES_BUCKET,
+    maxBytes: 10 * MB,
+    allowedTypes: ['image/png', 'image/jpeg'],
+    async grant({ safeName }) {
+      const denied = await requireAdmin()
+      return denied ?? { path: `pd-certificate/staged-${Date.now()}-${safeName}` }
     },
   },
 

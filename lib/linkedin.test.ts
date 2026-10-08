@@ -73,3 +73,10 @@ describe('linkedInManualDetails', () => {
     })
   })
 })
+
+describe('linkedInAddToProfileUrl — educator PD', () => {
+  it('carries the hours in the certification name', () => {
+    const u = new URL(linkedInAddToProfileUrl({ ...cred, title: 'Professional Development — Sample Event (8 hours)' }))
+    expect(u.searchParams.get('name')).toBe('Professional Development — Sample Event (8 hours)')
+  })
+})

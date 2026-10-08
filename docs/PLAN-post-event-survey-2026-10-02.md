@@ -105,7 +105,7 @@ Items marked **David** need his answer; none of them block the build.
 - Retention: no time-based purge of survey data at 7 years after deactivation (no deactivation date exists).
 - Reminder dedupe uses conditional updates on the invitation, not `sent_reminders` (its unique key cannot dedupe rows without a member).
 
-## 6. Follow-ups — status (2 Oct 2026, branch `feat/post-event-survey-followups`, local, not pushed; merges after `feat/post-event-survey`)
+## 6. Follow-ups — status (built 2 Oct 2026 on `feat/post-event-survey-followups`; landed as #294 `0c4ce5f`, promoted in #296 `7291e88`)
 
 ### Built
 | Item | Where |

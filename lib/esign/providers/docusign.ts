@@ -8,12 +8,15 @@ import {
   getAccountUsage,
   getEnvelopeCertificate,
   getEnvelopeDocument,
-  getEnvelopeFormData,
+  getEnvelopeCheckboxes,
+  getEnvelopeDocumentById,
   getEnvelopeRecipients,
   resendEnvelope,
   voidEnvelope,
   type CreatedEnvelope,
+  type EnvelopeFormField,
 } from '@/lib/docusign'
+import { nameCheckboxes } from '@/lib/docusign-form-data'
 import {
   AllowanceExhaustedError,
   CorrectionRefusedError,
@@ -43,6 +46,26 @@ export function isOutage(err: unknown): boolean {
   // fetch() rejects with a TypeError when the network fails, and with a
   // TimeoutError/AbortError when AbortSignal.timeout fires.
   return err.name === 'TypeError' || err.name === 'TimeoutError' || err.name === 'AbortError'
+}
+
+/**
+ * The opt-out boxes on a signed envelope, as form fields ('true' = ticked).
+ * Each box is named by the sentence printed beside it on the signed document,
+ * so forms whose boxes DocuSign never labelled (V2.1/V2.2) read the same as
+ * V2.3. Only the opt-out boxes come back; other fields are not needed.
+ */
+async function readOptOutBoxes(envelopeId: string): Promise<EnvelopeFormField[]> {
+  const boxes = await getEnvelopeCheckboxes(envelopeId)
+  if (!boxes.length) return []
+  // pdf.js is loaded only here, not by every route that issues an envelope.
+  const { extractPages } = await import('@/lib/esign/native/pdf-text')
+  const pages = new Map<string, Awaited<ReturnType<typeof extractPages>>>()
+  for (const documentId of new Set(boxes.map((b) => b.documentId))) {
+    pages.set(documentId, await extractPages(await getEnvelopeDocumentById(envelopeId, documentId)))
+  }
+  const { fields, unnamed } = nameCheckboxes(boxes, (b) => pages.get(b.documentId)?.[b.page - 1])
+  if (unnamed) console.warn(`[docusign] ${unnamed} checkbox(es) on envelope ${envelopeId} matched no opt-out sentence`)
+  return fields
 }
 
 function createEnvelope(req: CreateAgreementRequest): Promise<CreatedEnvelope> {
@@ -99,7 +122,7 @@ export const docusignProvider: EsignProvider = {
     }
   },
 
-  getFieldValues: (_ctx, externalId) => getEnvelopeFormData(externalId),
+  getFieldValues: (_ctx, externalId) => readOptOutBoxes(externalId),
 
   async getSignedDocument(_ctx, externalId, opts) {
     const pdf = await getEnvelopeDocument(externalId)

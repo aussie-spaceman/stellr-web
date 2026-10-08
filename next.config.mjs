@@ -22,8 +22,10 @@ const nextConfig = {
   // lib/event-pdf.ts reads the certificate name face from public/fonts at
   // request time; public/ is not traced into functions on its own.
   outputFileTracingIncludes: {
+    // lib/pd-certificate.ts adds the regular weight for the PD certificate.
     '/api/admin/events/**': ['./public/fonts/Aileron-SemiBold.otf'],
-    '/api/credentials/**': ['./public/fonts/Aileron-SemiBold.otf'],
+    '/api/credentials/**': ['./public/fonts/Aileron-SemiBold.otf', './public/fonts/Aileron-Regular.otf'],
+    '/api/admin/pd-certificate/**': ['./public/fonts/Aileron-SemiBold.otf', './public/fonts/Aileron-Regular.otf'],
     // Stellr signing stamps names and values in Open Sans (lib/esign/native/render.ts).
     '/api/sign/**': ['./public/fonts/esign/OpenSans-Regular.ttf'],
     // The template editor checks documents with pdf.js on the server
@@ -35,7 +37,18 @@ const nextConfig = {
       './node_modules/pdfjs-dist/standard_fonts/**',
     ],
     '/api/admin/events/**/docusign-reissue': ['./public/fonts/esign/OpenSans-Regular.ttf'],
-    '/api/cron/**': ['./public/fonts/esign/OpenSans-Regular.ttf'],
+    // The DocuSign opt-out read names each checkbox by the text beside it on
+    // the signed document, with pdf.js (lib/esign/providers/docusign.ts): on
+    // completion (the webhook) and in the docusign-form-data cron.
+    '/api/cron/**': [
+      './public/fonts/esign/OpenSans-Regular.ttf',
+      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+      './node_modules/pdfjs-dist/standard_fonts/**',
+    ],
+    '/api/webhooks/docusign': [
+      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+      './node_modules/pdfjs-dist/standard_fonts/**',
+    ],
   },
   serverExternalPackages: ['pdfjs-dist'],
   async headers() {

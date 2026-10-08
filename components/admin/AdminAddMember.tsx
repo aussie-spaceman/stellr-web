@@ -11,6 +11,8 @@ interface Tier { id: string; name: string }
 
 interface Props {
   tiers: Tier[]
+  /** Admin path to go back to after saving instead of the new member's page. */
+  returnTo?: string | null
 }
 
 const GRADES = [
@@ -47,7 +49,7 @@ function ageFromDob(dob: string): number | null {
   return isValidDob(dob) ? ageOn(dob) : null
 }
 
-export function AdminAddMember({ tiers }: Props) {
+export function AdminAddMember({ tiers, returnTo }: Props) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -143,7 +145,7 @@ export function AdminAddMember({ tiers }: Props) {
       return
     }
     const { member } = await res.json()
-    router.push(`/admin/members/${member.id}`)
+    router.push(returnTo ?? `/admin/members/${member.id}`)
   }
 
   return (

@@ -17,6 +17,7 @@ import EventBadges from '@/components/admin/EventBadges'
 import EventCertificates from '@/components/admin/EventCertificates'
 import EventAwards from '@/components/admin/EventAwards'
 import EventCredentials from '@/components/admin/EventCredentials'
+import EventEducatorPd from '@/components/admin/EventEducatorPd'
 import { RefundPolicyEditor } from '@/components/admin/RefundPolicyEditor'
 import { EventMerchandiseEditor } from '@/components/admin/EventMerchandiseEditor'
 import { EventMerchBatch } from '@/components/admin/EventMerchBatch'
@@ -381,6 +382,8 @@ export default async function AdminEventDetailPage({
           <EventAwards eventSlug={slug} />
 
           <EventCredentials eventSlug={slug} eventTitle={event.title} />
+
+          <EventEducatorPd eventSlug={slug} />
         </div>
       )}
     </div>

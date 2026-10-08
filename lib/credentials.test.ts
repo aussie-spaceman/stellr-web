@@ -28,6 +28,7 @@ import {
   credentialUrl,
   tombstoneCredentialsFor,
   unpublishCredentialsFor,
+  issueCredential,
   type CredentialRow,
 } from './credentials'
 
@@ -38,7 +39,8 @@ function row(over: Partial<CredentialRow> = {}): CredentialRow {
     id: 'c1', number: 'STL-2026-7K3MQ8ZD', source: 'course', member_id: 'm1', participant_id: null,
     module_id: 'mod1', event_slug: null, recipient_name: 'Ada Lovelace', title: 'Orbital Mechanics 101',
     description: null, criteria: null, skills: [], issuer: 'Stellr Academy', role_label: null, award: null, award_type: null,
-    theme: 'space', badge_path: null, issued_at: '2026-09-01T00:00:00Z', expires_at: null, status: 'issued',
+    theme: 'space', badge_path: null, pd_hours: null, standards: [], activity_title: null, activity_date: null, activity_location: null,
+    issued_at: '2026-09-01T00:00:00Z', expires_at: null, status: 'issued',
     revoked_at: null, revoked_reason: null, tombstoned_at: null, visibility: 'private', is_minor: false,
     ...over,
   }
@@ -310,5 +312,76 @@ describe('shareConsentFor', () => {
     const sixteen = `${new Date().getUTCFullYear() - 16}-01-01`
     expect(await shareConsentFor(makeDb(null), view(sixteen, { is_minor: false }))).toBe('none')
     expect(await shareConsentFor(granting(), view(sixteen, { is_minor: false }))).toBe('granted')
+  })
+})
+
+// Educator PD (7 Oct 2026): one live PD credential per member per event. A
+// revoked one does not block a corrected re-issue, so the lookup filters on
+// status — the partial index credentials_pd_once does the same in the DB.
+function makeIssueDb(existing: Record<string, unknown> | null) {
+  const calls: { filters: Record<string, unknown>; insert?: Record<string, unknown> }[] = []
+  const db = {
+    from() {
+      const call: { filters: Record<string, unknown>; insert?: Record<string, unknown> } = { filters: {} }
+      calls.push(call)
+      const q = {
+        select: () => q,
+        eq: (k: string, v: unknown) => { call.filters[k] = v; return q },
+        maybeSingle: async () => ({ data: existing, error: null }),
+        insert: (payload: Record<string, unknown>) => { call.insert = payload; return q },
+        single: async () => ({ data: { id: 'new', ...call.insert }, error: null }),
+      }
+      return q
+    },
+    calls,
+  }
+  return db as unknown as Parameters<typeof issueCredential>[0] & { calls: typeof calls }
+}
+
+describe('issueCredential — educator PD', () => {
+  const input = {
+    source: 'pd' as const,
+    memberId: 'm1',
+    eventSlug: 'co-2026',
+    recipient: { firstName: 'Maria', lastName: 'Gordon', dateOfBirth: null },
+    title: 'Professional Development — Sample (8 hours)',
+    pdHours: 8,
+    standards: ['NGSS SEP 1'],
+    activityTitle: 'Sample',
+    activityDate: '2026-10-04',
+    activityLocation: 'Springfield, CO',
+  }
+
+  it('looks for a live one for this member and event only', async () => {
+    const db = makeIssueDb(null)
+    const { created, row } = await issueCredential(db, input)
+    expect(created).toBe(true)
+    expect(db.calls[0].filters).toEqual({ source: 'pd', member_id: 'm1', event_slug: 'co-2026', status: 'issued' })
+    const ins = db.calls[1].insert!
+    expect(ins.pd_hours).toBe(8)
+    expect(ins.standards).toEqual(['NGSS SEP 1'])
+    expect(ins.activity_title).toBe('Sample')
+    expect(ins.award_type).toBeNull()
+    // No DOB yet (admin-created teacher): not a minor, and the page stays private.
+    expect(ins.is_minor).toBe(false)
+    expect(row.number).toMatch(/^STL-\d{4}-/)
+  })
+
+  it('returns the live one instead of issuing twice', async () => {
+    const db = makeIssueDb({ id: 'c1', number: 'STL-2026-AAAAAAAA' })
+    const { created, row } = await issueCredential(db, input)
+    expect(created).toBe(false)
+    expect(row.id).toBe('c1')
+    expect(db.calls).toHaveLength(1)
+  })
+
+  it('needs a member and an event', async () => {
+    await expect(issueCredential(makeIssueDb(null), { ...input, memberId: null })).rejects.toThrow(/memberId \+ eventSlug/)
+  })
+
+  it('never writes hours onto another kind of credential', async () => {
+    const db = makeIssueDb(null)
+    await issueCredential(db, { ...input, source: 'course', moduleId: 'mod1' })
+    expect(db.calls[1].insert!.pd_hours).toBeNull()
   })
 })

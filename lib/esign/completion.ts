@@ -54,8 +54,9 @@ export async function onEnvelopeCompleted(
   db: SupabaseClient,
   envelope: CompletedEnvelope,
 ): Promise<{ notified: boolean }> {
-  // Guardian's credential-sharing opt-out (minor forms only). Non-fatal: a
-  // failed read leaves form_data_read_at null and the docusign-form-data cron
+  // The opt-out boxes on the form (media on every agreement; quotes, digital
+  // communications and credential sharing on the minor form). Non-fatal: a
+  // failed read leaves form_opt_outs null and the docusign-form-data cron
   // retries it.
   await recordCredentialOptOutFromForm(db, envelope)
 

@@ -36,3 +36,33 @@ describe('credentialIssuedEmail', () => {
     expect(e.html).not.toContain('signing in to Stellr')
   })
 })
+
+// Educator PD (7 Oct 2026): the hours and what they are for are said once, and
+// a teacher added by an admin (no DOB yet) is told to finish their account —
+// not that "paperwork" is missing.
+describe('credentialIssuedEmail — educator PD', () => {
+  const pd = credentialIssuedEmail({
+    recipientFirstName: 'Maria', title: 'Professional Development — Sample Event (8 hours)', issuer: 'Stellr Education',
+    url: URL, viewUrl: VIEW, isMinor: false, canShare: false, pdHours: 8,
+  })
+
+  it('states the hours and the licence-renewal use', () => {
+    expect(pd.html).toContain('<strong>8 hours</strong> of professional development')
+    expect(pd.html).toContain('teaching license renewal')
+    expect(pd.text).toContain('8 hours of professional development')
+  })
+
+  it('points an unfinished account at finishing it', () => {
+    expect(pd.html).toContain('Once you have finished setting up your Stellr account')
+    expect(pd.html).not.toContain('paperwork on file')
+  })
+
+  it('leaves other credentials unchanged', () => {
+    const other = credentialIssuedEmail({
+      recipientFirstName: 'Grace', title: 'Orbital Mechanics 101', issuer: 'Stellr Education',
+      url: URL, isMinor: false, canShare: false,
+    })
+    expect(other.html).not.toContain('professional development')
+    expect(other.html).toContain('paperwork on file')
+  })
+})

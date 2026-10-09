@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { rows, sendEventEmail, statusWrites, today, runCatchUps } = vi.hoisted(() => ({
+const { rows, sendEventEmail, reclaimStuckSending, statusWrites, today, runCatchUps } = vi.hoisted(() => ({
   runCatchUps: vi.fn(async (..._a: unknown[]) => ({ checked: 1, emailed: 4, deferred: 0, errors: [] as { id: string; error: string }[] })),
   rows: [] as { id: string; event_slug: string; schedule_days_before: number }[],
   sendEventEmail: vi.fn(async (..._a: unknown[]) => ({ ok: true })),
+  // deep review INT-1: the cron now re-drives stale 'sending' rows.
+  reclaimStuckSending: vi.fn(async (..._a: unknown[]) => ({ reclaimed: 0, errors: [] as { id: string; error: string }[] })),
   statusWrites: [] as { id: string; status: string }[],
   today: { value: '2026-09-28' },
 }))
@@ -11,7 +13,7 @@ const { rows, sendEventEmail, statusWrites, today, runCatchUps } = vi.hoisted(()
 vi.mock('@/lib/cron', () => ({ guardCron: () => null }))
 vi.mock('@/lib/cron-runs', () => ({ startCronRun: async () => ({ fail: () => {}, finish: async () => {} }) }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: async (slug: string) => ({ date: slug === 'past' ? '2026-09-20' : '2026-10-03' }) }))
-vi.mock('@/lib/event-emails/send', () => ({ sendEventEmail }))
+vi.mock('@/lib/event-emails/send', () => ({ sendEventEmail, reclaimStuckSending }))
 vi.mock('@/lib/event-emails/render', () => ({ todayInMountain: () => today.value }))
 vi.mock('@/lib/event-emails/catch-up', () => ({ runCatchUps }))
 vi.mock('@/lib/supabase', () => ({
@@ -64,6 +66,12 @@ describe('GET /api/cron/event-emails', () => {
     now.mockReturnValue(40_000)         // before b
     expect(await run()).toMatchObject({ due: 2, sent: 1, deferred: 1 })
     now.mockRestore()
+  })
+
+  it('re-drives stale sends abandoned in "sending" and reports the count', async () => {
+    reclaimStuckSending.mockResolvedValueOnce({ reclaimed: 2, errors: [] })
+    expect(await run()).toMatchObject({ resumed: 2 })
+    expect(reclaimStuckSending).toHaveBeenCalledTimes(1)
   })
 
   it('catches up late registrants after the scheduled sends, sharing the event-date lookup', async () => {

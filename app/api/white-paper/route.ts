@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sendEmail, MARKETING_FROM } from '@/lib/email'
+import { escapeHtml } from '@/lib/email-layout'
 import { LEAD_SOURCE_LIFECYCLE } from '@/lib/hubspot-fields'
 import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
@@ -72,7 +73,13 @@ export async function POST(req: Request) {
 }
 
 function whitePaperEmailHtml(firstName: string, downloadUrl: string) {
-  const greeting = firstName || 'there'
+  // deep review PUB-2: this HTML email is sent, from Stellr's DKIM-aligned
+  // marketing sender, to the address the submitter typed — so the submitted
+  // name (and every other interpolated value) is escaped to stop injected
+  // markup rendering as a phishing lure. The plain-text copy below is unaffected.
+  const greeting = escapeHtml(firstName || 'there')
+  const title = escapeHtml(PAPER_TITLE)
+  const href = escapeHtml(downloadUrl)
   return `
   <div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;background:#F6F7FB;padding:32px 16px">
     <div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #E4E7F2;border-radius:16px;overflow:hidden">
@@ -82,11 +89,11 @@ function whitePaperEmailHtml(firstName: string, downloadUrl: string) {
       <div style="padding:32px">
         <p style="color:#13183A;font-size:16px;margin:0 0 12px">Hi ${greeting},</p>
         <p style="color:#454B68;font-size:15px;line-height:1.6;margin:0 0 18px">
-          Thanks for your interest — your copy of <strong>${PAPER_TITLE}</strong> is ready. Download it any
+          Thanks for your interest — your copy of <strong>${title}</strong> is ready. Download it any
           time using the button below.
         </p>
         <p style="margin:24px 0">
-          <a href="${downloadUrl}" style="display:inline-block;background:#3C6DF6;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:13px 26px;border-radius:8px">Download the white paper</a>
+          <a href="${href}" style="display:inline-block;background:#3C6DF6;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:13px 26px;border-radius:8px">Download the white paper</a>
         </p>
         <p style="color:#6A708C;font-size:13px;line-height:1.6;margin:18px 0 0">
           You'll get the occasional update from the Stellr community — you can unsubscribe any time.

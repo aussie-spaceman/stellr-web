@@ -28,9 +28,23 @@ const R = (email: string, firstName: string, role = 'participant') => ({
 })
 
 // Supabase stand-in: event_emails with a real lease, event_email_sends with
-// history the catch-up reads back and appends to.
-function fakeDb(row: typeof EMAIL, history: { trigger: string; recipients: { email: string; status: string }[] }[]) {
-  const state = { row: { ...row }, history: history.map((h) => ({ ...h })), inserted: [] as Record<string, unknown>[] }
+// history the catch-up reads back and records into. A send row is one object,
+// shared between `inserted` and `history`, that deliver updates in place — so
+// `recipients` written incrementally mid-send are visible to alreadyTried, as
+// in the real jsonb column. `killAtFinish` makes the final completion write
+// (the one that sets finished_at) throw, simulating the function dying after
+// the last recipient was recorded but before the row was marked finished.
+function fakeDb(
+  row: typeof EMAIL,
+  history: { trigger: string; recipients: { email: string; status: string }[] }[],
+  opts: { killAtFinish?: boolean } = {},
+) {
+  const state = {
+    row: { ...row },
+    history: history.map((h) => ({ ...h })) as { trigger: string; recipients: { email: string; status: string }[] }[],
+    inserted: [] as Record<string, unknown>[],
+    killAtFinish: opts.killAtFinish ?? false,
+  }
   const db = {
     state,
     from(table: string) {
@@ -70,12 +84,22 @@ function fakeDb(row: typeof EMAIL, history: { trigger: string; recipients: { ema
           }),
         }),
         insert: (values: Record<string, unknown>) => ({
-          select: () => ({ single: async () => { state.inserted.push({ ...values }); return { data: { id: `s${state.inserted.length}` } } } }),
+          select: () => ({ single: async () => {
+            // One row, shared between `inserted` (what the test asserts on) and
+            // `history` (what alreadyTried reads) and updated in place below.
+            const rowObj = { id: `s${state.inserted.length + 1}`, recipients: [], ...values } as Record<string, unknown>
+            state.inserted.push(rowObj)
+            state.history.push(rowObj as unknown as { trigger: string; recipients: { email: string; status: string }[] })
+            return { data: { id: rowObj.id } }
+          } }),
         }),
-        update: (values: { recipients: { email: string; status: string }[] }) => ({
+        update: (values: Record<string, unknown>) => ({
           eq: async () => {
+            // The authoritative completion write carries finished_at; killAtFinish
+            // makes it throw, so recipients recorded incrementally persist but the
+            // row is never marked finished — exactly a killed function.
+            if (state.killAtFinish && 'finished_at' in values) throw new Error('killed')
             Object.assign(state.inserted[state.inserted.length - 1], values)
-            state.history.push({ trigger: 'catch_up', recipients: values.recipients })
             return {}
           },
         }),
@@ -137,6 +161,27 @@ describe('sendCatchUp', () => {
     expect(again).toMatchObject({ ok: true, sendId: null, recipients: 0 })
     expect(sendEmail).not.toHaveBeenCalled()
     expect(db.state.inserted).toHaveLength(1)
+  })
+
+  // deep review INT-1: a catch-up killed mid-send (the 60s function times out)
+  // must not re-email the people it already reached. Because deliver records
+  // each recipient as it goes, the next run skips them. With the old code —
+  // recipients written only at the end — the kill lost them all and the next
+  // run emailed everyone again.
+  it('does not re-email recipients of a catch-up that was killed before it finished', async () => {
+    const db = fakeDb(EMAIL, [ORIGINAL], { killAtFinish: true })
+    const killed = await sendCatchUp(db as never, 'e1', { spacingMs: 0, today: '2026-10-02' })
+    // The completion write threw, so the run reports failure…
+    expect(killed.ok).toBe(false)
+    // …but both owed addresses were emailed and recorded as it went.
+    expect(sendEmail.mock.calls.map((c) => c[0].to)).toEqual(['bo@example.com', 'Bo.Dad@example.com'])
+
+    // The function is restarted (next cron slot or a button press).
+    db.state.killAtFinish = false
+    sendEmail.mockClear()
+    const retry = await sendCatchUp(db as never, 'e1', { spacingMs: 0, today: '2026-10-02' })
+    expect(retry).toMatchObject({ ok: true, recipients: 0 })
+    expect(sendEmail).not.toHaveBeenCalled()
   })
 
   it('writes no History row when nobody is owed it', async () => {

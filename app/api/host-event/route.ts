@@ -7,6 +7,19 @@ import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
+// deep review PUB-2: this is an unauthenticated public form whose values are
+// interpolated into a Stellr-branded HTML email to staff. Escape every value
+// before it reaches the HTML so a submission can't inject markup (matches the
+// teacher-grant route's helper).
+function esc(v: unknown): string {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export async function POST(req: Request) {
   const limited = rateLimitGuard(req, 'host-event', { limit: 3, windowMs: HOUR_MS })
   if (limited) return limited
@@ -24,16 +37,16 @@ export async function POST(req: Request) {
 
     const name = `${firstName} ${lastName}`
     const rows: [string, string][] = [
-      ['Name', name],
-      ['Email', `<a href="mailto:${email}">${email}</a>`],
-      ['Phone', phone],
-      ['Organization', companySchool],
-      ['Address', address || '—'],
-      ['Venue Capacity', venueCapacity],
-      ['Preferred Timing', preferredTiming],
-      ['Preferred Duration', preferredDuration],
-      ['Funding Available', funding || '—'],
-      ['Facility Overheads', facilityOverheads || '—'],
+      ['Name', esc(name)],
+      ['Email', `<a href="mailto:${esc(email)}">${esc(email)}</a>`],
+      ['Phone', esc(phone)],
+      ['Organization', esc(companySchool)],
+      ['Address', esc(address) || '—'],
+      ['Venue Capacity', esc(venueCapacity)],
+      ['Preferred Timing', esc(preferredTiming)],
+      ['Preferred Duration', esc(preferredDuration)],
+      ['Funding Available', esc(funding) || '—'],
+      ['Facility Overheads', esc(facilityOverheads) || '—'],
     ]
     const htmlRows = rows
       .map(([label, value]) => `<tr><td style="padding:8px;font-weight:bold;background:#f3f4f6">${label}</td><td style="padding:8px">${value}</td></tr>`)

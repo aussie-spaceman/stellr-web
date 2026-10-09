@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { notifyMember } from '@/lib/notify'
+import { escapeHtml } from '@/lib/email-layout'
 import { memberIsMinor } from '@/lib/community'
 
 type TipTapNode = { type?: string; attrs?: Record<string, unknown>; content?: TipTapNode[] }
@@ -78,6 +79,10 @@ export async function notifyMentions(opts: {
   const postUrl = `${APP_URL}/community/${opts.spaceSlug}/${opts.postId}`
   const where = opts.context === 'post' ? 'a post' : 'a comment'
   const body = `${opts.actorName} mentioned you in ${where}`
+  // deep review PUB-2: `actorName` is a member-chosen display name, so escape
+  // the body where it is interpolated into the email HTML below. `body` itself
+  // stays raw for the in-app and plain-text channels.
+  const bodyHtml = escapeHtml(body)
 
   await Promise.all(
     allowed.map((id) =>
@@ -89,7 +94,7 @@ export async function notifyMentions(opts: {
         referenceId: opts.postId,
         email: {
           subject: body,
-          html: `<p>${body}.</p><p><a href="${postUrl}">View the conversation</a></p>`,
+          html: `<p>${bodyHtml}.</p><p><a href="${postUrl}">View the conversation</a></p>`,
           text: `${body}. View it: ${postUrl}`,
         },
       }).catch((e) => console.error('[community] mention notify failed:', e)),

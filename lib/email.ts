@@ -1,5 +1,13 @@
-import { emailLayout } from '@/lib/email-layout'
+import { emailLayout, escapeHtml as esc } from '@/lib/email-layout'
 import { appEnv, isProd } from '@/lib/env'
+
+// deep review PUB-2 / HTML-injection cluster: every user-supplied value that is
+// interpolated into an HTML email body is escaped with `esc` (the shared
+// escapeHtml helper) so injected markup renders as inert text, never as live
+// HTML. `emailLayout` already escapes the `heading` and `preheader` it is given,
+// so those arguments are passed raw and only values inside `bodyHtml` (or a
+// hand-built HTML string) are escaped here. Subjects and the plain-text parts
+// are not HTML and are deliberately left unescaped.
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 
@@ -188,13 +196,13 @@ export function individualConfirmationEmail({
     heading: "You're registered!",
     preheader: `Your registration for ${eventTitle} is confirmed.`,
     bodyHtml: `
-        <p>Hi ${firstName},</p>
-        <p>Your registration for <strong>${eventTitle}</strong> has been confirmed and payment received. We look forward to seeing you there.</p>
+        <p>Hi ${esc(firstName)},</p>
+        <p>Your registration for <strong>${esc(eventTitle)}</strong> has been confirmed and payment received. We look forward to seeing you there.</p>
         <table style="border-collapse:collapse;width:100%;margin:24px 0;background:#f9fafb;border-radius:8px">
-          <tr><td style="padding:12px 16px;font-weight:600;color:#374151;width:40%">Name</td><td style="padding:12px 16px">${firstName} ${lastName}</td></tr>
-          <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">Membership ID</td><td style="padding:12px 16px;font-family:monospace">${membershipId}</td></tr>
-          <tr><td style="padding:12px 16px;font-weight:600;color:#374151">Event</td><td style="padding:12px 16px">${eventTitle}</td></tr>
-          <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">Reference #</td><td style="padding:12px 16px;font-family:monospace;color:#6b7280;font-size:12px">${registrationId}</td></tr>
+          <tr><td style="padding:12px 16px;font-weight:600;color:#374151;width:40%">Name</td><td style="padding:12px 16px">${esc(firstName)} ${esc(lastName)}</td></tr>
+          <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">Membership ID</td><td style="padding:12px 16px;font-family:monospace">${esc(membershipId)}</td></tr>
+          <tr><td style="padding:12px 16px;font-weight:600;color:#374151">Event</td><td style="padding:12px 16px">${esc(eventTitle)}</td></tr>
+          <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">Reference #</td><td style="padding:12px 16px;font-family:monospace;color:#6b7280;font-size:12px">${esc(registrationId)}</td></tr>
         </table>
         <p style="color:#6b7280;font-size:14px">Keep your Membership ID handy — you'll use it to check in at the event.</p>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
@@ -278,14 +286,14 @@ export function groupConfirmationEmail({
     heading: 'Group Registration Received',
     preheader: `Group registration received for ${eventTitle}.`,
     bodyHtml: `
-        <p>Hi ${teacherFirstName},</p>
-        <p>We've received your group registration for <strong>${eventTitle}</strong>.</p>
+        <p>Hi ${esc(teacherFirstName)},</p>
+        <p>We've received your group registration for <strong>${esc(eventTitle)}</strong>.</p>
         <table style="border-collapse:collapse;width:100%;margin:24px 0;background:#f9fafb;border-radius:8px">
-          <tr><td style="padding:12px 16px;font-weight:600;color:#374151;width:40%">Teacher / Coordinator</td><td style="padding:12px 16px">${teacherFirstName} ${teacherLastName}</td></tr>
-          <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">School</td><td style="padding:12px 16px">${schoolName}</td></tr>
-          <tr><td style="padding:12px 16px;font-weight:600;color:#374151">Event</td><td style="padding:12px 16px">${eventTitle}</td></tr>
+          <tr><td style="padding:12px 16px;font-weight:600;color:#374151;width:40%">Teacher / Coordinator</td><td style="padding:12px 16px">${esc(teacherFirstName)} ${esc(teacherLastName)}</td></tr>
+          <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">School</td><td style="padding:12px 16px">${esc(schoolName)}</td></tr>
+          <tr><td style="padding:12px 16px;font-weight:600;color:#374151">Event</td><td style="padding:12px 16px">${esc(eventTitle)}</td></tr>
           <tr style="background:#f3f4f6"><td style="padding:12px 16px;font-weight:600;color:#374151">Total Participants</td><td style="padding:12px 16px">${participantCount}</td></tr>
-          <tr><td style="padding:12px 16px;font-weight:600;color:#374151">Reference #</td><td style="padding:12px 16px;font-family:monospace;color:#6b7280;font-size:12px">${registrationId}</td></tr>
+          <tr><td style="padding:12px 16px;font-weight:600;color:#374151">Reference #</td><td style="padding:12px 16px;font-family:monospace;color:#6b7280;font-size:12px">${esc(registrationId)}</td></tr>
         </table>
         ${bothOptions}
         <p style="font-weight:600;color:#374151;margin-bottom:8px">What happens next:</p>
@@ -337,15 +345,15 @@ export function registrationPaymentLinkEmail({
     heading: 'Your registration is saved',
     preheader: `Pay when you're ready — ${what} at ${eventTitle} is held.`,
     bodyHtml: `
-        <p>Hi ${firstName},</p>
-        <p>${seats && seats > 1 ? 'Your group registration' : 'Your registration'} for <strong>${eventTitle}</strong> is saved but not yet confirmed — payment of <strong>${amount}</strong> is still needed.</p>
+        <p>Hi ${esc(firstName)},</p>
+        <p>${seats && seats > 1 ? 'Your group registration' : 'Your registration'} for <strong>${esc(eventTitle)}</strong> is saved but not yet confirmed — payment of <strong>${amount}</strong> is still needed.</p>
         <p>Use the button below whenever you're ready. The link keeps working until registration for the event closes, so it's fine to come back to it later.</p>
         <div style="margin:28px 0;text-align:center">
           <a href="${payUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600">Pay now →</a>
         </div>
         <p style="color:#6b7280;font-size:14px">Already paid? A confirmation email is on its way — nothing more to do.</p>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-        <p style="color:#6b7280;font-size:12px">Reference: <span style="font-family:monospace">${registrationId}</span></p>`,
+        <p style="color:#6b7280;font-size:12px">Reference: <span style="font-family:monospace">${esc(registrationId)}</span></p>`,
   })
   const text = `Hi ${firstName},\n\nYour registration for ${eventTitle} is saved but not yet confirmed — payment of ${amount} is still needed.\n\nPay whenever you're ready (the link works until registration closes):\n${payUrl}\n\nAlready paid? A confirmation is on its way — nothing more to do.\n\nReference: ${registrationId}\n\n— Stellr Education`
   return { subject, html, text }
@@ -361,13 +369,13 @@ export function groupMemberIndividualPaymentEmail({
   const html = emailLayout({
     heading: 'Complete Your Registration',
     bodyHtml: `
-        <p>Hi ${memberFirstName},</p>
-        <p>You've been registered for <strong>${eventTitle}</strong> as part of a group. To confirm your spot, please complete your individual payment.</p>
+        <p>Hi ${esc(memberFirstName)},</p>
+        <p>You've been registered for <strong>${esc(eventTitle)}</strong> as part of a group. To confirm your spot, please complete your individual payment.</p>
         <div style="margin:28px 0;text-align:center">
           <a href="${paymentUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600">Pay Now →</a>
         </div>
         <p style="color:#6b7280;font-size:14px">If you have any questions, reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-        <p style="color:#6b7280;font-size:12px">Reference: <span style="font-family:monospace">${registrationId}</span></p>`,
+        <p style="color:#6b7280;font-size:12px">Reference: <span style="font-family:monospace">${esc(registrationId)}</span></p>`,
   })
   const text = `Hi ${memberFirstName} ${memberLastName},\n\nYou've been registered for ${eventTitle}. Please complete your payment:\n\n${paymentUrl}\n\nReference: ${registrationId}\n\n— Stellr Education`
   return { subject, html, text }
@@ -387,14 +395,14 @@ export function groupRegisteredNoPaymentEmail({
   const html = emailLayout({
     heading: "You're Registered",
     bodyHtml: `
-        <p>Hi ${memberFirstName},</p>
-        <p>You've been registered for <strong>${eventTitle}</strong> as part of a group.</p>
+        <p>Hi ${esc(memberFirstName)},</p>
+        <p>You've been registered for <strong>${esc(eventTitle)}</strong> as part of a group.</p>
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
           <p style="margin:0;font-weight:600;color:#166534">No payment is required — this event is free of charge.</p>
         </div>
         <p>There's nothing more to do to hold your place. If any paperwork is needed, you'll receive it separately by email from DocuSign.</p>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>
-        <p style="color:#6b7280;font-size:12px">Reference: <span style="font-family:monospace">${registrationId}</span></p>`,
+        <p style="color:#6b7280;font-size:12px">Reference: <span style="font-family:monospace">${esc(registrationId)}</span></p>`,
   })
   const text = `Hi ${memberFirstName} ${memberLastName},\n\nYou've been registered for ${eventTitle} as part of a group.\n\nNo payment is required — this event is free of charge.\n\nIf any paperwork is needed, you'll receive it separately by email from DocuSign.\n\nReference: ${registrationId}\n\n— Stellr Education`
   return { subject, html, text }
@@ -410,8 +418,8 @@ export function groupMemberJoinedEmail({
   const html = emailLayout({
     heading: 'New Group Member Registered',
     bodyHtml: `
-        <p>Hi ${registrantFirstName},</p>
-        <p><strong>${memberFirstName} ${memberLastName}</strong> (${memberEmail}) has completed their registration for <strong>${eventTitle}</strong>.</p>
+        <p>Hi ${esc(registrantFirstName)},</p>
+        <p><strong>${esc(memberFirstName)} ${esc(memberLastName)}</strong> (${esc(memberEmail)}) has completed their registration for <strong>${esc(eventTitle)}</strong>.</p>
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
           <p style="margin:0;font-weight:600;color:#166534">Group progress: ${memberCount} of ${totalExpected} members registered</p>
         </div>
@@ -431,8 +439,8 @@ export function studentLeftTeamEmail({
   const html = emailLayout({
     heading: 'Team Member Removed',
     bodyHtml: `
-        <p>Hi ${teacherFirstName},</p>
-        <p><strong>${studentFirstName} ${studentLastName}</strong> (${studentEmail}) has removed themselves from your team for <strong>${eventTitle}</strong>.</p>
+        <p>Hi ${esc(teacherFirstName)},</p>
+        <p><strong>${esc(studentFirstName)} ${esc(studentLastName)}</strong> (${esc(studentEmail)}) has removed themselves from your team for <strong>${esc(eventTitle)}</strong>.</p>
         <p style="color:#6b7280;font-size:14px">You may want to update your team details or find a replacement. Log in to your member portal to manage your team.</p>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
   })
@@ -449,8 +457,8 @@ export function docusignSentToMinorEmail({
   const html = emailLayout({
     heading: 'Parental Consent Required',
     bodyHtml: `
-        <p>Hi ${firstName},</p>
-        <p>We have sent a parental consent form to <strong>${guardianName}</strong> (${guardianEmail}) for your participation in <strong>${eventTitle}</strong>.</p>
+        <p>Hi ${esc(firstName)},</p>
+        <p>We have sent a parental consent form to <strong>${esc(guardianName)}</strong> (${esc(guardianEmail)}) for your participation in <strong>${esc(eventTitle)}</strong>.</p>
         <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:24px 0">
           <p style="margin:0;font-size:14px;color:#92400e">
             <strong>Your registration is not yet confirmed.</strong> Your parent or guardian needs to review and sign the consent form before your spot is secured. Please let them know to check their inbox.
@@ -496,7 +504,7 @@ export function docusignReminderToMinorEmail({
 
   const outstandingHtml = waitingOn.length > 0
     ? `<ul style="margin:8px 0 0;padding-left:20px">${waitingOn
-        .map(w => `<li><strong>${w.name}</strong> — the ${w.role} signature${w.queued ? ' (DocuSign sends this once the other signature is done)' : w.neverOpened ? ' (the DocuSign email has not been opened yet)' : ''}</li>`)
+        .map(w => `<li><strong>${esc(w.name)}</strong> — the ${esc(w.role)} signature${w.queued ? ' (DocuSign sends this once the other signature is done)' : w.neverOpened ? ' (the DocuSign email has not been opened yet)' : ''}</li>`)
         .join('')}</ul>`
     : ''
 
@@ -509,8 +517,8 @@ export function docusignReminderToMinorEmail({
   const html = emailLayout({
     heading: 'Consent Form Reminder',
     bodyHtml: `
-        <p>Hi ${firstName},</p>
-        <p>The consent form for <strong>${eventTitle}</strong> is not complete yet. Still to sign:</p>
+        <p>Hi ${esc(firstName)},</p>
+        <p>The consent form for <strong>${esc(eventTitle)}</strong> is not complete yet. Still to sign:</p>
         ${outstandingHtml}
         ${bothNote}
         <p>We've sent another reminder via DocuSign. Please check the inbox — and the spam folder — for an email from DocuSign.</p>
@@ -543,14 +551,14 @@ export function docusignSentToGuardianEmail({
   const html = emailLayout({
     heading: isReminder ? 'Consent Form Reminder' : 'Consent Form Sent',
     bodyHtml: `
-        <p>Hi ${guardianName},</p>
-        <p>${isReminder ? 'We still need your' : 'We have sent you a'} parental consent form for <strong>${minorName}</strong> to take part in <strong>${eventTitle}</strong>.</p>
+        <p>Hi ${esc(guardianName)},</p>
+        <p>${isReminder ? 'We still need your' : 'We have sent you a'} parental consent form for <strong>${esc(minorName)}</strong> to take part in <strong>${esc(eventTitle)}</strong>.</p>
         <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:24px 0">
           <p style="margin:0 0 8px;font-size:14px;color:#92400e"><strong>What to look for</strong></p>
-          <p style="margin:0;font-size:14px;color:#92400e">A separate email from <strong>DocuSign</strong> (dse@docusign.net) with the subject "PARENT/GUARDIAN signature required — ${eventTitle}". Please check your spam folder if it isn't in your inbox.</p>
+          <p style="margin:0;font-size:14px;color:#92400e">A separate email from <strong>DocuSign</strong> (dse@docusign.net) with the subject "PARENT/GUARDIAN signature required — ${esc(eventTitle)}". Please check your spam folder if it isn't in your inbox.</p>
         </div>
         <p>The form has <strong>two signature sections</strong> — one for you and one for the student — and DocuSign sends a separate email for each. Signing the student's section does not complete yours.</p>
-        <p style="color:#6b7280;font-size:14px">${minorName}'s registration stays unconfirmed until the parent/guardian section is signed.</p>
+        <p style="color:#6b7280;font-size:14px">${esc(minorName)}'s registration stays unconfirmed until the parent/guardian section is signed.</p>
         <p style="color:#6b7280;font-size:14px">Questions, or need it sent to a different address? Just reply to this email.</p>`,
   })
   const text = `Hi ${guardianName},\n\n${isReminder ? 'We still need your' : 'We have sent you a'} parental consent form for ${minorName} to take part in ${eventTitle}.\n\nLook for a separate email from DocuSign (dse@docusign.net), subject "PARENT/GUARDIAN signature required — ${eventTitle}". Check your spam folder if it isn't in your inbox.\n\nThe form has two signature sections — one for you and one for the student — sent as two separate DocuSign emails. Signing the student's section does not complete yours.\n\nQuestions, or need it sent to a different address? Reply to this email.\n\n— Stellr Education`
@@ -566,8 +574,8 @@ export function docusignCompletedToMinorEmail({
   const html = emailLayout({
     heading: 'Consent Form Signed',
     bodyHtml: `
-        <p>Hi ${firstName},</p>
-        <p>Great news — <strong>${guardianName}</strong> has signed the parental consent form for your participation in <strong>${eventTitle}</strong>.</p>
+        <p>Hi ${esc(firstName)},</p>
+        <p>Great news — <strong>${esc(guardianName)}</strong> has signed the parental consent form for your participation in <strong>${esc(eventTitle)}</strong>.</p>
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
           <p style="margin:0;font-weight:600;color:#14532d">Your registration is now confirmed!</p>
         </div>
@@ -575,7 +583,7 @@ export function docusignCompletedToMinorEmail({
         <div style="margin:24px 0;text-align:center">
           <a href="${downloadUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;font-weight:600">Download Consent Form →</a>
         </div>
-        <p style="color:#6b7280;font-size:14px">DocuSign has also sent a copy directly to ${guardianName}.</p>
+        <p style="color:#6b7280;font-size:14px">DocuSign has also sent a copy directly to ${esc(guardianName)}.</p>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
   })
   const text = `Hi ${firstName},\n\n${guardianName} has signed the parental consent form for ${eventTitle}. Your registration is confirmed!\n\nDownload the signed form: ${downloadUrl}\n\n— Stellr Education`
@@ -595,8 +603,8 @@ export function docusignSentToSignerEmail({
   const html = emailLayout({
     heading: 'Signature Required',
     bodyHtml: `
-        <p>Hi ${firstName},</p>
-        <p>We've sent you the <strong>${agreementLabel}</strong> for <strong>${eventTitle}</strong> via DocuSign.</p>
+        <p>Hi ${esc(firstName)},</p>
+        <p>We've sent you the <strong>${esc(agreementLabel)}</strong> for <strong>${esc(eventTitle)}</strong> via DocuSign.</p>
         <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:24px 0">
           <p style="margin:0;font-size:14px;color:#92400e">
             <strong>Your registration is not yet confirmed.</strong> Please review and sign the agreement to secure your place.
@@ -620,8 +628,8 @@ export function docusignReminderToSignerEmail({
   const html = emailLayout({
     heading: 'Agreement Reminder',
     bodyHtml: `
-        <p>Hi ${firstName},</p>
-        <p>We haven't yet received your signed <strong>${agreementLabel}</strong> for <strong>${eventTitle}</strong>.</p>
+        <p>Hi ${esc(firstName)},</p>
+        <p>We haven't yet received your signed <strong>${esc(agreementLabel)}</strong> for <strong>${esc(eventTitle)}</strong>.</p>
         <p>We've sent you another reminder via DocuSign. Please check your inbox (and spam folder) for an email from DocuSign.</p>
         <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:24px 0">
           <p style="margin:0;font-size:14px;color:#92400e">
@@ -643,8 +651,8 @@ export function docusignCompletedToSignerEmail({
   const html = emailLayout({
     heading: 'Agreement Signed',
     bodyHtml: `
-        <p>Hi ${firstName},</p>
-        <p>Thank you — your <strong>${agreementLabel}</strong> for <strong>${eventTitle}</strong> has been signed.</p>
+        <p>Hi ${esc(firstName)},</p>
+        <p>Thank you — your <strong>${esc(agreementLabel)}</strong> for <strong>${esc(eventTitle)}</strong> has been signed.</p>
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
           <p style="margin:0;font-weight:600;color:#14532d">Your registration is now confirmed!</p>
         </div>
@@ -680,8 +688,8 @@ export function docusignOnFileEmail({
   const html = emailLayout({
     heading: 'Paperwork Already on Record',
     bodyHtml: `
-        <p>Hi ${firstName},</p>
-        <p>Good news — the <strong>${agreementLabel}</strong> signed on ${fmt(signedOn)} is already on your Stellr member record, so no new paperwork is needed for <strong>${eventTitle}</strong>.</p>
+        <p>Hi ${esc(firstName)},</p>
+        <p>Good news — the <strong>${esc(agreementLabel)}</strong> signed on ${fmt(signedOn)} is already on your Stellr member record, so no new paperwork is needed for <strong>${esc(eventTitle)}</strong>.</p>
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:24px 0">
           <p style="margin:0;font-weight:600;color:#14532d">No signature required — your existing agreement covers this event.</p>
         </div>
@@ -701,9 +709,9 @@ export function groupPaymentConfirmedEmail({
   const html = emailLayout({
     heading: 'Payment Received — Registration Confirmed',
     bodyHtml: `
-        <p>Hi ${teacherFirstName},</p>
-        <p>We've received your payment for <strong>${eventTitle}</strong>. Your group registration is now confirmed.</p>
-        <p style="color:#6b7280;font-size:14px">Reference #: <span style="font-family:monospace">${registrationId}</span></p>
+        <p>Hi ${esc(teacherFirstName)},</p>
+        <p>We've received your payment for <strong>${esc(eventTitle)}</strong>. Your group registration is now confirmed.</p>
+        <p style="color:#6b7280;font-size:14px">Reference #: <span style="font-family:monospace">${esc(registrationId)}</span></p>
         <p style="color:#6b7280;font-size:14px">We'll be in touch with event details closer to the date. Each participant's agreement is sent for signature if one isn't already on record. A student's agreement covers every Stellr event while they're a Minor; an adult's stays valid for 3 years.</p>`,
   })
   const text = `Hi ${teacherFirstName},\n\nPayment received for ${eventTitle}. Your group registration is confirmed.\n\nReference #: ${registrationId}\n\n— Stellr Education`
@@ -744,10 +752,17 @@ export function outstandingItemsReminderEmail({
   }
 
   if (docusign) {
+    // deep review PUB-2: escape the guardian name in the HTML. The plain-text
+    // copy is built separately from the raw name so its meaning is unchanged
+    // (it is not derived from the HTML, which would carry escape entities).
+    const g = docusign.guardianName
     const html = docusign.minor
-      ? `The required participation paperwork has not yet been completed${docusign.guardianName ? ` by <strong>${docusign.guardianName}</strong>` : ''}. Your parent or guardian needs to sign the DocuSign consent form — please ask them to check their inbox (and spam folder) for an email from DocuSign.`
+      ? `The required participation paperwork has not yet been completed${g ? ` by <strong>${esc(g)}</strong>` : ''}. Your parent or guardian needs to sign the DocuSign consent form — please ask them to check their inbox (and spam folder) for an email from DocuSign.`
       : 'Your required participation paperwork has not yet been completed. Please check your inbox (and spam folder) for an email from DocuSign and sign the agreement.'
-    items.push({ heading: 'Paperwork outstanding', html, text: html.replace(/<\/?strong>/g, '') })
+    const text = docusign.minor
+      ? `The required participation paperwork has not yet been completed${g ? ` by ${g}` : ''}. Your parent or guardian needs to sign the DocuSign consent form — please ask them to check their inbox (and spam folder) for an email from DocuSign.`
+      : 'Your required participation paperwork has not yet been completed. Please check your inbox (and spam folder) for an email from DocuSign and sign the agreement.'
+    items.push({ heading: 'Paperwork outstanding', html, text })
   }
 
   const subject = `Action required — ${eventTitle}`
@@ -764,8 +779,8 @@ export function outstandingItemsReminderEmail({
   const html = emailLayout({
     heading: 'Your registration needs attention',
     bodyHtml: `
-        <p>Hi ${firstName},</p>
-        <p>Your registration for <strong>${eventTitle}</strong> is not yet complete. The following item${items.length !== 1 ? 's' : ''} need${items.length === 1 ? 's' : ''} your attention:</p>
+        <p>Hi ${esc(firstName)},</p>
+        <p>Your registration for <strong>${esc(eventTitle)}</strong> is not yet complete. The following item${items.length !== 1 ? 's' : ''} need${items.length === 1 ? 's' : ''} your attention:</p>
         ${sections}
         <p style="color:#6b7280;font-size:14px">Your place is only confirmed once everything above is complete.</p>
         <p style="color:#6b7280;font-size:14px">Questions? Reply to this email or visit <a href="https://www.stellreducation.org">stellreducation.org</a>.</p>`,
@@ -792,8 +807,8 @@ export function communityReplyEmail({
   const subject = `${actorName} replied to your post — Stellr Community`
   const html = `
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px">
-      <p style="font-size:16px;color:#111827">Hi ${recipientFirstName},</p>
-      <p style="color:#374151"><strong>${actorName}</strong> replied to your post <em>${postTitle}</em> in the Stellr Community.</p>
+      <p style="font-size:16px;color:#111827">Hi ${esc(recipientFirstName)},</p>
+      <p style="color:#374151"><strong>${esc(actorName)}</strong> replied to your post <em>${esc(postTitle)}</em> in the Stellr Community.</p>
       <a href="${postUrl}" style="display:inline-block;margin:16px 0;padding:10px 20px;background:#111827;color:#fff;border-radius:6px;text-decoration:none;font-size:14px">View reply</a>
       <p style="color:#9ca3af;font-size:12px">You're receiving this because you posted in the Stellr Community. <a href="${postUrl}" style="color:#6b7280">Manage preferences</a> from your account settings.</p>
     </div>
@@ -817,8 +832,8 @@ export function campaignProposalReceivedEmail({
   const html = emailLayout({
     heading: 'Proposal received',
     bodyHtml: `
-        <p>Hi ${contactFirstName},</p>
-        <p>We've received your team's proposal (<strong>${fileName}</strong>). Judging opens after the ${deadlineLabel} deadline and results follow within three weeks. You can replace your submission any time before then from the app.</p>
+        <p>Hi ${esc(contactFirstName)},</p>
+        <p>We've received your team's proposal (<strong>${esc(fileName)}</strong>). Judging opens after the ${esc(deadlineLabel)} deadline and results follow within three weeks. You can replace your submission any time before then from the app.</p>
         <p style="color:#374151">— The Stellr team</p>`,
   })
   const text = `Hi ${contactFirstName},\n\nWe've received your team's proposal (${fileName}). Judging opens after the ${deadlineLabel} deadline and results follow within three weeks. You can replace your submission any time before then from the app.\n\n— The Stellr team`
@@ -834,8 +849,6 @@ export function campaignBroadcastEmail({
   body: string
   campaignTitle: string
 }) {
-  const esc = (s: string) =>
-    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const bodyHtml = esc(body).replace(/\n/g, '<br/>')
   const html = emailLayout({
     heading: campaignTitle,
@@ -876,8 +889,6 @@ export function credentialIssuedEmail({
   /** Educator PD credentials: the hours recorded, for the licence-renewal line. */
   pdHours?: number | null
 }) {
-  const esc = (s: string) =>
-    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const toGuardian = isMinor && !!guardianFirstName
   const who = toGuardian ? esc(guardianFirstName!) : esc(recipientFirstName)
   const subject = toGuardian
@@ -939,8 +950,6 @@ export function credentialsMadePrivateEmail({
   guardianFirstName?: string | null
   titles: string[]
 }) {
-  const esc = (s: string) =>
-    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const toGuardian = !!guardianFirstName
   const who = esc(toGuardian ? guardianFirstName! : recipientFirstName)
   const plural = titles.length === 1 ? 'page is' : 'pages are'
@@ -971,8 +980,6 @@ export function credentialRevokedEmail({
   number: string
   reason: string
 }) {
-  const esc = (s: string) =>
-    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const toGuardian = !!guardianFirstName
   const who = esc(toGuardian ? guardianFirstName! : recipientFirstName)
   const subject = `Credential withdrawn — ${title}`
@@ -1004,8 +1011,6 @@ export function accountInviteEmail({
   email: string
   url: string
 }) {
-  const esc = (s: string) =>
-    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const subject = 'Your Stellr account is ready — complete your profile'
   const html = emailLayout({
     heading: 'Welcome to Stellr',

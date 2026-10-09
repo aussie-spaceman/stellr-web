@@ -754,9 +754,21 @@ export async function POST(req: NextRequest) {
     // Sequential to avoid DocuSign rate limits; all calls are non-fatal.
     // Stellr signing invitations go out together at the end, so a parent of
     // siblings gets one email with a link for each child.
-    const partIdByEmail = new Map((insertedParts ?? []).map(r => [r.email, r.id]))
-    await batchInvites(db, async () => { for (const row of participantRows) {
-      const participantId = partIdByEmail.get(row.email)
+    // Pair each inserted participant back to its source row by POSITION. A single
+    // multi-row INSERT ... RETURNING preserves the VALUES order, so index i lines
+    // up. Keying by email (the previous approach) collapsed siblings who share
+    // the family email onto ONE participant id — the first child's row then got
+    // no agreement and the second was dispatched twice (deep review C-5 / DS-2).
+    if ((insertedParts?.length ?? 0) !== participantRows.length) {
+      console.error('[register/group] inserted participant count mismatch', {
+        inserted: insertedParts?.length ?? 0, expected: participantRows.length,
+      })
+    }
+    const participantsWithId = participantRows.map((row, i) => ({
+      row,
+      participantId: insertedParts?.[i]?.id as string | undefined,
+    }))
+    await batchInvites(db, async () => { for (const { row, participantId } of participantsWithId) {
       if (!participantId) continue
       await dispatchAgreement(db, {
         participantId,
@@ -1013,10 +1025,9 @@ export async function POST(req: NextRequest) {
       await ensureIndividualPayments(
         db,
         regId,
-        participantRows
-          .map((row) => {
-            const participantId = partIdByEmail.get(row.email)
-            return participantId
+        participantsWithId
+          .map(({ row, participantId }) =>
+            participantId
               ? {
                   participantId,
                   email:     row.email,
@@ -1024,7 +1035,7 @@ export async function POST(req: NextRequest) {
                   lastName:  row.last_name,
                 }
               : null
-          })
+          )
           .filter((p): p is NonNullable<typeof p> => p !== null),
       )
     }

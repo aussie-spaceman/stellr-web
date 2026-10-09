@@ -86,6 +86,10 @@ function resolve(table: string, filters: Filters, fixture: Fixture): unknown {
     // what the query asks for rather than something the fixture assumes.
     const types = filters.ins.envelope_type
     if (row && types && row.envelope_type && !types.includes(row.envelope_type)) return null
+    // Honour the minor_name subject filter (C-5 / DS-1): a minor's form is only
+    // reused for the same child, so a query naming a different subject matches
+    // nothing even though it is on the same (shared-email) member row.
+    if (row && filters.eq.minor_name !== undefined && row.minor_name !== filters.eq.minor_name) return null
     return row ?? null
   }
   return null
@@ -202,6 +206,52 @@ describe('dispatchAgreement — never issues paperwork already in the system', (
     expect((sendEmail.mock.calls[0][0] as { subject: string }).subject).toBe('on-file')
   })
 
+  it('does NOT reuse a sibling\'s minor consent form (same shared-email member)', async () => {
+    // Deep review C-5 / DS-1: Ada and her brother Bob register with the family
+    // email, so they share one member row. Ada's guardian signed her consent.
+    // Bob's registration must get its OWN envelope — his guardian has never
+    // consented for him — not be marked "on file" from Ada's form.
+    const { db, inserts } = makeDb({
+      completedEnvelope: {
+        id: 'env-ada', completed_at: '2026-01-15T00:00:00Z',
+        signer_name: 'Grace Lovelace', signer_email: 'grace@example.com',
+        minor_name: 'Ada Lovelace', reused_from: null,
+      },
+    })
+    await dispatchAgreement(db, {
+      ...ADULT, eventRole: 'participant', firstName: 'Bob', lastName: 'Lovelace',
+      dateOfBirth: '2013-03-03',
+      guardianEmail: 'grace@example.com', guardianFirstName: 'Grace', guardianLastName: 'Lovelace',
+    })
+
+    // A fresh consent envelope is issued for Bob; nothing is reused.
+    expect(createConsent).toHaveBeenCalledTimes(1)
+    const agreementInsert = inserts.find((i) => i.table === 'agreements')!
+    expect(agreementInsert).toBeDefined()
+    expect(agreementInsert.payload.reused_from ?? null).toBeNull()
+    expect(agreementInsert.payload.minor_name).toBe('Bob Lovelace')
+  })
+
+  it('DOES reuse the same child\'s own minor consent form', async () => {
+    const { db, inserts } = makeDb({
+      completedEnvelope: {
+        id: 'env-bob', completed_at: '2026-01-15T00:00:00Z',
+        signer_name: 'Grace Lovelace', signer_email: 'grace@example.com',
+        minor_name: 'Bob Lovelace', reused_from: null,
+      },
+    })
+    await dispatchAgreement(db, {
+      ...ADULT, eventRole: 'participant', firstName: 'Bob', lastName: 'Lovelace',
+      dateOfBirth: '2013-03-03',
+      guardianEmail: 'grace@example.com', guardianFirstName: 'Grace', guardianLastName: 'Lovelace',
+    })
+
+    expect(createConsent).not.toHaveBeenCalled()
+    const agreementInsert = inserts.find((i) => i.table === 'agreements')!
+    expect(agreementInsert.payload.reused_from).toBe('env-bob')
+    expect(agreementInsert.payload.status).toBe('completed')
+  })
+
   it('falls back to email when the caller has no member id, and still finds coverage', async () => {
     // A failed/skipped member upsert (blank sheet rows) used to bypass the
     // on-file check entirely and re-send paperwork the person had signed.
@@ -310,6 +360,8 @@ describe('V2.3 validity: a minor agreement lasts while current, others 3 years',
   const SIGNED_MINOR = {
     id: 'env-minor-signed', completed_at: '2024-01-15T00:00:00Z', envelope_type: 'minor',
     signer_name: 'Pat', signer_email: 'pat@example.com', reused_from: null,
+    // Same child as STUDENT — the subject match (C-5 / DS-1) requires it.
+    minor_name: 'Kid Lovelace',
   }
 
   it('asks a family to sign again when their agreement predates V2.3', async () => {

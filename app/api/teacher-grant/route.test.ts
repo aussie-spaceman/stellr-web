@@ -148,7 +148,7 @@ describe('POST /api/teacher-grant', () => {
 
     // The first arg is the Supabase handle (shape is not under test here).
     expect(autoGrantBaseMembership).toHaveBeenCalledTimes(1)
-    expect(autoGrantBaseMembership.mock.calls[0][1]).toBe('member-1')
+    expect((autoGrantBaseMembership.mock.calls[0] as unknown[])[1]).toBe('member-1')
   })
 
   it('still accepts the application when member registration fails', async () => {

@@ -135,7 +135,7 @@ describe('upsertMember — onExisting: skip (untrusted input)', () => {
 
   it("default behaviour (no opts) still updates — trusted callers unchanged", async () => {
     const { db, calls } = makeDb({ id: 'existing-10' })
-    await upsertMember(db, { email: 'a@b.test', phone: '555' })
+    await upsertMember(db, { email: 'a@b.test', first_name: 'A', last_name: 'B', phone: '555' })
     expect(calls.updates).toHaveLength(1)
   })
 })

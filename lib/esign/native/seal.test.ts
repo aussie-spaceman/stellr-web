@@ -43,9 +43,28 @@ async function agreementPdf(): Promise<Uint8Array> {
 }
 
 /** Checks a sealed PDF the way a reader would: digest of the signed bytes, then the RSA signature. */
+// @signpdf/utils extractSignature strips trailing 0x00 padding from the
+// /Contents placeholder — but a PKCS#7 DER whose last byte(s) are legitimately
+// 0x00 (roughly a third of random test keys) gets trimmed too, leaving
+// asn1.fromDer one or more bytes short ("Too few bytes to read ASN.1 value").
+// DER is self-delimiting, so re-pad to the length the outer header declares.
+// Production is unaffected: real PAdES verifiers parse /Contents by DER length,
+// they do not strip trailing zeros.
+function derTotalLength(buf: Buffer): number {
+  const lenByte = buf[1]
+  if (lenByte < 0x80) return 2 + lenByte
+  const n = lenByte & 0x7f
+  let len = 0
+  for (let i = 0; i < n; i++) len = (len << 8) | buf[2 + i]
+  return 2 + n + len
+}
+
 function verify(sealed: Uint8Array) {
-  const { signature, signedData } = extractSignature(Buffer.from(sealed))
-  const content = asn1.fromDer(signature)
+  const { signature: trimmed, signedData } = extractSignature(Buffer.from(sealed))
+  const declared = derTotalLength(trimmed)
+  const signature =
+    declared > trimmed.length ? Buffer.concat([trimmed, Buffer.alloc(declared - trimmed.length)]) : trimmed
+  const content = asn1.fromDer(signature.toString('binary'))
   const signedDataAsn = ((content.value as forge.asn1.Asn1[])[1].value as forge.asn1.Asn1[])[0]
   const fields = signedDataAsn.value as forge.asn1.Asn1[]
   const signerInfo = ((fields[4].value as forge.asn1.Asn1[])[0]).value as forge.asn1.Asn1[]

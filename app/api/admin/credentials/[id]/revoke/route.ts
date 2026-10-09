@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
 import { getCurrentMember } from '@/lib/community'
-import { revokeCredential, CREDENTIAL_COLUMNS, type CredentialRow } from '@/lib/credentials'
+import { revokeCredential, holderIsMinor, CREDENTIAL_COLUMNS, type CredentialRow } from '@/lib/credentials'
 import { logActivity } from '@/lib/activity-log'
 import { sendEmail, credentialRevokedEmail } from '@/lib/email'
 import { recipientForCredential } from '@/lib/credentials-notify'
@@ -42,10 +42,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
   }
 
-  // Tell the holder (guardian for a minor). Non-fatal.
+  // Tell the holder (guardian for a Minor, per the policy). Non-fatal.
   try {
     const to = await recipientForCredential(db, row)
-    const toGuardian = row.is_minor && !!to?.guardianEmail && !!to?.guardianFirstName
+    const toGuardian = (await holderIsMinor(db, row)) && !!to?.guardianEmail && !!to?.guardianFirstName
     const address = toGuardian ? to?.guardianEmail : to?.email
     if (to && address) {
       const mail = credentialRevokedEmail({

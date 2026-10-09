@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { agreementValid } from '@/lib/docusign-agreements'
+import { isMinorPerPolicy, type MinorFacts } from '@/lib/minor-policy'
 import {
   CREDENTIAL_COLUMNS,
   ageBlock,
@@ -101,33 +102,90 @@ export async function consentForMinor(
   return optOut ? 'declined' : 'granted'
 }
 
+// ── Who is a Minor (Privacy Policy §2, Terms §4.1) ───────────────────────────
+//
+// Until 9 Oct 2026 credentials used "under 18" alone, so an 18-year-old in
+// Nebraska, or an 18-year-old still in high school, was an adult here but a
+// Minor in the policy: the issued email went to them rather than their parent
+// or guardian, and a public page needed no guardian's consent.
+
+/**
+ * The facts the policy's Minor definition turns on (lib/minor-policy), read
+ * from the holder's records: date of birth, grade, age bracket, and the
+ * school's state standing in for the home state. Member first, then the
+ * participant row, field by field. Null when a read fails, so callers can
+ * fail closed.
+ */
+export async function holderMinorFacts(
+  db: SupabaseClient,
+  who: { memberId: string | null; participantId: string | null },
+): Promise<MinorFacts | null> {
+  const [m, ms, p] = await Promise.all([
+    who.memberId
+      ? db.from('members').select('date_of_birth, grade, age_bracket').eq('id', who.memberId).maybeSingle()
+      : null,
+    who.memberId
+      ? db.from('member_schools').select('is_current, schools(state)').eq('member_id', who.memberId)
+          .order('is_current', { ascending: false }).limit(1)
+      : null,
+    who.participantId
+      ? db.from('participants').select('date_of_birth, grade, age_bracket, registrations(school_address_state)')
+          .eq('id', who.participantId).maybeSingle()
+      : null,
+  ])
+  if (m?.error || ms?.error || p?.error) return null
+
+  type Person = { date_of_birth?: string | null; grade?: string | null; age_bracket?: string | null }
+  const one = <T,>(v: unknown) => (Array.isArray(v) ? v[0] : v) as T | null | undefined
+  const mem = (m?.data ?? null) as Person | null
+  const part = (p?.data ?? null) as (Person & { registrations?: unknown }) | null
+  const school = one<{ schools?: unknown }>(ms?.data)?.schools
+  return {
+    dateOfBirth: mem?.date_of_birth ?? part?.date_of_birth ?? null,
+    grade:       mem?.grade ?? part?.grade ?? null,
+    ageBracket:  mem?.age_bracket ?? part?.age_bracket ?? null,
+    state:       one<{ state?: string | null }>(school)?.state
+                   ?? one<{ school_address_state?: string | null }>(part?.registrations)?.school_address_state
+                   ?? null,
+  }
+}
+
+/**
+ * Whether the holder is a Minor now, or was when the credential was issued
+ * (`is_minor`). Decides who the credential emails are addressed to. A failed
+ * read falls back to the DOB alone: guessing "Minor" would send an adult's
+ * email to their emergency contact, which is no safer than the reverse.
+ */
+export async function holderIsMinor(
+  db: SupabaseClient,
+  c: CredentialRow & { date_of_birth?: string | null },
+): Promise<boolean> {
+  if (c.is_minor) return true
+  const known = 'date_of_birth' in c ? (c.date_of_birth ?? null) : null
+  const facts = await holderMinorFacts(db, { memberId: c.member_id, participantId: c.participant_id })
+  if (!facts) return isMinorOn(known)
+  return isMinorPerPolicy({ ...facts, dateOfBirth: known ?? facts.dateOfBirth })
+}
+
 /**
  * The age rules come first and use the live DOB: under 13 (or unknown) never
- * goes public, and anyone under 18 today needs consent even if the credential
- * was issued without a DOB (`is_minor` false). Callers holding a CredentialView
- * already have the DOB; a bare row is looked up.
+ * goes public. Then anyone who is a Minor today needs consent, even if the
+ * credential was issued as an adult's (`is_minor` false): under the age of
+ * majority in their school's state, or still in school. Callers holding a
+ * CredentialView already have the DOB; the rest is looked up. A failed read
+ * is treated as a Minor, which needs consent (QUAL-5 fails closed).
  */
 export async function shareConsentFor(
   db: SupabaseClient,
   c: CredentialRow & { date_of_birth?: string | null },
 ): Promise<ShareConsent> {
-  const dob = 'date_of_birth' in c ? (c.date_of_birth ?? null) : await credentialDob(db, c)
+  const facts = await holderMinorFacts(db, { memberId: c.member_id, participantId: c.participant_id })
+  const dob = 'date_of_birth' in c ? (c.date_of_birth ?? null) : (facts?.dateOfBirth ?? null)
   const blocked = ageBlock(dob)
   if (blocked) return blocked
-  if (!c.is_minor && !isMinorOn(dob)) return 'not_required'
+  const minor = c.is_minor || !facts || isMinorPerPolicy({ ...facts, dateOfBirth: dob })
+  if (!minor) return 'not_required'
   return consentForMinor(db, { memberId: c.member_id, participantId: c.participant_id })
-}
-
-async function credentialDob(db: SupabaseClient, c: CredentialRow): Promise<string | null> {
-  if (c.member_id) {
-    const { data } = await db.from('members').select('date_of_birth').eq('id', c.member_id).maybeSingle()
-    if (data?.date_of_birth) return data.date_of_birth as string
-  }
-  if (c.participant_id) {
-    const { data } = await db.from('participants').select('date_of_birth').eq('id', c.participant_id).maybeSingle()
-    if (data?.date_of_birth) return data.date_of_birth as string
-  }
-  return null
 }
 
 // ── Issue / revoke / visibility ──────────────────────────────────────────────
@@ -171,6 +229,14 @@ export async function issueCredential(
   const existing = await findExisting(db, input)
   if (existing) return { row: existing, created: false }
 
+  // Minor per the policy, not just under 18 (holderMinorFacts). If the records
+  // cannot be read, fall back to the DOB alone rather than storing a guess:
+  // the consent check and the email re-read the records anyway.
+  const facts = await holderMinorFacts(db, { memberId: input.memberId ?? null, participantId: input.participantId ?? null })
+  const isMinor = facts
+    ? isMinorPerPolicy({ ...facts, dateOfBirth: input.recipient.dateOfBirth ?? facts.dateOfBirth })
+    : isMinorOn(input.recipient.dateOfBirth)
+
   const insert = {
     number:         generateCredentialNumber(),
     source:         input.source,
@@ -194,7 +260,7 @@ export async function issueCredential(
     activity_title:    input.activityTitle ?? null,
     activity_date:     input.activityDate ?? null,
     activity_location: input.activityLocation ?? null,
-    is_minor:       isMinorOn(input.recipient.dateOfBirth),
+    is_minor:       isMinor,
   }
 
   const { data, error } = await db

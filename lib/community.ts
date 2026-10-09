@@ -14,6 +14,21 @@ const SIGNED_URL_TTL_SECONDS = 120
  * Only call this after a server-side tier check (FR-COM-03).
  */
 export async function signedDownloadUrl(storagePath: string): Promise<string | null> {
+  // deep review MEM-1: this helper is shared by every download route and signs
+  // with the service_role key, so it fails closed on any path that could escape
+  // its intended prefix. storage-js and the WHATWG URL parser normalise `..`/`//`
+  // before the request leaves; no legitimate caller passes those (every path is
+  // `<prefix>/<id>/<ts>-<safeName>` built server-side), so reject them outright.
+  if (
+    !storagePath ||
+    storagePath.includes('..') ||
+    storagePath.includes('//') ||
+    storagePath.includes('\\') ||
+    storagePath.startsWith('/')
+  ) {
+    console.error('[community] refused suspicious storage path')
+    return null
+  }
   const db = supabaseServer()
   const { data, error } = await db.storage
     .from(RESOURCES_BUCKET)

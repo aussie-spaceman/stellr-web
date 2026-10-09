@@ -88,3 +88,22 @@ describe('GET /api/members/teams/[id] for the organiser', () => {
     expect(teammate.health_conditions).toBe('epilepsy')
   })
 })
+
+// deep review TEST-2: the route's only real authorisation is `owns || isParticipant`
+// (route.ts:51-56). It was tested for a teammate and the organiser, but never for
+// a member who is on neither — the 403 that stops any signed-in member pulling an
+// arbitrary team's minors (DOB, health, guardian emails).
+describe('GET /api/members/teams/[id] for someone not on the team', () => {
+  it('403s and returns no roster', async () => {
+    state.member = { id: 'stranger', email: 'someone@else.test' }
+    const res = await get()
+    expect(res.status).toBe(403)
+    expect(JSON.stringify(await res.json())).not.toMatch(/Kid|asthma|epilepsy|2012-01-01/)
+  })
+
+  it('does not treat a null POC/teacher email as matching a member with no email', async () => {
+    // Guards against norm() regressing so null === null reads as ownership.
+    state.member = { id: 'stranger', email: null as unknown as string }
+    expect((await get()).status).toBe(403)
+  })
+})

@@ -281,6 +281,29 @@ export async function loadComplianceRecordsByEmails(
   return out
 }
 
+// Load compliance records keyed by member id. Preferred over the by-email
+// loader whenever a participant row is linked to a member (deep review BG-4):
+// members are keyed by email and families share one, so matching clearance by
+// email alone can show a cleared spouse's/sibling's status for a different,
+// uncleared person. The member id identifies the exact human.
+export async function loadComplianceRecordsByMemberIds(
+  db: SupabaseClient,
+  memberIds: (string | null | undefined)[],
+): Promise<Map<string, ComplianceRecords>> {
+  const out = new Map<string, ComplianceRecords>()
+  const unique = [...new Set(memberIds.filter((id): id is string => !!id))]
+  if (unique.length === 0) return out
+
+  const { data } = await db.from('members').select(COMPLIANCE_SELECT).in('id', unique)
+  for (const row of (data as MemberComplianceRow[] | null) ?? []) {
+    out.set(row.id, {
+      license: row.member_teacher_licenses?.[0] ?? null,
+      checks: row.member_background_checks ?? [],
+    })
+  }
+  return out
+}
+
 export interface MemberComplianceRecords extends ComplianceRecords {
   memberId: string
   email: string | null

@@ -182,6 +182,14 @@ export async function POST(req: NextRequest) {
       ec_relationship: str(d.emergency_contact_relationship) || null,
     }
 
+    // Did this email already have a member row before we upsert it below?
+    // Captured now so we can decide whether a silent sign-in token is safe — an
+    // anonymous join must never get a session for an existing member (deep review
+    // C-1). A lookup error leaves this false, so no token is minted.
+    const { data: priorJoiner } = await db
+      .from('members').select('id').eq('email', person.email).maybeSingle()
+    const memberIsNew = !priorJoiner
+
     // Cross-reference against the existing membership database by email: someone
     // already on file (added by an organiser, a past event, or another group's
     // sheet) has THAT record updated from what they just submitted, rather than
@@ -217,9 +225,14 @@ export async function POST(req: NextRequest) {
     // is silently signed in on success (non-fatal — they can still sign in later
     // with the same email). Eagerly link the Clerk id to avoid a webhook race.
     try {
-      const provisioned = await ensureClerkUserAndSignInToken(person.email, person.first_name, person.last_name)
+      const provisioned = await ensureClerkUserAndSignInToken(person.email, person.first_name, person.last_name, { memberIsNew })
       signInToken = provisioned.signInToken
-      await db.from('members').update({ clerk_user_id: provisioned.clerkUserId }).eq('id', memberId)
+      // Only link the Clerk id when a token was minted (both Clerk user and
+      // member row new this request); otherwise linking would bind a
+      // caller-created login to an existing member (deep review C-1).
+      if (signInToken) {
+        await db.from('members').update({ clerk_user_id: provisioned.clerkUserId }).eq('id', memberId)
+      }
     } catch (clerkErr) {
       console.error('Clerk provisioning for group-join (non-fatal):', clerkErr)
     }

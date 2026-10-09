@@ -51,6 +51,23 @@ test.describe('signed in as a member', () => {
     await expect(page).not.toHaveURL(/\/admin\/members/)
   })
 
+  test('cannot read admin page data via a direct RSC request', async ({ page }) => {
+    // Deep review C-2: a redirect thrown in the (admin) layout does NOT stop the
+    // page segment rendering, so requesting the RSC payload directly (the header
+    // the router sends during in-app navigation) returned the full member list
+    // to a member. The middleware now redirects before the render.
+    //
+    // The canary is OTHER people's emails. The viewer is redirected to their own
+    // /account page, which legitimately contains their own address, so that is
+    // not a leak. The admin members list, by contrast, contains every member —
+    // so the admin's and teacher's addresses appearing is proof the list
+    // rendered. Pre-fix this failed (both present); post-fix they are absent.
+    const res = await page.request.get('/admin/members', { headers: { RSC: '1' } })
+    const body = await res.text()
+    expect(body, 'admin members list leaked to a member').not.toContain(FIXTURES.admin.email)
+    expect(body, 'admin members list leaked to a member').not.toContain(FIXTURES.teacher.email)
+  })
+
   test('can reach their own account', async ({ page }) => {
     await page.goto('/account')
     await expect(page).toHaveURL(/\/account/)

@@ -506,6 +506,10 @@ export async function POST(req: NextRequest) {
     // emails and fill each blank from them, so the batch below still writes in
     // one round-trip but only *adds* information. Mirrors the same guarantee
     // lib/member-sync.ts gives the join-link and spreadsheet paths.
+    // Emails that already had a member row before this request. Used below to
+    // decide whether the registrant may be silently signed in — an anonymous
+    // caller must never get a session for an existing member (deep review C-1).
+    const preexistingMemberEmails = new Set<string>()
     const upsertEmails = [...memberUpsertByEmail.keys()]
     if (upsertEmails.length > 0) {
       const { data: storedMembers, error: storedError } = await db
@@ -513,15 +517,22 @@ export async function POST(req: NextRequest) {
         .select('email, first_name, last_name, nickname, phone, date_of_birth, gender, grade, tshirt_size, age_bracket, event_role, health_conditions, ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship')
         .in('email', upsertEmails)
       if (storedError) {
-        // Non-fatal: fall through to the plain upsert rather than blocking the
-        // registration. Worst case is the pre-merge behaviour.
+        // Non-fatal for the merge, but it makes "is this member new?" unknowable,
+        // so treat every email as pre-existing (no sign-in token) to stay safe.
         console.error('Existing-member preload error (non-fatal):', storedError)
+        for (const e of upsertEmails) preexistingMemberEmails.add(e)
       }
       for (const stored of storedMembers ?? []) {
+        preexistingMemberEmails.add(stored.email as string)
         const payload = memberUpsertByEmail.get(stored.email as string)
         if (payload) fillBlanksFromStored(payload, stored)
       }
     }
+    // The registrant is only "new" if their email was in the upsert batch (not
+    // already linked/known) and had no row before. If it wasn't in the batch at
+    // all we never looked it up, so assume pre-existing and mint no token.
+    const registrantMemberIsNew =
+      memberUpsertByEmail.has(teacher.email) && !preexistingMemberEmails.has(teacher.email)
 
     const memberIdMap: Record<string, string | null> = {}
     // Seed linked participants' member ids up front (they were skipped above).
@@ -636,12 +647,14 @@ export async function POST(req: NextRequest) {
       try {
         const provisioned = await ensureClerkUserAndSignInToken(
           teacher.email, teacher.first_name, teacher.last_name,
+          { memberIsNew: registrantMemberIsNew },
         )
         signInToken = provisioned.signInToken
-        // Eagerly link the Clerk id to the member row (the user.created webhook
-        // also does this, but we can't rely on its timing for the immediate
-        // ownership check on the sheet endpoint).
-        if (registrantMemberId) {
+        // Only link the Clerk id when a token was actually minted (both the Clerk
+        // user and the member row are new this request). Linking otherwise would
+        // bind a caller-created login to an existing member (deep review C-1). The
+        // user.created webhook still links the legitimate returning case by email.
+        if (signInToken && registrantMemberId) {
           await db.from('members').update({ clerk_user_id: provisioned.clerkUserId }).eq('id', registrantMemberId)
         }
       } catch (clerkErr) {

@@ -208,7 +208,9 @@ async function issueOrReuse(
     //    link this participant to it instead of issuing a fresh envelope.
     const coverageMemberId = ctx.memberId ?? (await memberIdByEmail(db, ctx.email))
     if (coverageMemberId) {
-      const onFile = await findValidAgreement(db, coverageMemberId, type)
+      // Pass the subject (this participant) so a minor's form is only reused for
+      // the SAME child, not a sibling sharing the family email (C-5 / DS-1).
+      const onFile = await findValidAgreement(db, coverageMemberId, type, `${ctx.firstName} ${ctx.lastName}`)
       if (onFile) {
         await recordCoverage(db, { ...ctx, memberId: coverageMemberId }, type, onFile)
         await safeEmail(ctx.email, docusignOnFileEmail({
@@ -477,6 +479,7 @@ interface SignedRow {
   envelope_type: string
   agreement_version: string | null
   reused_from: string | null
+  minor_name: string | null
 }
 
 // Newest completed agreement of the given type (or one executing the same
@@ -488,13 +491,29 @@ async function findValidAgreement(
   db: SupabaseClient,
   memberId: string,
   type: AgreementType,
+  subjectName?: string,
 ): Promise<ValidAgreement | null> {
-  const { data, error } = await db
+  // A minor's consent form is ABOUT a specific child. Members are keyed by email
+  // and families share one, so two siblings collapse onto a single member row —
+  // reusing by member_id alone would mark a second child "on file" from the
+  // first child's signed form, with no guardian ever asked to consent for the
+  // second child (deep review C-5, finding DS-1). So for a minor type we reuse
+  // only a form whose recorded subject name matches this child. Adult / mentor /
+  // volunteer agreements are about the signer themselves, so member identity is
+  // the correct key and no subject match applies. The subject name is built from
+  // the participant's own fields the same way it is written (recordCoverage /
+  // issue), so an exact match lines up; a mismatch errs toward issuing a fresh
+  // envelope, which is the safe direction (ask the guardian again).
+  let query = db
     .from('agreements')
-    .select('id, completed_at, signer_name, signer_email, envelope_type, agreement_version, reused_from')
+    .select('id, completed_at, signer_name, signer_email, envelope_type, agreement_version, reused_from, minor_name')
     .eq('member_id', memberId)
     .in('envelope_type', coveringTypes(type))
     .eq('status', 'completed')
+  if (type === 'minor' && subjectName) {
+    query = query.eq('minor_name', subjectName)
+  }
+  const { data, error } = await query
     .order('completed_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -504,7 +523,7 @@ async function findValidAgreement(
   if (row.reused_from) {
     const { data: root } = await db
       .from('agreements')
-      .select('id, completed_at, signer_name, signer_email, envelope_type, agreement_version, reused_from')
+      .select('id, completed_at, signer_name, signer_email, envelope_type, agreement_version, reused_from, minor_name')
       .eq('id', row.reused_from)
       .eq('status', 'completed')
       .maybeSingle()

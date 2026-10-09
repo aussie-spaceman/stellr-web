@@ -213,6 +213,15 @@ export async function POST(req: Request) {
     // not.
     try {
       const db = supabaseServer()
+      // This is an UNAUTHENTICATED public form. It may create a brand-new
+      // Educator member, but it must NEVER modify a member that already exists
+      // for the submitted email — otherwise anyone could rewrite any member's
+      // DOB, age bracket, role, school link and grant by naming their address
+      // (deep review C-6/PUB-1). `onExisting: 'skip'` returns the existing id
+      // without touching the row; we then run the signup side effects only when
+      // this request actually created the member.
+      const { data: priorMember } = await db
+        .from('members').select('id').eq('email', v.email).maybeSingle()
       const memberId = await upsertMember(db, {
         email: v.email,
         first_name: v.firstName,
@@ -222,9 +231,14 @@ export async function POST(req: Request) {
         gender: v.gender,
         age_bracket: 'adult',
         event_role: 'teacher',
-      })
+      }, { onExisting: 'skip' })
 
-      if (memberId) {
+      if (priorMember) {
+        // Existing member — the application still reached the inbox and HubSpot
+        // above; the record itself is left untouched and no grant is re-applied
+        // from anonymous input.
+        console.info('[teacher-grant] existing member, record not modified', priorMember.id)
+      } else if (memberId) {
         await linkMembersToSchoolByName(db, [memberId], {
           name: v.schoolName,
           address_city: v.schoolCity,

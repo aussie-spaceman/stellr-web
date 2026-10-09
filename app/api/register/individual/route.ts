@@ -263,40 +263,58 @@ export async function POST(req: NextRequest) {
     const resolvedBracket = ageNow < 18 ? 'high_school' : normalizeAgeBracket(age_bracket)
     const resolvedRole = ageNow < 18 ? 'participant' : normalizeEventRole(event_role)
 
-    const { data: memberRow, error: memberUpsertError } = await db
-      .from('members')
-      .upsert({
-        email,
-        first_name,
-        last_name,
-        nickname: nickname || null,
-        phone,
-        date_of_birth,
-        gender: normalizeGender(gender),
-        grade: normalizeGrade(grade),
-        tshirt_size: normalizeTshirt(t_shirt_size),
-        age_bracket: resolvedBracket,
-        event_role: resolvedRole,
-        is_active: true,
-        // Persist the profile so the member doesn't re-enter it next time (028).
-        // Emergency contact goes to the members table's canonical ec_* columns —
-        // the same ones /account, admin, and group-join read (029). Ethnicity and
-        // dietary go to the member_ethnicities/member_allergies join tables below
-        // for the same reason (030).
-        health_conditions: health_conditions || null,
-        ec_first_name: emergency_contact_first_name || null,
-        ec_last_name: emergency_contact_last_name || null,
-        ec_email: emergency_contact_email || null,
-        ec_phone: emergency_contact_phone || null,
-        ec_relationship: emergency_contact_relationship || null,
-      }, { onConflict: 'email', ignoreDuplicates: false })
-      .select('id')
-      .maybeSingle()
-    if (memberUpsertError) {
-      console.error('Member upsert error (non-fatal — participant still created):', memberUpsertError)
-    }
+    // Did THIS request create the member row (vs. one already on file)? Captured
+    // before the upsert and used to decide whether a silent sign-in token is
+    // safe — never hand an anonymous caller a session for an existing member
+    // (deep review C-1). A lookup error leaves this false, so no token is minted.
+    const { data: priorMember } = await db
+      .from('members').select('id').eq('email', email).maybeSingle()
+    const memberIsNew = !priorMember
 
-    const memberId = memberRow?.id ?? null
+    // Only write the canonical members row when this request created it, or when
+    // a signed-in member is registering themselves (email is derived from the
+    // session above, so sessionMember implies ownership). An anonymous caller
+    // naming an existing member's email must NOT rewrite that row — DOB,
+    // emergency/guardian contact, role and active flag stay as they were; the
+    // submitted details live on the participant/registration row only, for staff
+    // to review (deep review C-3, finding REG-2). A brand-new email is created.
+    const mayWriteMemberRow = memberIsNew || !!sessionMember
+    let memberId: string | null = priorMember?.id ?? null
+    if (mayWriteMemberRow) {
+      const { data: memberRow, error: memberUpsertError } = await db
+        .from('members')
+        .upsert({
+          email,
+          first_name,
+          last_name,
+          nickname: nickname || null,
+          phone,
+          date_of_birth,
+          gender: normalizeGender(gender),
+          grade: normalizeGrade(grade),
+          tshirt_size: normalizeTshirt(t_shirt_size),
+          age_bracket: resolvedBracket,
+          event_role: resolvedRole,
+          is_active: true,
+          // Persist the profile so the member doesn't re-enter it next time (028).
+          // Emergency contact goes to the members table's canonical ec_* columns —
+          // the same ones /account, admin, and group-join read (029). Ethnicity and
+          // dietary go to the member_ethnicities/member_allergies join tables below
+          // for the same reason (030).
+          health_conditions: health_conditions || null,
+          ec_first_name: emergency_contact_first_name || null,
+          ec_last_name: emergency_contact_last_name || null,
+          ec_email: emergency_contact_email || null,
+          ec_phone: emergency_contact_phone || null,
+          ec_relationship: emergency_contact_relationship || null,
+        }, { onConflict: 'email', ignoreDuplicates: false })
+        .select('id')
+        .maybeSingle()
+      if (memberUpsertError) {
+        console.error('Member upsert error (non-fatal — participant still created):', memberUpsertError)
+      }
+      memberId = memberRow?.id ?? memberId
+    }
 
     // Resolve the school to a schools row and link the member to it, so the
     // school surfaces in /admin/schools and on the member page — not just as
@@ -304,7 +322,14 @@ export async function POST(req: NextRequest) {
     // school, school_id is authoritative (we link to it, never create a dupe);
     // otherwise we resolve-or-create by normalized name. resolvedSchool.state is
     // the canonical state used to fill the DocuSign "State of Residence" tab.
-    const resolvedSchool = await resolveAndLinkSchool(db, memberId ? [memberId] : [], {
+    // Resolve the school either way (its state fills the DocuSign tab), but only
+    // LINK it to the member — and only sync the member's ethnicity/dietary join
+    // rows — when we were allowed to write that member's row. For an existing
+    // member an anonymous caller must not touch, these stay as they were; the
+    // participant row below still carries the submitted school and options
+    // (deep review C-3, finding REG-2).
+    const linkMemberIds = mayWriteMemberRow && memberId ? [memberId] : []
+    const resolvedSchool = await resolveAndLinkSchool(db, linkMemberIds, {
       id: body.school_id ?? null,
       name: school_name,
       address_street: body.school_address_street ?? null,
@@ -312,7 +337,7 @@ export async function POST(req: NextRequest) {
       address_state: school_address_state ?? null,
       address_zip: body.school_address_zip ?? null,
     })
-    if (memberId) {
+    if (mayWriteMemberRow && memberId) {
       await syncMemberOptionSelections(db, [
         { memberId, ethnicity, dietary: dietary_requirements },
       ])
@@ -388,9 +413,12 @@ export async function POST(req: NextRequest) {
     let signInToken: string | null = null
     if (!sessionMember) {
       try {
-        const provisioned = await ensureClerkUserAndSignInToken(email, first_name, last_name)
+        const provisioned = await ensureClerkUserAndSignInToken(email, first_name, last_name, { memberIsNew })
         signInToken = provisioned.signInToken
-        if (memberId) {
+        // Only link the Clerk id when a token was actually minted (i.e. both the
+        // Clerk user and the member row are new this request). Linking otherwise
+        // would bind a caller-created login to an existing member (deep review C-1).
+        if (signInToken && memberId) {
           await db.from('members').update({ clerk_user_id: provisioned.clerkUserId }).eq('id', memberId)
         }
       } catch (clerkErr) {

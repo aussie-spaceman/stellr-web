@@ -78,9 +78,24 @@ export function fillBlanksFromStored(
 // Returns the member id, or null when the email is missing or the write fails —
 // callers treat member creation as non-fatal (the participant row is saved
 // either way).
+//
+// `onExisting` controls what happens when a member already exists for the email:
+//   'update' (default) — merge the submitted fields in. For TRUSTED callers only
+//     (admin sheet sync, a signed-in member editing their own row). This is the
+//     historical behaviour.
+//   'skip' — return the existing id and DO NOT modify the row or its roles. This
+//     is mandatory for UNAUTHENTICATED input (public forms, join links): an
+//     anonymous POST naming someone else's email must never rewrite that
+//     person's DOB, emergency/guardian contact, role or active flag (deep review
+//     C-3, findings REG-2 + PUB-1). A new email is still created either way.
+export interface UpsertMemberOptions {
+  onExisting?: 'update' | 'skip'
+}
+
 export async function upsertMember(
   db: SupabaseClient,
-  input: MemberUpsertInput
+  input: MemberUpsertInput,
+  opts: UpsertMemberOptions = {},
 ): Promise<string | null> {
   const email = normalizeEmail(input.email)
   if (!email) return null
@@ -97,6 +112,13 @@ export async function upsertMember(
   if (lookupError) {
     console.error('[member-sync] Member lookup error (non-fatal):', lookupError)
     return null
+  }
+
+  // Untrusted input must not touch an existing member (C-3). Hand back the id so
+  // the caller can still attach a participant row; the submitted details live on
+  // that row for staff to review, never on the canonical members record.
+  if (existing && opts.onExisting === 'skip') {
+    return existing.id
   }
 
   let memberId: string | null = null

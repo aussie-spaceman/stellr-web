@@ -99,6 +99,47 @@ describe('upsertMember — email cross-reference against existing members', () =
   })
 })
 
+// Deep review C-3 (REG-2 + PUB-1): unauthenticated callers (public forms, join
+// links) must be able to create a member but never modify one that already
+// exists for the submitted email.
+describe('upsertMember — onExisting: skip (untrusted input)', () => {
+  it('returns the existing id and writes NOTHING when the member exists', async () => {
+    const { db, calls } = makeDb({ id: 'existing-9', event_role: 'teacher' })
+    const id = await upsertMember(
+      db,
+      {
+        email: 'kid@family.test',
+        first_name: 'Attacker', last_name: 'Name',
+        date_of_birth: '1980-01-01',          // would push a minor to adult
+        age_bracket: 'adult', event_role: 'teacher',
+        ec_email: 'stranger@evil.test',       // would redirect guardian consent
+      },
+      { onExisting: 'skip' },
+    )
+    expect(id).toBe('existing-9')
+    expect(calls.updates).toHaveLength(0)
+    expect(calls.inserts).toHaveLength(0)
+  })
+
+  it('still CREATES a brand-new member when the email is not on file', async () => {
+    const { db, calls } = makeDb(null)
+    const id = await upsertMember(
+      db,
+      { email: 'brand@new.test', first_name: 'Brand', last_name: 'New', event_role: 'Student' },
+      { onExisting: 'skip' },
+    )
+    expect(id).toBe('new-id')
+    expect(calls.inserts).toHaveLength(1)
+    expect(calls.updates).toHaveLength(0)
+  })
+
+  it("default behaviour (no opts) still updates — trusted callers unchanged", async () => {
+    const { db, calls } = makeDb({ id: 'existing-10' })
+    await upsertMember(db, { email: 'a@b.test', first_name: 'A', last_name: 'B', phone: '555' })
+    expect(calls.updates).toHaveLength(1)
+  })
+})
+
 // The organiser group form must batch its roster into one upsert, and
 // ON CONFLICT DO UPDATE overwrites every column in the payload — so blanks are
 // pre-filled from the stored row before the batch runs.

@@ -96,3 +96,28 @@ The ask: recognise teachers who support events.
 
 **Gaps in this session's own process:**
 - I asked David for approval to merge #326 and the session ended before an answer. The merge happened in another session, which is fine, but this session did not do Step 7 (verify production). The checks above, run on 8 Oct, stand in for it.
+
+## Close-out, 8 Oct 2026 (evening): two-page certificate
+
+**On `dev`, not live.**
+- #341 squash-merged at 21:19Z as `16793d5`. `changes`, `verify` and `e2e` passed (74 passed; 1 flake in `survey.spec.ts`, which this change does not touch).
+- It is in promotion #343, opened by another session together with #342. That promotion was **still open** at close-out.
+- Design: `docs/PLAN-educator-pd-2026-10-07.md` §8.
+
+**What #341 does:**
+- **Two pages.** The Cowork front gets four drawn fields: the name in Aileron, shrunk to fit; location, date and hours in Norwester, defaulting to Canva size 36. The back prints as is.
+- **"Position the fields" on the Educator PD panel.** Sliders and a live preview, saved as `layout.json`.
+- **Artwork and layout per theme,** at `pd-certificate/<theme>/…`. The old `pd-certificate/current` is no longer read.
+- **Standards:** the app now uses the 17 Common Core codes printed on the back, replacing the NGSS set.
+
+**Production at close-out:**
+- Maria Gordon was created at 20:38Z on 8 Oct as a teacher. Invite sent; not onboarded; no school linked.
+- **No PD credential has been issued.**
+- The only PD artwork is the old one-page `pd-certificate/current`.
+
+**Gaps:**
+- **The core ask is still undone.** Maria has no credential (`.4`).
+- **The new certificate is not live** until #343 merges (`.12`). Then David must re-upload the front and back (`.5`).
+- **Not proven in a real browser:** the positioner's live preview (`.14`) and the upload/positioner flow. There is no e2e for them (`.16`).
+- **Code spelling on the back:** HSN- versus the official HSA-/HSG- codes (`.13`).
+- I applied David's two answers (standards and theme) by interpretation. Both are recorded in §8 of the plan.

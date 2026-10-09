@@ -263,6 +263,14 @@ export async function POST(req: NextRequest) {
     const resolvedBracket = ageNow < 18 ? 'high_school' : normalizeAgeBracket(age_bracket)
     const resolvedRole = ageNow < 18 ? 'participant' : normalizeEventRole(event_role)
 
+    // Did THIS request create the member row (vs. one already on file)? Captured
+    // before the upsert and used to decide whether a silent sign-in token is
+    // safe — never hand an anonymous caller a session for an existing member
+    // (deep review C-1). A lookup error leaves this false, so no token is minted.
+    const { data: priorMember } = await db
+      .from('members').select('id').eq('email', email).maybeSingle()
+    const memberIsNew = !priorMember
+
     const { data: memberRow, error: memberUpsertError } = await db
       .from('members')
       .upsert({
@@ -388,9 +396,12 @@ export async function POST(req: NextRequest) {
     let signInToken: string | null = null
     if (!sessionMember) {
       try {
-        const provisioned = await ensureClerkUserAndSignInToken(email, first_name, last_name)
+        const provisioned = await ensureClerkUserAndSignInToken(email, first_name, last_name, { memberIsNew })
         signInToken = provisioned.signInToken
-        if (memberId) {
+        // Only link the Clerk id when a token was actually minted (i.e. both the
+        // Clerk user and the member row are new this request). Linking otherwise
+        // would bind a caller-created login to an existing member (deep review C-1).
+        if (signInToken && memberId) {
           await db.from('members').update({ clerk_user_id: provisioned.clerkUserId }).eq('id', memberId)
         }
       } catch (clerkErr) {

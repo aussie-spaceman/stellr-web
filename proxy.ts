@@ -118,12 +118,22 @@ export default clerkMiddleware(async (auth, req, event) => {
     await auth.protect()
   }
 
-  // Event Managers may only enter the Events section of the admin portal;
-  // the admin layout handles redirecting everyone else without a role.
-  if (isAdminRoute(req) && !isAdminEventsRoute(req)) {
+  // Admin portal authorisation (deep review C-2). The (admin) layout also
+  // redirects, but a redirect thrown in a layout does NOT stop the page segment
+  // beneath it from rendering and serialising its data: a signed-in member who
+  // requests the RSC payload of /admin/members directly still received the full
+  // member list (minors' rows included). Middleware runs BEFORE the render, so
+  // the decision has to be here. This gates the admin PAGES only — /api/admin/*
+  // routes keep their own per-handler admin guards and are not matched by
+  // isAdminRoute (they live under /api).
+  if (isAdminRoute(req)) {
     const { sessionClaims } = await auth()
     const role = (sessionClaims?.metadata as { role?: string } | undefined)?.role
-    if (role === 'event_manager') {
+    if (role !== 'admin' && role !== 'event_manager') {
+      return NextResponse.redirect(new URL('/account', req.url))
+    }
+    // Event Managers may only enter the Events/Competitions section.
+    if (role === 'event_manager' && !isAdminEventsRoute(req)) {
       return NextResponse.redirect(new URL('/admin/competitions', req.url))
     }
   }

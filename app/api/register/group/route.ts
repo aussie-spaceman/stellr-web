@@ -41,6 +41,17 @@ import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
+// deep review REG-5: a sane upper bound on a single group registration. The
+// declared counts drive billing and the join-link cap; without a ceiling a
+// request could declare (and insert) an arbitrarily large roster. 200 is well
+// above any real school group and is a placeholder pending an owner decision.
+const GROUP_SIZE_MAX = 200
+// A declared seat count must be a non-negative integer within the cap. Rejects
+// floats, negatives (which could net off against each other to pass the
+// total-participants equality check) and absurd sizes before any billing.
+const isValidCount = (n: unknown): n is number =>
+  Number.isInteger(n) && (n as number) >= 0 && (n as number) <= GROUP_SIZE_MAX
+
 // The "minor → participant" override must never strip an organiser of their
 // role. A teacher / student-manager keeps it regardless of DOB — a test or
 // mistyped birthdate previously downgraded the registrant to participant,
@@ -77,19 +88,24 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const {
-      event_slug, event_title,
+      event_slug,
       registrant_role = 'teacher',
       teacher,
       teacher_poc,
       adult_count, student_count, total_participants,
       details_method = 'add_now',
       payment_method,
-      is_campaign = false,
       member_pays_individually = false,
       additional_adults,
       students,
       school_dpa_agreed,
     } = body
+    // deep review REG-3 / REG-4: event_title and campaign status come from the
+    // server event (resolved below), never from the client body. event_title was
+    // previously trusted from `body`, which let a bogus-slug request stamp an
+    // invented title onto a confirmed registration; `is_campaign` was trusted the
+    // same way and drove `status: 'confirmed'` + no pay token. Both are derived
+    // from the CMS document now.
 
     // Option A — when the registrant (teacher / student-manager) is signed in,
     // their session email is authoritative. This keeps the registrant bound to
@@ -121,10 +137,40 @@ export async function POST(req: NextRequest) {
     // made their CMS toggle cosmetic; `registrationIsOpen` now answers for both
     // kinds. It reads the activity type off the CMS document rather than the
     // client-supplied `is_campaign`, so a forged flag cannot bypass the gate.
-    const eventForGate = await getEventBySlug(event_slug).catch(() => null)
-    if (eventForGate && !registrationIsOpen(eventForGate)) {
+    //
+    // deep review REG-4: this lookup must FAIL CLOSED. The old
+    // `getEventBySlug(...).catch(() => null)` + `if (eventForGate && ...)` mapped
+    // both "Sanity unreachable" and "no such slug" to null and then SKIPPED the
+    // window gate — so an outage (or an invented slug) sailed past the gate,
+    // `collectsNothing(undefined, null)` read the event as free, and the row below
+    // was written `confirmed` with $0 owing and no payment. Distinguish a
+    // transient failure (retryable 503) from a genuinely unknown event (404), and
+    // never fall through to free/open.
+    let eventForGate
+    try {
+      eventForGate = await getEventBySlug(event_slug)
+    } catch (e) {
+      console.error('[register/group] event lookup failed:', e)
+      return NextResponse.json(
+        { error: 'Registration is temporarily unavailable. Please try again shortly.' },
+        { status: 503 },
+      )
+    }
+    if (!eventForGate) {
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+    }
+    if (!registrationIsOpen(eventForGate)) {
       return NextResponse.json({ error: 'Registration is not open for this event.' }, { status: 403 })
     }
+    // deep review REG-3: the activity type is authoritative from the CMS, never
+    // the client. A paid live event can no longer be forced to `type: 'campaign'`
+    // + `status: 'confirmed'` by sending `is_campaign: true`.
+    const isCampaign =
+      (eventForGate as { activityType?: string } | null)?.activityType === 'campaign'
+    // deep review REG-4: the title is the server's, not the client's — a bogus
+    // request can't stamp an invented event name onto a real registration/email.
+    const event_title =
+      ((eventForGate as { title?: string } | null)?.title ?? body.event_title ?? '') as string
     // A school is mandatory — it drives school linking, the DocuSign SchoolName
     // tab, and FERPA scoping. The form gates on this too, but enforce it here so
     // the school can never be silently blank (which left DocuSign school empty).
@@ -142,6 +188,45 @@ export async function POST(req: NextRequest) {
     }
     if (registrant_role === 'student_manager' && !teacher_poc?.email) {
       return NextResponse.json({ error: 'Student managers must nominate a teacher point of contact' }, { status: 400 })
+    }
+
+    // deep review REG-5: validate the declared counts as non-negative integers
+    // within the cap BEFORE any pricing or inserts. Negative counts previously
+    // slipped through because the total-participants check only compared the sum
+    // (adult_count:-10 + student_count:12 == total_participants:2), and a float
+    // or absurd count was never rejected at all.
+    if (!isValidCount(adult_count) || !isValidCount(student_count)) {
+      return NextResponse.json(
+        { error: `Group size is invalid. Adult and student counts must be whole numbers between 0 and ${GROUP_SIZE_MAX}.` },
+        { status: 400 },
+      )
+    }
+
+    // deep review REG-5 (July #2, closing it out): billing is for the declared
+    // seat count, but the `additional_adults` / `students` arrays were inserted
+    // unbounded — a request billing 3 seats could insert 26 participants (each
+    // with a consent envelope + Space access), and the join-link cap would then
+    // treat the group as already full. Bind the arrays to the declared counts.
+    // The absolute-count conversion (declaredAdultCount / declaredStudentCount)
+    // happens below; here we use the same per-array expectations the "still to
+    // add" messaging uses, so the two can never disagree. Only `add_now` sends
+    // people now — the sheet / email-link methods provide the roster later.
+    if (details_method === 'add_now') {
+      const expectedAdditionalAdultsIn = registrant_role === 'student_manager'
+        ? adult_count                   // SM: all adults are "additional"
+        : Math.max(0, adult_count - 1)  // teacher: exclude themselves
+      if ((students ?? []).length > student_count) {
+        return NextResponse.json(
+          { error: `You've entered more students (${(students ?? []).length}) than the ${student_count} you declared. Please adjust the group size or remove the extra entries.` },
+          { status: 400 },
+        )
+      }
+      if ((additional_adults ?? []).length > expectedAdditionalAdultsIn) {
+        return NextResponse.json(
+          { error: `You've entered more additional adults (${(additional_adults ?? []).length}) than the ${expectedAdditionalAdultsIn} your group allows. Please adjust the group size or remove the extra entries.` },
+          { status: 400 },
+        )
+      }
     }
 
     const db = supabaseServer()
@@ -398,17 +483,17 @@ export async function POST(req: NextRequest) {
     }
 
     // Create registration record
-    const payToken = payment_method === 'card' && !nothingToCollect && !is_campaign ? mintPayToken() : null
+    const payToken = payment_method === 'card' && !nothingToCollect && !isCampaign ? mintPayToken() : null
     const { data: registration, error: regError } = await db.from('registrations').insert({
       event_slug, event_title,
       // Campaign group registrations are stored as type 'campaign' so they
       // surface in the member's campaign context + workspace (which filter on
       // type='campaign'); regular group event registrations stay type 'group'.
-      type: is_campaign ? 'campaign' : 'group',
+      type: isCampaign ? 'campaign' : 'group',
       // Campaigns and free events are confirmed immediately — nothing will ever
       // be collected, so no webhook will arrive to move them off 'pending'.
       // Paid events stay pending until the Stripe webhook confirms payment.
-      status: is_campaign || nothingToCollect ? 'confirmed' : 'pending',
+      status: isCampaign || nothingToCollect ? 'confirmed' : 'pending',
       amount_due_cents: amountDueCents,
       adult_count: declaredAdultCount,
       student_count: declaredStudentCount,
@@ -1046,7 +1131,7 @@ export async function POST(req: NextRequest) {
     // Do it here so 'confirmed' means the same thing on both paths. Runs after
     // the participant insert because allocation is per participant. Idempotent
     // and non-fatal by contract.
-    if (nothingToCollect && !is_campaign) {
+    if (nothingToCollect && !isCampaign) {
       await finalizeRegistrationMerch(db, regId)
     }
 

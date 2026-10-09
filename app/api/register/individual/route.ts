@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const {
-      event_slug, event_title,
+      event_slug,
       first_name, last_name, nickname, phone, date_of_birth,
       grade, gender, ethnicity, t_shirt_size, school_name,
       age_bracket, event_role,
@@ -79,11 +79,35 @@ export async function POST(req: NextRequest) {
 
     // Registration window gate — reject before creating any records / sending
     // DocuSign if the event's registration isn't currently open (FR-EVT). An
-    // offered scholarship holds the student's place, so it isn't gated.
-    const eventForGate = await getEventBySlug(event_slug).catch(() => null)
-    if (eventForGate && !registrationIsOpen(eventForGate) && !scholarship) {
+    // offered scholarship holds the student's place, so the WINDOW isn't gated
+    // for it — but the event must still exist.
+    //
+    // deep review REG-4: fail closed. `getEventBySlug(...).catch(() => null)` +
+    // `if (eventForGate && ...)` mapped both a Sanity outage and an unknown slug
+    // to null and skipped the gate — so a bogus slug still created a member,
+    // participant and DocuSign envelope. Distinguish a transient failure
+    // (retryable 503) from a genuinely unknown event (404); never fall through.
+    let eventForGate
+    try {
+      eventForGate = await getEventBySlug(event_slug)
+    } catch (e) {
+      console.error('[register/individual] event lookup failed:', e)
+      return NextResponse.json(
+        { error: 'Registration is temporarily unavailable. Please try again shortly.' },
+        { status: 503 },
+      )
+    }
+    if (!eventForGate) {
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+    }
+    if (!registrationIsOpen(eventForGate) && !scholarship) {
       return NextResponse.json({ error: 'Registration is not open for this event.' }, { status: 403 })
     }
+    // Server-authoritative title (deep review REG-4) — never the client's, which
+    // could stamp an invented event name onto the registration, DocuSign envelope
+    // and confirmation email.
+    const event_title =
+      ((eventForGate as { title?: string } | null)?.title ?? body.event_title ?? '') as string
 
     // School is mandatory — accept either an existing school id or a non-empty
     // new-school name. Server-side backstop so the requirement holds even if the

@@ -12,10 +12,16 @@ export default function PrivacyPage() {
       <h1 className="text-4xl font-bold text-brand-blue-dark mb-8">Privacy Policy</h1>
       <div className="prose prose-slate max-w-none space-y-6 text-brand-grey-dark">
         <p className="text-sm text-brand-grey-mid italic">
-          Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 02-Oct-2026
+          Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 09-Oct-2026
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
-          <strong>Recent update (02-Oct-2026):</strong>{' '}Student self-registration and pending
+          <strong>Recent update (09-Oct-2026):</strong>{' '}When we issue a credential, we email a
+          link that opens the credential page even while it is private. For a Minor, that email
+          goes to their parent or legal guardian. Sections 2, 3.11, 5, 7.4 and 12 now explain who
+          can see a private credential page, and why you should not forward that email.
+        </p>
+        <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
+          <strong>Earlier update (02-Oct-2026):</strong>{' '}Student self-registration and pending
           accounts; the definition of Minor (state age of majority); students who are adults but
           still in high school; students&rsquo; own opt-out choices; deletion within 30 days on
           request; our children&rsquo;s data retention policy; credential pages for children under
@@ -109,7 +115,9 @@ export default function PrivacyPage() {
             child under 13 creates an account themselves, before a parent consents we collect no
             more than the child&rsquo;s name, date of birth, and email address and the
             parent&rsquo;s name and email address, and we use them only to seek consent. A
-            child&rsquo;s credential pages always stay private while the child is under 13. We do
+            child&rsquo;s credential pages always stay private while the child is under 13: only
+            the child, signed in, and their parent or legal guardian, through the link in the email
+            we send when a credential is issued, can open them (Section 7.4). We do
             not disclose a child&rsquo;s personal information to third parties except to the
             service providers in Section 7.1 that we need to run our programs; we will not disclose
             it for any other purpose, such as advertising, without the parent&rsquo;s separate
@@ -165,7 +173,9 @@ export default function PrivacyPage() {
             <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
               privacy@stellreducation.org
             </a>
-            . Credential pages stay private unless the student chooses to make each one public.
+            . Credential pages stay private unless the student chooses to make each one public. A
+            Minor&rsquo;s parent or legal guardian can always open their credential pages, through
+            the link in the email we send when a credential is issued (Section 7.4).
             Where state law requires a student&rsquo;s own agreement first (currently New York and
             Colorado), these uses stay off for students aged 13 to 17 until the student turns them
             on. Opting out never affects participation.
@@ -320,7 +330,7 @@ export default function PrivacyPage() {
           <li>
             Activity on your credential pages — how many times a page was viewed, and when you used
             the share, copy-link, or download buttons. We record the action and the time, not who
-            viewed the page
+            viewed the page. Opening a page from the link in our email is not counted
           </li>
         </ul>
 
@@ -365,7 +375,7 @@ export default function PrivacyPage() {
                 ['Supervision and emergency contact for students attending in-person events without a school group', 'Parent or guardian contact details; name and contact details of a designated responsible adult'],
                 ['Processing registration payments and refunds', 'Billing history'],
                 ['Publishing competition results, photos, and highlights', 'Photos, videos, name'],
-                ['Issuing verifiable credentials, and showing a credential page publicly when you choose to (credential pages of children under 13 are never public)', 'Name, credential details, date of birth (to apply the age rules in Section 7.4), parental consent record for students under 18'],
+                ['Issuing verifiable credentials, emailing a link to the credential (for a Minor, to their parent or legal guardian), and showing a credential page publicly when you choose to (credential pages of children under 13 are never public)', 'Name, credential details, date of birth (to apply the age rules in Section 7.4), email address of the holder or of a Minor’s parent or legal guardian, parental consent record for students under 18'],
                 ['Improving programs, and quoting survey responses in promotional materials (attributed by first name and last initial, grade, and school or state; anonymous for children under 13; subject to opt-out)', 'Survey and feedback responses; first name, last initial, grade, school or state'],
                 ['Improving our Services through analytics', 'Technical and usage data'],
                 ['Understanding which schools and organisations are interested in partnering with us', 'Technical data and inferred organisation — educator and partner pages only, with advertising consent'],
@@ -506,6 +516,21 @@ export default function PrivacyPage() {
           search engines.
         </p>
         <p>
+          <strong>Who can see a private credential page.</strong>{' '}A private page can be opened
+          only by its holder, signed in to Stellr; by Stellr staff who run our programs; and by
+          anyone who opens it from the link in the email we send when the credential is issued.
+          For a Minor, that email goes to their parent or legal guardian, with a copy to the
+          student when we have the student&rsquo;s email address. The emailed link opens a
+          read-only view of the page: it shows the holder&rsquo;s name and the credential, but no
+          sharing controls, and it is not listed anywhere or submitted to search engines. The
+          link does not expire, and anyone who has it can open the page, so please do not forward
+          that email. If you think the link has reached someone it should not have, contact{' '}
+          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+            privacy@stellreducation.org
+          </a>
+          .
+        </p>
+        <p>
           <strong>Sharing on LinkedIn.</strong> From a public credential page you can choose to add
           the credential to your LinkedIn profile or share it in a LinkedIn post. Stellr does not
           connect to your LinkedIn account and does not send your information to LinkedIn. The
@@ -533,6 +558,8 @@ export default function PrivacyPage() {
           </a>
           , and any public pages are made private. Credential pages of a child under 13 always stay
           private, and no credential page can be made public while an account is pending consent.
+          A parent or legal guardian can always open their child&rsquo;s private credential pages
+          from the link in the email we send them, whether or not the pages are public.
         </p>
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">7.5 Legal Requirements</h3>
@@ -825,8 +852,9 @@ export default function PrivacyPage() {
           <li>Withdraw consent you have given, including to photo and media use</li>
           <li>Refuse further collection or use of your child&rsquo;s information</li>
           <li>
-            Decline public credential pages for your child under 18 — any pages already public are
-            made private (see Section 7.4)
+            Decline public credential pages for your child who is a Minor — any pages already public
+            are made private (see Section 7.4). You can still open them from the link in the email
+            we send when a credential is issued
           </li>
           <li>
             Contact us at any time:{' '}

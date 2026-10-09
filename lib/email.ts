@@ -1,4 +1,5 @@
 import { emailLayout } from '@/lib/email-layout'
+import type { ShareBlock } from '@/lib/credentials-core'
 import { appEnv, isProd } from '@/lib/env'
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY
@@ -857,7 +858,7 @@ const pdHoursLabel = (h: number) => `${Number.isInteger(h) ? h : h.toFixed(1)} $
 // addressee — the same split the DocuSign notices use — and the copy speaks to
 // them about the student; the caller Cc's the earner when they have an address.
 export function credentialIssuedEmail({
-  recipientFirstName, guardianFirstName, title, issuer, url, viewUrl, isMinor, canShare, pdHours,
+  recipientFirstName, guardianFirstName, title, issuer, url, viewUrl, isMinor, canShare, shareBlock, pdHours,
 }: {
   recipientFirstName: string
   guardianFirstName?: string | null
@@ -873,6 +874,12 @@ export function credentialIssuedEmail({
   isMinor: boolean
   /** Whether the earner can make the page public today (age/consent). */
   canShare: boolean
+  /**
+   * Why it can't, when canShare is false (lib/credentials-core canShare). The
+   * guardian line must not promise a page will go public when it never can
+   * (under 13) or the guardian has said no (Privacy Policy 7.4).
+   */
+  shareBlock?: ShareBlock | null
   /** Educator PD credentials: the hours recorded, for the licence-renewal line. */
   pdHours?: number | null
 }) {
@@ -891,8 +898,14 @@ export function credentialIssuedEmail({
     ? `It's private until ${toGuardian ? `${esc(recipientFirstName)} chooses` : 'you choose'} to make it public. From the credential page ${toGuardian ? 'they' : 'you'} can turn that on, copy the link, and add it to LinkedIn (16+).`
     : isPd
       ? 'It stays private for now. Once you have finished setting up your Stellr account, you can download the certificate, make the credential public and add it to your LinkedIn profile.'
+    : toGuardian && shareBlock === 'under_13'
+      ? `It stays private. Credential pages of children under 13 are never made public, but you and ${esc(recipientFirstName)} can always open it.`
+    : toGuardian && shareBlock === 'minor_declined'
+      ? 'It stays private, as you asked on the Stellr consent form.'
+    : toGuardian && shareBlock === 'minor_no_consent'
+      ? `It stays private for now. ${esc(recipientFirstName)} can make it public once a parent or legal guardian has signed the Stellr consent form.`
     : toGuardian
-      ? 'It stays private for now. Making it public is covered by the Stellr consent form signed at registration — there is no separate step.'
+      ? 'It stays private for now.'
       : 'It stays private for now. You can turn on sharing from the credential page once the paperwork on file allows it.'
 
   // Guardians can say no at any time; this is where most of them will first

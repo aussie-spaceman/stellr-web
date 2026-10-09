@@ -1,12 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail, credentialIssuedEmail, credentialsMadePrivateEmail } from '@/lib/email'
-import { shareConsentFor, canShare, credentialUrl, unpublishCredentialsFor, type CredentialRow } from '@/lib/credentials'
+import { shareConsentFor, canShare, credentialUrl, unpublishCredentialsFor, holderIsMinor, type CredentialRow } from '@/lib/credentials'
 import { familyCredentialUrl } from '@/lib/credentials-link'
 
 // The "you've earned a credential" email, addressed the way the DocuSign
-// notices are: an adult hears directly; a minor's guardian is the addressee
-// and the minor is Cc'd when they have an address. Kept out of
-// lib/credentials so the issuance module stays free of mail dependencies.
+// notices are: an adult hears directly; a Minor's guardian is the addressee
+// and the Minor is Cc'd when they have an address. "Minor" is the policy's
+// (Privacy Policy §2, §7.4), read live by holderIsMinor, so a resend reaches
+// the guardian too. Kept out of lib/credentials so the issuance module stays
+// free of mail dependencies.
 
 export interface CredentialRecipient {
   firstName: string
@@ -23,7 +25,9 @@ export async function sendCredentialIssuedEmail(
 ): Promise<boolean> {
   try {
     const consent = await shareConsentFor(db, row)
-    const toGuardian = row.is_minor && !!to.guardianEmail && !!to.guardianFirstName
+    const share = canShare(row, consent)
+    const isMinor = await holderIsMinor(db, row)
+    const toGuardian = isMinor && !!to.guardianEmail && !!to.guardianFirstName
     const address = toGuardian ? to.guardianEmail : to.email
     if (!address) return false
 
@@ -34,8 +38,9 @@ export async function sendCredentialIssuedEmail(
       issuer:   row.issuer,
       url:      credentialUrl(row.number),
       viewUrl:  familyCredentialUrl(row),
-      isMinor:  row.is_minor,
-      canShare: canShare(row, consent).ok,
+      isMinor,
+      canShare: share.ok,
+      shareBlock: share.ok ? null : share.reason,
       pdHours:  row.source === 'pd' ? row.pd_hours : null,
     })
     await sendEmail({

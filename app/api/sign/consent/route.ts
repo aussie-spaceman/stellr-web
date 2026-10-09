@@ -1,6 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
-import { recordConsent, resolveSession } from '@/lib/esign/native/flow'
-import { invalidLink, json, readJson, requestMeta, sameOrigin, sessionCookie, throttle } from '@/lib/esign/native/http'
+import { recordConsent } from '@/lib/esign/native/flow'
+import { actingSession, invalidLink, json, readJson, requestMeta, sameOrigin, throttle } from '@/lib/esign/native/http'
 
 // POST /api/sign/consent — the signer agrees to sign electronically, having
 // read the disclosure (and, for a parent, confirms they are the child's parent
@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   if (limited) return limited
   if (!sameOrigin(req)) return json({ error: 'Forbidden' }, 403)
   const db = supabaseServer()
-  const ctx = await resolveSession(db, await sessionCookie(), 'act')
+  const ctx = await actingSession(db, req, 'act')
   if (!ctx) return invalidLink()
 
   const body = await readJson<{ disclosureVersion?: unknown; attest?: unknown }>(req)

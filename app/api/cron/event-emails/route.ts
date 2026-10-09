@@ -3,7 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { guardCron } from '@/lib/cron'
 import { startCronRun } from '@/lib/cron-runs'
 import { getEventBySlug } from '@/lib/sanity'
-import { sendEventEmail } from '@/lib/event-emails/send'
+import { sendEventEmail, reclaimStuckSending } from '@/lib/event-emails/send'
 import { scheduleDecision } from '@/lib/event-emails/schedule'
 import { todayInMountain } from '@/lib/event-emails/render'
 import { runCatchUps } from '@/lib/event-emails/catch-up'
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     return eventDates.get(slug) ?? null
   }
   const result = {
-    due: 0, sent: 0, skipped: 0, deferred: 0, catchUpEmailed: 0, catchUpDeferred: 0,
+    due: 0, sent: 0, skipped: 0, deferred: 0, resumed: 0, catchUpEmailed: 0, catchUpDeferred: 0,
     signingEmailsSent: 0, signingEmailsWaiting: 0,
   }
   for (const row of rows ?? []) {
@@ -75,6 +75,13 @@ export async function GET(req: NextRequest) {
     if (out.ok) result.sent++
     else run.fail(row.id as string, out.error)
   }
+
+  // deep review INT-1: pick up any send abandoned in 'sending' by a killed
+  // function and finish it (skipping whoever the killed run already emailed),
+  // before the catch-up pass re-checks who is owed.
+  const resumed = await reclaimStuckSending(db, () => Date.now() - started <= START_BUDGET_MS)
+  result.resumed = resumed.reclaimed
+  for (const e of resumed.errors) run.fail(`resume:${e.id}`, e.error)
 
   const catchUps = await runCatchUps(db, eventDate, () => Date.now() - started <= START_BUDGET_MS, today)
   result.catchUpEmailed = catchUps.emailed

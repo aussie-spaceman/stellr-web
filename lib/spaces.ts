@@ -421,8 +421,16 @@ export interface SpaceDetail extends SpaceSummary {
  */
 export async function getSpaceForMember(
   member: CommunityMember,
-  slug: string
+  slug: string,
+  // deep review MEM-5 (performance): the member count is computed by
+  // resolveSpaceMemberCounts → resolveSpaceAudiences, which loads the WHOLE
+  // members / memberships / roles / roster tables. The channel feed re-fetches
+  // the space every 8 s (and on every realtime event) only to read posts and
+  // access, never the count — so callers on a hot path pass withCounts:false to
+  // skip that scan entirely. Page renders keep the default (true).
+  opts: { withCounts?: boolean } = {}
 ): Promise<SpaceDetail | null> {
+  const { withCounts = true } = opts
   const db = supabaseServer()
   const { data: s } = await db
     .from('community_spaces')
@@ -447,7 +455,9 @@ export async function getSpaceForMember(
         .eq('space_id', s.id)
         .eq('is_archived', false)
         .order('display_order', { ascending: true }),
-      resolveSpaceMemberCounts([s.id]),
+      withCounts
+        ? resolveSpaceMemberCounts([s.id])
+        : Promise.resolve(new Map<string, number>()),
     ])
 
   const isEventLinked = (await loadEventLinkedSpaceIds([s.id])).has(s.id)

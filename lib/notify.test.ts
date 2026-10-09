@@ -103,6 +103,18 @@ describe('notifyCommunityAdmins', () => {
     expect(sent.html).toContain('<p>Checkr report referred</p>')
   })
 
+  // deep review PUB-2: the plain-text body (which can carry names and other free
+  // text, e.g. the e-sign decline reason) is escaped before it becomes the HTML
+  // fallback body, so injected markup can't render.
+  it('escapes the plain body in the HTML fallback', async () => {
+    fakeDb({ data: [], error: null })
+    await notifyCommunityAdmins({ type: 'action', body: 'Pat <img src=x onerror=alert(1)> declined' })
+
+    const sent = sendEmail.mock.calls[0][0] as { html: string }
+    expect(sent.html).not.toContain('<img src=x')
+    expect(sent.html).toContain('&lt;img src=x')
+  })
+
   it('falls back when the staff_roles lookup errors', async () => {
     fakeDb({ data: null, error: { message: 'permission denied for table staff_roles' } })
     await notifyCommunityAdmins(alert)

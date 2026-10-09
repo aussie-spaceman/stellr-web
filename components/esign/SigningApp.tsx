@@ -41,10 +41,12 @@ type Phase =
 
 type Step = 'consent' | 'read' | 'details' | 'sign'
 
-async function post(path: string, body: unknown) {
+async function post(path: string, body: unknown, ref?: string | null) {
   const res = await fetch(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // deep review ES-1: name the recipient this tab is acting for, so the
+    // server reads this tab's own scoped session and never another tab's.
+    headers: { 'Content-Type': 'application/json', ...(ref ? { 'x-sign-ref': ref } : {}) },
     body: JSON.stringify(body),
     credentials: 'same-origin',
     cache: 'no-store',
@@ -58,9 +60,16 @@ export function SigningApp() {
   // Held in memory only (never stored): what renews the session if it expires mid-way.
   const tokenRef = useRef<string | null>(null)
   const yearRef = useRef<string | null>(null)
+  // deep review ES-1: the recipient this tab is signing for. Sent on every
+  // call so the server reads this tab's own scoped session, never a sibling's.
+  const refRef = useRef<string | null>(null)
 
   const loadContext = useCallback(async () => {
-    const res = await fetch('/api/sign/context', { cache: 'no-store', credentials: 'same-origin' })
+    const res = await fetch('/api/sign/context', {
+      cache: 'no-store',
+      credentials: 'same-origin',
+      headers: refRef.current ? { 'x-sign-ref': refRef.current } : undefined,
+    })
     const data = await res.json().catch(() => ({}))
     if (data.state === 'ready') setPhase({ kind: 'ready', view: data.view })
     else if (data.state === 'signed') setPhase({ kind: 'done', complete: !!data.completed })
@@ -71,6 +80,7 @@ export function SigningApp() {
     const token = tokenRef.current
     if (!token) return false
     const { data } = await post('/api/sign/session', { token, birthYear: yearRef.current ?? undefined })
+    if (data.state === 'ready' && typeof data.ref === 'string') refRef.current = data.ref
     return data.state === 'ready'
   }, [])
 
@@ -81,6 +91,8 @@ export function SigningApp() {
     // Only a year that was accepted is kept: a wrong one resent on renewal
     // would count against the link's five tries.
     if (data.state === 'ready' && birthYear) yearRef.current = birthYear
+    // The session is scoped to this recipient; keep its ref for later calls.
+    if (data.state === 'ready' && typeof data.ref === 'string') refRef.current = data.ref
     switch (data.state) {
       case 'ready': return loadContext()
       case 'verify': return setPhase({ kind: 'verify', documentLabel: String(data.documentLabel ?? 'form'), aboutSigner: !!data.aboutSigner, retry: !!data.retry })
@@ -136,13 +148,14 @@ export function SigningApp() {
         {phase.kind === 'ready' && (
           <Signing
             view={phase.view}
+            signRef={refRef.current}
             onDone={(complete) => setPhase({ kind: 'done', complete })}
             onDeclined={() => setPhase({ kind: 'declined' })}
             onLost={() => setPhase({ kind: 'invalid' })}
             onRenew={renew}
           />
         )}
-        {phase.kind === 'done' && <Done complete={phase.complete} />}
+        {phase.kind === 'done' && <Done complete={phase.complete} signRef={refRef.current} />}
         {phase.kind === 'declined' && (
           <Notice title="You declined to sign">
             We&rsquo;ve let the Stellr team know. If that was a mistake, or you&rsquo;d like to talk it through, email{' '}
@@ -213,8 +226,10 @@ function VerifyYear({ documentLabel, aboutSigner, retry, onSubmit }: { documentL
   )
 }
 
-function Signing({ view, onDone, onDeclined, onLost, onRenew }: {
+function Signing({ view, signRef, onDone, onDeclined, onLost, onRenew }: {
   view: View
+  /** The recipient this tab is signing for (deep review ES-1). */
+  signRef: string | null
   onDone: (complete: boolean) => void
   onDeclined: () => void
   onLost: () => void
@@ -237,8 +252,12 @@ function Signing({ view, onDone, onDeclined, onLost, onRenew }: {
   useEffect(() => { headingRef.current?.focus() }, [step])
 
   useEffect(() => {
-    if (step === 'read') void fetch('/api/sign/viewed', { method: 'POST', credentials: 'same-origin' })
-  }, [step])
+    if (step === 'read') void fetch('/api/sign/viewed', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: signRef ? { 'x-sign-ref': signRef } : undefined,
+    })
+  }, [step, signRef])
 
   const lost = (status: number) => { if (status === 404) { onLost(); return true } return false }
 
@@ -246,9 +265,9 @@ function Signing({ view, onDone, onDeclined, onLost, onRenew }: {
   // place (WCAG 2.2.1): when it has run out, open a fresh one from the link
   // this page already holds, and try once more.
   async function call(path: string, body: unknown) {
-    const first = await post(path, body)
+    const first = await post(path, body, signRef)
     if (first.status !== 404 || !(await onRenew())) return first
-    return post(path, body)
+    return post(path, body, signRef)
   }
 
   async function consent(attest: boolean) {
@@ -323,6 +342,7 @@ function Signing({ view, onDone, onDeclined, onLost, onRenew }: {
           <ReadStep
             headingRef={headingRef}
             textHtml={view.textHtml}
+            signRef={signRef}
             onNext={() => setStep(view.fields.length ? 'details' : 'sign')}
           />
         )}
@@ -420,7 +440,7 @@ function ConsentStep({ headingRef, disclosureVersion, attestation, busy, onAgree
   )
 }
 
-function ReadStep({ headingRef, textHtml, onNext }: { headingRef: HeadingRef; textHtml: string | null; onNext: () => void }) {
+function ReadStep({ headingRef, textHtml, signRef, onNext }: { headingRef: HeadingRef; textHtml: string | null; signRef: string | null; onNext: () => void }) {
   const [showText, setShowText] = useState(false)
   return (
     <div className="space-y-4">
@@ -429,7 +449,7 @@ function ReadStep({ headingRef, textHtml, onNext }: { headingRef: HeadingRef; te
         Please read it in full before you sign. Your details are already filled in where we have them; you can correct
         them in the next step.
       </p>
-      <PdfViewer src="/api/sign/document" title="The document to sign" />
+      <PdfViewer src="/api/sign/document" title="The document to sign" signRef={signRef} />
       {textHtml && (
         <div>
           <button type="button" className="text-sm text-primary-deep underline" onClick={() => setShowText((v) => !v)} aria-expanded={showText}>
@@ -647,12 +667,12 @@ function DeclineLink({ busy, onDecline }: { busy: boolean; onDecline: (reason: s
   )
 }
 
-function Done({ complete }: { complete: boolean }) {
+function Done({ complete, signRef }: { complete: boolean; signRef: string | null }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   async function download() {
     setBusy(true); setError(null)
-    const { ok, data } = await post('/api/sign/copy', {})
+    const { ok, data } = await post('/api/sign/copy', {}, signRef)
     setBusy(false)
     if (!ok) return setError(String(data.message ?? data.error ?? 'Your copy is not ready yet. Try again in a minute.'))
     const a = document.createElement('a')

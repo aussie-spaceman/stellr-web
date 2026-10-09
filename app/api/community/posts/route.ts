@@ -36,7 +36,10 @@ export async function GET(req: Request) {
   const slug = Array.isArray(rel) ? rel[0]?.slug : rel?.slug
   if (!slug) return NextResponse.json({ error: 'Channel not found' }, { status: 404 })
 
-  const space = await getSpaceForMember(member, slug)
+  // deep review MEM-5: this GET is the feed's 8 s poll + realtime-refetch target.
+  // It needs access + channels, never the member count, so skip the full-table
+  // audience scan that computing the count would otherwise run on every poll.
+  const space = await getSpaceForMember(member, slug, { withCounts: false })
   if (!space || !space.access.canAccess) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (!space.channels.some((c) => c.id === channelId)) {
     return NextResponse.json({ error: 'Channel not found' }, { status: 404 })

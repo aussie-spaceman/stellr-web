@@ -1,7 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
-import { declineAgreement, resolveSession } from '@/lib/esign/native/flow'
+import { declineAgreement } from '@/lib/esign/native/flow'
 import { notifyCommunityAdmins } from '@/lib/notify'
-import { clearSessionCookie, invalidLink, json, readJson, requestMeta, sameOrigin, sessionCookie, throttle } from '@/lib/esign/native/http'
+import { actingSession, clearSessionCookie, invalidLink, json, readJson, requestMeta, sameOrigin, signRef, throttle } from '@/lib/esign/native/http'
 
 // POST /api/sign/decline — the signer chooses not to sign. Nobody is chased
 // after a decline; admins are told so a person can follow up.
@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   if (limited) return limited
   if (!sameOrigin(req)) return json({ error: 'Forbidden' }, 403)
   const db = supabaseServer()
-  const ctx = await resolveSession(db, await sessionCookie(), 'act')
+  const ctx = await actingSession(db, req, 'act')
   if (!ctx) return invalidLink()
 
   const body = await readJson<{ reason?: unknown }>(req)
@@ -25,5 +25,5 @@ export async function POST(req: Request) {
     referenceId: ctx.envelope.participant_id ?? undefined,
   }).catch(() => {})
 
-  return clearSessionCookie(json({ ok: true }))
+  return clearSessionCookie(json({ ok: true }), signRef(req))
 }

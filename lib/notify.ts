@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { sendEmail, staffAlertEmail } from '@/lib/email'
+import { escapeHtml } from '@/lib/email-layout'
 import { sendSms, SMS_ENABLED } from '@/lib/sms'
 
 // Multi-channel notification dispatch (FR-COM-06 + session reminders).
@@ -59,7 +60,11 @@ export async function notifyMember(memberId: string, input: NotifyInput): Promis
       await sendEmail({
         to: member.email,
         subject: input.email?.subject ?? input.body,
-        html: input.email?.html ?? `<p>${input.body}</p>`,
+        // deep review PUB-2: `input.body` is plain notification text (names,
+        // free text) — escape it before it becomes the HTML fallback body so
+        // injected markup can't render. A caller-supplied `input.email.html` is
+        // already-built HTML and is the caller's responsibility to escape.
+        html: input.email?.html ?? `<p>${escapeHtml(input.body)}</p>`,
         text: input.email?.text ?? input.body,
       })
     } catch (e) {
@@ -121,7 +126,10 @@ export async function notifyCommunityAdmins(input: NotifyInput): Promise<void> {
     await sendEmail({
       to,
       subject: input.email?.subject ?? input.body,
-      html: `${input.email?.html ?? `<p>${input.body}</p>`}<p><em>${note}</em></p>`,
+      // deep review PUB-2: same as notifyMember — escape the plain-text body
+      // when it falls through to the HTML body. `note` is a server-built
+      // constant.
+      html: `${input.email?.html ?? `<p>${escapeHtml(input.body)}</p>`}<p><em>${note}</em></p>`,
       text: `${input.email?.text ?? input.body}\n\n${note}`,
     })
   } catch (e) {

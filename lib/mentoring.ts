@@ -20,6 +20,7 @@ import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 import { ensureMemberGrants, getKindBalance, bookCohortFromAllocation, cancelCohortViaLedger } from '@/lib/entitlements'
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 import { addGlobalRole } from '@/lib/member-roles'
+import { isClearedForMinorContact } from '@/lib/compliance'
 import { stripeClient } from '@/lib/stripe'
 
 // ─── Credits ────────────────────────────────────────────────────────────────
@@ -570,6 +571,15 @@ export async function reassignMentor(cohortId: string, newMentorId: string): Pro
 /** Grant the platform-wide mentor role (the only entry point is per-cohort UI). */
 export async function grantMentorRole(memberId: string): Promise<void> {
   const db = supabaseServer()
+  // deep review MEM-9 (safeguarding): being made a mentor gives this adult cohort
+  // chat and scheduled-session contact with members who may be minors. Refuse the
+  // grant unless they are cleared to work with minors (passed background check or
+  // verified license — lib/compliance). Fails closed. (Assumed owner decision —
+  // the owner accepted uncleared adults in event *Spaces* but that did not cover
+  // 1:1 coaching/mentoring; confirm.)
+  if (!(await isClearedForMinorContact(db, memberId, 'mentor'))) {
+    throw new Error('Mentor is not cleared to work with minors (background check or license required).')
+  }
   await db
     .from('session_hosts')
     .upsert({ member_id: memberId, can_mentor: true }, { onConflict: 'member_id' })

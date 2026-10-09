@@ -1,6 +1,18 @@
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
+import { isMinorOn } from '@/lib/age'
+
+/**
+ * deep review MEM-10 (safeguarding / minors' PII): is this member a minor, for
+ * the purpose of directory discovery and @mentions? True when their date of
+ * birth says so, or — DOB missing — when they are classified high-school. A
+ * minor must never be listable in the directory, returned by mention-search, or
+ * emailed an @mention by an arbitrary adult.
+ */
+export function memberIsMinor(m: { date_of_birth?: string | null; age_bracket?: string | null }): boolean {
+  return isMinorOn(m.date_of_birth) || m.age_bracket === 'high_school'
+}
 
 // Private Supabase Storage bucket for community resources (FR-COM-03).
 // Create this bucket manually in the Supabase dashboard: name = community-resources, public = false.
@@ -14,6 +26,21 @@ const SIGNED_URL_TTL_SECONDS = 120
  * Only call this after a server-side tier check (FR-COM-03).
  */
 export async function signedDownloadUrl(storagePath: string): Promise<string | null> {
+  // deep review MEM-1: this helper is shared by every download route and signs
+  // with the service_role key, so it fails closed on any path that could escape
+  // its intended prefix. storage-js and the WHATWG URL parser normalise `..`/`//`
+  // before the request leaves; no legitimate caller passes those (every path is
+  // `<prefix>/<id>/<ts>-<safeName>` built server-side), so reject them outright.
+  if (
+    !storagePath ||
+    storagePath.includes('..') ||
+    storagePath.includes('//') ||
+    storagePath.includes('\\') ||
+    storagePath.startsWith('/')
+  ) {
+    console.error('[community] refused suspicious storage path')
+    return null
+  }
   const db = supabaseServer()
   const { data, error } = await db.storage
     .from(RESOURCES_BUCKET)

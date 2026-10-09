@@ -11,6 +11,7 @@ import { onboardingRequirements, emergencyContactComplete } from '@/lib/onboardi
 import { sendAccountConfirmation, notifyStaffOfRegistration } from '@/lib/registration-notify'
 import { assertNotImpersonating } from '@/lib/impersonation'
 import { dispatchMembershipAgreement } from '@/lib/membership-agreement'
+import { isMinorOn } from '@/lib/age'
 
 // POST /api/members/onboarding — completes a member's profile after Clerk sign-up
 export async function POST(req: Request) {
@@ -83,6 +84,57 @@ export async function POST(req: Request) {
   // A minor is a high-school participant whatever they selected.
   const resolvedBracket = required.isMinor ? 'high_school' : age_bracket
   const resolvedRole = required.isMinor ? 'participant' : event_role
+
+  // deep review MEM-3: onboarding is a POST anyone signed in can re-run, and it
+  // used to revive and rewrite whatever member row it matched. Gate a re-run
+  // BEFORE any write. Find an existing row for this caller — by Clerk id, or by
+  // the caller's verified Clerk email, since an admin/Clerk deactivation nulls
+  // clerk_user_id so only the email still finds the row.
+  const guardClerkUser = await currentUser()
+  const guardEmail = normalizeEmail(
+    guardClerkUser?.emailAddresses.find((e) => e.id === guardClerkUser.primaryEmailAddressId)?.emailAddress,
+  )
+  type PriorRow = { id: string; is_active: boolean | null; date_of_birth: string | null }
+  let priorRow: PriorRow | null = null
+  {
+    const { data: byClerk } = await db
+      .from('members')
+      .select('id, is_active, date_of_birth')
+      .eq('clerk_user_id', userId)
+      .maybeSingle()
+    priorRow = (byClerk as PriorRow | null) ?? null
+    if (!priorRow && guardEmail) {
+      const { data: byEmail } = await db
+        .from('members')
+        .select('id, is_active, date_of_birth')
+        .eq('email', guardEmail)
+        .maybeSingle()
+      priorRow = (byEmail as PriorRow | null) ?? null
+    }
+  }
+  if (priorRow) {
+    // Owner decision (9 Oct 2026): admin "Deactivate" is a ban. A deactivated or
+    // soft-deleted row must never be silently reactivated by re-running
+    // onboarding — that was the only member-level ban lever, and this route
+    // undid it. Fail closed; a genuine returning member is restored by staff.
+    // (A separate fix bans the Clerk user too; this refuses onboarding here.)
+    if (priorRow.is_active === false) {
+      return NextResponse.json(
+        { error: 'This account has been closed. Please contact Stellr to restore access.' },
+        { status: 403 },
+      )
+    }
+    // A minor already on file may not re-submit an adult date of birth to strip
+    // their own minor status — doing so would move them into an adult bracket and
+    // skip the guardian-consent path and the high-school gates. The DOB on file
+    // can only be corrected by an admin.
+    if (priorRow.date_of_birth && isMinorOn(priorRow.date_of_birth) && !required.isMinor) {
+      return NextResponse.json(
+        { error: 'Your date of birth is already on file and cannot be changed here. Please contact Stellr.' },
+        { status: 403 },
+      )
+    }
+  }
 
   // Self-registration is not open to Minors yet (Terms §4.1, Privacy §2, 2 Oct
   // 2026). Until the pending-consent flow exists — parent email, DocuSign
@@ -225,11 +277,15 @@ export async function POST(req: Request) {
     // Seed the canonical web-app roles from the role the member just declared.
     // This is the ONLY place that knows it: the Clerk webhook fires before the
     // wizard and can only assume 'subscriber', and when a member row already
-    // exists it takes its link branch and never syncs at all. Without this a
-    // self-serve teacher never holds the 'teacher' role, so role-granted Spaces
-    // (Teachers' Room) and every MANAGE_ROLES gate stay shut. Idempotent
+    // exists it takes its link branch and never syncs at all. Idempotent
     // insert-or-ignore, so re-saving the profile is harmless.
-    await syncMemberClassificationRole(db, memberId, resolvedRole)
+    // deep review MEM-3: this is UNVERIFIED self-service, so withhold global
+    // MANAGE roles — a member picking "teacher"/"mentor" in the wizard must not
+    // thereby grant themselves the global teacher/mentor role (and the Spaces and
+    // MANAGE gates it opens). Those are granted by an admin (coach/mentor also
+    // gated on background clearance, MEM-9); the classification still rides on
+    // members.event_role for display.
+    await syncMemberClassificationRole(db, memberId, resolvedRole, { allowManageRoles: false })
   }
 
   // Volunteer program signup: grant the additive volunteer role (which also adds

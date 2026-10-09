@@ -1,6 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { isMinorOn, onDate } from '@/lib/age'
-import { deriveCompliance, loadComplianceRecordsByEmails, type ComplianceState } from '@/lib/compliance'
+import { deriveCompliance, loadComplianceRecordsByEmails, loadComplianceRecordsByMemberIds, type ComplianceState } from '@/lib/compliance'
 import { registrationPaid, paymentPill, type PaymentPillState } from '@/lib/payment-status'
 import { describeEnvelope, describeMissingEnvelope, type DocusignPill } from '@/lib/docusign-status'
 import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
@@ -148,7 +148,7 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
       .select(
         `id, type, status, teacher_first_name, teacher_last_name, teacher_email, school_name,
          member_pays_individually, invoice_requested, invoice_paid_at,
-         participants(id, first_name, last_name, email, grade, gender, date_of_birth, t_shirt_size,
+         participants(id, member_id, first_name, last_name, email, grade, gender, date_of_birth, t_shirt_size,
            school_name, event_role, dietary_requirements, health_conditions, company_id,
            checked_in_at, individual_payment_status,
            emergency_contact_first_name, emergency_contact_last_name, emergency_contact_email,
@@ -255,6 +255,13 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
     ((reg.participants as Record<string, unknown>[]) ?? []).map((p) => (p.email as string | null) ?? ''),
   )
   const complianceRecords = await loadComplianceRecordsByEmails(db, allEmails)
+  // Prefer a member-id match over an email match for the compliance pill: a
+  // participant linked to a member gets THAT person's clearance, not whichever
+  // member row happens to share the (family) email (deep review BG-4).
+  const allMemberIds = (regs ?? []).flatMap((reg) =>
+    ((reg.participants as Record<string, unknown>[]) ?? []).map((p) => (p.member_id as string | null) ?? null),
+  )
+  const complianceByMemberId = await loadComplianceRecordsByMemberIds(db, allMemberIds)
 
   const groups: RosterGroup[] = (regs ?? []).map((reg) => {
     const participants = ((reg.participants as Record<string, unknown>[]) ?? []).map((p) => {
@@ -290,10 +297,14 @@ export async function getEventRoster(eventSlug: string, eventDate?: string): Pro
         : describeMissingEnvelope(minor)
       const docusign_pill: DocusignPill = description.pill
 
-      // Compliance pill: derive from the member's license/checks (by email) but
-      // using the participant's role/dob for THIS event. No member row → records
-      // are absent, so an adult non-student with nothing on file reads 'invalid'.
-      const records = complianceRecords.get(((p.email as string | null) ?? '').toLowerCase())
+      // Compliance pill: derive from the member's license/checks using the
+      // participant's role/dob for THIS event. Resolve by member_id first so the
+      // pill reflects the exact person, falling back to email only when the
+      // participant isn't linked to a member (deep review BG-4). No records →
+      // an adult non-student with nothing on file reads 'invalid'.
+      const records =
+        (p.member_id ? complianceByMemberId.get(p.member_id as string) : undefined) ??
+        complianceRecords.get(((p.email as string | null) ?? '').toLowerCase())
       const compliance_pill = deriveCompliance(
         records?.license ?? null,
         records?.checks ?? [],

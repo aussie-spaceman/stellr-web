@@ -29,6 +29,8 @@ import {
   tombstoneCredentialsFor,
   unpublishCredentialsFor,
   issueCredential,
+  holderIsMinor,
+  holderMinorFacts,
   type CredentialRow,
 } from './credentials'
 
@@ -120,11 +122,47 @@ describe('canShare', () => {
 
 interface Env { id: string; completed_at: string | null; credential_sharing_opt_out?: boolean; reused_from?: string | null }
 
-function makeDb(latest: Env | null, roots: Record<string, Env> = {}) {
+// The holder's records, for the Minor-per-policy lookups (holderMinorFacts):
+// members, their current school's state, and the participant row with its
+// registration's school state.
+interface Person { date_of_birth?: string | null; grade?: string | null; age_bracket?: string | null }
+interface People {
+  member?: Person
+  memberSchoolState?: string | null
+  participant?: Person & { registrations?: { school_address_state: string | null } | null }
+  error?: boolean
+}
+
+function peopleQuery(table: string, people: People) {
+  const error = people.error ? { message: 'transient db error' } : null
+  const data =
+    table === 'members' ? people.member ?? null
+    : table === 'participants' ? people.participant ?? null
+    : table === 'member_schools'
+      ? (people.memberSchoolState === undefined ? [] : [{ is_current: true, schools: { state: people.memberSchoolState } }])
+      : null
+  const q = {
+    select: () => q,
+    eq: () => q,
+    order: () => q,
+    limit: async () => ({ data: error ? null : data, error }),
+    maybeSingle: async () => ({ data: error ? null : data, error }),
+  }
+  return q
+}
+
+function makeDb(
+  latest: Env | null,
+  roots: Record<string, Env> = {},
+  errors: { latest?: boolean; root?: boolean } = {},
+  people: People = {},
+) {
   const calls: Record<string, unknown>[] = []
+  const err = { message: 'transient db error' }
   return {
     calls,
-    from() {
+    from(table: string) {
+      if (table !== 'agreements') return peopleQuery(table, people)
       const f: Record<string, unknown> = {}
       const chain = {
         select: () => chain,
@@ -134,8 +172,8 @@ function makeDb(latest: Env | null, roots: Record<string, Env> = {}) {
         limit: () => chain,
         maybeSingle: async () => {
           calls.push({ ...f })
-          if (f.id) return { data: roots[f.id as string] ?? null, error: null }
-          return { data: latest, error: null }
+          if (f.id) return { data: errors.root ? null : (roots[f.id as string] ?? null), error: errors.root ? err : null }
+          return { data: errors.latest ? null : latest, error: errors.latest ? err : null }
         },
       }
       return chain
@@ -162,6 +200,23 @@ describe('consentForMinor (opt-out model)', () => {
   it('an expired form is no consent at all', async () => {
     const db = makeDb({ id: 'e1', completed_at: '2023-01-10T00:00:00Z' })
     expect(await consentForMinor(db, { memberId: 'm1', participantId: null }, NOW)).toBe('none')
+  })
+  it('fails CLOSED (none) when the agreement lookup errors (QUAL-5)', async () => {
+    // A discarded read error used to read as "no agreement → unprotected" and
+    // let a minor's credential be published against a recorded opt-out. Any
+    // error must now block, i.e. return 'none'.
+    const db = makeDb({ id: 'e1', completed_at: '2026-01-10T00:00:00Z' }, {}, { latest: true })
+    expect(await consentForMinor(db, { memberId: 'm1', participantId: null }, NOW)).toBe('none')
+  })
+  it('fails CLOSED (none) when the reused root lookup errors (QUAL-5)', async () => {
+    // The opt-out lives on the reused root. If it cannot be read we cannot prove
+    // consent to share, so do not default to 'granted'.
+    const db = makeDb(
+      { id: 'cov', completed_at: '2026-03-01T00:00:00Z', reused_from: 'root' },
+      { root: { id: 'root', completed_at: '2026-03-01T00:00:00Z', credential_sharing_opt_out: true } },
+      { root: true },
+    )
+    expect(await consentForMinor(db, { memberId: null, participantId: 'p1' }, NOW)).toBe('none')
   })
   it('nobody to look up is none', async () => {
     const db = makeDb({ id: 'e1', completed_at: '2026-01-10T00:00:00Z' })
@@ -318,10 +373,11 @@ describe('shareConsentFor', () => {
 // Educator PD (7 Oct 2026): one live PD credential per member per event. A
 // revoked one does not block a corrected re-issue, so the lookup filters on
 // status — the partial index credentials_pd_once does the same in the DB.
-function makeIssueDb(existing: Record<string, unknown> | null) {
+function makeIssueDb(existing: Record<string, unknown> | null, people: People = {}) {
   const calls: { filters: Record<string, unknown>; insert?: Record<string, unknown> }[] = []
   const db = {
-    from() {
+    from(table: string) {
+      if (table !== 'credentials') return peopleQuery(table, people)
       const call: { filters: Record<string, unknown>; insert?: Record<string, unknown> } = { filters: {} }
       calls.push(call)
       const q = {
@@ -420,5 +476,126 @@ describe('issueCredential — volunteer mentor', () => {
 
   it('needs a member and an event', async () => {
     await expect(issueCredential(makeIssueDb(null), { ...input, memberId: null })).rejects.toThrow(/mentor credential needs memberId/)
+  })
+})
+
+// ── Minor per the policy (9 Oct 2026) ────────────────────────────────────────
+// Privacy Policy §2 / Terms §4.1: a Minor is under the age of majority in their
+// state (19 in AL and NE, 21 in MS), or still in school, or a ward. Credentials
+// used under-18 alone, so these students were treated as adults: the issued
+// email went to them, and a public page needed no guardian's consent.
+
+/** A date of birth `years` (and three months) ago: that age today, clear of any birthday. */
+function bornYearsAgo(years: number): string {
+  const d = new Date()
+  d.setUTCFullYear(d.getUTCFullYear() - years)
+  d.setUTCMonth(d.getUTCMonth() - 3)
+  return d.toISOString().slice(0, 10)
+}
+
+describe('shareConsentFor — Minor per the policy', () => {
+  const view = (dob: string | null, over: Partial<CredentialRow> = {}) => ({ ...row(over), date_of_birth: dob })
+  const none = (people: People) => makeDb(null, {}, {}, people)
+  const granting = (people: People) => makeDb({ id: 'e1', completed_at: new Date().toISOString() }, {}, {}, people)
+
+  it('an 18-year-old at a Nebraska or Alabama school needs consent', async () => {
+    expect(await shareConsentFor(none({ memberSchoolState: 'NE' }), view(bornYearsAgo(18)))).toBe('none')
+    expect(await shareConsentFor(granting({ memberSchoolState: 'NE' }), view(bornYearsAgo(18)))).toBe('granted')
+    expect(await shareConsentFor(none({ memberSchoolState: 'Alabama' }), view(bornYearsAgo(18)))).toBe('none')
+    expect(await shareConsentFor(none({ memberSchoolState: 'NE' }), view(bornYearsAgo(19)))).toBe('not_required')
+  })
+  it('a 20-year-old in Mississippi needs consent; at 21 they do not', async () => {
+    expect(await shareConsentFor(none({ memberSchoolState: 'MS' }), view(bornYearsAgo(20)))).toBe('none')
+    expect(await shareConsentFor(none({ memberSchoolState: 'MS' }), view(bornYearsAgo(21)))).toBe('not_required')
+  })
+  it('an 18-year-old elsewhere needs none, unless still in school', async () => {
+    expect(await shareConsentFor(none({ memberSchoolState: 'CO' }), view(bornYearsAgo(18)))).toBe('not_required')
+    expect(await shareConsentFor(none({ memberSchoolState: 'CO', member: { grade: 'grade_12' } }), view(bornYearsAgo(18)))).toBe('none')
+    expect(await shareConsentFor(none({ member: { age_bracket: 'high_school' } }), view(bornYearsAgo(19)))).toBe('none')
+  })
+  it('reads an event participant\'s state from their registration', async () => {
+    const p = view(bornYearsAgo(18), { member_id: null, participant_id: 'p1' })
+    expect(await shareConsentFor(none({ participant: { registrations: { school_address_state: 'NE' } } }), p)).toBe('none')
+    expect(await shareConsentFor(none({ participant: { registrations: { school_address_state: 'NV' } } }), p)).toBe('not_required')
+  })
+  it('looks the DOB up for a bare row', async () => {
+    expect(await shareConsentFor(none({ member: { date_of_birth: bornYearsAgo(18) }, memberSchoolState: 'NE' }), row())).toBe('none')
+    expect(await shareConsentFor(none({ member: { date_of_birth: bornYearsAgo(30) } }), row())).toBe('not_required')
+  })
+  it('fails CLOSED when the holder\'s records cannot be read (QUAL-5)', async () => {
+    expect(await shareConsentFor(none({ error: true }), view(bornYearsAgo(30)))).toBe('none')
+  })
+})
+
+describe('holderMinorFacts', () => {
+  it('takes the member first, field by field, then the participant row', async () => {
+    const db = makeDb(null, {}, {}, {
+      member: { date_of_birth: '2008-01-01', grade: null },
+      memberSchoolState: 'NE',
+      participant: { date_of_birth: '2007-01-01', grade: '12', age_bracket: 'high_school', registrations: { school_address_state: 'CO' } },
+    })
+    expect(await holderMinorFacts(db, { memberId: 'm1', participantId: 'p1' })).toEqual({
+      dateOfBirth: '2008-01-01', grade: '12', ageBracket: 'high_school', state: 'NE',
+    })
+  })
+  it('is null on a read error', async () => {
+    expect(await holderMinorFacts(makeDb(null, {}, {}, { error: true }), { memberId: 'm1', participantId: null })).toBeNull()
+  })
+})
+
+describe('holderIsMinor (who the credential emails go to)', () => {
+  it('a credential issued to a minor stays addressed to the guardian', async () => {
+    expect(await holderIsMinor(makeDb(null, {}, {}, { error: true }), row({ is_minor: true }))).toBe(true)
+  })
+  it('an 18-year-old in Nebraska is a Minor even if stored as an adult', async () => {
+    const db = makeDb(null, {}, {}, { member: { date_of_birth: bornYearsAgo(18) }, memberSchoolState: 'NE' })
+    expect(await holderIsMinor(db, row({ is_minor: false }))).toBe(true)
+  })
+  it('an adult is not', async () => {
+    expect(await holderIsMinor(makeDb(null, {}, {}, { member: { date_of_birth: '1980-01-01' } }), row())).toBe(false)
+  })
+  it('a failed read falls back to the DOB alone, never to the emergency contact', async () => {
+    const failing = () => makeDb(null, {}, {}, { error: true })
+    expect(await holderIsMinor(failing(), row())).toBe(false)
+    expect(await holderIsMinor(failing(), { ...row(), date_of_birth: bornYearsAgo(30) })).toBe(false)
+    expect(await holderIsMinor(failing(), { ...row(), date_of_birth: bornYearsAgo(16) })).toBe(true)
+  })
+  it('a teacher with no DOB is not', async () => {
+    expect(await holderIsMinor(makeDb(null, {}, {}, { member: { date_of_birth: null, age_bracket: 'adult' } }), row())).toBe(false)
+  })
+})
+
+describe('issueCredential — is_minor per the policy', () => {
+  const event = {
+    source: 'event' as const,
+    participantId: 'p1',
+    eventSlug: 'ne-2026',
+    recipient: { firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: bornYearsAgo(18) },
+    title: 'Space Design Challenge — Participant',
+  }
+  const issued = async (people: People, input: Parameters<typeof issueCredential>[1] = event) => {
+    const db = makeIssueDb(null, people)
+    await issueCredential(db, input)
+    return db.calls[1].insert!.is_minor
+  }
+
+  it('an 18-year-old registered through a Nebraska school is a Minor', async () => {
+    expect(await issued({ participant: { registrations: { school_address_state: 'NE' } } })).toBe(true)
+    expect(await issued({ participant: { registrations: { school_address_state: 'CO' } } })).toBe(false)
+  })
+  it('an 18-year-old still in 12th grade is a Minor in any state', async () => {
+    expect(await issued({ participant: { grade: '12', registrations: { school_address_state: 'CO' } } })).toBe(true)
+  })
+  it('a 20-year-old member at a Mississippi school is a Minor', async () => {
+    const course = {
+      source: 'course' as const, memberId: 'm1', moduleId: 'mod1',
+      recipient: { firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: bornYearsAgo(20) }, title: 'Orbital Mechanics 101',
+    }
+    expect(await issued({ memberSchoolState: 'MS' }, course)).toBe(true)
+    expect(await issued({ memberSchoolState: 'TX' }, course)).toBe(false)
+  })
+  it('falls back to the DOB alone when the records cannot be read', async () => {
+    expect(await issued({ error: true })).toBe(false)
+    expect(await issued({ error: true }, { ...event, recipient: { ...event.recipient, dateOfBirth: bornYearsAgo(16) } })).toBe(true)
   })
 })

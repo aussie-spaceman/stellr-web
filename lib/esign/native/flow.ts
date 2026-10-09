@@ -267,14 +267,24 @@ export async function openLink(
     } as const
     const answer = (opts.birthYear ?? '').trim()
     if (!answer) return verify
+    // deep review ES-2: charge one attempt atomically *before* comparing, so
+    // parallel guesses cannot all read the same pre-count and each slip through
+    // as "the first try". The RPC increments under the row lock and returns the
+    // new count, or null once the five-try cap is spent — and once it is spent
+    // no further guess is even compared. (Was a read-then-write that counted
+    // every concurrent guess as 1 and so never locked.)
+    const { data: attempts, error } = await db.rpc('esign_note_failed_check', {
+      p_id: recipient.id,
+      p_max: MAX_FAILED_CHECKS,
+    })
+    if (error) throw new Error(`Recording a failed birth-year check failed: ${error.message}`)
+    if (attempts === null || attempts === undefined) return { kind: 'invalid' }
     if (answer !== expectedYear) {
-      await db
-        .from('agreement_recipients')
-        .update({ failed_token_attempts: failedChecks + 1 })
-        .eq('id', recipient.id)
-      if (failedChecks + 1 >= MAX_FAILED_CHECKS) return { kind: 'invalid' }
-      return verify
+      return (attempts as number) >= MAX_FAILED_CHECKS ? { kind: 'invalid' } : verify
     }
+    // Right answer: refund the slot we just charged and clear any earlier
+    // typos, so a genuine signer's wrong guesses never accumulate to a lockout.
+    await db.from('agreement_recipients').update({ failed_token_attempts: 0 }).eq('id', recipient.id)
   }
 
   const { token: session, expiresAt } = mintToken(recipient.id, 'session', recipient.token_version, SESSION_TTL_SECONDS, now.getTime())

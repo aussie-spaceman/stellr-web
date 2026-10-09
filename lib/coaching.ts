@@ -23,6 +23,7 @@ import { notifyMember, notifyMembers } from '@/lib/notify'
 import { linkCohortTraining } from '@/lib/sessions'
 import { logActivity } from '@/lib/activity-log'
 import { addGlobalRole } from '@/lib/member-roles'
+import { isClearedForMinorContact } from '@/lib/compliance'
 import { DEFAULT_TZ } from '@/lib/mentoring-format'
 import { autoWorkshopName } from '@/lib/coaching-format'
 import { ensureMemberGrants, getKindBalanceSplit, getCoachingTierLabel, cancelCohortViaLedger, releaseCoachingBooking, getCoachingAllocationByTier, setTierCoachingAllocation } from '@/lib/entitlements'
@@ -481,6 +482,15 @@ export async function updateWorkshop(workshopId: string, patch: UpdateWorkshopIn
 /** Grant the platform-wide coach capability (only entry point is the workshop UI). */
 async function grantCoachRole(memberId: string): Promise<void> {
   const db = supabaseServer()
+  // deep review MEM-9 (safeguarding): being made a coach gives this adult 1:1
+  // coaching and cohort-chat contact with members who may be minors. Refuse the
+  // grant unless they are cleared to work with minors (passed background check or
+  // verified license — lib/compliance). Fails closed. (Assumed owner decision —
+  // the owner accepted uncleared adults in event *Spaces* but that did not cover
+  // 1:1 coaching/mentoring; confirm.)
+  if (!(await isClearedForMinorContact(db, memberId, 'coach'))) {
+    throw new Error('Coach is not cleared to work with minors (background check or license required).')
+  }
   await db.from('session_hosts').upsert({ member_id: memberId, can_coach: true }, { onConflict: 'member_id' })
   await addGlobalRole(db, memberId, 'coach')
 }

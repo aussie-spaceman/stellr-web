@@ -1,8 +1,8 @@
 import { supabaseServer } from '@/lib/supabase'
-import { resolveSession, submitSignature } from '@/lib/esign/native/flow'
+import { submitSignature } from '@/lib/esign/native/flow'
 import { parseSignatureImage } from '@/lib/esign/native/signature-image'
 import { sendInvites } from '@/lib/esign/outbox'
-import { invalidLink, json, readJson, requestMeta, sameOrigin, sessionCookie, throttle } from '@/lib/esign/native/http'
+import { actingSession, invalidLink, json, readJson, requestMeta, sameOrigin, throttle } from '@/lib/esign/native/http'
 
 // POST /api/sign/submit — the signature. Records the signer's field values and
 // typed name, then either emails the next signer (a student, after their
@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   if (limited) return limited
   if (!sameOrigin(req)) return json({ error: 'Forbidden' }, 403)
   const db = supabaseServer()
-  const ctx = await resolveSession(db, await sessionCookie(), 'act')
+  const ctx = await actingSession(db, req, 'act')
   if (!ctx) return invalidLink()
 
   // Room for a drawn signature (at most ~200 KB as base64) on top of the fields.

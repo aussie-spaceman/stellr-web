@@ -134,6 +134,22 @@ export function deriveCompliance(
     return { state: 'not_required', detail: null, license, check }
   }
 
+  // An explicit adverse decision DOMINATES everything else (deep review BG-2).
+  // When an adjudicator has marked the current (newest) check 'not_cleared',
+  // Stellr has positively decided this adult must not work with minors — a
+  // verified teacher licence must not mask that. Owner policy (9 Oct 2026):
+  // Stellr's adjudication wins over a licence or a later vendor event.
+  if (check && check.adjudication_outcome === 'not_cleared') {
+    return {
+      state: 'invalid',
+      detail: `Not cleared on review${check.adjudicated_label ? ` by ${check.adjudicated_label}` : ''}${
+        check.adjudicated_at ? ` (${formatDateShort(check.adjudicated_at)})` : ''
+      }`,
+      license,
+      check,
+    }
+  }
+
   const licenseValid = !!license && !!license.verified_at && !licenseExpired(license, ref)
   const licensePending = !!license && !license.verified_at && !licenseExpired(license, ref)
 
@@ -265,6 +281,29 @@ export async function loadComplianceRecordsByEmails(
   return out
 }
 
+// Load compliance records keyed by member id. Preferred over the by-email
+// loader whenever a participant row is linked to a member (deep review BG-4):
+// members are keyed by email and families share one, so matching clearance by
+// email alone can show a cleared spouse's/sibling's status for a different,
+// uncleared person. The member id identifies the exact human.
+export async function loadComplianceRecordsByMemberIds(
+  db: SupabaseClient,
+  memberIds: (string | null | undefined)[],
+): Promise<Map<string, ComplianceRecords>> {
+  const out = new Map<string, ComplianceRecords>()
+  const unique = [...new Set(memberIds.filter((id): id is string => !!id))]
+  if (unique.length === 0) return out
+
+  const { data } = await db.from('members').select(COMPLIANCE_SELECT).in('id', unique)
+  for (const row of (data as MemberComplianceRow[] | null) ?? []) {
+    out.set(row.id, {
+      license: row.member_teacher_licenses?.[0] ?? null,
+      checks: row.member_background_checks ?? [],
+    })
+  }
+  return out
+}
+
 export interface MemberComplianceRecords extends ComplianceRecords {
   memberId: string
   email: string | null
@@ -318,5 +357,47 @@ export async function loadComplianceForMember(
     row.member_background_checks ?? [],
     row.event_role,
     row.date_of_birth,
+  )
+}
+
+/**
+ * deep review MEM-9: may this member be put — or kept — in a coach/mentor role
+ * that gives them 1:1 or cohort contact with minors? True only when a cleared
+ * adult (a passed background check or a verified teacher license on file), or a
+ * person for whom clearance genuinely is not required.
+ *
+ * We derive compliance as if the member already held the event-facing `role`, so
+ * the gate cannot be slipped by a member still classified 'subscriber' /
+ * 'participant' at grant time (requiresBackgroundCheck keys off event_role). A
+ * minor — who can never hold these roles — falls out as 'not_required'; an
+ * unknown DOB is treated as an adult and must therefore be cleared. Fails closed
+ * on a missing member or a failed lookup.
+ */
+export async function isClearedForMinorContact(
+  db: SupabaseClient,
+  memberId: string,
+  // Named for the call site's readability; the clearance rule is identical for
+  // coach and mentor, so both derive against a BC-required role below.
+  _role: 'coach' | 'mentor' = 'mentor',
+): Promise<boolean> {
+  const { data } = await db.from('members').select(COMPLIANCE_SELECT).eq('id', memberId).maybeSingle()
+  const row = data as MemberComplianceRow | null
+  if (!row) return false // fail closed: an unknown member is not cleared
+  const summary = deriveCompliance(
+    row.member_teacher_licenses?.[0] ?? null,
+    row.member_background_checks ?? [],
+    // Force 'mentor' — a BC_REQUIRED role — rather than trusting the member's
+    // stored event_role (a coach/mentor is often still 'subscriber'/'participant'
+    // at grant time, which would wrongly read as not_required). 'coach' is NOT in
+    // BC_REQUIRED_ROLES, so it must not be used as the derivation role here.
+    'mentor',
+    row.date_of_birth,
+  )
+  return (
+    summary.state === 'valid_bc' ||
+    summary.state === 'valid_license' ||
+    // 'not_required' here can only mean a minor (role is forced to a BC-required
+    // one), who cannot be a coach/mentor anyway — don't block that edge on this axis.
+    summary.state === 'not_required'
   )
 }

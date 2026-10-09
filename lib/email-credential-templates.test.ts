@@ -37,6 +37,32 @@ describe('credentialIssuedEmail', () => {
   })
 })
 
+// 9 Oct 2026: the guardian line said every private minor credential was
+// "covered by the consent form", implying it would go public — untrue for a
+// child under 13 (never public) or a guardian who declined (Privacy Policy 7.4).
+describe('credentialIssuedEmail — why a minor\'s page stays private', () => {
+  const base = {
+    recipientFirstName: 'Ada', guardianFirstName: 'Jess', title: 'Space Design Challenge', issuer: 'Stellr Education',
+    url: URL, viewUrl: VIEW, isMinor: true, canShare: false,
+  } as const
+
+  it('never suggests an under-13 page will be made public', () => {
+    const e = credentialIssuedEmail({ ...base, shareBlock: 'under_13' })
+    expect(e.html).toContain('Credential pages of children under 13 are never made public')
+    expect(e.html).not.toContain('covered by the Stellr consent form')
+  })
+
+  it('reflects a guardian who declined', () => {
+    const e = credentialIssuedEmail({ ...base, shareBlock: 'minor_declined' })
+    expect(e.html).toContain('as you asked on the Stellr consent form')
+  })
+
+  it('says consent is still needed when none is on file', () => {
+    const e = credentialIssuedEmail({ ...base, shareBlock: 'minor_no_consent' })
+    expect(e.html).toContain('once a parent or legal guardian has signed the Stellr consent form')
+  })
+})
+
 // Educator PD (7 Oct 2026): the hours and what they are for are said once, and
 // a teacher added by an admin (no DOB yet) is told to finish their account —
 // not that "paperwork" is missing.

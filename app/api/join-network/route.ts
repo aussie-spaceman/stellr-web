@@ -4,6 +4,18 @@ import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
 
+// deep review PUB-2: unauthenticated public form; its values go into a
+// Stellr-branded HTML email to staff. Escape every value before the HTML so a
+// submission can't inject markup (matches the teacher-grant route's helper).
+function esc(v: unknown): string {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export async function POST(req: Request) {
   const limited = rateLimitGuard(req, 'join-network', { limit: 3, windowMs: HOUR_MS })
   if (limited) return limited
@@ -19,13 +31,13 @@ export async function POST(req: Request) {
 
     const name = `${firstName} ${lastName}`
     const rows: [string, string][] = [
-      ['Name', name],
-      ['Email', `<a href="mailto:${email}">${email}</a>`],
-      ['Phone', phone],
-      ['Company', companyName],
-      ['Address', address || '—'],
-      ['What they do', whatYouDo],
-      ['Partner type', reason],
+      ['Name', esc(name)],
+      ['Email', `<a href="mailto:${esc(email)}">${esc(email)}</a>`],
+      ['Phone', esc(phone)],
+      ['Company', esc(companyName)],
+      ['Address', esc(address) || '—'],
+      ['What they do', esc(whatYouDo)],
+      ['Partner type', esc(reason)],
     ]
     const htmlRows = rows
       .map(([label, value]) => `<tr><td style="padding:8px;font-weight:bold;background:#f3f4f6">${label}</td><td style="padding:8px">${value}</td></tr>`)

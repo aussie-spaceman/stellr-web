@@ -1,9 +1,10 @@
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { SITE_URL, AUTH_APP_URL } from '@/lib/env'
 import { rateLimitGuard } from '@/lib/rate-limit'
 import { SESSION_COOKIE, SESSION_TTL_SECONDS } from '@/lib/esign/native/tokens'
-import type { RequestMeta } from '@/lib/esign/native/flow'
+import { resolveSession, type RequestMeta, type SessionContext } from '@/lib/esign/native/flow'
 
 // Shared plumbing for the public signing routes (/api/sign/*). None of them
 // sits behind a login: the signer proves who they are with the emailed link,
@@ -56,12 +57,33 @@ export function throttle(req: Request, route: string, limit = 30): Response | nu
   return rateLimitGuard(req, `sign:${route}`, { limit, windowMs: 60_000 })
 }
 
-export async function sessionCookie(): Promise<string | undefined> {
-  return (await cookies()).get(SESSION_COOKIE)?.value
+// deep review ES-1: one browser-wide signing cookie let a parent with two
+// signing links open overwrite one child's session with the other's, so a
+// consent/submit/decline from the first tab landed on the second child's form —
+// recording one child's identity and opt-outs as the other's. Scope the cookie
+// per recipient, so two open links keep separate sessions, and have each tab
+// name the recipient it is acting for in the `x-sign-ref` header. A session can
+// then only ever act on the agreement its own tab is showing.
+const REF_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+/** The session cookie name for a given recipient; the bare name when unknown. */
+export function cookieName(ref?: string | null): string {
+  if (typeof ref === 'string' && REF_RE.test(ref)) return `${SESSION_COOKIE}_${ref.replace(/-/g, '')}`
+  return SESSION_COOKIE
 }
 
-export function setSessionCookie(res: NextResponse, value: string): NextResponse {
-  res.cookies.set(SESSION_COOKIE, value, {
+/** The recipient this request's tab is acting for (its open document). */
+export function signRef(req: Request): string | null {
+  const ref = req.headers.get('x-sign-ref')
+  return ref && REF_RE.test(ref) ? ref : null
+}
+
+export async function sessionCookie(ref?: string | null): Promise<string | undefined> {
+  return (await cookies()).get(cookieName(ref))?.value
+}
+
+export function setSessionCookie(res: NextResponse, value: string, ref: string): NextResponse {
+  res.cookies.set(cookieName(ref), value, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
@@ -71,9 +93,28 @@ export function setSessionCookie(res: NextResponse, value: string): NextResponse
   return res
 }
 
-export function clearSessionCookie(res: NextResponse): NextResponse {
-  res.cookies.set(SESSION_COOKIE, '', { httpOnly: true, sameSite: 'strict', path: '/', maxAge: 0 })
+export function clearSessionCookie(res: NextResponse, ref?: string | null): NextResponse {
+  res.cookies.set(cookieName(ref), '', { httpOnly: true, sameSite: 'strict', path: '/', maxAge: 0 })
   return res
+}
+
+/**
+ * Resolves the signing session for the recipient this tab is acting for
+ * (deep review ES-1). The cookie is scoped per recipient, and we re-check that
+ * the resolved recipient is the one the tab named, so a session minted for one
+ * child can never act on another child's form. Fails closed: no ref, no scoped
+ * cookie, or a mismatch all resolve to null, which every route refuses.
+ */
+export async function actingSession(
+  db: SupabaseClient,
+  req: Request,
+  mode: 'act' | 'read',
+): Promise<SessionContext | null> {
+  const ref = signRef(req)
+  const ctx = await resolveSession(db, await sessionCookie(ref), mode)
+  if (!ctx) return null
+  if (ref && ctx.recipient.id !== ref) return null
+  return ctx
 }
 
 /** Reads and size-limits a JSON body. */

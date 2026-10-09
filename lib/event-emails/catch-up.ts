@@ -18,7 +18,13 @@ import { resolveAudience, type ResolvedRecipient } from './audiences'
 import { daysUntil } from './schedule'
 import { todayInMountain } from './render'
 import { deliver, loadAttachments, loadEventForEmail, type SendOutcome } from './send'
+// alreadyTriedAddresses / missedRecipients live in ./history so send.ts can read
+// the history without importing this module (which imports send.ts). Re-export
+// them here to keep existing importers working.
+import { alreadyTriedAddresses, missedRecipients } from './history'
 import { MAX_RECIPIENTS_PER_SEND, type AudienceKey, type EventEmailRow, type RecipientRole } from './types'
+
+export { alreadyTriedAddresses, missedRecipients }
 
 /** A claim older than this belongs to a run that died; the next run may take it. */
 const LEASE_MS = 5 * 60_000
@@ -36,28 +42,6 @@ export function catchUpAudiences(audiences: readonly AudienceKey[]): AudienceKey
 /** Open through the event day itself; closed once it has passed, or with no date. */
 export function catchUpOpen(eventDate: string | null | undefined, today: string): boolean {
   return !!eventDate && daysUntil(eventDate, today) >= 0
-}
-
-export function missedRecipients(recipients: ResolvedRecipient[], alreadyTried: Set<string>): ResolvedRecipient[] {
-  return recipients.filter((r) => !alreadyTried.has(r.email.toLowerCase()))
-}
-
-/** Every address a real (non-test) send of this email has already tried. */
-export async function alreadyTriedAddresses(db: SupabaseClient, emailId: string): Promise<Set<string>> {
-  const { data, error } = await db
-    .from('event_email_sends')
-    .select('recipients')
-    .eq('event_email_id', emailId)
-    .neq('trigger', 'test')
-  // Never guess on a failed read: an empty set would email everyone again.
-  if (error) throw new Error(`Could not read send history: ${error.message}`)
-  const out = new Set<string>()
-  for (const row of data ?? []) {
-    for (const r of (row.recipients as { email?: string }[] | null) ?? []) {
-      if (r?.email) out.add(r.email.toLowerCase())
-    }
-  }
-  return out
 }
 
 export interface CatchUpStatus {

@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember } from '@/lib/community'
+import { getCurrentMember, memberIsMinor } from '@/lib/community'
 
 interface MemberRel {
   first_name: string | null
   last_name: string | null
   event_role: string | null
+  date_of_birth: string | null
+  age_bracket: string | null
 }
 
 // GET /api/community/members/mention-search?q=…
@@ -24,7 +26,8 @@ export async function GET(req: Request) {
   const db = supabaseServer()
   const { data } = await db
     .from('member_directory_prefs')
-    .select('member_id, members!inner(first_name, last_name, event_role)')
+    // deep review MEM-10: pull DOB + bracket so minors can be excluded server-side.
+    .select('member_id, members!inner(first_name, last_name, event_role, date_of_birth, age_bracket)')
     .eq('is_visible', true)
     .limit(500)
 
@@ -37,6 +40,9 @@ export async function GET(req: Request) {
     .map((r) => {
       const m = Array.isArray(r.members) ? r.members[0] : r.members
       if (!m) return null
+      // deep review MEM-10 (safeguarding): a minor is never mentionable, even if
+      // a directory opt-in slipped through before this gate existed.
+      if (memberIsMinor(m)) return null
       const label = [m.first_name, m.last_name].filter(Boolean).join(' ') || 'Member'
       return { id: r.member_id, label, role: m.event_role }
     })

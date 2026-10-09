@@ -1,6 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
 import { notifyMember } from '@/lib/notify'
 import { escapeHtml } from '@/lib/email-layout'
+import { memberIsMinor } from '@/lib/community'
 
 type TipTapNode = { type?: string; attrs?: Record<string, unknown>; content?: TipTapNode[] }
 
@@ -56,7 +57,23 @@ export async function notifyMentions(opts: {
     .in('member_id', candidates)
     .eq('is_visible', true)
 
-  const allowed = (visible ?? []).map((r) => r.member_id as string)
+  let allowed = (visible ?? []).map((r) => r.member_id as string)
+  if (allowed.length === 0) return
+
+  // deep review MEM-10 (safeguarding): never email a minor an @mention from an
+  // arbitrary adult. Minors are excluded from mention-search, but a stale
+  // directory opt-in or a hand-crafted body_json could still name one, so drop
+  // any minor recipient here as the server-side backstop.
+  const { data: recipientRows } = await db
+    .from('members')
+    .select('id, date_of_birth, age_bracket')
+    .in('id', allowed)
+  const minors = new Set(
+    (recipientRows ?? [])
+      .filter((m) => memberIsMinor(m as { date_of_birth: string | null; age_bracket: string | null }))
+      .map((m) => (m as { id: string }).id),
+  )
+  allowed = allowed.filter((id) => !minors.has(id))
   if (allowed.length === 0) return
 
   const postUrl = `${APP_URL}/community/${opts.spaceSlug}/${opts.postId}`

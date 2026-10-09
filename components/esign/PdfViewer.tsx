@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 // Each page is an image with its page number for screen readers; the text
 // version beside it is the accessible equivalent of the wording.
 
-export function PdfViewer({ src, title }: { src: string; title: string }) {
+export function PdfViewer({ src, title, signRef }: { src: string; title: string; signRef?: string | null }) {
   const pagesRef = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [pageCount, setPageCount] = useState(0)
@@ -20,7 +20,13 @@ export function PdfViewer({ src, title }: { src: string; title: string }) {
       try {
         const pdfjs = await import('pdfjs-dist')
         pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
-        const res = await fetch(src, { credentials: 'same-origin', cache: 'no-store' })
+        // deep review ES-1: name the recipient this tab is signing for, so the
+        // document fetched is this tab's own, not another open tab's.
+        const res = await fetch(src, {
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: signRef ? { 'x-sign-ref': signRef } : undefined,
+        })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const doc = await pdfjs.getDocument({ data: new Uint8Array(await res.arrayBuffer()) }).promise
         destroy = () => doc.destroy()
@@ -57,7 +63,7 @@ export function PdfViewer({ src, title }: { src: string; title: string }) {
       cancelled = true
       void destroy?.()
     }
-  }, [src])
+  }, [src, signRef])
 
   return (
     <section aria-label={title} className="space-y-2">

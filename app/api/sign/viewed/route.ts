@@ -1,6 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
-import { recordViewed, resolveSession } from '@/lib/esign/native/flow'
-import { json, requestMeta, sameOrigin, sessionCookie, throttle } from '@/lib/esign/native/http'
+import { recordViewed } from '@/lib/esign/native/flow'
+import { actingSession, json, requestMeta, sameOrigin, throttle } from '@/lib/esign/native/http'
 
 // POST /api/sign/viewed — the page reports that a person has the document in
 // front of them. Recorded from the page, not from opening the link: email
@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   if (limited) return limited
   if (!sameOrigin(req)) return json({ error: 'Forbidden' }, 403)
   const db = supabaseServer()
-  const ctx = await resolveSession(db, await sessionCookie(), 'act')
+  const ctx = await actingSession(db, req, 'act')
   if (!ctx) return json({ ok: false }, 404)
   await recordViewed(db, ctx, requestMeta(req))
   return json({ ok: true })

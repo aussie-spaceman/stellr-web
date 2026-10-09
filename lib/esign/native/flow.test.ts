@@ -25,7 +25,7 @@ vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins: vi.fn(async () => {}) })
 vi.mock('@/lib/credentials-notify', () => ({ applyGuardianOptOut: vi.fn(async () => {}) }))
 
 import { nativeProvider } from '@/lib/esign/providers/native'
-import { openLink, resolveSession, recordConsent, sameName, submitSignature, recordViewed } from './flow'
+import { openLink, resolveSession, recordConsent, sameName, submitSignature, recordViewed, MAX_FAILED_CHECKS } from './flow'
 import { verifyToken } from './tokens'
 import { sendInvites } from '@/lib/esign/outbox'
 import { SIGNED_BUCKET } from '@/lib/esign/storage'
@@ -83,6 +83,19 @@ async function setup() {
   db.objects.set('agreement-templates/minor/v1.pdf', pdf)
   db.rpcs.esign_append_audit = appendAuditRpc(db)
   db.rpcs.esign_claim_email = () => true
+  // deep review ES-2: the real atomic increment lives in Postgres
+  // (esign_note_failed_check). Model it here as the single conditional UPDATE
+  // it is — increments only while below the cap, returns the new count, or null
+  // once spent. Being synchronous, concurrent calls serialise exactly as the DB
+  // row lock does.
+  db.rpcs.esign_note_failed_check = (args) => {
+    const r = db.table('agreement_recipients').find((x) => x.id === args.p_id)
+    if (!r) return null
+    const cur = (r.failed_token_attempts as number) ?? 0
+    if (cur >= (args.p_max as number)) return null
+    r.failed_token_attempts = cur + 1
+    return r.failed_token_attempts
+  }
   return db
 }
 
@@ -149,6 +162,28 @@ describe('Stellr signing: a minor’s consent form', () => {
     for (let i = 0; i < 4; i++) expect((await openLink(db.client, token, { birthYear: '1999' })).kind).toBe('verify')
     expect((await openLink(db.client, token, { birthYear: '1999' })).kind).toBe('invalid')
     // Locked even with the right answer now.
+    expect((await openLink(db.client, token, { birthYear: '2012' })).kind).toBe('invalid')
+  })
+
+  it('counts parallel wrong birth-year guesses atomically, so a burst cannot outrun the five-try lock', async () => {
+    // deep review ES-2: a stranger who received the link by mistake fires one
+    // guess per plausible year at once. Before the fix each read the same
+    // pre-count and wrote 1, so the lock never engaged; now each attempt is
+    // charged atomically and the sixth is refused without being compared.
+    const db = await setup()
+    await issue(db)
+    const token = linkFrom(sent[0])
+    const guardian = () => db.table('agreement_recipients').find((r) => r.role_name === 'Guardian')!
+
+    const wrongYears = ['2005', '2006', '2007', '2008', '2009', '2010', '2011', '2013', '2014', '2015']
+    const results = await Promise.all(wrongYears.map((y) => openLink(db.client, token, { birthYear: y })))
+
+    // No guess in the burst opened a session.
+    expect(results.some((r) => r.kind === 'ready')).toBe(false)
+    // The attempts were counted and capped (was stuck at 1 before the fix,
+    // because every concurrent guess read 0 and wrote 1).
+    expect(guardian().failed_token_attempts).toBe(MAX_FAILED_CHECKS)
+    // The five tries are spent, so even the right year is now refused.
     expect((await openLink(db.client, token, { birthYear: '2012' })).kind).toBe('invalid')
   })
 

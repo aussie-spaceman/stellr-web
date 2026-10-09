@@ -15,6 +15,7 @@ import type { BackgroundProvider, BackgroundWebhookResult, MappedStatus } from '
 import { BC_VALIDITY_YEARS } from '@/lib/compliance'
 import { logActivity } from '@/lib/activity-log'
 import { notifyCommunityAdmins } from '@/lib/notify'
+import { escapeHtml } from '@/lib/email-layout'
 
 export interface CheckRowRef {
   id: string
@@ -63,15 +64,71 @@ export async function applyCheckOutcome(
     }
   }
 
+  // Reconcile with a prior Stellr adjudication (deep review BG-3). A later vendor
+  // event must not leave a stale human decision standing. If this check was
+  // adjudicated and the incoming vendor outcome flags it again ('referred') or
+  // disagrees with the recorded decision (adverse action after a 'cleared', or a
+  // 'passed' on a row an adjudicator marked not_cleared), clear the adjudication
+  // so the row returns to "needs review" instead of silently staying cleared.
+  // deriveCompliance already makes an explicit not_cleared dominant; this stops a
+  // dead 'cleared' decision outliving new adverse facts.
+  let adjudicationReset = false
+  if (outcome.status === 'referred' || outcome.status === 'passed') {
+    const { data: cur } = await db
+      .from('member_background_checks')
+      .select('adjudication_outcome, adjudicated_at')
+      .eq('id', row.id)
+      .maybeSingle()
+    if (cur?.adjudicated_at) {
+      const decisionWasCleared = cur.adjudication_outcome === 'cleared'
+      const vendorSaysCleared = outcome.status === 'passed'
+      if (outcome.status === 'referred' || decisionWasCleared !== vendorSaysCleared) {
+        update.adjudicated_at = null
+        update.adjudication_outcome = null
+        update.adjudicated_label = null
+        update.expires_at = null // a cleared adjudication's expiry no longer applies
+        adjudicationReset = true
+      }
+    }
+  }
+
   await db.from('member_background_checks').update(update).eq('id', row.id)
 
   const changed = row.status !== outcome.status
+
+  // A prior human decision was just invalidated by a conflicting vendor event:
+  // announce it so an adjudicator re-reviews, rather than trusting a cleared pill
+  // that no longer reflects the report (deep review BG-3).
+  if (adjudicationReset) {
+    try {
+      const { data: member } = await db
+        .from('members').select('first_name, last_name, email').eq('id', row.member_id).maybeSingle()
+      const who = [member?.first_name, member?.last_name].filter(Boolean).join(' ') || member?.email || 'A member'
+      const body =
+        `Checkr sent a new background-check outcome for ${who} that conflicts with the decision an ` +
+        `adjudicator had already recorded. The prior decision has been cleared; they are NOT cleared ` +
+        `until the report is re-reviewed and a fresh decision is recorded in Stellr.`
+      await notifyCommunityAdmins({
+        type: 'action',
+        body,
+        referenceType: 'member',
+        referenceId: row.member_id,
+        email: {
+          subject: `Background check needs re-review — ${who}`,
+          html: `<p>${escapeHtml(body)}</p><p><a href="${escapeHtml(process.env.NEXT_PUBLIC_AUTH_APP_URL ?? '')}/admin/members/${encodeURIComponent(row.member_id)}">Open their compliance panel</a></p>`,
+          text: body,
+        },
+      })
+    } catch (err) {
+      console.error('[background-sync] adjudication-reset notification failed:', err)
+    }
+  }
 
   // A flagged report is the one outcome that CANNOT resolve itself: somebody has
   // to look at what was found and decide. Until 22 Sept 2026 nothing announced
   // it — the only trace was an activity-log row and a red pill on a page nobody
   // had reason to open, so a person waiting on clearance could sit unnoticed.
-  if (changed && outcome.status === 'referred') {
+  if (changed && outcome.status === 'referred' && !adjudicationReset) {
     try {
       const { data: member } = await db
         .from('members')

@@ -12,6 +12,7 @@ import { RESOURCES_BUCKET } from '@/lib/community'
 import { getEventBySlug } from '@/lib/sanity'
 import { reissueParticipantAgreement } from '@/lib/docusign-reissue'
 import { resolveAudience, type ResolvedRecipient } from './audiences'
+import { alreadyTriedAddresses, missedRecipients } from './history'
 import {
   EVENT_EMAIL_FROM,
   EVENT_EMAIL_REPLY_TO,
@@ -25,6 +26,17 @@ import { MAX_RECIPIENTS_PER_SEND, type EventEmailRow, type EventEmailStatus } fr
 
 /** Resend's default limit is 2 requests/second per team. */
 const SEND_SPACING_MS = 550
+
+// deep review INT-1: a send runs inside a ≤60s function. If it is killed
+// mid-flight the row is left in 'sending' and nothing ever completes it — the
+// admin PATCH refuses with 409 and the cron only picks up 'scheduled'. A row
+// still 'sending' this long after the claim is treated as abandoned and
+// re-driven by the cron (reclaimStuckSending). 10 minutes is far longer than
+// the 60s budget, so a healthy in-progress send is never reclaimed. The
+// event_emails.updated_at trigger makes the reclaiming UPDATE a safe
+// compare-and-swap: taking the row bumps updated_at, so a second run no longer
+// matches `updated_at < stale`.
+const SENDING_STALE_MS = 10 * 60_000
 
 export type SendTrigger = 'manual' | 'schedule' | 'test' | 'catch_up'
 
@@ -59,7 +71,17 @@ export async function loadAttachments(db: SupabaseClient, email: EventEmailRow) 
 export async function sendEventEmail(
   db: SupabaseClient,
   emailId: string,
-  opts: { trigger: Exclude<SendTrigger, 'catch_up'>; triggeredBy?: string | null; testTo?: string; spacingMs?: number },
+  opts: {
+    trigger: Exclude<SendTrigger, 'catch_up'>
+    triggeredBy?: string | null
+    testTo?: string
+    spacingMs?: number
+    // deep review INT-1: set by reclaimStuckSending to re-drive a row abandoned
+    // in 'sending'. The claim then takes a stale 'sending' row (instead of a
+    // draft/scheduled one) and the send resumes, skipping addresses already
+    // emailed by the killed run.
+    resume?: boolean
+  },
 ): Promise<SendOutcome> {
   const { data: row } = await db.from('event_emails').select('*').eq('id', emailId).maybeSingle()
   const email = row as EventEmailRow | null
@@ -79,13 +101,28 @@ export async function sendEventEmail(
   // ── Claim ───────────────────────────────────────────────────────────────────
   const priorStatus: EventEmailStatus = email.status
   if (!isTest) {
-    const { data: claimed } = await db
-      .from('event_emails')
-      .update({ status: 'sending' })
-      .eq('id', email.id)
-      .in('status', ['draft', 'scheduled'])
-      .select('id')
-    if (!claimed?.length) return { ok: false, status: 409, error: 'This email has already been sent (or is sending now)' }
+    if (opts.resume) {
+      // Re-take a row abandoned in 'sending'. Only a row that has been 'sending'
+      // longer than SENDING_STALE_MS matches, and the updated_at trigger bumps
+      // the timestamp as we take it, so two concurrent reclaims can't both win.
+      const stale = new Date(Date.now() - SENDING_STALE_MS).toISOString()
+      const { data: claimed } = await db
+        .from('event_emails')
+        .update({ status: 'sending' })
+        .eq('id', email.id)
+        .eq('status', 'sending')
+        .lt('updated_at', stale)
+        .select('id')
+      if (!claimed?.length) return { ok: false, status: 409, error: 'This email is not a stale send to resume' }
+    } else {
+      const { data: claimed } = await db
+        .from('event_emails')
+        .update({ status: 'sending' })
+        .eq('id', email.id)
+        .in('status', ['draft', 'scheduled'])
+        .select('id')
+      if (!claimed?.length) return { ok: false, status: 409, error: 'This email has already been sent (or is sending now)' }
+    }
   }
   const release = async (status: EventEmailStatus, extra: Record<string, unknown> = {}) => {
     if (!isTest) await db.from('event_emails').update({ status, ...extra }).eq('id', email.id)
@@ -94,6 +131,15 @@ export async function sendEventEmail(
   try {
     const audience = await resolveAudience(db, event, email.audiences, { mintPayLinks: !isTest })
     let recipients: ResolvedRecipient[] = audience.recipients
+
+    // deep review INT-1: skip anyone a prior (non-test) send of this email
+    // already tried. For a fresh send this set is empty; for a resumed stuck
+    // send it is the addresses the killed run already emailed, so nobody is
+    // emailed twice. Covers every non-test trigger, not just catch-ups.
+    if (!isTest) {
+      const tried = await alreadyTriedAddresses(db, email.id)
+      if (tried.size) recipients = missedRecipients(recipients, tried)
+    }
 
     if (!isTest && recipients.length > MAX_RECIPIENTS_PER_SEND) {
       await release(priorStatus)
@@ -203,6 +249,20 @@ export async function deliver(
     .single()
 
   const results: { email: string; name: string; roles: string[]; status: 'sent' | 'failed'; error?: string }[] = []
+  // deep review INT-1: persist progress after EACH recipient, not only at the
+  // end. A send runs in a ≤60s function; if it is killed mid-loop the earlier
+  // write means every address already tried is on the row, so a re-run
+  // (resumed stuck send, or the next catch-up) skips them instead of emailing
+  // them again. Best-effort: a failed progress write never aborts the send, and
+  // the authoritative counts land in the final update below.
+  const persistProgress = async () => {
+    if (!sendRow?.id) return
+    try {
+      await db.from('event_email_sends').update({ recipients: results }).eq('id', sendRow.id)
+    } catch (err) {
+      console.error(`[event-emails] progress write failed for send ${sendRow.id}:`, err)
+    }
+  }
   for (const [i, r] of recipients.entries()) {
     if (i > 0) await sleep(opts.spacingMs ?? SEND_SPACING_MS)
     try {
@@ -220,6 +280,7 @@ export async function deliver(
     } catch (err) {
       results.push({ email: r.email, name: r.name, roles: r.roles, status: 'failed', error: err instanceof Error ? err.message.slice(0, 300) : String(err) })
     }
+    await persistProgress()
   }
 
   const sent = results.filter((r) => r.status === 'sent').length
@@ -231,4 +292,39 @@ export async function deliver(
       .eq('id', sendRow.id)
   }
   return { sendId: (sendRow?.id as string) ?? '', sent, failed }
+}
+
+/**
+ * deep review INT-1: re-drive event emails abandoned in 'sending' by a killed
+ * function. Without this a scheduled send cut off at the 60s budget would stay
+ * 'sending' forever — the admin PATCH refuses with 409 and the cron only picks
+ * up 'scheduled' rows, so the recipients after the cut-off would never get it
+ * and no catch-up would ever reach them. The resumed send skips addresses the
+ * killed run already emailed (see sendEventEmail's alreadyTried subtraction),
+ * so nobody is emailed twice. Called from the cron after the scheduled sends.
+ */
+export async function reclaimStuckSending(
+  db: SupabaseClient,
+  budgetLeft: () => boolean,
+): Promise<{ reclaimed: number; errors: { id: string; error: string }[] }> {
+  const out = { reclaimed: 0, errors: [] as { id: string; error: string }[] }
+  const stale = new Date(Date.now() - SENDING_STALE_MS).toISOString()
+  const { data: rows, error } = await db
+    .from('event_emails')
+    .select('id')
+    .eq('status', 'sending')
+    .lt('updated_at', stale)
+    .order('updated_at', { ascending: true })
+  if (error) {
+    out.errors.push({ id: 'query', error: error.message })
+    return out
+  }
+  for (const row of rows ?? []) {
+    if (!budgetLeft()) break
+    const r = await sendEventEmail(db, row.id as string, { trigger: 'schedule', triggeredBy: 'resume', resume: true })
+    // 409 just means another run took it first — not an error.
+    if (r.ok) out.reclaimed++
+    else if (r.status !== 409) out.errors.push({ id: row.id as string, error: r.error })
+  }
+  return out
 }

@@ -12,12 +12,22 @@ import { applyCheckOutcome, syncStaleChecks } from './background-sync'
 
 // A minimal chainable stand-in for the two supabase calls this module makes:
 // update(...).eq(...) and select(...).eq().in().lt().order().limit().
-function fakeDb(openRows: Record<string, unknown>[] = []) {
+function fakeDb(
+  openRows: Record<string, unknown>[] = [],
+  // Prior adjudication on the row, returned by the BG-3 reconciliation read.
+  cur: { adjudication_outcome?: string | null; adjudicated_at?: string | null } | null = null,
+) {
   const updates: { id: string; patch: Record<string, unknown> }[] = []
+  let table = ''
+  const member = { first_name: 'Mae', last_name: 'Mentor', email: 'mae@example.com' }
   const chain = {
     select: () => chain,
     eq: (col: string, val: unknown) => {
-      if (col === 'id') updates[updates.length - 1].id = val as string
+      // Only an update's eq('id') names the row being written; a plain read's
+      // eq('id') must not touch the updates list (BG-3 added a pre-update read).
+      if (col === 'id' && updates.length && updates[updates.length - 1].id === '') {
+        updates[updates.length - 1].id = val as string
+      }
       return chain
     },
     in: () => chain,
@@ -28,9 +38,13 @@ function fakeDb(openRows: Record<string, unknown>[] = []) {
       updates.push({ id: '', patch })
       return chain
     },
-    maybeSingle: () => Promise.resolve({ data: { first_name: 'Mae', last_name: 'Mentor', email: 'mae@example.com' } }),
+    maybeSingle: () =>
+      Promise.resolve({
+        data: table === 'member_background_checks' ? cur : member,
+        error: null,
+      }),
   }
-  const db = { from: () => chain }
+  const db = { from: (t: string) => { table = t; return chain } }
   return { db: db as never, updates }
 }
 
@@ -125,6 +139,49 @@ describe('flagged results are announced', () => {
     ).resolves.toMatchObject({ changed: true })
     expect(updates[0].patch).toMatchObject({ status: 'referred' })
     expect(logActivity).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('BG-3: a conflicting vendor event clears a stale Stellr adjudication', () => {
+  it('a new adverse (referred) event on a row adjudicated "cleared" nulls the adjudication and re-announces', async () => {
+    const { db, updates } = fakeDb([], { adjudication_outcome: 'cleared', adjudicated_at: '2026-09-01T00:00:00Z' })
+    await applyCheckOutcome(
+      db,
+      { ...row, status: 'passed' },
+      { candidateRef: 'c', invitationRef: null, reportRef: 'rep', status: 'referred', result: 'consider' },
+      'webhook',
+    )
+    expect(updates[0].patch).toMatchObject({
+      status: 'referred',
+      adjudicated_at: null,
+      adjudication_outcome: null,
+      expires_at: null,
+    })
+    expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
+    expect((notifyCommunityAdmins.mock.calls[0][0] as { email: { subject: string } }).email.subject)
+      .toMatch(/needs re-review/i)
+  })
+
+  it('a vendor "passed" on a row adjudicated "not_cleared" is a conflict → nulls the adjudication', async () => {
+    const { db, updates } = fakeDb([], { adjudication_outcome: 'not_cleared', adjudicated_at: '2026-09-01T00:00:00Z' })
+    await applyCheckOutcome(
+      db,
+      { ...row, status: 'referred' },
+      { candidateRef: 'c', invitationRef: null, reportRef: 'rep', status: 'passed', result: 'clear' },
+      'webhook',
+    )
+    expect(updates[0].patch).toMatchObject({ adjudication_outcome: null, adjudicated_at: null })
+  })
+
+  it('a vendor "passed" consistent with a "cleared" adjudication does NOT disturb it', async () => {
+    const { db, updates } = fakeDb([], { adjudication_outcome: 'cleared', adjudicated_at: '2026-09-01T00:00:00Z' })
+    await applyCheckOutcome(
+      db,
+      { ...row, status: 'referred' },
+      { candidateRef: 'c', invitationRef: null, reportRef: 'rep', status: 'passed', result: 'clear' },
+      'webhook',
+    )
+    expect(updates[0].patch).not.toHaveProperty('adjudication_outcome')
   })
 })
 

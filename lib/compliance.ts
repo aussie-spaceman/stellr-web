@@ -134,6 +134,22 @@ export function deriveCompliance(
     return { state: 'not_required', detail: null, license, check }
   }
 
+  // An explicit adverse decision DOMINATES everything else (deep review BG-2).
+  // When an adjudicator has marked the current (newest) check 'not_cleared',
+  // Stellr has positively decided this adult must not work with minors — a
+  // verified teacher licence must not mask that. Owner policy (9 Oct 2026):
+  // Stellr's adjudication wins over a licence or a later vendor event.
+  if (check && check.adjudication_outcome === 'not_cleared') {
+    return {
+      state: 'invalid',
+      detail: `Not cleared on review${check.adjudicated_label ? ` by ${check.adjudicated_label}` : ''}${
+        check.adjudicated_at ? ` (${formatDateShort(check.adjudicated_at)})` : ''
+      }`,
+      license,
+      check,
+    }
+  }
+
   const licenseValid = !!license && !!license.verified_at && !licenseExpired(license, ref)
   const licensePending = !!license && !license.verified_at && !licenseExpired(license, ref)
 
@@ -258,6 +274,29 @@ export async function loadComplianceRecordsByEmails(
   for (const row of (data as MemberComplianceRow[] | null) ?? []) {
     if (!row.email) continue
     out.set(row.email.toLowerCase(), {
+      license: row.member_teacher_licenses?.[0] ?? null,
+      checks: row.member_background_checks ?? [],
+    })
+  }
+  return out
+}
+
+// Load compliance records keyed by member id. Preferred over the by-email
+// loader whenever a participant row is linked to a member (deep review BG-4):
+// members are keyed by email and families share one, so matching clearance by
+// email alone can show a cleared spouse's/sibling's status for a different,
+// uncleared person. The member id identifies the exact human.
+export async function loadComplianceRecordsByMemberIds(
+  db: SupabaseClient,
+  memberIds: (string | null | undefined)[],
+): Promise<Map<string, ComplianceRecords>> {
+  const out = new Map<string, ComplianceRecords>()
+  const unique = [...new Set(memberIds.filter((id): id is string => !!id))]
+  if (unique.length === 0) return out
+
+  const { data } = await db.from('members').select(COMPLIANCE_SELECT).in('id', unique)
+  for (const row of (data as MemberComplianceRow[] | null) ?? []) {
+    out.set(row.id, {
       license: row.member_teacher_licenses?.[0] ?? null,
       checks: row.member_background_checks ?? [],
     })

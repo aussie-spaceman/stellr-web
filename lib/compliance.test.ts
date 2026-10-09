@@ -4,6 +4,7 @@ import {
   STUDENT_ROLES,
   deriveCompliance,
   requiresBackgroundCheck,
+  loadComplianceRecordsByMemberIds,
   type BackgroundCheck,
   type TeacherLicense,
 } from './compliance'
@@ -164,6 +165,24 @@ describe('deriveCompliance', () => {
     expect(s.detail).toMatch(/cleared on review by David Shaw/i)
   })
 
+  it('an adjudicated not_cleared beats a valid licence (BG-2): Stellr decision wins', () => {
+    // A person Stellr positively decided must not work with minors must not show
+    // as cleared just because they also hold a verified teacher licence.
+    const s = deriveCompliance(
+      license({ verified_at: '2026-01-01T00:00:00Z' }),
+      [check({
+        status: 'referred',
+        adjudicated_at: '2026-09-22T00:00:00Z',
+        adjudication_outcome: 'not_cleared',
+        adjudicated_label: 'David Shaw',
+      })],
+      'teacher',
+      ADULT,
+    )
+    expect(s.state).toBe('invalid')
+    expect(s.detail).toMatch(/not cleared on review/i)
+  })
+
   it('adjudicated cleared but past its expiry is not compliant', () => {
     const s = deriveCompliance(
       null,
@@ -222,5 +241,40 @@ describe('deriveCompliance', () => {
     )
     expect(s.check?.id).toBe('new')
     expect(s.state).toBe('in_process')
+  })
+})
+
+// Deep review BG-4: clearance must be resolved by the participant's member id,
+// not a shared family email. This loader is the member-id path event-admin now
+// prefers.
+describe('loadComplianceRecordsByMemberIds (BG-4)', () => {
+  function db(rows: Record<string, unknown>[]) {
+    return {
+      from: () => ({
+        select: () => ({
+          in: (_col: string, ids: string[]) => Promise.resolve({
+            data: rows.filter((r) => ids.includes(r.id as string)),
+            error: null,
+          }),
+        }),
+      }),
+    } as unknown as Parameters<typeof loadComplianceRecordsByMemberIds>[0]
+  }
+
+  it('keys records by member id and ignores null/undefined ids', async () => {
+    const d = db([
+      { id: 'mem-cleared', member_teacher_licenses: [], member_background_checks: [{ id: 'bc1', status: 'passed' }] },
+      { id: 'mem-other', member_teacher_licenses: [], member_background_checks: [] },
+    ])
+    const map = await loadComplianceRecordsByMemberIds(d, ['mem-cleared', null, undefined, 'mem-cleared'])
+    expect(map.get('mem-cleared')?.checks).toHaveLength(1)
+    // Only the ids we asked for are loaded; a different member's record is not
+    // returned just because it shares an email.
+    expect(map.has('mem-other')).toBe(false)
+  })
+
+  it('returns an empty map when there are no member ids', async () => {
+    const map = await loadComplianceRecordsByMemberIds(db([]), [null, undefined])
+    expect(map.size).toBe(0)
   })
 })

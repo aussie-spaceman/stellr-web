@@ -1,0 +1,11 @@
+-- Follow-up to 20261009185923_esign_atomic_failed_check.sql.
+--
+-- On production, Supabase's default privileges grant EXECUTE on new public
+-- functions to `anon` and `authenticated` DIRECTLY, not only via PUBLIC. So
+-- `REVOKE EXECUTE … FROM PUBLIC` in the original migration left anon/authenticated
+-- able to call esign_note_failed_check — which lets an anonymous caller inflate a
+-- recipient's failed_token_attempts and lock a legitimate signer out of a minor's
+-- consent form (a signing DoS). Same class as the deep-review C-6 finding.
+--
+-- Revoke explicitly. service_role (the signing routes) keeps its grant.
+REVOKE EXECUTE ON FUNCTION public.esign_note_failed_check(uuid, int) FROM anon, authenticated;

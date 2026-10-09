@@ -4,6 +4,7 @@ import {
   STUDENT_ROLES,
   deriveCompliance,
   requiresBackgroundCheck,
+  isClearedForMinorContact,
   type BackgroundCheck,
   type TeacherLicense,
 } from './compliance'
@@ -222,5 +223,60 @@ describe('deriveCompliance', () => {
     )
     expect(s.check?.id).toBe('new')
     expect(s.state).toBe('in_process')
+  })
+})
+
+// deep review MEM-9 (safeguarding): the clearance gate the community grant and
+// booking paths call before putting an adult in 1:1 / cohort contact with minors.
+describe('isClearedForMinorContact', () => {
+  // A db stub that returns one members row from the nested compliance select.
+  function dbWith(row: unknown) {
+    return {
+      from: () => ({
+        select: () => ({
+          eq: () => ({ maybeSingle: async () => ({ data: row, error: null }) }),
+        }),
+      }),
+    } as never
+  }
+
+  const memberRow = (over: {
+    date_of_birth?: string | null
+    event_role?: string | null
+    licenses?: TeacherLicense[]
+    checks?: BackgroundCheck[]
+  }) => ({
+    id: 'm1',
+    email: 'a@test',
+    event_role: over.event_role ?? 'subscriber',
+    date_of_birth: over.date_of_birth ?? ADULT,
+    member_teacher_licenses: over.licenses ?? [],
+    member_background_checks: over.checks ?? [],
+  })
+
+  it('refuses an adult with a pending check (not cleared)', async () => {
+    const db = dbWith(memberRow({ checks: [check({ status: 'invited' })] }))
+    expect(await isClearedForMinorContact(db, 'm1', 'mentor')).toBe(false)
+  })
+
+  it('refuses an adult with nothing on file, even when event_role looks exempt', async () => {
+    // The gate must force the mentor/coach role rather than trust the stored
+    // 'subscriber' role (which would wrongly read as not_required).
+    const db = dbWith(memberRow({ event_role: 'subscriber', checks: [] }))
+    expect(await isClearedForMinorContact(db, 'm1', 'coach')).toBe(false)
+  })
+
+  it('allows an adult with a passed, unexpired background check', async () => {
+    const db = dbWith(memberRow({ checks: [check({ status: 'passed', expires_at: inYears(2) })] }))
+    expect(await isClearedForMinorContact(db, 'm1', 'mentor')).toBe(true)
+  })
+
+  it('allows an adult with a verified, unexpired teacher license', async () => {
+    const db = dbWith(memberRow({ licenses: [license({ verified_at: inYears(-1), expiry_date: '2031-01-01' })] }))
+    expect(await isClearedForMinorContact(db, 'm1', 'coach')).toBe(true)
+  })
+
+  it('fails closed when the member row is missing', async () => {
+    expect(await isClearedForMinorContact(dbWith(null), 'ghost', 'mentor')).toBe(false)
   })
 })

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember } from '@/lib/community'
+import { getCurrentMember, memberIsMinor } from '@/lib/community'
 import { assertNotImpersonating } from '@/lib/impersonation'
 
 const prefsSchema = z.object({
@@ -38,6 +38,16 @@ export async function PATCH(req: Request) {
   const parsed = prefsSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+  }
+
+  // deep review MEM-10 (safeguarding): a minor must not make themselves
+  // discoverable. Refuse opting IN to the directory; turning visibility off is
+  // always allowed (and is what we want for any minor already opted in).
+  if (parsed.data.is_visible && memberIsMinor(member)) {
+    return NextResponse.json(
+      { error: 'The member directory is for adult members only.' },
+      { status: 403 },
+    )
   }
 
   const db = supabaseServer()

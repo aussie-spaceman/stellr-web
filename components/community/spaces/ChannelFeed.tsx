@@ -84,12 +84,17 @@ export function ChannelFeed({
     return () => clearInterval(t)
   }, [load])
 
-  // Realtime push on new/changed posts in this channel, plus replies and
-  // reactions so those update live too. community_comments/community_reactions
-  // carry no channel_id (they key off post/comment ids), so they can't be
-  // server-filtered to this channel — load() re-reads only this channel, so a
-  // stray event just triggers one scoped refetch. Polling covers the gap when
-  // realtime isn't authenticated.
+  // Realtime push on new/changed posts in THIS channel only.
+  //
+  // deep review MEM-5 (performance): this used to also subscribe to
+  // community_comments and community_reactions table-wide (they carry no
+  // channel_id to filter on), so a comment or reaction ANYWHERE in the community
+  // fired a full feed refetch in EVERY open feed — and each refetch is one of the
+  // full-table audience scans MEM-5 is about. We drop those two subscriptions.
+  // New replies still arrive live because adding a comment bumps the parent
+  // post's comment_count/updated_at (migration 013), landing as a community_posts
+  // UPDATE caught by the filter below. Reactions (no post-row bump) and the
+  // realtime-off case are covered by the 8 s poll above.
   useEffect(() => {
     let channel: ReturnType<ReturnType<typeof createBrowserSupabase>['channel']> | null = null
     try {
@@ -99,16 +104,6 @@ export function ChannelFeed({
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'community_posts', filter: `channel_id=eq.${channelId}` },
-          () => load()
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'community_comments' },
-          () => load()
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'community_reactions' },
           () => load()
         )
         .subscribe()

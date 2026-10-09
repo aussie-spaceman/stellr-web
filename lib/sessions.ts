@@ -6,11 +6,12 @@ import { ensureCoachingContainer } from '@/lib/container-sync'
 import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
 import { ensureMemberGrants, bookCoachingSessionFromAllocation, releaseCoachingBooking } from '@/lib/entitlements'
 import { getVideoProvider } from '@/lib/video-provider'
-import { notifyMember, notifyMembers } from '@/lib/notify'
+import { notifyMember, notifyMembers, notifyCommunityAdmins } from '@/lib/notify'
 import { sendEmail, DEFAULT_REPLY_TO } from '@/lib/email'
 import { buildIcsAttachment } from '@/lib/ics'
 import { listModules } from '@/lib/training'
 import { logActivity } from '@/lib/activity-log'
+import { isClearedForMinorContact } from '@/lib/compliance'
 
 // Core logic for Coaching (1:1, FR-COM-12) and Mentoring (group, FR-COM-11).
 // Coaching: sessions.member_id is the coachee. Mentoring: sessions.cohort_id is
@@ -81,6 +82,16 @@ export async function bookCoaching(
 
   const caps = await getHostCaps(hostId)
   if (!caps.canCoach) return { ok: false, error: 'Selected coach is not available.' }
+
+  // deep review MEM-9 (safeguarding): a 1:1 coaching session puts an adult in
+  // private contact with a member who may be a minor. Refuse the booking unless
+  // the coach is cleared to work with minors (passed background check or verified
+  // license — lib/compliance). Fails closed. (Assumed owner decision — the owner
+  // accepted that event *Space* access does not wait for clearance, but that did
+  // not cover 1:1 coaching; confirm.)
+  if (!(await isClearedForMinorContact(db, hostId, 'coach'))) {
+    return { ok: false, error: 'This coach is not currently available for booking.' }
+  }
 
   // Draw 1 coaching_session from the entitlements ledger (1 per session). Both the
   // free tier allowance AND purchased extras live there now, so a single draw covers
@@ -812,16 +823,17 @@ async function isChannelModerator(channelId: string, memberId: string): Promise<
   return false
 }
 
-/** A member flags a message to the channel's moderator (PRD §11). */
+/** A member flags a message for review (PRD §11). */
 export async function flagMessage(messageId: string, memberId: string): Promise<boolean> {
   const db = supabaseServer()
   const { data: msg } = await db
     .from('chat_messages')
-    .select('id, channel_id')
+    .select('id, channel_id, author_member_id')
     .eq('id', messageId)
     .maybeSingle()
   if (!msg) return false
   const channelId = msg.channel_id as string
+  const authorId = (msg.author_member_id as string | null) ?? null
   if (!(await canAccessChannel(channelId, memberId))) return false
 
   const { error } = await db
@@ -830,7 +842,6 @@ export async function flagMessage(messageId: string, memberId: string): Promise<
     .eq('id', messageId)
   if (error) return false
 
-  // Notify the channel's moderator (mentor / coach).
   const { data: ch } = await db
     .from('chat_channels')
     .select('kind, cohort_id, host_member_id')
@@ -846,10 +857,25 @@ export async function flagMessage(messageId: string, memberId: string): Promise<
       .maybeSingle()
     moderatorId = (c?.mentor_member_id as string | null) ?? null
   }
-  // Notify moderator and point the notification link at the cohort page so they
-  // land in the right place (NotificationBell routes reference_type='cohort').
   const cohortId = ch?.kind === 'cohort' ? (ch.cohort_id as string | null) : null
-  if (moderatorId && moderatorId !== memberId) {
+
+  // deep review MEM-4 (safeguarding): a flag must always reach a NEUTRAL party.
+  // The channel "moderator" of a 1:1 coaching chat is the coach — i.e. the person
+  // most likely being reported — and space-chat flags previously reached nobody
+  // at all. Route every flag to the community admins / staff moderation queue.
+  await notifyCommunityAdmins({
+    type: 'announcement',
+    body: 'A community chat message was flagged for review.',
+    referenceType: cohortId ? 'cohort' : 'chat_channel',
+    referenceId: cohortId ?? channelId,
+    actorMemberId: memberId,
+  }).catch((e) => console.error('[sessions] flag admin notify failed:', e))
+
+  // Still tell the channel moderator so they can act in-context — but NEVER when
+  // they are the reporter or the author of the flagged message (the reported
+  // coach must not be alerted to a report about their own message). Admins above
+  // are the guaranteed recipient; this is an in-context extra for cohorts.
+  if (moderatorId && moderatorId !== memberId && moderatorId !== authorId) {
     await notifyMember(moderatorId, {
       type: 'announcement',
       body: 'A message in your cohort chat was flagged for review.',
@@ -878,11 +904,17 @@ export async function deleteMessage(messageId: string, memberId: string): Promis
   const db = supabaseServer()
   const { data: msg } = await db
     .from('chat_messages')
-    .select('id, channel_id')
+    .select('id, channel_id, author_member_id, flagged_at')
     .eq('id', messageId)
     .maybeSingle()
   if (!msg) return false
   if (!(await isChannelModerator(msg.channel_id as string, memberId))) return false
+  // deep review MEM-4 (safeguarding): the author of a FLAGGED message must not be
+  // able to delete it. In a 1:1 coaching chat the only "moderator" is the coach,
+  // so the reported coach could otherwise erase the very message that was flagged
+  // about them. Once flagged, a message can only be removed by staff via the
+  // admin moderation queue.
+  if (msg.flagged_at && (msg.author_member_id as string | null) === memberId) return false
   const { error } = await db
     .from('chat_messages')
     .update({ deleted_at: new Date().toISOString(), deleted_by: memberId })

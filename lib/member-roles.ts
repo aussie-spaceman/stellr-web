@@ -167,16 +167,34 @@ function classificationRolesFor(eventRole: string): MemberRole[] {
  * member holds the base 'member' role plus the global role(s) their event_role
  * implies. Additive (insert-or-ignore) — call after writing members.event_role.
  * Pass the caller's db client so it shares the request's connection.
+ *
+ * deep review MEM-3: when the classification comes from UNVERIFIED self-service
+ * (member-completed onboarding), pass `{ allowManageRoles: false }`. The sign-up
+ * wizard lets anyone pick "teacher" or "mentor", and those classifications map to
+ * the global `teacher` / `mentor` MANAGE roles, which open role-granted Spaces
+ * (Teachers' Room) and gate MANAGE actions. A member must not be able to grant
+ * themselves a manage role simply by picking it at sign-up — those are granted by
+ * an admin (and, for coach/mentor, gated on background clearance, MEM-9). The role
+ * still rides on members.event_role for classification/display; only the global
+ * manage grant is withheld here.
  */
 export async function syncMemberClassificationRole(
   db: SupabaseClient,
   memberId: string,
   eventRole: string,
+  opts: { allowManageRoles?: boolean } = {},
 ): Promise<void> {
+  const { allowManageRoles = true } = opts
   // Bracket compatibility: drop implied roles the member's bracket can't hold
   // (e.g. a high-school registrant classified 'volunteer' keeps base 'member' only).
   const bracket = await memberBracket(db, memberId)
   const allowed = classificationRolesFor(eventRole).filter((r) => {
+    // deep review MEM-3: self-service onboarding may not grant a global MANAGE
+    // role (teacher/mentor/coach/…). Keep base 'member' only for those.
+    if (!allowManageRoles && MANAGE_ROLES.has(r)) {
+      console.warn('[member-roles] manage role withheld from self-service classification:', memberId, r)
+      return false
+    }
     const ok = roleAllowedForBracket(r, bracket)
     if (!ok) console.warn('[member-roles] classification role dropped (bracket):', memberId, r, bracket)
     return ok

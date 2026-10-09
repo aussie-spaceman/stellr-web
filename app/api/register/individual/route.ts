@@ -392,7 +392,10 @@ export async function POST(req: NextRequest) {
       email,
       phone,
       dateOfBirth:       date_of_birth,
-      eventRole:         event_role,
+      // resolvedRole, not the raw client event_role: a minor is forced to
+      // 'participant' above, so the agreement router can't be handed 'Mentor'
+      // for a child (deep review REG-6). classifyAgreement also fails safe on DOB.
+      eventRole:         resolvedRole,
       schoolName:        school_name,
       // Prefer the canonical state on the linked school row — the form only
       // sends an address (and thus a state) for brand-new schools, so for an

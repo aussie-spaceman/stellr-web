@@ -846,11 +846,15 @@ export function classifyAgreement(
   dateOfBirth: string | null | undefined,
   state?: string | null,
 ): EventAgreementType | null {
+  // A KNOWN minor always gets the guardian-consent (minor) agreement, whatever
+  // role was selected (deep review REG-6). A student who picks "College" on the
+  // individual form is routed to a Mentor role; without this they would be sent
+  // the adult Mentor agreement and self-sign it with no guardian consent.
+  if (dateOfBirth && isMinorOn(dateOfBirth, undefined, state)) return 'minor'
   const role = (eventRole ?? '').toLowerCase().replace(/\s+/g, '_')
   if (role === 'participant' || role === 'school_student_manager') return 'minor'
   if (role === 'mentor') return 'mentor'
   if (role === 'volunteer') return 'volunteer'
-  if (dateOfBirth && isMinorOn(dateOfBirth, undefined, state)) return 'minor'
   if (!role) return null
   return 'adult'
 }

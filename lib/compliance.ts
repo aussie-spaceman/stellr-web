@@ -134,6 +134,22 @@ export function deriveCompliance(
     return { state: 'not_required', detail: null, license, check }
   }
 
+  // An explicit adverse decision DOMINATES everything else (deep review BG-2).
+  // When an adjudicator has marked the current (newest) check 'not_cleared',
+  // Stellr has positively decided this adult must not work with minors — a
+  // verified teacher licence must not mask that. Owner policy (9 Oct 2026):
+  // Stellr's adjudication wins over a licence or a later vendor event.
+  if (check && check.adjudication_outcome === 'not_cleared') {
+    return {
+      state: 'invalid',
+      detail: `Not cleared on review${check.adjudicated_label ? ` by ${check.adjudicated_label}` : ''}${
+        check.adjudicated_at ? ` (${formatDateShort(check.adjudicated_at)})` : ''
+      }`,
+      license,
+      check,
+    }
+  }
+
   const licenseValid = !!license && !!license.verified_at && !licenseExpired(license, ref)
   const licensePending = !!license && !license.verified_at && !licenseExpired(license, ref)
 

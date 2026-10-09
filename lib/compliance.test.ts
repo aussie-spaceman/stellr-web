@@ -164,6 +164,24 @@ describe('deriveCompliance', () => {
     expect(s.detail).toMatch(/cleared on review by David Shaw/i)
   })
 
+  it('an adjudicated not_cleared beats a valid licence (BG-2): Stellr decision wins', () => {
+    // A person Stellr positively decided must not work with minors must not show
+    // as cleared just because they also hold a verified teacher licence.
+    const s = deriveCompliance(
+      license({ verified_at: '2026-01-01T00:00:00Z' }),
+      [check({
+        status: 'referred',
+        adjudicated_at: '2026-09-22T00:00:00Z',
+        adjudication_outcome: 'not_cleared',
+        adjudicated_label: 'David Shaw',
+      })],
+      'teacher',
+      ADULT,
+    )
+    expect(s.state).toBe('invalid')
+    expect(s.detail).toMatch(/not cleared on review/i)
+  })
+
   it('adjudicated cleared but past its expiry is not compliant', () => {
     const s = deriveCompliance(
       null,

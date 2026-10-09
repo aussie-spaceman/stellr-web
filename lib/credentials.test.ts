@@ -120,8 +120,13 @@ describe('canShare', () => {
 
 interface Env { id: string; completed_at: string | null; credential_sharing_opt_out?: boolean; reused_from?: string | null }
 
-function makeDb(latest: Env | null, roots: Record<string, Env> = {}) {
+function makeDb(
+  latest: Env | null,
+  roots: Record<string, Env> = {},
+  errors: { latest?: boolean; root?: boolean } = {},
+) {
   const calls: Record<string, unknown>[] = []
+  const err = { message: 'transient db error' }
   return {
     calls,
     from() {
@@ -134,8 +139,8 @@ function makeDb(latest: Env | null, roots: Record<string, Env> = {}) {
         limit: () => chain,
         maybeSingle: async () => {
           calls.push({ ...f })
-          if (f.id) return { data: roots[f.id as string] ?? null, error: null }
-          return { data: latest, error: null }
+          if (f.id) return { data: errors.root ? null : (roots[f.id as string] ?? null), error: errors.root ? err : null }
+          return { data: errors.latest ? null : latest, error: errors.latest ? err : null }
         },
       }
       return chain
@@ -162,6 +167,23 @@ describe('consentForMinor (opt-out model)', () => {
   it('an expired form is no consent at all', async () => {
     const db = makeDb({ id: 'e1', completed_at: '2023-01-10T00:00:00Z' })
     expect(await consentForMinor(db, { memberId: 'm1', participantId: null }, NOW)).toBe('none')
+  })
+  it('fails CLOSED (none) when the agreement lookup errors (QUAL-5)', async () => {
+    // A discarded read error used to read as "no agreement → unprotected" and
+    // let a minor's credential be published against a recorded opt-out. Any
+    // error must now block, i.e. return 'none'.
+    const db = makeDb({ id: 'e1', completed_at: '2026-01-10T00:00:00Z' }, {}, { latest: true })
+    expect(await consentForMinor(db, { memberId: 'm1', participantId: null }, NOW)).toBe('none')
+  })
+  it('fails CLOSED (none) when the reused root lookup errors (QUAL-5)', async () => {
+    // The opt-out lives on the reused root. If it cannot be read we cannot prove
+    // consent to share, so do not default to 'granted'.
+    const db = makeDb(
+      { id: 'cov', completed_at: '2026-03-01T00:00:00Z', reused_from: 'root' },
+      { root: { id: 'root', completed_at: '2026-03-01T00:00:00Z', credential_sharing_opt_out: true } },
+      { root: true },
+    )
+    expect(await consentForMinor(db, { memberId: null, participantId: 'p1' }, NOW)).toBe('none')
   })
   it('nobody to look up is none', async () => {
     const db = makeDb({ id: 'e1', completed_at: '2026-01-10T00:00:00Z' })

@@ -66,7 +66,7 @@ export async function consentForMinor(
     who.participantId ? `participant_id.eq.${who.participantId}` : null,
   ].filter(Boolean).join(',')
 
-  const { data } = await db
+  const { data, error } = await db
     .from('agreements')
     .select('id, completed_at, envelope_type, agreement_version, credential_sharing_opt_out, reused_from')
     .or(filters)
@@ -75,17 +75,28 @@ export async function consentForMinor(
     .order('completed_at', { ascending: false })
     .limit(1)
     .maybeSingle()
+  // Fail CLOSED on any read error (deep review QUAL-5). This value gates whether
+  // a minor's credential may be made public against a guardian's recorded
+  // opt-out. A discarded error used to read as "no agreement", which the caller
+  // treats as unprotected; a transient 5xx while publishing could then expose a
+  // child whose guardian had declined. Any error → 'none' (no consent on
+  // record), which blocks publication rather than permitting it.
+  if (error) return 'none'
   if (!data?.completed_at) return 'none'
   if (!agreementValid(data, now)) return 'none'
 
   let optOut = Boolean(data.credential_sharing_opt_out)
   if (data.reused_from) {
-    const { data: root } = await db
+    // The opt-out is recorded on the originally signed root agreement. If we
+    // cannot read it, we cannot prove the guardian consented to share, so fail
+    // closed rather than defaulting to "granted".
+    const { data: root, error: rootError } = await db
       .from('agreements')
       .select('credential_sharing_opt_out')
       .eq('id', data.reused_from)
       .maybeSingle()
-    optOut = optOut || Boolean(root?.credential_sharing_opt_out)
+    if (rootError || !root) return 'none'
+    optOut = optOut || Boolean(root.credential_sharing_opt_out)
   }
   return optOut ? 'declined' : 'granted'
 }

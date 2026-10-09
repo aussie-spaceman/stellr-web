@@ -1,31 +1,27 @@
 import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember } from '@/lib/community'
+import { getCurrentMember, memberIsMinor } from '@/lib/community'
 import Link from 'next/link'
 import { Avatar } from '@/components/ui/Avatar'
 import { EmptyState } from '@/components/ui/EmptyState'
 
 export const metadata = { title: 'Community · Member Directory' }
 
+interface DirectoryMemberRel {
+  first_name: string | null
+  last_name: string | null
+  age_bracket: string | null
+  date_of_birth: string | null
+  event_role: string | null
+  school_address_state: string | null
+  member_schools: Array<{ is_current: boolean; schools: { name: string } }>
+}
+
 interface DirectoryMember {
   member_id: string
   show_school: boolean
   show_region: boolean
-  members: {
-    first_name: string | null
-    last_name: string | null
-    age_bracket: string | null
-    event_role: string | null
-    school_address_state: string | null
-    member_schools: Array<{ is_current: boolean; schools: { name: string } }>
-  } | Array<{
-    first_name: string | null
-    last_name: string | null
-    age_bracket: string | null
-    event_role: string | null
-    school_address_state: string | null
-    member_schools: Array<{ is_current: boolean; schools: { name: string } }>
-  }> | null
+  members: DirectoryMemberRel | DirectoryMemberRel[] | null
 }
 
 function getMember(rel: DirectoryMember['members']) {
@@ -62,7 +58,7 @@ export default async function MemberDirectoryPage({
       show_school,
       show_region,
       members!inner(
-        first_name, last_name, age_bracket, event_role, school_address_state,
+        first_name, last_name, age_bracket, date_of_birth, event_role, school_address_state,
         member_schools(is_current, schools(name))
       )
     `)
@@ -73,6 +69,17 @@ export default async function MemberDirectoryPage({
 
   // Apply school/state filters in-memory (dataset small enough; avoids complex join filters).
   let rows = (entries ?? []) as unknown as DirectoryMember[]
+
+  // deep review MEM-10 (safeguarding / minors' PII): a minor must never appear in
+  // the directory, even if a directory opt-in slipped through before the opt-in
+  // gate existed. Exclude them before any count, dropdown or render.
+  rows = rows.filter((e) => {
+    const m = getMember(e.members)
+    return m ? !memberIsMinor(m) : false
+  })
+  // Keep the adults-only set for the states dropdown, before school/state filters
+  // narrow `rows` — the dropdown should list every available region.
+  const adultRows = rows
 
   if (school) {
     rows = rows.filter((e) => {
@@ -88,11 +95,12 @@ export default async function MemberDirectoryPage({
     })
   }
 
-  // Collect distinct states for the filter dropdown.
+  // Collect distinct states for the filter dropdown — from the adults-only set
+  // (deep review MEM-10), so a minor's region never leaks into the dropdown.
   const allStates = [
     ...new Set(
-      (entries ?? [])
-        .map((e) => getMember((e as unknown as DirectoryMember).members)?.school_address_state)
+      adultRows
+        .map((e) => getMember(e.members)?.school_address_state)
         .filter((s): s is string => Boolean(s))
         .sort()
     ),

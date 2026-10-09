@@ -192,9 +192,10 @@ export async function POST(req: NextRequest) {
 
     // Cross-reference against the existing membership database by email: someone
     // already on file (added by an organiser, a past event, or another group's
-    // sheet) has THAT record updated from what they just submitted, rather than
-    // gaining a second one. Fields they left blank keep their stored values.
-    // upsertMember also keeps member_roles in step.
+    // sheet) keeps their record as-is and we just link the participant to it.
+    // This is an UNAUTHENTICATED join link, so submitted details must never
+    // rewrite an existing member's profile (deep review C-3, finding REG-2) —
+    // they live on the participant row below. A brand-new email is still created.
     const resolvedMemberId = await upsertMember(db, {
       email: person.email,
       first_name: person.first_name,
@@ -213,7 +214,7 @@ export async function POST(req: NextRequest) {
       ec_email: person.ec_email,
       ec_phone: person.ec_phone,
       ec_relationship: person.ec_relationship,
-    })
+    }, { onExisting: 'skip' })
 
     if (!resolvedMemberId) {
       console.error('Group join member upsert failed for', person.email)

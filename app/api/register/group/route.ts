@@ -18,7 +18,6 @@ import { dispatchAgreement } from '@/lib/docusign-agreements'
 import { batchInvites } from '@/lib/esign/outbox'
 import { SCHOOL_DATA_TERMS_VERSION, schoolDataTermsSha256 } from '@/lib/school-data-terms'
 import { normalizeGender, normalizeAgeBracket, normalizeEventRole, normalizeGrade, normalizeTshirt, normalizeEmail } from '@/lib/member-enums'
-import { fillBlanksFromStored } from '@/lib/member-sync'
 import { linkMembersToSchoolByName } from '@/lib/school-link'
 import { recordEventParticipation } from '@/lib/event-participation-sync'
 import { syncObjectSpaceRoster, reconcileEventSpaceRoster } from '@/lib/space-inheritance'
@@ -499,33 +498,31 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ── Merge, don't replace ──────────────────────────────────────────────────
-    // ON CONFLICT DO UPDATE overwrites every column in the payload, so a field
-    // the organiser left blank would wipe what an existing member already has on
-    // file (phone, DOB, emergency contact). Pre-load the stored rows for these
-    // emails and fill each blank from them, so the batch below still writes in
-    // one round-trip but only *adds* information. Mirrors the same guarantee
-    // lib/member-sync.ts gives the join-link and spreadsheet paths.
-    // Emails that already had a member row before this request. Used below to
-    // decide whether the registrant may be silently signed in — an anonymous
-    // caller must never get a session for an existing member (deep review C-1).
+    // ── Create new members only; never modify existing ones ────────────────────
+    // An existing member must NOT be rewritten from group-registration input: the
+    // organiser is not the authority on another person's DOB, emergency/guardian
+    // contact, role or active flag, and this is reachable unauthenticated (deep
+    // review C-3, finding REG-2). So we split the batch: existing emails are
+    // mapped to their current id and left untouched, and only brand-new emails
+    // are inserted. The submitted details still land on the participant rows.
     const preexistingMemberEmails = new Set<string>()
+    const existingIdByEmail = new Map<string, string>()
     const upsertEmails = [...memberUpsertByEmail.keys()]
     if (upsertEmails.length > 0) {
       const { data: storedMembers, error: storedError } = await db
         .from('members')
-        .select('email, first_name, last_name, nickname, phone, date_of_birth, gender, grade, tshirt_size, age_bracket, event_role, health_conditions, ec_first_name, ec_last_name, ec_email, ec_phone, ec_relationship')
+        .select('id, email')
         .in('email', upsertEmails)
       if (storedError) {
-        // Non-fatal for the merge, but it makes "is this member new?" unknowable,
-        // so treat every email as pre-existing (no sign-in token) to stay safe.
+        // Can't tell new from existing — fail safe by treating every email as
+        // pre-existing, so nothing is inserted-over or modified. Participants are
+        // still created below; their member_id is simply left null.
         console.error('Existing-member preload error (non-fatal):', storedError)
         for (const e of upsertEmails) preexistingMemberEmails.add(e)
       }
       for (const stored of storedMembers ?? []) {
         preexistingMemberEmails.add(stored.email as string)
-        const payload = memberUpsertByEmail.get(stored.email as string)
-        if (payload) fillBlanksFromStored(payload, stored)
+        existingIdByEmail.set(stored.email as string, stored.id as string)
       }
     }
     // The registrant is only "new" if their email was in the upsert batch (not
@@ -537,36 +534,49 @@ export async function POST(req: NextRequest) {
     const memberIdMap: Record<string, string | null> = {}
     // Seed linked participants' member ids up front (they were skipped above).
     for (const [email, id] of linkedMemberIdByEmail) memberIdMap[email] = id
-    const { data: memberRows, error: memberUpsertError } = memberUpsertByEmail.size > 0
+    // Map existing members to their current id without writing anything.
+    for (const [email, id] of existingIdByEmail) memberIdMap[email] = id
+
+    // Insert only the brand-new members. ignoreDuplicates (INSERT … ON CONFLICT
+    // DO NOTHING) means a row that was created in the tiny window since the
+    // preload is left as-is, never overwritten.
+    const newMemberPayloads = [...memberUpsertByEmail.entries()]
+      .filter(([email]) => !preexistingMemberEmails.has(email))
+      .map(([, payload]) => payload)
+    const newlyCreatedEmails = new Set<string>()
+    const { data: memberRows, error: memberUpsertError } = newMemberPayloads.length > 0
       ? await db
           .from('members')
-          .upsert([...memberUpsertByEmail.values()], { onConflict: 'email', ignoreDuplicates: false })
+          .upsert(newMemberPayloads, { onConflict: 'email', ignoreDuplicates: true })
           .select('id, email')
       : { data: [], error: null }
     if (memberUpsertError) {
-      console.error('Member upsert error (non-fatal — participants still created):', memberUpsertError)
+      console.error('Member insert error (non-fatal — participants still created):', memberUpsertError)
     }
 
     for (const row of memberRows ?? []) {
       memberIdMap[row.email] = row.id
+      newlyCreatedEmails.add(row.email as string)
     }
 
-    // Guarantee the registrant's member row. The batched upsert above can drop
-    // *everyone* if a single row violates an enum/date constraint — and if the
-    // registrant is among the dropped, teacher_member_id never gets set and the
-    // Clerk link is skipped, so the organiser lands on a portal that 403s every
-    // team action and shows no teams. Re-upsert the registrant alone (their own
-    // payload, so a bad teammate row can't block them) to recover that case.
-    if (!memberIdMap[teacher.email]) {
+    // Guarantee the registrant's member row when they are NEW. The batched insert
+    // above can drop *everyone* if a single row violates an enum/date constraint
+    // (ON CONFLICT DO NOTHING handles unique conflicts, not CHECK violations) —
+    // and if the new registrant is among the dropped, teacher_member_id never
+    // gets set and the Clerk link is skipped, so the organiser lands on a portal
+    // that 403s every team action. Re-insert the registrant alone to recover.
+    // An EXISTING registrant is already mapped from existingIdByEmail, so this is
+    // skipped for them and their row is never touched.
+    if (!memberIdMap[teacher.email] && registrantMemberIsNew) {
       const registrantPayload = memberUpsertByEmail.get(teacher.email)
       if (registrantPayload) {
         const { data: soloRow, error: soloErr } = await db
           .from('members')
-          .upsert(registrantPayload, { onConflict: 'email', ignoreDuplicates: false })
+          .upsert(registrantPayload, { onConflict: 'email', ignoreDuplicates: true })
           .select('id')
           .maybeSingle()
-        if (soloErr) console.error('Registrant solo upsert error (non-fatal):', soloErr)
-        if (soloRow?.id) memberIdMap[teacher.email] = soloRow.id
+        if (soloErr) console.error('Registrant solo insert error (non-fatal):', soloErr)
+        if (soloRow?.id) { memberIdMap[teacher.email] = soloRow.id; newlyCreatedEmails.add(teacher.email) }
       }
     }
 
@@ -621,12 +631,16 @@ export async function POST(req: NextRequest) {
         .map((memberId) => autoGrantBaseMembership(db, memberId))
     )
 
-    // Persist each member's ethnicity/dietary selections onto the canonical
-    // join tables (030) — same non-fatal contract as school linking.
+    // Persist ethnicity/dietary selections onto the canonical join tables (030),
+    // but only for members this request CREATED — these are member-profile data,
+    // so an anonymous group submission must not rewrite an existing member's
+    // selections (deep review C-3, finding REG-2). Same non-fatal contract.
     await syncMemberOptionSelections(
       db,
       [...optionsByEmail].map(([email, sel]) =>
-        memberIdMap[email] ? { memberId: memberIdMap[email]!, ...sel } : null
+        memberIdMap[email] && newlyCreatedEmails.has(email)
+          ? { memberId: memberIdMap[email]!, ...sel }
+          : null
       )
     )
 
@@ -740,9 +754,21 @@ export async function POST(req: NextRequest) {
     // Sequential to avoid DocuSign rate limits; all calls are non-fatal.
     // Stellr signing invitations go out together at the end, so a parent of
     // siblings gets one email with a link for each child.
-    const partIdByEmail = new Map((insertedParts ?? []).map(r => [r.email, r.id]))
-    await batchInvites(db, async () => { for (const row of participantRows) {
-      const participantId = partIdByEmail.get(row.email)
+    // Pair each inserted participant back to its source row by POSITION. A single
+    // multi-row INSERT ... RETURNING preserves the VALUES order, so index i lines
+    // up. Keying by email (the previous approach) collapsed siblings who share
+    // the family email onto ONE participant id — the first child's row then got
+    // no agreement and the second was dispatched twice (deep review C-5 / DS-2).
+    if ((insertedParts?.length ?? 0) !== participantRows.length) {
+      console.error('[register/group] inserted participant count mismatch', {
+        inserted: insertedParts?.length ?? 0, expected: participantRows.length,
+      })
+    }
+    const participantsWithId = participantRows.map((row, i) => ({
+      row,
+      participantId: insertedParts?.[i]?.id as string | undefined,
+    }))
+    await batchInvites(db, async () => { for (const { row, participantId } of participantsWithId) {
       if (!participantId) continue
       await dispatchAgreement(db, {
         participantId,
@@ -999,10 +1025,9 @@ export async function POST(req: NextRequest) {
       await ensureIndividualPayments(
         db,
         regId,
-        participantRows
-          .map((row) => {
-            const participantId = partIdByEmail.get(row.email)
-            return participantId
+        participantsWithId
+          .map(({ row, participantId }) =>
+            participantId
               ? {
                   participantId,
                   email:     row.email,
@@ -1010,7 +1035,7 @@ export async function POST(req: NextRequest) {
                   lastName:  row.last_name,
                 }
               : null
-          })
+          )
           .filter((p): p is NonNullable<typeof p> => p !== null),
       )
     }

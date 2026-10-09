@@ -34,6 +34,9 @@ export async function POST(req: Request) {
     case 'already_signed':
       return clearSessionCookie(json({ state: 'already_signed', completed: state.completed }))
     case 'ready':
-      return setSessionCookie(json({ state: 'ready' }), state.session)
+      // deep review ES-1: scope the session cookie to this recipient and hand
+      // the tab its ref, so a second link opened in another tab keeps its own
+      // session instead of overwriting this one.
+      return setSessionCookie(json({ state: 'ready', ref: state.recipient.id }), state.session, state.recipient.id)
   }
 }

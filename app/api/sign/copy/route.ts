@@ -1,8 +1,7 @@
 import { supabaseServer } from '@/lib/supabase'
-import { resolveSession } from '@/lib/esign/native/flow'
 import { verifyToken } from '@/lib/esign/native/tokens'
 import { STORED_RECORD_COLUMNS, loadSignedRecord, logRecordAccess, type StoredRecordRow } from '@/lib/esign/archive'
-import { invalidLink, json, readJson, sameOrigin, sessionCookie, throttle } from '@/lib/esign/native/http'
+import { actingSession, invalidLink, json, readJson, sameOrigin, throttle } from '@/lib/esign/native/http'
 
 // POST /api/sign/copy — a signer's own copy of the signed agreement, as a
 // short-lived link. Reached two ways: straight after signing (the session
@@ -34,7 +33,7 @@ export async function POST(req: Request) {
     recipientId = r.id as string
     envelopeRow = r.envelope_row as string
   } else {
-    const ctx = await resolveSession(db, await sessionCookie(), 'read')
+    const ctx = await actingSession(db, req, 'read')
     if (!ctx || ctx.recipient.status !== 'completed') return invalidLink()
     recipientId = ctx.recipient.id
     envelopeRow = ctx.envelope.id

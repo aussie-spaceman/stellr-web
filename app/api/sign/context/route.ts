@@ -1,6 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
-import { resolveSession, signingView } from '@/lib/esign/native/flow'
-import { invalidLink, json, sessionCookie, throttle } from '@/lib/esign/native/http'
+import { signingView } from '@/lib/esign/native/flow'
+import { actingSession, invalidLink, json, throttle } from '@/lib/esign/native/http'
 
 // GET /api/sign/context — what the signer in this session sees: the document,
 // their fields with any pre-filled values, the disclosure version, and whether
@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   const limited = throttle(req, 'context', 60)
   if (limited) return limited
   const db = supabaseServer()
-  const ctx = await resolveSession(db, await sessionCookie(), 'read')
+  const ctx = await actingSession(db, req, 'read')
   if (!ctx) return invalidLink()
 
   if (ctx.recipient.status === 'completed') {

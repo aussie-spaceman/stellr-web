@@ -29,6 +29,10 @@ export async function createPendingOrder(input: {
   memberId: string | null
   email: string | null
   channel?: 'storefront' | 'reship'
+  // deep review PAY-2: for a 'reship' order, the event-merch order it reships.
+  // Persisted so the reship route can enforce one reship per source order and
+  // the DB unique partial index can backstop a concurrent double-submit.
+  sourceOrderId?: string | null
   lines: CheckoutLine[]
 }): Promise<{ orderId: string; subtotalCents: number }> {
   const db = supabaseServer()
@@ -42,6 +46,7 @@ export async function createPendingOrder(input: {
       email: input.email ?? '',
       status: 'pending',
       channel: input.channel ?? 'storefront',
+      source_order_id: input.sourceOrderId ?? null,
       subtotal_cents: subtotal,
       discount_cents: discount,
       total_cents: subtotal,

@@ -5,6 +5,7 @@ import { sendEmail, studentLeftTeamEmail } from '@/lib/email'
 import { normalizeEventRole } from '@/lib/member-enums'
 import { ownsTeam } from '@/lib/team-access'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { removeEventParticipation } from '@/lib/event-participation-sync'
 
 // PATCH /api/members/teams/[id]/participants/[pid]
 export async function PATCH(
@@ -105,7 +106,7 @@ export async function DELETE(
       .eq('registration_id', registrationId)
       .maybeSingle(),
     db.from('registrations')
-      .select('id, teacher_member_id, teacher_first_name, teacher_email, teacher_poc_email, event_title')
+      .select('id, teacher_member_id, teacher_first_name, teacher_email, teacher_poc_email, event_title, event_slug')
       .eq('id', registrationId)
       .maybeSingle(),
   ])
@@ -135,6 +136,18 @@ export async function DELETE(
   if (error) {
     console.error('[teams/participants/pid] Delete error:', error)
     return NextResponse.json({ error: 'Failed to remove participant' }, { status: 500 })
+  }
+
+  // deep review REG-10: removing the participant row alone leaves the member in
+  // the event's community Space (which may be full of minors), and the next
+  // registration for the event re-grants it from the cohort roster. Revoke the
+  // inherited Space access now. No-ops if this member still holds another active
+  // participant on the event (the row is already deleted, so the guard is clean).
+  if (participant.member_id && registration.event_slug) {
+    await removeEventParticipation(db, {
+      memberId: participant.member_id,
+      eventSlug: registration.event_slug,
+    })
   }
 
   // Notify the organiser if a participant removed themselves

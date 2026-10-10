@@ -19,6 +19,7 @@
 -- Live because Supabase Third-Party Auth for Clerk is enabled (owner, 9 Oct 2026).
 -- CREATE OR REPLACE preserves 047's `GRANT EXECUTE ... TO authenticated` — this is
 -- an RLS helper and MUST keep the authenticated EXECUTE grant to work over Realtime.
+-- rls-helper: keep authenticated EXECUTE (migration-security lint allowlist, DB-N3)
 
 CREATE OR REPLACE FUNCTION public.can_read_chat_channel(_channel_id uuid, _clerk_sub text)
  RETURNS boolean

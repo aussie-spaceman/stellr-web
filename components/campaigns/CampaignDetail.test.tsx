@@ -1,10 +1,27 @@
-import { describe, it, expect } from 'vitest'
+import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { CampaignDetail } from './CampaignDetail'
 import type { StellarEvent } from '@/lib/sanity'
 
-// A campaign in its Fall 2027 window (which runs Aug–Dec 2026 — campaignYear is
-// the SCHOOL year), so only the registrationOpen toggle decides Open vs Closed.
+// deep review TEST-4: the fixture below is a Fall 2027 campaign, whose term runs
+// Aug 15 – Dec 15 2026 (campaignYear is the SCHOOL year). campaignStatus() reads
+// the real clock via todayInAppZone(), so once that window closes (~16 Dec 2026)
+// the "open" cases would report Closed and the suite would fail on every run date
+// after it — breaking the required `verify` CI check. Pin the clock to a fixed
+// instant INSIDE the window so the test asserts the toggle logic, not the
+// calendar: 2026-10-01 12:00 America/Denver sits inside both the term and the
+// registration window (Aug 1 – Nov 30 2026). Only `Date` is faked, so React
+// Testing Library's timers/microtasks are left real.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-01T18:00:00Z'))
+})
+afterAll(() => {
+  vi.useRealTimers()
+})
+
+// A campaign in its Fall 2027 window, so only the registrationOpen toggle decides
+// Open vs Closed (the window itself is held open by the pinned clock above).
 function campaign(overrides: Partial<StellarEvent> = {}): StellarEvent {
   return {
     _id: 'c1',

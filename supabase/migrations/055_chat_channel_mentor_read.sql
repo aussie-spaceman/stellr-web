@@ -4,6 +4,13 @@
 -- back to the 8s poll. Also scope the roster branch to active members so an
 -- invited-but-not-accepted member can't read ahead of acceptance — matching the
 -- server-side canAccessChannel() logic in lib/sessions.ts.
+--
+-- rls-helper: keep authenticated EXECUTE. A SECURITY DEFINER RLS helper called
+-- inside the authenticated SELECT policy on chat_messages (047) — revoking
+-- EXECUTE from `authenticated` would make that policy fail closed and break
+-- chat reads. anon's grant IS revoked (118). This annotation is the allowlist
+-- escape hatch recognised by lint:migrations (scripts/check-migration-security.mjs
+-- — deep review DB-N3).
 CREATE OR REPLACE FUNCTION public.can_read_chat_channel(_channel_id uuid, _clerk_sub text)
  RETURNS boolean
  LANGUAGE sql

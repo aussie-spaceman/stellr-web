@@ -563,9 +563,16 @@ export async function updateCohort(cohortId: string, patch: UpdateCohortInput): 
 /** Reassign a cohort's mentor (admin). */
 export async function reassignMentor(cohortId: string, newMentorId: string): Promise<void> {
   const db = supabaseServer()
-  await db.from('mentoring_cohorts').update({ mentor_member_id: newMentorId }).eq('id', cohortId)
-  // Ensure the new mentor holds the global mentor capability.
+  // deep review MEM-N1: grant the mentor capability FIRST — grantMentorRole gates
+  // on isClearedForMinorContact and THROWS for an uncleared adult (MEM-9). The
+  // write used to land first, so the throw left mentoring_cohorts.mentor_member_id
+  // pointed at an uncleared person; canAccessChannel's cohort/host branch
+  // authorises on that pointer, so the uncleared adult could then read and post in
+  // the cohort's private chat (whose roster may include minors). Doing the gated
+  // grant before the pointer write means an uncleared reassignment never lands —
+  // fails closed, with nothing to roll back.
   await grantMentorRole(newMentorId)
+  await db.from('mentoring_cohorts').update({ mentor_member_id: newMentorId }).eq('id', cohortId)
 }
 
 /** Grant the platform-wide mentor role (the only entry point is per-cohort UI). */

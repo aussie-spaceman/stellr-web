@@ -15,6 +15,10 @@ const { removeEventParticipation } = await import('./event-participation-sync')
 let stillInCount: number
 // Every delete the code issues, recorded as `${table}` for assertions.
 let deletes: { table: string }[]
+// deep review QUALTEST-N1: inject a read error for a given table so we can assert
+// the teardown fails CLOSED (throws) instead of silently treating an errored read
+// as "nothing to tear down".
+let readErrors: Record<string, unknown>
 
 function makeDb() {
   deletes = []
@@ -41,8 +45,9 @@ function makeDb() {
             deletes.push({ table })
             return resolve({ data: null, error: null })
           }
-          if (b.count) return resolve({ count: stillInCount, error: null })
-          return resolve({ data: listFor[table] ?? [], error: null })
+          const readErr = readErrors[table] ?? null
+          if (b.count) return resolve({ count: readErr ? null : stillInCount, error: readErr })
+          return resolve({ data: readErr ? null : (listFor[table] ?? []), error: readErr })
         },
       }
       return chain
@@ -52,6 +57,7 @@ function makeDb() {
 
 beforeEach(() => {
   stillInCount = 0
+  readErrors = {}
 })
 
 describe('removeEventParticipation (deep review REG-10)', () => {
@@ -80,5 +86,42 @@ describe('removeEventParticipation (deep review REG-10)', () => {
     await removeEventParticipation(db, { memberId: null, eventSlug: 'evt' })
     await removeEventParticipation(db, { memberId: 'mem1', eventSlug: null })
     expect(deletes).toHaveLength(0)
+  })
+})
+
+describe('removeEventParticipation — fails closed on a read error (deep review QUALTEST-N1)', () => {
+  it('throws (not silently "nothing to tear down") when the entitlement-count read errors', async () => {
+    // A failed "is this member still entitled?" read must not be read as 0 — that
+    // would wrongly proceed OR, if it threw inside the old swallow, abort silently.
+    readErrors = { participants: { message: 'statement timeout' } }
+    const db = makeDb()
+    await expect(
+      removeEventParticipation(db, { memberId: 'mem1', eventSlug: 'evt' }),
+    ).rejects.toThrow(/read failed/i)
+  })
+
+  it('throws when the event-container read errors (before the Space membership is torn down)', async () => {
+    readErrors = { mentoring_cohorts: { message: 'pool exhausted' } }
+    const db = makeDb()
+    await expect(
+      removeEventParticipation(db, { memberId: 'mem1', eventSlug: 'evt' }),
+    ).rejects.toThrow(/read failed/i)
+  })
+
+  it('throws when the event Space-link read errors — a swallowed error would leave the member in the Space', async () => {
+    readErrors = { community_space_sources: { message: 'PostgREST 503' } }
+    const db = makeDb()
+    await expect(
+      removeEventParticipation(db, { memberId: 'mem1', eventSlug: 'evt' }),
+    ).rejects.toThrow(/read failed/i)
+  })
+
+  it('still swallows an unexpected non-read error (a removal is not blocked by a write hiccup)', async () => {
+    // Belt-and-braces: only deliberate read failures escape; the function stays
+    // non-fatal otherwise. A normal run with no injected read error completes.
+    const db = makeDb()
+    await expect(
+      removeEventParticipation(db, { memberId: 'mem1', eventSlug: 'evt' }),
+    ).resolves.toBeUndefined()
   })
 })

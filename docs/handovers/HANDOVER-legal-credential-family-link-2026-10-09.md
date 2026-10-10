@@ -107,3 +107,26 @@ the code) to "a Minor". **David chose the code fix in the same promote:**
 - Tests: NE/AL at 18, MS at 20/21, an 18-year-old 12th grader, the registration state, read errors.
 
 Open rows are in `tracker/2026-10-09-legal-credential-family-link.md`.
+
+## Close-out (9 Oct 2026, evening)
+
+**Shipped.** #358 squash-merged to `dev` as `b970384d` (20:20Z) and was promoted with the rest of batch 2 in
+#360 (`602cf589`, 20:36Z) by another session; the legal pages and the email fix went out together, as the
+handover required. CI on #358 succeeded by step: verify (typecheck, design-system lint, unit, build) and
+e2e (77 passed, 1 skipped).
+
+**Verified on prod** (22:03Z, fetched from www): `/privacy` and `/terms` both 200 with Last Updated
+09-Oct-2026, both banners, the §7.4 "Who can see a private credential page" paragraph with the privacy@
+link inside it, and the Terms §5.1 "The link in our email" bullet. Publish date is 9 Oct, so no date change.
+The promotion record (`.claude/releases/promote-2026-10-09b.md`) checked only www/app/cron, not these pages.
+
+**Not verified.**
+- The G1 code has not been exercised on prod: no credential issued or published since, by an 18+ holder
+  who is a Minor under the new rule (tracker `.1`).
+- The under-13 guardian email ("never made public") was never sent, even on dev (tracker `.3`).
+- `next build` was not run locally; CI's build step stands in for it.
+
+**Biggest open item:** tracker `.4` (HIGH). A page made public before 9 Oct by someone who is a Minor only
+under the new rule stays public without a guardian's consent. It needs a prod read and David's decision.
+
+Rows: `docs/handovers/tracker/2026-10-09-legal-credential-family-link.md` (`legal-credential-family-link.1`–`.11`).

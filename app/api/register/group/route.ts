@@ -1116,17 +1116,27 @@ export async function POST(req: NextRequest) {
                 .eq('id', registrantMemberId).is('stripe_customer_id', null)
             }
           }
-          await stripe.invoiceItems.create({
-            customer: customerId,
-            currency: priceObj.currency,
-            amount: invoiceAmountCents,
-            description: `${event_title} — Group Registration (${total_participants} participant${total_participants !== 1 ? 's' : ''} × ${priceObj.currency.toUpperCase()} ${(perSeatCents / 100).toFixed(2)} each)`,
-          })
+          // deep review PAY-1: create the invoice FIRST, then attach the line
+          // item to it explicitly with `invoice: invoice.id`. The old order
+          // created a *pending* invoice item and then an invoice with no
+          // `pending_invoice_items_behavior`; on the pinned SDK (2026-05-27.dahlia)
+          // that default EXCLUDES pending items, so the invoice finalised with no
+          // line — a $0 invoice that auto-sent (and, with the webhook, stamped the
+          // registration paid) for a paid event. Mirrors the known-good pattern in
+          // app/api/stripe/membership-invoice/route.ts.
           const invoice = await stripe.invoices.create({
             customer: customerId,
             collection_method: 'send_invoice',
             days_until_due: 14,
+            auto_advance: false,
             metadata: { registrationId: regId, eventSlug: event_slug, isGroup: 'true' },
+          })
+          await stripe.invoiceItems.create({
+            customer: customerId,
+            invoice: invoice.id,
+            currency: priceObj.currency,
+            amount: invoiceAmountCents,
+            description: `${event_title} — Group Registration (${total_participants} participant${total_participants !== 1 ? 's' : ''} × ${priceObj.currency.toUpperCase()} ${(perSeatCents / 100).toFixed(2)} each)`,
           })
           const finalized = await stripe.invoices.finalizeInvoice(invoice.id)
           await stripe.invoices.sendInvoice(finalized.id)

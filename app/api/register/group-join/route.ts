@@ -90,8 +90,23 @@ export async function POST(req: NextRequest) {
       { status: 410 },
     )
   }
-  const joinEvent = await getEventBySlug(eventSlug).catch(() => null)
-  if (joinEvent && !registrationIsOpen(joinEvent)) {
+  // deep review REG-4: fail closed. The old `getEventBySlug(...).catch(() => null)`
+  // + `if (joinEvent && ...)` admitted new participants during a Sanity outage (or
+  // if the event vanished from the CMS) by skipping the window gate entirely —
+  // each join adds a real participant with a DocuSign envelope, Space grant and
+  // payment email. A transient failure is a retryable 503; an unresolved event
+  // can't be confirmed open, so refuse rather than admit.
+  let joinEvent
+  try {
+    joinEvent = await getEventBySlug(eventSlug)
+  } catch (e) {
+    console.error('[register/group-join] event lookup failed:', e)
+    return NextResponse.json(
+      { error: 'Registration is temporarily unavailable. Please try again shortly.' },
+      { status: 503 },
+    )
+  }
+  if (!joinEvent || !registrationIsOpen(joinEvent)) {
     return NextResponse.json(
       { error: 'Registration for this event is closed.' },
       { status: 403 },

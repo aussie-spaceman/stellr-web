@@ -13,6 +13,7 @@ import { scheduleFromRequest } from '@/lib/coaching-requests'
 import { confirmPaidBooking, redeemCoupon, grantTierAllocations, grantPurchasedLot, getOfferingTarget } from '@/lib/entitlements'
 import { requireStripe } from '@/lib/stripe'
 import { confirmRegistration } from '@/lib/registration-confirm'
+import { notifyCommunityAdmins } from '@/lib/notify'
 
 // Formats a Stripe minor-unit amount as " ($60.00)" for activity-log summaries.
 function fmtMoney(amount: number | null | undefined, currency: string | null | undefined): string {
@@ -266,7 +267,229 @@ async function expireMembership(stripeSubscriptionId: string) {
   }
 }
 
+// deep review PAY-3: resolve the subscription id from an invoice across Stripe
+// API shapes. On the pinned version (2026-05-27.dahlia) Invoice no longer carries
+// a top-level `subscription`; it moved under `parent.subscription_details`
+// (and per-line `parent.subscription_item_details`). Keeping the old top-level
+// field as a fallback means a webhook endpoint still on a pre-basil version also
+// works. Each slot may be a string id or an expanded object with `.id`.
+function resolveInvoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
+  const loose = invoice as unknown as {
+    parent?: { subscription_details?: { subscription?: string | { id?: string } | null } | null } | null
+    subscription?: string | { id?: string } | null
+    lines?: {
+      data?: Array<{
+        parent?: { subscription_item_details?: { subscription?: string | { id?: string } | null } | null } | null
+      }>
+    }
+  }
+  const candidates: (string | { id?: string } | null | undefined)[] = [
+    loose.parent?.subscription_details?.subscription,
+    loose.subscription,
+    ...(loose.lines?.data ?? []).map((l) => l?.parent?.subscription_item_details?.subscription),
+  ]
+  for (const c of candidates) {
+    if (typeof c === 'string' && c) return c
+    if (c && typeof c === 'object' && typeof c.id === 'string' && c.id) return c.id
+  }
+  return null
+}
+
+// deep review PAY-4: a registration can end up with two live Checkout sessions
+// at once — the student is redirected to one while the parent is emailed the pay
+// link (a second session). Both can complete. Before confirming, if the
+// registration already recorded a DIFFERENT payment intent, the first payment
+// already landed: refund THIS (duplicate) intent and alert admins instead of
+// overwriting the first intent — overwriting would hide the original charge from
+// every later refund path (cancellation, scholarship). Returns true when it
+// handled a duplicate (caller must then skip confirm + capture).
+async function refundDuplicateRegistrationPayment(
+  session: Stripe.Checkout.Session,
+  registrationId: string,
+  stripe: Stripe,
+): Promise<boolean> {
+  const newIntent = typeof session.payment_intent === 'string' ? session.payment_intent : null
+  if (!newIntent) return false
+  const db = supabaseServer()
+  const { data } = await db
+    .from('registrations')
+    .select('stripe_payment_intent_id')
+    .eq('id', registrationId)
+    .maybeSingle()
+  const existingIntent =
+    (data as { stripe_payment_intent_id?: string | null } | null)?.stripe_payment_intent_id ?? null
+  // First payment, or a redelivery of the same intent → normal path. (A redelivery
+  // of the very same event is already stopped by the idempotency guard upstream.)
+  if (!existingIntent || existingIntent === newIntent) return false
+
+  // Fail safe on the money: refund the duplicate, keep the first intent of record.
+  await stripe.refunds.create(
+    {
+      payment_intent: newIntent,
+      metadata: { source: 'stellr_app', reason: 'duplicate_registration_payment', registrationId },
+    },
+    { idempotencyKey: `dup-${session.id}` },
+  )
+  await notifyCommunityAdmins({
+    type: 'action',
+    body: `Registration ${registrationId} was paid twice. The first payment (intent ${existingIntent}) stands; the duplicate (${newIntent}) was refunded automatically. No action needed unless the family disputes it.`,
+  }).catch(() => {})
+  return true
+}
+
 // ── Webhook handler ───────────────────────────────────────────────────────────
+
+// Fulfils a completed Checkout session (registration / membership / booking /
+// store). Extracted so checkout.session.completed and the delayed-payment
+// checkout.session.async_payment_succeeded share one body — see PAY-6 below.
+async function fulfilCheckoutSession(session: Stripe.Checkout.Session, stripe: Stripe) {
+  if (session.metadata?.type === 'membership') {
+    // Membership purchase
+    const { memberId, tierId, billingInterval } = session.metadata
+    const subscriptionId = session.subscription as string
+
+    if (memberId && tierId && subscriptionId) {
+      await activateMembership(memberId, tierId, billingInterval ?? 'annual', subscriptionId)
+      await logActivity({
+        memberId,
+        category: 'billing',
+        action: 'payment_received',
+        summary: `Membership payment received${fmtMoney(session.amount_total, session.currency)}`,
+        metadata: { kind: 'membership', tierId, amount: session.amount_total, currency: session.currency },
+        actorType: 'stripe',
+      })
+    }
+  } else if (session.metadata?.type === 'mentoring_topup') {
+    // Purchased extra mentoring credits (top-up pack) → purchased cohort_access
+    // lot (one lot of N), idempotent on the Stripe session.
+    const { memberId } = session.metadata
+    const qty = Math.max(1, Math.floor(Number(session.metadata?.quantity) || 1))
+    if (memberId) await grantPurchasedLot(memberId, 'cohort_access', qty, session.id)
+  } else if (session.metadata?.type === 'coaching_topup') {
+    // Purchased extra coaching sessions (top-up pack) → purchased coaching_session
+    // lot (one lot of N), idempotent on the Stripe session.
+    const { memberId } = session.metadata
+    const qty = Math.max(1, Math.floor(Number(session.metadata?.quantity) || 1))
+    if (memberId) await grantPurchasedLot(memberId, 'coaching_session', qty, session.id)
+  } else if (session.metadata?.type === 'coaching_request_pay') {
+    // Member-initiated coaching request, paid path: grant the purchased
+    // coaching_session lot (idempotent on the Stripe session), then complete the
+    // booking from the matched request. The DB is the source of truth, so the
+    // session is scheduled even if the member closed the tab. scheduleFromRequest
+    // is itself idempotent (an already-scheduled request returns its session).
+    const { memberId, requestId, start } = session.metadata
+    if (memberId && requestId && start) {
+      await grantPurchasedLot(memberId, 'coaching_session', 1, session.id)
+      await scheduleFromRequest(requestId, start)
+    }
+  } else if (session.metadata?.type === 'entitlement_booking') {
+    // À-la-carte coaching/mentoring/training booking via the entitlements
+    // ledger. Records the purchased (refundable) entitlement + reserves the
+    // seat. If the cohort filled between checkout and webhook, refund + stop.
+    const { memberId, offeringId, participantId, coupon } = session.metadata
+    const creditApplied = Math.max(0, Math.floor(Number(session.metadata?.creditAppliedCents) || 0))
+    const amount = session.amount_total ?? 0
+    if (memberId && offeringId) {
+      const intent = typeof session.payment_intent === 'string' ? session.payment_intent : null
+      try {
+        const bookingId = await confirmPaidBooking({
+          memberId,
+          offeringId,
+          stripePaymentId: intent ?? session.id,
+          amountChargedCents: amount,
+          creditAppliedCents: creditApplied,
+          participantId: participantId ?? null,
+        })
+        // Mentoring-cohort bookings also need the cohort_members roster (which
+        // grants portal access) — confirmPaidBooking only records the ledger seat.
+        const target = await getOfferingTarget(offeringId)
+        if (target?.type === 'mentoring_cohort' && target.cohortId) {
+          await rosterAfterPaidBooking(target.cohortId, memberId)
+        }
+        if (coupon) await redeemCoupon(coupon, memberId, bookingId, amount)
+        await persistStripeCustomer(session)
+        await logActivity({
+          memberId,
+          category: 'billing',
+          action: 'payment_received',
+          summary: `Booking payment received${fmtMoney(session.amount_total, session.currency)}`,
+          metadata: { kind: 'entitlement_booking', offeringId, amount, currency: session.currency },
+          actorType: 'stripe',
+        })
+      } catch (err) {
+        console.error('[stripe/webhook] entitlement_booking confirm failed, refunding:', err)
+        if (intent) await stripe.refunds.create({ payment_intent: intent })
+      }
+    }
+  } else if (
+    session.metadata?.type === 'workshop_enrollment' ||
+    session.metadata?.type === 'workshop_topup'
+  ) {
+    // Legacy group-"Workshops" was merged into Coaching (25-Jun-2026) and its
+    // enroll/top-up handlers were removed. A Stripe Checkout session created
+    // before this deploy can still complete afterwards — don't silently
+    // swallow the payment. Flag it loudly + in the member activity log so it
+    // can be remediated by hand (grant a coaching credit or issue a refund).
+    const { memberId } = session.metadata
+    console.error('[stripe/webhook] stray legacy workshop payment after merge:', {
+      type: session.metadata.type,
+      memberId,
+      workshopId: session.metadata?.workshopId ?? null,
+      quantity: session.metadata?.quantity ?? null,
+      sessionId: session.id,
+      amount: session.amount_total,
+    })
+    if (memberId) {
+      await persistStripeCustomer(session)
+      await logActivity({
+        memberId,
+        category: 'billing',
+        action: 'payment_received',
+        summary: `Legacy workshop payment received${fmtMoney(session.amount_total, session.currency)} — needs manual remediation (Workshops merged into Coaching)`,
+        metadata: {
+          kind: 'legacy_workshop_stray',
+          stripeType: session.metadata.type,
+          workshopId: session.metadata?.workshopId ?? null,
+          quantity: session.metadata?.quantity ?? null,
+          sessionId: session.id,
+          amount: session.amount_total,
+          currency: session.currency,
+        },
+        actorType: 'stripe',
+      })
+    }
+  } else if (session.metadata?.type === 'store_order') {
+    // Web-store purchase (direct-to-consumer) — mark paid, place the Printful
+    // order, log to activity history, email the buyer. Idempotent.
+    await handleStoreOrderPaid(session)
+  } else if (session.metadata?.isIndividualGroupPayment === 'true') {
+    // Individual member payment within a group registration
+    const { registrationId, participantEmail } = session.metadata
+    if (registrationId && participantEmail) {
+      await markIndividualPayment(registrationId, participantEmail)
+      await capturePaymentIntent(session, { registrationId, participantEmail })
+      await persistStripeCustomer(session)
+      await logEventPayment(session, registrationId, participantEmail)
+    }
+  } else {
+    // Event registration purchase (whole group or individual)
+    const registrationId = session.metadata?.registrationId ?? session.client_reference_id
+    const isGroup = session.metadata?.isGroup === 'true'
+    if (registrationId) {
+      // PAY-4: if this registration was already paid under a different intent,
+      // refund this duplicate and keep the first — don't re-confirm or overwrite.
+      if (!(await refundDuplicateRegistrationPayment(session, registrationId, stripe))) {
+        await confirmRegistration(registrationId, isGroup)
+        await capturePaymentIntent(session, { registrationId })
+        await persistStripeCustomer(session)
+        if (!isGroup) await logEventPayment(session, registrationId)
+      }
+    }
+  }
+
+  // Settle any account-credit redemption applied to this checkout.
+  await finalizeRedemption(session)
+}
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text()
@@ -306,164 +529,50 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // ── checkout.session.completed ──────────────────────────────────────────
-    if (event.type === 'checkout.session.completed') {
+    // ── checkout.session.completed / async_payment_succeeded ────────────────
+    // deep review PAY-6: only fulfil once funds are actually captured. A delayed
+    // method (ACH/us_bank_account, SEPA, …) completes Checkout with
+    // payment_status 'unpaid'/'pending' — the money isn't ours yet, so we wait
+    // for the later async_payment_succeeded (same handler). 'no_payment_required'
+    // is a genuine $0 / fully-coupon session. Fulfilling an 'unpaid' session was
+    // confirming registrations/memberships and placing Printful orders for money
+    // that had not cleared (and might bounce).
+    if (
+      event.type === 'checkout.session.completed' ||
+      event.type === 'checkout.session.async_payment_succeeded'
+    ) {
       const session = event.data.object as Stripe.Checkout.Session
-
-      if (session.metadata?.type === 'membership') {
-        // Membership purchase
-        const { memberId, tierId, billingInterval } = session.metadata
-        const subscriptionId = session.subscription as string
-
-        if (memberId && tierId && subscriptionId) {
-          await activateMembership(memberId, tierId, billingInterval ?? 'annual', subscriptionId)
-          await logActivity({
-            memberId,
-            category: 'billing',
-            action: 'payment_received',
-            summary: `Membership payment received${fmtMoney(session.amount_total, session.currency)}`,
-            metadata: { kind: 'membership', tierId, amount: session.amount_total, currency: session.currency },
-            actorType: 'stripe',
-          })
-        }
-      } else if (session.metadata?.type === 'mentoring_topup') {
-        // Purchased extra mentoring credits (top-up pack) → purchased cohort_access
-        // lot (one lot of N), idempotent on the Stripe session.
-        const { memberId } = session.metadata
-        const qty = Math.max(1, Math.floor(Number(session.metadata?.quantity) || 1))
-        if (memberId) await grantPurchasedLot(memberId, 'cohort_access', qty, session.id)
-      } else if (session.metadata?.type === 'coaching_topup') {
-        // Purchased extra coaching sessions (top-up pack) → purchased coaching_session
-        // lot (one lot of N), idempotent on the Stripe session.
-        const { memberId } = session.metadata
-        const qty = Math.max(1, Math.floor(Number(session.metadata?.quantity) || 1))
-        if (memberId) await grantPurchasedLot(memberId, 'coaching_session', qty, session.id)
-      } else if (session.metadata?.type === 'coaching_request_pay') {
-        // Member-initiated coaching request, paid path: grant the purchased
-        // coaching_session lot (idempotent on the Stripe session), then complete the
-        // booking from the matched request. The DB is the source of truth, so the
-        // session is scheduled even if the member closed the tab. scheduleFromRequest
-        // is itself idempotent (an already-scheduled request returns its session).
-        const { memberId, requestId, start } = session.metadata
-        if (memberId && requestId && start) {
-          await grantPurchasedLot(memberId, 'coaching_session', 1, session.id)
-          await scheduleFromRequest(requestId, start)
-        }
-      } else if (session.metadata?.type === 'entitlement_booking') {
-        // À-la-carte coaching/mentoring/training booking via the entitlements
-        // ledger. Records the purchased (refundable) entitlement + reserves the
-        // seat. If the cohort filled between checkout and webhook, refund + stop.
-        const { memberId, offeringId, participantId, coupon } = session.metadata
-        const creditApplied = Math.max(0, Math.floor(Number(session.metadata?.creditAppliedCents) || 0))
-        const amount = session.amount_total ?? 0
-        if (memberId && offeringId) {
-          const intent = typeof session.payment_intent === 'string' ? session.payment_intent : null
-          try {
-            const bookingId = await confirmPaidBooking({
-              memberId,
-              offeringId,
-              stripePaymentId: intent ?? session.id,
-              amountChargedCents: amount,
-              creditAppliedCents: creditApplied,
-              participantId: participantId ?? null,
-            })
-            // Mentoring-cohort bookings also need the cohort_members roster (which
-            // grants portal access) — confirmPaidBooking only records the ledger seat.
-            const target = await getOfferingTarget(offeringId)
-            if (target?.type === 'mentoring_cohort' && target.cohortId) {
-              await rosterAfterPaidBooking(target.cohortId, memberId)
-            }
-            if (coupon) await redeemCoupon(coupon, memberId, bookingId, amount)
-            await persistStripeCustomer(session)
-            await logActivity({
-              memberId,
-              category: 'billing',
-              action: 'payment_received',
-              summary: `Booking payment received${fmtMoney(session.amount_total, session.currency)}`,
-              metadata: { kind: 'entitlement_booking', offeringId, amount, currency: session.currency },
-              actorType: 'stripe',
-            })
-          } catch (err) {
-            console.error('[stripe/webhook] entitlement_booking confirm failed, refunding:', err)
-            if (intent) await requireStripe().refunds.create({ payment_intent: intent })
-          }
-        }
-      } else if (
-        session.metadata?.type === 'workshop_enrollment' ||
-        session.metadata?.type === 'workshop_topup'
-      ) {
-        // Legacy group-"Workshops" was merged into Coaching (25-Jun-2026) and its
-        // enroll/top-up handlers were removed. A Stripe Checkout session created
-        // before this deploy can still complete afterwards — don't silently
-        // swallow the payment. Flag it loudly + in the member activity log so it
-        // can be remediated by hand (grant a coaching credit or issue a refund).
-        const { memberId } = session.metadata
-        console.error('[stripe/webhook] stray legacy workshop payment after merge:', {
-          type: session.metadata.type,
-          memberId,
-          workshopId: session.metadata?.workshopId ?? null,
-          quantity: session.metadata?.quantity ?? null,
-          sessionId: session.id,
-          amount: session.amount_total,
-        })
-        if (memberId) {
-          await persistStripeCustomer(session)
-          await logActivity({
-            memberId,
-            category: 'billing',
-            action: 'payment_received',
-            summary: `Legacy workshop payment received${fmtMoney(session.amount_total, session.currency)} — needs manual remediation (Workshops merged into Coaching)`,
-            metadata: {
-              kind: 'legacy_workshop_stray',
-              stripeType: session.metadata.type,
-              workshopId: session.metadata?.workshopId ?? null,
-              quantity: session.metadata?.quantity ?? null,
-              sessionId: session.id,
-              amount: session.amount_total,
-              currency: session.currency,
-            },
-            actorType: 'stripe',
-          })
-        }
-      } else if (session.metadata?.type === 'store_order') {
-        // Web-store purchase (direct-to-consumer) — mark paid, place the Printful
-        // order, log to activity history, email the buyer. Idempotent.
-        await handleStoreOrderPaid(session)
-      } else if (session.metadata?.isIndividualGroupPayment === 'true') {
-        // Individual member payment within a group registration
-        const { registrationId, participantEmail } = session.metadata
-        if (registrationId && participantEmail) {
-          await markIndividualPayment(registrationId, participantEmail)
-          await capturePaymentIntent(session, { registrationId, participantEmail })
-          await persistStripeCustomer(session)
-          await logEventPayment(session, registrationId, participantEmail)
-        }
-      } else {
-        // Event registration purchase (whole group or individual)
-        const registrationId = session.metadata?.registrationId ?? session.client_reference_id
-        const isGroup = session.metadata?.isGroup === 'true'
-        if (registrationId) {
-          await confirmRegistration(registrationId, isGroup)
-          await capturePaymentIntent(session, { registrationId })
-          await persistStripeCustomer(session)
-          if (!isGroup) await logEventPayment(session, registrationId)
-        }
+      if (session.payment_status === 'paid' || session.payment_status === 'no_payment_required') {
+        await fulfilCheckoutSession(session, stripe)
       }
+    }
 
-      // Settle any account-credit redemption applied to this checkout.
-      await finalizeRedemption(session)
+    // ── checkout.session.async_payment_failed ───────────────────────────────
+    // deep review PAY-6: a delayed payment that bounced. Nothing was fulfilled
+    // (we gated on payment_status above), so just alert admins to follow up.
+    if (event.type === 'checkout.session.async_payment_failed') {
+      const session = event.data.object as Stripe.Checkout.Session
+      await notifyCommunityAdmins({
+        type: 'action',
+        body: `A delayed payment failed for Checkout session ${session.id} (${session.metadata?.type ?? 'event registration'}). Nothing was confirmed or shipped; the payer may need to try another method.`,
+      }).catch(() => {})
     }
 
     // ── invoice.paid (recurring renewal) ───────────────────────────────────
     if (event.type === 'invoice.paid') {
-      const invoice = event.data.object as Stripe.Invoice & { subscription?: string | null }
+      const invoice = event.data.object as Stripe.Invoice
+      // deep review PAY-3: resolve the subscription id across API shapes (the
+      // pinned dahlia version dropped the top-level invoice.subscription).
+      const subscriptionId = resolveInvoiceSubscriptionId(invoice)
 
       if (invoice.metadata?.type === 'membership_invoice') {
         // One-time membership purchased by emailed invoice — grant on payment.
         await activateInvoiceMembership(invoice)
-      } else if (invoice.metadata?.type === 'membership' || invoice.subscription) {
-        // Membership renewal — extend expires_at by the billing period
-        const subscriptionId = invoice.subscription ?? null
+      } else if (invoice.metadata?.type === 'membership' || subscriptionId) {
+        // Membership renewal — extend expires_at to the period this invoice paid
+        // for. Reading invoice.subscription here (the old shape) found nothing on
+        // dahlia, so renewals silently never extended and paying members lost
+        // their tier at day 31 / 366.
         if (subscriptionId) {
           const db = supabaseServer()
           const { data: membership } = await db
@@ -475,9 +584,15 @@ export async function POST(req: NextRequest) {
 
           if (membership) {
             const interval = (membership as { billing_interval: string }).billing_interval
-            const newExpiry = interval === 'monthly'
+            // Prefer the period the invoice actually paid for; fall back to
+            // now()+interval when the line period is absent.
+            const periodEnd = (invoice.lines?.data?.[0] as { period?: { end?: number } } | undefined)?.period?.end
+            const fallback = interval === 'monthly'
               ? new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
               : new Date(Date.now() + 366 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+            const newExpiry = periodEnd
+              ? new Date(periodEnd * 1000).toISOString().split('T')[0]
+              : fallback
 
             await db
               .from('member_memberships')

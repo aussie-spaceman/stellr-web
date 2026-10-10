@@ -17,6 +17,9 @@ const h = vi.hoisted(() => ({
   findExistingRegistrations: vi.fn(async () => new Map<string, unknown[]>()),
   resolveDuplicate: vi.fn(() => ({ kind: 'none' })),
   ensureClerk: vi.fn(async () => ({ clerkUserId: 'c-1', signInToken: null, created: false })),
+  // AUTH-N2: controllable rate-limit guard. Returns null (proceed) by default;
+  // a test can make it return a 429 Response to assert the route bails first.
+  rlGuard: vi.fn((_req: unknown, _route: string, _opts: unknown, _suffix?: string): Response | null => null),
   // Captures every row passed to `.insert()`, keyed by table name.
   captures: {} as Record<string, unknown[]>,
 }))
@@ -33,7 +36,12 @@ function makeDb(captures: Record<string, unknown[]>) {
         return { data: rows.map((r: Record<string, unknown>, i: number) => ({ id: `p-${i}`, email: r.email })), error: null }
       }
       if (table === 'members' && state.op === 'upsert') {
-        return state.single ? { data: { id: 'm-teacher' }, error: null } : { data: [], error: null }
+        if (state.single) return { data: { id: 'm-teacher' }, error: null }
+        // Mirror Supabase `.upsert(rows).select('id,email')`: a created row per
+        // payload, id derived from email so the route maps members back by email.
+        // REG-11 depends on this linkage being observable on participant rows.
+        const rows = Array.isArray(state.payload) ? state.payload : [state.payload]
+        return { data: rows.map((r: Record<string, unknown>) => ({ id: `m-${String(r.email)}`, email: r.email })), error: null }
       }
       if (table === 'members' && state.op === 'select') return { data: [], error: null }
       return { data: null, error: null }
@@ -63,6 +71,7 @@ vi.mock('@/lib/registration-duplicates', () => ({
   resolveDuplicate: h.resolveDuplicate,
 }))
 vi.mock('@/lib/clerk-provisioning', () => ({ ensureClerkUserAndSignInToken: h.ensureClerk }))
+vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: h.rlGuard, HOUR_MS: 3_600_000 }))
 vi.mock('@/lib/docusign-agreements', () => ({ dispatchAgreement: vi.fn(async () => {}) }))
 vi.mock('@/lib/esign/outbox', () => ({ batchInvites: async () => {} }))
 vi.mock('@/lib/email', () => ({ sendEmail: async () => {}, groupConfirmationEmail: () => ({ subject: '', html: '', text: '' }) }))
@@ -128,6 +137,7 @@ beforeEach(() => {
   h.findExistingRegistrations.mockResolvedValue(new Map())
   h.resolveDuplicate.mockReturnValue({ kind: 'none' })
   h.ensureClerk.mockResolvedValue({ clerkUserId: 'c-1', signInToken: null, created: false })
+  h.rlGuard.mockReturnValue(null)
 })
 
 describe('POST /api/register/group', () => {
@@ -197,5 +207,55 @@ describe('POST /api/register/group', () => {
     expect(h.captures.registrations?.length).toBe(1)
     // teacher + 2 students
     expect((h.captures.participants?.[0] as unknown[]).length).toBe(3)
+  })
+
+  // ── REG-11 ─────────────────────────────────────────────────────────────────
+  it('REG-11: two same-email, different-name students are not merged into one member', async () => {
+    const shared = 'family@example.com'
+    const res = await post(body({
+      student_count: 2, total_participants: 3,
+      students: [
+        { ...STUDENT(shared), first_name: 'Alice', last_name: 'Smith', date_of_birth: '2011-03-01' },
+        { ...STUDENT(shared), first_name: 'Bob', last_name: 'Smith', date_of_birth: '2013-07-15' },
+      ],
+    }))
+    expect(res.status).toBe(201)
+    const parts = (h.captures.participants?.[0] ?? []) as Array<Record<string, unknown>>
+    const alice = parts.find((p) => p.first_name === 'Alice')
+    const bob = parts.find((p) => p.first_name === 'Bob')
+    // Both distinct students survive as their own participant rows…
+    expect(alice).toBeTruthy()
+    expect(bob).toBeTruthy()
+    // …each keeping its own identity (not overwritten last-wins).
+    expect(alice!.last_name).toBe('Smith')
+    expect(alice!.date_of_birth).toBe('2011-03-01')
+    expect(bob!.date_of_birth).toBe('2013-07-15')
+    // …and they are NOT collapsed onto one shared member row. Before the fix the
+    // email-keyed dedupe linked both participant rows to the same member id; now
+    // only the first claimant of the shared family email owns a member and the
+    // sibling's member_id is null (its identity lives on the participant row).
+    const bothLinkedToSameMember = !!alice!.member_id && alice!.member_id === bob!.member_id
+    expect(bothLinkedToSameMember).toBe(false)
+  })
+
+  // ── AUTH-N2 ────────────────────────────────────────────────────────────────
+  it('AUTH-N2: runs the rate-limit guard first, sub-keyed by event slug', async () => {
+    await post(body())
+    expect(h.rlGuard).toHaveBeenCalledWith(
+      expect.anything(),
+      'register-group',
+      { limit: 3, windowMs: 3_600_000 },
+      'colorado',
+    )
+  })
+
+  it('AUTH-N2: a throttled caller gets 429 and nothing is created', async () => {
+    h.rlGuard.mockReturnValue(
+      new Response(JSON.stringify({ error: 'Too many requests' }), { status: 429 }),
+    )
+    const res = await post(body())
+    expect(res.status).toBe(429)
+    expect(h.captures.registrations).toBeUndefined()
+    expect(h.captures.participants).toBeUndefined()
   })
 })

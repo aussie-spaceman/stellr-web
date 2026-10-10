@@ -9,6 +9,8 @@ const h = vi.hoisted(() => ({
   getEventBySlug: vi.fn(async (_slug: string): Promise<unknown> => ({ title: 'Colorado', activityType: 'live_event' })),
   partInsert: vi.fn(),
   auth: vi.fn(async () => ({ userId: null as string | null })),
+  // AUTH-N2: controllable rate-limit guard (null = proceed by default).
+  rlGuard: vi.fn((_req: unknown, _route: string, _opts: unknown, _suffix?: string): Response | null => null),
 }))
 
 const tokenRow = {
@@ -43,6 +45,7 @@ vi.mock('@/lib/event-participation-sync', () => ({ recordEventParticipation: asy
 vi.mock('@/lib/space-inheritance', () => ({ syncObjectSpaceRoster: async () => {}, reconcileEventSpaceRoster: async () => {} }))
 vi.mock('@/lib/clerk-provisioning', () => ({ ensureClerkUserAndSignInToken: async () => ({ clerkUserId: 'c', signInToken: null }) }))
 vi.mock('@/lib/member-sync', () => ({ upsertMember: async () => 'm-1' }))
+vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: h.rlGuard, HOUR_MS: 3_600_000 }))
 
 const { POST } = await import('./route')
 
@@ -59,6 +62,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.getEventBySlug.mockResolvedValue({ title: 'Colorado', activityType: 'live_event' })
   h.auth.mockResolvedValue({ userId: null })
+  h.rlGuard.mockReturnValue(null)
 })
 
 describe('POST /api/register/group-join', () => {
@@ -73,6 +77,26 @@ describe('POST /api/register/group-join', () => {
     h.getEventBySlug.mockResolvedValue(null)
     const res = await post()
     expect(res.status).toBe(403)
+    expect(h.partInsert).not.toHaveBeenCalled()
+  })
+
+  // ── AUTH-N2 ────────────────────────────────────────────────────────────────
+  it('AUTH-N2: runs the rate-limit guard first, sub-keyed by the join token', async () => {
+    await post()
+    expect(h.rlGuard).toHaveBeenCalledWith(
+      expect.anything(),
+      'register-group-join',
+      { limit: 3, windowMs: 3_600_000 },
+      'tok',
+    )
+  })
+
+  it('AUTH-N2: a throttled caller gets 429 and admits no one', async () => {
+    h.rlGuard.mockReturnValue(
+      new Response(JSON.stringify({ error: 'Too many requests' }), { status: 429 }),
+    )
+    const res = await post()
+    expect(res.status).toBe(429)
     expect(h.partInsert).not.toHaveBeenCalled()
   })
 })

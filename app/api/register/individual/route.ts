@@ -27,6 +27,7 @@ import { sendPayLinkEmail } from '@/lib/registration-pay-link'
 import { pendingAddonLines } from '@/lib/registration-checkout'
 import { confirmRegistration } from '@/lib/registration-confirm'
 import { attachOfferToRegistration, findOfferByToken } from '@/lib/scholarships'
+import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 // Where a registrant lands afterwards — the member portal, with a flag the
@@ -47,6 +48,23 @@ export async function POST(req: NextRequest) {
       emergency_contact_relationship,
       school_address_state,
     } = body
+
+    // deep review AUTH-N2: rate-limit this public, unauthenticated write before
+    // any member/registration/Clerk/email side effect. Each call creates a
+    // member (+ passwordless Clerk user) and force-sends a pay-link email on a
+    // shared free Resend quota (100/day); without a cap a scripted client could
+    // exhaust the day's email and pollute members/registrations/Clerk. Matches
+    // the other public forms (teacher-grant, host-event, join-network). Sub-keyed
+    // by event slug so one venue's families registering for one event aren't
+    // lumped with that IP's traffic to other events; limit stays tight because
+    // the quota is shared.
+    const rateLimited = rateLimitGuard(
+      req,
+      'register-individual',
+      { limit: 3, windowMs: HOUR_MS },
+      typeof event_slug === 'string' ? event_slug : undefined,
+    )
+    if (rateLimited) return rateLimited
 
     // Option A — a signed-in member can only register under their own address.
     // Trust the session email over whatever the client submitted; this prevents

@@ -7,6 +7,7 @@ import { ensureEventContainer } from '@/lib/container-sync'
 import { getVolunteerStatuses, grantVolunteerRole, dispatchVolunteerAgreement, VOLUNTEER_MEMBER_COLUMNS } from '@/lib/volunteer'
 import { logActivity, actorFromAuth } from '@/lib/activity-log'
 import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
+import { removeEventParticipation } from '@/lib/event-participation-sync'
 
 // Event volunteer management (PRD §15). Volunteers raise interest from the
 // member catalog (volunteer_event_interest); admins assign them here. An
@@ -196,6 +197,20 @@ export async function DELETE(req: Request, { params }: Ctx) {
     .eq('member_id', memberId)
     .eq('event_slug', slug)
     .eq('role', 'volunteer')
+
+  // deep review BG-5: the volunteer-assignment POST above also inherited every
+  // Space linked to this event (syncObjectSpaceRoster) and granted the Volunteer
+  // role, so deleting only the cohort/participation rows left the removed (often
+  // uncleared) volunteer inside the event's community Space/chat — which may be
+  // full of minors — and reconcileEventSpaceRoster would re-grant it from the
+  // active cohort roster on the next registration. Tear down the inherited Space
+  // membership too, mirroring the participant-DELETE and hard-delete paths. The
+  // helper no-ops for anyone still entitled by another active (non-withdrawn)
+  // registration on this event (e.g. a volunteer who is also a competitor), so
+  // this never strips access they hold by another route. Fails closed on a read
+  // error (deep review QUALTEST-N1): an unassign that cannot confirm the teardown
+  // surfaces an error for retry rather than silently leaving them in the Space.
+  await removeEventParticipation(db, { memberId, eventSlug: slug })
 
   const event = await getEventBySlug(slug).catch(() => null)
   const title = (event as { title?: string } | null)?.title ?? null

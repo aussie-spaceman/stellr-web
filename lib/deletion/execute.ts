@@ -167,14 +167,23 @@ async function tombstonePersonCredentials(db: Db, def: EntityDef, id: string): P
     // Event credentials issued before the student's account was linked carry a
     // participant_id but a null member_id, so a member-only tombstone misses
     // them — reach them through the member's participant rows.
-    const { data: parts } = await db.from('participants').select('id').eq('member_id', id)
+    const { data: parts, error: partsErr } = await db.from('participants').select('id').eq('member_id', id)
+    // deep review QUALTEST-N1: this is right-to-erasure. A discarded read error
+    // would skip the participant-linked credentials — the exact null-member_id
+    // case this fix exists for — leaving a minor's credential (name + public page)
+    // live after a deletion. Fail closed: abort so the deletion records a failure
+    // and can retry, rather than silently erasing nothing.
+    if (partsErr) throw new Error(`Credential tombstone aborted: could not read member's participant rows: ${partsErr.message}`)
     for (const p of parts ?? []) await tombstoneCredentialsFor(db, 'participant', (p as { id: string }).id)
   } else if (def.type === 'participant') {
     await tombstoneCredentialsFor(db, 'participant', id)
   } else if (def.type === 'registration') {
     // "Delete a group" cascades the participants; tombstone each student's event
     // credential first, or the cascade nulls the link and strands the name.
-    const { data: parts } = await db.from('participants').select('id').eq('registration_id', id)
+    const { data: parts, error: partsErr } = await db.from('participants').select('id').eq('registration_id', id)
+    // deep review QUALTEST-N1: fail closed (see the member branch above) — a read
+    // error here would strand every student's name through the cascade.
+    if (partsErr) throw new Error(`Credential tombstone aborted: could not read group participant rows: ${partsErr.message}`)
     for (const p of parts ?? []) await tombstoneCredentialsFor(db, 'participant', (p as { id: string }).id)
   }
 }
@@ -190,22 +199,30 @@ async function participantsLeavingEvent(
   def: EntityDef,
   id: string,
 ): Promise<{ memberId: string; eventSlug: string }[]> {
+  // deep review QUALTEST-N1: fail closed on every read. A discarded error would
+  // return [] → skip the event-Space access revocation below, leaving the departed
+  // (possibly uncleared) member in a minors' event Space that reconcileEventSpaceRoster
+  // keeps alive. These reads run BEFORE any row is deleted, so a throw aborts the
+  // whole deletion cleanly and it can be retried.
   if (def.type === 'participant') {
-    const { data: p } = await db
+    const { data: p, error: pErr } = await db
       .from('participants')
       .select('member_id, registrations(event_slug)')
       .eq('id', id)
       .maybeSingle()
+    if (pErr) throw new Error(`Space-access teardown aborted: could not read participant ${id}: ${pErr.message}`)
     const memberId = (p?.member_id as string | null) ?? null
     const reg = p?.registrations as { event_slug?: string | null } | { event_slug?: string | null }[] | null
     const eventSlug = (Array.isArray(reg) ? reg[0]?.event_slug : reg?.event_slug) ?? null
     return memberId && eventSlug ? [{ memberId, eventSlug }] : []
   }
   if (def.type === 'registration') {
-    const { data: reg } = await db.from('registrations').select('event_slug').eq('id', id).maybeSingle()
+    const { data: reg, error: regErr } = await db.from('registrations').select('event_slug').eq('id', id).maybeSingle()
+    if (regErr) throw new Error(`Space-access teardown aborted: could not read registration ${id}: ${regErr.message}`)
     const eventSlug = (reg?.event_slug as string | null) ?? null
     if (!eventSlug) return []
-    const { data: parts } = await db.from('participants').select('member_id').eq('registration_id', id)
+    const { data: parts, error: partsErr } = await db.from('participants').select('member_id').eq('registration_id', id)
+    if (partsErr) throw new Error(`Space-access teardown aborted: could not read group participants: ${partsErr.message}`)
     return (parts ?? [])
       .map((p) => (p as { member_id: string | null }).member_id)
       .filter((m): m is string => Boolean(m))

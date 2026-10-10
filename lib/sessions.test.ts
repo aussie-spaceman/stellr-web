@@ -9,6 +9,13 @@ const { state } = vi.hoisted(() => ({
     message: null as Record<string, unknown> | null,
     channel: null as Record<string, unknown> | null,
     cohort: null as Record<string, unknown> | null,
+    // deep review MEM-N1 / DB-N1: canAccessChannel now also reads the caller's
+    // members row (is_active/deleted_at), the cohort roster, and session_hosts
+    // (can_mentor) + a clearance re-check for the mentor/host side.
+    member: null as Record<string, unknown> | null,
+    rosterMember: null as Record<string, unknown> | null,
+    host: null as Record<string, unknown> | null,
+    cleared: true,
     adminNotifs: [] as unknown[],
     memberNotifs: [] as string[],
     messageUpdates: [] as Record<string, unknown>[],
@@ -25,40 +32,63 @@ vi.mock('@/lib/notify', () => ({
   notifyMembers: async () => {},
 }))
 vi.mock('@/lib/activity-log', () => ({ logActivity: async () => {} }))
-vi.mock('@/lib/compliance', () => ({ isClearedForMinorContact: async () => true }))
+vi.mock('@/lib/compliance', () => ({ isClearedForMinorContact: async () => state.cleared }))
 vi.mock('@/lib/community', () => ({ getCurrentMember: async () => null }))
+// containerAccessPersists reads mentoring_cohorts internally; stub it so the cohort
+// branch tests assert the access decision, not container persistence (D1, covered elsewhere).
+vi.mock('@/lib/containers', () => ({ containerAccessPersists: async () => true }))
 
-vi.mock('@/lib/supabase', () => ({
-  supabaseServer: () => ({
-    from(table: string) {
-      if (table === 'chat_messages') {
-        return {
-          select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: state.message, error: null }) }) }),
-          update: (payload: Record<string, unknown>) => ({
-            eq: async () => {
-              state.messageUpdates.push(payload)
-              return { error: null }
-            },
-          }),
+vi.mock('@/lib/supabase', () => {
+  // A chainable read double: any number of .eq()/.neq()/.in()/.is() then
+  // .maybeSingle() or an awaited list, resolving to the supplied result.
+  const read = (result: () => { data?: unknown; error?: unknown; count?: unknown }) => {
+    const q: Record<string, unknown> = {}
+    q.select = () => q
+    q.eq = () => q
+    q.neq = () => q
+    q.in = () => q
+    q.is = () => q
+    q.maybeSingle = async () => result()
+    q.then = (resolve: (v: unknown) => unknown) => resolve(result())
+    return q
+  }
+  return {
+    supabaseServer: () => ({
+      from(table: string) {
+        if (table === 'chat_messages') {
+          return {
+            select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: state.message, error: null }) }) }),
+            update: (payload: Record<string, unknown>) => ({
+              eq: async () => {
+                state.messageUpdates.push(payload)
+                return { error: null }
+              },
+            }),
+          }
         }
-      }
-      if (table === 'chat_channels') {
-        return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: state.channel, error: null }) }) }) }
-      }
-      if (table === 'mentoring_cohorts') {
-        return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: state.cohort, error: null }) }) }) }
-      }
-      throw new Error(`unexpected table ${table}`)
-    },
-  }),
-}))
+        if (table === 'chat_channels') return read(() => ({ data: state.channel, error: null }))
+        if (table === 'mentoring_cohorts') return read(() => ({ data: state.cohort, error: null }))
+        if (table === 'members') return read(() => ({ data: state.member, error: null }))
+        if (table === 'cohort_members') return read(() => ({ data: state.rosterMember, error: null }))
+        if (table === 'session_hosts') return read(() => ({ data: state.host, error: null }))
+        throw new Error(`unexpected table ${table}`)
+      },
+    }),
+  }
+})
 
-import { flagMessage, deleteMessage } from './sessions'
+import { flagMessage, deleteMessage, canAccessChannel } from './sessions'
 
 beforeEach(() => {
   state.message = null
   state.channel = null
   state.cohort = null
+  // Default the caller to an active, non-deleted member so the existing flag/
+  // delete tests are unaffected by the DB-N1 member guard.
+  state.member = { is_active: true, deleted_at: null }
+  state.rosterMember = null
+  state.host = null
+  state.cleared = true
   state.adminNotifs = []
   state.memberNotifs = []
   state.messageUpdates = []
@@ -103,5 +133,67 @@ describe('deleteMessage — flagged message by its author', () => {
     const ok = await deleteMessage('msg-3', 'coach-1')
     expect(ok).toBe(true)
     expect(state.messageUpdates).toHaveLength(1)
+  })
+})
+
+describe('canAccessChannel — cohort host clearance (deep review MEM-N1)', () => {
+  // kind is neither 'coaching' nor 'space' → the cohort/host branch.
+  const cohortChannel = { kind: 'cohort', cohort_id: 'co-1', member_id: null, host_member_id: null, space_id: null }
+
+  it('allows an active roster member without any clearance check (a mentee may be a minor)', async () => {
+    state.channel = cohortChannel
+    state.rosterMember = { member_id: 'kid-1' } // on the active roster
+    state.cleared = false // would block a host, must NOT block a roster member
+    expect(await canAccessChannel('ch', 'kid-1')).toBe(true)
+  })
+
+  it('allows the cohort mentor when they hold can_mentor AND a current clearance', async () => {
+    state.channel = cohortChannel
+    state.rosterMember = null
+    state.cohort = { mentor_member_id: 'mentor-1' }
+    state.host = { can_mentor: true }
+    state.cleared = true
+    expect(await canAccessChannel('ch', 'mentor-1')).toBe(true)
+  })
+
+  it('DENIES the cohort mentor when their clearance has lapsed (uncleared), despite mentor_member_id', async () => {
+    // The MEM-N1 hole: authorising on mentor_member_id alone let an uncleared /
+    // lapsed adult into cohort chat whose roster may include minors.
+    state.channel = cohortChannel
+    state.rosterMember = null
+    state.cohort = { mentor_member_id: 'mentor-1' }
+    state.host = { can_mentor: true }
+    state.cleared = false
+    expect(await canAccessChannel('ch', 'mentor-1')).toBe(false)
+  })
+
+  it('DENIES a mentor_member_id match that lacks the can_mentor host capability', async () => {
+    state.channel = cohortChannel
+    state.rosterMember = null
+    state.cohort = { mentor_member_id: 'mentor-1' }
+    state.host = { can_mentor: false }
+    state.cleared = true
+    expect(await canAccessChannel('ch', 'mentor-1')).toBe(false)
+  })
+})
+
+describe('canAccessChannel — deactivated/soft-deleted member (deep review DB-N1)', () => {
+  it('DENIES a deactivated member even when they are on the active cohort roster', async () => {
+    state.channel = { kind: 'cohort', cohort_id: 'co-1', member_id: null, host_member_id: null, space_id: null }
+    state.rosterMember = { member_id: 'kid-1' } // would otherwise grant
+    state.member = { is_active: false, deleted_at: null } // deactivated, Clerk login kept
+    expect(await canAccessChannel('ch', 'kid-1')).toBe(false)
+  })
+
+  it('DENIES a soft-deleted member on a coaching channel they are party to', async () => {
+    state.channel = { kind: 'coaching', cohort_id: null, member_id: 'kid-1', host_member_id: 'coach-1', space_id: null }
+    state.member = { is_active: true, deleted_at: '2026-10-10T00:00:00Z' }
+    expect(await canAccessChannel('ch', 'coach-1')).toBe(false)
+  })
+
+  it('allows an active coaching party (guard passes through to the coaching branch)', async () => {
+    state.channel = { kind: 'coaching', cohort_id: null, member_id: 'kid-1', host_member_id: 'coach-1', space_id: null }
+    state.member = { is_active: true, deleted_at: null }
+    expect(await canAccessChannel('ch', 'coach-1')).toBe(true)
   })
 })

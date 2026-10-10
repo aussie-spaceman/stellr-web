@@ -550,6 +550,19 @@ export async function canAccessChannel(channelId: string, memberId: string): Pro
     .eq('id', channelId)
     .maybeSingle()
   if (!ch) return false
+
+  // deep review DB-N1: a deactivated / soft-deleted member reads no chat, in any
+  // branch — mirrors the can_read_chat_channel / can_read_space RLS fix. The admin
+  // member form can set is_active = false without a full delete (which would null
+  // the Clerk login), and getCurrentMember does NOT filter on is_active, so this
+  // is the only place the server gate enforces it. Fails closed on a missing row.
+  const { data: meRow } = await db
+    .from('members')
+    .select('is_active, deleted_at')
+    .eq('id', memberId)
+    .maybeSingle()
+  if (!meRow || meRow.is_active !== true || meRow.deleted_at != null) return false
+
   if (ch.kind === 'coaching') return ch.member_id === memberId || ch.host_member_id === memberId
   if (ch.kind === 'space') {
     // Space chat mirrors space-view access, resolved by the same Space access
@@ -571,16 +584,32 @@ export async function canAccessChannel(channelId: string, memberId: string): Pro
     .eq('member_id', memberId)
     .eq('status', 'active')
     .maybeSingle()
-  let onRoster = !!cm
-  if (!onRoster) {
-    const { data: cohort } = await db
-      .from('mentoring_cohorts')
-      .select('mentor_member_id')
-      .eq('id', ch.cohort_id)
-      .maybeSingle()
-    onRoster = cohort?.mentor_member_id === memberId
+  if (cm) {
+    // An active roster member (a mentee/participant, who may be a minor — no
+    // clearance requirement on the member side).
+    return containerAccessPersists(ch.cohort_id)
   }
-  if (!onRoster) return false
+
+  // Host (mentor) side. deep review MEM-N1: this branch used to authorise on
+  // mentoring_cohorts.mentor_member_id ALONE, so an uncleared adult reassigned
+  // onto a cohort (the reassignMentor ordering bug) — or a mentor whose
+  // background clearance has since lapsed — could read and post in cohort chat
+  // whose roster may include minors. Require the mentor capability AND a CURRENT
+  // clearance (re-checked here at access time, not only trusted from grant time),
+  // mirroring the MEM-9 gate on grantMentorRole / bookCoaching. Fails closed.
+  const { data: cohort } = await db
+    .from('mentoring_cohorts')
+    .select('mentor_member_id')
+    .eq('id', ch.cohort_id)
+    .maybeSingle()
+  if (cohort?.mentor_member_id !== memberId) return false
+  const { data: host } = await db
+    .from('session_hosts')
+    .select('can_mentor')
+    .eq('member_id', memberId)
+    .maybeSingle()
+  if (host?.can_mentor !== true) return false
+  if (!(await isClearedForMinorContact(db, memberId, 'mentor'))) return false
   return containerAccessPersists(ch.cohort_id)
 }
 

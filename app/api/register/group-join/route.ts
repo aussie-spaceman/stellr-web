@@ -16,6 +16,7 @@ import { upsertMember } from '@/lib/member-sync'
 import { ageFromDob } from '@/lib/utils'
 import { registrationIsOpen } from '@/lib/registration'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
 // A participant, normalised to the enum/shape the participants + members tables
 // and DocuSign expect — built either from the signed-in member's profile, or
@@ -57,6 +58,19 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const { token, details } = body as { token?: string; details?: Record<string, unknown> }
   if (!token) return NextResponse.json({ error: 'Token required' }, { status: 400 })
+
+  // deep review AUTH-N2: rate-limit this public, unauthenticated write before any
+  // member/registration/Clerk/email side effect (and before the token lookup
+  // read). A join adds a real participant (+ member / passwordless Clerk user)
+  // and sends transactional email on a shared free Resend quota (100/day);
+  // without a cap a scripted client could exhaust the day's email and pollute
+  // members/registrations/Clerk. Matches the other public forms. Sub-keyed by
+  // the join token: one token is exactly one event+group (the event slug isn't
+  // known until the token is resolved below), so this is the per-link analogue
+  // of the event-slug sub-key used by the individual/group routes and also caps
+  // the token-lookup read path. Limit stays tight because the quota is shared.
+  const rateLimited = rateLimitGuard(req, 'register-group-join', { limit: 3, windowMs: HOUR_MS }, token)
+  if (rateLimited) return rateLimited
 
   const db = supabaseServer()
 

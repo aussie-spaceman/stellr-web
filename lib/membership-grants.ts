@@ -121,8 +121,14 @@ function actorTypeForSource(source: GrantSource): ActorType {
 
 export interface GrantResult {
   granted: boolean
-  /** Why nothing happened, when granted is false. */
-  reason?: 'already_active' | 'no_tier'
+  /**
+   * Why nothing happened, when granted is false.
+   * - `already_active` / `no_tier` are benign no-ops (nothing to retry).
+   * - `error` (deep review PAY-5) is a genuine write FAILURE: a money-path caller
+   *   (e.g. the Stripe webhook) must treat it as unfinished and fail closed —
+   *   throw so the payment is retried — rather than record the event processed.
+   */
+  reason?: 'already_active' | 'no_tier' | 'error'
   membershipId?: string
 }
 
@@ -219,7 +225,11 @@ export async function grantTier(
 
   if (error) {
     console.error('[membership-grants] grantTier insert error:', error)
-    return { granted: false, reason: 'no_tier' }
+    // deep review PAY-5: distinguish a real write FAILURE from the benign
+    // no-op reasons. Previously this returned `no_tier`, indistinguishable from
+    // "caller passed no tier", so a money-path caller couldn't tell a transient DB
+    // error from a legitimate skip and recorded the Stripe event as processed.
+    return { granted: false, reason: 'error' }
   }
 
   // Audit trail — captures every grant path (manual, rule, signup, cron, Stripe).

@@ -25,6 +25,20 @@ function fmtMoney(amount: number | null | undefined, currency: string | null | u
   }
 }
 
+// deep review PAY-5: a money-path Supabase write that returns an {error} must
+// abort the whole webhook rather than be silently discarded. Throwing propagates
+// to the POST handler's try/catch, which returns 500 WITHOUT recording the event
+// id — so Stripe retries the delivery and the state eventually reconciles. The
+// previous code dropped the {error}, let the handler return 200, and recorded the
+// event as processed, so a transient DB blip meant money captured, local state
+// lost, and no retry would ever fix it. Fail CLOSED on every settled-money write.
+function assertWritten(error: unknown, where: string): void {
+  if (error) {
+    const message = (error as { message?: string } | null)?.message ?? 'unknown error'
+    throw new Error(`[stripe/webhook] money-path write failed (${where}): ${message}`)
+  }
+}
+
 // ── Event registration helpers ────────────────────────────────────────────────
 
 // Stores the Stripe payment_intent so a later deletion can issue a cash refund.
@@ -38,16 +52,20 @@ async function capturePaymentIntent(
   if (!intent) return
   const db = supabaseServer()
   if (target.participantEmail) {
-    await db
+    // deep review PAY-5: losing this write means the stored intent is absent, so a
+    // later refund/delete can't return the money — must retry, not swallow.
+    const { error } = await db
       .from('participants')
       .update({ stripe_payment_intent_id: intent })
       .eq('registration_id', target.registrationId)
       .eq('email', target.participantEmail)
+    assertWritten(error, 'capturePaymentIntent participant')
   } else {
-    await db
+    const { error } = await db
       .from('registrations')
       .update({ stripe_payment_intent_id: intent })
       .eq('id', target.registrationId)
+    assertWritten(error, 'capturePaymentIntent registration')
   }
 }
 
@@ -97,12 +115,18 @@ async function logEventPayment(
 async function markIndividualPayment(registrationId: string, participantEmail: string) {
   const db = supabaseServer()
 
-  // Mark this participant as paid
-  await db
-    .from('participants')
-    .update({ individual_payment_status: 'paid' })
-    .eq('registration_id', registrationId)
-    .eq('email', participantEmail)
+  // Mark this participant as paid. deep review PAY-5: if this write fails the seat
+  // stays unpaid locally even though the money cleared — throw so the webhook 500s
+  // and Stripe retries, rather than recording the event processed with the seat
+  // silently still outstanding.
+  {
+    const { error } = await db
+      .from('participants')
+      .update({ individual_payment_status: 'paid' })
+      .eq('registration_id', registrationId)
+      .eq('email', participantEmail)
+    assertWritten(error, 'markIndividualPayment paid')
+  }
 
   // Send payment confirmation to the participant
   const { data: participant } = await db
@@ -144,10 +168,13 @@ async function markIndividualPayment(registrationId: string, participantEmail: s
     .or('individual_payment_status.is.null,individual_payment_status.eq.pending')
 
   if (!unsettled || unsettled.length === 0) {
-    await db
+    // deep review PAY-5: the group is fully paid — losing this confirm leaves it
+    // stuck 'pending' with money taken. Throw → 500 → Stripe retries.
+    const { error } = await db
       .from('registrations')
       .update({ status: 'confirmed' })
       .eq('id', registrationId)
+    assertWritten(error, 'markIndividualPayment confirm')
     // Whole group now paid → finalize event merch (idempotent, non-fatal).
     await finalizeRegistrationMerch(db, registrationId)
   }
@@ -175,7 +202,11 @@ async function activateMembership(
     ? new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     : new Date(Date.now() + 366 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-  const { data: inserted } = await db.from('member_memberships').insert({
+  // deep review PAY-5: the subscription payment cleared — if this insert fails the
+  // member is charged with no membership row (no access, no renewal tracking).
+  // Throw so the webhook 500s and Stripe retries, instead of recording the event
+  // processed with the grant silently missing.
+  const { data: inserted, error: insertError } = await db.from('member_memberships').insert({
     member_id: memberId,
     tier_id: tierId,
     started_at: startedAt,
@@ -186,6 +217,7 @@ async function activateMembership(
     stripe_subscription_id: stripeSubscriptionId,
     billing_interval: billingInterval,
   }).select('id').single()
+  assertWritten(insertError, 'activateMembership insert')
 
   // Audit trail — paid membership activated via Stripe (this path bypasses grantTier).
   const { data: tier } = await db.from('membership_tiers').select('name').eq('id', tierId).maybeSingle()
@@ -229,6 +261,13 @@ async function activateInvoiceMembership(invoice: Stripe.Invoice) {
     { memberId, tierId, months: 12, source: 'stripe', replacesFree: true },
     db,
   )
+  // deep review PAY-5: the invoice was paid, so the grant must stick. A `reason:
+  // 'error'` is a real write failure (not the benign already_active/no_tier skip)
+  // — throw so the webhook 500s and Stripe retries, instead of recording the
+  // invoice.paid event processed while the member was billed but never granted.
+  if (!result.granted && result.reason === 'error') {
+    throw new Error(`[stripe/webhook] membership_invoice grant failed for member ${memberId} tier ${tierId}`)
+  }
   // Fan-out grant rules + entitlement allocations, same as a card purchase.
   await fireTierPurchased(memberId, tierId, db)
   try {
@@ -594,10 +633,14 @@ export async function POST(req: NextRequest) {
               ? new Date(periodEnd * 1000).toISOString().split('T')[0]
               : fallback
 
-            await db
+            // deep review PAY-5: the renewal invoice was paid — if this extension
+            // write fails the member loses their tier at the old expiry despite
+            // paying. Throw → 500 → Stripe retries rather than record-and-forget.
+            const { error: renewError } = await db
               .from('member_memberships')
               .update({ expires_at: newExpiry })
               .eq('id', (membership as { id: string }).id)
+            assertWritten(renewError, 'invoice.paid renewal expires_at')
           }
         }
       } else {
@@ -605,7 +648,18 @@ export async function POST(req: NextRequest) {
         // invoice_paid_at (this is the invoice path, so it is required).
         const registrationId = invoice.metadata?.registrationId
         const isGroup = invoice.metadata?.isGroup === 'true'
-        if (registrationId) {
+        // deep review PAY-1: never confirm a paid event on a zero-amount invoice.
+        // The group invoice-ordering bug could finalise an empty $0 invoice that
+        // Stripe auto-marks paid; a genuine paid-event invoice is always > 0.
+        // Backstop here so a $0 `invoice.paid` from any source can't mark a paid
+        // registration settled for free — log loudly for manual follow-up instead.
+        const amountPaid = invoice.amount_paid ?? 0
+        if (registrationId && amountPaid <= 0) {
+          console.error(
+            '[stripe/webhook] invoice.paid IGNORED — non-positive amount on an event-registration invoice',
+            { invoiceId: invoice.id, registrationId, amountPaid, isGroup },
+          )
+        } else if (registrationId) {
           await confirmRegistration(registrationId, isGroup, { paidViaInvoice: true })
         }
       }

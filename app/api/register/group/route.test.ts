@@ -13,6 +13,12 @@ const h = vi.hoisted(() => ({
     stripePriceId: 'price_x',
   })),
   priceRetrieve: vi.fn(async () => ({ unit_amount: 13500, currency: 'usd' })),
+  // PAY-1: Stripe invoice surface for the "pay by invoice" path.
+  customersCreate: vi.fn(async () => ({ id: 'cus_1' })),
+  invoicesCreate: vi.fn(async () => ({ id: 'in_1' })),
+  invoiceItemsCreate: vi.fn(async () => ({ id: 'ii_1' })),
+  invoicesFinalize: vi.fn(async (id: string) => ({ id, hosted_invoice_url: null })),
+  invoicesSend: vi.fn(async () => ({})),
   getCurrentMember: vi.fn(async (): Promise<unknown> => null),
   findExistingRegistrations: vi.fn(async () => new Map<string, unknown[]>()),
   resolveDuplicate: vi.fn(() => ({ kind: 'none' })),
@@ -57,7 +63,14 @@ vi.mock('@/lib/supabase', () => ({ supabaseServer: () => makeDb(h.captures) }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: h.getEventBySlug }))
 vi.mock('@/lib/community', () => ({ getCurrentMember: h.getCurrentMember }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: async () => null }))
-vi.mock('@/lib/stripe', () => ({ stripeClient: () => ({ prices: { retrieve: h.priceRetrieve } }) }))
+vi.mock('@/lib/stripe', () => ({
+  stripeClient: () => ({
+    prices: { retrieve: h.priceRetrieve },
+    customers: { create: h.customersCreate },
+    invoiceItems: { create: h.invoiceItemsCreate },
+    invoices: { create: h.invoicesCreate, finalizeInvoice: h.invoicesFinalize, sendInvoice: h.invoicesSend },
+  }),
+}))
 vi.mock('@/lib/registration-duplicates', () => ({
   findExistingRegistrations: h.findExistingRegistrations,
   resolveDuplicate: h.resolveDuplicate,
@@ -197,5 +210,30 @@ describe('POST /api/register/group', () => {
     expect(h.captures.registrations?.length).toBe(1)
     // teacher + 2 students
     expect((h.captures.participants?.[0] as unknown[]).length).toBe(3)
+  })
+
+  // ── PAY-1 ────────────────────────────────────────────────────────────────────
+  // The "pay by invoice" path must attach the line item to a specific invoice so
+  // the invoice carries the real amount. The bug created a *pending* invoice item
+  // first and then an invoice with no `pending_invoice_items_behavior`; on the
+  // pinned SDK that defaults to excluding pending items, finalising a $0 invoice.
+  it('PAY-1: invoice is created BEFORE the line item, which is attached with invoice:<id>', async () => {
+    const res = await post(body({ payment_method: 'invoice' }))
+    expect(res.status).toBe(201)
+
+    // The invoice was created, then the line item attached to THAT invoice.
+    expect(h.invoicesCreate).toHaveBeenCalledTimes(1)
+    expect(h.invoiceItemsCreate).toHaveBeenCalledTimes(1)
+    expect(h.invoiceItemsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ invoice: 'in_1', amount: 13500 * 3 }),
+    )
+    // Ordering: invoices.create ran before invoiceItems.create (so the item is
+    // never left as an unattached pending item that the invoice excludes).
+    expect(h.invoicesCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      h.invoiceItemsCreate.mock.invocationCallOrder[0],
+    )
+    // And it was finalised + sent.
+    expect(h.invoicesFinalize).toHaveBeenCalledWith('in_1')
+    expect(h.invoicesSend).toHaveBeenCalledTimes(1)
   })
 })

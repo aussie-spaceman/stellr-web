@@ -19,7 +19,14 @@ export async function confirmRegistration(
   // admin having to hit /api/admin/events/[slug]/invoice-paid manually.
   const update: { status: string; invoice_paid_at?: string } = { status: 'confirmed' }
   if (opts.paidViaInvoice) update.invoice_paid_at = new Date().toISOString()
-  await db.from('registrations').update(update).eq('id', registrationId)
+  // deep review PAY-5: this is the settled-money confirm. If the write errors,
+  // throw rather than swallow — every caller (Stripe webhook, scholarship, direct
+  // registration) must fail closed so the payment is retried/surfaced instead of
+  // the registration being reported confirmed while it is still pending in the DB.
+  const { error } = await db.from('registrations').update(update).eq('id', registrationId)
+  if (error) {
+    throw new Error(`[registration-confirm] failed to confirm registration ${registrationId}: ${error.message}`)
+  }
 
   // Finalize event merch: allocate the included shirt to every participant
   // (sized from their t-shirt size) and activate any paid add-ons. Idempotent + non-fatal.

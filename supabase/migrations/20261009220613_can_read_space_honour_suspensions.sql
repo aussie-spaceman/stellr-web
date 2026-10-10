@@ -8,6 +8,13 @@
 -- already denies these; this brings the RLS helper in line.
 --
 -- Live because Supabase Third-Party Auth for Clerk is enabled (owner, 9 Oct 2026).
+--
+-- rls-helper: keep authenticated EXECUTE. A SECURITY DEFINER RLS helper (so it
+-- avoids RLS recursion) called inside the authenticated SELECT policies on the
+-- community spaces — revoking EXECUTE from `authenticated` would make those
+-- policies fail closed and break space reads. anon's grant IS revoked (118).
+-- This annotation is the allowlist escape hatch recognised by lint:migrations
+-- (scripts/check-migration-security.mjs — deep review DB-N3).
 
 CREATE OR REPLACE FUNCTION public.can_read_space(p_space_id uuid, p_clerk_user_id text)
  RETURNS boolean

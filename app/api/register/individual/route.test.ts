@@ -9,6 +9,8 @@ const h = vi.hoisted(() => ({
   getEventBySlug: vi.fn(async (_slug: string): Promise<unknown> => ({ title: 'Colorado', activityType: 'live_event' })),
   getCurrentMember: vi.fn(async (): Promise<unknown> => null),
   regInsert: vi.fn(),
+  // AUTH-N2: controllable rate-limit guard (null = proceed by default).
+  rlGuard: vi.fn((_req: unknown, _route: string, _opts: unknown, _suffix?: string): Response | null => null),
 }))
 
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: h.getEventBySlug }))
@@ -33,6 +35,7 @@ vi.mock('@/lib/docusign-agreements', () => ({ dispatchAgreement: vi.fn(async () 
 vi.mock('@/lib/clerk-provisioning', () => ({ ensureClerkUserAndSignInToken: async () => ({ clerkUserId: 'c', signInToken: null }) }))
 vi.mock('@/lib/registration-pay-link', () => ({ sendPayLinkEmail: async () => ({ sent: false, recipients: [] }) }))
 vi.mock('@/lib/registration-duplicates', () => ({ findExistingRegistrations: async () => new Map(), resolveDuplicate: () => ({ kind: 'none' }) }))
+vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: h.rlGuard, HOUR_MS: 3_600_000 }))
 
 const { POST } = await import('./route')
 
@@ -54,6 +57,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.getEventBySlug.mockResolvedValue({ title: 'Colorado', activityType: 'live_event' })
   h.getCurrentMember.mockResolvedValue(null)
+  h.rlGuard.mockReturnValue(null)
 })
 
 describe('POST /api/register/individual', () => {
@@ -68,6 +72,26 @@ describe('POST /api/register/individual', () => {
     h.getEventBySlug.mockResolvedValue(null)
     const res = await post()
     expect(res.status).toBe(404)
+    expect(h.regInsert).not.toHaveBeenCalled()
+  })
+
+  // ── AUTH-N2 ────────────────────────────────────────────────────────────────
+  it('AUTH-N2: runs the rate-limit guard first, sub-keyed by event slug', async () => {
+    await post()
+    expect(h.rlGuard).toHaveBeenCalledWith(
+      expect.anything(),
+      'register-individual',
+      { limit: 3, windowMs: 3_600_000 },
+      'colorado',
+    )
+  })
+
+  it('AUTH-N2: a throttled caller gets 429 and creates no registration', async () => {
+    h.rlGuard.mockReturnValue(
+      new Response(JSON.stringify({ error: 'Too many requests' }), { status: 429 }),
+    )
+    const res = await post()
+    expect(res.status).toBe(429)
     expect(h.regInsert).not.toHaveBeenCalled()
   })
 })

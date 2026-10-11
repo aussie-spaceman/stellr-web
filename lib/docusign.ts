@@ -180,7 +180,7 @@ export interface CreatedEnvelope {
 }
 
 /** Same mailbox, ignoring case and surrounding whitespace. */
-function sameAddress(a: string, b: string): boolean {
+export function sameAddress(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 

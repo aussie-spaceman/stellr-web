@@ -22,21 +22,26 @@
  *     (a signing DoS on a minor's consent form) — and 20261009202141 had to add
  *     `FROM anon, authenticated` afterwards.
  *
- * A `FROM PUBLIC` revoke is therefore NOT sufficient here; the revoke must name
- * `anon` AND `authenticated` (or revoke them at the schema level). This lint
- * makes the next one fail in CI instead of in production.
+ * NEITHER revoke alone is sufficient: `FROM PUBLIC` leaves the direct
+ * anon/authenticated grants (the esign lesson above), and `FROM anon,
+ * authenticated` leaves the default PUBLIC grant — which
+ * `has_function_privilege('anon', …)` still resolves through, so anon can still
+ * call it (observed on `bump_email_quota`, 10 Oct 2026, which the first cut of
+ * this lint wrongly passed). The revoke must name `public`, `anon` AND
+ * `authenticated` (or seal the schema from all three). This lint makes the next
+ * one fail in CI instead of in production.
  *
  * ── The rule ─────────────────────────────────────────────────────────────────
  * For every SECURITY DEFINER function a migration declares, one of these must be
  * true somewhere in the migrations corpus (a revoke may live in a later, atomic
  * follow-up migration — but if it is missing when CI runs, the build is red):
  *
- *   (a) EXECUTE is revoked from BOTH `anon` and `authenticated` for that
- *       function — `REVOKE EXECUTE ON FUNCTION <fn>(...) FROM ... anon ...
- *       authenticated`; or
- *   (b) its schema is sealed from both roles — `REVOKE EXECUTE ON ALL FUNCTIONS
- *       IN SCHEMA <s> FROM ... anon ... authenticated` or `REVOKE USAGE ON
- *       SCHEMA <s> FROM ... anon ... authenticated` (the entitlements shape); or
+ *   (a) EXECUTE is revoked from `public`, `anon` AND `authenticated` for that
+ *       function — `REVOKE EXECUTE ON FUNCTION <fn>(...) FROM PUBLIC, anon,
+ *       authenticated` (the three may be spread across atomic follow-ups); or
+ *   (b) its schema is sealed from all three — `REVOKE EXECUTE ON ALL FUNCTIONS
+ *       IN SCHEMA <s> FROM PUBLIC, anon, authenticated` or `REVOKE USAGE ON
+ *       SCHEMA <s> FROM PUBLIC, anon, authenticated` (the entitlements shape); or
  *   (c) the function carries an allowlist comment justifying that it KEEPS a
  *       public role's EXECUTE — `-- rls-helper: keep authenticated EXECUTE`.
  *
@@ -169,38 +174,55 @@ export function splitStatements(sql) {
   return statements
 }
 
-/** Does a REVOKE statement name BOTH anon and authenticated in its FROM clause?
- *  `FROM PUBLIC` alone is deliberately NOT enough (the esign two-step lesson). */
-function revokesAnonAndAuthenticated(stmt) {
+/** The three public-facing roles that must ALL lose EXECUTE before a SECURITY
+ *  DEFINER function is sealed. Neither revoke alone is enough: `FROM PUBLIC`
+ *  leaves Supabase's direct anon/authenticated grants (the esign two-step
+ *  lesson), and `FROM anon, authenticated` leaves Postgres's default PUBLIC
+ *  grant — which `has_function_privilege('anon', …)` still resolves through, so
+ *  anon can still call it (observed on bump_email_quota, 10 Oct 2026). */
+export const REQUIRED_REVOKES = ['public', 'anon', 'authenticated']
+
+/** The REQUIRED_REVOKES roles named in a REVOKE statement's FROM clause. */
+function revokedRolesIn(stmt) {
   const idx = stmt.toLowerCase().lastIndexOf(' from ')
-  if (idx === -1) return false
-  const roles = stmt.slice(idx + 6).toLowerCase()
-  const tokens = roles.split(/[^a-z_]+/).filter(Boolean)
-  return tokens.includes('anon') && tokens.includes('authenticated')
+  if (idx === -1) return []
+  const tokens = new Set(
+    stmt
+      .slice(idx + 6)
+      .toLowerCase()
+      .split(/[^a-z_]+/)
+      .filter(Boolean),
+  )
+  return REQUIRED_REVOKES.filter((r) => tokens.has(r))
 }
 
 /**
  * Scan an array of { name, sql } migration files. Returns the offenders plus the
- * sealed sets (exposed for the self-test). Sealing is corpus-wide: a revoke in
- * any file counts, because an atomic follow-up migration is a valid shape.
+ * sealed sets (exposed for the self-test). Sealing is corpus-wide and additive:
+ * the required revokes may be spread across atomic follow-up migrations (the
+ * esign shape — PUBLIC in one, anon/authenticated in the next), so a function or
+ * schema is sealed once ALL THREE roles have been revoked somewhere in the corpus.
  */
 export function scanMigrations(files) {
-  const schemaSealed = new Set()
-  const funcSealed = new Set()
+  const schemaRoles = new Map() // schema -> Set<role revoked>
+  const funcRoles = new Map() // qualified fn -> Set<role revoked>
   const sdFunctions = []
+  const accumulate = (map, key, roles) => {
+    const cur = map.get(key) ?? new Set()
+    for (const r of roles) cur.add(r)
+    map.set(key, cur)
+  }
 
   for (const { name: file, sql } of files) {
     for (const st of splitStatements(sql)) {
       const s = st.text
       let m
       if ((m = /revoke\s+execute\s+on\s+all\s+functions\s+in\s+schema\s+([a-z0-9_]+)/i.exec(s))) {
-        if (revokesAnonAndAuthenticated(s)) schemaSealed.add(m[1].toLowerCase())
+        accumulate(schemaRoles, m[1].toLowerCase(), revokedRolesIn(s))
       } else if ((m = /revoke\s+usage\s+on\s+schema\s+([a-z0-9_]+)/i.exec(s))) {
-        if (revokesAnonAndAuthenticated(s)) schemaSealed.add(m[1].toLowerCase())
+        accumulate(schemaRoles, m[1].toLowerCase(), revokedRolesIn(s))
       } else if ((m = /revoke\s+execute\s+on\s+function\s+(?:([a-z0-9_]+)\s*\.\s*)?([a-z0-9_]+)\s*\(/i.exec(s))) {
-        if (revokesAnonAndAuthenticated(s)) {
-          funcSealed.add(`${(m[1] || 'public').toLowerCase()}.${m[2].toLowerCase()}`)
-        }
+        accumulate(funcRoles, `${(m[1] || 'public').toLowerCase()}.${m[2].toLowerCase()}`, revokedRolesIn(s))
       }
 
       const cf = CREATE_FN.exec(s)
@@ -214,6 +236,10 @@ export function scanMigrations(files) {
       }
     }
   }
+
+  const hasAll = (roles) => !!roles && REQUIRED_REVOKES.every((r) => roles.has(r))
+  const schemaSealed = new Set([...schemaRoles].filter(([, r]) => hasAll(r)).map(([k]) => k))
+  const funcSealed = new Set([...funcRoles].filter(([, r]) => hasAll(r)).map(([k]) => k))
 
   const offenders = []
   for (const fn of sdFunctions) {
@@ -242,17 +268,18 @@ function main() {
     console.error(
       '\n  A SECURITY DEFINER function bypasses RLS and is EXECUTE-able by anon +\n' +
         '  authenticated by default — an unauthenticated RPC on a public repo.\n' +
-        '  In the SAME migration, add one of:\n\n' +
-        '      REVOKE EXECUTE ON FUNCTION <schema>.<fn>(<args>) FROM anon, authenticated;\n' +
-        '      REVOKE USAGE ON SCHEMA <schema> FROM anon, authenticated;        -- whole schema\n\n' +
-        '  REVOKE ... FROM PUBLIC is NOT enough (Supabase grants anon/authenticated\n' +
-        '  directly). If the function MUST keep a public role EXECUTE (an RLS helper),\n' +
-        '  annotate it:  -- rls-helper: keep authenticated EXECUTE\n',
+        '  In the SAME migration (or an atomic follow-up), add one of:\n\n' +
+        '      REVOKE EXECUTE ON FUNCTION <schema>.<fn>(<args>) FROM PUBLIC, anon, authenticated;\n' +
+        '      REVOKE USAGE ON SCHEMA <schema> FROM PUBLIC, anon, authenticated;   -- whole schema\n\n' +
+        '  All three must go: FROM PUBLIC alone leaves the direct anon/authenticated\n' +
+        '  grants, and FROM anon, authenticated alone leaves the default PUBLIC grant\n' +
+        '  (anon still reaches it through PUBLIC). If the function MUST keep a public\n' +
+        '  role EXECUTE (an RLS helper), annotate it:  -- rls-helper: keep authenticated EXECUTE\n',
     )
     process.exit(1)
   }
   console.log(
-    `✓ migration security: ${sdFunctions.length} SECURITY DEFINER function(s), all revoked from anon+authenticated, schema-sealed, or allowlisted`,
+    `✓ migration security: ${sdFunctions.length} SECURITY DEFINER function(s), all revoked from public+anon+authenticated, schema-sealed, or allowlisted`,
   )
 }
 

@@ -35,12 +35,20 @@ const sql = {
   revoked: `
     CREATE OR REPLACE FUNCTION public.mint_credit(p_member uuid)
     RETURNS void LANGUAGE sql SECURITY DEFINER AS $$ SELECT 1 $$;
+    REVOKE EXECUTE ON FUNCTION public.mint_credit(uuid) FROM PUBLIC, anon, authenticated;
+  `,
+  // FROM anon, authenticated WITHOUT PUBLIC leaves the default PUBLIC grant, which
+  // has_function_privilege('anon', …) resolves through — the bump_email_quota bug
+  // (10 Oct 2026) the first cut of this lint wrongly passed. Must be flagged.
+  anonAuthOnly: `
+    CREATE OR REPLACE FUNCTION public.mint_credit(p_member uuid)
+    RETURNS void LANGUAGE sql SECURITY DEFINER AS $$ SELECT 1 $$;
     REVOKE EXECUTE ON FUNCTION public.mint_credit(uuid) FROM anon, authenticated;
   `,
   schemaUsageRevoked: `
     CREATE OR REPLACE FUNCTION entitlements.mint_credit(p_member uuid)
     RETURNS void LANGUAGE sql SECURITY DEFINER AS $$ SELECT 1 $$;
-    REVOKE USAGE ON SCHEMA entitlements FROM anon, authenticated;
+    REVOKE USAGE ON SCHEMA entitlements FROM PUBLIC, anon, authenticated;
   `,
   // The can_read_chat_channel / can_read_space shape: SECURITY DEFINER that MUST
   // keep authenticated EXECUTE, justified by the allowlist comment.
@@ -77,11 +85,16 @@ describe('check-migration-security (DB-N3)', () => {
     expect(flags(sql.fromPublicOnly)).toBe(true)
   })
 
-  it('accepts a REVOKE EXECUTE ... FROM anon, authenticated', () => {
+  it('accepts a REVOKE EXECUTE ... FROM PUBLIC, anon, authenticated', () => {
     expect(flags(sql.revoked)).toBe(false)
   })
 
-  it('accepts a schema-level REVOKE USAGE ... FROM anon, authenticated', () => {
+  it('flags a revoke naming anon + authenticated but NOT public (the bump_email_quota bug)', () => {
+    // The default PUBLIC grant remains, so anon still reaches it through PUBLIC.
+    expect(flags(sql.anonAuthOnly)).toBe(true)
+  })
+
+  it('accepts a schema-level REVOKE USAGE ... FROM PUBLIC, anon, authenticated', () => {
     expect(flags(sql.schemaUsageRevoked)).toBe(false)
   })
 
@@ -101,7 +114,7 @@ describe('check-migration-security (DB-N3)', () => {
       { name: NEW, sql: sql.bare },
       {
         name: '20991231000001_seal.sql',
-        sql: 'REVOKE EXECUTE ON FUNCTION public.mint_credit(uuid) FROM anon, authenticated;',
+        sql: 'REVOKE EXECUTE ON FUNCTION public.mint_credit(uuid) FROM PUBLIC, anon, authenticated;',
       },
     ]).offenders
     expect(offenders).toEqual([])

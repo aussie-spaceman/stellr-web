@@ -1,14 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { sendEmail, reissue, resolveAudience, calls } = vi.hoisted(() => ({
-  sendEmail: vi.fn(async (_o: { to: string; subject: string; from?: string; replyTo?: string }) => {}),
-  reissue: vi.fn(async (..._a: unknown[]) => ({ kind: 'resent' })),
-  resolveAudience: vi.fn(async (..._a: unknown[]): Promise<{ recipients: unknown[]; docusignParticipantIds: string[] }> => ({ recipients: [], docusignParticipantIds: [] })),
-  calls: { order: [] as string[] },
-}))
+const { sendEmail, reissue, resolveAudience, calls, EmailSendError } = vi.hoisted(() => {
+  // Mirrors the real EmailSendError so the deliver loop's `instanceof` +
+  // `isQuota` branch (deep review INT-2 / PUB-4) behaves as production does.
+  class EmailSendError extends Error {
+    status: number
+    constructor(message: string, status: number) { super(message); this.name = 'EmailSendError'; this.status = status }
+    get isQuota() { return this.status === 429 }
+  }
+  return {
+    sendEmail: vi.fn(async (_o: { to: string; subject: string; from?: string; replyTo?: string }) => {}),
+    reissue: vi.fn(async (..._a: unknown[]) => ({ kind: 'resent' })),
+    resolveAudience: vi.fn(async (..._a: unknown[]): Promise<{ recipients: unknown[]; docusignParticipantIds: string[] }> => ({ recipients: [], docusignParticipantIds: [] })),
+    calls: { order: [] as string[] },
+    EmailSendError,
+  }
+})
 
 vi.mock('@/lib/community', () => ({ tiptapToPlainText: () => '', RESOURCES_BUCKET: 'community-resources' }))
-vi.mock('@/lib/email', () => ({ sendEmail: (o: { to: string; subject: string }) => { calls.order.push(`email:${o.to}`); return sendEmail(o) } }))
+vi.mock('@/lib/email', () => ({
+  sendEmail: (o: { to: string; subject: string }) => { calls.order.push(`email:${o.to}`); return sendEmail(o) },
+  EmailSendError,
+}))
 vi.mock('@/lib/docusign-reissue', () => ({ reissueParticipantAgreement: (...a: unknown[]) => { calls.order.push('docusign'); return reissue(...a) } }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: async () => ({ title: 'CO SDC', date: '2026-10-03', venue: 'STEM School' }) }))
 vi.mock('./audiences', () => ({ resolveAudience }))
@@ -144,6 +157,36 @@ describe('sendEventEmail', () => {
     sendEmail.mockRejectedValueOnce(new Error('Resend 422'))
     const out = await sendEventEmail(fakeDb(EMAIL) as never, 'e1', { trigger: 'manual', spacingMs: 0 })
     expect(out).toMatchObject({ ok: true, sent: 1, failed: 1 })
+  })
+
+  // deep review INT-2 / PUB-4: a bulk event-email blast is marketing against the
+  // shared daily budget. When sendEmail refuses with a quota (429) error the
+  // loop must STOP, must NOT record the unreached recipients (so they retry),
+  // and the email must go back to its prior state — not be marked 'sent'.
+  it('stops on a shared-budget quota error, leaving the rest unrecorded for retry and the email unsent', async () => {
+    sendEmail.mockResolvedValueOnce(undefined) // Al goes out
+    sendEmail.mockRejectedValueOnce(new EmailSendError('daily budget spent', 429)) // Bo hits the cap
+    const db = fakeDb(EMAIL)
+    const out = await sendEventEmail(db as never, 'e1', { trigger: 'schedule', spacingMs: 0 })
+
+    expect(out).toMatchObject({ ok: true, sent: 1, failed: 0, incomplete: true })
+    // Only Al was attempted; Bo was not emailed and not recorded.
+    expect(sendEmail.mock.calls.map((c) => c[0].to)).toEqual(['a@example.com', 'b@example.com'])
+    const recorded = (db.state.sends[0].recipients as { email: string }[]) ?? []
+    expect(recorded.map((r) => r.email)).toEqual(['a@example.com'])
+    // Returned to 'scheduled' (its prior status) so the next cron slot resumes it.
+    expect(db.state.row.status).toBe('scheduled')
+    expect(db.state.statusWrites).toEqual(['sending', 'scheduled'])
+  })
+
+  it('a non-quota failure is NOT a budget stop: it records the failure and finishes (sent)', async () => {
+    // Guards the mutation boundary — only an isQuota EmailSendError stops the loop.
+    sendEmail.mockResolvedValueOnce(undefined)
+    sendEmail.mockRejectedValueOnce(new Error('Resend 500'))
+    const db = fakeDb(EMAIL)
+    const out = await sendEventEmail(db as never, 'e1', { trigger: 'schedule', spacingMs: 0 })
+    expect(out).toMatchObject({ ok: true, sent: 1, failed: 1 })
+    expect(db.state.row.status).toBe('sent')
   })
 
   it('a manual send to nobody is refused and the email stays editable', async () => {

@@ -6,7 +6,7 @@
 // NB: lib/campaigns.ts is unrelated (Fall/Spring program registration windows).
 
 import { supabaseServer } from '@/lib/supabase'
-import { sendEmail, MARKETING_FROM } from '@/lib/email'
+import { sendEmail, MARKETING_FROM, EmailSendError } from '@/lib/email'
 import { renderCampaignEmail } from '@/lib/email-render'
 import { memberMergeVars, type CampaignMember } from '@/lib/email-vars'
 
@@ -117,6 +117,11 @@ export interface SendResult {
   sent: number
   failed: number
   skipped: number // already in the ledger for this (campaign, dedupKey)
+  // deep review INT-2 / PUB-4: set when the loop stopped early because the
+  // shared daily email budget ran out. The members not reached were NOT written
+  // to the ledger, so the caller must leave the campaign/queue row runnable and
+  // the next run resumes them.
+  quotaStopped?: boolean
 }
 
 /**
@@ -150,9 +155,22 @@ async function sendToMembers(
     let error: string | null = null
     try {
       const { subject, html, text } = renderCampaignEmail(template, vars, unsub)
-      await sendEmail({ to: m.email, from: MARKETING_FROM, subject, html, text })
+      // Marketing/bulk: refused by sendEmail (throws isQuota) once the shared
+      // daily budget's non-reserved portion is spent — see below.
+      await sendEmail({ to: m.email, from: MARKETING_FROM, subject, html, text, kind: 'marketing' })
       result.sent++
     } catch (e) {
+      // deep review INT-2 / PUB-4: a quota/429 is the shared Resend budget
+      // running out, NOT this member failing. STOP the loop and leave this
+      // member (and everyone after) OUT of the ledger, so the next run retries
+      // them instead of recording them as permanently tried. (A genuine
+      // per-recipient failure — e.g. a 422 bad address — still ledgers as
+      // 'failed' below, so it is not retried forever.)
+      if (e instanceof EmailSendError && e.isQuota) {
+        result.quotaStopped = true
+        console.warn('[email-campaigns] daily email budget spent — pausing campaign send for retry')
+        break
+      }
       status = 'failed'
       error = e instanceof Error ? e.message : String(e)
       result.failed++
@@ -210,11 +228,20 @@ export async function dispatchDueCampaigns(): Promise<{ processed: number; resul
     }
 
     const members = await resolveAudience((c.audience ?? {}) as Audience)
-    results[c.id] = await sendToMembers(c.id, template, members)
+    const r = await sendToMembers(c.id, template, members)
+    results[c.id] = r
 
+    // deep review INT-2 / PUB-4: if the shared daily budget ran out mid-send,
+    // return the campaign to 'scheduled' (not 'sent') so the next cron tick
+    // re-claims it and sends whoever is left — the send ledger skips the
+    // members already delivered, so nobody is emailed twice.
     await db
       .from('email_campaigns')
-      .update({ status: 'sent', sent_at: new Date().toISOString() })
+      .update(
+        r.quotaStopped
+          ? { status: 'scheduled', updated_at: new Date().toISOString() }
+          : { status: 'sent', sent_at: new Date().toISOString() },
+      )
       .eq('id', c.id)
   }
 
@@ -358,6 +385,14 @@ export async function dispatchDueDrips(limit = 200): Promise<DripResult> {
       }
 
       const sendResult = await sendToMembers(row.campaign_id, template, [target], row.dedup_key ?? '')
+      // deep review INT-2 / PUB-4: the shared daily budget ran out before this
+      // step went out. Return the queue row to 'pending' (the claim above had
+      // optimistically marked it 'sent') so a later run delivers it, and stop
+      // draining further rows this run — the budget is gone.
+      if (sendResult.quotaStopped) {
+        await db.from('email_campaign_queue').update({ status: 'pending', processed_at: null }).eq('id', row.id)
+        break
+      }
       if (sendResult.failed > 0) await finish('failed', 'send failed')
       else result.sent++
     } catch (e) {

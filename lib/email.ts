@@ -1,6 +1,8 @@
 import { emailLayout, escapeHtml as esc } from '@/lib/email-layout'
 import type { ShareBlock } from '@/lib/credentials-core'
 import { appEnv, isProd } from '@/lib/env'
+import { supabaseServer } from '@/lib/supabase'
+import { canSend, recordSend, type EmailKind } from '@/lib/email-budget'
 
 // deep review PUB-2 / HTML-injection cluster: every user-supplied value that is
 // interpolated into an HTML email body is escaped with `esc` (the shared
@@ -110,12 +112,21 @@ interface SendEmailOptions {
   attachments?: EmailAttachment[]
   /** Extra MIME headers, e.g. List-Unsubscribe for one-click opt-out. */
   headers?: Record<string, string>
+  /**
+   * deep review INT-2 / PUB-4: how this send is weighed against the shared
+   * daily Resend budget. `'transactional'` (the default, so every existing
+   * caller stays transactional) is never held back by the budget; `'marketing'`
+   * — campaigns and event-email blasts — is refused once the day's non-reserved
+   * budget is spent, keeping the reserve for consent / credential / registration
+   * / safeguarding mail.
+   */
+  kind?: EmailKind
 }
 
 /** Resend's id for the message, when one was sent. */
 export interface SentEmail { id: string | null }
 
-export async function sendEmail({ to, from, cc, replyTo, subject, html, text, attachments, headers }: SendEmailOptions): Promise<SentEmail> {
+export async function sendEmail({ to, from, cc, replyTo, subject, html, text, attachments, headers, kind = 'transactional' }: SendEmailOptions): Promise<SentEmail> {
   if (!RESEND_API_KEY) {
     console.log('[email] No RESEND_API_KEY — would have sent to:', to?.replace(/^.*@/, '…@'), subject)
     return { id: null }
@@ -129,6 +140,19 @@ export async function sendEmail({ to, from, cc, replyTo, subject, html, text, at
       subject,
     )
     return { id: null }
+  }
+
+  // deep review INT-2 / PUB-4: hold marketing/bulk mail back once the shared
+  // daily budget's non-reserved portion is spent, so it can't drain the sends
+  // reserved for transactional mail. Refusing throws EmailSendError(isQuota) so
+  // a bulk loop STOPS and leaves the recipient unrecorded for retry rather than
+  // burning the rest of its list on failures. Transactional mail is never gated
+  // (see canSend) — it is the fail-safe path. The quota client is obtained
+  // defensively: if the service-role env is absent the whole app is broken
+  // anyway, and we would rather let a send through than crash the mailer here.
+  const quotaDb = quotaClient()
+  if (kind === 'marketing' && quotaDb && !(await canSend('marketing', quotaDb))) {
+    throw new EmailSendError('Daily email budget reserved for transactional mail is exhausted', 429)
   }
 
   const res = await fetch('https://api.resend.com/emails', {
@@ -164,7 +188,25 @@ export async function sendEmail({ to, from, cc, replyTo, subject, html, text, at
     throw new EmailSendError(`Failed to send email: ${err}`, res.status)
   }
   const body = await res.json().catch(() => null) as { id?: string } | null
+  // deep review INT-2 / PUB-4: count the send that actually went out against the
+  // shared daily budget, keyed by UTC day. Best-effort: recordSend never throws,
+  // since the mail has already been sent.
+  if (quotaDb) await recordSend(quotaDb)
   return { id: body?.id ?? null }
+}
+
+// deep review INT-2 / PUB-4: the shared budget lives in Supabase (service role).
+// Obtain the client without letting a misconfigured environment take the mailer
+// down: if supabaseServer() throws, the budget is simply not enforced for this
+// send (the app is already broken elsewhere), which keeps transactional mail
+// flowing.
+function quotaClient(): ReturnType<typeof supabaseServer> | null {
+  try {
+    return supabaseServer()
+  } catch (err) {
+    console.error('[email] shared-budget client unavailable — skipping budget check:', err instanceof Error ? err.message : err)
+    return null
+  }
 }
 
 /**

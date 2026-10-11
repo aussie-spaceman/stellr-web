@@ -6,7 +6,7 @@
 // never both send it. Every send, including a test, lands in event_email_sends.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { sendEmail } from '@/lib/email'
+import { sendEmail, EmailSendError } from '@/lib/email'
 import { extractTokens } from '@/lib/email-render'
 import { RESOURCES_BUCKET } from '@/lib/community'
 import { getEventBySlug } from '@/lib/sanity'
@@ -41,7 +41,19 @@ const SENDING_STALE_MS = 10 * 60_000
 export type SendTrigger = 'manual' | 'schedule' | 'test' | 'catch_up'
 
 export type SendOutcome =
-  | { ok: true; sendId: string; recipients: number; sent: number; failed: number; docusignResent: number }
+  | {
+      ok: true
+      sendId: string
+      recipients: number
+      sent: number
+      failed: number
+      docusignResent: number
+      // deep review INT-2 / PUB-4: true when the shared daily email budget ran
+      // out before every recipient was reached. The email was returned to its
+      // prior state (scheduled/draft) rather than marked sent, so the next cron
+      // slot resumes it and sends whoever is left.
+      incomplete?: boolean
+    }
   | { ok: false; status: number; error: string }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -184,7 +196,7 @@ export async function sendEventEmail(
       }
     }
 
-    const { sendId, sent, failed } = await deliver(db, email, event, recipients, {
+    const { sendId, sent, failed, stoppedForQuota } = await deliver(db, email, event, recipients, {
       trigger: opts.trigger,
       triggeredBy: opts.triggeredBy,
       audiences: email.audiences,
@@ -192,6 +204,17 @@ export async function sendEventEmail(
       docusignResent,
       spacingMs: opts.spacingMs,
     })
+
+    // deep review INT-2 / PUB-4: if the shared daily email budget ran out
+    // mid-send, do NOT mark the email 'sent' — put it back where it was so the
+    // next scheduled cron slot (or an admin re-send) resumes it. The recipients
+    // already emailed are on the send row, so alreadyTriedAddresses skips them
+    // and only the unreached ones go out next time. Nobody is emailed twice.
+    if (stoppedForQuota) {
+      await release(priorStatus)
+      return { ok: true, sendId, recipients: recipients.length, sent, failed, docusignResent, incomplete: true }
+    }
+
     await release('sent', { sent_at: new Date().toISOString() })
 
     return { ok: true, sendId, recipients: recipients.length, sent, failed, docusignResent }
@@ -222,7 +245,7 @@ export async function deliver(
     docusignResent?: number
     spacingMs?: number
   },
-): Promise<{ sendId: string; sent: number; failed: number }> {
+): Promise<{ sendId: string; sent: number; failed: number; stoppedForQuota: boolean }> {
   const isTest = opts.trigger === 'test'
   const eventVars = eventMergeVars(event)
   // History shows the subject as it went out (first recipient's rendering),
@@ -263,6 +286,11 @@ export async function deliver(
       console.error(`[event-emails] progress write failed for send ${sendRow.id}:`, err)
     }
   }
+  // An event-email blast is marketing/bulk against the shared daily budget: it
+  // must not be able to drain the sends reserved for transactional mail. A test
+  // goes to the sender only and is always allowed through.
+  const kind = isTest ? 'transactional' : 'marketing'
+  let stoppedForQuota = false
   for (const [i, r] of recipients.entries()) {
     if (i > 0) await sleep(opts.spacingMs ?? SEND_SPACING_MS)
     try {
@@ -275,9 +303,20 @@ export async function deliver(
         html: content.html,
         text: content.text,
         attachments: opts.attachments,
+        kind,
       })
       results.push({ email: r.email, name: r.name, roles: r.roles, status: 'sent' })
     } catch (err) {
+      // deep review INT-2 / PUB-4: a quota/429 means the SHARED Resend budget is
+      // spent, not that this recipient failed. STOP now and do NOT record this
+      // recipient (nor anyone after), so the next run retries them —
+      // alreadyTriedAddresses only skips addresses we actually persisted. A
+      // genuine per-recipient failure (e.g. a bad address) still records as
+      // 'failed' and carries on, exactly as before.
+      if (err instanceof EmailSendError && err.isQuota) {
+        stoppedForQuota = true
+        break
+      }
       results.push({ email: r.email, name: r.name, roles: r.roles, status: 'failed', error: err instanceof Error ? err.message.slice(0, 300) : String(err) })
     }
     await persistProgress()
@@ -291,7 +330,7 @@ export async function deliver(
       .update({ sent_count: sent, failed_count: failed, recipients: results, finished_at: new Date().toISOString() })
       .eq('id', sendRow.id)
   }
-  return { sendId: (sendRow?.id as string) ?? '', sent, failed }
+  return { sendId: (sendRow?.id as string) ?? '', sent, failed, stoppedForQuota }
 }
 
 /**

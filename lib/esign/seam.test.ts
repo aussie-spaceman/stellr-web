@@ -37,6 +37,11 @@ const PURE_EXPORTS = new Set([
   'isMinor',
   'summariseSigners',
   'verifyConnectHmac',
+  // Pure string comparison (trim + lowercase), no DocuSign API call. Shared so
+  // the CO-2 safeguarding marker in lib/docusign-agreements.ts records on the
+  // exact "guardian inbox == student inbox" condition the shared-inbox routing
+  // in lib/docusign.ts uses.
+  'sameAddress',
 ])
 
 const SCAN_DIRS = ['app', 'lib', 'components']

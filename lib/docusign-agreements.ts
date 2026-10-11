@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { classifyAgreement, type AgreementType, type EventAgreementType } from './docusign'
+import { classifyAgreement, sameAddress, type AgreementType, type EventAgreementType } from './docusign'
 import { issueAgreement } from './esign/issue'
+import { logActivity } from './activity-log'
 import { ISSUE_FAILED_PREFIX, type CreatedAgreement, type MembershipAgreementParams, type ProviderId } from './esign/types'
 import { escapeHtml as esc } from './email-layout'
 import {
@@ -244,6 +245,42 @@ async function issueOrReuse(
         return { outcome: 'not_required' }
       }
       const guardianName = [ctx.guardianFirstName, ctx.guardianLastName].filter(Boolean).join(' ')
+
+      // deep review CO-2: when the guardian contact email is the student's own
+      // inbox, the two consent signatures (guardian + minor) can be given by one
+      // person — the independent-guardian-consent assurance is only as strong as
+      // the two addresses being different. The shared-inbox routing in
+      // lib/docusign.ts handles the mechanics (sequential signing) but leaves no
+      // trace anyone can review. The owner asked for a durable, queryable marker
+      // only — NO block, NO refusal, NO admin UI. Record it on the student's
+      // activity log (shared member/admin timeline, queryable by category/action)
+      // via the existing best-effort helper, so no new table or migration is
+      // needed. `sameAddress` is the same comparison the routing uses, so the
+      // marker is written on exactly the registrations that route to one inbox.
+      // Best-effort and fully isolated: a logging failure must never turn a
+      // successfully-issued consent into a reported failure.
+      const guardianEmailEqualsStudent = !!ctx.email && sameAddress(ctx.email, ctx.guardianEmail)
+      if (guardianEmailEqualsStudent) {
+        const co2MemberId = coverageMemberId ?? ctx.memberId
+        if (co2MemberId) {
+          await logActivity({
+            memberId:   co2MemberId,
+            actorType:  'system',
+            category:   'compliance',
+            action:     'guardian_email_equals_student',
+            summary:    'Guardian consent contact uses the same email as the student, so one inbox receives both consent signatures.',
+            metadata: {
+              finding:       'CO-2',
+              participantId: ctx.participantId ?? null,
+              eventSlug:     ctx.eventSlug,
+              agreementType: 'minor',
+            },
+          }, db).catch((err) => {
+            console.error('[agreements] CO-2 safeguarding marker failed (non-fatal):', err)
+          })
+        }
+      }
+
       const envelope = await issueAgreement(db, {
         type: 'minor',
         accounts: { memberId: ctx.memberId },

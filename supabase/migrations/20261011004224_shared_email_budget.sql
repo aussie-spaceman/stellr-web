@@ -47,5 +47,5 @@ END $$;
 -- SECURITY DEFINER bypasses RLS and Supabase grants EXECUTE to anon +
 -- authenticated by default, so lock it to the server (deep review DB-N3 /
 -- lint:migrations). A FROM PUBLIC revoke is deliberately NOT enough here.
-REVOKE EXECUTE ON FUNCTION public.bump_email_quota(date) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.bump_email_quota(date) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.bump_email_quota(date) TO service_role;

@@ -30,16 +30,49 @@ export async function POST(req: Request) {
 
   const db = supabaseServer()
 
-  // Reconcile to our row: prefer the candidate ref (always set at order time),
-  // fall back to the report ref.
-  let query = db.from('member_background_checks').select('id, member_id, status').limit(1)
-  if (parsed.candidateRef) query = query.eq('provider_candidate_ref', parsed.candidateRef)
-  else if (parsed.reportRef) query = query.eq('provider_report_ref', parsed.reportRef)
-  else return NextResponse.json({ received: true, skipped: 'no reference to match' })
-  const { data: row } = await query.maybeSingle()
+  // Reconcile to OUR row by the MOST SPECIFIC ref the event carries, newest
+  // first (deep review BG-6). The old code matched on the candidate ref alone
+  // with .limit(1) and no ordering, which breaks when two checks share a Checkr
+  // candidate — the 22-Sept flow of deleting an invitation and re-ordering the
+  // same day reuses the candidate id within Checkr's 24h window. That let a late
+  // `invitation.deleted` for the OLD invitation land on the NEWER row and cancel
+  // it (a cancelled row is no longer polled, so the real outcome is stranded),
+  // and a report event hit whichever row came back first.
+  //
+  // Precedence:
+  //   1. An invitation event carries an invitation id that is unique to one of
+  //      our rows — match it exactly, so a stale invitation.* only ever touches
+  //      its own row.
+  //   2. A report event's report id is matched directly; a brand-new report whose
+  //      id we haven't stored yet falls back to the newest OPEN row for the
+  //      candidate (a cancelled/terminal row is never revived by it).
+  //   3. Otherwise match the candidate, newest by ordered_at.
+  const selectOne = () =>
+    db
+      .from('member_background_checks')
+      .select('id, member_id, status')
+      .order('ordered_at', { ascending: false })
+      .limit(1)
+
+  let row: { id: string; member_id: string; status: string } | null = null
+  if (parsed.invitationRef) {
+    ;({ data: row } = await selectOne().eq('provider_invitation_ref', parsed.invitationRef).maybeSingle())
+  } else if (parsed.reportRef) {
+    ;({ data: row } = await selectOne().eq('provider_report_ref', parsed.reportRef).maybeSingle())
+    if (!row && parsed.candidateRef) {
+      ;({ data: row } = await selectOne()
+        .eq('provider_candidate_ref', parsed.candidateRef)
+        .in('status', ['invited', 'in_progress'])
+        .maybeSingle())
+    }
+  } else if (parsed.candidateRef) {
+    ;({ data: row } = await selectOne().eq('provider_candidate_ref', parsed.candidateRef).maybeSingle())
+  } else {
+    return NextResponse.json({ received: true, skipped: 'no reference to match' })
+  }
 
   if (!row) {
-    console.warn('[background-webhook] No row for', parsed.candidateRef ?? parsed.reportRef)
+    console.warn('[background-webhook] No row for', parsed.invitationRef ?? parsed.reportRef ?? parsed.candidateRef)
     return NextResponse.json({ received: true })
   }
 

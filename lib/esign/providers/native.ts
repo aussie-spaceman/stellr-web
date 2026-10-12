@@ -107,13 +107,29 @@ export const nativeProvider: EsignProvider = {
       throw new Error(`Agreement is ${env.status}; nothing to void`)
     }
     const now = new Date().toISOString()
-    // Every outstanding link dies with the agreement.
+    // deep review ES-3: the status read above and the write below are not atomic
+    // — finaliseAgreement can mark the row 'completed' in between (several
+    // seconds of render/store), and an unconditional write would clobber that
+    // completion back to 'voided' (a signed consent silently lost; conversely a
+    // void clobbered to completed can gate a child in). Guard the write on the
+    // row still being live, and only invalidate the signing links and record the
+    // void once the void actually won the race. Nothing to void if it did not.
+    const { data: voided } = await db
+      .from('agreements')
+      .update({ status: 'voided', updated_at: now })
+      .eq('id', env.id)
+      .in('status', ['created', 'sent', 'delivered'])
+      .select('id')
+    if (!voided?.length) {
+      throw new Error('Agreement is no longer out for signature (it was completed or voided concurrently); nothing to void')
+    }
+    // Every outstanding link dies with the agreement — after the status win, so
+    // a lost race leaves the live links intact.
     for (const r of await loadRecipients(db, env.id)) {
       if (r.status !== 'completed') {
         await db.from('agreement_recipients').update({ token_version: r.token_version + 1 }).eq('id', r.id)
       }
     }
-    await db.from('agreements').update({ status: 'voided', updated_at: now }).eq('id', env.id)
     await appendAudit(db, { envelopeRow: env.id, event: 'voided', detail: { reason: reason ?? 'Voided by Stellr' } })
   },
 

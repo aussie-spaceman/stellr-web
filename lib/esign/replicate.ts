@@ -17,8 +17,26 @@ import type { BackupStore } from '@/lib/esign/backup-store'
 const EXPORT_PREFIX = 'export-'
 const KEEP_EXPORTS = 30
 
-export const backupName = (envelopeRow: string, kind: 'signed' | 'certificate' | 'audit') =>
-  `${envelopeRow}-${kind}.${kind === 'audit' ? 'json' : 'pdf'}.enc`
+// deep review ES-5: the signed PDF changes when the certificate seal is applied
+// (certificate-seal.ts rewrites signed_pdf_path/sha and clears replicated_at to
+// force a re-copy). The backup name used to be content-independent and `put` is
+// write-once, so the re-copy found the pre-seal name and silently skipped —
+// leaving the off-site copy holding bytes that no longer match the row's
+// signed_pdf_sha256, so every restore of a sealed record failed its hash check.
+// Keying the signed copy's name on its content hash means the sealed bytes get a
+// new name and are actually copied. The certificate/audit file does not change
+// on seal, so those names stay stable. `removeReplicas` sweeps by prefix so both
+// the pre-seal and sealed signed copies are removed at retention.
+export const SIGNED_BACKUP_PREFIX = (envelopeRow: string) => `${envelopeRow}-signed`
+
+export const backupName = (
+  envelopeRow: string,
+  kind: 'signed' | 'certificate' | 'audit',
+  sha?: string | null,
+): string => {
+  if (kind === 'signed') return `${envelopeRow}-signed${sha ? `-${sha.slice(0, 16)}` : ''}.pdf.enc`
+  return `${envelopeRow}-${kind}.${kind === 'audit' ? 'json' : 'pdf'}.enc`
+}
 
 interface ReplicableRow {
   id: string
@@ -68,7 +86,10 @@ export async function replicatePending(
       if (row.signed_pdf_sha256 && sha256Hex(pdf) !== row.signed_pdf_sha256) {
         throw new Error('Stored PDF no longer matches its recorded hash; not copying a damaged record')
       }
-      await store.put(backupName(row.id, 'signed'), encryptBackup(pdf))
+      // deep review ES-5: name the signed copy by its content hash so a sealed
+      // version (a different hash) is copied rather than skipped as "already
+      // present" against the pre-seal name.
+      await store.put(backupName(row.id, 'signed', row.signed_pdf_sha256), encryptBackup(pdf))
       if (row.certificate_path) {
         const kind = (row.provider ?? 'docusign') === 'native' ? 'audit' : 'certificate'
         await store.put(backupName(row.id, kind), encryptBackup(await readStored(db, row.certificate_path)))
@@ -141,5 +162,9 @@ export async function exportTables(
 
 /** Removes a record's off-site copies, at the end of its retention period. */
 export async function removeReplicas(store: BackupStore, envelopeRow: string): Promise<void> {
-  for (const kind of ['signed', 'certificate', 'audit'] as const) await store.remove(backupName(envelopeRow, kind))
+  // deep review ES-5: the signed copy's name is content-keyed, so there can be a
+  // pre-seal and a sealed copy (and legacy un-suffixed copies); sweep every
+  // `<row>-signed*` name. The certificate/audit names are stable.
+  for (const name of await store.list(SIGNED_BACKUP_PREFIX(envelopeRow))) await store.remove(name)
+  for (const kind of ['certificate', 'audit'] as const) await store.remove(backupName(envelopeRow, kind))
 }

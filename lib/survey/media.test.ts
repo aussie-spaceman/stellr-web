@@ -54,6 +54,16 @@ describe('media permission resolver', () => {
     expect(mediaPermission(facts({ isMinor: false, age: 34, states: ['CO'], agreement: { exists: false, restricted: false, optOut: false, optOutKnown: false } }))).toEqual({ status: 'yes', reason: 'default' })
   })
 
+  it('an ADULT whose signed form could not be read is check, not yes (DS-6)', () => {
+    // deep review DS-6: an educator/mentor/volunteer whose media opt-out could
+    // not be read back must fail closed to "check", exactly as a minor does — a
+    // failed read must never default to "yes, may use photos".
+    expect(mediaPermission(facts({
+      isMinor: false, age: 35, states: [], studentAllowMedia: null,
+      agreement: { exists: true, restricted: false, optOut: false, optOutKnown: false },
+    }))).toEqual({ status: 'check', reason: 'form_unread' })
+  })
+
   it('says who answered and on which form', () => {
     const minor = { isMinor: true, signedAt: '2026-10-02T15:04:00Z' }
     expect(mediaReasonDetail({ ...minor, decision: { status: 'no', reason: 'opted_out_on_agreement' } }))

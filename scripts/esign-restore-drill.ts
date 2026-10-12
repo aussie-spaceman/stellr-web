@@ -69,7 +69,10 @@ async function main() {
 
   let failures = 0
   for (const row of rows) {
-    const sealed = await store.get(backupName(row.id, 'signed'))
+    // deep review ES-5: the signed copy is named by its content hash, so look it
+    // up by the row's recorded sha256 (falls back to the legacy un-suffixed name
+    // when a row predates that hash).
+    const sealed = await store.get(backupName(row.id, 'signed', row.signed_pdf_sha256))
     if (!sealed) { console.error(`✗ ${row.id}: no backup copy`); failures++; continue }
     let plain: Buffer
     try { plain = decryptBackup(sealed) } catch (e) { console.error(`✗ ${row.id}: ${(e as Error).message}`); failures++; continue }

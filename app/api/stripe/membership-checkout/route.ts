@@ -97,7 +97,16 @@ export async function POST(req: Request) {
         memberId: member.id,
         tierId: tier.id,
         billingInterval,
-        ...(discount ? { creditMemberId: member.id as string, creditAllocations: JSON.stringify(discount.allocations) } : {}),
+        // deep review PAY-9: the credit is reserved at buildCreditDiscount time; the
+        // webhook settles that reservation by id (creditAllocations is kept only so a
+        // session minted before this deploy still settles via the back-compat path).
+        ...(discount
+          ? {
+              creditMemberId: member.id as string,
+              creditReservationId: discount.reservationId,
+              creditAllocations: JSON.stringify(discount.allocations),
+            }
+          : {}),
       },
       subscription_data: {
         metadata: {

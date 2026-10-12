@@ -79,6 +79,10 @@ export async function POST(
     metadata: {
       registrationId,
       eventSlug: registration.event_slug,
+      // deep review PAY-7: settle THIS seat by id. member.email follows Clerk and
+      // may differ from the frozen registration-time participant email the webhook
+      // would otherwise match on (payment taken, seat never marked paid).
+      participantId: participant.id,
       participantEmail: member.email,
       isIndividualGroupPayment: 'true',
     },

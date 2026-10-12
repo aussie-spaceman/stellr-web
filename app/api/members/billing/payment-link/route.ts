@@ -87,9 +87,16 @@ export async function POST(req: NextRequest) {
   if (!stripePriceId) return NextResponse.json({ error: 'No price configured for this event' }, { status: 400 })
 
   // Member-pays-individually: metadata mirrors lib/individual-payment so the
-  // webhook's markIndividualPayment settles this member's seat.
+  // webhook's markIndividualPayment settles this member's seat. deep review PAY-7:
+  // carry participantId so the webhook settles THIS seat by id — member.email
+  // follows Clerk and may differ from the frozen registration-time participant
+  // email the webhook would otherwise match on (payment taken, seat never paid).
   const metadata: Record<string, string> = {
-    registrationId, eventSlug: registration.event_slug, participantEmail: member.email, isIndividualGroupPayment: 'true',
+    registrationId,
+    eventSlug: registration.event_slug,
+    participantId: participant.id,
+    participantEmail: member.email,
+    isIndividualGroupPayment: 'true',
   }
 
   // Refuse to take money on a production deployment holding TEST keys. A test-mode

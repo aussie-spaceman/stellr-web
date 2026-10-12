@@ -1,24 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type Stripe from 'stripe'
 
 // vi.mock factories are hoisted above the file body, so the spies they close
 // over must be created inside vi.hoisted().
-const { sendEmail, checkoutCreate, priceRetrieve, getEventBySlug, notifyCommunityAdmins } = vi.hoisted(() => ({
+const { sendEmail, payEmailFactory, checkoutCreate, priceRetrieve, getEventBySlug, notifyCommunityAdmins, assertLiveCredentials } = vi.hoisted(() => ({
   sendEmail: vi.fn(async (_opts: unknown) => {}),
-  checkoutCreate: vi.fn(async (_opts: unknown) => ({ url: 'https://checkout.stripe.test/session' })),
+  payEmailFactory: vi.fn((a: { eventTitle: string; paymentUrl: string }) => ({ subject: `pay:${a.eventTitle}`, html: '', text: '' })),
+  checkoutCreate: vi.fn(async (_opts: unknown) => ({ id: 'cs_x', url: 'https://checkout.stripe.test/session' })),
   priceRetrieve: vi.fn(async (_id: string): Promise<{ unit_amount: number | null }> => ({ unit_amount: 13500 })),
   getEventBySlug: vi.fn(async (_slug: string) => ({ stripePriceId: 'price_abc' } as { stripePriceId?: string })),
   notifyCommunityAdmins: vi.fn(async (_input: unknown) => {}),
+  assertLiveCredentials: vi.fn(),
 }))
 
 vi.mock('@/lib/email', () => ({
   sendEmail,
-  groupMemberIndividualPaymentEmail: (a: { eventTitle: string }) =>
-    ({ subject: `pay:${a.eventTitle}`, html: '', text: '' }),
+  groupMemberIndividualPaymentEmail: payEmailFactory,
   groupRegisteredNoPaymentEmail: (a: { eventTitle: string }) =>
     ({ subject: `free:${a.eventTitle}`, html: '', text: '' }),
 }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: (slug: string) => getEventBySlug(slug) }))
 vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins }))
+vi.mock('@/lib/env-guards', () => ({ assertLiveCredentials }))
 vi.mock('stripe', () => ({
   default: class {
     checkout = { sessions: { create: checkoutCreate } }
@@ -26,43 +29,54 @@ vi.mock('stripe', () => ({
   },
 }))
 
-import { ensureIndividualPayments } from '@/lib/individual-payment'
+import { ensureIndividualPayments, createSeatCheckout } from '@/lib/individual-payment'
 
 interface Reg { member_pays_individually: boolean }
-interface Part { id: string; individual_payment_link_sent_at: string | null }
+interface Part { id: string; individual_payment_link_sent_at: string | null; pay_token?: string | null }
 
-// Supabase stub covering just the three shapes the helper uses: the single
-// registration lookup, the `.in()` participant lookup, and per-participant
-// updates (recorded so we can assert exactly what was written).
+// In-memory Supabase stub covering the shapes the helper uses: the single
+// registration lookup, the `.in()` participant lookup, ensureSeatPayToken's
+// pay_token read + guarded mint, and the per-participant status/sent_at updates
+// (recorded so we can assert exactly what was written).
 function makeDb(registration: Reg | null, participants: Part[]) {
+  const rows = participants.map((p) => ({ pay_token: null, ...p } as Record<string, unknown>))
   const updates: Record<string, unknown>[] = []
-  const db = {
-    from(table: string) {
-      if (table === 'registrations') {
-        const chain = {
-          select: () => chain,
-          eq: () => chain,
-          maybeSingle: async () => ({
-            data: registration
-              ? { id: 'reg-1', event_slug: 'nevada-2027', event_title: 'Nevada 2027', ...registration }
-              : null,
-            error: null,
-          }),
-        }
-        return chain
-      }
+  function builder(table: string) {
+    if (table === 'registrations') {
       const chain = {
         select: () => chain,
-        in: async () => ({ data: participants, error: null }),
-        update: (payload: Record<string, unknown>) => {
-          updates.push(payload)
-          return { eq: async () => ({ error: null }) }
-        },
+        eq: () => chain,
+        maybeSingle: async () => ({
+          data: registration
+            ? { id: 'reg-1', event_slug: 'nevada-2027', event_title: 'Nevada 2027', ...registration }
+            : null,
+          error: null,
+        }),
       }
       return chain
-    },
+    }
+    const filters: ((r: Record<string, unknown>) => boolean)[] = []
+    let pending: Record<string, unknown> | null = null
+    const matched = () => rows.filter((r) => filters.every((f) => f(r)))
+    const applyUpdate = () => {
+      const m = matched()
+      for (const r of m) Object.assign(r, pending)
+      updates.push(pending as Record<string, unknown>)
+      return m
+    }
+    const q = {
+      select: () => q,
+      eq: (c: string, v: unknown) => (filters.push((r) => r[c] === v), q),
+      in: (c: string, vs: unknown[]) => (filters.push((r) => vs.includes(r[c])), q),
+      is: (c: string, v: unknown) => (filters.push((r) => (v === null ? r[c] == null : r[c] === v)), q),
+      update: (payload: Record<string, unknown>) => ((pending = payload), q),
+      maybeSingle: async () => (pending ? { data: applyUpdate()[0] ?? null, error: null } : { data: matched()[0] ?? null, error: null }),
+      then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+        Promise.resolve(pending ? { data: applyUpdate(), error: null } : { data: matched(), error: null }).then(resolve, reject),
+    }
+    return q
   }
-  return { db: db as never, updates }
+  return { db: { from: builder } as never, updates, rows }
 }
 
 const PEOPLE = [
@@ -75,11 +89,11 @@ beforeEach(() => {
   process.env.STRIPE_SECRET_KEY = 'sk_test'
   getEventBySlug.mockResolvedValue({ stripePriceId: 'price_abc' })
   priceRetrieve.mockResolvedValue({ unit_amount: 13500 })
-  checkoutCreate.mockResolvedValue({ url: 'https://checkout.stripe.test/session' })
+  payEmailFactory.mockImplementation((a) => ({ subject: `pay:${a.eventTitle}`, html: '', text: '' }))
 })
 
 describe('ensureIndividualPayments', () => {
-  it('sends a payment link to each unnotified participant on a paid event', async () => {
+  it('emails a DURABLE per-seat pay link (not a raw 24h Checkout URL) to each unnotified participant (PAY-8)', async () => {
     const { db, updates } = makeDb(
       { member_pays_individually: true },
       [
@@ -91,14 +105,17 @@ describe('ensureIndividualPayments', () => {
     const result = await ensureIndividualPayments(db, 'reg-1', PEOPLE)
 
     expect(result).toEqual({ charged: 2, waived: 0, skipped: 0 })
-    expect(checkoutCreate).toHaveBeenCalledTimes(2)
-    // Promo codes set up in Stripe only appear on Checkout when this flag is sent.
-    expect(checkoutCreate).toHaveBeenCalledWith(expect.objectContaining({ allow_promotion_codes: true }))
+    // No Checkout session is minted at email time any more — the link is durable.
+    expect(checkoutCreate).not.toHaveBeenCalled()
     expect(sendEmail).toHaveBeenCalledTimes(2)
-    expect(sendEmail.mock.calls.every(([a]) => (a as { subject: string }).subject.startsWith('pay:'))).toBe(true)
+    for (const call of payEmailFactory.mock.calls) {
+      const url = call[0].paymentUrl
+      expect(url).toMatch(/\/register\/nevada-2027\/pay-seat\/[a-f0-9]{64}$/)
+      expect(url).not.toContain('checkout.stripe')
+    }
     // 'pending' so the webhook's "has the whole group paid?" check sees them.
-    expect(updates.filter(u => u.individual_payment_status === 'pending')).toHaveLength(2)
-    expect(updates.filter(u => u.individual_payment_link_sent_at != null)).toHaveLength(2)
+    expect(updates.filter((u) => u.individual_payment_status === 'pending')).toHaveLength(2)
+    expect(updates.filter((u) => u.individual_payment_link_sent_at != null)).toHaveLength(2)
   })
 
   it('waives and sends the no-payment-required notice when the event has no price', async () => {
@@ -112,15 +129,11 @@ describe('ensureIndividualPayments', () => {
 
     expect(result).toEqual({ charged: 0, waived: 1, skipped: 0 })
     expect(checkoutCreate).not.toHaveBeenCalled()
-    expect((sendEmail.mock.calls[0][0] as { subject: string }).subject).toBe('free:Nevada 2027')
-    expect(updates.some(u => u.individual_payment_status === 'waived')).toBe(true)
+    expect(updates.some((u) => u.individual_payment_status === 'waived')).toBe(true)
     // Free and misconfigured are indistinguishable here, so staff get one alert.
     expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
   })
 
-  // Free events are configured as an explicit $0 price, which still has a price
-  // ID — so keying "free" on the ID alone would mint checkout links for $0 that
-  // Stripe cannot create.
   it('waives on an explicit $0 price rather than minting a zero-value checkout', async () => {
     priceRetrieve.mockResolvedValue({ unit_amount: 0 })
     const { db, updates } = makeDb(
@@ -131,13 +144,12 @@ describe('ensureIndividualPayments', () => {
     const result = await ensureIndividualPayments(db, 'reg-1', [PEOPLE[0]])
 
     expect(result).toEqual({ charged: 0, waived: 1, skipped: 0 })
-    expect(checkoutCreate).not.toHaveBeenCalled()
-    expect(updates.some(u => u.individual_payment_status === 'waived')).toBe(true)
+    expect(updates.some((u) => u.individual_payment_status === 'waived')).toBe(true)
   })
 
   // The opposite failure: waiving on a transient Stripe error would tell paying
   // participants they owe nothing, and no webhook would ever correct it.
-  it('still attempts the charge when the price lookup fails, rather than waiving', async () => {
+  it('still sends the pay link when the price lookup fails, rather than waiving', async () => {
     priceRetrieve.mockRejectedValue(new Error('Stripe unreachable'))
     const { db } = makeDb(
       { member_pays_individually: true },
@@ -147,7 +159,7 @@ describe('ensureIndividualPayments', () => {
     const result = await ensureIndividualPayments(db, 'reg-1', [PEOPLE[0]])
 
     expect(result).toEqual({ charged: 1, waived: 0, skipped: 0 })
-    expect(checkoutCreate).toHaveBeenCalledTimes(1)
+    expect(payEmailFactory.mock.calls[0][0].paymentUrl).toMatch(/\/pay-seat\/[a-f0-9]{64}$/)
     expect(notifyCommunityAdmins).not.toHaveBeenCalled()
   })
 
@@ -205,8 +217,52 @@ describe('ensureIndividualPayments', () => {
     const result = await ensureIndividualPayments(db, 'reg-1', [PEOPLE[0]])
 
     expect(result.charged).toBe(0)
-    expect(updates.some(u => u.individual_payment_link_sent_at != null)).toBe(false)
+    expect(updates.some((u) => u.individual_payment_link_sent_at != null)).toBe(false)
     // The status still landed, so the participant is visibly outstanding.
-    expect(updates.some(u => u.individual_payment_status === 'pending')).toBe(true)
+    expect(updates.some((u) => u.individual_payment_status === 'pending')).toBe(true)
+  })
+})
+
+describe('createSeatCheckout (PAY-7)', () => {
+  const stripe = {
+    prices: { retrieve: priceRetrieve },
+    checkout: { sessions: { create: checkoutCreate } },
+  } as unknown as Stripe
+
+  it('carries participantId (and the email fallback) in the webhook metadata', async () => {
+    const result = await createSeatCheckout(stripe, {
+      participantId: 'pZ',
+      participantEmail: 'seat@school.org',
+      registrationId: 'reg-1',
+      eventSlug: 'nevada-2027',
+      successUrl: 'https://x/ok',
+      cancelUrl: 'https://x/cancel',
+    })
+
+    expect(result).toMatchObject({ url: expect.any(String), sessionId: 'cs_x' })
+    const params = checkoutCreate.mock.calls[0][0] as { metadata: Record<string, string> }
+    expect(params.metadata).toMatchObject({
+      registrationId: 'reg-1',
+      participantId: 'pZ',
+      participantEmail: 'seat@school.org',
+      isIndividualGroupPayment: 'true',
+    })
+    expect(assertLiveCredentials).toHaveBeenCalledWith('stripe')
+  })
+
+  it('returns a free/no-price error instead of minting a $0 session', async () => {
+    getEventBySlug.mockResolvedValueOnce({} as { stripePriceId: string })
+    const r = await createSeatCheckout(stripe, {
+      participantId: 'pZ', participantEmail: 'seat@x', registrationId: 'reg-1', eventSlug: 'nevada-2027',
+      successUrl: 'https://x/ok', cancelUrl: 'https://x/cancel',
+    })
+    expect(r).toEqual({ error: 'no_price' })
+
+    priceRetrieve.mockResolvedValueOnce({ unit_amount: 0 })
+    const r2 = await createSeatCheckout(stripe, {
+      participantId: 'pZ', participantEmail: 'seat@x', registrationId: 'reg-1', eventSlug: 'nevada-2027',
+      successUrl: 'https://x/ok', cancelUrl: 'https://x/cancel',
+    })
+    expect(r2).toEqual({ error: 'free' })
   })
 })

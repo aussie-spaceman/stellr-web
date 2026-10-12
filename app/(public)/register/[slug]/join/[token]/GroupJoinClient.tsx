@@ -123,7 +123,11 @@ export default function GroupJoinClient({
       return
     }
     try {
-      const res = await fetch(`/api/members/exists?email=${encodeURIComponent(clean)}`)
+      // deep review AUTH-4: /exists now requires this group's live invite token
+      // (it's no longer a public account-existence oracle). We always have it here.
+      const res = await fetch(
+        `/api/members/exists?email=${encodeURIComponent(clean)}&token=${encodeURIComponent(token)}`,
+      )
       const data = await res.json()
       setExistingAccount(!!data.hasAccount)
     } catch {

@@ -17,6 +17,13 @@
 //                               so the token and the minor's identifiers never
 //                               reach GA4 / HubSpot / Vercel Analytics (deep
 //                               review MP-1).
+//   /scholarship/offer/<token>  scholarship-offer link (deep review PUB-13) — the
+//                               token is the only key; the page reveals a (usually
+//                               minor) applicant's first name and event and mints
+//                               a working pay link. Same treatment as above so the
+//                               token URL is never sent to GA4 / HubSpot / Vercel
+//                               Analytics. The /scholarship landing page stays
+//                               public and tracked — only the token path is keyed.
 
 export const PRIVATE_ROUTE_HEADER = 'x-stellr-private-route'
 
@@ -27,6 +34,7 @@ const PRIVATE = [
   /^\/survey\//,
   /^\/team-profile\//,
   /^\/credentials(\/|$)/,
+  /^\/scholarship\/offer\//,
 ]
 
 export function isPrivatePath(pathname: string): boolean {

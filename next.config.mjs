@@ -93,6 +93,12 @@ const nextConfig = {
       // the page and its opengraph-image share-card are never cached public and
       // never persist a name after an unpublish or erasure.
       { source: '/credentials/:path*', headers: privateLink },
+      // deep review PUB-13: the scholarship-offer bearer link (token in the
+      // path, reveals a usually-minor applicant's name/event and mints a pay
+      // link). Same HTTP backstop as the other private links — no referrer, no
+      // indexing, never cached — so the token URL is neither forwarded nor
+      // persisted. The tracker suppression itself is driven by lib/private-routes.
+      { source: '/scholarship/offer/:path*', headers: privateLink },
       // The signing page shows the document in a same-origin frame. No
       // object-src here: on a PDF response it can stop the browser's own viewer.
       {

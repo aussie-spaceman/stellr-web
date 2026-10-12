@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, X } from 'lucide-react'
 import { usePrefillNameEmail } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
@@ -34,16 +34,62 @@ export function WhitePaperGate() {
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const lastFocused = useRef<HTMLElement | null>(null)
 
   const valid = name.trim().length > 0 && isEmailLike(email)
   const greeting = name.trim().split(/\s+/)[0] || 'there'
+
+  function openModal() {
+    lastFocused.current = document.activeElement as HTMLElement
+    setOpen(true)
+  }
 
   function close() {
     setOpen(false)
     setSubmitted(false)
     setError(false)
     setLoading(false)
+    lastFocused.current?.focus()
   }
+
+  // deep review PUB-10: give the modal real dialog behaviour (matching AssetGate,
+  // README §9). Esc closes, Tab is trapped inside the dialog, body scroll locks,
+  // the first field is focused on open, and focus is restored to the trigger on
+  // close — otherwise a screen-reader/keyboard user can tab into the page behind.
+  useEffect(() => {
+    if (!open) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    dialogRef.current?.querySelector<HTMLElement>('input, button, a[href]')?.focus()
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        close()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled])',
+      )
+      if (!focusables || focusables.length === 0) return
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs on open/close only; the handler reads the dialog through refs
+  }, [open])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -70,7 +116,7 @@ export function WhitePaperGate() {
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openModal}
         className="inline-flex items-center justify-center gap-2 rounded-[9px] bg-primary px-6 py-3.5 font-display text-[15px] font-semibold text-white hover:bg-primary-deep transition-colors"
       >
         Get the white paper ↓
@@ -84,7 +130,13 @@ export function WhitePaperGate() {
             if (e.target === e.currentTarget) close()
           }}
         >
-          <div className="w-full max-w-[460px] bg-white rounded-panel overflow-hidden shadow-[0_40px_90px_-28px_rgba(8,12,28,.72)]">
+          <div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={PAPER_TITLE}
+            className="w-full max-w-[460px] bg-white rounded-panel overflow-hidden shadow-[0_40px_90px_-28px_rgba(8,12,28,.72)]"
+          >
             {/* Header band */}
             <div className="relative bg-[linear-gradient(135deg,#20264F,#0E1330)] px-7 py-6 flex items-center gap-4">
               <CoverThumb className="w-14 h-[72px] shrink-0" />

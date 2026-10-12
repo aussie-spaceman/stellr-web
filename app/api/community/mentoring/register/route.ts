@@ -7,6 +7,7 @@ import { getOrCreateCohortOffering } from '@/lib/entitlements'
 import { getAcademyDiscountPercent, academyLineItemFromPrice, discountCents } from '@/lib/academy-discount'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 
 // Self-register for an open mentoring cohort: free-with-membership, with a
@@ -93,6 +94,10 @@ export async function POST(req: Request) {
     offeringId,
     creditAppliedCents: '0',
   }
+  // deep review PAY-15: refuse to take money on a production deployment holding
+  // TEST keys — a test-mode charge looks successful and settles nothing. No-op on
+  // real prod (live keys). Reads/pricing above are deliberately not gated.
+  assertLiveCredentials('stripe')
   const checkout = await stripe.checkout.sessions.create({
     mode: 'payment',
     line_items: [lineItem],

@@ -6,6 +6,8 @@ import { computeUnitPrice } from '@/lib/store/pricing'
 import { createPendingOrder, STORE_FLAT_SHIPPING_CENTS, type CheckoutLine } from '@/lib/store/orders'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { assertLiveCredentials } from '@/lib/env-guards'
+import { getActiveTierIdsByMember } from '@/lib/tiers-server'
 import { stripeClient } from '@/lib/stripe'
 
 // Storefront checkout. Re-derives every price server-side (tier discount applied
@@ -37,7 +39,13 @@ export async function POST(req: Request) {
   let memberId: string | null = null
   let email: string | null = null
   let customerId: string | null = null
-  let tierId: string | null = null
+  // deep review PAY-16: the member's active, UNEXPIRED tier ids. The old lookup
+  // was `.eq('renewal_status','active').maybeSingle()` with no expires_at filter —
+  // an expired-but-still-'active' row discounted the order, and a member holding
+  // two active rows (paid + rule grant, common) made maybeSingle error, which
+  // silently dropped the discount entirely. getActiveTierIdsByMember filters by
+  // expiry and returns all of them; we take the best discount per item below.
+  let tierIds: string[] = []
   const { userId } = await auth()
   if (userId) {
     const { data: m } = await db
@@ -51,13 +59,7 @@ export async function POST(req: Request) {
       email = member.email
       // Heal a stale/missing stored customer id rather than passing it blindly.
       customerId = await ensureStripeCustomer(stripe, db, member, userId)
-      const { data: mem } = await db
-        .from('member_memberships')
-        .select('tier_id')
-        .eq('member_id', member.id)
-        .eq('renewal_status', 'active')
-        .maybeSingle()
-      tierId = (mem as { tier_id?: string | null } | null)?.tier_id ?? null
+      tierIds = (await getActiveTierIdsByMember([member.id])).get(member.id) ?? []
     }
   }
 
@@ -80,11 +82,17 @@ export async function POST(req: Request) {
     const product = Array.isArray(row.product) ? row.product[0] : row.product
     if (!row.active || !product || product.status !== 'active') continue
     const qty = reqMap.get(row.id)!
-    const price = await computeUnitPrice(
-      { market_price_cents: row.market_price_cents, product_id: product.id },
-      { product_type: product.product_type },
-      { kind: 'storefront', tierId },
-    )
+    // deep review PAY-16: price against each active tier and keep the best (lowest)
+    // for this item — a member may legitimately hold more than one active tier, and
+    // the discount can differ per product. No tier → no discount.
+    const variantForPrice = { market_price_cents: row.market_price_cents, product_id: product.id }
+    const productForPrice = { product_type: product.product_type }
+    const tierCtxList = tierIds.length > 0 ? tierIds : [null]
+    let price = await computeUnitPrice(variantForPrice, productForPrice, { kind: 'storefront', tierId: tierCtxList[0] })
+    for (const t of tierCtxList.slice(1)) {
+      const candidate = await computeUnitPrice(variantForPrice, productForPrice, { kind: 'storefront', tierId: t })
+      if (candidate.unit_cents < price.unit_cents) price = candidate
+    }
     const name = `${product.name}${row.label ? ` — ${row.label}` : ''}`
     lines.push({ variantId: row.id, sku: row.sku, name, qty, baseCents: price.base_cents, unitCents: price.unit_cents })
     stripeLineItems.push({
@@ -97,6 +105,10 @@ export async function POST(req: Request) {
   const { orderId } = await createPendingOrder({ memberId, email, lines })
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
+  // deep review PAY-15: refuse to take money on a production deployment holding
+  // TEST keys — a test-mode charge looks successful and settles nothing. No-op on
+  // real prod (live keys). Reads/price derivation above are deliberately not gated.
+  assertLiveCredentials('stripe')
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     line_items: stripeLineItems,

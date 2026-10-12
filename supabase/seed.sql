@@ -134,7 +134,16 @@ insert into public.members (
   -- actually being tested.
   ('00000000-0000-4000-a000-000000000005', 'Ida', 'Lapsed',
    (current_date - interval '17 years')::date, 'female', 'ida.lapsed@example.com',
-   'high_school', 'participant', 'grade_12', 'M', false, false)
+   'high_school', 'participant', 'grade_12', 'M', false, false),
+
+  -- deep review TEST-8: an event manager, scoped to ONE event, to prove the
+  -- "cannot see another event" boundary end-to-end. Its Clerk role lives in
+  -- publicMetadata {"role":"event_manager"} (set in Clerk, not here), and its
+  -- event assignment keys on the instance-specific clerk_user_id — see the
+  -- commented event_manager_assignments block below.
+  ('00000000-0000-4000-a000-000000000006', 'Emma', 'EventManager',
+   (current_date - interval '35 years')::date, 'female', 'emma.eventmanager+clerk_test@example.com',
+   'adult', 'adult', null, 'M', true, false)
 on conflict (id) do update set
   first_name = excluded.first_name,
   last_name = excluded.last_name,
@@ -179,6 +188,19 @@ insert into public.member_roles (id, member_id, role) values
   ('00000000-0000-4000-c000-000000000003', '00000000-0000-4000-a000-000000000004', 'mentor'),
   ('00000000-0000-4000-c000-000000000004', '00000000-0000-4000-a000-000000000001', 'member')
 on conflict (id) do update set role = excluded.role;
+
+-- ── Event-manager assignment (deep review TEST-8) ─────────────────────────────
+--
+-- The event_manager fixture (Emma, members id …a000-…006) is assigned to ONE
+-- event so the "cannot see another event" boundary can be tested. This table
+-- keys on clerk_user_id, NOT member id, and that id is specific to YOUR Clerk
+-- development instance — a wrong value is worse than none, exactly as for
+-- members.clerk_user_id above. So this is left commented: fill in Emma's real
+-- Clerk user id and run it once you have provisioned the fixture.
+--
+-- insert into public.event_manager_assignments (clerk_user_id, event_slug) values
+--   ('user_XXXXXXXXXXXXXXXXXXXXXXXXXX', 'seed-regional-challenge')
+-- on conflict (clerk_user_id, event_slug) do nothing;
 
 -- ── An event registration ────────────────────────────────────────────────────
 --

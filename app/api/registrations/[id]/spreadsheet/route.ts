@@ -7,6 +7,7 @@ import { sheets as sheetsApi } from '@googleapis/sheets' // not the `googleapis`
 import { drive as driveApi } from '@googleapis/drive'
 import { JWT } from 'google-auth-library'
 import { impersonatedMemberId } from '@/lib/impersonation'
+import { GRADES, GENDERS, T_SHIRT_SIZES, DIETARY, EMERGENCY_RELATIONSHIPS } from '@/lib/registration-constants'
 
 function getAuth() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
@@ -36,13 +37,10 @@ const HEADERS = [
   'Emergency Contact Relationship',
 ]
 
-const GENDERS = ['Male', 'Female', 'Other']
-const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
-// School grades run from 6 because some events open below high school
-// (Colorado 2027 runs grades 7–12). Mirrors GRADES in lib/registration-constants.
-const GRADES = ['6', '7', '8', '9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
-const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
-const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
+// deep review QUAL-2: these dropdown lists were a second copy of the canonical
+// option lists (this file is a 313-line duplicate of the roster-sheet builder).
+// Import the single source so they cannot drift from the forms or each other.
+const DIETARY_OPTIONS = DIETARY
 
 function dropdown(sheetId: number, startRow: number, endRow: number, col: number, values: string[]) {
   return {

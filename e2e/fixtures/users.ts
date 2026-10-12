@@ -16,7 +16,7 @@
  * anyone with a different instance.
  */
 
-export type FixtureRole = 'member' | 'teacher' | 'admin'
+export type FixtureRole = 'member' | 'teacher' | 'admin' | 'event_manager'
 
 export interface Fixture {
   /** Clerk sign-in address; matches members.email in seed.sql. */
@@ -47,6 +47,21 @@ export const FIXTURES: Record<FixtureRole, Fixture> = {
     passwordVar: 'E2E_ADMIN_PASSWORD',
     memberId: '00000000-0000-4000-a000-000000000003',
     covers: '/admin routes — carries the staff role',
+  },
+  // deep review TEST-8: an event manager assigned to ONE event, to prove the
+  // "cannot see another event" boundary end-to-end (lib/event-access.ts). This
+  // fixture needs owner setup before it can sign in, and until then it is
+  // skipped — e2e/auth.setup.ts skips any fixture whose password var is unset,
+  // and the event-manager boundary spec skips when the session is absent, so CI
+  // stays green. To activate it: (1) create this user in the Clerk dev instance
+  // with publicMetadata {"role":"event_manager"}; (2) set E2E_EVENT_MANAGER_PASSWORD
+  // in .env.local and the repo secrets; (3) apply the event_manager_assignments
+  // seed row (see supabase/seed.sql), filling in this user's real clerk_user_id.
+  event_manager: {
+    email: 'emma.eventmanager+clerk_test@example.com',
+    passwordVar: 'E2E_EVENT_MANAGER_PASSWORD',
+    memberId: '00000000-0000-4000-a000-000000000006',
+    covers: 'event-manager scoping — assigned to seed-regional-challenge only',
   },
 }
 

@@ -71,10 +71,16 @@ export function normalizeGrade(v: unknown): string | null {
   return (VALID_GRADES as readonly string[]).includes(c) ? c : null
 }
 
-// T-shirt size → enum, or null when unrecognised (e.g. the form's "3XL (or larger)",
-// which has no enum value). Sizes are stored verbatim, not canonicalised.
+// T-shirt size → enum, or null when unrecognised. Sizes are stored verbatim,
+// not canonicalised, with ONE exception: deep review QUAL-2 — the admin
+// "add member" and onboarding forms used to submit the baseline spelling
+// '3XL_plus' while every registration path (and the enum's canonical label,
+// migration 016) use '3XL (or larger)'. The two spellings split one size across
+// rosters and merch counts. Fold the legacy value onto the canonical one here
+// so a write can never persist the split, whichever form it came from.
 export function normalizeTshirt(v: unknown): string | null {
   const s = (v ?? '').toString().trim()
+  if (s === '3XL_plus') return '3XL (or larger)'
   return (VALID_TSHIRT_SIZES as readonly string[]).includes(s) ? s : null
 }
 
@@ -100,9 +106,14 @@ export function denormalizeGrade(v: unknown): string | undefined {
   }[c]
 }
 
-// T-shirt sizes are stored verbatim, so the display value is the stored value.
+// T-shirt sizes are stored verbatim, so the display value is the stored value —
+// except that a row written before QUAL-2 may carry the legacy '3XL_plus'
+// spelling, which is not an <option> in the registration form and would prefill
+// blank. Map it onto the canonical label so existing data prefills correctly
+// without needing a data back-fill (see normalizeTshirt).
 export function denormalizeTshirt(v: unknown): string | undefined {
   const s = (v ?? '').toString().trim()
+  if (s === '3XL_plus') return '3XL (or larger)'
   return s.length > 0 ? s : undefined
 }
 

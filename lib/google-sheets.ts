@@ -4,6 +4,9 @@
 import { sheets as sheetsApi } from '@googleapis/sheets'
 import { drive as driveApi } from '@googleapis/drive'
 import { JWT } from 'google-auth-library'
+// deep review QUAL-2: the dropdown lists below were a divergent copy of the
+// canonical option lists — import the single source so they cannot drift again.
+import { GRADES, GENDERS, T_SHIRT_SIZES, DIETARY, EMERGENCY_RELATIONSHIPS } from '@/lib/registration-constants'
 
 // A Google account identity for Drive file ownership/sharing — NOT a mail
 // sender, so it is intentionally exempt from the stellreducation.org email
@@ -202,13 +205,10 @@ const COL_EC_END = 17 // exclusive — includes Relationship (col 16)
 const COL_EC_RELATIONSHIP = 16
 
 const PARTICIPANT_TYPES = ['Student', 'Adult', 'Mentor', 'Teacher']
-// School grades run from 6 because some events open below high school
-// (Colorado 2027 runs grades 7–12). Mirrors GRADES in lib/registration-constants.
-const GRADES = ['6', '7', '8', '9', '10', '11', '12', 'College Freshman', 'College Sophomore', 'College Junior', 'College Senior', 'Grad / PhD']
-const GENDERS = ['Male', 'Female', 'Other']
-const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
-const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Vegetarian', 'Vegan', 'Other']
-const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
+// GRADES / GENDERS / T_SHIRT_SIZES / EMERGENCY_RELATIONSHIPS come from
+// lib/registration-constants (imported above). DIETARY was the one that had
+// drifted — this file's copy omitted Halal and Kosher (QUAL-2).
+const DIETARY_OPTIONS = DIETARY
 
 const GREY = { red: 0.84, green: 0.84, blue: 0.84 }
 const LIGHT_GREY = { red: 0.95, green: 0.95, blue: 0.95 }

@@ -112,6 +112,31 @@ describe('purgeExpired', () => {
     expect(await purgeExpired(db.client, { limit: 50, now, dryRun: true })).toEqual({ eligible: 1, purged: 0, failed: [] })
     expect(db.table('agreements')).toHaveLength(3)
   })
+
+  it('refuses to delete a replicated record while the off-site store is down (ES-10)', async () => {
+    // deep review ES-10: with the Drive store unavailable (store: null),
+    // removeReplicas is skipped — so a row that HAS off-site copies must not be
+    // deleted, or its encrypted copies would outlive the 7-year retention duty
+    // with Stellr still holding the key. A never-replicated row is still safe
+    // to purge. The next run retries the replicated one once the store is back.
+    const db = fakeSupabase({
+      agreements: [
+        { id: 'repl', retain_until: '2026-10-01T00:00:00Z', signed_pdf_path: 'docusign/2019/repl/signed.pdf', certificate_path: null, replicated_at: '2026-09-01T00:00:00Z' },
+        { id: 'local', retain_until: '2026-10-01T00:00:00Z', signed_pdf_path: 'native/2019/local/signed.pdf', certificate_path: null, replicated_at: null },
+      ],
+    })
+    db.rpcs.esign_purge_audit = () => 1
+    db.objects.set(`${SIGNED_BUCKET}/native/2019/local/signed.pdf`, new Uint8Array([1]))
+
+    const result = await purgeExpired(db.client, { limit: 50, now, store: null })
+    expect(result.eligible).toBe(2)
+    expect(result.purged).toBe(1)
+    expect(result.failed).toHaveLength(1)
+    expect(result.failed[0].id).toBe('repl')
+    const ids = db.table('agreements').map((r) => r.id)
+    expect(ids).toContain('repl')      // replicated row kept
+    expect(ids).not.toContain('local') // never-replicated row deleted
+  })
 })
 
 describe('expireUnsigned', () => {

@@ -30,7 +30,9 @@ const OID = {
   rsaEncryption: '1.2.840.113549.1.1.1',
 }
 
-const DEFAULT_TSA = 'http://timestamp.digicert.com'
+// deep review ES-8: use the TLS endpoint by default so the token cannot be
+// swapped in transit. DigiCert serves RFC 3161 over https on the same host.
+const DEFAULT_TSA = 'https://timestamp.digicert.com'
 /** Room for the signature: our chain plus the timestamp service's token and chain. */
 const SIGNATURE_LENGTH = 20_000
 
@@ -137,6 +139,17 @@ export interface TimestampToken {
 /**
  * Reads a TimeStampResp: granted, its token, and the token's time. Checks the
  * token is for the hash we sent; anything else is refused.
+ *
+ * deep review ES-8 — evidential limitation (documented, not fully closed here):
+ * this confirms the status and the message imprint only. It does NOT verify the
+ * token's CMS signature, the TSA certificate chain / timeStamping EKU, or the
+ * nonce echo, so the recorded `genTime` is trusted from the (now TLS) TSA rather
+ * than cryptographically proven. Full token verification needs a dedicated ASN.1
+ * verifier (e.g. pkijs / @peculiar/x509 — node-forge's PKCS#1 v1.5 verify is
+ * GHSA-86w9 and must not be used) and is deferred as a larger, owner-scoped
+ * change. The whole timestamp path already fails safe: any parse/verify failure
+ * returns a null token, so the seal is recorded as `pades` (no trusted time),
+ * never as `pades-t` with a fabricated time.
  */
 export function parseTimestampResponse(der: string, imprint: string): TimestampToken {
   const resp = asn1.fromDer(der)

@@ -33,7 +33,10 @@ export async function POST(req: Request) {
     recipientId = r.id as string
     envelopeRow = r.envelope_row as string
   } else {
-    const ctx = await actingSession(db, req, 'read')
+    // deep review ES-9: 'download' (not 'read') — only the session that signed
+    // may fetch the signed copy, so a session minted before an email correction
+    // can no longer download the form the corrected-to parent signed.
+    const ctx = await actingSession(db, req, 'download')
     if (!ctx || ctx.recipient.status !== 'completed') return invalidLink()
     recipientId = ctx.recipient.id
     envelopeRow = ctx.envelope.id

@@ -297,14 +297,25 @@ export interface SessionContext {
 }
 
 /**
- * Resolves the signing session cookie. `act` requires the signer still to be
- * able to sign; `read` also accepts a signer who has finished (to download
- * their copy straight after signing).
+ * Resolves the signing session cookie.
+ *  - `act`      requires the signer still to be able to sign.
+ *  - `read`     also accepts a signer who has finished (so the signing page can
+ *               show the "already signed" state) — any still-valid version.
+ *  - `download` (deep review ES-9) is the strictest: it hands over the SIGNED
+ *               document, so it accepts only the exact session that did the
+ *               signing. Submit bumps the version by one and stamps `signed_at`,
+ *               and a completed recipient's version never moves again (a
+ *               correction refuses a completed/voided envelope), so the signing
+ *               session is uniquely `verified.version === token_version - 1`
+ *               with `signed_at` set. A session minted before an email
+ *               correction (version ≤ token_version - 2) is refused, closing the
+ *               ~30-minute window in which the mistyped address could still
+ *               download a minor's signed form.
  */
 export async function resolveSession(
   db: SupabaseClient,
   cookie: string | undefined,
-  mode: 'act' | 'read',
+  mode: 'act' | 'read' | 'download',
   now = new Date(),
 ): Promise<SessionContext | null> {
   if (!cookie) return null
@@ -318,6 +329,9 @@ export async function resolveSession(
   if (mode === 'act') {
     if (recipient.token_version !== verified.version) return null
     if (!ACTIVE_RECIPIENT.has(recipient.status) || !LIVE_ENVELOPE.has(envelope.status)) return null
+  } else if (mode === 'download') {
+    if (envelope.status === 'voided') return null
+    if (!recipient.signed_at || verified.version !== recipient.token_version - 1) return null
   } else {
     // Completion bumps the token version to kill the emailed link; the
     // session that did the signing may still read the outcome.

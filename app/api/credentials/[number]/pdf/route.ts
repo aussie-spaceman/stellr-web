@@ -11,6 +11,7 @@ import { certificateGateFor } from '@/lib/survey/certificate-gate'
 import { renderPdCertificatePdf } from '@/lib/pd-certificate'
 import { loadPdArtwork, loadPdLayout, pdTheme } from '@/lib/pd-certificate-store'
 import { tokens } from '@/lib/tokens'
+import { runAfterResponse } from '@/lib/after-response'
 
 // GET /api/credentials/[number]/pdf
 // Streams the owner's certificate for a credential. An event credential prints
@@ -64,7 +65,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
     const artwork = template ? await downloadArtwork(db, template.artwork_path) : null
     if (template && artwork) {
       const out = await generateCertificatesPdf([{ name: cred.recipient_name || 'Member' }], 'us_letter', artwork, placementOf(template))
-      void recordCredentialEvent(db, cred.id, 'pdf')
+      // deep review QUAL-1: register the audit write with after() so it survives
+      // the response flush rather than being dropped on a frozen instance.
+      runAfterResponse('credentials', () => recordCredentialEvent(db, cred.id, 'pdf'))
       return pdfResponse(out)
     }
     // No artwork for this award yet: fall through to the default design.
@@ -90,7 +93,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
       artwork,
       { accentHex: cred.theme === 'environmental' ? tokens.color.enviroGreen : tokens.color.spaceViolet, layout },
     )
-    void recordCredentialEvent(db, cred.id, 'pdf')
+    runAfterResponse('credentials', () => recordCredentialEvent(db, cred.id, 'pdf'))
     return pdfResponse(out)
   }
 
@@ -121,7 +124,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
     templateBytes,
   })
 
-  void recordCredentialEvent(db, cred.id, 'pdf')
+  runAfterResponse('credentials', () => recordCredentialEvent(db, cred.id, 'pdf'))
   return pdfResponse(out)
 }
 

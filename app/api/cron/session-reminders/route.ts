@@ -3,6 +3,7 @@ import { formatDateTime } from '@/lib/utils'
 import { supabaseServer } from '@/lib/supabase'
 import { notifyMember } from '@/lib/notify'
 import { guardCron } from '@/lib/cron'
+import { rows } from '@/lib/db'
 
 // GET /api/cron/session-reminders — runs hourly (see vercel.json).
 // Reminds participants + hosts of upcoming coaching/mentoring sessions at two
@@ -22,19 +23,27 @@ export async function GET(req: NextRequest) {
   let sent = 0
 
   for (const b of buckets) {
-    const { data: sessions } = await db
-      .from('sessions')
-      .select('id, title, scheduled_start, host_member_id')
-      .eq('status', 'scheduled')
-      .gte('scheduled_start', new Date(b.fromMs).toISOString())
-      .lte('scheduled_start', new Date(b.toMs).toISOString())
+    // deep review QUAL-6: these reads decide whether anyone gets reminded. Read
+    // via rows(), which throws on a PostgREST error instead of resolving to an
+    // empty list — so a transient outage fails the cron run (recorded, retried
+    // next hour; sends are idempotent via sent_reminders) rather than reporting
+    // `sent: 0` and leaving cron_runs looking healthy while nobody was reminded.
+    const sessions = await rows<{ id: string; title: string | null; scheduled_start: string; host_member_id: string | null }>(
+      db
+        .from('sessions')
+        .select('id, title, scheduled_start, host_member_id')
+        .eq('status', 'scheduled')
+        .gte('scheduled_start', new Date(b.fromMs).toISOString())
+        .lte('scheduled_start', new Date(b.toMs).toISOString()),
+      'session-reminders: upcoming sessions',
+    )
 
-    for (const s of sessions ?? []) {
-      const { data: parts } = await db
-        .from('session_participants')
-        .select('member_id')
-        .eq('session_id', s.id)
-      const recipients = new Set<string>((parts ?? []).map((p) => p.member_id as string))
+    for (const s of sessions) {
+      const parts = await rows<{ member_id: string }>(
+        db.from('session_participants').select('member_id').eq('session_id', s.id),
+        'session-reminders: session participants',
+      )
+      const recipients = new Set<string>(parts.map((p) => p.member_id))
       if (s.host_member_id) recipients.add(s.host_member_id as string)
 
       for (const memberId of recipients) {

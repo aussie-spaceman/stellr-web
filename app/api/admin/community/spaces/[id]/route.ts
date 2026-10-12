@@ -10,6 +10,7 @@ import { sanitizeBracketRequirements, anyBracketMandatory } from '@/lib/space-tr
 import { syncSpaceSourceRoster } from '@/lib/space-inheritance'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { slugify } from '@/lib/utils'
+import { runAfterResponse } from '@/lib/after-response'
 
 // Per-space admin config actions (Spaces design, screens 11–17 + modals 19/21/22).
 // One JSON action router keeps the (many) small mutations in one place. Resource
@@ -197,7 +198,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
       // Notify the invitee (in-app + email, respecting their prefs). Best-effort —
       // the invite row is already written, so a notification failure must not 500.
-      void (async () => {
+      // deep review QUAL-1: run it with after() so the invite email is not
+      // dropped when the instance is frozen after the response.
+      runAfterResponse('spaces', async () => {
         const { data: space } = await db
           .from('community_spaces')
           .select('name, slug')
@@ -219,7 +222,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             text: `You've been invited to join ${sp.name} on Stellr. Open your Spaces directory to accept: ${url}`,
           },
         })
-      })().catch((e) => console.error('[spaces] invite notify error:', e))
+      })
 
       return NextResponse.json({ ok: true })
     }
@@ -339,14 +342,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         scope === 'access'
           ? lifting ? 'Restored access to' : 'Revoked access to'
           : lifting ? 'Lifted posting suspension in' : 'Suspended posting in'
-      void logActivity({
-        ...(await actorFromAuth()),
-        memberId,
-        category: 'community',
-        action: `space_${scope}_${lifting ? 'restored' : 'blocked'}`,
-        summary: `${verb} ${spaceName}`,
-        metadata: { spaceId, scope, reason: b.reason ?? null, expiresAt: b.expiresAt ?? null },
-      })
+      // deep review QUAL-1: a space access revoked/restored audit row. Register
+      // it with after() so the moderation audit trail is not lost when the
+      // instance is frozen after the response.
+      const actor = await actorFromAuth()
+      runAfterResponse('spaces', () =>
+        logActivity({
+          ...actor,
+          memberId,
+          category: 'community',
+          action: `space_${scope}_${lifting ? 'restored' : 'blocked'}`,
+          summary: `${verb} ${spaceName}`,
+          metadata: { spaceId, scope, reason: b.reason ?? null, expiresAt: b.expiresAt ?? null },
+        })
+      )
 
       return NextResponse.json({ ok: true })
     }

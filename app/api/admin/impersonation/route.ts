@@ -57,7 +57,12 @@ export async function POST(req: Request) {
   }
 
   const m = member as { first_name: string | null; last_name: string | null; email: string | null }
-  void logActivity({
+  // deep review QUAL-1: this audit row is a safeguarding control — an adult
+  // staff member viewing a minor's portal. It was `void`ed, so the insert could
+  // still be in flight when the instance was frozen after the response, and a
+  // silently missing row cannot be detected later. Await it: one insert on an
+  // already-slow path (two member lookups precede it).
+  await logActivity({
     ...(await actorFromAuth()),
     memberId,
     category: 'account',

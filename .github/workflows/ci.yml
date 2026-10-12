@@ -177,11 +177,18 @@ jobs:
           node-version: 24.x
           cache: npm
 
-      # Until the secrets exist this job cannot do anything meaningful. It says
-      # so and stops, rather than failing every PR — but it does NOT report a
-      # misleading pass: the summary states plainly that nothing ran.
+      # deep review TEST-5: the e2e check is a REQUIRED gate on dev and main. It
+      # used to set ready=false on a missing secret and let every later step
+      # skip, so the job finished green and the required check passed WITHOUT e2e
+      # having run — the exact silent-pass this workflow's own header warns
+      # against. Now a missing secret FAILS the job (fail closed), so a rotated,
+      # renamed or deleted secret blocks the merge instead of waving it through.
+      # A repo that genuinely cannot hold secrets (a fork) opts out explicitly by
+      # setting the repository variable E2E_ALLOW_UNCONFIGURED=true.
       - name: Check configuration
         id: config
+        env:
+          ALLOW_UNCONFIGURED: ${{ vars.E2E_ALLOW_UNCONFIGURED }}
         run: |
           missing=""
           for name in NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY \
@@ -199,6 +206,10 @@ jobs:
               echo ""
               echo "Add them at **Settings → Secrets and variables → Actions**."
             } >> "$GITHUB_STEP_SUMMARY"
+            if [ "$ALLOW_UNCONFIGURED" != "true" ]; then
+              echo "::error::e2e secrets are missing, so the suite cannot run. A required check must not pass green without running — failing closed. Set the repository variable E2E_ALLOW_UNCONFIGURED=true only for an environment (e.g. a fork) that cannot hold these secrets."
+              exit 1
+            fi
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi

@@ -530,6 +530,11 @@ async function fulfilCheckoutSession(session: Stripe.Checkout.Session, stripe: S
   await finalizeRedemption(session)
 }
 
+// deep review QUAL-7: a single webhook confirms a registration, grants tiers,
+// finalises merch and sends email inline. Pin the ceiling to the plan maximum
+// so a slow fan-out cannot be cut off before the payment side effects complete.
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   const rawBody = await req.text()
   const sig = req.headers.get('stripe-signature')

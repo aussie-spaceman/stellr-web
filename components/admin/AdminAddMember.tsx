@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { ageOn, isValidDob } from '@/lib/age'
+import { T_SHIRT_SIZES } from '@/lib/registration-constants'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ROLES_FOR_BRACKET, DEFAULT_ROLE_FOR_BRACKET, getEligibleTierNames } from '@/lib/membership-rules'
@@ -34,7 +35,9 @@ const GRADES = [
 
 const BRACKETS = ['high_school', 'college', 'adult']
 const GENDERS = ['male', 'female', 'other']
-const TSHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL_plus']
+// deep review QUAL-2: this form used to submit '3XL_plus' while every
+// registration path uses the canonical '3XL (or larger)', splitting one size
+// across rosters/merch. Use the single source so the stored value matches.
 const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
 const ETHNICITIES = ['Pacific Islander', 'Hispanic', 'White (Caucasian)', 'Black', 'Native American', 'Asian', 'Prefer Not To Say']
 const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
@@ -267,8 +270,8 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
                   className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 >
                   <option value="">Select…</option>
-                  {TSHIRT_SIZES.map((s) => (
-                    <option key={s} value={s}>{s.replace('_plus', '+')}</option>
+                  {T_SHIRT_SIZES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
               </div>

@@ -34,6 +34,11 @@ const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreduca
 // /community page reads to pop the "registration submitted" modal.
 const POST_REGISTER_URL = `${APP_URL}/community?registered=1&type=individual`
 
+// deep review QUAL-7: this handler dispatches a consent agreement, provisions a
+// Clerk user and creates a Stripe checkout inline. Pin the ceiling to the plan
+// maximum so it cannot be cut off mid-flow by the lower platform default.
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()

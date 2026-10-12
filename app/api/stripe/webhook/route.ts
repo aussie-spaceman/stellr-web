@@ -41,24 +41,36 @@ function assertWritten(error: unknown, where: string): void {
 
 // ── Event registration helpers ────────────────────────────────────────────────
 
+// A per-seat ("members pay individually") participant selector. deep review
+// PAY-7: prefer the participant id — members.email follows Clerk, but
+// participants.email is the registration-time address and never updates, so
+// matching a seat by email can miss it (payment taken, seat never marked paid).
+// participantEmail remains the fallback for sessions minted before PAY-7.
+interface SeatSelector {
+  participantId?: string
+  participantEmail?: string
+}
+
 // Stores the Stripe payment_intent so a later deletion can issue a cash refund.
 // Per-participant payments land on the participant row; whole-group/individual
 // payments land on the registration.
 async function capturePaymentIntent(
   session: Stripe.Checkout.Session,
-  target: { registrationId: string; participantEmail?: string }
+  target: { registrationId: string } & SeatSelector
 ) {
   const intent = typeof session.payment_intent === 'string' ? session.payment_intent : null
   if (!intent) return
   const db = supabaseServer()
-  if (target.participantEmail) {
+  if (target.participantId || target.participantEmail) {
     // deep review PAY-5: losing this write means the stored intent is absent, so a
     // later refund/delete can't return the money — must retry, not swallow.
-    const { error } = await db
+    const base = db
       .from('participants')
       .update({ stripe_payment_intent_id: intent })
       .eq('registration_id', target.registrationId)
-      .eq('email', target.participantEmail)
+    const { error } = await (target.participantId
+      ? base.eq('id', target.participantId)
+      : base.eq('email', target.participantEmail as string))
     assertWritten(error, 'capturePaymentIntent participant')
   } else {
     const { error } = await db
@@ -90,7 +102,7 @@ async function persistStripeCustomer(session: Stripe.Checkout.Session) {
 async function logEventPayment(
   session: Stripe.Checkout.Session,
   registrationId: string,
-  participantEmail?: string,
+  seat?: SeatSelector,
 ) {
   const db = supabaseServer()
   let q = db
@@ -98,7 +110,9 @@ async function logEventPayment(
     .select('member_id')
     .eq('registration_id', registrationId)
     .not('member_id', 'is', null)
-  if (participantEmail) q = q.eq('email', participantEmail)
+  // deep review PAY-7: target the exact seat by id when we have it.
+  if (seat?.participantId) q = q.eq('id', seat.participantId)
+  else if (seat?.participantEmail) q = q.eq('email', seat.participantEmail)
   const { data } = await q.limit(1).maybeSingle()
   const memberId = (data as { member_id?: string | null } | null)?.member_id
   if (!memberId) return
@@ -112,29 +126,34 @@ async function logEventPayment(
   }, db)
 }
 
-async function markIndividualPayment(registrationId: string, participantEmail: string) {
+async function markIndividualPayment(registrationId: string, seat: SeatSelector) {
   const db = supabaseServer()
 
   // Mark this participant as paid. deep review PAY-5: if this write fails the seat
   // stays unpaid locally even though the money cleared — throw so the webhook 500s
   // and Stripe retries, rather than recording the event processed with the seat
-  // silently still outstanding.
+  // silently still outstanding. deep review PAY-7: match by participant id when
+  // present (email is the frozen registration-time address, not the member's).
   {
-    const { error } = await db
+    const base = db
       .from('participants')
       .update({ individual_payment_status: 'paid' })
       .eq('registration_id', registrationId)
-      .eq('email', participantEmail)
+    const { error } = await (seat.participantId
+      ? base.eq('id', seat.participantId)
+      : base.eq('email', seat.participantEmail as string))
     assertWritten(error, 'markIndividualPayment paid')
   }
 
   // Send payment confirmation to the participant
-  const { data: participant } = await db
+  const participantQuery = db
     .from('participants')
     .select('first_name, last_name, email, membership_id')
     .eq('registration_id', registrationId)
-    .eq('email', participantEmail)
-    .maybeSingle()
+  const { data: participant } = await (seat.participantId
+    ? participantQuery.eq('id', seat.participantId)
+    : participantQuery.eq('email', seat.participantEmail as string)
+  ).maybeSingle()
 
   const { data: reg } = await db
     .from('registrations')
@@ -376,6 +395,48 @@ async function refundDuplicateRegistrationPayment(
   return true
 }
 
+// deep review PAY-N1: the per-seat ("members pay individually") equivalent of
+// refundDuplicateRegistrationPayment. "Pay now" mints a fresh Checkout each click
+// while the seat is pending, so one participant can hold two live sessions; if
+// both complete, markIndividualPayment would re-send the confirmation and
+// capturePaymentIntent would overwrite the first intent — hiding the original
+// charge from every later refund path. If the seat already recorded a DIFFERENT
+// intent, refund THIS duplicate and keep the first. Matched by participant id
+// (PAY-7). Returns true when it handled a duplicate (caller skips settle/capture).
+async function refundDuplicateIndividualPayment(
+  session: Stripe.Checkout.Session,
+  target: { registrationId: string } & SeatSelector,
+  stripe: Stripe,
+): Promise<boolean> {
+  const newIntent = typeof session.payment_intent === 'string' ? session.payment_intent : null
+  if (!newIntent) return false
+  const db = supabaseServer()
+  const base = db
+    .from('participants')
+    .select('stripe_payment_intent_id')
+    .eq('registration_id', target.registrationId)
+  const { data } = await (target.participantId
+    ? base.eq('id', target.participantId)
+    : base.eq('email', target.participantEmail as string)
+  ).maybeSingle()
+  const existingIntent =
+    (data as { stripe_payment_intent_id?: string | null } | null)?.stripe_payment_intent_id ?? null
+  if (!existingIntent || existingIntent === newIntent) return false
+
+  await stripe.refunds.create(
+    {
+      payment_intent: newIntent,
+      metadata: { source: 'stellr_app', reason: 'duplicate_individual_payment', registrationId: target.registrationId },
+    },
+    { idempotencyKey: `dup-${session.id}` },
+  )
+  await notifyCommunityAdmins({
+    type: 'action',
+    body: `A members-pay-individually seat on registration ${target.registrationId} was paid twice. The first payment (intent ${existingIntent}) stands; the duplicate (${newIntent}) was refunded automatically. No action needed unless the family disputes it.`,
+  }).catch(() => {})
+  return true
+}
+
 // ── Webhook handler ───────────────────────────────────────────────────────────
 
 // Fulfils a completed Checkout session (registration / membership / booking /
@@ -502,13 +563,20 @@ async function fulfilCheckoutSession(session: Stripe.Checkout.Session, stripe: S
     // order, log to activity history, email the buyer. Idempotent.
     await handleStoreOrderPaid(session)
   } else if (session.metadata?.isIndividualGroupPayment === 'true') {
-    // Individual member payment within a group registration
-    const { registrationId, participantEmail } = session.metadata
-    if (registrationId && participantEmail) {
-      await markIndividualPayment(registrationId, participantEmail)
-      await capturePaymentIntent(session, { registrationId, participantEmail })
-      await persistStripeCustomer(session)
-      await logEventPayment(session, registrationId, participantEmail)
+    // Individual member payment within a group registration. deep review PAY-7:
+    // settle by participantId when present (participantEmail is the fallback for
+    // sessions minted before PAY-7).
+    const { registrationId, participantEmail, participantId } = session.metadata
+    if (registrationId && (participantId || participantEmail)) {
+      const seat: SeatSelector = { participantId, participantEmail }
+      // deep review PAY-N1: if this seat already recorded a different intent, the
+      // first payment already landed — refund this duplicate, keep the first.
+      if (!(await refundDuplicateIndividualPayment(session, { registrationId, ...seat }, stripe))) {
+        await markIndividualPayment(registrationId, seat)
+        await capturePaymentIntent(session, { registrationId, ...seat })
+        await persistStripeCustomer(session)
+        await logEventPayment(session, registrationId, seat)
+      }
     }
   } else {
     // Event registration purchase (whole group or individual)
@@ -529,6 +597,11 @@ async function fulfilCheckoutSession(session: Stripe.Checkout.Session, stripe: S
   // Settle any account-credit redemption applied to this checkout.
   await finalizeRedemption(session)
 }
+
+// deep review QUAL-7: a single webhook confirms a registration, grants tiers,
+// finalises merch and sends email inline. Pin the ceiling to the plan maximum
+// so a slow fan-out cannot be cut off before the payment side effects complete.
+export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text()

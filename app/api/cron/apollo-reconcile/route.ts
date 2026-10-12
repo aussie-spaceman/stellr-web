@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { supabaseServer } from '@/lib/supabase'
 import { guardCron } from '@/lib/cron'
-import { sendEmail } from '@/lib/email'
+import { startCronRun } from '@/lib/cron-runs'
+import { sendEmail, staffAlertEmail } from '@/lib/email'
 import { fetchEngagedProspects, reconcileProspects } from '@/lib/apollo-reconcile'
 
 // GET /api/cron/apollo-reconcile — runs daily (see vercel.json).
@@ -33,6 +35,11 @@ import { fetchEngagedProspects, reconcileProspects } from '@/lib/apollo-reconcil
 
 export const dynamic = 'force-dynamic'
 
+// deep review INT-8: each prospect costs several sequential HubSpot round-trips
+// and the Apollo fetch now backs off on a 429, so give the run room rather than
+// letting the default budget kill it mid-reconcile.
+export const maxDuration = 60
+
 /**
  * Bounded so a runaway Apollo response cannot rewrite the pipeline, and because
  * each prospect costs several HubSpot round-trips — an unbounded run would
@@ -53,6 +60,11 @@ export async function GET(req: NextRequest) {
     console.error('[apollo-reconcile] APOLLO_API_KEY is not set — cannot reconcile')
     return NextResponse.json({ error: 'Not configured' }, { status: 503 })
   }
+
+  // deep review INT-9: record every run in cron_runs so a broken Apollo/HubSpot
+  // integration is visible in the DB after Vercel's 1h log retention expires.
+  const db = supabaseServer()
+  const run = await startCronRun(db, 'apollo-reconcile')
 
   try {
     const prospects = await fetchEngagedProspects(apiKey)
@@ -100,7 +112,10 @@ export async function GET(req: NextRequest) {
           : '')
 
       await sendEmail({
-        to: process.env.CONTACT_EMAIL ?? '',
+        // deep review INT-8: staffAlertEmail() always resolves to a real
+        // address (CONTACT_EMAIL → hello@). The old `CONTACT_EMAIL ?? ''` sent
+        // the alert to nowhere when the env was unset — the alert silently lost.
+        to: staffAlertEmail(),
         subject: `Apollo reconciliation repaired ${repaired} deal(s)`,
         text: `${preamble}\n\n${rows.map((r) => `  • ${r}`).join('\n')}\n\n${tail}`,
         html:
@@ -115,9 +130,16 @@ export async function GET(req: NextRequest) {
         `created=${result.created} advanced=${result.advanced} ` +
         `skipped=${result.skipped} failed=${result.failed}`,
     )
+    if (result.failed > 0) run.fail('reconcile', `${result.failed} record(s) failed to write`)
+    await run.finish({ ...result })
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
+    // deep review INT-8/INT-9: a thrown run (e.g. Apollo rate-limited after the
+    // bounded retries) now surfaces as a recorded failure + 500, not a silent
+    // hang that Vercel kills.
     console.error('[apollo-reconcile] Run failed', err)
+    run.fail('run', err)
+    await run.finish({})
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
 }

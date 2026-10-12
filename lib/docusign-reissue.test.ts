@@ -99,6 +99,24 @@ describe('reissueParticipantAgreement', () => {
     expect(db.updates[0].values).toMatchObject({ status: 'voided' })
   })
 
+  it('does NOT mark voided or re-issue when the void call fails (DS-4)', async () => {
+    // deep review DS-4: a failed void used to be swallowed and the row marked
+    // 'voided' anyway. mayTransition('voided','completed') is then false, so a
+    // real completion arriving via Connect is discarded — a guardian's signed
+    // consent silently lost, and a duplicate envelope sent. On a void failure we
+    // must leave the status untouched and not issue a duplicate.
+    voidEnvelope.mockRejectedValueOnce(new Error('DocuSign 503'))
+    const db = fakeDb({
+      participant: PARTICIPANT,
+      envelope: { id: 'row-1', envelope_id: 'env-1', status: 'sent' },
+      bounced: [{ email: 'parent@example.com' }],
+    })
+    await expect(reissueParticipantAgreement(db as never, 'p-1', { allowNewEnvelope: true })).rejects.toThrow()
+    // The row was never marked voided, and no new envelope was issued.
+    expect(db.updates.some((u) => u.values.status === 'voided')).toBe(false)
+    expect(dispatchAgreement).not.toHaveBeenCalled()
+  })
+
   it('does nothing for signed paperwork or another event', async () => {
     const signed = fakeDb({ participant: PARTICIPANT, envelope: { id: 'r', envelope_id: 'e', status: 'completed' } })
     expect(await reissueParticipantAgreement(signed as never, 'p-1')).toMatchObject({ kind: 'nothing_to_do', reason: 'completed' })

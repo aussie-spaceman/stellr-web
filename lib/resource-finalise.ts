@@ -24,8 +24,14 @@ export async function finaliseStoredUpload(args: {
   uploadedBy: string | null
   fromChat?: boolean
   contentHash?: string | null
+  /** deep review MEM-13: forwarded to claimUpload to pin the namespace. */
+  expectedPrefix?: string
 }): Promise<Finalised | UploadDenied> {
-  const claimed = await claimUpload({ purpose: args.purpose, storagePath: args.storagePath })
+  const claimed = await claimUpload({
+    purpose: args.purpose,
+    storagePath: args.storagePath,
+    expectedPrefix: args.expectedPrefix,
+  })
   if ('error' in claimed) return claimed
 
   const { bucket } = claimed

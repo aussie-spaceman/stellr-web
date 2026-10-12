@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 import { getEventBySlug } from '@/lib/sanity'
@@ -35,6 +36,14 @@ export interface IndividualPaymentResult {
 // confirmed the whole registration once the *visible* 'pending' rows had paid.
 //
 // So it lives here, called from all five paths.
+//
+// deep review PAY-8: the email now links to a DURABLE per-seat pay page
+// (seatPayPageUrl, keyed on participants.pay_token), which mints a fresh Checkout
+// on click. Previously it embedded the raw Stripe Checkout URL, which expires in
+// 24h, and individual_payment_link_sent_at was stamped so nothing re-sent it — a
+// participant (often a sheet-added student with no member account, so Account →
+// Teams was out of reach) who opened the email a day later hit "link expired"
+// with no way back, and their seat stayed pending so the group never confirmed.
 //
 // Idempotent on participants.individual_payment_link_sent_at: a sheet re-sync or
 // a replayed Drive webhook re-runs this for the same people and sends nothing.
@@ -97,7 +106,7 @@ export async function ensureIndividualPayments(
   // so the waive path alerts admins below.
   //
   // A price lookup that FAILS is deliberately not treated as free: unitAmount
-  // stays null, we still attempt the charge, and the per-person failure is
+  // stays null, we still send the pay link, and the per-person failure is
   // recorded. Waiving on a blip would tell paying participants they owe nothing.
   const event = await getEventBySlug(eventSlug).catch(() => null)
   const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId ?? null
@@ -115,7 +124,7 @@ export async function ensureIndividualPayments(
   const outcomes = await Promise.all(
     todo.map((person) =>
       canCharge
-        ? chargePerson(db, stripe!, stripePriceId!, { registrationId, eventSlug, eventTitle }, person)
+        ? chargePerson(db, { registrationId, eventSlug, eventTitle }, person)
         : waivePerson(db, { registrationId, eventTitle }, person),
     ),
   )
@@ -152,38 +161,14 @@ interface ChargeContext {
 
 async function chargePerson(
   db: SupabaseClient,
-  stripe: Stripe,
-  stripePriceId: string,
   ctx: ChargeContext,
   person: IndividualPaymentPerson,
 ): Promise<'charged' | 'failed'> {
   try {
-    // Refuse to take money on a production deployment holding TEST keys. A test-mode
-    // charge looks successful and settles nothing — the Stripe equivalent of the
-    // DocuSign sandbox envelopes that were not binding signatures. Reads are
-    // deliberately not gated: a wrong price is visible, a phantom payment is not.
-    assertLiveCredentials('stripe')
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      // Surfaces the "Add promotion code" field for codes set up in Stripe.
-      allow_promotion_codes: true,
-      line_items: [{ price: stripePriceId, quantity: 1 }],
-      customer_email: person.email,
-      // The webhook matches on these to mark the right participant paid.
-      metadata: {
-        registrationId: ctx.registrationId,
-        eventSlug: ctx.eventSlug,
-        participantEmail: person.email,
-        isIndividualGroupPayment: 'true',
-      },
-      success_url: `${SITE_URL}/register/${ctx.eventSlug}/confirmation?id=${ctx.registrationId}&type=group&payment=success`,
-      cancel_url: `${SITE_URL}/account?tab=teams`,
-    })
-    if (!session.url) {
-      console.error('[individual-payment] checkout session has no URL for', person.email)
-      return 'failed'
-    }
+    // deep review PAY-8: email a durable per-seat pay link rather than a raw
+    // 24h Checkout URL. The Checkout is minted on click (/api/register/pay-seat),
+    // so the link keeps working — and it is settled by participant id (PAY-7).
+    const token = await ensureSeatPayToken(db, person.participantId)
 
     // 'pending' before the send: it reflects what is owed, and the webhook's
     // "whole group paid?" check must see this person as outstanding from the
@@ -200,14 +185,14 @@ async function chargePerson(
         memberLastName: person.lastName,
         eventTitle: ctx.eventTitle,
         registrationId: ctx.registrationId,
-        paymentUrl: session.url,
+        paymentUrl: seatPayPageUrl(ctx.eventSlug, token),
       }),
     })
 
     await stampSent(db, person.participantId)
     return 'charged'
   } catch (err) {
-    console.error(`[individual-payment] charge setup failed for ${person.email} (non-fatal):`, err)
+    console.error(`[individual-payment] pay-link setup failed for ${person.email} (non-fatal):`, err)
     return 'failed'
   }
 }
@@ -247,4 +232,104 @@ async function stampSent(db: SupabaseClient, participantId: string): Promise<voi
     .update({ individual_payment_link_sent_at: new Date().toISOString() })
     .eq('id', participantId)
   if (error) console.error('[individual-payment] sent_at stamp failed (non-fatal):', error)
+}
+
+// ── Per-seat pay token + checkout (deep review PAY-7 / PAY-8) ───────────────────
+
+/** The durable per-seat pay page for `token`. Mirrors payPageUrl for registrations. */
+export function seatPayPageUrl(eventSlug: string, token: string, opts?: { cancelled?: boolean }): string {
+  return `${SITE_URL}/register/${eventSlug}/pay-seat/${token}${opts?.cancelled ? '?cancelled=1' : ''}`
+}
+
+/**
+ * The participant's per-seat pay token, minting one if it has none. Mirrors
+ * ensurePayToken for registrations: the `.is('pay_token', null)` guard keeps two
+ * concurrent mints from clobbering each other — the loser re-reads the winner's.
+ */
+export async function ensureSeatPayToken(db: SupabaseClient, participantId: string): Promise<string> {
+  const { data } = await db
+    .from('participants')
+    .select('pay_token')
+    .eq('id', participantId)
+    .maybeSingle()
+  const existing = (data as { pay_token?: string | null } | null)?.pay_token
+  if (existing) return existing
+
+  const token = randomBytes(32).toString('hex')
+  const { data: updated } = await db
+    .from('participants')
+    .update({ pay_token: token })
+    .eq('id', participantId)
+    .is('pay_token', null)
+    .select('pay_token')
+    .maybeSingle()
+  const won = (updated as { pay_token?: string | null } | null)?.pay_token
+  if (won) return won
+
+  const { data: reread } = await db
+    .from('participants')
+    .select('pay_token')
+    .eq('id', participantId)
+    .maybeSingle()
+  const current = (reread as { pay_token?: string | null } | null)?.pay_token
+  if (!current) throw new Error(`Could not mint pay token for participant ${participantId}`)
+  return current
+}
+
+export type SeatCheckoutError = { error: 'no_price' | 'free' }
+
+export interface SeatCheckoutOptions {
+  participantId: string
+  participantEmail: string
+  registrationId: string
+  eventSlug: string
+  successUrl: string
+  cancelUrl: string
+  /** Pre-fills Stripe's email field; omit/null to let the payer enter their own. */
+  customerEmail?: string | null
+}
+
+/**
+ * Mint a Stripe Checkout for one "members pay individually" seat. The single
+ * place that builds a per-seat session, so the webhook-matching metadata is
+ * identical everywhere: it carries BOTH participantId (deep review PAY-7 — the
+ * webhook settles by id, because members.email follows Clerk while
+ * participants.email is frozen at registration time) and participantEmail (the
+ * fallback for sessions minted before PAY-7). Returns a {error} for a free / no-
+ * price event rather than minting a $0 session Stripe would reject.
+ */
+export async function createSeatCheckout(
+  stripe: Stripe,
+  opts: SeatCheckoutOptions,
+): Promise<{ url: string; sessionId: string } | SeatCheckoutError> {
+  const event = await getEventBySlug(opts.eventSlug).catch(() => null)
+  const stripePriceId = (event as { stripePriceId?: string } | null)?.stripePriceId ?? null
+  if (!stripePriceId) return { error: 'no_price' }
+  const price = await stripe.prices.retrieve(stripePriceId)
+  if ((price.unit_amount ?? 0) <= 0) return { error: 'free' }
+
+  // Refuse to take money on a production deployment holding TEST keys (same guard
+  // as every other charge path). Reads above are not gated.
+  assertLiveCredentials('stripe')
+
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    // Surfaces the "Add promotion code" field for codes set up in Stripe.
+    allow_promotion_codes: true,
+    line_items: [{ price: stripePriceId, quantity: 1 }],
+    ...(opts.customerEmail ? { customer_email: opts.customerEmail } : {}),
+    customer_creation: 'always',
+    client_reference_id: opts.registrationId,
+    metadata: {
+      registrationId: opts.registrationId,
+      eventSlug: opts.eventSlug,
+      participantId: opts.participantId,
+      participantEmail: opts.participantEmail,
+      isIndividualGroupPayment: 'true',
+    },
+    success_url: opts.successUrl,
+    cancel_url: opts.cancelUrl,
+  })
+  if (!session.url) throw new Error('Stripe seat checkout session has no URL')
+  return { url: session.url, sessionId: session.id }
 }

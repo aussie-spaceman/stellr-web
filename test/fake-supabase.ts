@@ -66,15 +66,36 @@ export interface FakeDb {
 
 export function fakeSupabase(
   initial: Record<string, object[]> = {},
-  opts: { failOn?: (table: string, action: string) => string | null } = {},
+  opts: {
+    failOn?: (table: string, action: string) => string | null
+    // deep review TEST-7: opt-in query-shape validation. For any table listed
+    // here, a filter or a write that touches a column NOT in its declared list
+    // throws, so a typo'd / renamed column fails its test instead of passing.
+    // The loose double matched `.is('revoke_at', null)` on EVERY row
+    // (`undefined ?? null === null`), so a broken query looked like it worked.
+    // Tables not listed stay loose, so the existing suites are unaffected.
+    schema?: Record<string, readonly string[]>
+  } = {},
 ): FakeDb {
   const tables: Record<string, Row[]> = {}
   for (const [k, rows] of Object.entries(initial)) tables[k] = rows.map((r) => ({ ...(r as Row) }))
   const objects = new Map<string, Uint8Array>()
   const table = (name: string) => (tables[name] ??= [])
+  const schema = opts.schema
+  // Throws if `col` is not a declared column of `name` (only when a schema is
+  // given for that table). Called from run(), so it surfaces as a rejected
+  // promise the test can assert on, not a synchronous throw at chain-build time.
+  const assertColumn = (name: string, col: string, where: string) => {
+    const cols = schema?.[name]
+    if (cols && !cols.includes(col)) {
+      throw new Error(`fake-supabase: unknown column "${col}" on table "${name}" (${where})`)
+    }
+  }
 
   function builder(name: string) {
     const filters: Op[] = []
+    // TEST-7: columns the chain filtered on, validated against the schema in run().
+    const filterCols: string[] = []
     let action: 'select' | 'update' | 'delete' | 'insert' | 'upsert' = 'select'
     let payload: Row | Row[] | null = null
     let upsertConflict: string[] = []
@@ -102,30 +123,37 @@ export function fakeSupabase(
       upsert(p: Row | Row[], o?: { onConflict?: string }) {
         action = 'upsert'; payload = p; upsertConflict = (o?.onConflict ?? 'id').split(','); return b
       },
-      eq(c: string, v: unknown) { filters.push((r) => r[c] === v); return b },
-      neq(c: string, v: unknown) { filters.push((r) => r[c] !== v); return b },
-      is(c: string, v: unknown) { filters.push((r) => (r[c] ?? null) === v); return b },
-      in(c: string, vs: unknown[]) { filters.push((r) => vs.includes(r[c])); return b },
-      gt(c: string, v: unknown) { filters.push((r) => r[c] != null && cmp(r[c], v) > 0); return b },
-      gte(c: string, v: unknown) { filters.push((r) => r[c] != null && cmp(r[c], v) >= 0); return b },
-      lt(c: string, v: unknown) { filters.push((r) => r[c] != null && cmp(r[c], v) < 0); return b },
-      lte(c: string, v: unknown) { filters.push((r) => r[c] != null && cmp(r[c], v) <= 0); return b },
+      eq(c: string, v: unknown) { filterCols.push(c); filters.push((r) => r[c] === v); return b },
+      neq(c: string, v: unknown) { filterCols.push(c); filters.push((r) => r[c] !== v); return b },
+      is(c: string, v: unknown) { filterCols.push(c); filters.push((r) => (r[c] ?? null) === v); return b },
+      in(c: string, vs: unknown[]) { filterCols.push(c); filters.push((r) => vs.includes(r[c])); return b },
+      gt(c: string, v: unknown) { filterCols.push(c); filters.push((r) => r[c] != null && cmp(r[c], v) > 0); return b },
+      gte(c: string, v: unknown) { filterCols.push(c); filters.push((r) => r[c] != null && cmp(r[c], v) >= 0); return b },
+      lt(c: string, v: unknown) { filterCols.push(c); filters.push((r) => r[c] != null && cmp(r[c], v) < 0); return b },
+      lte(c: string, v: unknown) { filterCols.push(c); filters.push((r) => r[c] != null && cmp(r[c], v) <= 0); return b },
       like(c: string, pattern: string) {
+        filterCols.push(c)
         const re = new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.')}$`)
         filters.push((r) => typeof r[c] === 'string' && re.test(r[c] as string))
         return b
       },
       ilike(c: string, pattern: string) {
+        filterCols.push(c)
         const re = likeToRegex(pattern, 'i')
         filters.push((r) => typeof r[c] === 'string' && re.test(r[c] as string))
         return b
       },
       not(c: string, op: string, v: unknown) {
         if (op !== 'is') throw new Error(`fake-supabase: unsupported not() operator ${op}`)
+        filterCols.push(c)
         filters.push((r) => (r[c] ?? null) !== v)
         return b
       },
-      or(expr: string) { filters.push(parseOr(expr)); return b },
+      or(expr: string) {
+        for (const clause of expr.split(',')) filterCols.push(clause.split('.')[0])
+        filters.push(parseOr(expr))
+        return b
+      },
       order(c: string, o?: { ascending?: boolean }) { orderBy.push({ col: c, asc: o?.ascending !== false }); return b },
       limit(n: number) { limitN = n; return b },
       range(from: number, to: number) { rangeFrom = from; limitN = to - from + 1; return b },
@@ -158,6 +186,16 @@ export function fakeSupabase(
     function run() {
       const failure = opts.failOn?.(name, action)
       if (failure) return { data: null, error: { message: failure }, count: null }
+      // TEST-7: when a schema is declared for this table, a filter or a write
+      // against a column it does not list is a broken query — throw rather than
+      // silently matching nothing (or, for `.is(col, null)`, matching everything).
+      if (schema?.[name]) {
+        for (const c of filterCols) assertColumn(name, c, 'filter')
+        if (payload) {
+          const items = Array.isArray(payload) ? payload : [payload]
+          for (const item of items) for (const c of Object.keys(item)) assertColumn(name, c, action)
+        }
+      }
       const rows = table(name)
 
       if (action === 'select') {

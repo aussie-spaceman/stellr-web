@@ -167,6 +167,25 @@ describe('executeRefund — fixes that came with it', () => {
     const r = await executeRefund('p1', 'cash', 'admin-1')
 
     expect(r).toMatchObject({ type: 'cash', refundCents: 7500 })
-    expect(stripe.refunds.create).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ source: 'stellr_app' }) }))
+    expect(stripe.refunds.create).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ source: 'stellr_app' }) }),
+      expect.objectContaining({ idempotencyKey: 'cancel-refund-p1' }),
+    )
+  })
+
+  // deep review PAY-12: a stable idempotency key makes a retried or double-
+  // submitted cancellation refund a no-op at Stripe, closing the read-then-act
+  // window. The DB unique index is the backstop.
+  it('passes a per-participant idempotency key on the cancellation refund', async () => {
+    seed()
+    const sanity = await import('@/lib/sanity')
+    vi.spyOn(sanity, 'getEventBySlug').mockResolvedValueOnce({ date: new Date(Date.now() + 120.5 * 86_400_000).toISOString(), stripePriceId: 'price_1' } as never)
+
+    await executeRefund('p1', 'cash', 'admin-1')
+
+    expect(stripe.refunds.create).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_intent: 'pi_1' }),
+      expect.objectContaining({ idempotencyKey: 'cancel-refund-p1' }),
+    )
   })
 })

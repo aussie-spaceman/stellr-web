@@ -249,6 +249,25 @@ describe('quote eligibility (V2.3 §1.7, §2)', () => {
     if (d.eligible) expect(attributionFor(d, { firstName: 'Kai', lastName: 'Ng', grade: 'grade_7', school: 'X', state: 'CO' })).toBe('')
   })
 
+  it('MP-9: an unknown-age minor is anonymised, never named', () => {
+    // A minor whose DOB can't be read (null age) used to be treated as 13+ and
+    // quoted "First L., Grade N, School". Fail safe: unknown age → under-13
+    // attribution (nothing identifying), whatever the state.
+    const d = quoteEligibility(minor({ age: null, state: 'NE' }))
+    expect(d).toEqual({ eligible: true, attribution: 'minor_under_13' })
+    if (d.eligible) {
+      expect(attributionFor(d, { firstName: 'Robin', lastName: 'Doe', grade: 'grade_9', school: 'Lincoln', state: 'Nebraska' })).toBe('')
+    }
+  })
+
+  it('MP-9: the NY/CO quote default treats an unknown age as a minor in band', () => {
+    expect(defaultAllowQuotes(null, 'NY')).toBe(false)
+    expect(defaultAllowQuotes(null, 'CO')).toBe(false)
+    // Outside NY/CO an unknown age keeps the permissive default (the under-13
+    // anonymisation in quoteEligibility is what protects the export).
+    expect(defaultAllowQuotes(null, 'TX')).toBe(true)
+  })
+
   it('needs an explicit yes from adults', () => {
     const adult = minor({ isMinor: false, quoteConsent: null })
     expect(quoteEligibility(adult).eligible).toBe(false)

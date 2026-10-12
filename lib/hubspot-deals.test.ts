@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   decideDealAction,
   PARTICIPANT_PIPELINE_ID,
@@ -100,5 +100,51 @@ describe('decideDealAction', () => {
       inPipeline(PARTICIPANT_STAGE.initialInterest, 'newer'),
     ])
     expect(decision.action).toBe('advance')
+  })
+})
+
+/**
+ * deep review INT-7: a read that FAILS must be distinguishable from a contact
+ * with no deals. Returning [] on an error made decideDealAction return `create`,
+ * duplicating a deal on any HubSpot 429/5xx. These pin the tri-state contract:
+ * null on a non-OK read, [] only on a successful empty read.
+ */
+describe('dealsForContact — a read error is not "no deals"', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    process.env.HUBSPOT_ACCESS_TOKEN = 'test-token'
+  })
+  afterEach(() => {
+    delete process.env.HUBSPOT_ACCESS_TOKEN
+    vi.resetModules()
+    vi.restoreAllMocks()
+  })
+
+  it('returns null (not []) when the associations read is rate-limited', async () => {
+    vi.doMock('@/lib/hubspot', () => ({
+      hubspotFetch: vi.fn(async () => ({ ok: false, status: 429 }) as unknown as Response),
+    }))
+    const { dealsForContact } = await import('./hubspot-deals')
+    expect(await dealsForContact('c1')).toBeNull()
+  })
+
+  it('returns null when the batch-read of the associated deals fails', async () => {
+    const hubspotFetch = vi
+      .fn()
+      // associations read OK, one associated deal id
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ results: [{ toObjectId: '42' }] }) })
+      // batch read 500s
+      .mockResolvedValueOnce({ ok: false, status: 500 })
+    vi.doMock('@/lib/hubspot', () => ({ hubspotFetch }))
+    const { dealsForContact } = await import('./hubspot-deals')
+    expect(await dealsForContact('c1')).toBeNull()
+  })
+
+  it('returns [] when the read succeeds with no associated deals', async () => {
+    vi.doMock('@/lib/hubspot', () => ({
+      hubspotFetch: vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ results: [] }) }) as unknown as Response),
+    }))
+    const { dealsForContact } = await import('./hubspot-deals')
+    expect(await dealsForContact('c1')).toEqual([])
   })
 })

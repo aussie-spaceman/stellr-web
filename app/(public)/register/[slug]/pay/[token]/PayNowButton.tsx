@@ -3,10 +3,19 @@
 import { useState } from 'react'
 import { Button } from '@stellr/web-ui'
 
-// Mints a fresh Stripe Checkout for the registration behind `token` and sends
-// the browser there. A session URL is never embedded in the page or the email:
-// Stripe sessions expire in 24 hours, the pay link must not.
-export default function PayNowButton({ token, amountLabel }: { token: string; amountLabel: string }) {
+// Mints a fresh Stripe Checkout for the registration (or, with endpoint set, the
+// per-seat payment — deep review PAY-8) behind `token` and sends the browser
+// there. A session URL is never embedded in the page or the email: Stripe
+// sessions expire in 24 hours, the pay link must not.
+export default function PayNowButton({
+  token,
+  amountLabel,
+  endpoint = '/api/register/pay',
+}: {
+  token: string
+  amountLabel: string
+  endpoint?: string
+}) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -14,7 +23,7 @@ export default function PayNowButton({ token, amountLabel }: { token: string; am
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch('/api/register/pay', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
@@ -31,7 +40,7 @@ export default function PayNowButton({ token, amountLabel }: { token: string; am
   return (
     <div className="space-y-3">
       <Button type="button" onClick={pay} disabled={busy} className="w-full sm:w-auto disabled:opacity-60">
-        {busy ? 'Opening secure checkout…' : `Pay ${amountLabel} now →`}
+        {busy ? 'Opening secure checkout…' : amountLabel ? `Pay ${amountLabel} now →` : 'Pay now →'}
       </Button>
       {error && (
         <p role="alert" className="text-sm text-red-700">

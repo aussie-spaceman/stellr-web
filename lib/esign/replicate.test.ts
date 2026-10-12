@@ -52,9 +52,37 @@ describe('replicatePending', () => {
     const db = setup(pdf)
     const store = memoryBackupStore()
     expect(await replicatePending(db.client, store)).toEqual({ replicated: 1, failed: [] })
-    expect(decryptBackup(store.files.get(backupName('row-1', 'signed'))!).toString()).toBe('%PDF signed')
+    // deep review ES-5: the signed copy is named by its content hash.
+    expect(decryptBackup(store.files.get(backupName('row-1', 'signed', sha256Hex(pdf)))!).toString()).toBe('%PDF signed')
     expect(store.files.has(backupName('row-1', 'audit'))).toBe(true)
     expect(db.table('agreements')[0].replicated_at).toBeTruthy()
+  })
+
+  it('re-copies the SEALED bytes after a certificate seal, matching the new hash (ES-5)', async () => {
+    // deep review ES-5: certificate-seal rewrites signed_pdf_path/sha256 and
+    // clears replicated_at to force a fresh copy. With a content-independent
+    // name the write-once `put` skipped it, so the only off-site copy kept the
+    // pre-seal bytes and no longer matched signed_pdf_sha256 — every restore of
+    // a sealed record then failed its hash check. The content-keyed name makes
+    // the sealed copy a new object that is actually written.
+    const pre = new TextEncoder().encode('%PDF signed')
+    const db = setup(pre)
+    const store = memoryBackupStore()
+    await replicatePending(db.client, store)
+
+    // Simulate the seal: new stored PDF, new hash/path, replicated_at cleared.
+    const sealed = new TextEncoder().encode('%PDF signed + certificate seal')
+    const sealedSha = sha256Hex(sealed)
+    db.objects.set(`${SIGNED_BUCKET}/native/2026/row-1/sealed.pdf`, sealed)
+    Object.assign(db.table('agreements')[0], {
+      signed_pdf_path: 'native/2026/row-1/sealed.pdf', signed_pdf_sha256: sealedSha, replicated_at: null,
+    })
+
+    expect(await replicatePending(db.client, store)).toEqual({ replicated: 1, failed: [] })
+    // The off-site copy for the NEW hash exists and decrypts to the sealed bytes.
+    const copy = store.files.get(backupName('row-1', 'signed', sealedSha))
+    expect(copy).toBeDefined()
+    expect(sha256Hex(decryptBackup(copy!))).toBe(sealedSha)
   })
 
   it('stops starting records at the deadline, leaving them for the next run', async () => {

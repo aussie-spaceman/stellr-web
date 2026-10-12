@@ -269,12 +269,25 @@ export async function POST(req: NextRequest) {
   }
 
   // Already in this registration?
-  const { data: existing } = await db
+  // deep review REG-7: fail CLOSED on a lookup error. A discarded error read as
+  // "not present" and let a duplicate participant through; a transient 5xx must
+  // not add a second row (two consent envelopes, two Space grants, double
+  // payment). The unique index participants_reg_email_uniq is the real guard
+  // against the read-then-insert race (handled at the insert below); this just
+  // stops silently proceeding when the pre-check itself fails.
+  const { data: existing, error: existingError } = await db
     .from('participants')
     .select('id')
     .eq('registration_id', registrationId)
     .eq('email', person.email)
     .maybeSingle()
+  if (existingError) {
+    console.error('[register/group-join] dedupe lookup failed:', existingError)
+    return NextResponse.json(
+      { error: 'Registration is temporarily unavailable. Please try again shortly.' },
+      { status: 503 },
+    )
+  }
 
   if (existing) {
     return NextResponse.json({ error: 'You are already registered in this group.' }, { status: 409 })
@@ -287,10 +300,19 @@ export async function POST(req: NextRequest) {
   const declaredAdults = reg.adult_count as number | null
   const declaredStudents = reg.student_count as number | null
   if (declaredAdults != null && declaredStudents != null) {
-    const { count: currentCount } = await db
+    const { count: currentCount, error: countError } = await db
       .from('participants')
       .select('*', { count: 'exact', head: true })
       .eq('registration_id', registrationId)
+    // deep review REG-7: fail CLOSED on a count error rather than admitting
+    // past the declared cap because the count could not be read.
+    if (countError) {
+      console.error('[register/group-join] capacity count failed:', countError)
+      return NextResponse.json(
+        { error: 'Registration is temporarily unavailable. Please try again shortly.' },
+        { status: 503 },
+      )
+    }
     if ((currentCount ?? 0) >= declaredAdults + declaredStudents) {
       return NextResponse.json({
         error: 'This group is already full — every place the organiser registered has been filled. Please contact your organiser if you think this is a mistake.',
@@ -329,6 +351,13 @@ export async function POST(req: NextRequest) {
   }).select('id').single()
 
   if (partError || !partRow) {
+    // deep review REG-7: the unique index participants_reg_email_uniq closes the
+    // read-then-insert race — two concurrent joins on the same token both pass
+    // the dedupe read above, but only one insert can win. The loser hits a
+    // unique violation (23505); that is "already registered" (409), not a 500.
+    if (partError?.code === '23505') {
+      return NextResponse.json({ error: 'You are already registered in this group.' }, { status: 409 })
+    }
     console.error('Group join participant insert error:', partError)
     return NextResponse.json({ error: 'Failed to complete registration. Please try again.' }, { status: 500 })
   }

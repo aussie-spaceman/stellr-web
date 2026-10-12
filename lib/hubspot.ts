@@ -40,6 +40,7 @@
 import { after } from 'next/server'
 import { sendEmail } from '@/lib/email'
 import { supabaseServer } from '@/lib/supabase'
+import { sleep } from '@/lib/utils'
 import {
   HS,
   LEAD_SOURCES,
@@ -64,17 +65,44 @@ type Props = Record<string, string>
 
 /* ── Low-level transport ─────────────────────────────────────────────────── */
 
+// deep review INT-7: how many times a rate-limited READ is retried before we
+// give up and hand the 429 back to the caller (who then skips rather than
+// creating a duplicate). Three attempts = original + two retries at ~1s, 2s.
+const HUBSPOT_MAX_ATTEMPTS = 3
+
+// Only idempotent READS may be auto-retried on a 429. A write (create/advance a
+// deal, patch a contact) must NOT be replayed here: a 429 can be returned after
+// the server has already accepted the write, so a blind retry risks a duplicate
+// — the very thing INT-7 is closing. GETs, and the search / batch-read POSTs
+// HubSpot models as reads, are safe.
+function isRetryableRead(path: string, method: string): boolean {
+  if (method === 'GET') return true
+  return method === 'POST' && (path.includes('/search') || path.endsWith('/batch/read'))
+}
+
 // The one HubSpot transport. hubspot-deals and hubspot-companies import it
 // rather than carrying their own copy of the same eight lines.
 export async function hubspotFetch(path: string, method: 'GET' | 'POST' | 'PATCH' | 'PUT', body?: unknown) {
-  return fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${HUBSPOT_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  })
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${BASE}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${HUBSPOT_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    })
+
+    // deep review INT-7: back off on a rate-limited read instead of treating the
+    // 429 as a hard failure. Honour Retry-After when present, else 1s, 2s (capped).
+    if (res.status === 429 && attempt < HUBSPOT_MAX_ATTEMPTS - 1 && isRetryableRead(path, method)) {
+      const retryAfter = Number(res.headers.get('retry-after'))
+      const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000 * 2 ** attempt
+      await sleep(Math.min(waitMs, 8_000))
+      continue
+    }
+    return res
+  }
 }
 
 /* ── Contact read ────────────────────────────────────────────────────────── */

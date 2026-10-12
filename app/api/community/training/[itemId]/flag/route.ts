@@ -3,6 +3,7 @@ import { getCurrentMember } from '@/lib/community'
 import { notifyCommunityAdmins } from '@/lib/notify'
 import { supabaseServer } from '@/lib/supabase'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { escapeHtml } from '@/lib/email-layout'
 
 // A member reports that a training lesson's resource is unavailable/broken
 // (e.g. no link provided, or a placeholder like "TBC"). Routes an in-app +
@@ -29,7 +30,7 @@ export async function POST(
   if (!item) return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
 
   const moduleTitle = (item.training_modules as { title?: string } | null)?.title ?? 'a course'
-  const memberName = [member.first_name, member.last_name].filter(Boolean).join(' ') || member.email
+  const memberName = [member.first_name, member.last_name].filter(Boolean).join(' ') || member.email || 'A member'
   const lessonTitle = (item.title as string) ?? 'a lesson'
 
   await notifyCommunityAdmins({
@@ -40,7 +41,11 @@ export async function POST(
     actorMemberId: member.id,
     email: {
       subject: `Training resource flagged: ${lessonTitle}`,
-      html: `<p><strong>${memberName}</strong> reported that the resource for the lesson <strong>${lessonTitle}</strong> in <strong>${moduleTitle}</strong> is unavailable.</p><p>Review it in Admin → Academy → Training.</p>`,
+      // deep review INTPUB-N1: this caller builds its own email.html, so notify
+      // does not escape it — the member's display name (student-settable) and
+      // the lesson/module titles must be escaped here, or markup in them renders
+      // in the admin's inbox (spoofed links/layout in trusted first-party mail).
+      html: `<p><strong>${escapeHtml(memberName)}</strong> reported that the resource for the lesson <strong>${escapeHtml(lessonTitle)}</strong> in <strong>${escapeHtml(moduleTitle)}</strong> is unavailable.</p><p>Review it in Admin → Academy → Training.</p>`,
       text: `${memberName} reported that the resource for "${lessonTitle}" in "${moduleTitle}" is unavailable. Review it in Admin → Academy → Training.`,
     },
   })

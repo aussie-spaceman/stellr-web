@@ -51,6 +51,21 @@ export interface BackgroundWebhookResult {
   assessment?: string | null
   /** True when a completed report included one or more canceled screenings. */
   includesCanceled?: boolean
+  /**
+   * The vendor's own completion timestamp (ISO) for a finished report, when the
+   * event/object carries one. Validity is measured from THIS, not from when we
+   * happened to hear about the pass, so a late sync recovery or a redelivery can
+   * neither shorten nor extend the 3-year window (deep review BG-7).
+   */
+  completedAt?: string | null
+  /**
+   * True only for a genuine adverse-action / dispute signal (pre/post adverse
+   * action, disputed) — not for a benign re-completed report that merely maps to
+   * 'referred'. Lets the single writer tell a real adverse event apart from
+   * Checkr's at-least-once redelivery when reconciling a prior human decision, so
+   * a duplicate Consider can't wipe a recorded 'cleared' (deep review BG-N1).
+   */
+  adverse?: boolean
 }
 
 /** The vendor refs we hold for one of our rows, used to poll its current state. */

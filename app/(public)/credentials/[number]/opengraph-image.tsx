@@ -1,7 +1,14 @@
 import { ImageResponse } from 'next/og'
 import { supabaseServer } from '@/lib/supabase'
 import { tokens } from '@/lib/tokens'
-import { credentialState, normaliseCredentialNumber, type CredentialTheme } from '@/lib/credentials-core'
+import {
+  ageBlock,
+  credentialState,
+  normaliseCredentialNumber,
+  type CredentialStatus,
+  type CredentialTheme,
+  type CredentialVisibility,
+} from '@/lib/credentials-core'
 import { badgeAccent, BadgeGlyph } from './badge/glyph'
 
 /**
@@ -24,26 +31,92 @@ export const alt = 'Stellr Education verified credential'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
+/**
+ * deep review MP-12: the card carries a (possibly minor's) name, so it must not
+ * be cached as `public, immutable, max-age=31536000` (the @vercel/og default) —
+ * that keeps a name card alive in browser, proxy and unfurler caches for a year
+ * after the page is unpublished, tombstoned or erased. `private, no-store` means
+ * caches re-fetch and so reflect the current state (matching the `privateLink`
+ * header stamped on `/credentials/*` in next.config). An edge card is cheap to
+ * regenerate.
+ */
+export const OG_CACHE_CONTROL = 'private, no-store'
+
+interface OgRow {
+  number: string
+  recipient_name: string
+  title: string
+  issuer: string
+  theme: CredentialTheme | null
+  status: CredentialStatus
+  expires_at: string | null
+  tombstoned_at: string | null
+  visibility: CredentialVisibility
+  /** The live DOB from the linked member/participant, for the age re-check. */
+  date_of_birth: string | null
+}
+
+type OgCard = { recipient_name: string; title: string; issuer: string; theme: CredentialTheme | null; number: string }
+
+/**
+ * The named card's fields, or null when the name must be withheld. Pure, so the
+ * gate is unit-tested without rendering an image.
+ *
+ * deep review MP-4: the name shows only on a public, non-withdrawn credential
+ * whose holder is not (now) under 13 or of unknown age — re-checked from the
+ * live DOB on every render, not just when the owner first turned sharing on. A
+ * guardian opt-out / withdrawal already flips `visibility` to private (handled
+ * by the visibility check); the DOB re-check closes the "DOB corrected to
+ * under-13 while still public" gap without pulling DocuSign into the edge card.
+ */
+export function ogCardFor(data: OgRow | null, now = new Date()): OgCard | null {
+  if (!data) return null
+  if (data.visibility !== 'public') return null
+  if (credentialState(data, now) === 'withdrawn') return null
+  if (ageBlock(data.date_of_birth, now)) return null
+  return { recipient_name: data.recipient_name, title: data.title, issuer: data.issuer, theme: data.theme, number: data.number }
+}
+
+/** A joined row's field is either the object or a one-element array. */
+function dobOf(v: unknown): string | null {
+  const one = (Array.isArray(v) ? v[0] : v) as { date_of_birth?: string | null } | null | undefined
+  return one?.date_of_birth ?? null
+}
+
 export default async function Image({ params }: { params: Promise<{ number: string }> }) {
   const { number } = await params
   const n = normaliseCredentialNumber(decodeURIComponent(number))
 
-  let cred: { recipient_name: string; title: string; issuer: string; theme: CredentialTheme | null; number: string } | null = null
+  let card: OgCard | null = null
   if (n) {
     const { data } = await supabaseServer()
       .from('credentials')
-      .select('number, recipient_name, title, issuer, theme, status, expires_at, tombstoned_at, visibility')
+      .select(
+        'number, recipient_name, title, issuer, theme, status, expires_at, tombstoned_at, visibility, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth)',
+      )
       .eq('number', n)
       .maybeSingle()
-    if (data && data.visibility === 'public' && credentialState(data) !== 'withdrawn') {
-      cred = { recipient_name: data.recipient_name, title: data.title, issuer: data.issuer, theme: data.theme, number: data.number }
+    if (data) {
+      const row = data as Record<string, unknown>
+      card = ogCardFor({
+        number: row.number as string,
+        recipient_name: row.recipient_name as string,
+        title: row.title as string,
+        issuer: row.issuer as string,
+        theme: (row.theme as CredentialTheme | null) ?? null,
+        status: row.status as CredentialStatus,
+        expires_at: (row.expires_at as string | null) ?? null,
+        tombstoned_at: (row.tombstoned_at as string | null) ?? null,
+        visibility: row.visibility as CredentialVisibility,
+        date_of_birth: dobOf(row.members) ?? dobOf(row.participants),
+      })
     }
   }
 
-  const accent = badgeAccent(cred?.theme ?? null)
-  const title = cred?.title ?? 'Verified credential'
-  const holder = cred ? cred.recipient_name : 'Issued by Stellr Education'
-  const issuer = cred?.issuer ?? 'Stellr Education'
+  const accent = badgeAccent(card?.theme ?? null)
+  const title = card?.title ?? 'Verified credential'
+  const holder = card ? card.recipient_name : 'Issued by Stellr Education'
+  const issuer = card?.issuer ?? 'Stellr Education'
 
   return new ImageResponse(
     (
@@ -79,11 +152,11 @@ export default async function Image({ params }: { params: Promise<{ number: stri
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 22, color: tokens.color.heroLead }}>
             <div>{issuer}</div>
-            <div>{cred ? `stellreducation.org/credentials/${cred.number}` : 'stellreducation.org'}</div>
+            <div>{card ? `stellreducation.org/credentials/${card.number}` : 'stellreducation.org'}</div>
           </div>
         </div>
       </div>
     ),
-    size,
+    { ...size, headers: { 'Cache-Control': OG_CACHE_CONTROL } },
   )
 }

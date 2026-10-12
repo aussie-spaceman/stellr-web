@@ -9,6 +9,7 @@ import {
   credentialState,
   shareConsentFor,
   canShare,
+  publicShareAllowed,
   canUseLinkedIn,
   credentialUrl,
   recordCredentialEvent,
@@ -47,8 +48,12 @@ type Params = {
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { number } = await params
-  const cred = await getCredentialByNumber(supabaseServer(), number)
-  const showable = cred && cred.visibility === 'public' && !cred.tombstoned_at
+  const db = supabaseServer()
+  const cred = await getCredentialByNumber(db, number)
+  // deep review MP-4: the <title>/OG meta carry the holder's name, so gate them
+  // on the live consent/age too — not only on the stored visibility flag.
+  const consent = cred ? await shareConsentFor(db, cred) : 'none'
+  const showable = !!cred && !cred.tombstoned_at && publicShareAllowed(cred.visibility, consent)
   const title = showable ? `${cred.recipient_name} — ${cred.title}` : 'Stellr credential'
   const description = showable
     ? `${cred.title}, issued by ${cred.issuer} on ${formatDate(cred.issued_at)}. Verify at stellreducation.org.`
@@ -95,11 +100,20 @@ export default async function CredentialPage({ params, searchParams }: Params) {
     )
   }
 
-  // ── Private: the holder has not turned it on ───────────────────────────
+  // ── Private: the holder has not turned it on, OR consent no longer allows it ─
   // The emailed family link opens it read-only; anything else stops here.
+  //
+  // deep review MP-4: re-check consent/age on every render, not only when the
+  // owner first flipped sharing on. A page left `visibility: 'public'` whose
+  // holder's DOB was later corrected to under-13, whose minor agreement has
+  // expired, or whose guardian withdrew consent (agreement restricted) must go
+  // back to private for the public. Owners and the emailed family link still
+  // open it (they are allowed to see a private page).
+  const consent = await shareConsentFor(db, cred)
+  const effectivelyPrivate = !publicShareAllowed(cred.visibility, consent)
   const familyView =
-    cred.visibility === 'private' && !isOwner && verifyCredentialViewToken(cred.id, typeof key === 'string' ? key : null)
-  if (cred.visibility === 'private' && !isOwner && !familyView) {
+    effectivelyPrivate && !isOwner && verifyCredentialViewToken(cred.id, typeof key === 'string' ? key : null)
+  if (effectivelyPrivate && !isOwner && !familyView) {
     return (
       <Shell eyebrow="Credential" title="This credential is private" banner={banner}>
         <p className="text-content-secondary leading-relaxed">
@@ -114,7 +128,6 @@ export default async function CredentialPage({ params, searchParams }: Params) {
   // A family view is not a verifier's view; only public opens are counted.
   if (!isOwner && !familyView) void recordCredentialEvent(db, cred.id, 'view')
 
-  const consent = await shareConsentFor(db, cred)
   const share = canShare(cred, consent)
   const linkedInOk = canUseLinkedIn(cred.date_of_birth)
   const url = credentialUrl(cred.number)

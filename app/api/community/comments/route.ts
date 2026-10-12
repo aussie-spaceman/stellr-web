@@ -6,6 +6,7 @@ import { getSpaceAccessById, isMemberMutedInSpace } from '@/lib/spaces'
 import { sendEmail, communityReplyEmail } from '@/lib/email'
 import { extractMentionIds, notifyMentions } from '@/lib/mentions'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { runAfterResponse } from '@/lib/after-response'
 
 const createCommentSchema = z.object({
   postId: z.string().uuid(),
@@ -104,7 +105,11 @@ export async function POST(req: Request) {
     .eq('id', postId)
     .maybeSingle()
 
-  if (!post || post.status === 'deleted') {
+  // deep review MEM-6: a post an admin has moderated is status='hidden' (not
+  // 'deleted'). The old check blocked only 'deleted', so a hidden post stayed
+  // commentable by direct link (mention/reply emails point straight at it).
+  // Require 'published' — nobody may add a comment to a hidden or deleted post.
+  if (!post || post.status !== 'published') {
     return NextResponse.json({ error: 'Post not found' }, { status: 404 })
   }
   if (post.space_id) {
@@ -151,16 +156,19 @@ export async function POST(req: Request) {
     }
   )
 
-  // Notify post author on reply (FR-COM-06). Best-effort — don't fail the request.
-  notifyPostAuthor({ db, postId, actorMember: member, commentId: comment.id, snippedText: plainText }).catch(
-    (e) => console.error('[community] notification error:', e)
+  // Notify post author on reply (FR-COM-06). Best-effort — don't fail the
+  // request, but deep review QUAL-1: register it with after() so the reply
+  // email is not dropped when the instance is frozen after the response.
+  runAfterResponse('community', () =>
+    notifyPostAuthor({ db, postId, actorMember: member, commentId: comment.id, snippedText: plainText })
   )
 
   // Notify any @mentioned members. Exclude the post author (they already get the
-  // 'reply' notification above) and the comment author. Best-effort.
+  // 'reply' notification above) and the comment author. Best-effort — after()
+  // so the mention emails survive the response flush (QUAL-1).
   const mentionIds = extractMentionIds(bodyJson)
   if (mentionIds.length) {
-    void (async () => {
+    runAfterResponse('community', async () => {
       const { data: ctx } = await db
         .from('community_posts')
         .select('author_member_id, community_spaces(slug)')
@@ -177,7 +185,7 @@ export async function POST(req: Request) {
         spaceSlug: slug ?? 'general',
         excludeIds: ctx?.author_member_id ? [ctx.author_member_id] : [],
       })
-    })().catch((e: unknown) => console.error('[community] mention notify error:', e))
+    })
   }
 
   return NextResponse.json({ id: comment.id })

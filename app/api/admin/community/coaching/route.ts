@@ -11,6 +11,7 @@ import {
   deleteWorkshop,
   updateTierCoaching,
 } from '@/lib/coaching'
+import { CommunityDeleteBlockedError } from '@/lib/community-delete-guard'
 
 // Admin actions for Coaching workshops (1-on-1): create + invite, settings,
 // coach reassignment, member invite/replace/remove, archive/delete, and the
@@ -74,7 +75,19 @@ export async function POST(req: Request) {
     }
     case 'delete': {
       if (!b.workshopId) return NextResponse.json({ error: 'workshopId required' }, { status: 400 })
-      await deleteWorkshop(b.workshopId)
+      // deep review DB-4: deleteWorkshop blocks the delete when it would cascade
+      // away the workshop's chat history — surface that as a 409 steering to Archive.
+      try {
+        await deleteWorkshop(b.workshopId)
+      } catch (e) {
+        if (e instanceof CommunityDeleteBlockedError) {
+          return NextResponse.json(
+            { error: 'This workshop has chat history. Archive it instead to preserve the record.', blockers: e.blockers },
+            { status: 409 },
+          )
+        }
+        throw e
+      }
       return NextResponse.json({ ok: true })
     }
     case 'updateTier': {

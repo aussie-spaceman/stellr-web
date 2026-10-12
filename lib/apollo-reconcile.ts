@@ -57,24 +57,49 @@ export interface ReconcileResult {
 
 /* ── Apollo ──────────────────────────────────────────────────────────────── */
 
+// deep review INT-8: bound the 429 retry. The old code recursed after a flat
+// 60s sleep on EVERY 429, with no ceiling. Apollo also returns 429 when the
+// plan's hourly/daily API quota is exhausted (e.g. a manual scripts/ run drained
+// it), so a persistent 429 made this recurse and sleep until Vercel killed the
+// function — writing no cron_runs row and sending no alert, i.e. the exact
+// silent failure the reconciler exists to prevent. Cap the attempts and the
+// backoff so it fails fast and visibly instead.
+const APOLLO_MAX_ATTEMPTS = 3
+const APOLLO_MAX_BACKOFF_MS = 20_000
+
 async function apollo(apiKey: string, body: Record<string, unknown>) {
-  const res = await fetch(APOLLO_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      accept: 'application/json',
-      'Cache-Control': 'no-cache',
-      'x-api-key': apiKey,
-    },
-    body: JSON.stringify(body),
-  })
-  if (res.status === 429) {
-    await sleep(60_000)
-    return apollo(apiKey, body)
+  for (let attempt = 0; attempt < APOLLO_MAX_ATTEMPTS; attempt++) {
+    const res = await fetch(APOLLO_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        accept: 'application/json',
+        'Cache-Control': 'no-cache',
+        'x-api-key': apiKey,
+      },
+      body: JSON.stringify(body),
+    })
+    if (res.status === 429) {
+      if (attempt < APOLLO_MAX_ATTEMPTS - 1) {
+        const retryAfter = Number(res.headers.get('retry-after'))
+        const waitMs =
+          Number.isFinite(retryAfter) && retryAfter > 0
+            ? Math.min(retryAfter * 1000, APOLLO_MAX_BACKOFF_MS)
+            : Math.min(5_000 * 2 ** attempt, APOLLO_MAX_BACKOFF_MS)
+        await sleep(waitMs)
+        continue
+      }
+      // Out of retries: a sustained 429 is almost always quota exhaustion. Throw
+      // so the cron records a failed run and alerts, rather than hanging.
+      throw new Error('Apollo rate-limited (429) after 3 attempts — API quota is likely exhausted')
+    }
+    const text = await res.text()
+    if (!res.ok) throw new Error(`Apollo ${res.status}: ${text.slice(0, 300)}`)
+    return JSON.parse(text) as Record<string, unknown>
   }
-  const text = await res.text()
-  if (!res.ok) throw new Error(`Apollo ${res.status}: ${text.slice(0, 300)}`)
-  return JSON.parse(text) as Record<string, unknown>
+  // Unreachable: the loop returns or throws on every path. Kept so the function
+  // has a definite return/throw for the type checker.
+  throw new Error('Apollo rate-limited — retries exhausted')
 }
 
 function messagesOf(json: Record<string, unknown>): Record<string, unknown>[] {
@@ -255,7 +280,17 @@ export async function reconcileProspects(
         await associateDefault('contacts', contact.id, 'companies', company.id)
       }
 
-      const decision = decideDealAction(p.engagement, await dealsForContact(contact.id))
+      // deep review INT-7: null = the existing-deals read failed (not "no
+      // deals"). Skip and count it failed so a transient HubSpot error does not
+      // create a duplicate deal; the next daily run reconciles it.
+      const existingDeals = await dealsForContact(contact.id)
+      if (existingDeals === null) {
+        log(`${p.email} — skipped: could not read existing deals (HubSpot error)`)
+        r.failed++
+        if (opts.apply) await sleep(pace)
+        continue
+      }
+      const decision = decideDealAction(p.engagement, existingDeals)
 
       if (decision.action === 'none') {
         r.skipped++

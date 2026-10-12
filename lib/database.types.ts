@@ -34,6 +34,10 @@ export interface RegistrationRow {
   // Pay-later capability (see lib/registration-checkout.ts). NULL until minted.
   pay_token: string | null
   pay_link_sent_at: string | null
+  // deep review PAY-4 part-1: the open Checkout session, expired before a new one
+  // is minted so a registration never holds two payable sessions. NULL until first
+  // checkout.
+  checkout_session_id: string | null
 }
 
 export type RegistrationInsert = Omit<RegistrationRow, 'id' | 'created_at' | 'updated_at'>
@@ -64,8 +68,14 @@ export interface ParticipantRow {
   membership_id: string
   company_name: string | null
   award: string | null
-  individual_payment_status: 'pending' | 'paid' | null
+  individual_payment_status: 'pending' | 'paid' | 'waived' | null
   join_completed_at: string | null
+  // deep review PAY-8: durable per-seat pay token (mirrors registrations.pay_token).
+  // NULL until a per-seat payment link is first needed.
+  pay_token: string | null
+  // Stripe payment reference for a per-seat payment (migration 027), used by cash
+  // refunds. NULL until the seat is paid.
+  stripe_payment_intent_id: string | null
   created_at: string
 }
 

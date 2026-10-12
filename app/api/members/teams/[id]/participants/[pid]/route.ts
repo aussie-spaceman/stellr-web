@@ -127,6 +127,36 @@ export async function DELETE(
   // Managers cannot delete student accounts — only remove from team
   // (we're removing the participant row, not the member account, so this is fine)
 
+  // deep review MEM-15 (data retention): a participant row is the parent of
+  // award, post-event-survey and team-profile records whose FKs are ON DELETE
+  // CASCADE, so a hard delete here would erase judging awards, submitted survey
+  // responses and the team profile — data policy retains for 7 years (the issued
+  // credential survives via SET NULL, but the award it references would be gone).
+  // Refuse to destroy retained records: if the participant holds any, the row is
+  // kept (space access is still revoked below is NOT reached — we return first).
+  // A migration flips these FKs to SET NULL so removal can later preserve rather
+  // than erase (supabase/migrations/…_participant_retention_set_null.sql, UNAPPLIED).
+  const [awards, surveyResponses, teamProfiles] = await Promise.all([
+    db.from('event_award_assignments').select('id', { count: 'exact', head: true }).eq('participant_id', pid),
+    db.from('survey_responses').select('id', { count: 'exact', head: true }).eq('participant_id', pid).not('submitted_at', 'is', null),
+    db.from('team_profiles').select('id', { count: 'exact', head: true }).eq('participant_id', pid).not('submitted_at', 'is', null),
+  ])
+  // Fail closed: if any count read errored we cannot prove there is nothing to
+  // lose, so treat it as "has retained records" and refuse the destructive delete.
+  const retained =
+    (awards.count ?? 1) > 0 || awards.error != null ||
+    (surveyResponses.count ?? 1) > 0 || surveyResponses.error != null ||
+    (teamProfiles.count ?? 1) > 0 || teamProfiles.error != null
+  if (retained) {
+    return NextResponse.json(
+      {
+        error:
+          'This participant has event records (awards, survey responses or a team profile) that must be retained. Contact Stellr to remove them.',
+      },
+      { status: 409 }
+    )
+  }
+
   const { error } = await db
     .from('participants')
     .delete()

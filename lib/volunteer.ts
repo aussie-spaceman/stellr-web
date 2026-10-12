@@ -15,7 +15,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { addGlobalRole, memberHasRole } from '@/lib/member-roles'
 import { applyGrantTrigger } from '@/lib/membership-grants'
 import { dispatchAgreement, agreementExpiry, coveringTypes, type DispatchOutcome } from '@/lib/docusign-agreements'
-import { deriveCompliance, loadComplianceRecordsByEmails, type ComplianceState } from '@/lib/compliance'
+import { deriveCompliance, loadComplianceRecordsByMemberIds, type ComplianceState } from '@/lib/compliance'
 import { logActivity, type Actor } from '@/lib/activity-log'
 
 /** Slug of the community space that acts as the Volunteer Hub (created via the
@@ -219,7 +219,13 @@ export async function getVolunteerStatuses(
       .select('member_id, status, completed_at')
       .in('member_id', ids)
       .in('envelope_type', coveringTypes('volunteer')),
-    loadComplianceRecordsByEmails(db, members.map((m) => m.email ?? '')),
+    // deep review BG-4: resolve each member's clearance by member id, NOT by the
+    // email string. Members are keyed by email and families routinely share one,
+    // so an email lookup can show a cleared spouse's/sibling's pill against a
+    // different, uncleared person. This panel already holds the exact member id,
+    // so there is no reason to go through the ambiguous email (mirrors the roster
+    // in lib/event-admin.ts and classifyMentors in lib/background-report-export).
+    loadComplianceRecordsByMemberIds(db, ids),
   ])
 
   const now = new Date()
@@ -229,7 +235,7 @@ export async function getVolunteerStatuses(
       (e) => e.status === 'completed' && e.completed_at && mentorExpiry(e.completed_at) > now,
     )
     const inFlight = mine.some((e) => ['created', 'sent', 'delivered'].includes(e.status))
-    const records = compliance.get((m.email ?? '').toLowerCase())
+    const records = compliance.get(m.id)
     const summary = deriveCompliance(
       records?.license ?? null,
       records?.checks ?? [],

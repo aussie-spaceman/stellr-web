@@ -12,6 +12,17 @@ vi.mock('@/lib/google-calendar', () => ({
   listUpdatedEvents,
 }))
 vi.mock('@/lib/hubspot', () => ({ getContactByEmail, upsertContact, createNote }))
+// deep review INT-9: the route now records its run in cron_runs via
+// startCronRun, so it reaches for the service-role client. Stub it — the ledger
+// write is best-effort and off the path these tests assert on.
+vi.mock('@/lib/supabase', () => ({
+  supabaseServer: () => ({
+    from: () => ({
+      insert: () => ({ select: () => ({ single: async () => ({ data: { id: 'run1' }, error: null }) }) }),
+      update: () => ({ eq: async () => ({ error: null }) }),
+    }),
+  }),
+}))
 
 const { GET } = await import('./route')
 

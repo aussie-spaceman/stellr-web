@@ -85,6 +85,14 @@ interface TeacherPoC {
   first_name: string; last_name: string; email: string
 }
 
+// deep review QUAL-7: a group registration runs one agreement dispatch per
+// participant sequentially, then a Google Sheet, then Stripe — a 30-student team
+// does 30 sequential sends plus billing in one request. Pin the ceiling to the
+// plan maximum so a large team is not cut off by the lower platform default
+// mid-dispatch (which would leave envelopes issued and the invoice unsent). The
+// handler is still one large function; extracting it is flagged as a follow-up.
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()

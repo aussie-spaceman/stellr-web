@@ -53,42 +53,55 @@ export async function applyCheckOutcome(
   if (outcome.assessment != null) update.assessment = outcome.assessment
   if (outcome.includesCanceled != null) update.includes_canceled = outcome.includesCanceled
 
+  // One read of the row as it currently stands, shared by the expiry (BG-7) and
+  // adjudication-reconcile (BG-3/BG-N1) logic below — so a webhook/poll costs one
+  // extra query, not two.
+  const { data: cur } = await db
+    .from('member_background_checks')
+    .select('adjudication_outcome, adjudicated_at, completed_at')
+    .eq('id', row.id)
+    .maybeSingle()
+
   // passed/referred/cancelled are a finished report; expired = invite never used.
   const reportCompleted = outcome.status === 'passed' || outcome.status === 'referred' || outcome.status === 'cancelled'
   if (reportCompleted) {
-    update.completed_at = now
+    // deep review BG-7: validity is measured from the report's OWN completion
+    // time, and never moves once set. Both writers run repeatedly — Checkr
+    // delivers at-least-once and the daily cron re-polls — so stamping new Date()
+    // on apply would push a 3-year expiry forward on every redelivery, and a sync
+    // recovery (the whole reason sync exists) would date a June pass to September.
+    // Preference: the completion already on file > the vendor's own completedAt >
+    // now (only when we first learn of it and the vendor gave us nothing).
+    const completionBasis = (cur?.completed_at as string | null) ?? outcome.completedAt ?? now
+    update.completed_at = completionBasis
     if (outcome.status === 'passed') {
-      const expires = new Date()
+      const expires = new Date(completionBasis)
       expires.setFullYear(expires.getFullYear() + BC_VALIDITY_YEARS)
       update.expires_at = expires.toISOString()
     }
   }
 
-  // Reconcile with a prior Stellr adjudication (deep review BG-3). A later vendor
-  // event must not leave a stale human decision standing. If this check was
-  // adjudicated and the incoming vendor outcome flags it again ('referred') or
-  // disagrees with the recorded decision (adverse action after a 'cleared', or a
-  // 'passed' on a row an adjudicator marked not_cleared), clear the adjudication
-  // so the row returns to "needs review" instead of silently staying cleared.
-  // deriveCompliance already makes an explicit not_cleared dominant; this stops a
-  // dead 'cleared' decision outliving new adverse facts.
+  // Reconcile with a prior Stellr adjudication (deep review BG-3 / BG-N1). A later
+  // vendor event must not leave a stale human decision standing — but it must also
+  // not DESTROY a valid one on a benign redelivery. Reset ONLY when:
+  //   • a genuine adverse-action/dispute signal lands on a 'cleared' decision, or
+  //   • the vendor now PASSES a report a human marked 'not_cleared' (a direct
+  //     contradiction of the recorded decision).
+  // A re-completed or redelivered Consider is also 'referred', but carries no
+  // adverse signal — so it is a no-op here, and a duplicate webhook can neither
+  // un-clear someone nor spam admins (this preserves the module's documented
+  // idempotency for adjudicated rows). deriveCompliance keeps 'not_cleared'
+  // dominant at read time regardless, so the safety direction is never weakened.
   let adjudicationReset = false
-  if (outcome.status === 'referred' || outcome.status === 'passed') {
-    const { data: cur } = await db
-      .from('member_background_checks')
-      .select('adjudication_outcome, adjudicated_at')
-      .eq('id', row.id)
-      .maybeSingle()
-    if (cur?.adjudicated_at) {
-      const decisionWasCleared = cur.adjudication_outcome === 'cleared'
-      const vendorSaysCleared = outcome.status === 'passed'
-      if (outcome.status === 'referred' || decisionWasCleared !== vendorSaysCleared) {
-        update.adjudicated_at = null
-        update.adjudication_outcome = null
-        update.adjudicated_label = null
-        update.expires_at = null // a cleared adjudication's expiry no longer applies
-        adjudicationReset = true
-      }
+  if (cur?.adjudicated_at) {
+    const adverseAfterCleared = cur.adjudication_outcome === 'cleared' && outcome.adverse === true
+    const passAfterNotCleared = cur.adjudication_outcome === 'not_cleared' && outcome.status === 'passed'
+    if (adverseAfterCleared || passAfterNotCleared) {
+      update.adjudicated_at = null
+      update.adjudication_outcome = null
+      update.adjudicated_label = null
+      update.expires_at = null // a cleared adjudication's expiry no longer applies
+      adjudicationReset = true
     }
   }
 

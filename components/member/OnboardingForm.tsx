@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { isMinorOn, isValidDob } from '@/lib/age'
+import { T_SHIRT_SIZES } from '@/lib/registration-constants'
 import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
 import { onboardingRequirements, emergencyContactComplete } from '@/lib/onboarding-requirements'
 
@@ -379,8 +380,9 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
                   </label>
                   <select value={form.tshirt_size} onChange={(e) => set('tshirt_size', e.target.value)} className={inputClass}>
                     <option value="">Select…</option>
-                    {['S', 'M', 'L', 'XL', '2XL', '3XL_plus'].map((s) => (
-                      <option key={s} value={s}>{s.replace('_plus', '+')}</option>
+                    {/* deep review QUAL-2: canonical sizes (was '3XL_plus'). */}
+                    {T_SHIRT_SIZES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
                 </div>

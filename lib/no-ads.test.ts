@@ -8,9 +8,11 @@ import { CONSENT_STORAGE_KEY, applyConsent } from '@/lib/consent'
 const NOW = new Date('2026-10-02T12:00:00Z')
 
 describe('isNoAdsPath', () => {
-  it('covers registration, auth, the member platform and credentials', () => {
+  it('covers registration, auth, the member platform, credentials and scholarship', () => {
     for (const p of ['/register/co-sdc/individual', '/sign-up', '/sign-in/factor-one', '/home', '/community/events',
-      '/account/onboarding', '/join', '/credentials/STL-2026-ABC', '/check-in/x', '/admin']) {
+      '/account/onboarding', '/join', '/credentials/STL-2026-ABC', '/check-in/x',
+      // MP-8: the scholarship application is a student page — no ad tags there.
+      '/scholarship', '/scholarship/offer/abc', '/admin']) {
       expect(isNoAdsPath(p)).toBe(true)
     }
   })

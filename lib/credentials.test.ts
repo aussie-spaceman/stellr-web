@@ -22,6 +22,7 @@ import {
   canUseLinkedIn,
   credentialState,
   canShare,
+  publicShareAllowed,
   ageBlock,
   consentForMinor,
   shareConsentFor,
@@ -115,6 +116,25 @@ describe('canShare', () => {
   it('state blocks win over consent', () => {
     expect(canShare(row({ status: 'revoked' }), 'granted')).toEqual({ ok: false, reason: 'revoked' })
     expect(canShare(row({ tombstoned_at: '2026-09-02T00:00:00Z' }), 'not_required')).toEqual({ ok: false, reason: 'withdrawn' })
+  })
+})
+
+// ── MP-4: a public credential's name is re-gated on consent at every render ──
+
+describe('publicShareAllowed', () => {
+  it('shows the name only on a public page whose consent still allows it', () => {
+    expect(publicShareAllowed('public', 'not_required')).toBe(true)
+    expect(publicShareAllowed('public', 'granted')).toBe(true)
+  })
+  it('hides the name for lapsed/withdrawn/under-age consent even while public', () => {
+    expect(publicShareAllowed('public', 'declined')).toBe(false)
+    expect(publicShareAllowed('public', 'none')).toBe(false)
+    expect(publicShareAllowed('public', 'under_13')).toBe(false)
+    expect(publicShareAllowed('public', 'dob_unknown')).toBe(false)
+  })
+  it('never shows a private page to the public, whatever the consent', () => {
+    expect(publicShareAllowed('private', 'not_required')).toBe(false)
+    expect(publicShareAllowed('private', 'granted')).toBe(false)
   })
 })
 

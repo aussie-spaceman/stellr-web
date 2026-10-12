@@ -30,6 +30,7 @@ interface Reg {
   teacher_last_name?: string | null
   teacher_email?: string | null
   pay_token?: string | null
+  checkout_session_id?: string | null
 }
 
 function makeDb(opts: {
@@ -109,6 +110,7 @@ function makeStripe(
   coupons: { byId?: Record<string, { id: string; valid: boolean; percent_off: number | null }>; byPromo?: Record<string, { id: string; valid: boolean; percent_off: number | null }> } = {},
 ) {
   const create = vi.fn(async (_p: unknown) => ({ id: 'cs_1', url: 'https://checkout.stripe.test/cs_1' }))
+  const expire = vi.fn(async (_id: string) => ({}))
   const retrieve = vi.fn(async (_id: string) => ({ unit_amount: unitAmount }))
   const couponRetrieve = vi.fn(async (id: string) => {
     const c = coupons.byId?.[id]
@@ -120,12 +122,13 @@ function makeStripe(
   }))
   return {
     stripe: {
-      checkout: { sessions: { create } },
+      checkout: { sessions: { create, expire } },
       prices: { retrieve },
       coupons: { retrieve: couponRetrieve },
       promotionCodes: { list: promoList },
     } as never,
     create,
+    expire,
     retrieve,
   }
 }
@@ -331,6 +334,53 @@ describe('createRegistrationCheckout — scholarship', () => {
     expect(err.code).toBe('scholarship_unavailable')
     expect(create).not.toHaveBeenCalled()
     expect(notifyCommunityAdmins).toHaveBeenCalledOnce()
+  })
+})
+
+// ── PAY-4 part-1: one live Checkout session per registration ──────────────────
+
+describe('createRegistrationCheckout — single live session (PAY-4 part-1)', () => {
+  it('expires the prior session before minting a new one, then persists the new id', async () => {
+    const { db, updates } = makeDb({
+      registration: { type: 'individual', status: 'pending', checkout_session_id: 'cs_old' },
+      participant: { first_name: 'D', last_name: 'A', email: 'dan@example.com' },
+    })
+    const { stripe, create, expire } = makeStripe(7500)
+
+    await createRegistrationCheckout(db, stripe, 'reg-1', URLS)
+
+    expect(expire).toHaveBeenCalledWith('cs_old')
+    // Expired BEFORE the replacement was created — so two sessions never co-exist.
+    expect(expire.mock.invocationCallOrder[0]).toBeLessThan(create.mock.invocationCallOrder[0])
+    // The new session is recorded as the one to expire next time.
+    expect(updates).toContainEqual({ checkout_session_id: 'cs_1' })
+  })
+
+  it('mints without expiring when the registration has no prior session', async () => {
+    const { db } = makeDb({
+      registration: { type: 'individual', status: 'pending', checkout_session_id: null },
+      participant: { first_name: 'D', last_name: 'A', email: 'dan@example.com' },
+    })
+    const { stripe, expire } = makeStripe(7500)
+
+    await createRegistrationCheckout(db, stripe, 'reg-1', URLS)
+
+    expect(expire).not.toHaveBeenCalled()
+  })
+
+  it('still mints if expiring the stale session throws (already completed/expired)', async () => {
+    const { db } = makeDb({
+      registration: { type: 'individual', status: 'pending', checkout_session_id: 'cs_old' },
+      participant: { first_name: 'D', last_name: 'A', email: 'dan@example.com' },
+    })
+    const { stripe, create, expire } = makeStripe(7500)
+    expire.mockRejectedValueOnce(new Error('session already completed'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const result = await createRegistrationCheckout(db, stripe, 'reg-1', URLS)
+
+    expect(result.sessionId).toBe('cs_1')
+    expect(create).toHaveBeenCalledTimes(1)
   })
 })
 

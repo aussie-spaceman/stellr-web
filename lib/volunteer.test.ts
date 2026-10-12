@@ -11,9 +11,34 @@ vi.mock('@/lib/docusign-agreements', async (importOriginal) => {
 vi.mock('@/lib/member-roles', () => ({ addGlobalRole: vi.fn(), memberHasRole: vi.fn() }))
 vi.mock('@/lib/membership-grants', () => ({ applyGrantTrigger: vi.fn() }))
 vi.mock('@/lib/activity-log', () => ({ logActivity: vi.fn() }))
+
+// Records-aware compliance stand-in. deriveCompliance returns valid_bc iff the
+// records it is handed hold a passed check — enough to prove the status is bound
+// to the right person (BG-4), without re-testing deriveCompliance's own suite.
+// Both loaders are provided so the mutation check (revert to the by-email lookup)
+// exercises a real divergence: the shared email resolves to the CLEARED person.
+const { complianceById, complianceByEmail } = vi.hoisted(() => ({
+  complianceById: new Map<string, { license: unknown; checks: { status: string }[] }>(),
+  complianceByEmail: new Map<string, { license: unknown; checks: { status: string }[] }>(),
+}))
 vi.mock('@/lib/compliance', () => ({
-  deriveCompliance: () => ({ state: 'not_required', detail: null }),
-  loadComplianceRecordsByEmails: async () => new Map(),
+  deriveCompliance: (_license: unknown, checks: { status: string }[]) => ({
+    state: checks?.some((c) => c.status === 'passed') ? 'valid_bc' : 'invalid',
+    detail: null,
+  }),
+  loadComplianceRecordsByMemberIds: async (_db: unknown, ids: string[]) => {
+    const out = new Map<string, { license: unknown; checks: { status: string }[] }>()
+    for (const id of ids) out.set(id, complianceById.get(id) ?? { license: null, checks: [] })
+    return out
+  },
+  loadComplianceRecordsByEmails: async (_db: unknown, emails: string[]) => {
+    const out = new Map<string, { license: unknown; checks: { status: string }[] }>()
+    for (const e of emails) {
+      const k = (e ?? '').toLowerCase()
+      if (complianceByEmail.has(k)) out.set(k, complianceByEmail.get(k)!)
+    }
+    return out
+  },
 }))
 
 import { dispatchVolunteerAgreement, pickVolunteerAgreement, getVolunteerStatuses } from './volunteer'
@@ -38,7 +63,11 @@ const MEMBER = {
   phone: null, date_of_birth: null,
 }
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  complianceById.clear()
+  complianceByEmail.clear()
+})
 
 describe('dispatchVolunteerAgreement', () => {
   it('issues when nothing is in flight, recorded against the program', async () => {
@@ -75,6 +104,21 @@ describe('getVolunteerStatuses', () => {
     const out = await getVolunteerStatuses(db, [{ id: 'm1', email: 'pat@example.org', date_of_birth: null }])
     expect(ins.envelope_type).toEqual(['mentor', 'volunteer'])
     expect(out.m1.agreement).toBe('complete')
+  })
+
+  // BG-4: two people share one family email; only m1 is cleared. The pill must
+  // reflect the member id, so m2 is NOT shown as m1's clearance. (Keyed by the
+  // shared email, m2 would have read 'valid_bc'.)
+  it('binds clearance to the member id, not a shared family email', async () => {
+    complianceById.set('m1', { license: null, checks: [{ status: 'passed' }] })
+    complianceByEmail.set('family@example.org', { license: null, checks: [{ status: 'passed' }] })
+    const { db } = makeDb([])
+    const out = await getVolunteerStatuses(db, [
+      { id: 'm1', email: 'family@example.org', date_of_birth: null },
+      { id: 'm2', email: 'family@example.org', date_of_birth: null },
+    ])
+    expect(out.m1.compliance).toBe('valid_bc')
+    expect(out.m2.compliance).toBe('invalid')
   })
 })
 

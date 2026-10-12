@@ -64,4 +64,20 @@ describe('route guards (static inventory)', () => {
       expect(body.trimStart().startsWith('const blocked = guardCron(req)'), f).toBe(true)
     }
   })
+
+  // deep review INT-9: 13 of 19 crons had no cron_runs ledger, so a failing
+  // integration (membership expiry, drip, reminders, Apollo/HubSpot) returned
+  // 200 with zeros and Vercel Hobby's 1h log retention erased the only trace.
+  // Every cron must record its run via startCronRun (or the runCron helper, if
+  // one is introduced later) so "did it run, and did it fail?" is answerable
+  // from the DB. A stale allow-list entry is the one way this can hide a gap.
+  it('every cron route records its run in cron_runs (startCronRun)', () => {
+    const files = routeFiles('app/api/cron').filter((f) => /app\/api\/cron\/[^/]+\/route\.ts$/.test(f))
+    expect(files.length).toBeGreaterThan(10)
+    const missing = files.filter((f) => {
+      const src = readFileSync(f, 'utf8')
+      return !/\bstartCronRun\b|\brunCron\b/.test(src)
+    })
+    expect(missing).toEqual([])
+  })
 })

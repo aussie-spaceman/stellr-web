@@ -5,6 +5,7 @@
 //
 //   /sign, /sign/copy           Stellr signing (token in the URL fragment)
 //   /register/<slug>/pay/<tok>  pay-later link for a registration
+//   /register/<slug>/pay-seat/<tok> per-seat pay link (deep review PAY-8)
 //   /register/<slug>/join/<tok> join link for a group registration
 //   /privacy/request, …/confirm the privacy request form and its emailed
 //                               confirmation link (people describe their families)
@@ -17,16 +18,24 @@
 //                               so the token and the minor's identifiers never
 //                               reach GA4 / HubSpot / Vercel Analytics (deep
 //                               review MP-1).
+//   /scholarship/offer/<token>  scholarship-offer link (deep review PUB-13) — the
+//                               token is the only key; the page reveals a (usually
+//                               minor) applicant's first name and event and mints
+//                               a working pay link. Same treatment as above so the
+//                               token URL is never sent to GA4 / HubSpot / Vercel
+//                               Analytics. The /scholarship landing page stays
+//                               public and tracked — only the token path is keyed.
 
 export const PRIVATE_ROUTE_HEADER = 'x-stellr-private-route'
 
 const PRIVATE = [
   /^\/sign(\/|$)/,
-  /^\/register\/[^/]+\/(pay|join)\//,
+  /^\/register\/[^/]+\/(pay|pay-seat|join)\//,
   /^\/privacy\/request(\/|$)/,
   /^\/survey\//,
   /^\/team-profile\//,
   /^\/credentials(\/|$)/,
+  /^\/scholarship\/offer\//,
 ]
 
 export function isPrivatePath(pathname: string): boolean {

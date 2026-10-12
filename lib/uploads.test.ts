@@ -157,6 +157,37 @@ describe('claimUpload', () => {
     const result = await claimUpload({ purpose: 'admin-resource', storagePath: 'resources/gone.pdf' })
     expect(result).toMatchObject({ status: 400 })
   })
+
+  // deep review MEM-13: the caller passes the namespace it authorised; a path
+  // outside it (another space, a training folder, an admin file) must be refused
+  // before any storage read/remove — otherwise a member could adopt or (if
+  // oversize) discard-DELETE an object they never uploaded.
+  it('refuses a path outside the caller-authorised prefix without touching storage', async () => {
+    const result = await claimUpload({
+      purpose: 'space-attachment',
+      storagePath: 'training/evil.mp4',
+      expectedPrefix: 'community-resources/space-1/',
+    })
+    expect(result).toMatchObject({ status: 400 })
+    expect(download).not.toHaveBeenCalled()
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  it('accepts a path inside the authorised prefix', async () => {
+    storedBytes([1, 2, 3])
+    const result = await claimUpload({
+      purpose: 'space-attachment',
+      storagePath: 'community-resources/space-1/123-file.pdf',
+      expectedPrefix: 'community-resources/space-1/',
+    })
+    expect(result).toMatchObject({ bucket: 'community-resources' })
+  })
+
+  it('rejects an empty-segment (//) path without touching storage', async () => {
+    const result = await claimUpload({ purpose: 'admin-resource', storagePath: 'resources//x.pdf' })
+    expect(result).toMatchObject({ status: 400 })
+    expect(download).not.toHaveBeenCalled()
+  })
 })
 
 describe('safeFileName', () => {

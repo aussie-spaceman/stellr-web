@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email'
 import { guardCron } from '@/lib/cron'
+import { startCronRun } from '@/lib/cron-runs'
 
 // GET /api/cron/lead-capture-failures — runs weekly (see vercel.json).
 //
@@ -27,6 +28,9 @@ export async function GET(req: NextRequest) {
   if (blocked) return blocked
 
   const db = supabaseServer()
+  // deep review INT-9: record the run so this backstop-for-the-backstop is
+  // itself monitored.
+  const run = await startCronRun(db, 'lead-capture-failures')
 
   const { data, error, count } = await db
     .from('lead_capture_failures')
@@ -37,11 +41,14 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     console.error('[cron:lead-capture-failures] Query failed:', error.message)
+    run.fail('query', error.message)
+    await run.finish({})
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   const unresolved = count ?? 0
   if (unresolved === 0) {
+    await run.finish({ unresolved: 0, alerted: false })
     return NextResponse.json({ unresolved: 0, alerted: false }, { status: 200 })
   }
 
@@ -72,9 +79,12 @@ export async function GET(req: NextRequest) {
     })
   } catch (err) {
     console.error('[cron:lead-capture-failures] Alert send failed:', err)
+    run.fail('alert', err)
+    await run.finish({ unresolved, alerted: false })
     return NextResponse.json({ unresolved, alerted: false, error: String(err) }, { status: 200 })
   }
 
   console.log(`[cron:lead-capture-failures] ${unresolved} unresolved, alerted ${CONTACT_EMAIL}`)
+  await run.finish({ unresolved, alerted: true })
   return NextResponse.json({ unresolved, oldest, alerted: true }, { status: 200 })
 }

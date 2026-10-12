@@ -55,7 +55,10 @@ function eventSummary(event: EventData): string {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params
-  const event: EventData | null = await getEventBySlug(slug).catch(() => null)
+  // deep review PUB-9: let a Sanity fetch error propagate rather than catching it
+  // to null. Only a genuine miss (null) is "Event Not Found"; an outage must not
+  // masquerade as one (the page body throws to the error boundary too, below).
+  const event: EventData | null = await getEventBySlug(slug)
   if (!event) return { title: 'Event Not Found' }
   return {
     title: `${event.title} — ${eventKind(event)}`,
@@ -209,7 +212,17 @@ const FAQS: { q: string; a: React.ReactNode; text: string }[] = [
 
 export default async function EventDetailPage({ params }: PageProps) {
   const { slug } = await params
-  const event: EventData | null = await getEventBySlug(slug).catch(() => null)
+  // deep review PUB-9: a Sanity outage/timeout is NOT "no such event". Re-throw
+  // so the error boundary renders a retryable 500 — a 404 here de-indexes a live
+  // event URL (the AEO surface) and tells a family arriving from a flyer that the
+  // event doesn't exist. Only a null (genuine miss) falls through to notFound().
+  let event: EventData | null
+  try {
+    event = await getEventBySlug(slug)
+  } catch (err) {
+    console.error('[events] sanity fetch failed', err)
+    throw err
+  }
   if (!event) notFound()
 
   // The sibling events of this competition theme, so the `superEvent` series

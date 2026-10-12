@@ -10,6 +10,8 @@ import { sanitizeBracketRequirements, anyBracketMandatory } from '@/lib/space-tr
 import { syncSpaceSourceRoster } from '@/lib/space-inheritance'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { slugify } from '@/lib/utils'
+import { escapeHtml } from '@/lib/email-layout'
+import { runAfterResponse } from '@/lib/after-response'
 
 // Per-space admin config actions (Spaces design, screens 11–17 + modals 19/21/22).
 // One JSON action router keeps the (many) small mutations in one place. Resource
@@ -175,7 +177,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         await sendEmail({
           to: email,
           subject: `You're invited to ${spaceName} on Stellr`,
-          html: `<p>You've been invited to join the <strong>${spaceName}</strong> space on Stellr.</p>
+          // deep review INTPUB-N1: this caller builds its own email.html, so the
+          // space name (admin-authored, but still member-controllable text) must
+          // be escaped here — sendEmail only escapes values inside its own layout.
+          html: `<p>You've been invited to join the <strong>${escapeHtml(spaceName)}</strong> space on Stellr.</p>
 <p><a href="${signUpUrl}">Create your account</a> — your invitation will be waiting on your Spaces directory when you sign in.</p>`,
           text: `You've been invited to join ${spaceName} on Stellr. Create your account and your invitation will be waiting on your Spaces directory: ${signUpUrl}`,
         }).catch((e) => console.error('[spaces] invite-by-email send error:', e))
@@ -197,7 +202,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
       // Notify the invitee (in-app + email, respecting their prefs). Best-effort —
       // the invite row is already written, so a notification failure must not 500.
-      void (async () => {
+      // deep review QUAL-1: run it with after() so the invite email is not
+      // dropped when the instance is frozen after the response.
+      runAfterResponse('spaces', async () => {
         const { data: space } = await db
           .from('community_spaces')
           .select('name, slug')
@@ -213,13 +220,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           referenceId: spaceId,
           actorMemberId: adminMemberId ?? undefined,
           email: {
+            // deep review INTPUB-N1: escape the space name — this html is passed
+            // to notify pre-built, so notify does not escape it.
             subject: `You're invited to ${sp.name}`,
-            html: `<p>You've been invited to join the <strong>${sp.name}</strong> space on Stellr.</p>
+            html: `<p>You've been invited to join the <strong>${escapeHtml(sp.name)}</strong> space on Stellr.</p>
 <p><a href="${url}">Open your Spaces directory</a> to accept the invitation.</p>`,
             text: `You've been invited to join ${sp.name} on Stellr. Open your Spaces directory to accept: ${url}`,
           },
         })
-      })().catch((e) => console.error('[spaces] invite notify error:', e))
+      })
 
       return NextResponse.json({ ok: true })
     }
@@ -339,14 +348,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         scope === 'access'
           ? lifting ? 'Restored access to' : 'Revoked access to'
           : lifting ? 'Lifted posting suspension in' : 'Suspended posting in'
-      void logActivity({
-        ...(await actorFromAuth()),
-        memberId,
-        category: 'community',
-        action: `space_${scope}_${lifting ? 'restored' : 'blocked'}`,
-        summary: `${verb} ${spaceName}`,
-        metadata: { spaceId, scope, reason: b.reason ?? null, expiresAt: b.expiresAt ?? null },
-      })
+      // deep review QUAL-1: a space access revoked/restored audit row. Register
+      // it with after() so the moderation audit trail is not lost when the
+      // instance is frozen after the response.
+      const actor = await actorFromAuth()
+      runAfterResponse('spaces', () =>
+        logActivity({
+          ...actor,
+          memberId,
+          category: 'community',
+          action: `space_${scope}_${lifting ? 'restored' : 'blocked'}`,
+          summary: `${verb} ${spaceName}`,
+          metadata: { spaceId, scope, reason: b.reason ?? null, expiresAt: b.expiresAt ?? null },
+        })
+      )
 
       return NextResponse.json({ ok: true })
     }

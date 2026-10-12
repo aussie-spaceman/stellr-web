@@ -9,6 +9,8 @@ import {
   selectGuestEmails,
 } from '@/lib/motion-bookings'
 import { guardCron } from '@/lib/cron'
+import { startCronRun } from '@/lib/cron-runs'
+import { supabaseServer } from '@/lib/supabase'
 
 // GET /api/cron/motion-bookings — runs daily at 12:00 UTC (see vercel.json).
 //
@@ -98,6 +100,11 @@ export async function GET(req: Request) {
 
   const updatedSince = new Date(Date.now() - hours * 60 * 60 * 1000)
 
+  // deep review INT-9: record the run so a failing calendar read / HubSpot write
+  // is visible in cron_runs after Vercel's 1h log retention.
+  const db = supabaseServer()
+  const run = await startCronRun(db, 'motion-bookings')
+
   const stamped: string[] = []
   const alreadyBooked: string[] = []
   const unknown: string[] = []
@@ -167,6 +174,8 @@ export async function GET(req: Request) {
     // A Google 403 here almost always means the calendar was never shared with
     // the service account, so say so rather than logging a bare stack.
     console.error('[cron/motion-bookings] Failed:', err)
+    run.fail('run', err)
+    await run.finish({})
     return NextResponse.json(
       {
         error: 'Calendar read or HubSpot write failed',
@@ -182,6 +191,8 @@ export async function GET(req: Request) {
     )
   }
 
+  for (const w of warnings) run.fail('write', w)
+  await run.finish({ considered, booked: stamped.length })
   return NextResponse.json({
     lookbackHours: hours,
     considered,

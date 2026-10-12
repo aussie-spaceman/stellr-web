@@ -184,11 +184,23 @@ export async function executeRefund(
 
       // metadata.source lets the charge.refunded webhook tell the app's own
       // refunds from ones made in the dashboard (it can arrive before we audit).
-      const refund = await stripe.refunds.create({
-        payment_intent: paymentIntent,
-        amount: option.cents,
-        metadata: { source: 'stellr_app', participant_id: p.id },
-      })
+      //
+      // deep review PAY-12: a stable idempotency key makes a retried or
+      // double-submitted cancellation refund a no-op at Stripe — the second call
+      // with the same key returns the first refund rather than issuing another.
+      // This closes the read-then-act window (two admins, or a retry after the
+      // audit/deletion failed mid-way) that could otherwise over-refund a group
+      // payment. One refund per participant's cancellation, as the DB backstop
+      // (event_refunds_one_cancellation_per_participant) also enforces. Matches
+      // the scholarship refund path (lib/scholarship-refund.ts).
+      const refund = await stripe.refunds.create(
+        {
+          payment_intent: paymentIntent,
+          amount: option.cents,
+          metadata: { source: 'stellr_app', participant_id: p.id },
+        },
+        { idempotencyKey: `cancel-refund-${p.id}` },
+      )
       const result: RefundResult = { type: 'cash', refundCents: option.cents, stripeRefundId: refund.id, detail: `Refunded ${(option.cents / 100).toFixed(2)} ${currency.toUpperCase()}` }
       await audit(db, p, eventSlug, result, actorMemberId, paidCents, null, d, option.pct, { currency })
       await notifyRefund(p, reg.event_title as string, result, currency)
@@ -291,7 +303,18 @@ async function audit(
     note: extra.note ?? (result.type === 'manual_required' ? result.detail : null),
     currency: extra.currency ?? null,
   })
-  if (error) console.error('[refunds] audit insert failed:', error.message, { participantId: p.id })
+  if (error) {
+    // deep review PAY-12: a unique violation on
+    // event_refunds_one_cancellation_per_participant means a cancellation refund
+    // for this participant was already recorded — a concurrent/retried refund
+    // raced us. That is the backstop working, not a failure: the money move is
+    // already idempotency-keyed above, so log it benignly rather than as an error.
+    if ((error as { code?: string }).code === '23505') {
+      console.warn('[refunds] duplicate cancellation refund blocked by unique index:', { participantId: p.id })
+    } else {
+      console.error('[refunds] audit insert failed:', error.message, { participantId: p.id })
+    }
+  }
 }
 
 async function notifyRefund(p: ParticipantRow, eventTitle: string, result: RefundResult, currency: string) {

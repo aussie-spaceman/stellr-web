@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeGrade, denormalizeGrade, VALID_GRADES } from './member-enums'
+import { normalizeGrade, denormalizeGrade, normalizeTshirt, denormalizeTshirt, VALID_GRADES } from './member-enums'
 import { SCHOOL_GRADES, deriveAgeBracket } from './registration-constants'
 
 // `participants.grade` is text and always accepted "7"; `members.grade` is the
@@ -44,5 +44,31 @@ describe('deriveAgeBracket', () => {
   it('still separates college and adult', () => {
     expect(deriveAgeBracket('2004-05-01', 'College Junior')).toBe('College')
     expect(deriveAgeBracket('1985-05-01', '')).toBe('Adult')
+  })
+})
+
+// deep review QUAL-2: the admin and onboarding forms used to submit the baseline
+// spelling '3XL_plus' while every registration path uses '3XL (or larger)',
+// splitting one size across rosters and merch counts. The two helpers now fold
+// the legacy spelling onto the canonical one, so a write cannot persist the
+// split and an existing row prefills correctly, whichever form it came from.
+describe('normalizeTshirt (QUAL-2)', () => {
+  it('folds the legacy 3XL_plus spelling onto the canonical label', () => {
+    expect(normalizeTshirt('3XL_plus')).toBe('3XL (or larger)') // was null
+  })
+  it('keeps a canonical size and rejects an unknown one', () => {
+    expect(normalizeTshirt('3XL (or larger)')).toBe('3XL (or larger)')
+    expect(normalizeTshirt('M')).toBe('M')
+    expect(normalizeTshirt('XXL')).toBeNull()
+  })
+})
+
+describe('denormalizeTshirt (QUAL-2)', () => {
+  it('prefills a legacy 3XL_plus row as the canonical label', () => {
+    expect(denormalizeTshirt('3XL_plus')).toBe('3XL (or larger)') // was '3XL_plus'
+  })
+  it('passes a canonical size through verbatim', () => {
+    expect(denormalizeTshirt('L')).toBe('L')
+    expect(denormalizeTshirt('')).toBeUndefined()
   })
 })

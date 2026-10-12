@@ -33,7 +33,13 @@ import { signInAs } from './fixtures/sign-in'
 mkdirSync('e2e/.auth', { recursive: true })
 
 for (const role of Object.keys(FIXTURES) as FixtureRole[]) {
+  // deep review TEST-8: a fixture whose password secret is absent (e.g.
+  // event_manager, pending owner setup) is SKIPPED rather than failing the whole
+  // suite's setup project. The specs that use its session skip in turn when the
+  // storage file is missing, so adding a not-yet-provisioned fixture is safe.
+  const configured = Boolean(process.env[FIXTURES[role].passwordVar])
   setup(`sign in as ${role}`, async ({ page, baseURL }) => {
+    setup.skip(!configured, `${FIXTURES[role].passwordVar} not set — fixture not provisioned`)
     // Against a protected deployment every request is redirected to Vercel's
     // SSO page unless the bypass header rides along. Clerk then never loads and
     // the only symptom is the waitForFunction below timing out — which says

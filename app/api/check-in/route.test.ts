@@ -89,3 +89,37 @@ describe('POST /api/check-in — REG-8 presence oracle', () => {
     expect(ambiguous).toEqual(notOnRoster)
   })
 })
+
+// deep review TEST-8: the check-in JOURNEY (a name+DOB lookup on minors at the
+// door) had no route-level test — only lib/check-in's matcher was covered. These
+// pin the door flow itself: a correct lookup checks the participant in, a wrong
+// DOB is the generic miss, and a wrong token never reaches the roster at all.
+describe('POST /api/check-in — the door journey', () => {
+  it('checks in the participant on a correct name + DOB', async () => {
+    h.regs = [{ id: 'r1', participants: [participant()] }]
+    const res = await post({ firstName: 'Alex', lastName: 'Smith', dob: '2011-04-09' })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.alreadyCheckedIn).toBe(false)
+    expect(body.view).toBeTruthy()
+  })
+
+  it('does NOT check in on a correct name but wrong DOB (generic miss)', async () => {
+    h.regs = [{ id: 'r1', participants: [participant()] }]
+    const { status, body } = await bodyAndStatus({ firstName: 'Alex', lastName: 'Smith', dob: '2000-01-01' })
+    expect(status).toBe(404)
+    expect(body.code).toBe('need_email')
+  })
+
+  it('refuses a request whose token is not the event token, before reading the roster', async () => {
+    h.regs = [{ id: 'r1', participants: [participant()] }]
+    const res = await POST(
+      new Request('https://www.stellreducation.org/api/check-in', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slug: 'colorado', token: 'WRONG', firstName: 'Alex', lastName: 'Smith', dob: '2011-04-09' }),
+      }),
+    )
+    expect(res.status).toBe(403)
+  })
+})

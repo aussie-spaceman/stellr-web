@@ -19,9 +19,15 @@ import { ageOn, isValidDob } from '@/lib/age'
 /** Set on any browser where a student (or a member whose age is unknown) has signed in. */
 export const NO_ADS_COOKIE = 'stellr_no_ads'
 
-/** Registration, sign-in/up, the member platform, credential pages, check-in, admin. */
+/**
+ * Registration, sign-in/up, the member platform, credential pages, check-in,
+ * admin — and the scholarship application (deep review MP-8): the form is
+ * addressed to students ("Any student…"), asks no age, and collects a name,
+ * email, school and financial-need context, so advertising tags must never run
+ * there and a child's browsing must not be joined to an ad profile.
+ */
 export const NO_ADS_PATH_SOURCE =
-  '^/(register|sign-in|sign-up|home|community|account|join|campaigns|credentials|check-in|admin|studio)(/|$)'
+  '^/(register|sign-in|sign-up|home|community|account|join|campaigns|credentials|check-in|scholarship|admin|studio)(/|$)'
 
 const NO_ADS_PATH = new RegExp(NO_ADS_PATH_SOURCE)
 

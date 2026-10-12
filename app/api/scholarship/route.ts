@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { sendEmail } from '@/lib/email'
-import { LEAD_SOURCE_LIFECYCLE } from '@/lib/hubspot-fields'
-import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 import { supabaseServer } from '@/lib/supabase'
 import { getAllEvents, type StellarEvent } from '@/lib/sanity'
@@ -10,7 +8,6 @@ import { getCurrentMember } from '@/lib/community'
 import { scholarshipReceivedEmail, scholarshipStaffAlertEmail } from '@/lib/scholarship-emails'
 
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL ?? 'hello@stellreducation.org'
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 const APP_URL = process.env.NEXT_PUBLIC_AUTH_APP_URL ?? 'https://app.stellreducation.org'
 
 // Length caps keep a pasted essay (or a bot) from filling the table and the
@@ -78,32 +75,22 @@ export async function POST(req: Request) {
     const staff = scholarshipStaffAlertEmail({ name, email, phone, activity, school, brief, reviewUrl })
     await sendEmail({ to: CONTACT_EMAIL, replyTo: email, ...staff })
 
-    // The applicant's acknowledgement. HubSpot sends nothing on this form
-    // (checked 2 Oct 2026: neither applicant contact has ever been sent an
-    // email). Non-fatal.
+    // The applicant's acknowledgement. Non-fatal.
     try {
       await sendEmail({ to: email, ...scholarshipReceivedEmail({ firstName, activity }) })
     } catch (e) {
       console.error('[scholarship] acknowledgement email failed (non-fatal):', e)
     }
 
-    // Capture the applicant as a marketing lead in HubSpot (best-effort —
-    // never blocks the submission if the CRM is unreachable; a failed capture
-    // is dead-lettered and alerted rather than lost).
-    await captureLead({
-      email,
-      firstName,
-      lastName,
-      source: 'scholarship',
-      lifecycleStage: LEAD_SOURCE_LIFECYCLE.scholarship,
-      activity: `Scholarship application — ${activity}${school ? ` (${school})` : ''}.`,
-      logEntry: logLine('scholarship', `${activity}${school ? ` · ${school}` : ''}`),
-      context: {
-        hutk: readHubspotCookie(req),
-        pageUri: `${SITE_URL}/scholarship`,
-        pageName: 'Scholarship application',
-      },
-    })
+    // deep review MP-8: do NOT push scholarship applicants into the marketing
+    // CRM. The form is addressed to students ("Any student…") and asks no age,
+    // so an applicant may well be a child (some under 13). captureLead created a
+    // HubSpot contact with a marketing lifecycle stage and attached the
+    // `hubspotutk` tracking cookie, joining a child's browsing on www to a
+    // marketing profile — outside the "service providers we need to run our
+    // programs" carve-out in Privacy §9.4. The application is already stored in
+    // `scholarship_applications` and emailed to staff for review, so nothing is
+    // lost by not marketing-capturing it.
 
     return NextResponse.json({ ok: true })
   } catch (err) {

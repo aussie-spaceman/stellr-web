@@ -129,3 +129,22 @@ export function canShare(
   if (consent === 'none') return { ok: false, reason: 'minor_no_consent' }
   return { ok: true }
 }
+
+/**
+ * deep review MP-4: whether a credential holder's NAME may be shown to the
+ * public right now. A credential is only made public by its owner after a
+ * consent/age check, but that check runs once (at the toggle) and is never
+ * re-evaluated at render. This re-checks it on every public view: the name is
+ * shown only when the page is public AND consent still allows it — an adult
+ * (`not_required`) or a minor with a granted, unrestricted, unexpired agreement
+ * (`granted`). A DOB later corrected to under-13 (`under_13`), an unknown DOB
+ * (`dob_unknown`), an expired or withdrawn/restricted agreement (`none`), or a
+ * guardian opt-out (`declined`) make the page effectively private again.
+ *
+ * Owners viewing their own page and guardians opening the emailed family link
+ * are handled separately by the page (they are allowed to see a private page);
+ * this gates only the anonymous public render.
+ */
+export function publicShareAllowed(visibility: CredentialVisibility, consent: ShareConsent): boolean {
+  return visibility === 'public' && (consent === 'not_required' || consent === 'granted')
+}

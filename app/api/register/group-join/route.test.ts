@@ -11,6 +11,10 @@ const h = vi.hoisted(() => ({
   auth: vi.fn(async () => ({ userId: null as string | null })),
   // AUTH-N2: controllable rate-limit guard (null = proceed by default).
   rlGuard: vi.fn((_req: unknown, _route: string, _opts: unknown, _suffix?: string): Response | null => null),
+  // REG-7: controllable DB errors (null/false = healthy by default).
+  dedupeError: null as { code?: string; message?: string } | null,
+  countError: null as { message?: string } | null,
+  insertError: null as { code?: string; message?: string } | null,
 }))
 
 const tokenRow = {
@@ -27,11 +31,20 @@ vi.mock('@/lib/supabase', () => ({
     from: (table: string) => {
       const chain: Record<string, unknown> = {
         select: () => chain, eq: () => chain, not: () => chain, is: () => chain,
-        maybeSingle: async () => (table === 'group_join_tokens' ? { data: tokenRow, error: null } : { data: null, error: null }),
-        single: async () => ({ data: { id: 'p-1' }, error: null }),
+        maybeSingle: async () => {
+          if (table === 'group_join_tokens') return { data: tokenRow, error: null }
+          // participants maybeSingle is the REG-7 dedupe pre-check.
+          if (table === 'participants' && h.dedupeError) return { data: null, error: h.dedupeError }
+          return { data: null, error: null }
+        },
+        single: async () =>
+          table === 'participants' && h.insertError
+            ? { data: null, error: h.insertError }
+            : { data: { id: 'p-1' }, error: null },
         insert: (p: unknown) => { if (table === 'participants') h.partInsert(p); return chain },
         upsert: () => chain, update: () => chain,
-        then: (onF: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null, count: 0 }).then(onF),
+        then: (onF: (v: unknown) => unknown) =>
+          Promise.resolve({ data: null, error: table === 'participants' ? h.countError : null, count: 0 }).then(onF),
       }
       return chain
     },
@@ -63,6 +76,9 @@ beforeEach(() => {
   h.getEventBySlug.mockResolvedValue({ title: 'Colorado', activityType: 'live_event' })
   h.auth.mockResolvedValue({ userId: null })
   h.rlGuard.mockReturnValue(null)
+  h.dedupeError = null
+  h.countError = null
+  h.insertError = null
 })
 
 describe('POST /api/register/group-join', () => {
@@ -98,5 +114,28 @@ describe('POST /api/register/group-join', () => {
     const res = await post()
     expect(res.status).toBe(429)
     expect(h.partInsert).not.toHaveBeenCalled()
+  })
+
+  // ── REG-7 ────────────────────────────────────────────────────────────────
+  it('REG-7: fails closed (503) and admits no one when the dedupe lookup errors', async () => {
+    h.dedupeError = { message: 'transient db error' }
+    const res = await post()
+    expect(res.status).toBe(503)
+    expect(h.partInsert).not.toHaveBeenCalled()
+  })
+
+  it('REG-7: fails closed (503) when the capacity count errors', async () => {
+    h.countError = { message: 'transient db error' }
+    const res = await post()
+    expect(res.status).toBe(503)
+    expect(h.partInsert).not.toHaveBeenCalled()
+  })
+
+  it('REG-7: a unique-violation on insert (lost race) is a 409, not a 500', async () => {
+    h.insertError = { code: '23505', message: 'duplicate key value violates unique constraint' }
+    const res = await post()
+    expect(res.status).toBe(409)
+    // The insert was attempted (the index is what caught the race).
+    expect(h.partInsert).toHaveBeenCalled()
   })
 })

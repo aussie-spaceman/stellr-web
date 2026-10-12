@@ -86,6 +86,13 @@ const nextConfig = {
       { source: '/api/survey/:path*', headers: privateLink },
       { source: '/team-profile/:path*', headers: privateLink },
       { source: '/api/team-profile/:path*', headers: privateLink },
+      // deep review MP-12 / MPREG-N2: credential pages carry a (possibly minor's)
+      // name opened from a private `?k=` family link, and the page is the MP-1
+      // private route at runtime. Give it the same HTTP backstop as the other
+      // private links — no referrer, no indexing, and crucially `no-store`, so
+      // the page and its opengraph-image share-card are never cached public and
+      // never persist a name after an unpublish or erasure.
+      { source: '/credentials/:path*', headers: privateLink },
       // The signing page shows the document in a same-origin frame. No
       // object-src here: on a PDF response it can stop the browser's own viewer.
       {

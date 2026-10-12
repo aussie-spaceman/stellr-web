@@ -90,6 +90,21 @@ export async function POST(req: Request, { params }: Params) {
     if (typeof participantId !== 'string') {
       return NextResponse.json({ error: 'participantId required' }, { status: 400 })
     }
+    // deep review AUTH-3: confine the move to a participant OF THIS EVENT before
+    // writing. requireEventAccess(slug) only proves the caller may manage `slug`;
+    // the update below is keyed on participantId alone, so without this check an
+    // event manager assigned to one event could pass any event's participant id
+    // and retarget (or unlock) that other event's company placement — and badges,
+    // certificates and awards are keyed on company_id. Scope the id to `slug` via
+    // its registration, exactly as the sibling participant-keyed routes do
+    // (check-in, team-profile store). Fail closed: unknown-for-this-event → 404.
+    const { data: part } = await db
+      .from('participants')
+      .select('id, registrations!inner(event_slug)')
+      .eq('id', participantId)
+      .eq('registrations.event_slug', slug)
+      .maybeSingle()
+    if (!part) return NextResponse.json({ error: 'Participant not found for this event' }, { status: 404 })
     if (companyId !== null) {
       const { data: company } = await db
         .from('event_companies')

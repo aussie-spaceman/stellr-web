@@ -12,6 +12,9 @@
 interface WindowState {
   count: number
   windowStart: number
+  /** The window length this key was last counted under — lets eviction drop
+   *  keys whose window has already elapsed (a no-op reset) before any live one. */
+  windowMs: number
 }
 
 interface LimiterResult {
@@ -22,9 +25,35 @@ interface LimiterResult {
 
 const buckets = new Map<string, WindowState>()
 
-// Cap the map so a key-spraying attacker can't grow memory unbounded; clearing
-// simply resets windows, which only ever errs in the caller's favour.
+// Cap the map so a key-spraying attacker can't grow memory unbounded.
 const MAX_KEYS = 10_000
+
+// deep review AUTH-4: evict instead of wiping the whole map when it's full.
+// The old `buckets.clear()` reset EVERY window on overflow, so a client spraying
+// 10k distinct keys (e.g. a proxy pool, one key per IP) cleared everyone's active
+// limit as a side effect — turning the memory cap into a limit-reset primitive.
+// Instead we first drop only windows that have already ELAPSED: removing them
+// changes no decision (they'd reset on next touch anyway) and reclaims the bulk
+// in normal use, since keys accumulate as their short windows expire. An actively
+// hammered key has a live (un-elapsed) window, so this pass never resets it.
+// Only if the map is still over the cap after that — a genuine flood of
+// simultaneously-live distinct keys — do we shed the oldest-inserted entries to
+// bound memory; even then it is a slice, never a blanket wipe. (A truly
+// abuse-proof cap needs a durable/edge store — see the header note; flagged.)
+function evictIfFull(now: number): void {
+  if (buckets.size <= MAX_KEYS) return
+  for (const [key, s] of buckets) {
+    if (now - s.windowStart >= s.windowMs) buckets.delete(key)
+  }
+  if (buckets.size <= MAX_KEYS) return
+  const overflow = buckets.size - MAX_KEYS
+  let dropped = 0
+  for (const key of buckets.keys()) {
+    if (dropped >= overflow) break
+    buckets.delete(key)
+    dropped++
+  }
+}
 
 export function checkRateLimit(
   key: string,
@@ -32,11 +61,11 @@ export function checkRateLimit(
 ): LimiterResult {
   const now = Date.now()
 
-  if (buckets.size > MAX_KEYS) buckets.clear()
+  evictIfFull(now)
 
   const state = buckets.get(key)
   if (!state || now - state.windowStart >= opts.windowMs) {
-    buckets.set(key, { count: 1, windowStart: now })
+    buckets.set(key, { count: 1, windowStart: now, windowMs: opts.windowMs })
     return { ok: true, retryAfterSeconds: 0 }
   }
 

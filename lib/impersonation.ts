@@ -104,7 +104,29 @@ export async function getImpersonation(): Promise<ImpersonationTicket | null> {
   const { userId, sessionClaims } = await auth()
   if (!userId || !isAdminClaims(sessionClaims)) return null
 
-  return decodeTicket(raw)
+  const ticket = decodeTicket(raw)
+  if (!ticket) return null
+
+  // deep review AUTH-9: bind the ticket to the admin who issued it. isAdminClaims
+  // alone would let ANY admin — or a leaked cookie replayed in another admin's
+  // browser — drive a view-as ticket minted for someone else. When the ticket
+  // names its issuer (adminMemberId), require the caller to BE that issuer:
+  // resolve the caller's member id and fail closed on any mismatch (including an
+  // unresolvable caller row). A legacy ticket with no adminMemberId — e.g. an
+  // admin who has no member row — falls back to the admin-claim check above.
+  // This DB read only runs while a view-as cookie is present, i.e. for the admin
+  // actively viewing-as, never on the normal member path.
+  if (ticket.adminMemberId) {
+    const { data } = await supabaseServer()
+      .from('members')
+      .select('id')
+      .eq('clerk_user_id', userId)
+      .maybeSingle()
+    const callerMemberId = (data as { id: string } | null)?.id ?? null
+    if (callerMemberId !== ticket.adminMemberId) return null
+  }
+
+  return ticket
 }
 
 /** The member id the member-facing code should act as, or null. */

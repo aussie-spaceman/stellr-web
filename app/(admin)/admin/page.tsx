@@ -1,6 +1,7 @@
 import Link from 'next/link'
-import { isProductionDeployment, vercelTarget } from '@/lib/env'
-import { integrationEnvironments, type IntegrationEnvironment } from '@/lib/env-guards'
+import { vercelTarget } from '@/lib/env'
+import { integrationEnvironments, isRealProductionApp, type IntegrationEnvironment } from '@/lib/env-guards'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — Dashboard' }
 
@@ -22,11 +23,19 @@ const INTEGRATION_LABELS: Record<string, string> = {
 // Which environment each integration is actually pointed at. Production issued
 // real parental consent forms from the DocuSign DEMO account for three months
 // and nothing surfaced it: `vercel env pull` redacts secret values, so this can
-// only be answered from inside the deployment. See lib/env-guards.ts, and
-// lib/env.ts for why this panel keys off the Vercel target rather than APP_ENV.
+// only be answered from inside the deployment. See lib/env-guards.ts.
+//
+// deep review AUTH-8: this must use isRealProductionApp(), not
+// isProductionDeployment(). The dev Vercel project builds `dev` as its own
+// production (VERCEL_ENV=production) and is meant to be on sandboxes, so
+// isProductionDeployment() flags every sandbox integration there as a "problem"
+// and cries wolf — the exact effect the sibling API's comment warns against
+// (app/api/admin/health/integrations/route.ts). isRealProductionApp() is the
+// one that is still right once the dev project exists. Display-only; no guard
+// keys off this panel.
 function IntegrationHealth() {
   const environments = integrationEnvironments()
-  const problems = isProductionDeployment()
+  const problems = isRealProductionApp()
     ? Object.entries(environments).filter(([, env]) => env !== 'production')
     : []
 
@@ -68,7 +77,8 @@ function IntegrationHealth() {
   )
 }
 
-export default function AdminDashboardPage() {
+export default async function AdminDashboardPage() {
+  await requireAdminPage()
   return (
     <div className="space-y-6">
       <div>

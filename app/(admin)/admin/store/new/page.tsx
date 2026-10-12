@@ -2,11 +2,13 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { ProductForm } from '@/components/admin/store/ProductForm'
 import { StoreNav } from '../StoreNav'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — New product' }
 export const dynamic = 'force-dynamic'
 
-export default function NewProductPage() {
+export default async function NewProductPage() {
+  await requireAdminPage()
   return (
     <div>
       <Link href="/admin/store" className="mb-3 inline-flex items-center gap-1 text-sm text-brand-muted-soft hover:text-brand-blue-dark">

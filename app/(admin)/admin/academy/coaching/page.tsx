@@ -2,10 +2,12 @@ import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { listAllWorkshops, getAdminWorkshopStats } from '@/lib/coaching'
 import { AdminCoachingNav } from '@/components/admin/coaching/AdminCoachingNav'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin · Coaching workshops' }
 
 export default async function AdminWorkshopsPage() {
+  await requireAdminPage()
   const [workshops, stats] = await Promise.all([listAllWorkshops(), getAdminWorkshopStats()])
 
   return (

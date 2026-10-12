@@ -1,10 +1,12 @@
 import { listAllCoachingSessions } from '@/lib/coaching'
 import { AdminCoachingNav } from '@/components/admin/coaching/AdminCoachingNav'
 import { CoachingSessionsCalendar } from '@/components/admin/coaching/CoachingSessionsCalendar'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin · Coaching sessions calendar' }
 
 export default async function CoachingCalendarPage() {
+  await requireAdminPage()
   const sessions = await listAllCoachingSessions()
   return (
     <div className="flex gap-8">

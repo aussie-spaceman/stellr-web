@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { MemberTable, type MemberRow } from '@/components/admin/MemberTable'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — Members' }
 
@@ -8,6 +9,7 @@ export default async function AdminMembersPage({
 }: {
   searchParams: Promise<{ q?: string; bracket?: string; role?: string; tier?: string; page?: string }>
 }) {
+  await requireAdminPage()
   const params = await searchParams
   const q = params.q ?? ''
   const bracket = params.bracket ?? ''

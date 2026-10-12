@@ -1,10 +1,12 @@
 import { listRequests, listCoachOptions, countPendingRequests, suggestEligibilities } from '@/lib/coaching-requests'
 import { AdminCoachingNav } from '@/components/admin/coaching/AdminCoachingNav'
 import { CoachingRequestQueue } from '@/components/admin/coaching/CoachingRequestQueue'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin · Coaching requests' }
 
 export default async function AdminCoachingRequestsPage() {
+  await requireAdminPage()
   const [requests, coaches, pending] = await Promise.all([
     listRequests(),
     listCoachOptions(),

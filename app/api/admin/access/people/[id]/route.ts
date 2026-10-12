@@ -6,6 +6,7 @@ import { getMemberAccessSummary } from '@/lib/member-access'
 import { addGlobalRole, getGlobalRoleNames, ROLES_BY_BRACKET, type MemberRole } from '@/lib/member-roles'
 import { TIERS_BY_BRACKET, type AgeBracket } from '@/lib/tiers'
 import { isAdminClaims } from '@/lib/admin-auth'
+import { actorFromAuth, logActivity } from '@/lib/activity-log'
 
 // /api/admin/access/people/[id] — everything the Person 360 renders in one
 // call: profile + bracket, tier memberships, global roles, and the resolved
@@ -63,6 +64,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const db = supabaseServer()
   const result = await addGlobalRole(db, id, parsed.data.role as MemberRole, 'admin')
   if (!result.ok) return NextResponse.json({ error: result.reason }, { status: 400 })
+
+  // deep review AUTH-6: granting a global role (e.g. mentor, volunteer) changes
+  // what a member can reach across the platform — record who did it. Best-effort.
+  await logActivity({
+    ...(await actorFromAuth()),
+    memberId: id,
+    category: 'account',
+    action: 'role_granted',
+    summary: `Granted role: ${parsed.data.role}`,
+    metadata: { role: parsed.data.role },
+  })
+
   return NextResponse.json({ ok: true })
 }
 
@@ -82,5 +95,16 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const db = supabaseServer()
   await db.from('member_roles').delete()
     .eq('member_id', id).eq('role', role).eq('scope', 'global')
+
+  // deep review AUTH-6: a revoke is as audit-worthy as a grant.
+  await logActivity({
+    ...(await actorFromAuth()),
+    memberId: id,
+    category: 'account',
+    action: 'role_removed',
+    summary: `Removed role: ${role}`,
+    metadata: { role },
+  })
+
   return NextResponse.json({ ok: true })
 }

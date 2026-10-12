@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { SchoolEditForm } from '@/components/admin/SchoolEditForm'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — School Detail' }
 
@@ -17,6 +18,7 @@ export default async function AdminSchoolDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  await requireAdminPage()
   const { id } = await params
   const db = supabaseServer()
 

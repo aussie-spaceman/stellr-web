@@ -4,6 +4,7 @@ import { formatDateShort } from '@/lib/utils'
 import { getAdminResourceIndex } from '@/lib/resource-admin'
 import { ResourceUploadForm } from '@/components/admin/community/ResourceUploadForm'
 import { AdminBinaryActions } from '@/components/admin/community/AdminBinaryActions'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — Community Resources' }
 
@@ -27,6 +28,7 @@ function typeLabel(fileType: string | null, isLink: boolean): string {
 // the admin path that creates a binary unconditionally (the force-duplicate
 // override, decision 5).
 export default async function AdminCommunityResourcesPage() {
+  await requireAdminPage()
   const { rows, stats } = await getAdminResourceIndex()
 
   const statCards = [

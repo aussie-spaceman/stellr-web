@@ -8,10 +8,12 @@ import { supabaseServer } from '@/lib/supabase'
 import { getCohortFull, listCohortRoster, listMentoringTiers } from '@/lib/mentoring'
 import { AdminMentoringNav } from '@/components/admin/mentoring/AdminMentoringNav'
 import { AdminManageCohort } from '@/components/admin/mentoring/AdminManageCohort'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin · Manage cohort' }
 
 export default async function AdminManageCohortPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdminPage()
   const member = await getSignedInMember()
   if (!member) notFound()
   const { id } = await params

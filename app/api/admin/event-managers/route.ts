@@ -2,6 +2,8 @@ import { auth, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
+import { actorFromAuth, logActivity } from '@/lib/activity-log'
+import { memberIdForClerkUser } from '@/lib/deletion/actor'
 
 // Admin-only management of Event Manager → event assignments.
 // Event Managers cannot manage assignments, only admins.
@@ -64,6 +66,21 @@ export async function POST(req: Request) {
     console.error('Event manager assignment insert error:', error)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
+
+  // deep review AUTH-6: an event-manager assignment grants access to that
+  // event's roster — minors' details, medical notes, background summaries — so
+  // who granted it must be recoverable. The target is keyed by clerk_user_id;
+  // resolve their member row to attribute the entry (best-effort: logActivity
+  // no-ops if there is no linked member row).
+  await logActivity({
+    ...(await actorFromAuth()),
+    memberId: (await memberIdForClerkUser(clerkUserId)) ?? '',
+    category: 'account',
+    action: 'event_manager_assigned',
+    summary: `Assigned as event manager for ${eventSlug}`,
+    metadata: { event_slug: eventSlug, clerk_user_id: clerkUserId },
+  })
+
   return NextResponse.json({ assignment: data }, { status: 201 })
 }
 
@@ -90,5 +107,16 @@ export async function DELETE(req: Request) {
     console.error('Event manager assignment delete error:', error)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
+
+  // deep review AUTH-6: a revoke is as audit-worthy as a grant.
+  await logActivity({
+    ...(await actorFromAuth()),
+    memberId: (await memberIdForClerkUser(clerkUserId)) ?? '',
+    category: 'account',
+    action: 'event_manager_unassigned',
+    summary: `Removed as event manager for ${eventSlug}`,
+    metadata: { event_slug: eventSlug, clerk_user_id: clerkUserId },
+  })
+
   return NextResponse.json({ ok: true })
 }

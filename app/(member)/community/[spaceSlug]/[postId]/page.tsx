@@ -65,17 +65,28 @@ export default async function PostDetailPage({
     .eq('space_id', space.id)
     .maybeSingle()
 
-  if (!post || post.status === 'deleted') notFound()
+  // deep review MEM-6: a moderated post is status='hidden' (not 'deleted'). The
+  // old check rendered any non-deleted post in full, so content removed for
+  // safeguarding reasons stayed readable by direct link (and from older mention/
+  // reply emails) to every member in the space, minors included. Show only a
+  // 'published' post; a platform admin still sees hidden content so they can
+  // review what was taken down.
+  if (!post || (post.status !== 'published' && !member.isAdmin)) notFound()
 
   // Mark this post read for the member (clears its unread badge).
   await markPostRead(member.id, postId)
 
-  const { data: comments } = await db
+  // MEM-6: hidden (and deleted) comments must not render either. Admins may see
+  // non-deleted ones (to review a moderation decision); everyone else sees only
+  // published comments.
+  const commentQuery = db
     .from('community_comments')
     .select('id, parent_comment_id, body_json, created_at, members:author_member_id(first_name, last_name)')
     .eq('post_id', postId)
-    .neq('status', 'deleted')
-    .order('created_at', { ascending: true })
+  const { data: comments } = await (member.isAdmin
+    ? commentQuery.neq('status', 'deleted')
+    : commentQuery.eq('status', 'published')
+  ).order('created_at', { ascending: true })
 
   const commentRows = comments ?? []
 

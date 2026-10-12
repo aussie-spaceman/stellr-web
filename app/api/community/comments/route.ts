@@ -104,7 +104,11 @@ export async function POST(req: Request) {
     .eq('id', postId)
     .maybeSingle()
 
-  if (!post || post.status === 'deleted') {
+  // deep review MEM-6: a post an admin has moderated is status='hidden' (not
+  // 'deleted'). The old check blocked only 'deleted', so a hidden post stayed
+  // commentable by direct link (mention/reply emails point straight at it).
+  // Require 'published' — nobody may add a comment to a hidden or deleted post.
+  if (!post || post.status !== 'published') {
     return NextResponse.json({ error: 'Post not found' }, { status: 404 })
   }
   if (post.space_id) {

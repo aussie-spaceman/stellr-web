@@ -1,6 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { type CommunityMember, getCurrentMember } from '@/lib/community'
-import { getSpaceAccessById } from '@/lib/spaces'
+import { getSpaceAccessById, getSpaceForMember, canPostInSpace } from '@/lib/spaces'
 import { containerAccessPersists } from '@/lib/containers'
 import { ensureCoachingContainer } from '@/lib/container-sync'
 import { syncObjectSpaceRoster } from '@/lib/space-inheritance'
@@ -510,15 +510,21 @@ export async function getCoachingChannel(coacheeId: string, coachId: string): Pr
 
 export async function listMessages(channelId: string): Promise<ChatMessage[]> {
   const db = supabaseServer()
+  // deep review MEM-7: this used to order created_at ASC + limit(500), i.e. the
+  // OLDEST 500 — so once a busy cohort/space channel passed 500 messages every
+  // later message (including safeguarding-relevant ones a moderator must see) was
+  // silently dropped and senders watched their own message vanish after the poll.
+  // Load the NEWEST 500 instead, then reverse back to chronological order for the
+  // UI. (History beyond the most recent 500 needs a `before` cursor — see report.)
   const { data } = await db
     .from('chat_messages')
     .select('id, body, author_member_id, created_at, flagged_at, members:author_member_id(first_name, last_name)')
     .eq('channel_id', channelId)
     .is('deleted_at', null)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(500)
   type Rel = { first_name: string | null; last_name: string | null }
-  return (data ?? []).map((m) => {
+  return (data ?? []).reverse().map((m) => {
     const rel = (m as { members: Rel | Rel[] | null }).members
     const author = Array.isArray(rel) ? rel[0] : rel
     return {
@@ -611,6 +617,50 @@ export async function canAccessChannel(channelId: string, memberId: string): Pro
   if (host?.can_mentor !== true) return false
   if (!(await isClearedForMinorContact(db, memberId, 'mentor'))) return false
   return containerAccessPersists(ch.cohort_id)
+}
+
+/**
+ * Whether a member may POST to a channel. Read access (canAccessChannel) is
+ * necessary but NOT sufficient for a space channel:
+ *
+ * deep review MEM-8: the chat POST path gated only on canAccessChannel, which for
+ * a space returns the space's *view* access — true for a member an admin has
+ * muted or posting-suspended, and regardless of a "moderators only" posting
+ * policy. So a sanctioned member kept talking in the space's chat even though the
+ * same sanction stops them in the space's feed. Apply the SAME myMuted +
+ * canPostInSpace checks the channel-post path got (app/api/community/posts).
+ *
+ * Cohort and coaching channels have no space posting policy, so there write
+ * access equals read access (unchanged). Fails closed on every missing read.
+ */
+export async function canPostToChannel(channelId: string, memberId: string): Promise<boolean> {
+  if (!(await canAccessChannel(channelId, memberId))) return false
+  const db = supabaseServer()
+  const { data: ch } = await db
+    .from('chat_channels')
+    .select('kind, space_id')
+    .eq('id', channelId)
+    .maybeSingle()
+  if (!ch) return false
+  if (ch.kind !== 'space') return true
+  if (!ch.space_id) return false
+
+  // Resolve the space as the current member (must be the one asking — matches the
+  // canAccessChannel space branch) so posting obeys the live mute / posting
+  // suspension / moderators-only policy, exactly as the feed post path does.
+  const me = await getCurrentMember()
+  if (!me || me.id !== memberId) return false
+  const { data: sp } = await db
+    .from('community_spaces')
+    .select('slug')
+    .eq('id', ch.space_id)
+    .maybeSingle()
+  const slug = (sp as { slug: string } | null)?.slug
+  if (!slug) return false
+  const space = await getSpaceForMember(me, slug, { withCounts: false })
+  if (!space || !space.access.canAccess) return false
+  if (space.myMuted) return false
+  return canPostInSpace(me, space.postingPolicy, space.myRole, space.myMuted)
 }
 
 // ─── Cohort-as-Space (PRD §11) ───────────────────────────────────────────────

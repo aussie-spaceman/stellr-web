@@ -348,13 +348,39 @@ export async function claimUpload(args: {
   /** Extra format gate, e.g. the license magic-byte sniff. */
   verify?: (bytes: Uint8Array) => boolean
   verifyError?: string
+  /**
+   * deep review MEM-13: the namespace prefix the claimed object MUST sit under,
+   * derived by the CALLER from the same authorisation it just performed (e.g.
+   * `community-resources/<spaceId>/` for a space attachment). claimUpload trusts
+   * the path the browser posts back, so without this a member who can upload
+   * anywhere could post a path in another purpose's namespace (or another
+   * space/member's folder) and have the owning route adopt the object — or, if
+   * oversize, discardUpload-DELETE it. Enforced before any storage read/remove.
+   * Community write paths MUST pass it; omitted only where the namespace is
+   * already a dedicated private bucket (e.g. teacher-licenses).
+   */
+  expectedPrefix?: string
 }): Promise<{ bytes: Uint8Array; bucket: string } | UploadDenied> {
   const spec = UPLOAD_PURPOSES[args.purpose]
-  const { storagePath, purpose } = args
+  const { storagePath, purpose, expectedPrefix } = args
 
   // Only paths this app issues. An admin is trusted, but a typo must not be able
   // to rewrite an unrelated object (a lesson recording, someone's license).
-  if (storagePath.includes('..') || storagePath.startsWith('/')) {
+  // Reject traversal and separator tricks outright (`..`, leading `/`, backslash,
+  // and empty-segment `//` that could collapse to a different path).
+  if (
+    !storagePath ||
+    storagePath.includes('..') ||
+    storagePath.startsWith('/') ||
+    storagePath.includes('//') ||
+    storagePath.includes('\\')
+  ) {
+    return deny('That upload path is not one we issued.', 400)
+  }
+
+  // MEM-13: refuse (without touching storage) a path outside the namespace the
+  // caller authorised. Fails closed — a mismatch is never downloaded or deleted.
+  if (expectedPrefix && !storagePath.startsWith(expectedPrefix)) {
     return deny('That upload path is not one we issued.', 400)
   }
 

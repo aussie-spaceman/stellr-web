@@ -66,7 +66,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'You do not manage this object.' }, { status: 403 })
     }
 
-    const claimed = await claimUpload({ purpose: 'container-contribution', storagePath: body.storagePath })
+    // deep review MEM-13: a container-contribution object is issued under the
+    // flat `resources/` namespace (lib/uploads). Pin the claim to it so a manager
+    // cannot post back a path in another namespace (a training video, a teacher
+    // license folder) and have this route adopt — or discard-delete — it.
+    const CONTRIBUTION_PREFIX = 'resources/'
+    const claimed = await claimUpload({
+      purpose: 'container-contribution',
+      storagePath: body.storagePath,
+      expectedPrefix: CONTRIBUTION_PREFIX,
+    })
     if ('error' in claimed) {
       return NextResponse.json({ error: claimed.error }, { status: claimed.status })
     }
@@ -92,6 +101,7 @@ export async function POST(req: Request) {
       fileType,
       uploadedBy: member.id,
       contentHash,
+      expectedPrefix: CONTRIBUTION_PREFIX, // MEM-13: re-claim stays namespace-pinned
     })
     if ('error' in created) {
       return NextResponse.json({ error: created.error }, { status: created.status })

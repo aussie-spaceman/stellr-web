@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseServer } from '@/lib/supabase'
-import { getCurrentMember, getSpaceBySlug, memberCanAccessSpace, tiptapToPlainText } from '@/lib/community'
+import { getCurrentMember, tiptapToPlainText } from '@/lib/community'
 import { getSpaceForMember, canPostInSpace } from '@/lib/spaces'
 import { getChannelPosts } from '@/lib/space-posts'
 import { extractMentionIds, notifyMentions } from '@/lib/mentions'
@@ -111,10 +111,20 @@ export async function POST(req: Request) {
   if (!(title ?? '').trim()) {
     return NextResponse.json({ error: 'Title is required' }, { status: 400 })
   }
-  const space = await getSpaceBySlug(spaceSlug)
-  if (!space) return NextResponse.json({ error: 'Space not found' }, { status: 404 })
-  if (!(await memberCanAccessSpace(member, space))) {
-    return NextResponse.json({ error: 'Upgrade required' }, { status: 403 })
+  // deep review MEM-8: the legacy branch gated only on access (memberCanAccessSpace)
+  // and ignored mute / posting suspension / moderators-only policy, so a
+  // sanctioned member could still create a URL-reachable post (that also fired
+  // mention emails) by omitting channelSlug. Resolve the space through the same
+  // resolver the channel branch uses and apply the identical posting checks.
+  const space = await getSpaceForMember(member, spaceSlug)
+  if (!space || !space.access.canAccess) {
+    return NextResponse.json({ error: 'No access to this space' }, { status: 403 })
+  }
+  if (space.myMuted) {
+    return NextResponse.json({ error: 'You have been muted in this space' }, { status: 403 })
+  }
+  if (!canPostInSpace(member, space.postingPolicy, space.myRole, space.myMuted)) {
+    return NextResponse.json({ error: 'Posting is limited to moderators' }, { status: 403 })
   }
 
   const { data, error } = await db

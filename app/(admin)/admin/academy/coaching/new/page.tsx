@@ -5,10 +5,12 @@ import { supabaseServer } from '@/lib/supabase'
 import { ALL_TIER_NAMES } from '@/lib/tiers'
 import { AdminCoachingNav } from '@/components/admin/coaching/AdminCoachingNav'
 import { CreateWorkshopForm } from '@/components/admin/coaching/CreateWorkshopForm'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin · New coaching workshop' }
 
 export default async function NewWorkshopPage() {
+  await requireAdminPage()
   const member = await getSignedInMember()
   if (!member) redirect('/sign-up')
   if (!member.isAdmin) redirect('/community/coaching')

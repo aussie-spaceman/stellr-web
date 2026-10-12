@@ -2,6 +2,7 @@
 // requireAdmin check used elsewhere (role=admin in Clerk publicMetadata).
 
 import { auth } from '@clerk/nextjs/server'
+import { notFound, redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
 
 type Claims = Record<string, unknown> | null | undefined
@@ -36,6 +37,27 @@ export async function currentUserIsAdmin(): Promise<boolean> {
 // Anyone allowed into the admin portal shell (nav varies by role).
 export function hasAdminPortalAccess(sessionClaims: Claims): boolean {
   return isAdminClaims(sessionClaims) || isEventManagerClaims(sessionClaims)
+}
+
+// deep review AUTH-1 / AUTH-N1: page-level authorisation for admin RSC pages.
+//
+// The C-2 fix gates /admin in proxy.ts (middleware), which is the primary gate.
+// But that made middleware the SOLE barrier: Next skips layouts on RSC
+// navigation requests, so the (admin) layout check never was defence here, and
+// the data pages fetch minors' PII with no guard of their own. If the matcher
+// ever regresses, or a future Next release changes when middleware runs for a
+// flight request, these pages would silently render again. So each admin page
+// outside competitions/campaigns calls this at the top of its loader — the
+// page-side twin of the /api/admin route-guard sweep (test/admin-page-guards).
+//
+// Fails closed: unauthenticated → sign-in; signed-in non-staff → notFound()
+// (a 404 leaks less than a 403 about what exists). Event managers are allowed
+// into the shell here (hasAdminPortalAccess); the middleware is what confines
+// them to competitions, exactly as the layout does for UX.
+export async function requireAdminPage(): Promise<void> {
+  const { userId, sessionClaims } = await auth()
+  if (!userId) redirect('/sign-in')
+  if (!hasAdminPortalAccess(sessionClaims)) notFound()
 }
 
 // Whether the current user holds a function scope. Clerk admins implicitly hold

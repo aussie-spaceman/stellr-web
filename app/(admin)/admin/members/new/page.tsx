@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { AdminAddMember } from '@/components/admin/AdminAddMember'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — Add Member' }
 
@@ -7,6 +8,7 @@ export const metadata = { title: 'Admin — Add Member' }
 // e.g. the Educator PD panel, to issue the new teacher's credential. Only
 // admin-relative paths are honoured.
 export default async function AdminAddMemberPage({ searchParams }: { searchParams: Promise<{ return?: string }> }) {
+  await requireAdminPage()
   const { return: back } = await searchParams
   const returnTo = back && back.startsWith('/admin/') && !back.startsWith('//') ? back : null
   const db = supabaseServer()

@@ -19,8 +19,17 @@ import { loadSurveyEvent } from '@/lib/survey/events'
 // shared with `npm run sync:event-spaces`.
 //
 // Configure in Sanity: webhook on event create/update, URL this route, secret
-// in SANITY_WEBHOOK_SECRET (sent as the ?secret= query param or the
-// x-webhook-secret header).
+// in SANITY_WEBHOOK_SECRET, sent as the `x-webhook-secret` HEADER.
+//
+// deep review AUTH-10: the `?secret=` query form was dropped — a query-string
+// secret lands in Vercel access logs (and any proxy/referrer), so it is a
+// leaked credential. The header form is the only one accepted now. A fuller fix
+// — verifying Sanity's HMAC body signature with @sanity/webhook's
+// isValidSignature and re-fetching the document by _id — is deliberately NOT
+// done here: it needs a direct @sanity/webhook dependency AND the live Sanity
+// webhook reconfigured to sign its payload, which is an operational change for
+// the maintainer. Flagged for follow-up; the constant-time shared-secret compare
+// below remains the guard in the meantime.
 
 interface SanityEventPayload {
   _id?: string
@@ -32,9 +41,10 @@ interface SanityEventPayload {
 
 export async function POST(req: Request) {
   const secret = process.env.SANITY_WEBHOOK_SECRET
-  // Prefer the header; the ?secret= form is still accepted for existing configs
-  // but a query-string secret lands in access logs, so the header is preferred.
-  const provided = req.headers.get('x-webhook-secret') ?? new URL(req.url).searchParams.get('secret')
+  // Header only — the ?secret= query form was removed (AUTH-10: it leaks into
+  // access logs). A secret in the URL is a leaked credential, so we no longer
+  // read one from the query string even if present.
+  const provided = req.headers.get('x-webhook-secret')
   // Constant-time compare (this shared secret is the ONLY guard on this route —
   // there's no admin session — so the compare quality matters). Fails closed when
   // the secret is unset.

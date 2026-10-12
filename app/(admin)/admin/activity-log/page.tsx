@@ -1,10 +1,12 @@
 import { supabaseServer } from '@/lib/supabase'
 import { ActivityLogReview } from '@/components/admin/ActivityLogReview'
 import { DeletionRequestsReview, type DeletionRequest } from '@/components/admin/DeletionRequestsReview'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — Activity Log Review' }
 
 export default async function ActivityLogPage() {
+  await requireAdminPage()
   const db = supabaseServer()
 
   const [{ data: participations }, { data: deletionRequests }] = await Promise.all([

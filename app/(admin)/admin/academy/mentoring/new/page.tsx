@@ -6,10 +6,12 @@ import { listModules } from '@/lib/training'
 import { listMentoringTiers } from '@/lib/mentoring'
 import { CreateCohortForm } from '@/components/community/mentoring/CreateCohortForm'
 import { AdminMentoringNav } from '@/components/admin/mentoring/AdminMentoringNav'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin · New cohort' }
 
 export default async function AdminNewCohortPage() {
+  await requireAdminPage()
   const member = await getSignedInMember()
   if (!member) redirect('/sign-in')
 

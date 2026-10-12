@@ -4,13 +4,11 @@ import { OnboardingForm, type SelectedTier } from '@/components/member/Onboardin
 import { supabaseServer } from '@/lib/supabase'
 import { tierBySlug } from '@/app/(public)/membership/tier-data'
 import { impersonatedMemberId } from '@/lib/impersonation'
+import { safeNext } from '@/lib/safe-next'
 
 export const metadata = { title: 'Complete Your Profile' }
 
-// Only honour same-origin relative paths (open-redirect safety).
-function safeNext(next: string | undefined): string | null {
-  return next && next.startsWith('/') && !next.startsWith('//') ? next : null
-}
+// safeNext (open-redirect safety) is shared — deep review AUTH-7. See lib/safe-next.
 
 // The join orchestrator sends members here as `?next=/join?tier=<slug>`. We read
 // that tier so onboarding can be driven by the *purchase*, not a self-reported

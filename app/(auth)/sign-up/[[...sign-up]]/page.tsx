@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { SignUp } from '@clerk/nextjs'
+import { safeNext } from '@/lib/safe-next'
 
 export const metadata = { title: 'Create Account' }
 
@@ -10,10 +11,7 @@ export const metadata = { title: 'Create Account' }
 // Clerk users server-side and do NOT use this page, so they are unaffected.
 const SIGNUPS_OPEN = (process.env.NEXT_PUBLIC_SIGNUPS_OPEN ?? 'true') !== 'false'
 
-// Only honour same-origin relative paths as a post-auth destination (open-redirect safety).
-function safeNext(next: string | undefined): string | null {
-  return next && next.startsWith('/') && !next.startsWith('//') ? next : null
-}
+// safeNext (open-redirect safety) is shared — deep review AUTH-7. See lib/safe-next.
 
 export default async function SignUpPage({
   searchParams,

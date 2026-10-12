@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getSignedInMember } from '@/lib/community'
 import { STAFF_SCOPES } from '@/lib/admin-auth'
+import { actorFromAuth, logActivity } from '@/lib/activity-log'
 
 // Admin CRUD for the staff-roles function-scope seam (migration 044).
 
@@ -40,6 +41,19 @@ export async function POST(req: Request) {
     console.error('[staff-roles] upsert error:', error)
     return NextResponse.json({ error: 'Could not save staff role' }, { status: 500 })
   }
+
+  // deep review AUTH-6: staff function scopes grant admin-area access, so who
+  // set them (and to what) must be recoverable. Best-effort, like the rest of
+  // the audit trail — a logging failure never fails the grant.
+  await logActivity({
+    ...(await actorFromAuth()),
+    memberId: member.id,
+    category: 'account',
+    action: 'staff_scopes_set',
+    summary: `Staff function scopes set: ${clean.join(', ')}`,
+    metadata: { scopes: clean },
+  })
+
   return NextResponse.json({ ok: true, member })
 }
 
@@ -55,5 +69,15 @@ export async function DELETE(req: Request) {
     console.error('[staff-roles] delete error:', error)
     return NextResponse.json({ error: 'Could not remove staff role' }, { status: 500 })
   }
+
+  // deep review AUTH-6: a revoke is as audit-worthy as a grant.
+  await logActivity({
+    ...(await actorFromAuth()),
+    memberId,
+    category: 'account',
+    action: 'staff_scopes_removed',
+    summary: 'Staff function scopes removed',
+  })
+
   return NextResponse.json({ ok: true })
 }

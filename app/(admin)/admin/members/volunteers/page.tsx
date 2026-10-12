@@ -7,6 +7,7 @@ import {
   type VolunteerTrainingProgress,
 } from '@/lib/volunteer'
 import { VolunteersConsole, type VolunteerConsoleRow, type AssignableEvent } from '@/components/admin/VolunteersConsole'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — Volunteers' }
 export const dynamic = 'force-dynamic'
@@ -16,6 +17,7 @@ export const dynamic = 'force-dynamic'
 // training, and event assignments in one table. Actions are advisory-gated only
 // (warn-don't-block).
 export default async function VolunteersAdminPage() {
+  await requireAdminPage()
   const db = supabaseServer()
 
   // Events + campaigns a volunteer can be assigned to (a volunteer may cover

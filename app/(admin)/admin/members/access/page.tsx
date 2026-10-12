@@ -2,6 +2,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { AccessConsole } from '@/components/admin/access/AccessConsole'
 import type { RuleRow, TierOption } from '@/components/admin/membership/RulesClient'
 import { listDiscounts, listTiers, listTierBenefits } from '@/lib/entitlements'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — Access' }
 export const dynamic = 'force-dynamic'
@@ -20,6 +21,7 @@ export default async function AccessPage({
 }: {
   searchParams: Promise<{ tab?: string }>
 }) {
+  await requireAdminPage()
   const { tab } = await searchParams
   const db = supabaseServer()
 

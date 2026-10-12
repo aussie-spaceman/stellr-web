@@ -1,11 +1,12 @@
 import { supabaseServer } from '@/lib/supabase'
-import { STAFF_SCOPES } from '@/lib/admin-auth'
+import { STAFF_SCOPES, requireAdminPage } from '@/lib/admin-auth'
 import StaffRolesManager, { type StaffRole } from '@/components/admin/StaffRolesManager'
 
 export const metadata = { title: 'Admin — Staff roles' }
 
 // Function-scoped staff (platform RBAC seam, D10).
 export default async function AdminStaffPage() {
+  await requireAdminPage()
   const db = supabaseServer()
   const { data } = await db
     .from('staff_roles')

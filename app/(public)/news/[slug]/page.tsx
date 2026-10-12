@@ -19,7 +19,9 @@ interface PageProps {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params
-  const post = await getNewsPostBySlug(slug).catch(() => null)
+  // deep review PUB-9: let a Sanity fetch error propagate; only a genuine miss
+  // (null) is "Article Not Found". The page body throws to the error boundary too.
+  const post = await getNewsPostBySlug(slug)
   if (!post) return { title: 'Article Not Found' }
   return {
     title: post.title,
@@ -39,9 +41,20 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function NewsArticlePage({ params }: PageProps) {
   const { slug } = await params
-  const post = await getNewsPostBySlug(slug).catch(() => null)
+  // deep review PUB-9: distinguish a Sanity outage (throw → error boundary /
+  // retryable 500) from a genuine miss (null → 404). Swallowing to null here
+  // de-indexed live news URLs when Sanity was merely unreachable.
+  let post
+  try {
+    post = await getNewsPostBySlug(slug)
+  } catch (err) {
+    console.error('[news] sanity fetch failed', err)
+    throw err
+  }
   if (!post) notFound()
 
+  // Related posts are supplementary — a failure to load them must not take down
+  // the whole article, so this one stays best-effort (empty list on error).
   const related = post.category
     ? await getRelatedNewsPosts(post.category, post._id).catch(() => []) ?? []
     : []

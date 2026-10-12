@@ -125,6 +125,18 @@ export interface StellarEvent {
 // Every query returns null when Sanity is not configured.
 // Pages handle null by falling back to static seed data.
 
+// deep review PUB-8: a cache window on every published-content read. The
+// marketing routes currently render dynamically — the root layout reads request
+// headers, which opts every route out of static/ISR (un-picking that is a
+// route-group refactor, flagged for a design pass) — but the Next Data Cache
+// still serves these reads from the window below even while the route is
+// dynamic. So repeated views cost ~one Sanity API call per hour, not one per
+// view, and a brief Sanity outage is far less likely to surface as a 404
+// (PUB-9). The 'sanity' tag lets a future publish webhook revalidate on demand.
+// Passed as the 3rd arg of client.fetch; no-param queries pass {} as params.
+// Not `as const`: the client's `next.tags` type is a mutable string[].
+const PUBLISHED_CACHE = { next: { revalidate: 3600, tags: ['sanity'] } }
+
 export async function getFeaturedEvents() {
   if (!client) return null
   // Only surface live events on the homepage — campaigns have their own page.
@@ -135,7 +147,7 @@ export async function getFeaturedEvents() {
       venue, city, state, tagline, image, registrationOpen,
       registrationOpenDate, registrationCloseDate
     }
-  `)
+  `, {}, PUBLISHED_CACHE)
 }
 
 export async function getAllEvents() {
@@ -147,7 +159,7 @@ export async function getAllEvents() {
       venue, city, state, tagline, image, registrationOpen,
       registrationOpenDate, registrationCloseDate, featured
     }
-  `)
+  `, {}, PUBLISHED_CACHE)
 }
 
 // Live events with what the post-event survey schedule needs: the last day,
@@ -158,7 +170,7 @@ export async function getEventsForSurveySchedule() {
     *[_type == "event" && defined(slug.current) && defined(date) && (activityType == "live_event" || !defined(activityType))] {
       title, slug, date, endDate, activityType, state, country, status
     }
-  `)
+  `, {}, PUBLISHED_CACHE)
 }
 
 export async function getAllCampaigns() {
@@ -171,7 +183,7 @@ export async function getAllCampaigns() {
       _id, _updatedAt, title, slug, type, gradeLevel, gradeMin, gradeMax, season, campaignYear, deadline, deliverable,
       activityType, registrationOpen, tagline, image
     }
-  `)
+  `, {}, PUBLISHED_CACHE)
 }
 
 export async function getEventBySlug(slug: string) {
@@ -189,7 +201,8 @@ export async function getEventBySlug(slug: string) {
       capacity, stripePriceId, schedule[]{ time, label },
       country, latitude, longitude, startTime, endTime, status, previousStartDate
     }`,
-    { slug }
+    { slug },
+    PUBLISHED_CACHE
   )
 }
 
@@ -209,7 +222,7 @@ export async function getEventsForSchema(): Promise<StellarEvent[] | null> {
       tagline, image, registrationOpen, registrationOpenDate, registrationCloseDate,
       capacity, stripePriceId, status, previousStartDate
     }
-  `)
+  `, {}, PUBLISHED_CACHE)
 }
 
 // Minimal event/campaign metadata for a set of slugs — used by the Community
@@ -227,7 +240,8 @@ export async function getEventsBySlugs(slugs: string[]): Promise<EventMeta[]> {
   if (!client || slugs.length === 0) return []
   return client.fetch(
     `*[_type == "event" && slug.current in $slugs]{ _id, title, slug, activityType, date }`,
-    { slugs }
+    { slugs },
+    PUBLISHED_CACHE
   )
 }
 
@@ -237,7 +251,8 @@ export async function getEventsByIds(ids: string[]): Promise<EventMeta[]> {
   if (!client || ids.length === 0) return []
   return client.fetch(
     `*[_type == "event" && _id in $ids]{ _id, title, slug, activityType, date }`,
-    { ids }
+    { ids },
+    PUBLISHED_CACHE
   )
 }
 
@@ -247,7 +262,7 @@ export async function getFeaturedTestimonials() {
     *[_type == "testimonial" && featured == true] {
       _id, quote, author, role, event, videoUrl, photo
     }
-  `)
+  `, {}, PUBLISHED_CACHE)
 }
 
 export async function getAllNewsPosts() {
@@ -256,7 +271,7 @@ export async function getAllNewsPosts() {
     *[_type == "newsPost"] | order(publishedAt desc) {
       _id, _updatedAt, title, slug, publishedAt, author, category, excerpt, coverImage
     }
-  `)
+  `, {}, PUBLISHED_CACHE)
 }
 
 export async function getNewsPostBySlug(slug: string) {
@@ -266,7 +281,8 @@ export async function getNewsPostBySlug(slug: string) {
     `*[_type == "newsPost" && slug.current == $slug][0] {
       _id, _updatedAt, title, slug, publishedAt, author, category, excerpt, body, coverImage
     }`,
-    { slug }
+    { slug },
+    PUBLISHED_CACHE
   )
 }
 
@@ -276,6 +292,7 @@ export async function getRelatedNewsPosts(category: string, excludeId: string) {
     `*[_type == "newsPost" && category == $category && _id != $excludeId] | order(publishedAt desc) [0...3] {
       _id, title, slug, publishedAt, author, category, excerpt, coverImage
     }`,
-    { category, excludeId }
+    { category, excludeId },
+    PUBLISHED_CACHE
   )
 }

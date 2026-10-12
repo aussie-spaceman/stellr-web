@@ -40,6 +40,10 @@ export function SubscribeForm() {
       <input
         type="email"
         required
+        // deep review PUB-10 (WCAG 1.3.1 / 4.1.2): a placeholder is not a label.
+        // This footer field is site-wide, so it needs a programmatic name for
+        // screen readers and voice control.
+        aria-label="Email address"
         placeholder="your@email.com"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
@@ -54,7 +58,8 @@ export function SubscribeForm() {
         {status === 'loading' ? 'Subscribing…' : 'Subscribe'}
       </button>
       {status === 'error' && (
-        <p className="text-red-400 text-sm mt-1 sm:mt-0 sm:self-center">
+        // role="alert" so the failure is announced when it appears (PUB-10).
+        <p role="alert" className="text-red-400 text-sm mt-1 sm:mt-0 sm:self-center">
           Something went wrong — please try again.
         </p>
       )}

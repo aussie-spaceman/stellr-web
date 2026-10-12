@@ -99,6 +99,19 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
     closeTimer.current = setTimeout(() => setOpenDropdown(null), 150)
   }
 
+  // deep review PUB-10 (WCAG 2.1.1): the dropdowns previously opened on hover
+  // only, so a keyboard user could never reach their destinations. Clicking (or
+  // pressing Enter/Space on) the pillar button now toggles its menu, and Escape
+  // closes whatever is open — the pointer-hover behaviour above is unchanged.
+  const toggleMenu = (label: string) => {
+    if (closeTimer.current) clearTimeout(closeTimer.current)
+    setOpenDropdown((prev) => (prev === label ? null : label))
+  }
+
+  const closeOnEscape = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') setOpenDropdown(null)
+  }
+
   const toggleMobileSection = (label: string) =>
     setMobileExpanded((prev) => (prev === label ? null : label))
 
@@ -165,7 +178,7 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
           {/* Desktop nav pillars */}
           <ul className="hidden lg:flex items-center gap-1">
             {navLinks.map((link) => (
-              <li key={link.href} className="relative">
+              <li key={link.href} className="relative" onKeyDown={closeOnEscape}>
                 <div
                   onMouseEnter={() => openMenu(link.label)}
                   onMouseLeave={scheduleClose}
@@ -176,6 +189,8 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
                         ? 'text-midnight font-semibold'
                         : 'text-content font-normal'
                     }`}
+                    onClick={() => toggleMenu(link.label)}
+                    aria-haspopup="menu"
                     aria-expanded={openDropdown === link.label}
                   >
                     {link.label}
@@ -214,13 +229,15 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
           {/* Desktop CTAs */}
           <div className="hidden lg:flex items-center gap-2.5">
             {/* Get Involved */}
-            <div className="relative">
+            <div className="relative" onKeyDown={closeOnEscape}>
               <div
                 onMouseEnter={() => openMenu('get-involved')}
                 onMouseLeave={scheduleClose}
               >
                 <button
                   className="flex items-center gap-1.5 border-[1.5px] border-primary text-primary rounded-[8px] px-4 py-[9px] text-[14.5px] font-medium hover:bg-primary-soft transition-colors"
+                  onClick={() => toggleMenu('get-involved')}
+                  aria-haspopup="menu"
                   aria-expanded={openDropdown === 'get-involved'}
                 >
                   Get Involved

@@ -12,6 +12,41 @@ interface TipTapNode {
   attrs?: Record<string, unknown>
 }
 
+// deep review MEM-17: stored body_json is authored client-side, so a link mark or
+// image node can carry any href/src. React already neutralises `javascript:`
+// hrefs, so this is not XSS — the residual risks are (a) non-web link schemes
+// (`data:`, `tel:` spoofs, protocol-relative off-site links) and (b) an external
+// image src acting as a tracking pixel that logs the IP/UA of every member,
+// minors included, who opens the post. Restrict both at render time.
+
+/** An href safe to render as a link, or null to render the text un-linked. */
+function safeHref(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const href = raw.trim()
+  if (!href || href === '#') return null
+  // Protocol-relative (`//host`) and backslash variants resolve off-site — drop.
+  if (href.startsWith('//') || href.startsWith('\\')) return null
+  // Same-origin relative links (incl. in-page anchors) are safe as-is.
+  if (href.startsWith('/') || href.startsWith('#')) return href
+  try {
+    const scheme = new URL(href).protocol
+    return scheme === 'http:' || scheme === 'https:' || scheme === 'mailto:' ? href : null
+  } catch {
+    // Not a parseable absolute URL and not a recognised relative form — drop.
+    return null
+  }
+}
+
+// Embedded images must come through the access-gated media proxy (a relative
+// path, so it cannot point off-site). Anything else — including an absolute URL
+// to our own path on another host — is dropped.
+const MEDIA_PREFIX = '/api/community/media/community-media/'
+
+/** An image src safe to render, or null to drop the image. */
+function safeImageSrc(raw: unknown): string | null {
+  return typeof raw === 'string' && raw.startsWith(MEDIA_PREFIX) ? raw : null
+}
+
 function renderMarks(text: string, marks: TipTapNode['marks'], key: number): React.ReactNode {
   if (!marks || marks.length === 0) return <Fragment key={key}>{text}</Fragment>
   return marks.reduce<React.ReactNode>((acc, mark) => {
@@ -25,7 +60,10 @@ function renderMarks(text: string, marks: TipTapNode['marks'], key: number): Rea
       case 'strike':
         return <s>{acc}</s>
       case 'link': {
-        const href = typeof mark.attrs?.href === 'string' ? mark.attrs.href : '#'
+        // deep review MEM-17: only link out to web/mail/same-origin targets.
+        // An unsafe scheme renders as plain text (the mark is simply dropped).
+        const href = safeHref(mark.attrs?.href)
+        if (!href) return acc
         return (
           <a href={href} target="_blank" rel="noopener noreferrer nofollow" className="text-brand-blue underline">
             {acc}
@@ -85,7 +123,9 @@ function renderNode(node: TipTapNode, key: number): React.ReactNode {
       )
     }
     case 'image': {
-      const src = typeof node.attrs?.src === 'string' ? node.attrs.src : null
+      // deep review MEM-17: drop any image that isn't served by the access-gated
+      // media proxy, so a post can't embed an external tracking pixel.
+      const src = safeImageSrc(node.attrs?.src)
       if (!src) return <Fragment key={key} />
       const alt = typeof node.attrs?.alt === 'string' ? node.attrs.alt : ''
       // eslint-disable-next-line @next/next/no-img-element -- served by the access-gated /api/community/media proxy, which the optimizer cannot call with the viewer's cookies

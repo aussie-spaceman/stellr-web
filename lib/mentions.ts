@@ -25,6 +25,13 @@ export function extractMentionIds(doc: unknown): string[] {
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.stellreducation.org'
 
+// deep review MEM-11: cap the fan-out. One post could carry a `mention` node for
+// every directory-visible member, and each one sends a Stellr email — unbounded
+// fan-out is a spam / Resend-quota / sender-reputation lever (and a phishing lever
+// before PUB-2 escaped the actor name). A legitimate post mentions a handful of
+// people; keep the first N distinct recipients and silently ignore the rest.
+const MAX_MENTION_RECIPIENTS = 10
+
 /**
  * Notify members @mentioned in a post or comment (notification type 'mention',
  * already defined in lib/notify). Best-effort — never throws into the caller.
@@ -47,7 +54,11 @@ export async function notifyMentions(opts: {
   excludeIds?: string[]
 }): Promise<void> {
   const exclude = new Set([opts.actorMemberId, ...(opts.excludeIds ?? [])])
-  const candidates = [...new Set(opts.mentionIds)].filter((id) => !exclude.has(id))
+  // deep review MEM-11: dedupe, drop excluded ids, then cap BEFORE the directory
+  // query and the email fan-out so neither grows with the number of mention nodes.
+  const candidates = [...new Set(opts.mentionIds)]
+    .filter((id) => !exclude.has(id))
+    .slice(0, MAX_MENTION_RECIPIENTS)
   if (candidates.length === 0) return
 
   const db = supabaseServer()
@@ -64,12 +75,20 @@ export async function notifyMentions(opts: {
   // arbitrary adult. Minors are excluded from mention-search, but a stale
   // directory opt-in or a hand-crafted body_json could still name one, so drop
   // any minor recipient here as the server-side backstop.
-  const { data: recipientRows } = await db
+  const { data: recipientRows, error: recipientErr } = await db
     .from('members')
     .select('id, date_of_birth, age_bracket')
     .in('id', allowed)
+  // deep review MEM-N2: fail CLOSED. If the backstop lookup errors (or returns
+  // nothing) we cannot tell whether a recipient is a minor, and the old
+  // `recipientRows ?? []` treated that as "no minors present" — so a transient DB
+  // error plus a stale opt-in could email a minor. Skip the whole fan-out instead.
+  if (recipientErr || !recipientRows) {
+    console.error('[community] mention recipient lookup failed; skipping fan-out (fail-closed):', recipientErr)
+    return
+  }
   const minors = new Set(
-    (recipientRows ?? [])
+    recipientRows
       .filter((m) => memberIsMinor(m as { date_of_birth: string | null; age_bracket: string | null }))
       .map((m) => (m as { id: string }).id),
   )

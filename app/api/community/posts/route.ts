@@ -6,6 +6,7 @@ import { getSpaceForMember, canPostInSpace } from '@/lib/spaces'
 import { getChannelPosts } from '@/lib/space-posts'
 import { extractMentionIds, notifyMentions } from '@/lib/mentions'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { runAfterResponse } from '@/lib/after-response'
 
 const createPostSchema = z.object({
   spaceSlug: z.string().min(1),
@@ -207,12 +208,19 @@ function fireMentions(
 ) {
   const mentionIds = extractMentionIds(bodyJson)
   if (!mentionIds.length) return
-  notifyMentions({
-    mentionIds,
-    actorMemberId: member.id,
-    actorName: [member.first_name, member.last_name].filter(Boolean).join(' ') || 'A member',
-    context: 'post',
-    postId,
-    spaceSlug,
-  }).catch((e) => console.error('[community] mention notify error:', e))
+  // deep review MEM-18: register the fan-out with after() (via runAfterResponse)
+  // instead of a bare un-awaited promise. On Vercel the instance can be frozen
+  // the moment the response is flushed, silently dropping a plain `.catch()`
+  // promise — so mention emails went out only intermittently. The comments route
+  // already uses this helper (QUAL-1); this brings the post path in line.
+  runAfterResponse('community', () =>
+    notifyMentions({
+      mentionIds,
+      actorMemberId: member.id,
+      actorName: [member.first_name, member.last_name].filter(Boolean).join(' ') || 'A member',
+      context: 'post',
+      postId,
+      spaceSlug,
+    })
+  )
 }

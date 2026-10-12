@@ -366,15 +366,19 @@ export interface AssignActionOpts {
  * grouped by a shared batch id for the mentor's completion view). */
 export async function assignCohortAction(cohortId: string, mentorId: string, opts: AssignActionOpts): Promise<number> {
   const db = supabaseServer()
-  let targets = (opts.memberIds ?? []).filter(Boolean)
-  if (targets.length === 0) {
-    const { data } = await db
-      .from('cohort_members')
-      .select('member_id')
-      .eq('cohort_id', cohortId)
-      .eq('status', 'active')
-    targets = (data ?? []).map((r) => r.member_id as string)
-  }
+  // deep review MEM-11: the targets must be on THIS cohort's active roster. The
+  // old code trusted `opts.memberIds` verbatim, so a mentor could assign actions
+  // (and fire the notification emails) to arbitrary member ids outside their
+  // cohort. Load the roster once and intersect: an explicit list is scoped to the
+  // roster; an empty list still means "everyone active in the cohort".
+  const { data: rosterRows } = await db
+    .from('cohort_members')
+    .select('member_id')
+    .eq('cohort_id', cohortId)
+    .eq('status', 'active')
+  const roster = new Set((rosterRows ?? []).map((r) => r.member_id as string))
+  const requested = (opts.memberIds ?? []).filter(Boolean)
+  const targets = requested.length > 0 ? requested.filter((id) => roster.has(id)) : [...roster]
   if (targets.length === 0) return 0
 
   const batchId = crypto.randomUUID()

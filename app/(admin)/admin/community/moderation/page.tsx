@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { FlagQueue } from '@/components/admin/community/FlagQueue'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — Community Moderation' }
 
@@ -8,6 +9,7 @@ export default async function AdminModerationPage({
 }: {
   searchParams: Promise<{ status?: string }>
 }) {
+  await requireAdminPage()
   const { status = 'pending' } = await searchParams
   const db = supabaseServer()
 

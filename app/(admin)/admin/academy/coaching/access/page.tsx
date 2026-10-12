@@ -1,10 +1,12 @@
 import { listCoachingTiers, listWorkshopAccessRows } from '@/lib/coaching'
 import { AdminCoachingNav } from '@/components/admin/coaching/AdminCoachingNav'
 import { CoachingMembershipAccess } from '@/components/admin/coaching/CoachingMembershipAccess'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin · Coaching membership & access' }
 
 export default async function CoachingAccessPage() {
+  await requireAdminPage()
   const [tiers, workshops] = await Promise.all([listCoachingTiers(), listWorkshopAccessRows()])
 
   return (

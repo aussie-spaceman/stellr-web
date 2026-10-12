@@ -1,10 +1,12 @@
 import { getComplianceAudit } from '@/lib/compliance-admin'
 import { ComplianceAuditTable } from '@/components/admin/ComplianceAuditTable'
 import { ComplianceSyncButton } from '@/components/admin/ComplianceSyncButton'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — Background Checks' }
 
 export default async function ComplianceAuditPage() {
+  await requireAdminPage()
   const audit = await getComplianceAudit()
 
   return (

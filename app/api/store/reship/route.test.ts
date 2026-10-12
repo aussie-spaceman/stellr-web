@@ -11,16 +11,28 @@ const h = vi.hoisted(() => ({
   member: { id: 'm1', email: 'm1@example.com' } as { id: string; email: string } | null,
   createPendingOrder: vi.fn(async (_input: unknown) => ({ orderId: 'reship1', subtotalCents: 0 })),
   sessionsCreate: vi.fn(async () => ({ url: 'https://checkout.stripe.com/x' })),
+  assertLiveCredentials: vi.fn(), // deep review PAY-15: no-op guard spy.
   eventEndedPast: true, // event end date in the past unless a test flips it
 }))
 
-// In-memory DB: supports select/eq/neq/maybeSingle and a head/count select.
+// In-memory DB: supports select/eq/neq/lt/maybeSingle, a head/count select, and
+// update(...) that mutates matched rows in place (deep review PAY-N3 needs the
+// stale-pending cancel to actually flip the row's status).
 type Row = Record<string, unknown>
 let tables: Record<string, Row[]>
 function builder(table: string) {
   const filters: ((r: Row) => boolean)[] = []
   let head = false
+  let pendingUpdate: Row | null = null
   const matched = () => (tables[table] ?? []).filter((r) => filters.every((f) => f(r)))
+  const run = () => {
+    if (pendingUpdate) {
+      const rows = matched()
+      for (const r of rows) Object.assign(r, pendingUpdate)
+      return { data: rows, error: null }
+    }
+    return head ? { count: matched().length, error: null } : { data: matched(), error: null }
+  }
   const q: Record<string, unknown> = {
     select: (_cols?: string, opts?: { head?: boolean; count?: string }) => {
       if (opts?.head) head = true
@@ -28,9 +40,10 @@ function builder(table: string) {
     },
     eq: (c: string, v: unknown) => (filters.push((r) => r[c] === v), q),
     neq: (c: string, v: unknown) => (filters.push((r) => r[c] !== v), q),
+    lt: (c: string, v: unknown) => (filters.push((r) => String(r[c]) < String(v)), q),
+    update: (set: Row) => ((pendingUpdate = set), q),
     maybeSingle: async () => ({ data: matched()[0] ?? null, error: null }),
-    then: (resolve: (v: unknown) => unknown) =>
-      Promise.resolve(head ? { count: matched().length, error: null } : { data: matched(), error: null }).then(resolve),
+    then: (resolve: (v: unknown) => unknown) => Promise.resolve(run()).then(resolve),
   }
   return q
 }
@@ -38,6 +51,7 @@ function builder(table: string) {
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => ({ from: builder }) }))
 vi.mock('@/lib/store/auth', () => ({ currentStoreMember: async () => h.member }))
 vi.mock('@/lib/stripe', () => ({ stripeClient: () => ({ checkout: { sessions: { create: h.sessionsCreate } } }) }))
+vi.mock('@/lib/env-guards', () => ({ assertLiveCredentials: h.assertLiveCredentials }))
 vi.mock('@/lib/store/orders', () => ({ createPendingOrder: h.createPendingOrder, STORE_FLAT_SHIPPING_CENTS: 595 }))
 vi.mock('@/lib/sanity', () => ({
   getEventBySlug: async () => ({ date: h.eventEndedPast ? '2020-01-01' : '2999-01-01' }),
@@ -85,11 +99,35 @@ describe('POST /api/store/reship (PAY-2)', () => {
     const arg = h.createPendingOrder.mock.calls[0][0] as { sourceOrderId: string; lines: { variantId: string }[] }
     expect(arg.sourceOrderId).toBe('o1')
     expect(arg.lines.map((l) => l.variantId)).toEqual(['v_m1'])
+    // deep review PAY-15: the charge path consulted the test-key guard.
+    expect(h.assertLiveCredentials).toHaveBeenCalledWith('stripe')
   })
 
   it('refuses a second reship of the same source order (409)', async () => {
-    // A live reship already exists for o1.
-    tables.store_orders.push({ id: 'reship_prev', member_id: 'm1', channel: 'reship', status: 'pending', source_order_id: 'o1' })
+    // A live, still-fresh reship already exists for o1.
+    tables.store_orders.push({ id: 'reship_prev', member_id: 'm1', channel: 'reship', status: 'pending', source_order_id: 'o1', created_at: new Date().toISOString() })
+    const res = await POST(req('o1'))
+    expect(res.status).toBe(409)
+    expect(h.createPendingOrder).not.toHaveBeenCalled()
+  })
+
+  it('PAY-N3: cancels an abandoned (stale pending) reship and lets a new one proceed', async () => {
+    // An earlier reship checkout was never paid; its pending order is >24h old.
+    // Without the cleanup it would block every future reship of o1 forever (409).
+    const stale = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
+    tables.store_orders.push({ id: 'reship_stale', member_id: 'm1', channel: 'reship', status: 'pending', source_order_id: 'o1', created_at: stale })
+    const res = await POST(req('o1'))
+    expect(res.status).toBe(200)
+    expect(h.createPendingOrder).toHaveBeenCalledTimes(1)
+    // The abandoned order was cancelled (so it no longer blocks, and the unique
+    // partial index — which excludes cancelled rows — won't reject the new insert).
+    const staleRow = tables.store_orders.find((r) => r.id === 'reship_stale')
+    expect(staleRow?.status).toBe('cancelled')
+  })
+
+  it('PAY-N3: still 409s on a fresh in-flight pending reship (under 24h)', async () => {
+    const fresh = new Date(Date.now() - 60 * 1000).toISOString()
+    tables.store_orders.push({ id: 'reship_live', member_id: 'm1', channel: 'reship', status: 'pending', source_order_id: 'o1', created_at: fresh })
     const res = await POST(req('o1'))
     expect(res.status).toBe(409)
     expect(h.createPendingOrder).not.toHaveBeenCalled()

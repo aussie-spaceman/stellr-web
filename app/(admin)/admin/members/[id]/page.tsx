@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { supabaseServer } from '@/lib/supabase'
 import { notFound } from 'next/navigation'
-import { isAdminClaims } from '@/lib/admin-auth'
+import { isAdminClaims, requireAdminPage } from '@/lib/admin-auth'
 import { AdminMemberDetail } from '@/components/admin/AdminMemberDetail'
 import { loadComplianceForMember } from '@/lib/compliance'
 import type { MemberCompliance } from '@/components/admin/MemberCompliancePanel'
@@ -19,6 +19,7 @@ export default async function AdminMemberPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  await requireAdminPage()
   const { id } = await params
   const db = supabaseServer()
 

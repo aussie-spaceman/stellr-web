@@ -8,10 +8,12 @@ import { getWorkshopFull } from '@/lib/coaching'
 import { listCohortFileResources } from '@/lib/mentoring'
 import { AdminCoachingNav } from '@/components/admin/coaching/AdminCoachingNav'
 import { AdminManageWorkshop } from '@/components/admin/coaching/AdminManageWorkshop'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin · Manage workshop' }
 
 export default async function AdminManageWorkshopPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdminPage()
   const member = await getSignedInMember()
   if (!member) redirect('/sign-up')
   if (!member.isAdmin) redirect('/community/coaching')

@@ -4,7 +4,10 @@
  * zones use the zone most of their population lives in. Anything else — no
  * state, outside the US — falls back to the app's zone, America/Denver.
  */
-import { normaliseState } from '@/lib/locations'
+// deep review QUAL-12: import from the dependency-free lib/us-states, not
+// lib/locations (which value-imports the Sanity client), so the client
+// EventSurveyPanel that imports this module doesn't ship that client.
+import { normaliseState } from '@/lib/us-states'
 
 export const DEFAULT_TIME_ZONE = 'America/Denver'
 

@@ -5,7 +5,7 @@ const { notifyCommunityAdmins } = vi.hoisted(() => ({
 }))
 vi.mock('./notify', () => ({ notifyCommunityAdmins }))
 
-import { alertOnNewBounces } from './docusign-recipients'
+import { alertOnNewBounces, loadRecipientsByEnvelopeRows } from './docusign-recipients'
 import type { EnvelopeRecipient } from './docusign'
 
 const recipient = (over: Partial<EnvelopeRecipient>): EnvelopeRecipient => ({
@@ -52,5 +52,36 @@ describe('alertOnNewBounces', () => {
     const already = [{ email: 'pat@home.test', status: 'autoresponded' } as never]
     await alertOnNewBounces(already, [recipient({})], { minorName: 'A', eventTitle: 'E', participantId: null })
     expect(notifyCommunityAdmins).not.toHaveBeenCalled()
+  })
+})
+
+describe('loadRecipientsByEnvelopeRows', () => {
+  it('chunks the envelope-id .in() at 200 and merges every chunk (DS-9)', async () => {
+    // deep review DS-9: the admin consent-forms page passes every envelope id at
+    // once. An unchunked .in() silently truncated at PostgREST's 1000-row cap and
+    // could build an overlong URL. Chunk at 200 and merge, so every id is loaded.
+    const inSizes: number[] = []
+    let current: string[] = []
+    const db = {
+      from: () => {
+        const chain: Record<string, unknown> = {}
+        chain.select = () => chain
+        chain.in = (_col: string, ids: string[]) => { inSizes.push(ids.length); current = ids; return chain }
+        chain.order = async () => ({
+          data: current.map((id) => ({
+            envelope_row: id, name: 'P', email: 'p@x', role_name: 'Guardian',
+            status: 'sent', delivered_at: null, routing_order: 1, invite_sent_at: null,
+            envelope: { provider: 'docusign' },
+          })),
+          error: null,
+        })
+        return chain
+      },
+    } as never
+
+    const ids = Array.from({ length: 450 }, (_, i) => `env-${i}`)
+    const map = await loadRecipientsByEnvelopeRows(db, ids)
+    expect(inSizes).toEqual([200, 200, 50])
+    expect(map.size).toBe(450)
   })
 })

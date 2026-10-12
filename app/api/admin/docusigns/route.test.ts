@@ -12,7 +12,10 @@ const authMock = vi.fn()
 const from = vi.fn(() => {
   const chain: Record<string, unknown> = {}
   chain.select = () => chain
-  chain.order = async () => ({ data: [], error: null })
+  chain.order = () => chain
+  // deep review DS-9: the route now reads with an explicit .range() to defeat
+  // PostgREST's 1000-row cap, so that is the awaited step.
+  chain.range = async () => ({ data: [], error: null })
   return chain
 })
 vi.mock('@clerk/nextjs/server', () => ({ auth: () => authMock() }))

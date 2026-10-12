@@ -45,6 +45,8 @@ interface Fixture {
   memberByEmail?: { id: string } | null
   /** When set, the FIRST agreements insert returns this error (DS-11). */
   insertError?: string
+  /** The signed form's subject participant, for the minor-reuse DOB check (DSES-N3). */
+  subjectParticipant?: { id: string; date_of_birth: string | null } | null
 }
 
 interface Filters { eq: Record<string, unknown>; ins: Record<string, unknown[]> }
@@ -84,6 +86,12 @@ function makeDb(fixture: Fixture) {
 
 function resolve(table: string, filters: Filters, fixture: Fixture): unknown {
   if (table === 'members') return fixture.memberByEmail ?? null
+  // deep review DSES-N3: the minor-reuse DOB check reads the signed form's
+  // subject participant by id. Only answer for the matching participant id.
+  if (table === 'participants') {
+    const p = fixture.subjectParticipant
+    return p && p.id === filters.eq.id ? { date_of_birth: p.date_of_birth } : null
+  }
   if (table !== 'agreements') return null
   if (filters.eq.participant_id) {
     const row = fixture.participantEnvelope
@@ -264,6 +272,50 @@ describe('dispatchAgreement — never issues paperwork already in the system', (
     const agreementInsert = inserts.find((i) => i.table === 'agreements')!
     expect(agreementInsert.payload.reused_from).toBe('env-bob')
     expect(agreementInsert.payload.status).toBe('completed')
+  })
+
+  it('does NOT reuse a same-name sibling\'s form when the DOB differs (DSES-N3)', async () => {
+    // deep review DSES-N3: two children named "Bob Lovelace" on one family email
+    // (a Jr./Sr. pair, or a data-entry collision) pass the minor_name match. The
+    // signed form is about the 2013 child; the one registering now was born 2015,
+    // so his guardian has never consented for HIM — issue a fresh envelope.
+    const { db, inserts } = makeDb({
+      completedEnvelope: {
+        id: 'env-bob-sr', completed_at: '2026-01-15T00:00:00Z',
+        signer_name: 'Grace Lovelace', signer_email: 'grace@example.com',
+        minor_name: 'Bob Lovelace', reused_from: null, participant_id: 'p-bob-sr',
+      },
+      subjectParticipant: { id: 'p-bob-sr', date_of_birth: '2013-03-03' },
+    })
+    await dispatchAgreement(db, {
+      ...ADULT, eventRole: 'participant', firstName: 'Bob', lastName: 'Lovelace',
+      dateOfBirth: '2015-05-05',
+      guardianEmail: 'grace@example.com', guardianFirstName: 'Grace', guardianLastName: 'Lovelace',
+    })
+
+    expect(createConsent).toHaveBeenCalledTimes(1)
+    const agreementInsert = inserts.find((i) => i.table === 'agreements')!
+    expect(agreementInsert.payload.reused_from ?? null).toBeNull()
+  })
+
+  it('DOES reuse when the same-name child\'s DOB also matches (DSES-N3)', async () => {
+    const { db, inserts } = makeDb({
+      completedEnvelope: {
+        id: 'env-bob', completed_at: '2026-01-15T00:00:00Z',
+        signer_name: 'Grace Lovelace', signer_email: 'grace@example.com',
+        minor_name: 'Bob Lovelace', reused_from: null, participant_id: 'p-bob',
+      },
+      subjectParticipant: { id: 'p-bob', date_of_birth: '2013-03-03' },
+    })
+    await dispatchAgreement(db, {
+      ...ADULT, eventRole: 'participant', firstName: 'Bob', lastName: 'Lovelace',
+      dateOfBirth: '2013-03-03',
+      guardianEmail: 'grace@example.com', guardianFirstName: 'Grace', guardianLastName: 'Lovelace',
+    })
+
+    expect(createConsent).not.toHaveBeenCalled()
+    const agreementInsert = inserts.find((i) => i.table === 'agreements')!
+    expect(agreementInsert.payload.reused_from).toBe('env-bob')
   })
 
   it('falls back to email when the caller has no member id, and still finds coverage', async () => {

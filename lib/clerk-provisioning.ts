@@ -46,9 +46,26 @@ export async function ensureClerkUserAndSignInToken(
   lastName: string,
   opts: { memberIsNew: boolean },
 ): Promise<ProvisionedClerkUser> {
+  // deep review AUTH-N3: when the member row already exists, do not call
+  // ensureClerkUser at all. The C-1 fix already withholds the sign-in token
+  // here (no takeover — the passwordless user can't be authenticated without an
+  // email code to the real owner), but ensureClerkUser still CREATED a Clerk
+  // user for the email, which the svix-verified user.created webhook then links
+  // to the victim's member row: an attacker-triggered clerk_user_id write, plus
+  // possible unsolicited Clerk "verify" mail to a real person. Provisioning only
+  // makes sense when THIS request also created the member row; a returning
+  // member gets their Clerk user from the normal email-verified sign-in instead.
+  // Returns no clerkUserId precisely because the callers must not (and do not)
+  // link one unless a token was minted.
+  if (!opts.memberIsNew) {
+    return { clerkUserId: '', signInToken: null, created: false }
+  }
+
   const { clerkUserId, created } = await ensureClerkUser(email, firstName, lastName)
 
-  if (!created || !opts.memberIsNew) {
+  if (!created) {
+    // The email already has a Clerk account → a ticket would sign the caller in
+    // as that owner. Never mint, and the caller must not link clerkUserId.
     return { clerkUserId, signInToken: null, created }
   }
 

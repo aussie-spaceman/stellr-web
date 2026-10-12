@@ -1,10 +1,12 @@
 import { listMentoringTiers, listCohortAccessRows } from '@/lib/mentoring'
 import { AdminMentoringNav } from '@/components/admin/mentoring/AdminMentoringNav'
 import { MembershipAccess } from '@/components/admin/mentoring/MembershipAccess'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin · Membership & access' }
 
 export default async function MembershipAccessPage() {
+  await requireAdminPage()
   const [tiers, cohorts] = await Promise.all([listMentoringTiers(), listCohortAccessRows()])
 
   return (

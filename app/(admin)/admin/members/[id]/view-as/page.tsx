@@ -12,6 +12,7 @@ import { loadRecipientsByEnvelopeRows } from '@/lib/docusign-recipients'
 import { MyRegistrations } from '@/components/member/MyRegistrations'
 import { DirectoryPrefsForm } from '@/components/community/DirectoryPrefsForm'
 import { ViewAsBanner } from '@/components/admin/ViewAsBanner'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — View As Member' }
 
@@ -28,6 +29,7 @@ export default async function ViewAsMemberPage({
   params: Promise<{ id: string }>
   searchParams: Promise<{ tab?: string }>
 }) {
+  await requireAdminPage()
   const { id } = await params
   const db = supabaseServer()
 

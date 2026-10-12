@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { currentStoreMember } from '@/lib/store/auth'
 import { createPendingOrder, STORE_FLAT_SHIPPING_CENTS } from '@/lib/store/orders'
 import { stripeClient } from '@/lib/stripe'
+import { assertLiveCredentials } from '@/lib/env-guards'
 import { getEventBySlug } from '@/lib/sanity'
 
 export const dynamic = 'force-dynamic'
@@ -100,6 +101,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Reshipment opens after the event' }, { status: 400 })
   }
 
+  // deep review PAY-N3: a reship order is created 'pending' before the Stripe
+  // session. If the member abandons the $5.95 checkout, that pending order is
+  // never cancelled — so both the count check below and the unique partial index
+  // (store_orders_one_reship_per_source) keep counting it, and the member can
+  // never reship this order again (a permanent 409). The Checkout session lives
+  // 24h; a 'pending' reship older than that whose payment never landed is
+  // abandoned. Cancel those first so a genuine retry isn't locked out — cancelled
+  // rows are excluded from both the count below AND the unique index predicate.
+  const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  await db
+    .from('store_orders')
+    .update({ status: 'cancelled' })
+    .eq('source_order_id', order.id)
+    .eq('channel', 'reship')
+    .eq('status', 'pending')
+    .lt('created_at', staleBefore)
+
   // One reship per source order. The DB unique partial index is the race-safe
   // backstop for a double-submit; this check gives a clean 409.
   const { count } = await db
@@ -139,6 +157,10 @@ export async function POST(req: Request) {
   })
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
+  // deep review PAY-15: refuse to take the reship fee on a production deployment
+  // holding TEST keys — a test-mode charge looks successful and settles nothing.
+  // No-op on real prod (live keys).
+  assertLiveCredentials('stripe')
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     line_items: [

@@ -56,6 +56,10 @@ function formatGrade(grade: string | null) {
 export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOptions, readOnly = false }: Props) {
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(false)
+  // deep review MEM-16: the save used to show "Saved ✓" unconditionally, even when
+  // the PATCH failed (e.g. a rejected option set wiped nothing but saved nothing).
+  // Track the failure so the member isn't told a lost save succeeded.
+  const [saveError, setSaveError] = useState(false)
   const [phone, setPhone] = useState(member.phone ?? '')
   const [discord, setDiscord] = useState(member.discord_handle ?? '')
   const [nickname, setNickname] = useState(member.nickname ?? '')
@@ -80,26 +84,38 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
 
   async function handleSave() {
     setLoading(true)
-    await fetch('/api/members/me', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        phone,
-        nickname: nickname || null,
-        discord_handle: discord,
-        ethnicity_ids: selectedEthnicities,
-        allergy_ids: selectedAllergies,
-        ec_first_name: ecFirst || null,
-        ec_last_name: ecLast || null,
-        ec_email: ecEmail || null,
-        ec_phone: ecPhone || null,
-        ec_relationship: ecRelationship || null,
-        health_conditions: healthConditions || null,
-      }),
-    })
+    setSaveError(false)
+    // MEM-16: only report success when the server actually accepted the save.
+    let ok = false
+    try {
+      const res = await fetch('/api/members/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone,
+          nickname: nickname || null,
+          discord_handle: discord,
+          ethnicity_ids: selectedEthnicities,
+          allergy_ids: selectedAllergies,
+          ec_first_name: ecFirst || null,
+          ec_last_name: ecLast || null,
+          ec_email: ecEmail || null,
+          ec_phone: ecPhone || null,
+          ec_relationship: ecRelationship || null,
+          health_conditions: healthConditions || null,
+        }),
+      })
+      ok = res.ok
+    } catch {
+      ok = false
+    }
     setLoading(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+    if (ok) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } else {
+      setSaveError(true)
+    }
   }
 
   return (
@@ -303,13 +319,20 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
         </div>
 
         {!readOnly && (
-          <button
-            onClick={handleSave}
-            disabled={loading}
-            className="bg-brand-blue text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-50"
-          >
-            {loading ? 'Saving…' : saved ? 'Saved ✓' : 'Save changes'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSave}
+              disabled={loading}
+              className="bg-brand-blue text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-50"
+            >
+              {loading ? 'Saving…' : saved ? 'Saved ✓' : 'Save changes'}
+            </button>
+            {saveError && (
+              <p role="alert" className="text-sm text-danger">
+                Couldn&rsquo;t save your changes. Please try again.
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>

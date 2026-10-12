@@ -159,7 +159,14 @@ export function agreementFilename(row: StoredRecordRow, artifact: 'pdf' | 'certi
   const type = row.envelope_type ?? 'minor'
   const prefix = type === 'minor' ? 'consent' : type === 'membership' ? 'membership-agreement' : 'agreement'
   const who = slug(row.minor_name || row.signer_name || 'signed')
-  return artifact === 'certificate' ? `${prefix}-${who}-certificate.pdf` : `${prefix}-${who}.pdf`
+  if (artifact !== 'certificate') return `${prefix}-${who}.pdf`
+  // deep review ES-7: for Stellr signing the "certificate" artifact is the audit
+  // JSON (archivePaths: native → audit.json), not a PDF. Naming it
+  // `…-certificate.pdf` handed admins a file that would not open and masked that
+  // it holds the full audit trail (IPs/UAs/values). Name it by what it is.
+  return (row.provider ?? 'docusign') === 'native'
+    ? `${prefix}-${who}-audit.json`
+    : `${prefix}-${who}-certificate.pdf`
 }
 
 /**

@@ -3,6 +3,7 @@ import { listEventDiscounts, listTierDiscounts } from '@/lib/store/discounts'
 import { getAllEvents, getAllCampaigns } from '@/lib/sanity'
 import { DiscountMatrix, type EventOption } from '@/components/admin/store/DiscountMatrix'
 import { StoreNav } from '../StoreNav'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — Store discounts' }
 export const dynamic = 'force-dynamic'
@@ -11,6 +12,7 @@ export const dynamic = 'force-dynamic'
 // in the storefront) and event merch discounts (global default + per-event
 // override — mirrors the refund-policy model). 100% = the free included shirt.
 export default async function StoreDiscountsPage() {
+  await requireAdminPage()
   const db = supabaseServer()
   const [tier, event, tiersRes, productsRes, allEvents, allCampaigns] = await Promise.all([
     listTierDiscounts(),

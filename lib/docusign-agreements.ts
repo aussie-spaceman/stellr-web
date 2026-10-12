@@ -211,7 +211,8 @@ async function issueOrReuse(
     if (coverageMemberId) {
       // Pass the subject (this participant) so a minor's form is only reused for
       // the SAME child, not a sibling sharing the family email (C-5 / DS-1).
-      const onFile = await findValidAgreement(db, coverageMemberId, type, `${ctx.firstName} ${ctx.lastName}`)
+      // The DOB (DSES-N3) disambiguates two same-name children on one email.
+      const onFile = await findValidAgreement(db, coverageMemberId, type, `${ctx.firstName} ${ctx.lastName}`, ctx.dateOfBirth)
       if (onFile) {
         await recordCoverage(db, { ...ctx, memberId: coverageMemberId }, type, onFile)
         await safeEmail(ctx.email, docusignOnFileEmail({
@@ -524,6 +525,13 @@ interface SignedRow {
   agreement_version: string | null
   reused_from: string | null
   minor_name: string | null
+  participant_id: string | null
+}
+
+/** A DOB as a bare calendar date, for comparing the same source field across rows. */
+function normaliseDob(dob: string | null | undefined): string | null {
+  if (!dob) return null
+  return dob.trim().slice(0, 10) || null
 }
 
 // Newest completed agreement of the given type (or one executing the same
@@ -536,6 +544,7 @@ async function findValidAgreement(
   memberId: string,
   type: AgreementType,
   subjectName?: string,
+  subjectDob?: string | null,
 ): Promise<ValidAgreement | null> {
   // A minor's consent form is ABOUT a specific child. Members are keyed by email
   // and families share one, so two siblings collapse onto a single member row —
@@ -550,7 +559,7 @@ async function findValidAgreement(
   // envelope, which is the safe direction (ask the guardian again).
   let query = db
     .from('agreements')
-    .select('id, completed_at, signer_name, signer_email, envelope_type, agreement_version, reused_from, minor_name')
+    .select('id, completed_at, signer_name, signer_email, envelope_type, agreement_version, reused_from, minor_name, participant_id')
     .eq('member_id', memberId)
     .in('envelope_type', coveringTypes(type))
     .eq('status', 'completed')
@@ -567,7 +576,7 @@ async function findValidAgreement(
   if (row.reused_from) {
     const { data: root } = await db
       .from('agreements')
-      .select('id, completed_at, signer_name, signer_email, envelope_type, agreement_version, reused_from, minor_name')
+      .select('id, completed_at, signer_name, signer_email, envelope_type, agreement_version, reused_from, minor_name, participant_id')
       .eq('id', row.reused_from)
       .eq('status', 'completed')
       .maybeSingle()
@@ -575,6 +584,23 @@ async function findValidAgreement(
     row = root as SignedRow
   }
   if (!agreementCovers(row)) return null
+
+  // deep review DSES-N3: the minor_name match above still reuses one signed form
+  // for two same-name children on a shared family email (a Jr./Sr. pair, or a
+  // data-entry collision). When we know BOTH this child's DOB and the signed
+  // form's subject DOB (the root row's participant), a mismatch means a different
+  // child — refuse the reuse and issue a fresh envelope (the safe direction: ask
+  // the guardian again). DOB unknown on either side falls back to the name match
+  // (the prior behaviour), so this only tightens, never loosens, reuse.
+  if (type === 'minor' && subjectDob && row.participant_id) {
+    const { data: subject } = await db
+      .from('participants')
+      .select('date_of_birth')
+      .eq('id', row.participant_id)
+      .maybeSingle()
+    const signedDob = normaliseDob((subject as { date_of_birth?: string | null } | null)?.date_of_birth)
+    if (signedDob && signedDob !== normaliseDob(subjectDob)) return null
+  }
   return {
     id:          row.id,
     completedAt: row.completed_at,

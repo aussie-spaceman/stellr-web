@@ -1,9 +1,11 @@
 import { supabaseServer } from '@/lib/supabase'
 import { EmailManager } from '@/components/admin/email/EmailManager'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — Email Campaigns' }
 
 export default async function AdminEmailPage() {
+  await requireAdminPage()
   const db = supabaseServer()
   const [{ data: templates }, { data: campaigns }, { data: tiers }] = await Promise.all([
     db

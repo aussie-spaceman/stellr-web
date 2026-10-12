@@ -5,6 +5,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { buildCreditDiscount } from '@/lib/refunds/redeem'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { assertLiveCredentials } from '@/lib/env-guards'
 import { requireStripe } from '@/lib/stripe'
 
 export async function POST(req: Request) {
@@ -77,6 +78,11 @@ export async function POST(req: Request) {
     } catch (e) {
       console.error('[membership-checkout] credit application skipped:', e)
     }
+
+    // deep review PAY-15: refuse to open a subscription checkout on a production
+    // deployment holding TEST keys — it would look successful and settle nothing.
+    // No-op on real prod (live keys); reads above (price lookup) are not gated.
+    assertLiveCredentials('stripe')
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,

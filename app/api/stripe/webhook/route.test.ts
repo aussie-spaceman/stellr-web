@@ -33,6 +33,12 @@ const h = vi.hoisted(() => ({
   getOfferingTarget: vi.fn(async () => null),
   sendEmail: vi.fn(async () => {}),
   refundsCreate: vi.fn(async () => ({ id: 're_dup' })),
+  // deep review PAY-N4: cancel the prior Stripe subscription when a new one activates.
+  subscriptionsCancel: vi.fn(async () => ({ id: 'sub_cancelled' })),
+  // deep review PAY-15: a no-op spy standing in for the test-key guard, so a test
+  // can prove the money paths call it (the real guard only throws on a prod
+  // deployment holding sandbox keys, which the test env is not).
+  assertLiveCredentials: vi.fn(),
 }))
 
 // ── A tiny in-memory Supabase stand-in: enough for select/eq/neq/maybeSingle +
@@ -106,9 +112,11 @@ vi.mock('@/lib/stripe', () => {
   const stub = {
     webhooks: { constructEvent: () => currentEvent },
     refunds: { create: h.refundsCreate },
+    subscriptions: { cancel: h.subscriptionsCancel },
   }
   return { requireStripe: () => stub, stripeClient: () => stub, STRIPE_API_VERSION: 'test' }
 })
+vi.mock('@/lib/env-guards', () => ({ assertLiveCredentials: h.assertLiveCredentials }))
 vi.mock('@/lib/registration-confirm', () => ({ confirmRegistration: h.confirmRegistration }))
 vi.mock('@/lib/store/orders', () => ({ handleStoreOrderPaid: h.handleStoreOrderPaid }))
 vi.mock('@/lib/store/event-merch', () => ({ finalizeRegistrationMerch: h.finalizeRegistrationMerch }))
@@ -207,6 +215,47 @@ describe('checkout.session.completed duplicate (PAY-4)', () => {
     // The registration still references the FIRST intent.
     expect(await readRow('registrations', 'r1')).toMatchObject({ stripe_payment_intent_id: 'pi_1' })
     expect(h.notifyCommunityAdmins).toHaveBeenCalledTimes(1)
+    // deep review PAY-15: the auto-refund path must consult the test-key guard.
+    expect(h.assertLiveCredentials).toHaveBeenCalledWith('stripe')
+  })
+})
+
+describe('membership activation cancels a stranded prior subscription (PAY-N4)', () => {
+  const membershipSession = (subscription: string) => ({
+    id: 'cs_m', payment_status: 'paid', subscription,
+    metadata: { type: 'membership', memberId: 'm1', tierId: 't_new', billingInterval: 'annual' },
+    amount_total: 9900, currency: 'usd', customer: null, customer_details: null,
+  })
+
+  it('cancels the prior Stripe subscription, never the new one', async () => {
+    current = makeDb({
+      // The member already holds an active subscription on a DIFFERENT Stripe sub.
+      member_memberships: [
+        { id: 'mm_old', member_id: 'm1', tier_id: 't_old', renewal_status: 'active', stripe_subscription_id: 'sub_old' },
+      ],
+      membership_tiers: [{ id: 't_new', name: 'Innovator' }],
+      stripe_webhook_events: [],
+    })
+    const res = await post({ id: 'evt_m', type: 'checkout.session.completed', data: { object: membershipSession('sub_new') } } as unknown as Stripe.Event)
+
+    expect(res.status).toBe(200)
+    // The stranded prior subscription was cancelled so Stripe stops billing it.
+    expect(h.subscriptionsCancel).toHaveBeenCalledWith('sub_old')
+    // The subscription we just activated is NEVER cancelled.
+    expect(h.subscriptionsCancel).not.toHaveBeenCalledWith('sub_new')
+    // The old DB row was expired and a new active row inserted.
+    expect(await readRow('member_memberships', 'mm_old')).toMatchObject({ renewal_status: 'expired' })
+    expect(current.inserts.some((i) => i.table === 'member_memberships')).toBe(true)
+  })
+
+  it('does not cancel anything when there is no prior subscription', async () => {
+    current = makeDb({
+      member_memberships: [],
+      membership_tiers: [{ id: 't_new', name: 'Innovator' }],
+      stripe_webhook_events: [],
+    })
+    await post({ id: 'evt_m2', type: 'checkout.session.completed', data: { object: membershipSession('sub_new') } } as unknown as Stripe.Event)
+    expect(h.subscriptionsCancel).not.toHaveBeenCalled()
   })
 })
 

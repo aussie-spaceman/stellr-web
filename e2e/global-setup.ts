@@ -31,8 +31,16 @@ export default async function globalSetup() {
   // without meeting Clerk's bot-detection and new-device challenges.
   if (process.env.CLERK_SECRET_KEY) await clerkSetup()
 
-  const raw = process.env.E2E_BASE_URL
-  if (!raw) return // localhost, started by the config's webServer
+  // deep review TEST-11: previously this returned early with no E2E_BASE_URL, so
+  // the "is this actually our app, on the host we asked for?" probe ran only
+  // against deployments and never locally — exactly where the 10 Sept
+  // redirect-to-production false green happened. Default to the local server the
+  // config starts and always probe. The webServer is up before globalSetup runs,
+  // and when NEXT_PUBLIC_SITE_URL points at localhost (scripts/dev.mjs and CI
+  // both set it) the probe stays on-host and finds the app; if a stale .env.local
+  // still points at production, proxy.ts redirects off localhost and the probe
+  // now catches it instead of silently testing www.
+  const raw = process.env.E2E_BASE_URL ?? `http://localhost:${process.env.PORT ?? 3000}`
 
   let url: URL
   try {

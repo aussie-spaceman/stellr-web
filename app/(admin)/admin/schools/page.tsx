@@ -1,9 +1,11 @@
 import { supabaseServer } from '@/lib/supabase'
 import Link from 'next/link'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — Schools' }
 
 export default async function AdminSchoolsPage() {
+  await requireAdminPage()
   const db = supabaseServer()
 
   const { data: schools } = await db

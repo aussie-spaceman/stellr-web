@@ -3,11 +3,13 @@ import { resolveTierMap } from '@/lib/tiers-server'
 import { SpacesAdminList, type AdminSpaceRow } from '@/components/admin/community/spaces/SpacesAdminList'
 import { resolveSpaceMemberCounts } from '@/lib/spaces'
 import type { SpaceAccessType, SpaceTheme } from '@/lib/spaces'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin — Manage Spaces' }
 export const dynamic = 'force-dynamic'
 
 export default async function AdminSpacesPage() {
+  await requireAdminPage()
   const db = supabaseServer()
   const [{ data: spaces }, { data: tierRows }, memberCounts, tierMap] = await Promise.all([
     db

@@ -307,11 +307,20 @@ export async function hostRespond(
     .maybeSingle()
   if (!session || session.host_member_id !== hostId) return false
 
-  const { error } = await db
+  // deep review MEM-19: require the session to still be 'scheduled' before the
+  // transition, and act only if a row actually changed. hostRespond had no status
+  // precondition, so a repeated cancel/decline ran releaseCoachingBooking again
+  // each time — every repeat released another included booking and inflated the
+  // member's coaching allowance. A terminal session (already declined/cancelled/
+  // completed) now matches no row, so the refund + notifications fire exactly once.
+  const { data: updated, error } = await db
     .from('sessions')
     .update({ status: action, updated_at: new Date().toISOString() })
     .eq('id', sessionId)
+    .eq('status', 'scheduled')
+    .select('id')
   if (error) return false
+  if (!updated || updated.length === 0) return false
 
   // Refund-on-cancel: a cancelled/declined coaching session that drew an included
   // allocation releases it back to the member's coaching_session ledger (paid

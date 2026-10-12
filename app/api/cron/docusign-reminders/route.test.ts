@@ -5,10 +5,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // and each envelope's failure was only console.logged into Hobby's one-hour
 // log window. Every run now lands in cron_runs with its failures.
 
-const { query, resendEnvelope, runs } = vi.hoisted(() => ({
+const { query, resendEnvelope, runs, claim } = vi.hoisted(() => ({
   query: vi.fn(async (): Promise<{ data: unknown; error: unknown }> => ({ data: [], error: null })),
   resendEnvelope: vi.fn(async (_id: string) => 1),
   runs: { fails: [] as string[], finished: [] as Record<string, unknown>[] },
+  // deep review DS-8: the atomic claim's conditional update. Default: the row is
+  // ours (one row back). A test can make it return [] to model a concurrent run
+  // that claimed it first.
+  claim: vi.fn(async (): Promise<{ data: unknown; error: unknown }> => ({ data: [{ id: 'row-1' }], error: null })),
 }))
 
 vi.mock('@/lib/cron', () => ({ guardCron: () => null }))
@@ -41,7 +45,13 @@ vi.mock('@/lib/supabase', () => ({
       for (const m of ['select', 'in', 'lt', 'or', 'eq']) chain[m] = () => chain
       chain.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
         (table === 'agreements' ? query() : Promise.resolve({ data: [], error: null })).then(resolve, reject)
-      chain.update = () => ({ eq: async () => ({ error: null }) })
+      // deep review DS-8: the claim is update(...).eq('id').eq('reminder_count').select('id').
+      chain.update = () => {
+        const u: Record<string, unknown> = {}
+        u.eq = () => u
+        u.select = () => claim()
+        return u
+      }
       return chain
     },
   }),
@@ -58,6 +68,7 @@ const ENVELOPE = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  claim.mockResolvedValue({ data: [{ id: 'row-1' }], error: null })
   runs.fails.length = 0
   runs.finished.length = 0
 })
@@ -86,5 +97,15 @@ describe('GET /api/cron/docusign-reminders', () => {
     expect(resendEnvelope).toHaveBeenCalledWith('env-1')
     expect(runs.fails).toEqual([])
     expect(runs.finished[0]).toMatchObject({ processed: 1, eligible: 1 })
+  })
+
+  it('does not resend when a concurrent run already claimed the row (DS-8)', async () => {
+    // deep review DS-8: the atomic claim matched no row (another invocation got
+    // it first) — this run must skip the envelope, not double-resend to the family.
+    query.mockResolvedValueOnce({ data: [ENVELOPE], error: null })
+    claim.mockResolvedValueOnce({ data: [], error: null })
+    expect(await (await call()).json()).toMatchObject({ processed: 0 })
+    expect(resendEnvelope).not.toHaveBeenCalled()
+    expect(runs.fails).toEqual([])
   })
 })

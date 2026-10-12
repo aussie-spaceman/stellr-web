@@ -3,10 +3,12 @@ import { Plus } from 'lucide-react'
 import { listAllCohorts, getAdminCohortStats } from '@/lib/mentoring'
 import { themeTile } from '@/lib/mentoring-format'
 import { AdminMentoringNav } from '@/components/admin/mentoring/AdminMentoringNav'
+import { requireAdminPage } from '@/lib/admin-auth'
 
 export const metadata = { title: 'Admin · Mentoring cohorts' }
 
 export default async function AdminCohortsPage() {
+  await requireAdminPage()
   const [cohorts, stats] = await Promise.all([listAllCohorts(), getAdminCohortStats()])
 
   return (

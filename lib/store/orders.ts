@@ -158,10 +158,17 @@ export async function handleStoreOrderPaid(session: Stripe.Checkout.Session): Pr
   const total = session.amount_total ?? o.subtotal_cents
   const recipient = recipientFromSession(session)
 
+  // deep review PAY-16: a guest order is created with email '' (no member record),
+  // so the order was unreachable for support/returns and the buyer got no
+  // confirmation email. Backfill from the Stripe session's customer details and
+  // persist it. Never overwrite a member's existing address (o.email wins).
+  const buyerEmail = o.email || session.customer_details?.email || ''
+
   await db
     .from('store_orders')
     .update({
       status: 'paid',
+      email: buyerEmail,
       stripe_payment_intent_id: pi,
       stripe_checkout_session_id: session.id,
       shipping_cents: shipping,
@@ -183,9 +190,8 @@ export async function handleStoreOrderPaid(session: Stripe.Checkout.Session): Pr
 
   // Persist the Stripe customer on the member (mirrors event/membership flow).
   const customerId = typeof session.customer === 'string' ? session.customer : null
-  const email = session.customer_details?.email ?? o.email
-  if (customerId && email) {
-    await db.from('members').update({ stripe_customer_id: customerId }).eq('email', email).is('stripe_customer_id', null)
+  if (customerId && buyerEmail) {
+    await db.from('members').update({ stripe_customer_id: customerId }).eq('email', buyerEmail).is('stripe_customer_id', null)
   }
 
   await fulfilDirect(db, orderId, recipient)
@@ -204,7 +210,9 @@ export async function handleStoreOrderPaid(session: Stripe.Checkout.Session): Pr
     )
   }
 
-  if (o.email) {
-    await sendEmail({ to: o.email, ...orderEmail(orderId, total) })
+  // deep review PAY-16: send to the resolved buyer email (falls back to the
+  // Stripe session for guests), not the order's original (possibly empty) address.
+  if (buyerEmail) {
+    await sendEmail({ to: buyerEmail, ...orderEmail(orderId, total) })
   }
 }

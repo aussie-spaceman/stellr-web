@@ -2,6 +2,11 @@
 const nextConfig = {
   // Workspace UI packages ship TS source — let Next transpile them.
   transpilePackages: ['@stellr/web-ui', '@stellr/icons'],
+  // deep review TEST-12: the repo's lint (eslint.config.mjs) is deliberately
+  // non-blocking and run on its own via `npm run lint`, not during the build.
+  // Keep `next build` doing exactly what it did before the lint config existed,
+  // so the required `verify` check is unchanged by it.
+  eslint: { ignoreDuringBuilds: true },
   // Function Storage is metered on every retained deployment, so what each
   // function traces matters. Keys are route globs (picomatch, `contains`).
   outputFileTracingExcludes: {

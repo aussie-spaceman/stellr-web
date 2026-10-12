@@ -1,6 +1,12 @@
 import { createClient } from 'next-sanity'
 import { createImageUrlBuilder } from '@sanity/image-url'
 import type { SanityImageSource } from '@sanity/image-url'
+// deep review QUAL-12: the EventFlyer type and flyerDownloadUrl live in the
+// dependency-free lib/sanity-urls so a client component can use them without
+// pulling this module's Sanity client into its browser chunk. Re-exported here
+// so server callers that import them from '@/lib/sanity' are unchanged.
+import { flyerDownloadUrl, type EventFlyer } from '@/lib/sanity-urls'
+export { flyerDownloadUrl, type EventFlyer }
 
 export const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
 export const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production'
@@ -40,42 +46,8 @@ export function wmSrc(url: string): string {
 }
 
 // ── Shared types ──────────────────────────────────────────────────────────────
-
-/**
- * A public marketing PDF hanging off an event document (schema field `flyers`).
- * The bytes live on Sanity's CDN, so `url` is absolute and needs no media-host
- * prefixing — unlike the self-hosted /files assets in lib/media-manifest.ts.
- */
-export interface EventFlyer {
-  label: string
-  /** Absolute cdn.sanity.io URL. Use flyerDownloadUrl() for a download link. */
-  url: string
-  /** Bytes, straight from the asset document. */
-  size?: number
-  /** Original upload filename — becomes the saved filename via ?dl=. */
-  filename?: string
-  /** Authored, optional. Null/undefined → the card shows the size alone. */
-  pages?: number
-}
-
-/**
- * Sanity's asset CDN serves a PDF inline by default (the browser opens its
- * viewer). `?dl=<name>` flips it to Content-Disposition: attachment, so the
- * flyer lands in Downloads with a sensible name rather than a hashed asset id.
- *
- * The CDN echoes the ?dl= value into that header verbatim, so a percent-encoded
- * name is *saved* percent-encoded ("2027%20-%20SDC…pdf" — verified against the
- * live CDN). Normalise to a filename that needs no encoding at all instead.
- */
-export function flyerDownloadUrl(flyer: EventFlyer): string {
-  if (!flyer.url) return flyer.url
-  const base = (flyer.filename ?? flyer.label ?? '')
-    .replace(/\.pdf$/i, '')
-    .replace(/[^A-Za-z0-9._-]+/g, '-')
-    .replace(/-{2,}/g, '-')
-    .replace(/^[-.]+|[-.]+$/g, '')
-  return `${flyer.url}?dl=${base || 'flyer'}.pdf`
-}
+// EventFlyer and flyerDownloadUrl now live in lib/sanity-urls (QUAL-12) and are
+// re-exported at the top of this file.
 
 // Core event shape returned by the event queries below.
 export interface StellarEvent {

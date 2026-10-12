@@ -1,9 +1,11 @@
-import { auth } from '@clerk/nextjs/server'
+import { auth, clerkClient } from '@clerk/nextjs/server'
+import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { supabaseServer } from '@/lib/supabase'
 import { logActivity, actorFromAuth } from '@/lib/activity-log'
 import {
+  decodeTicket,
   encodeTicket,
   IMPERSONATION_COOKIE,
   IMPERSONATION_TTL_SECONDS,
@@ -31,10 +33,30 @@ export async function POST(req: Request) {
   const db = supabaseServer()
   const { data: member } = await db
     .from('members')
-    .select('id, first_name, last_name, email')
+    .select('id, first_name, last_name, email, clerk_user_id')
     .eq('id', memberId)
     .maybeSingle()
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+
+  // deep review AUTH-9: refuse to view-as another platform admin. View-as is an
+  // oversight lens over MEMBER portals; one admin must not use it to step into
+  // another admin's account. Admin status lives in Clerk publicMetadata.role, so
+  // resolve it from the target's Clerk user. A confirmed admin is refused. On a
+  // Clerk error we allow and log: an admin target is read-only anyway
+  // (assertNotImpersonating blocks every write), and failing closed here would
+  // take down the whole oversight tool during a Clerk outage.
+  const targetClerkId = (member as { clerk_user_id: string | null }).clerk_user_id
+  if (targetClerkId) {
+    try {
+      const client = await clerkClient()
+      const u = await client.users.getUser(targetClerkId)
+      if ((u.publicMetadata as { role?: string } | null)?.role === 'admin') {
+        return NextResponse.json({ error: 'Cannot view as another admin.' }, { status: 403 })
+      }
+    } catch (err) {
+      console.error('[impersonation] could not verify target admin status:', err)
+    }
+  }
 
   const { data: adminRow } = await db
     .from('members')
@@ -87,6 +109,23 @@ export async function POST(req: Request) {
 export async function DELETE() {
   // Deliberately NOT admin-gated: clearing the cookie can only ever reduce
   // access, and refusing to exit would be the worse failure.
+  //
+  // deep review AUTH-9: log the END of a view-as session as well as the start,
+  // so an access review sees both edges of the window rather than an open-ended
+  // one. Decode the current cookie first (best-effort — an expired or forged
+  // ticket simply yields no row and we just clear the cookie).
+  const jar = await cookies()
+  const ticket = decodeTicket(jar.get(IMPERSONATION_COOKIE)?.value)
+  if (ticket) {
+    await logActivity({
+      ...(await actorFromAuth()),
+      memberId: ticket.memberId,
+      category: 'account',
+      action: 'impersonation_ended',
+      summary: 'An admin stopped viewing the portal as this member',
+    })
+  }
+
   const res = NextResponse.json({ ok: true })
   res.cookies.set(IMPERSONATION_COOKIE, '', {
     httpOnly: true,

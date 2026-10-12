@@ -4,6 +4,7 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { assertLiveCredentials } from '@/lib/env-guards'
 import { requireStripe } from '@/lib/stripe'
 
 // Pay-by-invoice is offered only on the educator / school-district tiers, where
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
 
   const db = supabaseServer()
 
-  const tierBase = db.from('membership_tiers').select('id, name, annual_cost_cents, is_free')
+  const tierBase = db.from('membership_tiers').select('id, name, annual_cost_cents, is_free, stripe_price_id')
   const { data: tier } = tierId
     ? await tierBase.eq('id', tierId).single()
     : await tierBase.eq('name', tierName!).single()
@@ -89,6 +90,53 @@ export async function POST(req: Request) {
       })
     }
 
+    // deep review PAY-15: refuse to bill on a production deployment holding TEST
+    // keys — a test-mode invoice settles nothing. No-op on real prod (live keys).
+    assertLiveCredentials('stripe')
+
+    // deep review PAY-14: repeat "Request an invoice" clicks used to email a fresh
+    // invoice each time; a member who then paid two of them would be charged twice
+    // (the second grants nothing — see PAY-11). Reuse an already-open invoice for
+    // this member + tier. Stripe invoice search is eventually consistent, so this
+    // won't catch a true double-click a second apart, and a search outage must not
+    // block the first invoice — so on ANY search failure we fall through to create.
+    try {
+      const existing = await stripe.invoices.search({
+        query: `status:'open' AND metadata['memberId']:'${member.id}' AND metadata['tierId']:'${tier.id}'`,
+        limit: 1,
+      })
+      const open = existing.data[0]
+      if (open) {
+        return NextResponse.json({
+          ok: true,
+          email: member.email,
+          hostedInvoiceUrl: open.hosted_invoice_url ?? null,
+          deduped: true,
+        })
+      }
+    } catch (e) {
+      console.error('[membership-invoice] open-invoice dedup search skipped:', e)
+    }
+
+    // deep review PAY-14: bill the LIVE Stripe price the member saw on the site,
+    // not membership_tiers.annual_cost_cents — which lib/tier-pricing documents as
+    // a FALLBACK only (public pages and card checkout use the Stripe price), so
+    // after a Stripe price edit an invoice buyer would be billed a stale amount.
+    // Fall back to the DB cost (and USD) only when no usable Stripe price exists.
+    let amountCents = tier.annual_cost_cents as number
+    let currency = 'usd'
+    if (tier.stripe_price_id) {
+      try {
+        const price = await stripe.prices.retrieve(tier.stripe_price_id as string)
+        if (typeof price.unit_amount === 'number' && price.unit_amount > 0) {
+          amountCents = price.unit_amount
+          currency = price.currency || 'usd'
+        }
+      } catch (e) {
+        console.error('[membership-invoice] live price lookup failed, using DB cost:', e)
+      }
+    }
+
     // Create the invoice first, then attach the line item to it explicitly.
     // (Don't rely on pending-item sweeping — that left the total at $0.)
     // Tax is computed only when we have an address, so invoicing never breaks.
@@ -110,8 +158,8 @@ export async function POST(req: Request) {
     await stripe.invoiceItems.create({
       customer: customerId,
       invoice: invoice.id,
-      currency: 'usd',
-      amount: tier.annual_cost_cents,
+      currency,
+      amount: amountCents,
       description: `Stellr ${tier.name} membership — 12 months`,
     })
 

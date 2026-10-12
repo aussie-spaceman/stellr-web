@@ -6,6 +6,7 @@ import { CREDIT_PACK_PRICE_CENTS } from '@/lib/mentoring-format'
 import { getAcademyDiscountPercent, discountCents } from '@/lib/academy-discount'
 import { ensureStripeCustomer } from '@/lib/stripe-customer'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 
 // Buy extra mentoring SESSION credits (top-up beyond the tier allowance). Mentoring
@@ -41,6 +42,10 @@ export async function POST(req: Request) {
   )
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
+  // deep review PAY-15: refuse to take money on a production deployment holding
+  // TEST keys — a test-mode charge looks successful and settles nothing. No-op on
+  // real prod (live keys); the price derivation above is deliberately not gated.
+  assertLiveCredentials('stripe')
   const checkout = await stripe.checkout.sessions.create({
     mode: 'payment',
     line_items: [

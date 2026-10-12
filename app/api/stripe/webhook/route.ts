@@ -12,6 +12,7 @@ import { rosterAfterPaidBooking } from '@/lib/mentoring'
 import { scheduleFromRequest } from '@/lib/coaching-requests'
 import { confirmPaidBooking, redeemCoupon, grantTierAllocations, grantPurchasedLot, getOfferingTarget } from '@/lib/entitlements'
 import { requireStripe } from '@/lib/stripe'
+import { assertLiveCredentials } from '@/lib/env-guards'
 import { confirmRegistration } from '@/lib/registration-confirm'
 import { notifyCommunityAdmins } from '@/lib/notify'
 
@@ -206,8 +207,38 @@ async function activateMembership(
   tierId: string,
   billingInterval: string,
   stripeSubscriptionId: string,
+  stripe: Stripe,
 ) {
   const db = supabaseServer()
+
+  // deep review PAY-N4: a member can reach /join again while a subscription is
+  // already active (nothing gates the join flow or membership-checkout on an
+  // existing subscription), so starting a new one leaves TWO live Stripe
+  // subscriptions. We expire the old DB row below, but the old Stripe
+  // subscription keeps billing — and its renewal invoices then find no active
+  // row to extend (silently dropped, PAY-3's neighbour). Cancel the prior Stripe
+  // subscription(s) first so DB state and Stripe billing stay in lockstep. Never
+  // cancel the one we're activating. Best-effort + loud: don't strand the member
+  // without the tier they just paid for if a cancel fails — alert admins instead.
+  const { data: priorActive } = await db
+    .from('member_memberships')
+    .select('stripe_subscription_id')
+    .eq('member_id', memberId)
+    .eq('renewal_status', 'active')
+  for (const row of priorActive ?? []) {
+    const priorSubId = (row as { stripe_subscription_id?: string | null }).stripe_subscription_id
+    if (priorSubId && priorSubId !== stripeSubscriptionId) {
+      try {
+        await stripe.subscriptions.cancel(priorSubId)
+      } catch (err) {
+        console.error('[stripe/webhook] PAY-N4: could not cancel prior subscription', priorSubId, err)
+        await notifyCommunityAdmins({
+          type: 'action',
+          body: `Member ${memberId} started a new membership subscription (${stripeSubscriptionId}) while a prior one (${priorSubId}) was active, and the prior subscription could NOT be cancelled automatically. It may keep billing — please cancel it in Stripe.`,
+        }).catch(() => {})
+      }
+    }
+  }
 
   // Deactivate any existing active membership for this member
   await db
@@ -380,6 +411,10 @@ async function refundDuplicateRegistrationPayment(
   // of the very same event is already stopped by the idempotency guard upstream.)
   if (!existingIntent || existingIntent === newIntent) return false
 
+  // deep review PAY-15: refuse to "refund" on a production deployment holding
+  // TEST keys — a test-mode refund settles nothing, the same phantom-success trap
+  // the guard exists for on the charge paths. No-op on real prod (live keys).
+  assertLiveCredentials('stripe')
   // Fail safe on the money: refund the duplicate, keep the first intent of record.
   await stripe.refunds.create(
     {
@@ -423,6 +458,9 @@ async function refundDuplicateIndividualPayment(
     (data as { stripe_payment_intent_id?: string | null } | null)?.stripe_payment_intent_id ?? null
   if (!existingIntent || existingIntent === newIntent) return false
 
+  // deep review PAY-15: no-op on real prod; refuses a phantom test-mode refund on
+  // a prod deployment misconfigured with TEST keys.
+  assertLiveCredentials('stripe')
   await stripe.refunds.create(
     {
       payment_intent: newIntent,
@@ -449,7 +487,7 @@ async function fulfilCheckoutSession(session: Stripe.Checkout.Session, stripe: S
     const subscriptionId = session.subscription as string
 
     if (memberId && tierId && subscriptionId) {
-      await activateMembership(memberId, tierId, billingInterval ?? 'annual', subscriptionId)
+      await activateMembership(memberId, tierId, billingInterval ?? 'annual', subscriptionId, stripe)
       await logActivity({
         memberId,
         category: 'billing',
@@ -518,7 +556,12 @@ async function fulfilCheckoutSession(session: Stripe.Checkout.Session, stripe: S
         })
       } catch (err) {
         console.error('[stripe/webhook] entitlement_booking confirm failed, refunding:', err)
-        if (intent) await stripe.refunds.create({ payment_intent: intent })
+        // deep review PAY-15: no-op on real prod; refuses a phantom test-mode
+        // refund on a prod deployment misconfigured with TEST keys.
+        if (intent) {
+          assertLiveCredentials('stripe')
+          await stripe.refunds.create({ payment_intent: intent })
+        }
       }
     }
   } else if (

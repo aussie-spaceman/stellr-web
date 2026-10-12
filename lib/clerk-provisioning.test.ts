@@ -39,22 +39,28 @@ describe('ensureClerkUserAndSignInToken — who may be silently signed in', () =
     expect(createSignInToken).toHaveBeenCalledOnce()
   })
 
-  it('refuses a token when the email already has a Clerk account (takeover of the owner)', async () => {
+  it('refuses a token for an existing member even if the email has a Clerk account (takeover of the owner)', async () => {
     getUserList.mockResolvedValue({ data: [{ id: 'user_victim' }] }) // existing account
     const r = await ensureClerkUserAndSignInToken('admin@stellr.test', 'A', 'D', { memberIsNew: false })
     expect(r.created).toBe(false)
-    expect(r.clerkUserId).toBe('user_victim')
+    // AUTH-N3: an existing member short-circuits before any Clerk lookup, so we
+    // never mint a token AND never hand the caller the owner's Clerk id to link.
+    expect(r.clerkUserId).toBe('')
     expect(r.signInToken).toBeNull()
     expect(createSignInToken).not.toHaveBeenCalled()
   })
 
-  it('refuses a token when a NEW Clerk user would be bound to an EXISTING member row', async () => {
+  it('provisions NO Clerk user at all when the member row already exists (AUTH-N3)', async () => {
     // The dangerous case AUTH-2 flags: email on file as a member (a student a
-    // teacher added) but with no Clerk login yet. A fresh Clerk user is created,
-    // but the member is not new, so no token — and the caller must not link.
+    // teacher added) but with no Clerk login yet. deep review AUTH-N3: we must
+    // not even CREATE a Clerk user here — doing so let the user.created webhook
+    // bind a passwordless Clerk user to the victim's member row (an
+    // attacker-triggered clerk_user_id write) and could send Clerk mail to a
+    // real person. So: no createUser, no token, created=false.
     getUserList.mockResolvedValue({ data: [] })
     const r = await ensureClerkUserAndSignInToken('kid@family.test', 'Kid', 'One', { memberIsNew: false })
-    expect(r.created).toBe(true)
+    expect(createUser).not.toHaveBeenCalled()
+    expect(r.created).toBe(false)
     expect(r.signInToken).toBeNull()
     expect(createSignInToken).not.toHaveBeenCalled()
   })

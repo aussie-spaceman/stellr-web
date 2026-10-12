@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { supabaseServer } from '@/lib/supabase'
 import { currentStoreMember } from '@/lib/store/auth'
 import { canManageStoreCatalog } from '@/lib/store/auth'
+import { assertLiveCredentials } from '@/lib/env-guards'
 import { stripeClient } from '@/lib/stripe'
 
 export const dynamic = 'force-dynamic'
@@ -67,6 +68,9 @@ export async function PATCH(req: Request) {
   let refundId: string | null = null
   if (stripe && pi) {
     try {
+      // deep review PAY-15: refuse to "refund" on a production deployment holding
+      // TEST keys — a test-mode refund settles nothing. No-op on real prod.
+      assertLiveCredentials('stripe')
       const refund = await stripe.refunds.create({ payment_intent: pi })
       refundId = refund.id
     } catch (err) {

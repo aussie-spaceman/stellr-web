@@ -20,7 +20,14 @@
 // the Uruguay event is real but has no pin to sit on.
 
 import { client } from '@/lib/sanity'
+import { normaliseState } from '@/lib/us-states'
 import type { LpTheme } from '@/content/lp/types'
+
+// deep review QUAL-12: normaliseState (and its US-state maps) moved to the
+// dependency-free lib/us-states so lib/survey/timezone — imported by the client
+// EventSurveyPanel — no longer drags this module's Sanity client into the admin
+// bundle. Re-exported here so this module's existing callers are unchanged.
+export { normaliseState }
 
 export type LocationStatus = 'live' | 'planned'
 
@@ -45,35 +52,6 @@ export interface LocationCounts {
   /** Live locations only — the legend counts running events by theme. */
   space: number
   enviro: number
-}
-
-/* ── State normalisation ───────────────────────────────────────────────────
- * Sanity's `state` field is free text and the dataset proves it: "Colorado",
- * "CO", "NV", "South Dakota" and "Departamento de Maldonado" all coexist. A
- * distinct-state count over raw strings would report Colorado twice, so
- * normalise first — and use the same map to decide what counts as US at all. */
-const US_STATES: Record<string, string> = {
-  alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA',
-  colorado: 'CO', connecticut: 'CT', delaware: 'DE', florida: 'FL', georgia: 'GA',
-  hawaii: 'HI', idaho: 'ID', illinois: 'IL', indiana: 'IN', iowa: 'IA',
-  kansas: 'KS', kentucky: 'KY', louisiana: 'LA', maine: 'ME', maryland: 'MD',
-  massachusetts: 'MA', michigan: 'MI', minnesota: 'MN', mississippi: 'MS',
-  missouri: 'MO', montana: 'MT', nebraska: 'NE', nevada: 'NV',
-  'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
-  'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH', oklahoma: 'OK',
-  oregon: 'OR', pennsylvania: 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
-  'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT', vermont: 'VT',
-  virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI',
-  wyoming: 'WY', 'district of columbia': 'DC',
-}
-const US_CODES = new Set(Object.values(US_STATES))
-
-/** USPS code for a US state written either way, else undefined (⇒ not US). */
-export function normaliseState(raw?: string): string | undefined {
-  if (!raw) return undefined
-  const trimmed = raw.trim()
-  if (trimmed.length === 2 && US_CODES.has(trimmed.toUpperCase())) return trimmed.toUpperCase()
-  return US_STATES[trimmed.toLowerCase()]
 }
 
 /** Sanity's `type` (the competition theme) → the token-backed theme id. */

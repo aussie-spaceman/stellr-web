@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 import { existsSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 
 // Playwright does not read .env.local the way Next does, so nothing in it would
 // reach the suite otherwise — the bypass token and the fixture passwords would
@@ -7,6 +8,21 @@ import { existsSync } from 'node:fs'
 // needs no dependency. Real environment variables still win, which is what lets
 // CI pass secrets without a file.
 if (existsSync('.env.local')) process.loadEnvFile('.env.local')
+
+// deep review TEST-6: locally there is usually no ESIGN_TOKEN_SECRET, so the
+// consent-signing / privacy / survey / family-link specs silently SKIP and the
+// run still reports green — training developers to trust a pass that proved
+// nothing. CI already generates one per run; mirror that here. A per-run random
+// secret only has to sign the links this same run mints, so it needs no setup.
+// Real values (CI, or a developer's own) still win via ??=.
+process.env.ESIGN_TOKEN_SECRET ??= randomBytes(32).toString('hex')
+
+// A plain local `playwright test`: our own dev server, no E2E_BASE_URL. The
+// coordinator's runs showed `next dev` with the default worker count producing
+// transient 404s under parallel cold-compile (21 of 26 minors specs failed as
+// harness artefacts, not app bugs). Cap workers and offer an E2E_PROD mode that
+// serves the production build, which was 0-flaky.
+const localDev = !process.env.CI && !process.env.E2E_BASE_URL && !process.env.E2E_PROD
 
 /**
  * Playwright configuration.
@@ -30,6 +46,10 @@ export default defineConfig({
 
   // A spec that only passes when run alone is a spec that will fail in CI.
   fullyParallel: true,
+
+  // TEST-6: fewer workers locally on `next dev` so parallel cold compiles don't
+  // surface as transient 404s. CI, E2E_BASE_URL and E2E_PROD keep the default.
+  workers: localDev ? 2 : undefined,
 
   // `.only` left in a file silently narrows CI to one test and reports green.
   forbidOnly: !!process.env.CI,
@@ -92,9 +112,14 @@ export default defineConfig({
         // CI builds first and serves the production output: that is what
         // deploys, and a dev-server-only suite would miss anything differing
         // between them. Locally `npm run dev` keeps the fast loop and claims a
-        // free port per worktree via scripts/dev.mjs.
-        command: process.env.CI ? 'npm start' : 'npm run dev',
+        // free port per worktree via scripts/dev.mjs. TEST-6: E2E_PROD serves
+        // the production build locally too (0-flaky in the coordinator's runs),
+        // for confirming a failure is the app, not the dev-server harness.
+        command: process.env.CI || process.env.E2E_PROD ? 'npm start' : 'npm run dev',
         port: PORT,
+        // TEST-6: hand the server the same signing secret the specs use, so the
+        // minors journeys run instead of skipping when .env.local has none.
+        env: { ESIGN_TOKEN_SECRET: process.env.ESIGN_TOKEN_SECRET! },
         // Never reuse a server this run did not start.
         //
         // WHY (10 Sept 2026): the obvious version of this — reuse only when the

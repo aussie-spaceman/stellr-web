@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/supabase'
 import { isAdminClaims } from '@/lib/admin-auth'
+import { allRows } from '@/lib/db'
 import { MEDIA_STATUS_LABEL, mediaDoNotUseList, mediaReasonDetail, type MediaStatus } from '@/lib/survey/media'
 
 // /admin/media — the media do-not-use list (privacy runbook Part C). Check it
@@ -26,9 +27,21 @@ export default async function MediaDoNotUsePage({ searchParams }: { searchParams
   const includeOk = params.show === 'all'
 
   const db = supabaseServer()
-  const [{ rows, considered }, { data: regs }] = await Promise.all([
+  // deep review QUAL-9: the event dropdown is built from every registration's
+  // slug, so this read must not stop at PostgREST's silent 1,000-row cap — the
+  // `.limit(2000)` it replaces returned 1,000 without a word once there were
+  // that many. Page through so the filter never silently loses events.
+  const [{ rows, considered }, regs] = await Promise.all([
     mediaDoNotUseList(db, { eventSlug, includeOk }),
-    db.from('registrations').select('event_slug, event_title, created_at').order('created_at', { ascending: false }).limit(2000),
+    allRows<{ event_slug: string | null; event_title: string | null; created_at: string }>(
+      (from, to) =>
+        db
+          .from('registrations')
+          .select('event_slug, event_title, created_at')
+          .order('created_at', { ascending: false })
+          .range(from, to),
+      'media page event list',
+    ),
   ])
   const events = new Map<string, string>()
   for (const r of regs ?? []) if (r.event_slug && !events.has(r.event_slug as string)) events.set(r.event_slug as string, (r.event_title as string | null) ?? (r.event_slug as string))

@@ -170,6 +170,7 @@ export async function grantTier(
   }
 
   // Idempotency: skip if already actively on this tier and not past expiry.
+  const today = new Date().toISOString().split('T')[0]
   const { data: existing } = await db
     .from('member_memberships')
     .select('id, expires_at')
@@ -177,7 +178,52 @@ export async function grantTier(
     .eq('tier_id', tierId)
     .eq('renewal_status', 'active')
     .maybeSingle()
-  if (existing && (!existing.expires_at || existing.expires_at >= new Date().toISOString().split('T')[0])) {
+  if (existing && (!existing.expires_at || existing.expires_at >= today)) {
+    // deep review PAY-11: a PAID purchase must always extend access. The invoice
+    // membership path grants through grantTier, whose idempotency guard used to
+    // return `already_active` whenever any active row of this tier existed — so a
+    // member who already held the tier via a complimentary / rule grant paid a
+    // 12-month invoice and got nothing: access still ended when the comp row
+    // expired. For source 'stripe' we extend the existing row instead of skipping
+    // (from the later of its current expiry and today), and flip it to a real paid
+    // membership. A non-stripe grant keeps the original idempotent no-op.
+    if (source === 'stripe') {
+      let newExpiry: string
+      if (expiresAt !== undefined && expiresAt !== null) {
+        newExpiry = expiresAt
+      } else if (months === null) {
+        newExpiry = new Date(Date.now() + LIFETIME_DAYS * 86_400_000).toISOString().split('T')[0]
+      } else {
+        const base =
+          existing.expires_at && existing.expires_at > today ? new Date(existing.expires_at) : new Date()
+        base.setMonth(base.getMonth() + (months ?? 0))
+        newExpiry = base.toISOString().split('T')[0]
+      }
+      const { error: extendError } = await db
+        .from('member_memberships')
+        .update({ expires_at: newExpiry, is_complimentary: false, source: 'stripe' })
+        .eq('id', existing.id)
+      if (extendError) {
+        console.error('[membership-grants] grantTier extend error:', extendError)
+        // deep review PAY-5: a real write failure, not a benign skip — the money
+        // path must fail closed so the Stripe event is retried.
+        return { granted: false, reason: 'error' }
+      }
+      await logActivity(
+        {
+          memberId,
+          category: 'membership',
+          action: 'tier_granted',
+          summary: `Extended ${tierName} membership through ${newExpiry} (paid)`,
+          metadata: { tierId, tierName, source, complimentary: false, expiresAt: newExpiry, ruleId, extended: true },
+          actorType: logActor?.actorType ?? actorTypeForSource(source),
+          actorMemberId: logActor?.actorMemberId ?? null,
+          actorLabel: logActor?.actorLabel ?? null,
+        },
+        db,
+      )
+      return { granted: true, membershipId: existing.id }
+    }
     return { granted: false, reason: 'already_active', membershipId: existing.id }
   }
 

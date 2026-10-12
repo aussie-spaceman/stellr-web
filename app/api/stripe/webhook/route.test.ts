@@ -67,6 +67,17 @@ function makeDb(tables: Record<string, Row[]>, opts?: { failUpdate?: (table: str
       eq: (c: string, v: unknown) => (filters.push((r) => r[c] === v), q),
       neq: (c: string, v: unknown) => (filters.push((r) => r[c] !== v), q),
       in: (c: string, vs: unknown[]) => (filters.push((r) => vs.includes(r[c])), q),
+      // Minimal PostgREST `.or('col.is.null,col.eq.val')` support for
+      // markIndividualPayment's "is the whole group settled?" check (PAY-7 path).
+      or: (expr: string) => {
+        const clauses = expr.split(',').map((part) => {
+          const [col, op, ...rest] = part.split('.')
+          const val = rest.join('.')
+          return (r: Row) => (op === 'is' && val === 'null' ? r[col] == null : String(r[col]) === val)
+        })
+        filters.push((r) => clauses.some((c) => c(r)))
+        return q
+      },
       limit: () => q,
       order: () => q,
       not: () => q,
@@ -195,6 +206,71 @@ describe('checkout.session.completed duplicate (PAY-4)', () => {
     )
     // The registration still references the FIRST intent.
     expect(await readRow('registrations', 'r1')).toMatchObject({ stripe_payment_intent_id: 'pi_1' })
+    expect(h.notifyCommunityAdmins).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('members-pay-individually seat settlement (PAY-7 / PAY-N1)', () => {
+  // participants.email is the frozen registration-time address; the member signed
+  // in / pays under a different (Clerk) address carried as participantEmail. The
+  // seat must still be settled, by participant id.
+  const seatRows = (intent: string | null = null, status = 'pending') => ({
+    participants: [{
+      id: 'pX', registration_id: 'r1', email: 'old@school.org',
+      individual_payment_status: status, stripe_payment_intent_id: intent,
+      first_name: 'Ada', last_name: 'L', membership_id: 'M1',
+    }],
+    registrations: [{ id: 'r1', status: 'pending', event_title: 'Nevada 2027' }],
+    stripe_webhook_events: [],
+  })
+  const seatSession = (id: string, pi: string, extra: Record<string, unknown> = {}) => ({
+    id, payment_status: 'paid', payment_intent: pi,
+    metadata: { registrationId: 'r1', participantId: 'pX', participantEmail: 'new@home.com', isIndividualGroupPayment: 'true', ...extra },
+    customer: null, customer_details: null, amount_total: 7500, currency: 'usd',
+  })
+
+  it('settles the seat by participant id, not by the mismatched email (PAY-7)', async () => {
+    current = makeDb(seatRows())
+    const res = await post({ id: 'evt_seat', type: 'checkout.session.completed', data: { object: seatSession('cs_seat', 'pi_1') } } as unknown as Stripe.Event)
+
+    expect(res.status).toBe(200)
+    const seat = await readRow('participants', 'pX')
+    expect(seat).toMatchObject({ individual_payment_status: 'paid', stripe_payment_intent_id: 'pi_1' })
+    // Whole group now settled → registration confirmed.
+    expect(h.confirmRegistration).not.toHaveBeenCalled() // per-seat path confirms via direct update, not confirmRegistration
+    expect(await readRow('registrations', 'r1')).toMatchObject({ status: 'confirmed' })
+  })
+
+  it('still settles by email for a pre-PAY-7 session that carries no participantId', async () => {
+    current = makeDb({
+      participants: [{
+        id: 'pX', registration_id: 'r1', email: 'old@school.org',
+        individual_payment_status: 'pending', stripe_payment_intent_id: null,
+        first_name: 'Ada', last_name: 'L', membership_id: 'M1',
+      }],
+      registrations: [{ id: 'r1', status: 'pending', event_title: 'Nevada 2027' }],
+      stripe_webhook_events: [],
+    })
+    const session = { id: 'cs_old', payment_status: 'paid', payment_intent: 'pi_1',
+      metadata: { registrationId: 'r1', participantEmail: 'old@school.org', isIndividualGroupPayment: 'true' },
+      customer: null, customer_details: null, amount_total: 7500, currency: 'usd' }
+    await post({ id: 'evt_old', type: 'checkout.session.completed', data: { object: session } } as unknown as Stripe.Event)
+
+    expect(await readRow('participants', 'pX')).toMatchObject({ individual_payment_status: 'paid', stripe_payment_intent_id: 'pi_1' })
+  })
+
+  it('refunds a duplicate seat payment and keeps the first intent (PAY-N1)', async () => {
+    // The seat already paid under pi_1; a second live session (pi_2) now completes.
+    current = makeDb(seatRows('pi_1', 'paid'))
+    const res = await post({ id: 'evt_dup_seat', type: 'checkout.session.completed', data: { object: seatSession('cs_seat2', 'pi_2') } } as unknown as Stripe.Event)
+
+    expect(res.status).toBe(200)
+    expect(h.refundsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_intent: 'pi_2', metadata: expect.objectContaining({ source: 'stellr_app' }) }),
+      expect.objectContaining({ idempotencyKey: 'dup-cs_seat2' }),
+    )
+    // The seat still references the FIRST intent — the duplicate never overwrote it.
+    expect(await readRow('participants', 'pX')).toMatchObject({ stripe_payment_intent_id: 'pi_1' })
     expect(h.notifyCommunityAdmins).toHaveBeenCalledTimes(1)
   })
 })

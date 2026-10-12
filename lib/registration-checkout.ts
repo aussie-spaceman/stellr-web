@@ -74,10 +74,14 @@ interface RegistrationForCheckout {
   teacher_first_name: string | null
   teacher_last_name: string | null
   teacher_email: string | null
+  // deep review PAY-4 part-1: the previously-minted Checkout session, so we can
+  // expire it before minting a new one (a registration must never hold two live
+  // sessions that can both be paid).
+  checkout_session_id: string | null
 }
 
 const REGISTRATION_COLUMNS =
-  'id, event_slug, event_title, type, status, invoice_requested, member_pays_individually, adult_count, student_count, teacher_first_name, teacher_last_name, teacher_email'
+  'id, event_slug, event_title, type, status, invoice_requested, member_pays_individually, adult_count, student_count, teacher_first_name, teacher_last_name, teacher_email, checkout_session_id'
 
 export async function createRegistrationCheckout(
   db: SupabaseClient,
@@ -199,6 +203,22 @@ export async function createRegistrationCheckout(
     amountCents = discountedCents(amountCents, offer.percent_off)
   }
 
+  // deep review PAY-4 part-1: expire the registration's previous Checkout session
+  // before minting a new one, so only ONE live session can ever be paid. Without
+  // this, the student's redirect session and the emailed pay-link session (and
+  // any later billing-tab / pay-page session) all stay open for 24h and a family
+  // could complete two — the webhook's duplicate-refund (PAY-4) then has to
+  // compensate after the second charge rather than it being prevented. Best
+  // effort: a session that is already completed/expired throws here, which is
+  // fine — the webhook still reconciles the actual payment.
+  if (reg.checkout_session_id) {
+    try {
+      await stripe.checkout.sessions.expire(reg.checkout_session_id)
+    } catch (e) {
+      console.error('[registration-checkout] could not expire prior session', reg.checkout_session_id, '(non-fatal):', e)
+    }
+  }
+
   const customerEmail = opts.customerEmail === undefined ? defaultEmail : opts.customerEmail
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
@@ -216,6 +236,17 @@ export async function createRegistrationCheckout(
     cancel_url: opts.cancelUrl,
   })
   if (!session.url) throw new Error('Stripe checkout session has no URL')
+
+  // deep review PAY-4 part-1: record THIS session as the one to expire next time.
+  // Non-fatal — the worst case without it is the older session isn't expired, the
+  // same residual the webhook duplicate-refund already covers.
+  const { error: sessionWriteError } = await db
+    .from('registrations')
+    .update({ checkout_session_id: session.id })
+    .eq('id', reg.id)
+  if (sessionWriteError) {
+    console.error('[registration-checkout] could not persist checkout_session_id (non-fatal):', sessionWriteError)
+  }
 
   return { url: session.url, sessionId: session.id, amountCents }
 }

@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { ensureSpaceContainer } from '@/lib/container-sync'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { slugify } from '@/lib/utils'
+import { assertSpaceDeletable, CommunityDeleteBlockedError } from '@/lib/community-delete-guard'
 
 // Admin CRUD for community Spaces (Spaces design — list / create / delete).
 // Per-space config (channels, tiers, members, resources, training, announcements,
@@ -109,7 +110,27 @@ export async function DELETE(req: Request) {
   const b = await req.json().catch(() => ({}))
   if (!b.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const db = supabaseServer()
-  // Channels / posts / members / tiers / training / announcements cascade via FKs.
+  // deep review DB-4: refuse the hard delete when it would cascade away posts,
+  // chat messages or suspension records (safeguarding communication/moderation
+  // history, unrecoverable — no DB backups). Steer the admin to Archive instead
+  // (PATCH is_archived), which keeps all data. Fails closed: a count error throws
+  // and surfaces as a 500 rather than letting the delete through.
+  try {
+    await assertSpaceDeletable(db, b.id)
+  } catch (e) {
+    if (e instanceof CommunityDeleteBlockedError) {
+      return NextResponse.json(
+        {
+          error: 'This space has member posts, chat or moderation records. Archive it instead to preserve them.',
+          blockers: e.blockers,
+        },
+        { status: 409 },
+      )
+    }
+    return NextResponse.json({ error: 'Could not delete space' }, { status: 500 })
+  }
+  // Channels / members / tiers / training / announcements cascade via FKs; the
+  // guard above has confirmed no posts / chat / suspensions would be lost.
   const { error } = await db.from('community_spaces').delete().eq('id', b.id)
   if (error) return NextResponse.json({ error: 'Could not delete space' }, { status: 500 })
   return NextResponse.json({ ok: true })

@@ -10580,6 +10580,73 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENC
 
 
 --
+-- ═══════════════════════════════════════════════════════════════════════════
+-- deep review DB-5: post-dump Realtime + storage state
+-- ═══════════════════════════════════════════════════════════════════════════
+-- `pg_dump --schema=public --schema=entitlements --schema-only` (see
+-- docs/SCHEMA-BASELINE.md) captures tables, functions, policies and grants, but
+-- NOT the `supabase_realtime` publication membership (the publication is a
+-- cluster object, outside those schemas) nor `storage.buckets` rows (they live
+-- in the `storage` schema). A rebuild from the dump therefore comes up with chat
+-- and space feeds not streaming and the private upload buckets missing — exactly
+-- what happened on the 9 Sept dev rebuild (0 Realtime tables, 3 of 5 buckets),
+-- and what a prod disaster-recovery rebuild would hit (Supabase Free has no DB
+-- backups — docs/compliance/retention-schedule.md row 15). These idempotent
+-- blocks restore that state so a rebuild is complete.
+--
+-- Placed BEFORE the trailing `FOR ROLE supabase_admin` ALTER DEFAULT PRIVILEGES
+-- statements on purpose: the documented rebuild runs psql with
+-- `--set ON_ERROR_STOP=1`, which halts at the first of those (they error with
+-- "permission denied to change default privileges"), so anything after them
+-- would be skipped.
+--
+-- IMPORTANT: a `pg_dump` refresh of this file (SCHEMA-BASELINE.md "Keeping it
+-- current") OVERWRITES this section — it must be re-added after each refresh.
+-- The refresh procedure in that doc calls this out.
+
+-- Realtime: the three tables the browser client subscribes to (migrations
+-- 047_chat_realtime, 071_spaces_realtime). Ensure the publication exists first
+-- so this also works on a non-Supabase target (Supabase creates it by default).
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    CREATE PUBLICATION supabase_realtime;
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_messages;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.community_posts;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.community_comments;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- Storage: the five private buckets the app reads/writes via signed URLs.
+-- agreement-templates (20261002180802), signed-agreements (20261002173459),
+-- campaign-proposals (120), teacher-licenses (129); community-resources was
+-- created by hand on dev (25 Sept) and has no migration — seed it here too so a
+-- rebuild is complete. All private (public = false), matching the migrations.
+INSERT INTO storage.buckets (id, name, public) VALUES
+  ('agreement-templates', 'agreement-templates', false),
+  ('signed-agreements',   'signed-agreements',   false),
+  ('community-resources', 'community-resources', false),
+  ('teacher-licenses',    'teacher-licenses',    false),
+  ('campaign-proposals',  'campaign-proposals',  false)
+ON CONFLICT (id) DO NOTHING;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- end DB-5 post-dump extras
+-- ═══════════════════════════════════════════════════════════════════════════
+
+
+--
 -- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: -
 --
 

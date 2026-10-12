@@ -27,6 +27,7 @@ import { isClearedForMinorContact } from '@/lib/compliance'
 import { DEFAULT_TZ } from '@/lib/mentoring-format'
 import { autoWorkshopName } from '@/lib/coaching-format'
 import { ensureMemberGrants, getKindBalanceSplit, getCoachingTierLabel, cancelCohortViaLedger, releaseCoachingBooking, getCoachingAllocationByTier, setTierCoachingAllocation } from '@/lib/entitlements'
+import { assertCohortDeletable } from '@/lib/community-delete-guard'
 import Stripe from 'stripe'
 import { ALL_TIER_NAMES, tierGroupOf, type TierGroupKey } from '@/lib/tiers'
 import { stripeClient } from '@/lib/stripe'
@@ -548,10 +549,17 @@ export async function archiveWorkshop(workshopId: string): Promise<void> {
 
 /** Permanently delete a workshop and all its data (refunds ledger bookings first). */
 export async function deleteWorkshop(workshopId: string): Promise<void> {
+  const db = supabaseServer()
+  // deep review DB-4 (safeguarding / data-retention): block the hard delete when
+  // it would cascade away the workshop's chat history (adult coach ↔ minor 1:1
+  // chat, unrecoverable — no DB backups). Steer admins to Archive, which keeps
+  // the data. Runs BEFORE cancelCohortViaLedger so a blocked delete does no
+  // partial work. Fails closed: a count error throws rather than letting the
+  // cascade proceed.
+  await assertCohortDeletable(db, workshopId)
   // Restore drawn coaching_session allocations + refund any paid bookings to account
   // credit via the entitlements ledger before the offering/bookings cascade away.
   await cancelCohortViaLedger(workshopId)
-  const db = supabaseServer()
   await db.from('mentoring_cohorts').delete().eq('id', workshopId)
 }
 

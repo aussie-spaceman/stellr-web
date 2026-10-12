@@ -21,10 +21,40 @@ import { enqueueVideoWatermark } from '@/lib/watermark/video-queue'
 
 export const runtime = 'nodejs'
 
+// deep review INT-11: a recording can be several hundred MB, so give the pull +
+// upload real headroom rather than the platform default, which could kill the
+// function mid-upload (leaving the row stuck 'pending' and JaaS re-downloading
+// the whole file on every retry until the ~24h link expires).
+export const maxDuration = 300
+
 const JAAS_WEBHOOK_SECRET = process.env.JAAS_WEBHOOK_SECRET
 const LEGACY_SECRET = process.env.RECORDING_WEBHOOK_SECRET
 
+// deep review INT-11: refuse to buffer a recording larger than this into memory.
+// The webhook downloads the whole file into a Buffer before uploading, so an
+// unexpectedly huge file would OOM the function; a Content-Length over the cap
+// is rejected up front instead. Override with RECORDING_MAX_BYTES if JaaS
+// recordings legitimately exceed it. Default 1 GiB.
+const MAX_RECORDING_BYTES = Number(process.env.RECORDING_MAX_BYTES) || 1024 * 1024 * 1024
+
 type Target = { kind: 'session' | 'training'; id: string }
+
+/**
+ * Deterministic storage path for a recording (INT-11). Previously the path
+ * carried a `Date.now()` suffix, so every JaaS retry wrote to a NEW object and
+ * orphaned the last one. A stable path + upsert means a retry overwrites in
+ * place — no orphans — and matches how the watermark worker rewrites the same path.
+ */
+export function recordingStoragePath(target: Target): string {
+  const prefix = target.kind === 'session' ? target.id : `train-${target.id}`
+  return `recordings/${prefix}.mp4`
+}
+
+/** Guard against buffering an oversized recording into memory (INT-11). */
+export function recordingWithinSizeLimit(contentLength: number | null, max = MAX_RECORDING_BYTES): boolean {
+  if (contentLength == null || !Number.isFinite(contentLength)) return true // unknown size: let it through, bounded by maxDuration
+  return contentLength <= max
+}
 
 /** Map a JaaS room name back to the entity that owns the recording. */
 function targetForRoom(room: string): Target | null {
@@ -76,9 +106,18 @@ async function offload(target: Target, recordingUrl: string): Promise<boolean> {
   try {
     const res = await fetch(recordingUrl)
     if (!res.ok) throw new Error(`fetch ${res.status}`)
+
+    // deep review INT-11: reject an oversized file before buffering it, so a
+    // pathological recording can't OOM the function.
+    const contentLength = Number(res.headers.get('content-length'))
+    if (!recordingWithinSizeLimit(Number.isFinite(contentLength) ? contentLength : null)) {
+      throw new Error(`recording too large: ${contentLength} bytes > ${MAX_RECORDING_BYTES}`)
+    }
+
     const buf = Buffer.from(await res.arrayBuffer())
-    const prefix = target.kind === 'session' ? target.id : `train-${target.id}`
-    const path = `recordings/${prefix}-${Date.now()}.mp4`
+    // deep review INT-11: deterministic path (no Date.now()) so a JaaS retry
+    // overwrites in place instead of orphaning the previous upload.
+    const path = recordingStoragePath(target)
 
     const { error: upErr } = await db.storage
       .from(RESOURCES_BUCKET)

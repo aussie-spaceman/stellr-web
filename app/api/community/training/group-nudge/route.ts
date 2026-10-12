@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { getCurrentMember } from '@/lib/community'
 import { notifyMember } from '@/lib/notify'
 import { assertNotImpersonating } from '@/lib/impersonation'
+import { escapeHtml } from '@/lib/email-layout'
 
 // POST /api/community/training/group-nudge
 // Body: { memberIds: string[], objectRef: string, objectLabel?: string }
@@ -53,8 +54,12 @@ export async function POST(req: Request) {
         type: 'session_reminder',
         body: `Reminder from your teacher: please complete your required training for ${label}.`,
         email: {
+          // deep review INTPUB-N1: `label` is the teacher-supplied objectLabel
+          // and this html is passed to notify pre-built, so escape it here —
+          // otherwise a teacher can inject markup into their students' (minors')
+          // inboxes.
           subject: 'Required training reminder',
-          html: `<p>Hi,</p><p>This is a reminder from your teacher to complete your required training for <strong>${label}</strong>. Sign in to Stellr and head to Academy &rsaquo; Training.</p>`,
+          html: `<p>Hi,</p><p>This is a reminder from your teacher to complete your required training for <strong>${escapeHtml(label)}</strong>. Sign in to Stellr and head to Academy &rsaquo; Training.</p>`,
           text: `Reminder from your teacher: complete your required training for ${label}.`,
         },
       })

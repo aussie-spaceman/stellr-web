@@ -3,6 +3,7 @@ import { formatDateTime } from '@/lib/utils'
 import { supabaseServer } from '@/lib/supabase'
 import { notifyMember } from '@/lib/notify'
 import { guardCron } from '@/lib/cron'
+import { startCronRun } from '@/lib/cron-runs'
 
 // GET /api/cron/session-reminders — runs hourly (see vercel.json).
 // Reminds participants + hosts of upcoming coaching/mentoring sessions at two
@@ -13,6 +14,8 @@ export async function GET(req: NextRequest) {
   if (blocked) return blocked
 
   const db = supabaseServer()
+  // deep review INT-9: record the run so a failing reminder cron is visible.
+  const run = await startCronRun(db, 'session-reminders')
   const now = Date.now()
   const buckets: { bucket: string; fromMs: number; toMs: number }[] = [
     { bucket: '24h', fromMs: now + 60 * 60_000, toMs: now + 24 * 60 * 60_000 },
@@ -22,12 +25,18 @@ export async function GET(req: NextRequest) {
   let sent = 0
 
   for (const b of buckets) {
-    const { data: sessions } = await db
+    const { data: sessions, error } = await db
       .from('sessions')
       .select('id, title, scheduled_start, host_member_id')
       .eq('status', 'scheduled')
       .gte('scheduled_start', new Date(b.fromMs).toISOString())
       .lte('scheduled_start', new Date(b.toMs).toISOString())
+    if (error) {
+      // Surface the query failure rather than silently reporting 0 reminders.
+      run.fail(`query:${b.bucket}`, error.message)
+      await run.finish({ sent })
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
     for (const s of sessions ?? []) {
       const { data: parts } = await db
@@ -55,5 +64,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  await run.finish({ sent })
   return NextResponse.json({ sent })
 }

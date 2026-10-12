@@ -157,7 +157,24 @@ async function sendToMembers(
       const { subject, html, text } = renderCampaignEmail(template, vars, unsub)
       // Marketing/bulk: refused by sendEmail (throws isQuota) once the shared
       // daily budget's non-reserved portion is spent — see below.
-      await sendEmail({ to: m.email, from: MARKETING_FROM, subject, html, text, kind: 'marketing' })
+      //
+      // deep review INT-10 / PUB-6: advertise RFC 8058 one-click unsubscribe.
+      // Gmail/Yahoo expect these headers from bulk senders, and the
+      // List-Unsubscribe-Post header lets a mail client POST the opt-out (which
+      // the route performs) separately from the GET a link scanner issues — so a
+      // district Safe-Links scanner fetching the URL no longer opts the teacher out.
+      await sendEmail({
+        to: m.email,
+        from: MARKETING_FROM,
+        subject,
+        html,
+        text,
+        kind: 'marketing',
+        headers: {
+          'List-Unsubscribe': `<${unsub}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
+      })
       result.sent++
     } catch (e) {
       // deep review INT-2 / PUB-4: a quota/429 is the shared Resend budget
@@ -191,6 +208,14 @@ async function sendToMembers(
 
 // ─── Scheduled dispatch (cron) ──────────────────────────────────────────────
 
+// deep review INT-6: a campaign claimed `sending` whose dispatch is killed
+// (function timeout) or throws before it can reset the status sits in `sending`
+// forever — the cron ignores `sending` rows and the admin can only re-activate
+// from draft|paused, so the remainder silently never sends and staff have to
+// edit the DB by hand. A live dispatch stamps updated_at as it claims, so a row
+// still in `sending` and untouched for this long is abandoned and safe to reclaim.
+const STUCK_SENDING_MS = 15 * 60_000
+
 /**
  * Find every one-time campaign whose send time has arrived and run it. Called
  * by /api/cron/campaigns. Each campaign is claimed (status→sending) before
@@ -199,6 +224,17 @@ async function sendToMembers(
 export async function dispatchDueCampaigns(): Promise<{ processed: number; results: Record<string, SendResult> }> {
   const db = supabaseServer()
   const now = new Date().toISOString()
+
+  // deep review INT-6: reclaim campaigns stranded in `sending` by an earlier
+  // killed/throwing dispatch, returning them to `scheduled` so the select below
+  // picks them up and finishes them. The send ledger means a resumed send never
+  // re-mails anyone already delivered.
+  await db
+    .from('email_campaigns')
+    .update({ status: 'scheduled', updated_at: now })
+    .eq('trigger_type', 'scheduled')
+    .eq('status', 'sending')
+    .lt('updated_at', new Date(Date.now() - STUCK_SENDING_MS).toISOString())
 
   const { data: due } = await db
     .from('email_campaigns')
@@ -221,28 +257,46 @@ export async function dispatchDueCampaigns(): Promise<{ processed: number; resul
       .maybeSingle()
     if (!claimed) continue // another tick took it
 
-    const template = await loadTemplate(c.template_id)
-    if (!template) {
-      await db.from('email_campaigns').update({ status: 'draft' }).eq('id', c.id)
-      continue
+    // deep review INT-6: wrap the dispatch so a throw (resolveAudience /
+    // loadTemplate / a transient Supabase error) can never leave the campaign
+    // stuck in `sending`. On any throw, return it to `scheduled` so the next
+    // tick retries it instead of it needing a hand-edit.
+    try {
+      const template = await loadTemplate(c.template_id)
+      if (!template) {
+        await db.from('email_campaigns').update({ status: 'draft' }).eq('id', c.id)
+        continue
+      }
+
+      const members = await resolveAudience((c.audience ?? {}) as Audience)
+      const r = await sendToMembers(c.id, template, members)
+      results[c.id] = r
+
+      // Decide the terminal status:
+      //  • INT-2/PUB-4 quota ran out mid-send → back to `scheduled`, so the next
+      //    tick resumes the unsent members (the ledger skips those delivered).
+      //  • INT-6 every attempted send failed and none succeeded → back to
+      //    `scheduled`, NOT `sent`: marking an all-failed broadcast "sent" hides
+      //    a real outage. The per-member `failed` ledger rows mean a retry will
+      //    not re-hit a permanently bad recipient, so this settles after one
+      //    further pass rather than looping.
+      //  • otherwise → `sent`.
+      const allFailed = r.sent === 0 && r.failed > 0
+      await db
+        .from('email_campaigns')
+        .update(
+          r.quotaStopped || allFailed
+            ? { status: 'scheduled', updated_at: new Date().toISOString() }
+            : { status: 'sent', sent_at: new Date().toISOString() },
+        )
+        .eq('id', c.id)
+    } catch (e) {
+      console.error('[email-campaigns] dispatch failed for campaign', c.id, '—', e instanceof Error ? e.message : e)
+      await db
+        .from('email_campaigns')
+        .update({ status: 'scheduled', updated_at: new Date().toISOString() })
+        .eq('id', c.id)
     }
-
-    const members = await resolveAudience((c.audience ?? {}) as Audience)
-    const r = await sendToMembers(c.id, template, members)
-    results[c.id] = r
-
-    // deep review INT-2 / PUB-4: if the shared daily budget ran out mid-send,
-    // return the campaign to 'scheduled' (not 'sent') so the next cron tick
-    // re-claims it and sends whoever is left — the send ledger skips the
-    // members already delivered, so nobody is emailed twice.
-    await db
-      .from('email_campaigns')
-      .update(
-        r.quotaStopped
-          ? { status: 'scheduled', updated_at: new Date().toISOString() }
-          : { status: 'sent', sent_at: new Date().toISOString() },
-      )
-      .eq('id', c.id)
   }
 
   return { processed: Object.keys(results).length, results }

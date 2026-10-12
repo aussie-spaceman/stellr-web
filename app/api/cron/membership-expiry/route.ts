@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { supabaseServer } from '@/lib/supabase'
 import { expireLapsedGrants } from '@/lib/membership-grants'
 import { guardCron } from '@/lib/cron'
+import { startCronRun } from '@/lib/cron-runs'
 
 // GET /api/cron/membership-expiry — runs daily (see vercel.json).
 // Flips complimentary / rule-granted memberships to 'expired' once their
@@ -12,6 +14,16 @@ export async function GET(req: NextRequest) {
   const blocked = guardCron(req)
   if (blocked) return blocked
 
-  const expired = await expireLapsedGrants()
-  return NextResponse.json({ expired })
+  // deep review INT-9: record the run so a failing downgrade engine is visible.
+  const db = supabaseServer()
+  const run = await startCronRun(db, 'membership-expiry')
+  try {
+    const expired = await expireLapsedGrants()
+    await run.finish({ expired })
+    return NextResponse.json({ expired })
+  } catch (err) {
+    run.fail('run', err)
+    await run.finish({})
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
 }

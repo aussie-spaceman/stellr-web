@@ -167,7 +167,16 @@ async function handleEvent(
   })
   if (company) await associateDefault('contacts', contact.id, 'companies', company.id)
 
-  const decision = decideDealAction(engagement, await dealsForContact(contact.id))
+  // deep review INT-7: a null here means the existing-deals read FAILED (HubSpot
+  // 429/5xx), not that the contact has none. Creating now would duplicate an
+  // existing deal, so ack and leave it to the daily reconciler — which is built
+  // for exactly this gap — rather than writing on a blind guess.
+  const existingDeals = await dealsForContact(contact.id)
+  if (existingDeals === null) {
+    console.warn('[apollo-webhook]', email, engagement, '— could not read existing deals; skipping (reconciler will retry)')
+    return { ok: false, email, engagement, action: 'none', reason: 'deal read failed' }
+  }
+  const decision = decideDealAction(engagement, existingDeals)
   const sequence = findString(payload, ['sequence_name', 'sequenceName', 'emailer_campaign_name'])
   const label = [contact.properties.firstname, contact.properties.lastname]
     .filter(Boolean)

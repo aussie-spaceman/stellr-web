@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { supabaseServer } from '@/lib/supabase'
 import { searchContacts, setLifecycleStage } from '@/lib/hubspot'
 import { HS, LEAD_SOURCE_LIFECYCLE, LEAD_SOURCES, SUBSCRIBER_LEAD_SOURCES } from '@/lib/hubspot-fields'
 import { guardCron } from '@/lib/cron'
+import { startCronRun } from '@/lib/cron-runs'
 
 // GET /api/cron/hubspot-lifecycle — runs daily (see vercel.json).
 //
@@ -46,6 +48,11 @@ export async function GET(req: NextRequest) {
   if (!process.env.HUBSPOT_ACCESS_TOKEN) {
     return NextResponse.json({ error: 'HUBSPOT_ACCESS_TOKEN not set', corrected: 0 }, { status: 200 })
   }
+
+  // deep review INT-9: record the run so a failing lifecycle reconcile is
+  // visible after Vercel's 1h log retention.
+  const db = supabaseServer()
+  const run = await startCronRun(db, 'hubspot-lifecycle')
 
   const since = Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000
 
@@ -102,5 +109,9 @@ export async function GET(req: NextRequest) {
     console.log('[cron:hubspot-lifecycle]', JSON.stringify({ ...summary, corrected, failed }))
   }
 
+  // A contact that failed to move is a per-item failure worth recording, so the
+  // run shows ok=false even though the route still returns 200.
+  for (const f of failed) run.fail(f.email ?? 'unknown', f.error ?? 'setLifecycleStage failed')
+  await run.finish(summary)
   return NextResponse.json(summary, { status: 200 })
 }

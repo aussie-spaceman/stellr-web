@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { createHmac } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { recordingStoragePath, recordingWithinSizeLimit } from './route'
 
 // deep review TEST-1: the recording webhook has two authenticated paths, both of
 // which drive a server-side fetch(recordingUrl) + write into the private bucket —
@@ -92,5 +93,36 @@ describe('POST /api/webhooks/recording — legacy shared-secret path', () => {
     const res = await post(POST, { 'x-webhook-secret': 'wrong' }, body)
     expect(res.status).toBe(401)
     expect(from).not.toHaveBeenCalled()
+  })
+})
+
+// deep review INT-11: the storage path used to carry a Date.now() suffix, so
+// every JaaS retry wrote a NEW object and orphaned the previous one. A
+// deterministic path + upsert means a retry overwrites in place.
+describe('recordingStoragePath is deterministic (no orphaning on retry)', () => {
+  it('returns the same path for the same target across calls, with no timestamp', () => {
+    const a = recordingStoragePath({ kind: 'session', id: 'sess-1' })
+    const b = recordingStoragePath({ kind: 'session', id: 'sess-1' })
+    expect(a).toBe(b)
+    expect(a).toBe('recordings/sess-1.mp4')
+    expect(a).not.toMatch(/\d{10,}/) // no epoch-ms suffix
+  })
+
+  it('namespaces training recordings', () => {
+    expect(recordingStoragePath({ kind: 'training', id: 'item-9' })).toBe('recordings/train-item-9.mp4')
+  })
+})
+
+// deep review INT-11: refuse to buffer an oversized recording into memory.
+describe('recordingWithinSizeLimit guards the in-memory buffer', () => {
+  it('rejects a file over the cap', () => {
+    expect(recordingWithinSizeLimit(200, 100)).toBe(false)
+  })
+  it('accepts a file at or under the cap', () => {
+    expect(recordingWithinSizeLimit(100, 100)).toBe(true)
+    expect(recordingWithinSizeLimit(10, 100)).toBe(true)
+  })
+  it('allows an unknown size through (bounded by maxDuration)', () => {
+    expect(recordingWithinSizeLimit(null, 100)).toBe(true)
   })
 })

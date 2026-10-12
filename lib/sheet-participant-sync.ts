@@ -26,6 +26,14 @@ export interface SheetSyncResult {
   paymentLinksSent: number
 }
 
+// A syntactically valid email, the gate for syncing a sheet row (INT-4). Kept
+// deliberately simple — it only needs to reject blank and half-typed cells, not
+// validate deliverability.
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+function isSyncableEmail(email: string): boolean {
+  return EMAIL_RE.test(email)
+}
+
 // Map the sheet's "Type" column to the members/participants enum role + bracket.
 // Minors are always students (sheet people are never organisers).
 function roleFromType(type: string, dateOfBirth: string | null): { eventRole: string; ageBracket: string } {
@@ -70,13 +78,20 @@ async function syncFromSheet(
   const paymentPeople: IndividualPaymentPerson[] = []
 
   for (const row of sheetRows) {
-    if (!row.first_name && !row.email) continue
-
     // Email is the cross-reference key for both the participant row and the
     // member record, so normalise it once here. Matching on the raw sheet value
     // was case-sensitive: "Jane@x.com" typed over an existing "jane@x.com" row
     // missed the match and added a duplicate participant.
     const email = normalizeEmail(row.email)
+
+    // deep review INT-4: skip rows without a syntactically valid email. A Drive
+    // push fires while the organiser is still typing a row, so a name-only row
+    // used to sync with email='' — matching nothing, inserted as a phantom, and
+    // then orphaned the moment the email was filled in (the email lookup no
+    // longer matches the email-less row, so a SECOND participant is inserted).
+    // Email is also the key for the member record and for routing consent/
+    // payment, so a row without one cannot be processed meaningfully anyway.
+    if (!isSyncableEmail(email)) continue
 
     const { data: existing } = await db
       .from('participants')
@@ -145,13 +160,35 @@ async function syncFromSheet(
       participantId = existing.id
       updated++
     } else {
-      const { data: inserted } = await db
+      const { data: inserted, error: insErr } = await db
         .from('participants')
         .insert({ ...payload, registration_id: registration.id })
         .select('id')
         .single()
-      participantId = inserted?.id ?? null
-      created++
+      if (insErr) {
+        // deep review INT-4: two overlapping Drive pushes run two full syncs at
+        // once; both read "no participant" and both try to insert the same
+        // (registration_id, lower(email)). The participants_reg_email_uniq index
+        // (migration 20261012165038) makes the loser fail — treat that as "the
+        // other sync already created it", re-read the row, and update it so we
+        // don't manufacture a duplicate / a second consent + payment dispatch.
+        const { data: raced } = await db
+          .from('participants')
+          .select('id')
+          .eq('registration_id', registration.id)
+          .eq('email', email)
+          .maybeSingle()
+        if (raced?.id) {
+          await db.from('participants').update(payload).eq('id', raced.id)
+          participantId = raced.id
+          updated++
+        } else {
+          console.error('[sheet-sync] participant insert failed:', insErr.message)
+        }
+      } else {
+        participantId = inserted?.id ?? null
+        created++
+      }
     }
 
     // Paperwork, then billing. dispatchAgreement is a no-op for anyone who

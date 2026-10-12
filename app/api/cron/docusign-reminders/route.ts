@@ -39,6 +39,12 @@ const MAX_CHASES = 4
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
+// deep review DS-8: during a DocuSign slowdown each envelope's sync + resend can
+// take tens of seconds, so a long work list used to be killed mid-run, skipping
+// the outbox drain, heartbeat and run.finish at the end. Stop starting new
+// chases after this; the rest are picked up by the next daily run.
+const CHASE_BUDGET_MS = 90_000
+
 export async function GET(req: NextRequest) {
   const blocked = guardCron(req)
   if (blocked) return blocked
@@ -81,8 +87,14 @@ export async function GET(req: NextRequest) {
   // per-envelope reminder bookkeeping keeps the job resumable if it dies mid-run.
   let processed = 0
   let skippedBounced = 0
+  let deferred = 0
+  const stopAt = Date.now() + CHASE_BUDGET_MS
   for (const env of envelopes) {
     try {
+      // Out of time: leave the rest for the next run so the housekeeping below
+      // (outbox drain, heartbeat, run.finish) always gets its turn.
+      if (Date.now() >= stopAt) { deferred++; continue }
+
       // Refresh recipients first: the copy below depends on who is actually
       // outstanding, and a stale list would reproduce the exact bug this fixes.
       let recipients: Awaited<ReturnType<typeof syncEnvelopeRecipients>> = []
@@ -115,6 +127,24 @@ export async function GET(req: NextRequest) {
         skippedBounced++
         continue
       }
+
+      // deep review DS-8: claim the row BEFORE resending. Two overlapping
+      // invocations (a Vercel retry, a manual trigger) otherwise both select
+      // this row and both resend + email the family; and stamping
+      // reminder_sent_at only AFTER the emails meant a send that threw left the
+      // row un-stamped, so DocuSign re-notified the next day. A conditional
+      // update keyed on the reminder_count we read claims the slot atomically:
+      // exactly one runner's update matches, and the stamp lands before any send.
+      const prevCount = env.reminder_count ?? 0
+      const claimedAt = new Date().toISOString()
+      const { data: claimed } = await db
+        .from('agreements')
+        .update({ reminder_sent_at: claimedAt, reminder_count: prevCount + 1, updated_at: claimedAt })
+        .eq('id', env.id)
+        .eq('reminder_count', prevCount)
+        .select('id')
+      // No row matched: another runner already claimed it this cycle. Skip.
+      if (!claimed?.length) continue
 
       await remindEnvelopeRow(db, env)
 
@@ -164,16 +194,8 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const now = new Date().toISOString()
-      await db
-        .from('agreements')
-        .update({
-          reminder_sent_at: now,
-          reminder_count: (env.reminder_count ?? 0) + 1,
-          updated_at: now,
-        })
-        .eq('id', env.id)
-
+      // reminder_sent_at / reminder_count were already stamped by the atomic
+      // claim above (deep review DS-8), so there is no post-send bookkeeping.
       processed++
     } catch (err) {
       console.error(`[cron] docusign-reminders: failed for envelope ${env.id}:`, err)
@@ -191,7 +213,7 @@ export async function GET(req: NextRequest) {
   // The daily housekeeping job checks this cron; this cron checks it.
   await checkHeartbeat(db, ['esign-maintenance', 'docusign-form-data']).catch((err) => run.fail('heartbeat', err))
 
-  console.log(`[cron] docusign-reminders: processed ${processed} of ${envelopes.length} (${skippedBounced} skipped — bounced address)`)
-  await run.finish({ processed, eligible: envelopes.length, skippedBounced, outbox })
-  return NextResponse.json({ processed, skippedBounced })
+  console.log(`[cron] docusign-reminders: processed ${processed} of ${envelopes.length} (${skippedBounced} skipped — bounced address, ${deferred} deferred — out of time)`)
+  await run.finish({ processed, eligible: envelopes.length, skippedBounced, deferred, outbox })
+  return NextResponse.json({ processed, skippedBounced, deferred })
 }

@@ -21,8 +21,12 @@ export async function POST(req: Request) {
   if (!body || typeof body.token !== 'string') return invalidLink()
   const birthYear = typeof body.birthYear === 'string' ? body.birthYear.slice(0, 4) : null
 
-  // Opening a new link ends any session from an earlier one in this browser
-  // (a parent with two children), unless this link opens a session itself.
+  // deep review DSES-N1: each link gets its own per-recipient session cookie
+  // (ES-1), so opening a second link in the same browser does NOT end the first
+  // — a parent with two children keeps a separate session per child, and an
+  // action in one tab can never land on the other child's form. (Earlier code
+  // kept a single cookie and overwrote it; do not restore that.) The
+  // clearSessionCookie calls below only wipe the legacy unscoped cookie.
   const state = await openLink(supabaseServer(), body.token, { birthYear })
   switch (state.kind) {
     case 'invalid':

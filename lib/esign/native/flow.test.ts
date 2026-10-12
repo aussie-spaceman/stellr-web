@@ -26,7 +26,7 @@ vi.mock('@/lib/credentials-notify', () => ({ applyGuardianOptOut: vi.fn(async ()
 
 import { nativeProvider } from '@/lib/esign/providers/native'
 import { openLink, resolveSession, recordConsent, sameName, submitSignature, recordViewed, finaliseStalled, activateStrandedSigners, MAX_FAILED_CHECKS } from './flow'
-import { verifyToken } from './tokens'
+import { verifyToken, mintToken, SESSION_TTL_SECONDS } from './tokens'
 import { sendInvites } from '@/lib/esign/outbox'
 import { SIGNED_BUCKET } from '@/lib/esign/storage'
 
@@ -422,5 +422,48 @@ describe('Stellr signing: a minor’s consent form', () => {
     const env = db.table('agreements').find((a) => a.id === row.id)!
     expect(env.status).toBe('completed')
     expect(env.signed_pdf_sha256).toMatch(/^[0-9a-f]{64}$/)
+  })
+})
+
+describe('resolveSession download mode (deep review ES-9)', () => {
+  // The signing submit bumps the recipient's token_version by one and stamps
+  // signed_at, and a completed recipient's version never moves again, so the
+  // session that actually signed is uniquely version = token_version - 1. An
+  // email correction before the real parent signs bumps the version again, so
+  // the mistyped-address session is an OLDER version — it must not download the
+  // signed copy. `read` mode (the signing page's "already signed" check) still
+  // accepts an older session.
+  // verifyToken requires a UUID recipient id and version ≥ 1, so the recipient's
+  // current token_version is 3: the signing session is version 2 (= 3 - 1) and a
+  // pre-correction session is version 1.
+  const RID = '22222222-2222-4222-8222-222222222222'
+  const dlDb = () => fakeSupabase({
+    agreements: [{ id: 'env-dl', provider: 'native', status: 'completed', template_id: TEMPLATE_ID, prefill: {} }],
+    agreement_recipients: [{
+      id: RID, envelope_row: 'env-dl', role_name: 'guardian', name: 'Pat', email: 'pat@home.test',
+      status: 'completed', token_version: 3, signed_at: '2026-10-10T00:00:00Z',
+      token_expires_at: null, failed_token_attempts: 0,
+    }],
+  })
+  const session = (version: number) => mintToken(RID, 'session', version, SESSION_TTL_SECONDS).token
+
+  it('accepts the exact signing session (version = token_version - 1)', async () => {
+    const ctx = await resolveSession(dlDb().client, session(2), 'download')
+    expect(ctx?.recipient.id).toBe(RID)
+  })
+
+  it('refuses a session minted before an email correction (an older version)', async () => {
+    expect(await resolveSession(dlDb().client, session(1), 'download')).toBeNull()
+  })
+
+  it('refuses a session on a recipient that has not signed yet', async () => {
+    const db = dlDb()
+    db.table('agreement_recipients')[0].signed_at = null
+    expect(await resolveSession(db.client, session(2), 'download')).toBeNull()
+  })
+
+  it('leaves read mode unchanged: an older session can still read the outcome', async () => {
+    const ctx = await resolveSession(dlDb().client, session(1), 'read')
+    expect(ctx?.recipient.id).toBe(RID)
   })
 })

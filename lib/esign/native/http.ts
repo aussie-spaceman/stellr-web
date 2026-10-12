@@ -108,7 +108,7 @@ export function clearSessionCookie(res: NextResponse, ref?: string | null): Next
 export async function actingSession(
   db: SupabaseClient,
   req: Request,
-  mode: 'act' | 'read',
+  mode: 'act' | 'read' | 'download',
 ): Promise<SessionContext | null> {
   const ref = signRef(req)
   const ctx = await resolveSession(db, await sessionCookie(ref), mode)

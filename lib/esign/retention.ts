@@ -110,14 +110,11 @@ export async function retainSignedRecords(
   return { restricted: restricted?.length ?? 0, removedUnsigned }
 }
 
-/**
- * Restricts one person's signed agreements in answer to a deletion request,
- * without deleting the person. Returns how many were restricted.
- */
-export async function restrictForRequest(db: SupabaseClient, memberId: string, now = new Date()): Promise<number> {
-  const { restricted } = await retainSignedRecords(db, { kind: 'member', id: memberId }, now)
-  return restricted
-}
+// deep review DSES-N2 / CO-1: a `restrictForRequest(db, memberId)` wrapper lived
+// here but had no caller — the live erasure path restricts via
+// `executeDeletion` → `retainSignedRecords` directly. Removed so a future caller
+// can't wire a second, parallel restriction path. Call `retainSignedRecords`
+// with `{ kind: 'member', id }` if a member-scoped restriction is ever needed.
 
 export interface ExpireResult {
   eligible: number
@@ -246,19 +243,28 @@ export async function purgeExpired(
   const now = opts.now ?? new Date()
   const { data, error } = await db
     .from('agreements')
-    .select('id, signed_pdf_path, certificate_path')
+    .select('id, signed_pdf_path, certificate_path, replicated_at')
     .lte('retain_until', now.toISOString())
     .order('retain_until', { ascending: true })
     .limit(opts.limit)
   if (error) throw new Error(`Retention work list query failed: ${error.message}`)
 
-  const rows = (data ?? []) as { id: string; signed_pdf_path: string | null; certificate_path: string | null }[]
+  const rows = (data ?? []) as { id: string; signed_pdf_path: string | null; certificate_path: string | null; replicated_at: string | null }[]
   if (opts.dryRun) return { eligible: rows.length, purged: 0, failed: [] }
 
   let purged = 0
   const failed: { id: string; error: string }[] = []
   for (const row of rows) {
     try {
+      // deep review ES-10: a record with off-site copies (replicated_at set) must
+      // not be deleted while the store is unavailable — removeReplicas would be
+      // skipped and the encrypted copies would outlive the retention duty with
+      // Stellr still holding the key. Fail the row (the next run retries once the
+      // store is back) rather than orphaning the copies. A row never replicated
+      // has nothing off-site, so it may purge even without a store.
+      if (!opts.store && row.replicated_at) {
+        throw new Error('off-site store unavailable; refusing to delete a replicated record')
+      }
       // Off-site copies first: a record deleted here must not live on there.
       if (opts.store) await removeReplicas(opts.store, row.id)
       // Drawn signatures live beside the record; the signer rows that point at

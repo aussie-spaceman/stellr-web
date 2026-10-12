@@ -71,6 +71,11 @@ export async function syncEnvelopeRecipients(
   return recipients
 }
 
+/** PostgREST caps a response at 1000 rows and a long `.in()` makes an overlong
+ * GET URL (414/400); chunk the ids so neither bites at scale (deep review DS-9,
+ * matching the lib/survey/media.ts pattern). */
+const RECIPIENT_IN_CHUNK = 200
+
 /** Recipient rows for many envelopes at once, keyed by agreements.id. */
 export async function loadRecipientsByEnvelopeRows(
   db: SupabaseClient,
@@ -80,19 +85,27 @@ export async function loadRecipientsByEnvelopeRows(
   const ids = [...new Set(envelopeRowIds.filter(Boolean))]
   if (ids.length === 0) return byRow
 
-  const { data, error } = await db
-    .from('agreement_recipients')
-    .select('envelope_row, name, email, role_name, status, delivered_at, routing_order, invite_sent_at, envelope:agreements!inner(provider)')
-    .in('envelope_row', ids)
-    .order('routing_order', { ascending: true })
-  if (error) {
-    // A missing recipient list degrades the pill to "outstanding signer unknown"
-    // (see describeEnvelope) rather than breaking the page. Never fatal.
-    console.error('[docusign] recipient load failed (non-fatal):', error.message)
-    return byRow
+  // deep review DS-9: fetch in chunks of RECIPIENT_IN_CHUNK ids. The admin
+  // consent-forms page and the member panel pass every envelope id at once, so
+  // an unchunked `.in()` silently truncated the recipient list (losing "who is
+  // outstanding") and could build an overlong URL as the roster grew.
+  const data: Record<string, unknown>[] = []
+  for (let i = 0; i < ids.length; i += RECIPIENT_IN_CHUNK) {
+    const { data: slice, error } = await db
+      .from('agreement_recipients')
+      .select('envelope_row, name, email, role_name, status, delivered_at, routing_order, invite_sent_at, envelope:agreements!inner(provider)')
+      .in('envelope_row', ids.slice(i, i + RECIPIENT_IN_CHUNK))
+      .order('routing_order', { ascending: true })
+    if (error) {
+      // A missing recipient list degrades the pill to "outstanding signer unknown"
+      // (see describeEnvelope) rather than breaking the page. Never fatal.
+      console.error('[docusign] recipient load failed (non-fatal):', error.message)
+      return byRow
+    }
+    data.push(...(slice ?? []))
   }
 
-  for (const raw of data ?? []) {
+  for (const raw of data) {
     const { envelope, invite_sent_at, ...row } = raw as Record<string, unknown> & {
       envelope?: { provider?: string } | { provider?: string }[] | null
       invite_sent_at?: string | null

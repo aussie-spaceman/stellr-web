@@ -7,6 +7,7 @@ vi.mock('@/lib/esign/operations', () => ({ fetchSignedDocument }))
 
 import {
   SIGNED_BUCKET,
+  agreementFilename,
   archiveEnvelope,
   archivePending,
   loadSignedRecord,
@@ -167,5 +168,18 @@ describe('loadSignedRecord', () => {
       'certificate',
     )
     expect(record.kind === 'url' && record.filename).toBe('agreement-mo-lee-certificate.pdf')
+  })
+
+  it('names the native certificate artifact as the audit JSON, not a .pdf (ES-7)', () => {
+    // deep review ES-7: for Stellr signing the "certificate" artifact is
+    // audit.json; naming it .pdf gave admins a file that would not open.
+    expect(agreementFilename(completed({ provider: 'native', envelope_type: 'minor', minor_name: 'Sam Rivera' }), 'certificate'))
+      .toBe('consent-sam-rivera-audit.json')
+    // DocuSign still gets its PDF certificate name.
+    expect(agreementFilename(completed({ provider: 'docusign', envelope_type: 'mentor', minor_name: null, signer_name: 'Mo Lee' }), 'certificate'))
+      .toBe('agreement-mo-lee-certificate.pdf')
+    // The signed document itself is unaffected.
+    expect(agreementFilename(completed({ provider: 'native', envelope_type: 'minor', minor_name: 'Sam Rivera' }), 'pdf'))
+      .toBe('consent-sam-rivera.pdf')
   })
 })

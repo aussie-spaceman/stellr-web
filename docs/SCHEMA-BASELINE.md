@@ -92,6 +92,23 @@ select
 
 As of 9 Sept 2026 production reports `102 / 988 / 27`.
 
+Also verify the **post-dump Realtime + storage state** the DB-5 tail block restores
+(a plain `pg_dump` of `public`/`entitlements` omits both — see "Keeping it
+current"):
+
+```sql
+select
+  (select count(*) from pg_publication_tables where pubname='supabase_realtime') as realtime_tables, -- expect 3
+  (select count(*) from storage.buckets
+     where id in ('agreement-templates','signed-agreements','community-resources',
+                  'teacher-licenses','campaign-proposals')) as app_buckets;                           -- expect 5
+```
+
+If `realtime_tables` is 0 or `app_buckets` < 5, the DB-5 block at the tail of
+`supabase/baseline.sql` did not run — chat/space feeds will silently fall back to
+polling and teacher-licence / campaign-proposal uploads will fail with "Bucket
+not found".
+
 ## Seeding
 
 `npm run seed:dev` applies `supabase/seed.sql` on top. One surprise worth
@@ -108,6 +125,17 @@ Refresh the baseline whenever a migration lands in production:
   --schema=public --schema=entitlements \
   --schema-only --no-owner -f supabase/baseline.sql
 ```
+
+**After every refresh, re-add the DB-5 tail block.** `pg_dump` only dumps the
+`public`/`entitlements` schemas, so it drops the `supabase_realtime` publication
+adds and the `storage.buckets` seeds the DB-5 section restores — the very drift
+this file otherwise reintroduces. Re-insert that block (between the
+`FOR ROLE postgres … SEQUENCES … service_role` line and the first
+`FOR ROLE supabase_admin …` line, so `ON_ERROR_STOP=1` reaches it); it is
+delimited by the `deep review DB-5: post-dump Realtime + storage state` banner,
+so copy it from version control after dumping. (If this keeps biting, move it to
+a standalone `supabase/baseline-extras.sql` applied as its own `psql -f` step —
+`pg_dump` would then never touch it.)
 
 A stale baseline is worse than none — it will be trusted. Note production still
 has **no** `supabase_migrations.schema_migrations` ledger; which migrations are

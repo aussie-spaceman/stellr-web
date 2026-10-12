@@ -11,6 +11,7 @@ import {
   updateTierMentoring,
 } from '@/lib/mentoring'
 import type { CohortTheme } from '@/lib/mentoring-format'
+import { CommunityDeleteBlockedError } from '@/lib/community-delete-guard'
 
 // Admin actions for the Mentoring redesign that the legacy /api/admin/community/
 // cohorts route doesn't cover: make-mentor (global), reassign mentor, cohort
@@ -70,7 +71,19 @@ export async function POST(req: Request) {
     }
     case 'delete': {
       if (!b.cohortId) return NextResponse.json({ error: 'cohortId required' }, { status: 400 })
-      await deleteCohort(b.cohortId)
+      // deep review DB-4: deleteCohort blocks the delete when it would cascade
+      // away the cohort's chat history — surface that as a 409 steering to Archive.
+      try {
+        await deleteCohort(b.cohortId)
+      } catch (e) {
+        if (e instanceof CommunityDeleteBlockedError) {
+          return NextResponse.json(
+            { error: 'This cohort has chat history. Archive it instead to preserve the record.', blockers: e.blockers },
+            { status: 409 },
+          )
+        }
+        throw e
+      }
       return NextResponse.json({ ok: true })
     }
     case 'updateTier': {

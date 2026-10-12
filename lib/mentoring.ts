@@ -21,6 +21,7 @@ import { ensureMemberGrants, getKindBalance, bookCohortFromAllocation, cancelCoh
 import { reportEnrollmentGate, accessGatesEnforced } from '@/lib/access-gates'
 import { addGlobalRole } from '@/lib/member-roles'
 import { isClearedForMinorContact } from '@/lib/compliance'
+import { assertCohortDeletable } from '@/lib/community-delete-guard'
 import { stripeClient } from '@/lib/stripe'
 
 // ─── Credits ────────────────────────────────────────────────────────────────
@@ -612,12 +613,19 @@ export async function archiveCohort(cohortId: string): Promise<void> {
 }
 
 export async function deleteCohort(cohortId: string): Promise<void> {
+  const db = supabaseServer()
+  // deep review DB-4 (safeguarding / data-retention): block the hard delete when
+  // it would cascade away the cohort's chat history (adult↔minor group chat,
+  // unrecoverable — no DB backups). Steer admins to Archive, which keeps the data.
+  // Runs BEFORE cancelCohortViaLedger so a blocked delete does no partial work
+  // (no refunds issued for a cohort that then refuses to delete). Fails closed:
+  // a count error throws rather than letting the cascade proceed.
+  await assertCohortDeletable(db, cohortId)
   // Refund spent enrollments BEFORE deleting — restore drawn allocations + refund
   // paid bookings to account credit via the entitlements ledger (the offering and
   // its bookings vanish when the cohort row is deleted).
   await cancelCohortViaLedger(cohortId)
-  const db = supabaseServer()
-  // FK cascades remove cohort_members, sessions, actions, training links, chat.
+  // FK cascades remove cohort_members, sessions, actions, training links.
   await db.from('mentoring_cohorts').delete().eq('id', cohortId)
 }
 

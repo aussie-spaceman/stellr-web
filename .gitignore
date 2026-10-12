@@ -34,3 +34,6 @@ supabase/.temp/
 
 # AEO prompt-panel results (scripts/aeo-prompt-panel.ts) — local, uploaded to the tracker sheet
 .aeo-panel/
+
+# Vitest coverage output (deep review TEST-10: `vitest run --coverage`)
+/coverage/

@@ -7,6 +7,7 @@ import { syncMemberOptionSelections } from '@/lib/member-profile-options'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { getSignedInMember } from '@/lib/community'
 import { sendAccountInvite } from '@/lib/member-invite'
+import { isMinorOn } from '@/lib/age'
 
 // POST /api/admin/members — admin manually creates a new member record
 export async function POST(req: Request) {
@@ -46,16 +47,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'A member with this email already exists' }, { status: 409 })
   }
 
-  // Auto-override bracket/role if DOB indicates minor
+  // Auto-override bracket/role if DOB indicates minor.
+  // deep review QUAL-8: this backstop used `getFullYear() - getFullYear()`, which
+  // over-counts anyone whose birthday hasn't happened yet this year — a 17-year-old
+  // born in December reads as 18, so the minor override was skipped and the member
+  // was stored with an adult bracket/role. Use the one shared age module (lib/age),
+  // which compares the calendar date in the app's time zone, so the bracket is
+  // right whatever the month of birth.
   let resolvedBracket = age_bracket
   let resolvedRole = event_role
-  if (date_of_birth) {
-    const dob = new Date(date_of_birth)
-    const age = new Date().getFullYear() - dob.getFullYear()
-    if (age < 18) {
-      resolvedBracket = 'high_school'
-      resolvedRole = 'participant'
-    }
+  if (date_of_birth && isMinorOn(date_of_birth)) {
+    resolvedBracket = 'high_school'
+    resolvedRole = 'participant'
   }
 
   // Ensure role is valid for bracket

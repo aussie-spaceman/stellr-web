@@ -48,8 +48,31 @@ describe('POST comment — post status gate (MEM-6)', () => {
     state.db = fakeSupabase({
       community_posts: [{ id: POST_ID, status: 'published', space_id: null, author_member_id: 'm1' }],
     })
+    state.db.rpcs.increment_post_comment_count = () => null
     const res = await post()
     expect(res.status).toBe(200)
     expect(state.db.table('community_comments')).toHaveLength(1)
+  })
+})
+
+describe('POST comment — comment-count RPC error is surfaced, not swallowed (QUAL-10)', () => {
+  // The old `.then(ok, fallback)` swallowed every RPC failure because supabase-js
+  // resolves `{ error }` rather than rejecting, so the fallback never ran. The
+  // comment still has to be saved (count is best-effort), but the error must now
+  // be logged so an out-of-sync count is detectable.
+  it('logs the RPC error and still returns the saved comment', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    state.db = fakeSupabase({
+      community_posts: [{ id: POST_ID, status: 'published', space_id: null, author_member_id: 'm1' }],
+    })
+    // No rpc handler registered → the fake resolves `{ data: null, error }`.
+    const res = await post()
+    expect(res.status).toBe(200)
+    expect(state.db.table('community_comments')).toHaveLength(1)
+    expect(errSpy).toHaveBeenCalledWith(
+      '[community] increment_post_comment_count failed:',
+      expect.objectContaining({ message: expect.stringContaining('increment_post_comment_count') }),
+    )
+    errSpy.mockRestore()
   })
 })

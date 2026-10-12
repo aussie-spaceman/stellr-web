@@ -140,21 +140,13 @@ export async function POST(req: Request) {
   }
 
   // Keep the denormalised count in sync (best-effort).
-  await db.rpc('increment_post_comment_count', { p_post_id: postId }).then(
-    () => {},
-    async () => {
-      // Fallback if the RPC isn't present: read-modify-write.
-      const { data: row } = await db
-        .from('community_posts')
-        .select('comment_count')
-        .eq('id', postId)
-        .single()
-      await db
-        .from('community_posts')
-        .update({ comment_count: (row?.comment_count ?? 0) + 1 })
-        .eq('id', postId)
-    }
-  )
+  // deep review QUAL-10: supabase-js resolves `{ error }` on a failed query — it
+  // never rejects — so the old `.then(ok, fallback)` rejection handler was dead
+  // code: the no-op fulfilled branch always ran and any RPC error was silently
+  // swallowed. The RPC exists (migration 013), so there is nothing to fall back
+  // to; await it and log a real error instead of hiding it.
+  const { error: countError } = await db.rpc('increment_post_comment_count', { p_post_id: postId })
+  if (countError) console.error('[community] increment_post_comment_count failed:', countError)
 
   // Notify post author on reply (FR-COM-06). Best-effort — don't fail the
   // request, but deep review QUAL-1: register it with after() so the reply

@@ -1,7 +1,10 @@
 'use client'
 
 import { Download, FileText } from 'lucide-react'
-import { flyerDownloadUrl, type EventFlyer } from '@/lib/sanity'
+// deep review QUAL-12: import the flyer helpers from the dependency-free module,
+// not from '@/lib/sanity', so this client component doesn't pull the Sanity
+// client into the public event page's browser bundle.
+import { flyerDownloadUrl, type EventFlyer } from '@/lib/sanity-urls'
 import { pushDataLayer, participationTypeFor } from '@/lib/analytics'
 
 /**

@@ -13,10 +13,19 @@ const h = vi.hoisted(() => ({
     stripePriceId: 'price_x',
   })),
   priceRetrieve: vi.fn(async () => ({ unit_amount: 13500, currency: 'usd' })),
+  // PAY-1: Stripe invoice surface for the "pay by invoice" path.
+  customersCreate: vi.fn(async () => ({ id: 'cus_1' })),
+  invoicesCreate: vi.fn(async () => ({ id: 'in_1' })),
+  invoiceItemsCreate: vi.fn(async () => ({ id: 'ii_1' })),
+  invoicesFinalize: vi.fn(async (id: string) => ({ id, hosted_invoice_url: null })),
+  invoicesSend: vi.fn(async () => ({})),
   getCurrentMember: vi.fn(async (): Promise<unknown> => null),
   findExistingRegistrations: vi.fn(async () => new Map<string, unknown[]>()),
   resolveDuplicate: vi.fn(() => ({ kind: 'none' })),
   ensureClerk: vi.fn(async () => ({ clerkUserId: 'c-1', signInToken: null, created: false })),
+  // AUTH-N2: controllable rate-limit guard. Returns null (proceed) by default;
+  // a test can make it return a 429 Response to assert the route bails first.
+  rlGuard: vi.fn((_req: unknown, _route: string, _opts: unknown, _suffix?: string): Response | null => null),
   // Captures every row passed to `.insert()`, keyed by table name.
   captures: {} as Record<string, unknown[]>,
 }))
@@ -33,7 +42,12 @@ function makeDb(captures: Record<string, unknown[]>) {
         return { data: rows.map((r: Record<string, unknown>, i: number) => ({ id: `p-${i}`, email: r.email })), error: null }
       }
       if (table === 'members' && state.op === 'upsert') {
-        return state.single ? { data: { id: 'm-teacher' }, error: null } : { data: [], error: null }
+        if (state.single) return { data: { id: 'm-teacher' }, error: null }
+        // Mirror Supabase `.upsert(rows).select('id,email')`: a created row per
+        // payload, id derived from email so the route maps members back by email.
+        // REG-11 depends on this linkage being observable on participant rows.
+        const rows = Array.isArray(state.payload) ? state.payload : [state.payload]
+        return { data: rows.map((r: Record<string, unknown>) => ({ id: `m-${String(r.email)}`, email: r.email })), error: null }
       }
       if (table === 'members' && state.op === 'select') return { data: [], error: null }
       return { data: null, error: null }
@@ -57,12 +71,20 @@ vi.mock('@/lib/supabase', () => ({ supabaseServer: () => makeDb(h.captures) }))
 vi.mock('@/lib/sanity', () => ({ getEventBySlug: h.getEventBySlug }))
 vi.mock('@/lib/community', () => ({ getCurrentMember: h.getCurrentMember }))
 vi.mock('@/lib/impersonation', () => ({ assertNotImpersonating: async () => null }))
-vi.mock('@/lib/stripe', () => ({ stripeClient: () => ({ prices: { retrieve: h.priceRetrieve } }) }))
+vi.mock('@/lib/stripe', () => ({
+  stripeClient: () => ({
+    prices: { retrieve: h.priceRetrieve },
+    customers: { create: h.customersCreate },
+    invoiceItems: { create: h.invoiceItemsCreate },
+    invoices: { create: h.invoicesCreate, finalizeInvoice: h.invoicesFinalize, sendInvoice: h.invoicesSend },
+  }),
+}))
 vi.mock('@/lib/registration-duplicates', () => ({
   findExistingRegistrations: h.findExistingRegistrations,
   resolveDuplicate: h.resolveDuplicate,
 }))
 vi.mock('@/lib/clerk-provisioning', () => ({ ensureClerkUserAndSignInToken: h.ensureClerk }))
+vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: h.rlGuard, HOUR_MS: 3_600_000 }))
 vi.mock('@/lib/docusign-agreements', () => ({ dispatchAgreement: vi.fn(async () => {}) }))
 vi.mock('@/lib/esign/outbox', () => ({ batchInvites: async () => {} }))
 vi.mock('@/lib/email', () => ({ sendEmail: async () => {}, groupConfirmationEmail: () => ({ subject: '', html: '', text: '' }) }))
@@ -128,6 +150,7 @@ beforeEach(() => {
   h.findExistingRegistrations.mockResolvedValue(new Map())
   h.resolveDuplicate.mockReturnValue({ kind: 'none' })
   h.ensureClerk.mockResolvedValue({ clerkUserId: 'c-1', signInToken: null, created: false })
+  h.rlGuard.mockReturnValue(null)
 })
 
 describe('POST /api/register/group', () => {
@@ -197,5 +220,80 @@ describe('POST /api/register/group', () => {
     expect(h.captures.registrations?.length).toBe(1)
     // teacher + 2 students
     expect((h.captures.participants?.[0] as unknown[]).length).toBe(3)
+  })
+
+  // ── PAY-1 ────────────────────────────────────────────────────────────────────
+  // The "pay by invoice" path must attach the line item to a specific invoice so
+  // the invoice carries the real amount. The bug created a *pending* invoice item
+  // first and then an invoice with no `pending_invoice_items_behavior`; on the
+  // pinned SDK that defaults to excluding pending items, finalising a $0 invoice.
+  it('PAY-1: invoice is created BEFORE the line item, which is attached with invoice:<id>', async () => {
+    const res = await post(body({ payment_method: 'invoice' }))
+    expect(res.status).toBe(201)
+
+    // The invoice was created, then the line item attached to THAT invoice.
+    expect(h.invoicesCreate).toHaveBeenCalledTimes(1)
+    expect(h.invoiceItemsCreate).toHaveBeenCalledTimes(1)
+    expect(h.invoiceItemsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ invoice: 'in_1', amount: 13500 * 3 }),
+    )
+    // Ordering: invoices.create ran before invoiceItems.create (so the item is
+    // never left as an unattached pending item that the invoice excludes).
+    expect(h.invoicesCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      h.invoiceItemsCreate.mock.invocationCallOrder[0],
+    )
+    // And it was finalised + sent.
+    expect(h.invoicesFinalize).toHaveBeenCalledWith('in_1')
+    expect(h.invoicesSend).toHaveBeenCalledTimes(1)
+  })
+
+  // ── REG-11 ─────────────────────────────────────────────────────────────────
+  it('REG-11: two same-email, different-name students are not merged into one member', async () => {
+    const shared = 'family@example.com'
+    const res = await post(body({
+      student_count: 2, total_participants: 3,
+      students: [
+        { ...STUDENT(shared), first_name: 'Alice', last_name: 'Smith', date_of_birth: '2011-03-01' },
+        { ...STUDENT(shared), first_name: 'Bob', last_name: 'Smith', date_of_birth: '2013-07-15' },
+      ],
+    }))
+    expect(res.status).toBe(201)
+    const parts = (h.captures.participants?.[0] ?? []) as Array<Record<string, unknown>>
+    const alice = parts.find((p) => p.first_name === 'Alice')
+    const bob = parts.find((p) => p.first_name === 'Bob')
+    // Both distinct students survive as their own participant rows…
+    expect(alice).toBeTruthy()
+    expect(bob).toBeTruthy()
+    // …each keeping its own identity (not overwritten last-wins).
+    expect(alice!.last_name).toBe('Smith')
+    expect(alice!.date_of_birth).toBe('2011-03-01')
+    expect(bob!.date_of_birth).toBe('2013-07-15')
+    // …and they are NOT collapsed onto one shared member row. Before the fix the
+    // email-keyed dedupe linked both participant rows to the same member id; now
+    // only the first claimant of the shared family email owns a member and the
+    // sibling's member_id is null (its identity lives on the participant row).
+    const bothLinkedToSameMember = !!alice!.member_id && alice!.member_id === bob!.member_id
+    expect(bothLinkedToSameMember).toBe(false)
+  })
+
+  // ── AUTH-N2 ────────────────────────────────────────────────────────────────
+  it('AUTH-N2: runs the rate-limit guard first, sub-keyed by event slug', async () => {
+    await post(body())
+    expect(h.rlGuard).toHaveBeenCalledWith(
+      expect.anything(),
+      'register-group',
+      { limit: 3, windowMs: 3_600_000 },
+      'colorado',
+    )
+  })
+
+  it('AUTH-N2: a throttled caller gets 429 and nothing is created', async () => {
+    h.rlGuard.mockReturnValue(
+      new Response(JSON.stringify({ error: 'Too many requests' }), { status: 429 }),
+    )
+    const res = await post(body())
+    expect(res.status).toBe(429)
+    expect(h.captures.registrations).toBeUndefined()
+    expect(h.captures.participants).toBeUndefined()
   })
 })

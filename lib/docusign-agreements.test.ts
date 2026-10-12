@@ -21,9 +21,13 @@ vi.mock('./docusign', async (importOriginal) => {
 })
 vi.mock('./email', () => ({
   sendEmail,
-  docusignSentToMinorEmail:  () => ({ subject: 'sent-minor', html: '', text: '' }),
-  docusignSentToSignerEmail: () => ({ subject: 'sent-signer', html: '', text: '' }),
-  docusignOnFileEmail:       () => ({ subject: 'on-file', html: '', text: '' }),
+  docusignSentToMinorEmail:    () => ({ subject: 'sent-minor', html: '', text: '' }),
+  // The minor DocuSign path also sends the guardian a heads-up; the mock needs
+  // every export that path touches or the whole issuance throws (and reports a
+  // false 'failed'). Surfaced by the CO-2 test, which asserts a minor issuance.
+  docusignSentToGuardianEmail: () => ({ subject: 'sent-guardian', html: '', text: '' }),
+  docusignSentToSignerEmail:   () => ({ subject: 'sent-signer', html: '', text: '' }),
+  docusignOnFileEmail:         () => ({ subject: 'on-file', html: '', text: '' }),
 }))
 vi.mock('./notify', () => ({ notifyCommunityAdmins }))
 
@@ -397,5 +401,80 @@ describe('V2.3 validity: a minor agreement lasts while current, others 3 years',
 
   it('records Stellr signing agreements as the current version', () => {
     expect(agreementVersionFor('native')).toBe(AGREEMENT_VERSION)
+  })
+})
+
+describe('dispatchAgreement — CO-2 guardian-email-equals-student safeguarding marker', () => {
+  // Deep review CO-2: the owner asked for a durable, QUERYABLE record (no block,
+  // no refusal, no admin UI) whenever a minor's guardian consent email is the
+  // student's own inbox — one person can then give BOTH consent signatures, so
+  // the independent-guardian assurance is only as strong as the two addresses
+  // being different. The record is an activity-log row on the student's shared
+  // member/admin timeline (category 'compliance'), so it is queryable without a
+  // new table or migration. These assertions pin "written on a match, not on a
+  // mismatch", which is what the mutation-check reverts.
+  const MINOR_SHARED = {
+    ...ADULT,
+    firstName: 'Sam', lastName: 'Rivera',
+    email: 'family@home.test',
+    dateOfBirth: '2013-03-03',
+    eventRole: 'participant',
+    guardianFirstName: 'Pat', guardianLastName: 'Rivera',
+    guardianEmail: 'family@home.test',
+  }
+
+  const co2Rows = (inserts: { table: string; payload: Record<string, unknown> }[]) =>
+    inserts.filter((i) => i.table === 'member_activity_log')
+
+  it('writes the marker — and still issues the envelope — when the two emails match', async () => {
+    const { db, inserts } = makeDb({})
+    expect(await dispatchAgreement(db, MINOR_SHARED)).toBe('issued')
+
+    // No block/refusal: the consent envelope is still issued exactly as before.
+    expect(createConsent).toHaveBeenCalledTimes(1)
+
+    const rows = co2Rows(inserts)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].payload).toMatchObject({
+      member_id: 'm1',
+      category: 'compliance',
+      action: 'guardian_email_equals_student',
+      actor_type: 'system',
+    })
+    const meta = rows[0].payload.metadata as Record<string, unknown>
+    expect(meta.finding).toBe('CO-2')
+    expect(meta.eventSlug).toBe('nevada-2027')
+    expect(meta.agreementType).toBe('minor')
+  })
+
+  it('matches case-insensitively and ignores surrounding whitespace', async () => {
+    const { db, inserts } = makeDb({})
+    await dispatchAgreement(db, { ...MINOR_SHARED, email: '  Family@Home.TEST  ' })
+    expect(createConsent).toHaveBeenCalledTimes(1)
+    expect(co2Rows(inserts)).toHaveLength(1)
+  })
+
+  it('does NOT write the marker when guardian and student emails differ', async () => {
+    const { db, inserts } = makeDb({})
+    await dispatchAgreement(db, { ...MINOR_SHARED, email: 'student@home.test', guardianEmail: 'parent@home.test' })
+    // Still a normal minor issuance — only the safeguarding marker is absent.
+    expect(createConsent).toHaveBeenCalledTimes(1)
+    expect(co2Rows(inserts)).toHaveLength(0)
+  })
+
+  it('is best-effort: a failure writing the marker never breaks the consent issuance', async () => {
+    // The marker must never turn a successfully-issued consent into a failure.
+    const base = makeDb({})
+    const baseDb = base.db as unknown as { from(table: string): unknown }
+    const db = {
+      from(table: string) {
+        if (table === 'member_activity_log') {
+          return { insert: async () => { throw new Error('activity-log down') } }
+        }
+        return baseDb.from(table)
+      },
+    } as never
+    expect(await dispatchAgreement(db, MINOR_SHARED)).toBe('issued')
+    expect(createConsent).toHaveBeenCalledTimes(1)
   })
 })

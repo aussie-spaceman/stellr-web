@@ -25,6 +25,10 @@ vi.mock('./preflight', () => ({ deletionPreflight }))
 // Canned reads keyed by (table, selected columns). Writes just succeed.
 const participantsById: Record<string, unknown>[] = [{ id: 'p1' }, { id: 'p2' }]
 const participantMembers: Record<string, unknown>[] = [{ member_id: 'mem1' }, { member_id: 'mem2' }]
+// deep review QUALTEST-N1: inject a read error on a table so we can assert the
+// erasure/teardown aborts (throws) instead of silently treating the failed read
+// as an empty result. Mutated per-test; cleared in beforeEach.
+const readErrors: Record<string, unknown> = {}
 
 vi.mock('@/lib/supabase', () => ({
   supabaseServer: () => ({
@@ -38,11 +42,15 @@ vi.mock('@/lib/supabase', () => ({
         neq: () => chain,
         in: () => chain,
         is: () => chain,
-        maybeSingle: async () => ({ data: single(table, b.cols as string), error: null }),
+        maybeSingle: async () => {
+          const e = readErrors[table] ?? null
+          return { data: e ? null : single(table, b.cols as string), error: e }
+        },
         then: (resolve: (v: unknown) => unknown) => {
           if (b.op !== 'select') return resolve({ data: null, error: null })
-          if (b.count) return resolve({ count: 0, error: null })
-          return resolve({ data: list(table, b.cols as string), error: null })
+          const e = readErrors[table] ?? null
+          if (b.count) return resolve({ count: e ? null : 0, error: e })
+          return resolve({ data: e ? null : list(table, b.cols as string), error: e })
         },
       }
       return chain
@@ -70,6 +78,7 @@ const { executeDeletion } = await import('./execute')
 beforeEach(() => {
   for (const fn of [tombstoneCredentialsFor, removeEventParticipation, retainSignedRecords,
     startRetentionClock, purgeSurveyDataFor, archiveEntity, runExternalCleanup]) fn.mockClear()
+  for (const k of Object.keys(readErrors)) delete readErrors[k]
 })
 
 describe('executeDeletion — credential erasure (deep review MP-2 / MP-11)', () => {
@@ -105,5 +114,27 @@ describe('executeDeletion — event Space access (deep review REG-10)', () => {
   it('revokes event participation for a deleted participant', async () => {
     await executeDeletion('participant', 'p1', { mode: 'hard' })
     expect(removeEventParticipation).toHaveBeenCalledWith(expect.anything(), { memberId: 'mem1', eventSlug: 'evt' })
+  })
+})
+
+describe('executeDeletion — teardown reads fail closed (deep review QUALTEST-N1)', () => {
+  it('aborts a member hard-delete when the participant-rows read for the credential tombstone errors', async () => {
+    // A discarded error would skip the participant-linked credentials — the exact
+    // null-member_id case the tombstone exists for — erasing nothing while the row
+    // is deleted. Must throw so the deletion is retried, not silently incomplete.
+    readErrors.participants = { message: 'statement timeout' }
+    await expect(executeDeletion('member', 'mem1', { mode: 'hard' })).rejects.toThrow(/tombstone aborted/i)
+  })
+
+  it('aborts a participant hard-delete when the Space-access teardown read errors', async () => {
+    // participantsLeavingEvent must not return [] on an errored read — that would
+    // skip the event-Space revocation and leave the member in a minors' Space.
+    readErrors.participants = { message: 'PostgREST 503' }
+    await expect(executeDeletion('participant', 'p1', { mode: 'hard' })).rejects.toThrow(/teardown aborted/i)
+  })
+
+  it('aborts a group hard-delete when the registration read for the Space-access teardown errors', async () => {
+    readErrors.registrations = { message: 'pool exhausted' }
+    await expect(executeDeletion('registration', 'r1', { mode: 'hard' })).rejects.toThrow(/teardown aborted/i)
   })
 })

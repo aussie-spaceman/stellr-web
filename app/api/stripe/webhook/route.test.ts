@@ -39,7 +39,11 @@ const h = vi.hoisted(() => ({
 // update(...).eq(...) + insert. Writes mutate the fixture rows in place (so a
 // later read sees them) and are recorded for assertions.
 type Row = Record<string, unknown>
-function makeDb(tables: Record<string, Row[]>) {
+// `opts.failUpdate(table)` → that table's update() resolves with a Supabase
+// {error} (deep review PAY-5), letting a test prove a money-path write failure
+// aborts the webhook instead of being swallowed. Default (omitted) keeps every
+// write succeeding, so existing tests are unaffected.
+function makeDb(tables: Record<string, Row[]>, opts?: { failUpdate?: (table: string) => boolean }) {
   const updates: { table: string; set: Row }[] = []
   const inserts: { table: string; rows: Row[] }[] = []
   function builder(table: string) {
@@ -48,6 +52,9 @@ function makeDb(tables: Record<string, Row[]>) {
     const matched = () => (tables[table] ??= []).filter((r) => filters.every((f) => f(r)))
     const run = () => {
       if (pendingUpdate) {
+        if (opts?.failUpdate?.(table)) {
+          return { data: null, error: { message: `simulated ${table} write failure` } }
+        }
         const rows = matched()
         for (const r of rows) Object.assign(r, pendingUpdate)
         updates.push({ table, set: pendingUpdate })
@@ -213,5 +220,108 @@ describe('checkout.session.completed payment_status gate (PAY-6)', () => {
       data: { object: { id: 'cs_s', payment_status: 'paid', metadata: { type: 'store_order', orderId: 'o1' } } },
     } as unknown as Stripe.Event)
     expect(h.handleStoreOrderPaid).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('invoice.paid zero-amount guard (PAY-1)', () => {
+  it('does NOT confirm an event registration on a $0 invoice', async () => {
+    current = makeDb({ registrations: [{ id: 'r1', status: 'pending' }], stripe_webhook_events: [] })
+    const res = await post({
+      id: 'evt_zero', type: 'invoice.paid',
+      // The group invoice-ordering bug could finalise an empty $0 invoice that
+      // Stripe auto-marks paid; amount_paid is then 0.
+      data: { object: { id: 'in_zero', amount_paid: 0, metadata: { registrationId: 'r1' } } },
+    } as unknown as Stripe.Event)
+
+    expect(res.status).toBe(200)
+    expect(h.confirmRegistration).not.toHaveBeenCalled()
+  })
+
+  it('confirms when the invoice genuinely paid (amount_paid > 0)', async () => {
+    current = makeDb({ registrations: [{ id: 'r1', status: 'pending' }], stripe_webhook_events: [] })
+    await post({
+      id: 'evt_paid', type: 'invoice.paid',
+      data: { object: { id: 'in_paid', amount_paid: 40500, metadata: { registrationId: 'r1' } } },
+    } as unknown as Stripe.Event)
+
+    expect(h.confirmRegistration).toHaveBeenCalledTimes(1)
+    expect(h.confirmRegistration).toHaveBeenCalledWith('r1', false, { paidViaInvoice: true })
+  })
+})
+
+describe('money-path write failure fails closed (PAY-5)', () => {
+  const recorded = () => current.inserts.find((i) => i.table === 'stripe_webhook_events')
+
+  it('a renewal expires_at write error returns 500 and does NOT record the event', async () => {
+    current = makeDb(
+      {
+        member_memberships: [
+          { id: 'mm1', stripe_subscription_id: 'sub_1', renewal_status: 'active', billing_interval: 'monthly', expires_at: '2026-01-01' },
+        ],
+        stripe_webhook_events: [],
+      },
+      { failUpdate: (t) => t === 'member_memberships' },
+    )
+    const periodEnd = Math.floor(Date.parse('2026-12-01T00:00:00Z') / 1000)
+    const res = await post({
+      id: 'evt_renew_err', type: 'invoice.paid',
+      data: { object: {
+        metadata: {},
+        parent: { subscription_details: { subscription: 'sub_1' } },
+        lines: { data: [{ period: { end: periodEnd } }] },
+      } },
+    } as unknown as Stripe.Event)
+
+    expect(res.status).toBe(500)
+    expect(recorded()).toBeUndefined() // not processed → Stripe retries
+  })
+
+  it('a capturePaymentIntent write error returns 500 and does NOT record the event', async () => {
+    current = makeDb(
+      {
+        registrations: [{ id: 'r1', status: 'pending', stripe_payment_intent_id: null }],
+        participants: [],
+        stripe_webhook_events: [],
+      },
+      { failUpdate: (t) => t === 'registrations' },
+    )
+    const res = await post({
+      id: 'evt_cap_err', type: 'checkout.session.completed',
+      data: { object: {
+        id: 'cs_a', payment_status: 'paid', payment_intent: 'pi_1',
+        metadata: { registrationId: 'r1' }, client_reference_id: 'r1',
+        amount_total: 7500, currency: 'usd', customer: null, customer_details: null,
+      } },
+    } as unknown as Stripe.Event)
+
+    expect(res.status).toBe(500)
+    expect(recorded()).toBeUndefined()
+  })
+
+  it('a grantTier write failure on an invoice membership returns 500 and does NOT record the event', async () => {
+    // reason 'error' = a real insert failure, distinct from the benign skips.
+    h.grantTier.mockResolvedValueOnce({ granted: false, reason: 'error' })
+    current = makeDb({ stripe_webhook_events: [] })
+    const res = await post({
+      id: 'evt_grant_err', type: 'invoice.paid',
+      data: { object: { id: 'in_m', amount_paid: 9900, metadata: { type: 'membership_invoice', memberId: 'm1', tierId: 't1' } } },
+    } as unknown as Stripe.Event)
+
+    expect(res.status).toBe(500)
+    expect(recorded()).toBeUndefined()
+  })
+
+  it('still short-circuits an already-processed event (idempotency preserved)', async () => {
+    current = makeDb({
+      registrations: [{ id: 'r1', status: 'pending' }],
+      stripe_webhook_events: [{ id: 'evt_dup', type: 'invoice.paid' }],
+    })
+    const res = await post({
+      id: 'evt_dup', type: 'invoice.paid',
+      data: { object: { id: 'in_x', amount_paid: 40500, metadata: { registrationId: 'r1' } } },
+    } as unknown as Stripe.Event)
+
+    expect((await res.json()) as unknown).toMatchObject({ duplicate: true })
+    expect(h.confirmRegistration).not.toHaveBeenCalled()
   })
 })

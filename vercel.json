@@ -99,6 +99,10 @@
     {
       "path": "/api/cron/survey-retention",
       "schedule": "0 3 2 * *"
+    },
+    {
+      "path": "/api/cron/deletion-archive-retention",
+      "schedule": "0 4 2 * *"
     }
   ]
 }

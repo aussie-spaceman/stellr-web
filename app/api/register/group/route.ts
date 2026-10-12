@@ -38,6 +38,7 @@ import {
   payPageUrl,
 } from '@/lib/registration-checkout'
 import { sendPayLinkEmail } from '@/lib/registration-pay-link'
+import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -111,6 +112,23 @@ export async function POST(req: NextRequest) {
     // their session email is authoritative. This keeps the registrant bound to
     // their own member row and avoids duplicate/forged identities. Additional
     // adults and students are unaffected — group logic is otherwise unchanged.
+    // deep review AUTH-N2: rate-limit this public, unauthenticated write before
+    // any member/registration/Clerk/email side effect. A group registration
+    // creates many member + participant rows and sends transactional email on a
+    // shared free Resend quota (100/day); without a cap a scripted client could
+    // exhaust the day's email (including safeguarding/consent mail) and pollute
+    // members/registrations/Clerk. Matches the other public forms
+    // (teacher-grant, host-event, join-network). Sub-keyed by event slug so one
+    // venue registering for one event isn't lumped with that IP's traffic to
+    // other events; the limit stays tight because the quota is shared.
+    const rateLimited = rateLimitGuard(
+      req,
+      'register-group',
+      { limit: 3, windowMs: HOUR_MS },
+      typeof event_slug === 'string' ? event_slug : undefined,
+    )
+    if (rateLimited) return rateLimited
+
   // Read-only while an admin is viewing as this member. Impersonation is a lens,
   // not a login — an admin must never post, book or pay as somebody else.
   const impersonationBlock = await assertNotImpersonating()
@@ -537,20 +555,59 @@ export async function POST(req: NextRequest) {
       { ...teacher, event_role: registrant_role === 'student_manager' ? 'school_student_manager' : 'teacher' },
     ]
 
-    // Batch-upsert everyone in one round-trip; dedupe in-batch emails (last wins,
-    // matching the previous serial loop) since Postgres rejects ON CONFLICT
-    // updates that touch the same row twice in one statement.
+    // deep review REG-11: two distinct students can legitimately share ONE
+    // guardian email (siblings on a family address), so email alone is not a
+    // person's identity. Key a person by email + name + DOB and let the FIRST
+    // distinct person claim that email's member row. A later participant on the
+    // same email who is a DIFFERENT person is not merged into (or allowed to
+    // overwrite) that row: members.email is unique, so the sibling cannot get its
+    // own member row — its details still land on its own participant row below,
+    // and its consent is dispatched per-participant (DS-1 filters coverage on
+    // minor_name, DS-2 pairs envelopes by row position). Previously this map was
+    // keyed by email alone, last-wins, which collapsed two siblings into one
+    // member and linked both participant rows to it.
+    const personKey = (p: {
+      email?: string | null
+      first_name?: string | null
+      last_name?: string | null
+      date_of_birth?: string | null
+    }) =>
+      [
+        normalizeEmail(p.email ?? ''),
+        (p.first_name ?? '').trim().toLowerCase(),
+        (p.last_name ?? '').trim().toLowerCase(),
+        p.date_of_birth ?? '',
+      ].join('\u0000')
+
+    // We still map members by email (the table is unique on email) but remember
+    // WHICH person first claimed each email, so a distinct sibling sharing it is
+    // skipped rather than overwriting it last-wins.
     const memberUpsertByEmail = new Map<string, Record<string, unknown>>()
     const optionsByEmail = new Map<string, { ethnicity?: string[]; dietary?: string[] }>()
     const linkedMemberIdByEmail = new Map<string, string>()
+    // email -> personKey of the participant that owns that email's member row.
+    const memberEmailOwner = new Map<string, string>()
     for (const p of allPeople) {
       // Member-ID-linked participants reuse their existing record — never re-upsert
       // (which would overwrite their profile) or re-sync their options. Just keep
       // their id so the participant row below links to them.
       if (p._linked_member_id) {
-        if (p.email) linkedMemberIdByEmail.set(p.email, p._linked_member_id)
+        if (p.email) {
+          linkedMemberIdByEmail.set(p.email, p._linked_member_id)
+          // They own their email too (REG-11), so a later distinct person on the
+          // same email is not collapsed onto their record.
+          if (!memberEmailOwner.has(p.email)) memberEmailOwner.set(p.email, personKey(p))
+        }
         continue
       }
+      // REG-11: a DIFFERENT person already claimed this email in this batch —
+      // skip the member upsert for this sibling (no overwrite, no second row on
+      // the same unique email). resolveMemberId() leaves their member_id null
+      // below, so their identity stays on their own participant row.
+      const key = personKey(p)
+      const owner = memberEmailOwner.get(p.email)
+      if (owner && owner !== key) continue
+      if (!owner) memberEmailOwner.set(p.email, key)
       const ageNow = ageFromDob(p.date_of_birth)
       optionsByEmail.set(p.email, {
         ethnicity: (p as { ethnicity?: string[] }).ethnicity,
@@ -761,12 +818,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // deep review REG-11: resolve a participant's member link by PERSON, not by
+    // email. Only the participant that first claimed an email owns its member
+    // row; a distinct sibling sharing a family email (or a student entered under
+    // the teacher's address) resolves to null and keeps its identity on its own
+    // participant row, instead of being merged last-wins onto someone else's
+    // member. Member-ID-linked participants keep their explicit id.
+    const resolveMemberId = (p: ParticipantPayload): string | null => {
+      if (p._linked_member_id) return p._linked_member_id
+      return memberEmailOwner.get(p.email) === personKey(p)
+        ? (memberIdMap[p.email] ?? null)
+        : null
+    }
+
     // Build participant rows. event_role is normalised to the enum values the
     // admin roster, Companies auto-assign, and check-in filter on — same
     // under-18 override as the members upsert above.
     const buildParticipant = (p: ParticipantPayload, paymentStatus?: 'pending' | 'waived' | null) => ({
       registration_id: regId,
-      member_id: memberIdMap[p.email] ?? null,
+      member_id: resolveMemberId(p),
       first_name: p.first_name, last_name: p.last_name,
       nickname: p.nickname || null,
       email: p.email, phone: p.phone,
@@ -1046,17 +1116,27 @@ export async function POST(req: NextRequest) {
                 .eq('id', registrantMemberId).is('stripe_customer_id', null)
             }
           }
-          await stripe.invoiceItems.create({
-            customer: customerId,
-            currency: priceObj.currency,
-            amount: invoiceAmountCents,
-            description: `${event_title} — Group Registration (${total_participants} participant${total_participants !== 1 ? 's' : ''} × ${priceObj.currency.toUpperCase()} ${(perSeatCents / 100).toFixed(2)} each)`,
-          })
+          // deep review PAY-1: create the invoice FIRST, then attach the line
+          // item to it explicitly with `invoice: invoice.id`. The old order
+          // created a *pending* invoice item and then an invoice with no
+          // `pending_invoice_items_behavior`; on the pinned SDK (2026-05-27.dahlia)
+          // that default EXCLUDES pending items, so the invoice finalised with no
+          // line — a $0 invoice that auto-sent (and, with the webhook, stamped the
+          // registration paid) for a paid event. Mirrors the known-good pattern in
+          // app/api/stripe/membership-invoice/route.ts.
           const invoice = await stripe.invoices.create({
             customer: customerId,
             collection_method: 'send_invoice',
             days_until_due: 14,
+            auto_advance: false,
             metadata: { registrationId: regId, eventSlug: event_slug, isGroup: 'true' },
+          })
+          await stripe.invoiceItems.create({
+            customer: customerId,
+            invoice: invoice.id,
+            currency: priceObj.currency,
+            amount: invoiceAmountCents,
+            description: `${event_title} — Group Registration (${total_participants} participant${total_participants !== 1 ? 's' : ''} × ${priceObj.currency.toUpperCase()} ${(perSeatCents / 100).toFixed(2)} each)`,
           })
           const finalized = await stripe.invoices.finalizeInvoice(invoice.id)
           await stripe.invoices.sendInvoice(finalized.id)

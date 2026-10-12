@@ -10,17 +10,35 @@ const state: {
   inserts: Record<string, Record<string, unknown>[]>
   updates: Record<string, Record<string, unknown>[]>
   claimSucceeds: boolean
+  // deep review INT-2 / PUB-4: throw a quota (429) EmailSendError once this many
+  // sends have succeeded, to exercise the shared-budget stop. -1 = never.
+  quotaAfter: number
 } = {
   campaigns: [], queueRows: [], members: [], templates: [],
-  inserts: {}, updates: {}, claimSucceeds: true,
+  inserts: {}, updates: {}, claimSucceeds: true, quotaAfter: -1,
 }
 
 const sent: Array<{ to: string; subject: string }> = []
 
-vi.mock('@/lib/email', () => ({
-  sendEmail: vi.fn(async (o: { to: string; subject: string }) => { sent.push(o) }),
-  MARKETING_FROM: 'Stellr <hello@mail.example.org>',
-}))
+vi.mock('@/lib/email', () => {
+  // Mirrors the real EmailSendError so `e instanceof EmailSendError` and
+  // `e.isQuota` behave as production does — both sides come from this mock.
+  class EmailSendError extends Error {
+    status: number
+    constructor(message: string, status: number) { super(message); this.name = 'EmailSendError'; this.status = status }
+    get isQuota() { return this.status === 429 }
+  }
+  return {
+    sendEmail: vi.fn(async (o: { to: string; subject: string }) => {
+      if (state.quotaAfter >= 0 && sent.length >= state.quotaAfter) {
+        throw new EmailSendError('daily budget spent', 429)
+      }
+      sent.push(o)
+    }),
+    MARKETING_FROM: 'Stellr <hello@mail.example.org>',
+    EmailSendError,
+  }
+})
 
 vi.mock('@/lib/email-render', () => ({
   renderCampaignEmail: () => ({ subject: 'Rendered', html: '<p>hi</p>', text: 'hi' }),
@@ -83,6 +101,7 @@ beforeEach(() => {
   state.inserts = {}
   state.updates = {}
   state.claimSucceeds = true
+  state.quotaAfter = -1
   sent.length = 0
   vi.clearAllMocks()
 })
@@ -183,5 +202,52 @@ describe('dispatchDueDrips — eligibility is re-checked at send time', () => {
 
     expect(sent).toHaveLength(0)
     expect(result.sent).toBe(0)
+  })
+})
+
+// deep review INT-2 / PUB-4: when the shared daily Resend budget runs out
+// mid-send, the bulk loop must STOP, must NOT ledger the members it did not
+// reach (so they are retried, not recorded as permanently tried), and must
+// leave the campaign/queue row runnable.
+describe('shared daily budget — stop on quota without burning the rest', () => {
+  const mkMember = (id: string) => ({
+    id, first_name: id, last_name: 'M', email: `${id}@example.org`,
+    membership_id: id, age_bracket: 'adult', marketing_unsubscribe_token: `tok-${id}`,
+  })
+
+  it('dispatchDueCampaigns stops at the budget, leaves unsent members unledgered, and keeps the campaign scheduled', async () => {
+    const { dispatchDueCampaigns } = await import('@/lib/email-campaigns')
+    state.campaigns = [{ id: 'c1', template_id: 't1', audience: {} }]
+    state.templates = [{ name: 'Blast', subject: 'Hi', body_json: {} }]
+    state.members = [mkMember('a'), mkMember('b'), mkMember('c')]
+    state.quotaAfter = 1 // the first send succeeds; the 2nd hits the budget (429)
+
+    await dispatchDueCampaigns()
+
+    // Only the first member was emailed and ledgered; b and c were left for retry.
+    expect(sent.map((s) => s.to)).toEqual(['a@example.org'])
+    expect(state.inserts['email_campaign_sends'] ?? []).toHaveLength(1)
+    expect(state.inserts['email_campaign_sends'][0]).toMatchObject({ member_id: 'a', status: 'sent' })
+    // The campaign is returned to 'scheduled' so the next cron tick resumes it.
+    expect(state.updates['email_campaigns'].at(-1)).toMatchObject({ status: 'scheduled' })
+    expect(state.updates['email_campaigns'].at(-1)).not.toHaveProperty('sent_at')
+  })
+
+  it('dispatchDueDrips returns a budget-blocked step to pending instead of marking it done', async () => {
+    const { dispatchDueDrips } = await import('@/lib/email-campaigns')
+    state.queueRows = [{ id: 'q1', campaign_id: 'c1', member_id: 'm1', dedup_key: '' }]
+    state.campaigns = [{ template_id: 't1', audience: {}, status: 'scheduled' }]
+    state.templates = [{ name: 'Step 2', subject: 'Hi', body_json: {} }]
+    state.members = [mkMember('m1')]
+    state.quotaAfter = 0 // the budget is already spent — the one send is refused
+
+    const result = await dispatchDueDrips()
+
+    expect(sent).toHaveLength(0)
+    expect(result.sent).toBe(0)
+    // The claim optimistically set 'sent'; the budget stop must put it back.
+    expect(state.updates['email_campaign_queue'].at(-1)).toMatchObject({ status: 'pending', processed_at: null })
+    // And the member was NOT recorded as tried in the send ledger.
+    expect(state.inserts['email_campaign_sends'] ?? []).toHaveLength(0)
   })
 })

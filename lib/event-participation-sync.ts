@@ -130,8 +130,26 @@ export async function recordEventParticipationForRegistration(
 //
 // cohort_members.status / community_space_members.status only allow
 // 'invited'/'active' (no 'removed' state exists), so "deactivate the cohort
-// membership" is a row delete. Idempotent + non-fatal, like the grant it undoes;
-// a removal must never be blocked by this.
+// membership" is a row delete. DELETE failures stay non-fatal-logged (a removal
+// must never be blocked by a write hiccup), but READ failures do NOT — see below.
+//
+// deep review QUALTEST-N1: a FAILED READ here is not "nothing to tear down". If
+// the "still entitled?" count, the container lookup, or the Space-link lookup
+// errors (a transient PostgREST 5xx / statement timeout / pool exhaustion during
+// a fan-out delete), silently treating it as an empty result would skip the
+// cohort-roster and Space-member removal — and reconcileEventSpaceRoster would
+// then re-grant the Space row from the active roster — leaving an uncleared
+// member in a minors' event Space. So a read error throws (TeardownReadError) and
+// escapes the non-fatal wrapper, so the caller (a deletion / unassign job) records
+// a failure and can retry rather than declaring the teardown complete.
+class TeardownReadError extends Error {
+  constructor(what: string, cause: unknown) {
+    super(`removeEventParticipation: ${what} read failed`)
+    this.name = 'TeardownReadError'
+    this.cause = cause
+  }
+}
+
 export async function removeEventParticipation(
   db: SupabaseClient,
   p: { memberId: string | null | undefined; eventSlug: string | null | undefined },
@@ -142,23 +160,26 @@ export async function removeEventParticipation(
   try {
     // Still entitled by another registration on this event? Then leave it all in
     // place. Counts only non-withdrawn registrations (the active roster).
-    const { count: stillIn } = await db
+    const { count: stillIn, error: stillInErr } = await db
       .from('participants')
       .select('id, registrations!inner(event_slug, status)', { count: 'exact', head: true })
       .eq('member_id', memberId)
       .eq('registrations.event_slug', eventSlug)
       .neq('registrations.status', 'withdrawn')
+    // Fail closed: if we can't tell whether they're still entitled, don't guess.
+    if (stillInErr) throw new TeardownReadError('entitlement count', stillInErr)
     if ((stillIn ?? 0) > 0) return
 
     // 1. Deactivate the cohort membership — delete the roster row(s) in this
     //    event's containers (event-level root + any group sub-containers, all
     //    container_type='event_participation', campaign_ref=slug). This is what
     //    stops reconcileEventSpaceRoster re-granting the Space.
-    const { data: cohorts } = await db
+    const { data: cohorts, error: cohortsErr } = await db
       .from('mentoring_cohorts')
       .select('id')
       .eq('container_type', 'event_participation')
       .eq('campaign_ref', eventSlug)
+    if (cohortsErr) throw new TeardownReadError('event container', cohortsErr)
     const cohortIds = (cohorts ?? []).map((c) => (c as { id: string }).id)
     if (cohortIds.length) {
       const { error } = await db.from('cohort_members').delete().eq('member_id', memberId).in('cohort_id', cohortIds)
@@ -166,11 +187,12 @@ export async function removeEventParticipation(
     }
 
     // 2. Remove the inherited Space membership for every Space linked to the event.
-    const { data: links } = await db
+    const { data: links, error: linksErr } = await db
       .from('community_space_sources')
       .select('space_id')
       .eq('object_type', 'event')
       .eq('object_ref', eventSlug)
+    if (linksErr) throw new TeardownReadError('event Space links', linksErr)
     const spaceIds = (links ?? []).map((r) => (r as { space_id: string }).space_id)
     if (spaceIds.length) {
       const { error } = await db
@@ -190,6 +212,10 @@ export async function removeEventParticipation(
       .eq('event_slug', eventSlug)
     if (epErr) console.error('[event-participation] participation removal failed (non-fatal):', epErr)
   } catch (e) {
+    // deep review QUALTEST-N1: a deliberate read-failure escapes so the caller can
+    // retry; everything else stays non-fatal (a removal must not be blocked by an
+    // unexpected hiccup after the reads have succeeded).
+    if (e instanceof TeardownReadError) throw e
     console.error('[event-participation] removeEventParticipation failed (non-fatal):', e)
   }
 }

@@ -765,7 +765,14 @@ export async function finaliseAgreement(db: SupabaseClient, envelopeRowId: strin
     })
 
     const completedAt = now.toISOString()
-    const { error } = await db
+    // deep review ES-3: the sealed_at claim above and this final write are not
+    // atomic — an admin void (or a decline) can land during the seconds of
+    // render/store between them. Guard on the row still being live so a void
+    // that won the race is NOT clobbered back to 'completed': a voided consent
+    // must never end up completed, emailed and counted. If the row is no longer
+    // sent/delivered, stop (the stored PDF/cert are write-once and harmless, and
+    // the catch below releases our claim without touching the terminal status).
+    const { data: completed, error } = await db
       .from('agreements')
       .update({
         status: 'completed',
@@ -783,7 +790,12 @@ export async function finaliseAgreement(db: SupabaseClient, envelopeRowId: strin
         updated_at: completedAt,
       })
       .eq('id', envelopeRowId)
+      .in('status', ['sent', 'delivered'])
+      .select('id')
     if (error) throw new Error(`Marking the agreement completed failed: ${error.message}`)
+    if (!completed?.length) {
+      throw new FinaliseError('Agreement left sent/delivered during finalisation (voided or declined concurrently)')
+    }
 
     await appendAudit(db, { envelopeRow: envelopeRowId, event: 'completed' })
 
@@ -815,16 +827,78 @@ export async function finaliseAgreement(db: SupabaseClient, envelopeRowId: strin
 export async function finaliseStalled(db: SupabaseClient, limit = 10): Promise<{ retried: number }> {
   const { data } = await db
     .from('agreements')
-    .select('id, signers_total, signers_completed')
+    .select('id')
     .eq('provider', 'native')
     .in('status', ['sent', 'delivered'])
     .is('sealed_at', null)
     .limit(200)
-  const stalled = ((data ?? []) as { id: string; signers_total: number | null; signers_completed: number | null }[])
-    .filter((r) => (r.signers_total ?? 0) > 0 && r.signers_completed === r.signers_total)
-    .slice(0, limit)
-  for (const row of stalled) await finaliseAgreement(db, row.id)
-  return { retried: stalled.length }
+  const candidates = (data ?? []) as { id: string }[]
+  let retried = 0
+  for (const row of candidates) {
+    if (retried >= limit) break
+    // deep review ES-4: recompute completion from the recipient rows rather than
+    // trusting signers_completed. A submit that threw before the counter update
+    // (flow.ts updates it only after claiming the signer) leaves the counter
+    // below signers_total forever, and the old `signers_completed ===
+    // signers_total` filter then skipped a fully-signed agreement permanently —
+    // a minor's consent, signed by everyone, stuck "awaiting signature". The
+    // recipient rows are the source of truth.
+    const recipients = await loadRecipients(db, row.id)
+    if (recipients.length > 0 && recipients.every((r) => r.status === 'completed')) {
+      await finaliseAgreement(db, row.id)
+      retried++
+    }
+  }
+  return { retried }
+}
+
+/**
+ * deep review ES-4: re-drives the signing order for an agreement whose next
+ * signer was stranded. `activateNext` runs only from submitSignature, so if
+ * anything threw after a signer was claimed `completed` (the audit RPC, the
+ * counter update, or activateNext itself), the next signer stays `created` with
+ * no link and nothing ever activates them — the roster shows "awaiting
+ * signature" indefinitely and no job recovers it. This daily pass finds live
+ * native agreements that are not finished yet have NOBODY out for signature,
+ * though a signer is still waiting, and activates the next in order and emails
+ * them. activateNext is a conditional update on status='created', so a
+ * concurrent submit cannot double-activate, and it refuses to skip past an
+ * earlier signer who has not completed (a declined or bounced predecessor), so
+ * this never advances a stalled order wrongly.
+ */
+export async function activateStrandedSigners(
+  db: SupabaseClient,
+  limit = 25,
+): Promise<{ agreements: number; activated: number }> {
+  const { data } = await db
+    .from('agreements')
+    .select('id')
+    .eq('provider', 'native')
+    .in('status', ['sent', 'delivered'])
+    .is('sealed_at', null)
+    .limit(200)
+  let agreements = 0
+  let activated = 0
+  for (const row of (data ?? []) as { id: string }[]) {
+    if (agreements >= limit) break
+    const recipients = await loadRecipients(db, row.id)
+    if (!recipients.length) continue
+    const hasActive = recipients.some((r) => ACTIVE_RECIPIENT.has(r.status))
+    const waiting = recipients.some((r) => r.status === 'created')
+    const allDone = recipients.every((r) => r.status === 'completed')
+    // Someone is already out for signature, everyone has signed (finaliseStalled
+    // handles that), or there is nobody left to activate: not stranded.
+    if (hasActive || allDone || !waiting) continue
+    const next = await activateNext(db, row.id)
+    if (next.length) {
+      // Lazy import to avoid a flow ⇄ outbox import cycle (outbox imports flow).
+      const { sendInvites } = await import('@/lib/esign/outbox')
+      await sendInvites(db, next)
+      agreements++
+      activated += next.length
+    }
+  }
+  return { agreements, activated }
 }
 
 export type { TemplateKey }

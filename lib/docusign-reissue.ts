@@ -88,11 +88,22 @@ export async function reissueParticipantAgreement(
           'Continue only if that failed; the old envelope is then voided and a new one issued to the participant record as it stands.',
       }
     }
+    // deep review DS-4: the old code swallowed a void failure and marked the
+    // row 'voided' regardless, on the premise that "the row will catch up via
+    // Connect". That premise is false — once the row is 'voided',
+    // mayTransition('voided','completed') is false, so a later real completion
+    // is DISCARDED. A failed void means the old envelope may still be live (the
+    // signing service was unreachable) or may have just been signed (Connect not
+    // yet delivered); in both cases marking it voided and issuing a second
+    // envelope is wrong. Only mark voided when the void actually succeeded;
+    // otherwise re-throw so the caller surfaces "try again shortly" and NO
+    // duplicate envelope is issued — leaving the row's status untouched so a
+    // genuine completion can still be recorded.
     try {
       await voidEnvelopeRow(db, env, 'Re-issued by administrator after a bounced email')
     } catch (err) {
-      // Already finished on DocuSign's side — the row will catch up via Connect.
-      console.error(`[docusign-reissue] void failed for ${env.id}:`, err)
+      console.error(`[docusign-reissue] void failed for ${env.id}; not marking voided or re-issuing:`, err)
+      throw err
     }
     await db.from('agreements').update({ status: 'voided', updated_at: new Date().toISOString() }).eq('id', env.id)
   } else {

@@ -5,7 +5,7 @@ import { expireUnsigned, purgeExpired } from '@/lib/esign/retention'
 import { purgeRequests } from '@/lib/privacy-requests'
 import { syncDocusignUsage } from '@/lib/esign/routing'
 import { drainOutbox } from '@/lib/esign/outbox'
-import { finaliseStalled } from '@/lib/esign/native/flow'
+import { activateStrandedSigners, finaliseStalled } from '@/lib/esign/native/flow'
 import { sealPending } from '@/lib/esign/native/certificate-seal'
 import { retryFailedIssues } from '@/lib/esign/reconcile'
 import { backupConfigured } from '@/lib/esign/backup-crypto'
@@ -79,8 +79,16 @@ export async function runEsignMaintenance(
     return syncDocusignUsage(db, () => docusign.getUsage!({ db }))
   })
 
-  // Agreements everyone has signed but that never finished sealing.
-  await step('finalise', async () => (opts.dryRun ? { skipped: 'dry run' } : finaliseStalled(db)))
+  // Agreements everyone has signed but that never finished sealing, plus
+  // (deep review ES-4) any whose next signer was stranded when activation never
+  // ran — re-drive the order so a signed consent can't sit "awaiting signature"
+  // forever with no recovery.
+  await step('finalise', async () => {
+    if (opts.dryRun) return { skipped: 'dry run' }
+    const finalised = await finaliseStalled(db)
+    const strandedRecovered = await activateStrandedSigners(db)
+    return { ...finalised, strandedRecovered }
+  })
 
   // Agreements that could not be issued on any engine: try again.
   await step('reconcile', () => retryFailedIssues(db, { dryRun: opts.dryRun }))

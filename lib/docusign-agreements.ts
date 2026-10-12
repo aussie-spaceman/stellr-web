@@ -238,7 +238,14 @@ async function issueOrReuse(
           referenceId: ctx.participantId ?? undefined,
           email: {
             subject: `Action needed: missing guardian for ${ctx.firstName} ${ctx.lastName}`,
-            html: `<p>A parental consent form is required for <strong>${ctx.firstName} ${ctx.lastName}</strong> (${ctx.email}) for <strong>${ctx.eventTitle}</strong>, but no guardian name/email is on file — DocuSign could not be issued.</p><p>Collect the guardian's details and re-issue the consent form.</p>`,
+            // deep review DS-5: first/last name, email and event title are all
+            // registrant-controlled and flow unescaped into an admin HTML email
+            // (notify.ts treats a caller-supplied `email.html` as already-safe).
+            // A minor registered with a name of `<a href="…">…</a>` would inject
+            // a working link into every admin's inbox from a trusted sender, so
+            // escape every interpolation. The sibling failure alert below (and
+            // the bounce alert in docusign-recipients.ts) do the same.
+            html: `<p>A parental consent form is required for <strong>${esc(ctx.firstName)} ${esc(ctx.lastName)}</strong> (${esc(ctx.email)}) for <strong>${esc(ctx.eventTitle)}</strong>, but no guardian name/email is on file — DocuSign could not be issued.</p><p>Collect the guardian's details and re-issue the consent form.</p>`,
             text: `A parental consent form is required for ${ctx.firstName} ${ctx.lastName} (${ctx.email}) for ${ctx.eventTitle}, but no guardian contact is on file. Collect the guardian's details and re-issue.`,
           },
         }).catch(() => {})
@@ -589,7 +596,12 @@ async function recordCoverage(
   type: AgreementType,
   source: ValidAgreement,
 ): Promise<void> {
-  await db.from('agreements').insert({
+  // deep review DS-11: the caller (issueOrReuse) sends the family an "already on
+  // file" email and opens the team-profile gate on the strength of this row. A
+  // discarded insert error meant the family was told paperwork was on file while
+  // the participant had no coverage row at all. Fail closed so the caller's
+  // catch records the failure and alerts admins instead of sending that email.
+  const { error } = await db.from('agreements').insert({
     participant_id:    ctx.participantId,
     member_id:         ctx.memberId,
     event_slug:        ctx.eventSlug,
@@ -606,6 +618,7 @@ async function recordCoverage(
     signers_total:     1,
     signers_completed: 1,
   })
+  if (error) throw new Error(`Recording the coverage failed: ${error.message}`)
 }
 
 async function recordEnvelope(
@@ -634,7 +647,16 @@ async function recordEnvelope(
     ...envelope.rowFields,
   }
   if (!envelope.afterRecord) {
-    await db.from('agreements').insert(row)
+    // deep review DS-11: for DocuSign the envelope already exists and the family
+    // has already been emailed by the time this insert runs, so a discarded
+    // error left a LIVE envelope with no stored row — the participant shows
+    // "Not Issued", an admin re-issues (a second envelope, a second allowance
+    // unit) and a signature on the first envelope is dropped by the webhook as
+    // "unknown envelope". Fail closed: surface the error so issueOrReuse records
+    // the failure (a visible roster row + an admin alert) instead of reporting a
+    // phantom "issued".
+    const { error } = await db.from('agreements').insert(row)
+    if (error) throw new Error(`Recording the agreement failed: ${error.message}`)
     return { signNowUrl: null }
   }
 

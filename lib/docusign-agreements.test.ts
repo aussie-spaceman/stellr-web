@@ -43,6 +43,8 @@ interface Fixture {
   completedEnvelope?: Record<string, unknown> | null
   /** Result of the email → member fallback lookup. */
   memberByEmail?: { id: string } | null
+  /** When set, the FIRST agreements insert returns this error (DS-11). */
+  insertError?: string
 }
 
 interface Filters { eq: Record<string, unknown>; ins: Record<string, unknown[]> }
@@ -63,6 +65,14 @@ function makeDb(fixture: Fixture) {
         maybeSingle: async () => ({ data: resolve(table, filters, fixture), error: null }),
         insert: async (payload: Record<string, unknown>) => {
           inserts.push({ table, payload })
+          // deep review DS-11: let a test make the FIRST agreements insert fail
+          // (the DocuSign envelope row / coverage row). recordIssueFailure's own
+          // insert (the second) still succeeds, so the visible failure row is
+          // recorded and the outcome is 'failed', never a phantom 'issued'.
+          if (table === 'agreements' && fixture.insertError
+              && inserts.filter((i) => i.table === 'agreements').length === 1) {
+            return { error: { message: fixture.insertError } }
+          }
           return { error: null }
         },
       }
@@ -290,6 +300,51 @@ describe('dispatchAgreement — never issues paperwork already in the system', (
 
     expect(createConsent).not.toHaveBeenCalled()
     expect(inserts).toHaveLength(0)
+    expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
+  })
+
+  it('escapes a registrant-controlled name in the missing-guardian admin alert (DS-5)', async () => {
+    // deep review DS-5: a minor can be registered with an attacker-chosen name;
+    // the missing-guardian alert interpolates it into an admin HTML email. The
+    // markup must be escaped so it cannot render as a link in staff inboxes.
+    const { db } = makeDb({})
+    await dispatchAgreement(db, {
+      ...ADULT, eventRole: 'participant', dateOfBirth: '2012-01-01',
+      firstName: '<a href="https://evil.example">Click</a>', lastName: 'Smith',
+      guardianEmail: null, guardianFirstName: null,
+    })
+    expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
+    const alert = notifyCommunityAdmins.mock.calls[0][0] as { email: { html: string } }
+    expect(alert.email.html).toContain('&lt;a href=&quot;https://evil.example&quot;&gt;Click&lt;/a&gt;')
+    expect(alert.email.html).not.toContain('<a href="https://evil.example">')
+  })
+
+  it('reports FAILED (not a phantom issued) when the DocuSign envelope row insert errors (DS-11)', async () => {
+    // deep review DS-11: a DocuSign envelope already exists and the family has
+    // been emailed before this insert runs. A discarded error left a live
+    // envelope with no row. The insert error must surface as a visible failure.
+    const { db, inserts } = makeDb({ insertError: 'duplicate key value' })
+    expect(await dispatchAgreement(db, ADULT)).toBe('failed')
+    expect(createAdult).toHaveBeenCalledTimes(1)
+    // The failed envelope insert, then the recordIssueFailure visible row.
+    expect(inserts).toHaveLength(2)
+    expect(inserts[1].payload.status).toBe('voided')
+    expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports FAILED and does NOT tell the family "on file" when the coverage insert errors (DS-11)', async () => {
+    // deep review DS-11: recordCoverage must fail closed, because the caller
+    // sends the "already on file" email on the strength of this row.
+    const { db } = makeDb({
+      insertError: 'transient',
+      completedEnvelope: {
+        id: 'env-signed', completed_at: '2026-01-15T00:00:00Z',
+        signer_name: 'Ada Lovelace', signer_email: 'ada@example.com', reused_from: null,
+      },
+    })
+    expect(await dispatchAgreement(db, ADULT)).toBe('failed')
+    // The "already on file" email must not have gone out.
+    expect(sendEmail).not.toHaveBeenCalled()
     expect(notifyCommunityAdmins).toHaveBeenCalledTimes(1)
   })
 })

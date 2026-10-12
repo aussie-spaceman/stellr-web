@@ -3,6 +3,7 @@ import { summariseSigners, type EnvelopeRecipient } from './docusign'
 import type { RecipientLike } from './docusign-status'
 import { fetchEnvelopeRecipients } from './esign/operations'
 import { notifyCommunityAdmins } from './notify'
+import { escapeHtml as esc } from './email-layout'
 
 // Persistence for agreement_recipients (migration 148): pull the signer
 // list from DocuSign and mirror it into the DB so every surface can answer "who
@@ -129,7 +130,16 @@ export async function alertOnNewBounces(
   )
   if (newlyBounced.length === 0) return
 
+  // Plain-text lines for the in-app body / SMS / email text (not HTML-rendered).
   const lines = newlyBounced.map((r) => `${r.name} <${r.email}>${r.roleName ? ` — ${r.roleName}` : ''}`)
+  // deep review DS-5: the recipient name/email/role (and the subject's name and
+  // event title) are registrant-controlled and go unescaped into an admin HTML
+  // email — notify.ts treats a caller-supplied `email.html` as already-safe, so
+  // this sink is the caller's to escape. PUB-2 (#357) escaped the lib/email.ts
+  // templates but missed this file (it did not even import esc). Escape every
+  // interpolation that lands in the HTML so a bounced "signer" named
+  // `<a href="…">…</a>` cannot phish staff from a trusted sender.
+  const htmlLines = newlyBounced.map((r) => `${esc(r.name)} &lt;${esc(r.email)}&gt;${r.roleName ? ` — ${esc(r.roleName)}` : ''}`)
   await notifyCommunityAdmins({
     type: 'action',
     body: `DocuSign email bounced for ${context.minorName} (${context.eventTitle}): ${lines.join('; ')}. Use Correct email on the event roster: it fixes the address on the same envelope. Reminders will never reach them until then.`,
@@ -137,7 +147,7 @@ export async function alertOnNewBounces(
     referenceId: context.participantId ?? undefined,
     email: {
       subject: `Action needed: DocuSign email bounced for ${context.minorName}`,
-      html: `<p>DocuSign reported a bounced address on the agreement for <strong>${context.minorName}</strong> (${context.eventTitle}):</p><ul>${lines.map((l) => `<li>${l}</li>`).join('')}</ul><p>Reminders will never reach this address. Use Correct email on the event roster: it fixes the address on the same envelope, keeps any signature already given and uses no new envelope.</p>`,
+      html: `<p>DocuSign reported a bounced address on the agreement for <strong>${esc(context.minorName)}</strong> (${esc(context.eventTitle)}):</p><ul>${htmlLines.map((l) => `<li>${l}</li>`).join('')}</ul><p>Reminders will never reach this address. Use Correct email on the event roster: it fixes the address on the same envelope, keeps any signature already given and uses no new envelope.</p>`,
       text: `DocuSign reported a bounced address on the agreement for ${context.minorName} (${context.eventTitle}): ${lines.join('; ')}. Reminders will never reach this address. Use Correct email on the event roster: it fixes the address on the same envelope.`,
     },
   }).catch(() => {})

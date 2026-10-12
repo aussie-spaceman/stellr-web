@@ -25,7 +25,7 @@ vi.mock('@/lib/notify', () => ({ notifyCommunityAdmins: vi.fn(async () => {}) })
 vi.mock('@/lib/credentials-notify', () => ({ applyGuardianOptOut: vi.fn(async () => {}) }))
 
 import { nativeProvider } from '@/lib/esign/providers/native'
-import { openLink, resolveSession, recordConsent, sameName, submitSignature, recordViewed, MAX_FAILED_CHECKS } from './flow'
+import { openLink, resolveSession, recordConsent, sameName, submitSignature, recordViewed, finaliseStalled, activateStrandedSigners, MAX_FAILED_CHECKS } from './flow'
 import { verifyToken } from './tokens'
 import { sendInvites } from '@/lib/esign/outbox'
 import { SIGNED_BUCKET } from '@/lib/esign/storage'
@@ -336,5 +336,91 @@ describe('Stellr signing: a minor’s consent form', () => {
     const { created } = await issue(db)
     const recipients = await nativeProvider.getRecipients({ db: db.client }, created.externalId)
     expect(recipients.map((r) => [r.roleName, r.status, r.routingOrder])).toEqual([['Guardian', 'sent', 1], ['Minor', 'created', 2]])
+  })
+
+  it('does not resurrect a consent voided mid-finalise back to completed (ES-3)', async () => {
+    // deep review ES-3: an admin voids the agreement during the seconds
+    // finalise spends rendering/storing. The final completion write must not
+    // clobber that 'voided' back to 'completed' — a voided consent must never
+    // end up completed, emailed and counted. We inject the void at the moment
+    // the 'sealed' audit event is written (immediately before the completion
+    // write) by flipping the row to 'voided' there.
+    const db = await setup()
+    const { row } = await issue(db)
+
+    // Parent signs.
+    const parentLink = await openLink(db.client, linkFrom(sent[0]), { birthYear: '2012' })
+    if (parentLink.kind !== 'ready') throw new Error('expected a session')
+    await recordConsent(db.client, (await resolveSession(db.client, parentLink.session, 'act'))!, { disclosureVersion: '2026-10-v1', attest: true }, meta)
+    const first = await submitSignature(db.client, (await resolveSession(db.client, parentLink.session, 'act'))!, {
+      values: { GuardianPhone: '555 0199', MediaOptOut: false }, signatureText: 'Pat Rivera',
+    }, meta)
+    if (!first.ok) throw new Error('parent submit failed')
+
+    // The void lands exactly when finalise writes its 'sealed' audit event.
+    const base = appendAuditRpc(db)
+    db.rpcs.esign_append_audit = (args) => {
+      if (args.p_event === 'sealed') {
+        db.table('agreements').find((r) => r.id === row.id)!.status = 'voided'
+      }
+      return base(args)
+    }
+
+    // Student signs → triggers finalise, which now hits the voided row.
+    await sendInvites(db.client, first.activated)
+    const studentLink = await openLink(db.client, linkFrom(sent.at(-1)!), { birthYear: '2012' })
+    if (studentLink.kind !== 'ready') throw new Error('expected a session')
+    await recordConsent(db.client, (await resolveSession(db.client, studentLink.session, 'act'))!, { disclosureVersion: '2026-10-v1' }, meta)
+    await submitSignature(db.client, (await resolveSession(db.client, studentLink.session, 'act'))!, {
+      values: { MinorDateOfBirth: '04-May-2012' }, signatureText: 'Sam Rivera',
+    }, meta)
+
+    // The void stands; finalise did not overwrite it, and no signed PDF path
+    // was recorded against the voided row.
+    const env = db.table('agreements').find((r) => r.id === row.id)!
+    expect(env.status).toBe('voided')
+    expect(env.signed_pdf_path ?? null).toBeNull()
+  })
+
+  it('recovers a next signer stranded when activation never ran (ES-4)', async () => {
+    // deep review ES-4: the parent signed but a throw after the claim prevented
+    // activateNext, so the parent is 'completed' and the student is stranded
+    // 'created' with no link — and nothing ever recovers them. The daily pass
+    // re-drives the order and emails the stranded signer.
+    const db = await setup()
+    const { row } = await issue(db)
+    db.table('agreement_recipients').find((r) => r.role_name === 'Guardian')!.status = 'completed'
+    sent.length = 0 // ignore the issue email
+
+    const result = await activateStrandedSigners(db.client)
+    expect(result).toEqual({ agreements: 1, activated: 1 })
+    expect(db.table('agreement_recipients').find((r) => r.role_name === 'Minor')!.status).toBe('sent')
+    expect(sent.map((e) => e.to)).toContain('sam@student.test')
+    // Idempotent: a second pass finds nobody out of position and does nothing.
+    expect(await activateStrandedSigners(db.client)).toEqual({ agreements: 0, activated: 0 })
+    void row
+  })
+
+  it('finalises a fully-signed agreement whose counter was never updated (ES-4)', async () => {
+    // deep review ES-4: everyone signed, but a throw before the counter update
+    // left signers_completed stale and the agreement stuck at 'sent'. The old
+    // finaliseStalled trusted the counter and skipped it forever; the recompute
+    // from recipient rows catches it.
+    const db = await setup()
+    const { row } = await issue(db)
+    const when = new Date().toISOString()
+    for (const r of db.table('agreement_recipients')) {
+      Object.assign(r, {
+        status: 'completed', signed_at: when, consented_at: when,
+        signature_kind: 'typed', signature_text: r.name, signer_values: {},
+      })
+    }
+    // The stale counter the old filter trusted.
+    db.table('agreements').find((a) => a.id === row.id)!.signers_completed = 0
+
+    expect(await finaliseStalled(db.client)).toEqual({ retried: 1 })
+    const env = db.table('agreements').find((a) => a.id === row.id)!
+    expect(env.status).toBe('completed')
+    expect(env.signed_pdf_sha256).toMatch(/^[0-9a-f]{64}$/)
   })
 })

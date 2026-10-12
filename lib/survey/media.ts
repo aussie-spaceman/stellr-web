@@ -98,7 +98,16 @@ export function mediaPermission(f: MediaFacts): MediaDecision {
   if (a.optOut) return { status: 'no', reason: 'opted_out_on_agreement' }
   if (f.studentAllowMedia === false) return { status: 'no', reason: 'student_off' }
   if (f.isMinor && !a.exists) return { status: 'no', reason: 'no_agreement' }
-  if (f.isMinor && !a.optOutKnown) return { status: 'check', reason: 'form_unread' }
+  // deep review DS-6: an agreement exists but its media box could not be read
+  // (DocuSign read failed, the box's sentence didn't match, or the column query
+  // errored) ⇒ "check by hand", for EVERYONE, not just minors. The old guard was
+  // `f.isMinor`, so an adult signer (educator, mentor, volunteer) with an
+  // unread opt-out fell through to "yes, may use photos" — a failed read must
+  // never default to consented. A minor reaching here already has an agreement
+  // (the line above caught the no-agreement case), so minor behaviour is
+  // unchanged; adults now fail closed. An adult with NO agreement (a.exists
+  // false) is not required to have one, so it still defaults to yes below.
+  if (a.exists && !a.optOutKnown) return { status: 'check', reason: 'form_unread' }
   if (f.studentAllowMedia === true) return { status: 'yes', reason: 'opted_in' }
   const teen = f.age !== null ? f.age >= 13 && f.age <= 17 : f.isMinor
   if (teen && isNyCo(f.states)) return { status: 'no', reason: 'ny_co_default' }
@@ -192,7 +201,12 @@ export async function loadMediaAgreements(
   const columns = new Map<string, ColumnFacts>()
   for (let i = 0; i < ids.length; i += CHUNK) {
     const { data, error } = await db.from('agreements').select('id, media_opt_out, form_opt_outs').in('id', ids.slice(i, i + CHUNK))
-    if (error) break
+    // deep review DS-6: a failed column read used to `break`, silently leaving
+    // every unread agreement's opt-out unknown — which (with the resolver fix
+    // above) now reads as "check", but worse, it masked a real DB error. Every
+    // other read in this function throws; do the same so the failure is loud and
+    // the media list is never built from a half-read of the opt-out columns.
+    if (error) throw new Error(`Reading opt-out columns failed: ${error.message}`)
     for (const r of (data ?? []) as unknown as (ColumnFacts & { id: string })[]) columns.set(r.id, r)
   }
 

@@ -49,6 +49,13 @@ export interface TeacherLicense {
   verified_label: string | null
   /** Storage path of an uploaded license image (private bucket), or null. */
   document_path: string | null
+  /**
+   * Last-modified stamp, bumped on every member edit and re-upload (which also
+   * reset verified_at). The admin verify action binds to this value so a click
+   * can't certify a version the admin never saw (deep review BG-9). Optional so
+   * existing fixtures stay valid; the admin panel's payload always carries it.
+   */
+  updated_at?: string | null
 }
 
 export interface BackgroundCheck {
@@ -245,7 +252,7 @@ interface MemberComplianceRow {
 
 const COMPLIANCE_SELECT = `
   id, email, event_role, date_of_birth,
-  member_teacher_licenses!member_id(id, license_number, licensing_state, expiry_date, verified_at, verified_label, document_path),
+  member_teacher_licenses!member_id(id, license_number, licensing_state, expiry_date, verified_at, verified_label, document_path, updated_at),
   member_background_checks!member_id(id, status, result, assessment, includes_canceled, provider_report_ref, ordered_at, completed_at, expires_at, report_pdf_url, adjudicated_at, adjudication_outcome, adjudicated_label, adjudication_notes, provider_adjudication)
 `
 

@@ -14,8 +14,13 @@ import { applyCheckOutcome, syncStaleChecks } from './background-sync'
 // update(...).eq(...) and select(...).eq().in().lt().order().limit().
 function fakeDb(
   openRows: Record<string, unknown>[] = [],
-  // Prior adjudication on the row, returned by the BG-3 reconciliation read.
-  cur: { adjudication_outcome?: string | null; adjudicated_at?: string | null } | null = null,
+  // The row as it currently stands, returned by the single pre-update read used
+  // for the BG-3/BG-N1 adjudication reconcile and the BG-7 completion basis.
+  cur: {
+    adjudication_outcome?: string | null
+    adjudicated_at?: string | null
+    completed_at?: string | null
+  } | null = null,
 ) {
   const updates: { id: string; patch: Record<string, unknown> }[] = []
   let table = ''
@@ -142,13 +147,15 @@ describe('flagged results are announced', () => {
   })
 })
 
-describe('BG-3: a conflicting vendor event clears a stale Stellr adjudication', () => {
-  it('a new adverse (referred) event on a row adjudicated "cleared" nulls the adjudication and re-announces', async () => {
+describe('BG-3 / BG-N1: adjudication reconcile fires only on a genuine conflict', () => {
+  it('a genuine adverse event (adverse:true) on a row adjudicated "cleared" nulls the adjudication and re-announces', async () => {
     const { db, updates } = fakeDb([], { adjudication_outcome: 'cleared', adjudicated_at: '2026-09-01T00:00:00Z' })
     await applyCheckOutcome(
       db,
       { ...row, status: 'passed' },
-      { candidateRef: 'c', invitationRef: null, reportRef: 'rep', status: 'referred', result: 'consider' },
+      // adverse:true is what checkr.ts sets for report.pre/post_adverse_action /
+      // disputed — the real FCRA decision, not a re-completed Consider.
+      { candidateRef: 'c', invitationRef: null, reportRef: 'rep', status: 'referred', result: 'consider', adverse: true },
       'webhook',
     )
     expect(updates[0].patch).toMatchObject({
@@ -162,6 +169,22 @@ describe('BG-3: a conflicting vendor event clears a stale Stellr adjudication', 
       .toMatch(/needs re-review/i)
   })
 
+  // BG-N1: Checkr delivers at-least-once and a report can re-complete, so a benign
+  // 'referred' (no adverse signal) must be a no-op on an adjudicated-"cleared"
+  // row — it must not wipe the human decision or email every admin.
+  it('a redelivered benign "referred" (adverse not set) on a "cleared" row is a no-op', async () => {
+    const { db, updates } = fakeDb([], { adjudication_outcome: 'cleared', adjudicated_at: '2026-09-01T00:00:00Z' })
+    await applyCheckOutcome(
+      db,
+      { ...row, status: 'referred' }, // already referred: a duplicate completed event
+      { candidateRef: 'c', invitationRef: null, reportRef: 'rep', status: 'referred', result: 'consider' },
+      'webhook',
+    )
+    expect(updates[0].patch).not.toHaveProperty('adjudication_outcome')
+    expect(updates[0].patch).not.toHaveProperty('adjudicated_at')
+    expect(notifyCommunityAdmins).not.toHaveBeenCalled()
+  })
+
   it('a vendor "passed" on a row adjudicated "not_cleared" is a conflict → nulls the adjudication', async () => {
     const { db, updates } = fakeDb([], { adjudication_outcome: 'not_cleared', adjudicated_at: '2026-09-01T00:00:00Z' })
     await applyCheckOutcome(
@@ -173,6 +196,17 @@ describe('BG-3: a conflicting vendor event clears a stale Stellr adjudication', 
     expect(updates[0].patch).toMatchObject({ adjudication_outcome: null, adjudicated_at: null })
   })
 
+  it('a benign "referred" on a row adjudicated "not_cleared" leaves the decision standing', async () => {
+    const { db, updates } = fakeDb([], { adjudication_outcome: 'not_cleared', adjudicated_at: '2026-09-01T00:00:00Z' })
+    await applyCheckOutcome(
+      db,
+      { ...row, status: 'referred' },
+      { candidateRef: 'c', invitationRef: null, reportRef: 'rep', status: 'referred', result: 'consider' },
+      'webhook',
+    )
+    expect(updates[0].patch).not.toHaveProperty('adjudication_outcome')
+  })
+
   it('a vendor "passed" consistent with a "cleared" adjudication does NOT disturb it', async () => {
     const { db, updates } = fakeDb([], { adjudication_outcome: 'cleared', adjudicated_at: '2026-09-01T00:00:00Z' })
     await applyCheckOutcome(
@@ -182,6 +216,34 @@ describe('BG-3: a conflicting vendor event clears a stale Stellr adjudication', 
       'webhook',
     )
     expect(updates[0].patch).not.toHaveProperty('adjudication_outcome')
+  })
+})
+
+describe('BG-7: validity is measured from the report completion, not when we heard about it', () => {
+  it('a passed with a vendor completedAt expires 3 years from THAT date, not from now', async () => {
+    const { db, updates } = fakeDb()
+    await applyCheckOutcome(
+      db,
+      row,
+      { candidateRef: 'c', invitationRef: null, reportRef: 'rep', status: 'passed', result: 'clear', completedAt: '2026-06-01T00:00:00Z' },
+      'sync',
+    )
+    expect(updates[0].patch.completed_at).toBe('2026-06-01T00:00:00Z')
+    expect(updates[0].patch.expires_at).toBe('2029-06-01T00:00:00.000Z')
+  })
+
+  it('a redelivered pass does NOT re-extend an expiry already measured from the original completion', async () => {
+    // The row already completed on 1 June; a later redelivery/sync must keep that
+    // basis rather than stamping a fresh (later) completion and expiry.
+    const { db, updates } = fakeDb([], { completed_at: '2026-06-01T00:00:00Z' })
+    await applyCheckOutcome(
+      db,
+      row,
+      { candidateRef: 'c', invitationRef: null, reportRef: 'rep', status: 'passed', result: 'clear', completedAt: '2026-09-21T00:00:00Z' },
+      'sync',
+    )
+    expect(updates[0].patch.completed_at).toBe('2026-06-01T00:00:00Z')
+    expect(updates[0].patch.expires_at).toBe('2029-06-01T00:00:00.000Z')
   })
 })
 

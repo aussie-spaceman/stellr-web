@@ -140,6 +140,7 @@ interface CheckrReport {
   assessment?: string | null
   includes_canceled?: boolean
   adjudication?: string | null // engaged | pre_adverse_action | post_adverse_action | null
+  completed_at?: string | null // when Checkr finished the report (BG-7 validity basis)
 }
 
 // A report document. GET /reports/{id}?include=documents expands these inline;
@@ -170,13 +171,17 @@ function mapReportObject(r: CheckrReport): BackgroundWebhookResult {
     result: r.result ?? null,
     assessment: r.assessment ?? null,
     includesCanceled: r.includes_canceled === true,
+    // BG-7: carry the report's own completion time so validity is measured from it.
+    completedAt: r.completed_at ?? null,
   }
   const status = (r.status ?? '').toLowerCase()
   const adjudication = (r.adjudication ?? '').toLowerCase()
   if (status === 'canceled') return { ...base, status: 'cancelled', result: base.result ?? 'canceled' }
-  if (status === 'dispute') return { ...base, status: 'referred' }
+  // BG-N1: a disputed report is a genuine adverse signal, not a benign re-complete.
+  if (status === 'dispute') return { ...base, status: 'referred', adverse: true }
   if (adjudication === 'engaged') return { ...base, status: 'passed' }
-  if (adjudication === 'pre_adverse_action' || adjudication === 'post_adverse_action') return { ...base, status: 'referred' }
+  if (adjudication === 'pre_adverse_action' || adjudication === 'post_adverse_action')
+    return { ...base, status: 'referred', adverse: true }
   return { ...base, status: mapReport(r.status, base.result, base.assessment, base.includesCanceled) }
 }
 
@@ -263,15 +268,19 @@ export const checkrProvider: BackgroundProvider = {
     // ── Report lifecycle ──────────────────────────────────────────────────────
     if (type.startsWith('report.')) {
       const reportRef = (obj.id as string) ?? null
-      const base = { candidateRef, invitationRef: null, reportRef, result, assessment, includesCanceled }
+      // BG-7: a report.* envelope carries the report's completion time.
+      const completedAt = (obj.completed_at as string) ?? null
+      const base = { candidateRef, invitationRef: null, reportRef, result, assessment, includesCanceled, completedAt }
 
       // report.canceled — every screening canceled before any completed.
       if (type === 'report.canceled') return { ...base, status: 'cancelled', result: result ?? 'canceled' }
       // report.engaged — an adjudicator engaged the report; treat as cleared.
       if (type === 'report.engaged') return { ...base, status: 'passed' }
-      // Adverse action / dispute — flagged for human review.
+      // Adverse action / dispute — flagged for human review. BG-N1: mark these
+      // adverse so the writer can distinguish them from a benign re-completed
+      // Consider (also 'referred') when reconciling a prior human decision.
       if (type === 'report.pre_adverse_action' || type === 'report.post_adverse_action' || type === 'report.disputed')
-        return { ...base, status: 'referred' }
+        return { ...base, status: 'referred', adverse: true }
       // suspended/resumed — Checkr is still working the report.
       if (type === 'report.suspended' || type === 'report.resumed') return { ...base, status: 'in_progress' }
       // report.completed (and any other report.* carrying a status) — map it.

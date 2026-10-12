@@ -131,7 +131,9 @@ export function MemberCompliancePanel({
               </button>
             ) : (
               <button
-                onClick={() => post(`/api/admin/members/${memberId}/license`, { action: 'verify' })}
+                // BG-9: bind the verify to the version shown here, so a member
+                // edit between load and click can't be silently rubber-stamped.
+                onClick={() => post(`/api/admin/members/${memberId}/license`, { action: 'verify', licenseUpdatedAt: license.updated_at })}
                 disabled={busy}
                 className="text-xs font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg px-3 py-1.5"
               >

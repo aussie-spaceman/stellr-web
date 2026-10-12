@@ -66,7 +66,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Post not found in this space' }, { status: 404 })
   }
 
-  const claimed = await claimUpload({ purpose: 'space-attachment', storagePath })
+  // deep review MEM-13: pin the claim to THIS space's attachment namespace, the
+  // exact prefix signUpload issued (community-resources/<spaceId>/…). Without it a
+  // member could post back a path in another space, a training folder or an admin
+  // file and have it adopted here — or discard-deleted if oversize.
+  const claimed = await claimUpload({
+    purpose: 'space-attachment',
+    storagePath,
+    expectedPrefix: `community-resources/${space.id}/`,
+  })
   if ('error' in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status })
 
   // Copyright watermark on the bottom-right of every page of uploaded PDFs.

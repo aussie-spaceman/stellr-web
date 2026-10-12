@@ -132,5 +132,8 @@
   "//dependencyNotes": {
     "styled-components": "No direct imports — it is a required peer of sanity@6 (node_modules/sanity peerDependencies). Keep it in dependencies; do not 'clean it up' as unused. (deep review QUAL-11)",
     "@vercel/blob": "devDependency: imported only by scripts/upload-media.ts; the runtime reads Blob URLs over plain HTTP, not via this SDK. (deep review QUAL-11)"
+  },
+  "overrides": {
+    "tar": "^7.5.22"
   }
 }

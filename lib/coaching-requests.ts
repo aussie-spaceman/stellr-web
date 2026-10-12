@@ -17,6 +17,7 @@ import { bookCoaching, type BookResult } from '@/lib/sessions'
 import { grantAdhocEntitlement, ensureMemberGrants, getKindBalanceSplit } from '@/lib/entitlements'
 import { notifyMember } from '@/lib/notify'
 import { sendEmail, DEFAULT_REPLY_TO } from '@/lib/email'
+import { escapeHtml } from '@/lib/email-layout'
 
 export type CoachingEligibility = 'included' | 'award' | 'paid'
 export type CoachingRequestStatus = 'pending' | 'matched' | 'scheduled' | 'declined'
@@ -252,7 +253,10 @@ export async function createCoachingRequest(member: CommunityMember, input: Coac
     referenceId: data.id,
     email: {
       subject: 'We received your coaching request',
-      html: `<p>Hi ${member.first_name ?? 'there'},</p><p>Thanks for requesting a coaching session. Our team will match you with a coach and email you within two working days.</p><p>You can track your request any time at <a href="${SITE_URL}/community/coaching">your coaching page</a>.</p>`,
+      // deep review INTPUB-N1: this html is built here and passed to notify
+      // pre-built, so escape the member-controlled first name (notify only
+      // escapes its own plain-body fallback).
+      html: `<p>Hi ${escapeHtml(member.first_name ?? 'there')},</p><p>Thanks for requesting a coaching session. Our team will match you with a coach and email you within two working days.</p><p>You can track your request any time at <a href="${SITE_URL}/community/coaching">your coaching page</a>.</p>`,
       text: `Hi ${member.first_name ?? 'there'},\n\nThanks for requesting a coaching session. Our team will match you with a coach and email you within two working days.\n\nTrack your request: ${SITE_URL}/community/coaching`,
     },
   })
@@ -262,7 +266,11 @@ export async function createCoachingRequest(member: CommunityMember, input: Coac
     await sendEmail({
       to: COACHING_TEAM_EMAIL,
       subject: `New coaching request — ${memberName}`,
-      html: `<p>A new coaching request needs matching.</p><ul><li><strong>Member:</strong> ${memberName} (${member.email ?? 'no email'})</li><li><strong>Topic:</strong> ${topic}</li><li><strong>Stage:</strong> ${input.stage ?? '—'}</li><li><strong>Focus:</strong> ${input.focusArea ?? '—'}</li><li><strong>Availability:</strong> ${(input.availability ?? []).join(', ') || '—'}</li></ul><p><a href="${SITE_URL}/admin/academy/coaching/requests">Open the match queue</a></p>`,
+      // deep review INTPUB-N1: every interpolated value here is member-controlled
+      // (name, email, topic, stage, focus, availability) and this html is a
+      // hand-built string, so each must be escaped before it reaches the staff
+      // inbox (staff hold admin sessions — spoofed markup here is a phishing risk).
+      html: `<p>A new coaching request needs matching.</p><ul><li><strong>Member:</strong> ${escapeHtml(memberName)} (${escapeHtml(member.email ?? 'no email')})</li><li><strong>Topic:</strong> ${escapeHtml(topic)}</li><li><strong>Stage:</strong> ${escapeHtml(input.stage ?? '—')}</li><li><strong>Focus:</strong> ${escapeHtml(input.focusArea ?? '—')}</li><li><strong>Availability:</strong> ${escapeHtml((input.availability ?? []).join(', ') || '—')}</li></ul><p><a href="${SITE_URL}/admin/academy/coaching/requests">Open the match queue</a></p>`,
       text: `New coaching request needs matching.\nMember: ${memberName} (${member.email ?? 'no email'})\nTopic: ${topic}\nQueue: ${SITE_URL}/admin/academy/coaching/requests`,
     })
   } catch (err) {

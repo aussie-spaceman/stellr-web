@@ -10,6 +10,7 @@ import { sanitizeBracketRequirements, anyBracketMandatory } from '@/lib/space-tr
 import { syncSpaceSourceRoster } from '@/lib/space-inheritance'
 import { isAdminClaims } from '@/lib/admin-auth'
 import { slugify } from '@/lib/utils'
+import { escapeHtml } from '@/lib/email-layout'
 import { runAfterResponse } from '@/lib/after-response'
 
 // Per-space admin config actions (Spaces design, screens 11–17 + modals 19/21/22).
@@ -176,7 +177,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         await sendEmail({
           to: email,
           subject: `You're invited to ${spaceName} on Stellr`,
-          html: `<p>You've been invited to join the <strong>${spaceName}</strong> space on Stellr.</p>
+          // deep review INTPUB-N1: this caller builds its own email.html, so the
+          // space name (admin-authored, but still member-controllable text) must
+          // be escaped here — sendEmail only escapes values inside its own layout.
+          html: `<p>You've been invited to join the <strong>${escapeHtml(spaceName)}</strong> space on Stellr.</p>
 <p><a href="${signUpUrl}">Create your account</a> — your invitation will be waiting on your Spaces directory when you sign in.</p>`,
           text: `You've been invited to join ${spaceName} on Stellr. Create your account and your invitation will be waiting on your Spaces directory: ${signUpUrl}`,
         }).catch((e) => console.error('[spaces] invite-by-email send error:', e))
@@ -216,8 +220,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           referenceId: spaceId,
           actorMemberId: adminMemberId ?? undefined,
           email: {
+            // deep review INTPUB-N1: escape the space name — this html is passed
+            // to notify pre-built, so notify does not escape it.
             subject: `You're invited to ${sp.name}`,
-            html: `<p>You've been invited to join the <strong>${sp.name}</strong> space on Stellr.</p>
+            html: `<p>You've been invited to join the <strong>${escapeHtml(sp.name)}</strong> space on Stellr.</p>
 <p><a href="${url}">Open your Spaces directory</a> to accept the invitation.</p>`,
             text: `You've been invited to join ${sp.name} on Stellr. Open your Spaces directory to accept: ${url}`,
           },

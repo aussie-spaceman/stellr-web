@@ -13,9 +13,17 @@ const state: {
   // deep review INT-2 / PUB-4: throw a quota (429) EmailSendError once this many
   // sends have succeeded, to exercise the shared-budget stop. -1 = never.
   quotaAfter: number
+  // deep review INT-6: make every send throw a NON-quota error (genuine delivery
+  // failure), to exercise "don't mark a campaign sent when every send failed".
+  failAll: boolean
+  // deep review INT-6: make the members read (resolveAudience) error, to
+  // exercise "a throw mid-dispatch resets the campaign to scheduled, not stuck
+  // in sending".
+  membersError: boolean
 } = {
   campaigns: [], queueRows: [], members: [], templates: [],
   inserts: {}, updates: {}, claimSucceeds: true, quotaAfter: -1,
+  failAll: false, membersError: false,
 }
 
 const sent: Array<{ to: string; subject: string }> = []
@@ -30,6 +38,7 @@ vi.mock('@/lib/email', () => {
   }
   return {
     sendEmail: vi.fn(async (o: { to: string; subject: string }) => {
+      if (state.failAll) throw new Error('smtp down') // non-quota delivery failure
       if (state.quotaAfter >= 0 && sent.length >= state.quotaAfter) {
         throw new EmailSendError('daily budget spent', 429)
       }
@@ -70,6 +79,7 @@ function makeDb() {
         in: () => chain,
         not: () => chain,
         neq: () => chain,
+        lt: () => chain,
         lte: () => chain,
         order: () => chain,
         limit: () => chain,
@@ -86,7 +96,12 @@ function makeDb() {
           record(state.updates, table, payload)
           return chain
         },
-        then: (resolve: (v: unknown) => unknown) => resolve({ data: rowsFor(), error: null }),
+        then: (resolve: (v: unknown) => unknown) =>
+          resolve(
+            table === 'members' && state.membersError
+              ? { data: null, error: { message: 'members read failed' } }
+              : { data: rowsFor(), error: null },
+          ),
       })
       return chain
     },
@@ -102,6 +117,8 @@ beforeEach(() => {
   state.updates = {}
   state.claimSucceeds = true
   state.quotaAfter = -1
+  state.failAll = false
+  state.membersError = false
   sent.length = 0
   vi.clearAllMocks()
 })
@@ -152,6 +169,28 @@ describe('fireCampaignEvent — delay routing', () => {
 
     expect(state.inserts['email_campaign_queue']).toBeUndefined()
     expect(sent).toHaveLength(1)
+  })
+})
+
+// deep review INT-10 / PUB-6: campaign mail must carry RFC 8058 one-click
+// unsubscribe headers so Gmail/Yahoo surface the opt-out and a scanner's GET
+// doesn't perform it.
+describe('campaign sends advertise List-Unsubscribe (RFC 8058)', () => {
+  it('passes List-Unsubscribe + List-Unsubscribe-Post headers to sendEmail', async () => {
+    const { dispatchDueCampaigns } = await import('@/lib/email-campaigns')
+    state.campaigns = [{ id: 'c1', template_id: 't1', audience: {} }]
+    state.templates = [{ name: 'Blast', subject: 'Hi', body_json: {} }]
+    state.members = [{
+      id: 'm1', first_name: 'Mia', last_name: 'M', email: 'mia@example.org',
+      membership_id: '1', age_bracket: 'adult', marketing_unsubscribe_token: 'tok',
+    }]
+
+    await dispatchDueCampaigns()
+
+    expect(sent).toHaveLength(1)
+    const headers = (sent[0] as { headers?: Record<string, string> }).headers
+    expect(headers?.['List-Unsubscribe']).toMatch(/^<.*unsubscribe\?token=tok>$/)
+    expect(headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click')
   })
 })
 
@@ -231,6 +270,40 @@ describe('shared daily budget — stop on quota without burning the rest', () =>
     // The campaign is returned to 'scheduled' so the next cron tick resumes it.
     expect(state.updates['email_campaigns'].at(-1)).toMatchObject({ status: 'scheduled' })
     expect(state.updates['email_campaigns'].at(-1)).not.toHaveProperty('sent_at')
+  })
+
+  it('dispatchDueCampaigns leaves a campaign scheduled (not stuck sending) when the dispatch throws', async () => {
+    // deep review INT-6: resolveAudience throws after the scheduled→sending
+    // claim. Without the try/catch the campaign would sit in 'sending' forever —
+    // the cron ignores 'sending' rows and the admin can only re-activate from
+    // draft|paused. The dispatch must reset it to 'scheduled' for the next tick.
+    const { dispatchDueCampaigns } = await import('@/lib/email-campaigns')
+    state.campaigns = [{ id: 'c1', template_id: 't1', audience: {} }]
+    state.templates = [{ name: 'Blast', subject: 'Hi', body_json: {} }]
+    state.membersError = true // resolveAudience will throw
+
+    await dispatchDueCampaigns()
+
+    const last = state.updates['email_campaigns'].at(-1)
+    expect(last).toMatchObject({ status: 'scheduled' })
+    expect(last).not.toHaveProperty('sent_at')
+  })
+
+  it('dispatchDueCampaigns does NOT mark a campaign sent when every send failed', async () => {
+    // deep review INT-6: all recipients fail with a non-quota error. Marking the
+    // broadcast 'sent' would hide a real outage; it must go back to 'scheduled'.
+    const { dispatchDueCampaigns } = await import('@/lib/email-campaigns')
+    state.campaigns = [{ id: 'c1', template_id: 't1', audience: {} }]
+    state.templates = [{ name: 'Blast', subject: 'Hi', body_json: {} }]
+    state.members = [mkMember('a')]
+    state.failAll = true
+
+    await dispatchDueCampaigns()
+
+    expect(sent).toHaveLength(0)
+    const last = state.updates['email_campaigns'].at(-1)
+    expect(last).toMatchObject({ status: 'scheduled' })
+    expect(last).not.toHaveProperty('sent_at')
   })
 
   it('dispatchDueDrips returns a budget-blocked step to pending instead of marking it done', async () => {

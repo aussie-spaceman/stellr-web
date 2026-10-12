@@ -44,8 +44,14 @@ describe('GET /api/cron/session-reminders', () => {
     expect(await res.json()).toEqual({ sent: 0 })
   })
 
-  it('fails closed (throws) when the sessions read errors, instead of reporting sent:0', async () => {
+  it('fails closed (500, not sent:0) when the sessions read errors', async () => {
+    // QUAL-6 + INT-9 merged: the throwing read is caught so the cron run is
+    // recorded as failed (run.fail) and a 500 is returned — NOT a silent sent:0.
     h.fail = true
-    await expect(GET(req())).rejects.toThrow(/upcoming sessions: timeout/)
+    const res = await GET(req())
+    expect(res.status).toBe(500)
+    const body = await res.json()
+    expect(body).not.toEqual({ sent: 0 })
+    expect(body.error).toMatch(/timeout/)
   })
 })

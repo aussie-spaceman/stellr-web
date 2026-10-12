@@ -120,14 +120,23 @@ export function decideDealAction(
  * one — the exact duplicate this module exists to prevent. Associations are
  * read-after-write consistent.
  */
-export async function dealsForContact(contactId: string): Promise<DealSnapshot[]> {
+// deep review INT-7: the return type is deliberately tri-state. `null` means
+// "could not read" (HubSpot 429/5xx, or a thrown transport error); `[]` means a
+// read that succeeded and found no deals. The two were conflated — any read
+// error returned `[]`, decideDealAction read that as "no open deal" and returned
+// `create`, so a transient HubSpot error minted a DUPLICATE deal every time a
+// contact who already had one was processed. Callers must treat `null` as a skip
+// (count it failed, retry later), never as grounds to create. A missing token is
+// still `[]`, not an error: with no token there is no HubSpot to duplicate into
+// and createDeal is itself a no-op, so the (dry-run) read path stays usable.
+export async function dealsForContact(contactId: string): Promise<DealSnapshot[] | null> {
   if (!HUBSPOT_ACCESS_TOKEN) return []
   try {
     const assoc = await hubspotFetch(
       `/crm/v4/objects/contacts/${contactId}/associations/deals?limit=100`,
       'GET',
     )
-    if (!assoc.ok) return []
+    if (!assoc.ok) return null
     const assocJson = (await assoc.json()) as { results?: { toObjectId?: string | number }[] }
     const ids = (assocJson.results ?? [])
       .map((r) => String(r.toObjectId ?? ''))
@@ -138,7 +147,7 @@ export async function dealsForContact(contactId: string): Promise<DealSnapshot[]
       properties: ['pipeline', 'dealstage'],
       inputs: ids.map((id) => ({ id })),
     })
-    if (!read.ok) return []
+    if (!read.ok) return null
     const readJson = (await read.json()) as {
       results?: { id: string; properties?: Record<string, string> }[]
     }
@@ -149,7 +158,7 @@ export async function dealsForContact(contactId: string): Promise<DealSnapshot[]
     }))
   } catch (err) {
     console.error('[hubspot-deals] Failed reading deals for contact', contactId, err)
-    return []
+    return null
   }
 }
 

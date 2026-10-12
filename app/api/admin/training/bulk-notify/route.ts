@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { notifyMember } from '@/lib/notify'
 import { currentUserIsAdmin } from '@/lib/admin-auth'
+import { escapeHtml } from '@/lib/email-layout'
 
 // POST /api/admin/training/bulk-notify
 // Body: { memberIds: string[], objectLabel?: string, channels?: { email?, sms? } }
@@ -20,8 +21,10 @@ export async function POST(req: Request) {
         type: 'session_reminder',
         body: `Reminder: please complete your required training for ${label}.`,
         email: {
+          // deep review INTPUB-N1: `label` is the admin-supplied objectLabel and
+          // this html reaches notify pre-built, so escape it here.
           subject: 'Required training reminder',
-          html: `<p>Hi,</p><p>This is a reminder to complete your required training for <strong>${label}</strong>. Sign in to Stellr and open Academy &rsaquo; Training.</p>`,
+          html: `<p>Hi,</p><p>This is a reminder to complete your required training for <strong>${escapeHtml(label)}</strong>. Sign in to Stellr and open Academy &rsaquo; Training.</p>`,
           text: `Reminder: complete your required training for ${label}.`,
         },
       })

@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { notifyMember } from '@/lib/notify'
 import { grantTierAllocations } from '@/lib/entitlements'
 import { guardCron } from '@/lib/cron'
+import { startCronRun } from '@/lib/cron-runs'
 
 // GET /api/cron/alumni-upgrades — runs daily (see vercel.json).
 // The Alumni tier "automatically upgrades on July 1st of the School Student's
@@ -16,6 +17,8 @@ export async function GET(req: NextRequest) {
   if (blocked) return blocked
 
   const db = supabaseServer()
+  // deep review INT-9: record the run so a stalled annual upgrade is visible.
+  const run = await startCronRun(db, 'alumni-upgrades')
   const today = new Date()
   const year = today.getUTCFullYear()
   const julyFirstThisYear = Date.UTC(year, 6, 1) // month 6 = July
@@ -26,15 +29,27 @@ export async function GET(req: NextRequest) {
     .select('id')
     .eq('name', 'Alumni')
     .maybeSingle()
-  if (!alumniTier) return NextResponse.json({ error: 'Alumni tier not found', upgraded: 0 }, { status: 200 })
+  if (!alumniTier) {
+    run.fail('tier', 'Alumni tier not found')
+    await run.finish({ upgraded: 0 })
+    return NextResponse.json({ error: 'Alumni tier not found', upgraded: 0 }, { status: 200 })
+  }
 
   // Candidates: graduation year is set and has been reached.
-  const { data: members } = await db
+  const { data: members, error: membersErr } = await db
     .from('members')
     .select('id, graduation_year')
     .not('graduation_year', 'is', null)
     .lte('graduation_year', year)
-  if (!members?.length) return NextResponse.json({ upgraded: 0 })
+  if (membersErr) {
+    run.fail('query', membersErr.message)
+    await run.finish({ upgraded: 0 })
+    return NextResponse.json({ error: membersErr.message }, { status: 500 })
+  }
+  if (!members?.length) {
+    await run.finish({ upgraded: 0 })
+    return NextResponse.json({ upgraded: 0 })
+  }
 
   let upgraded = 0
 
@@ -59,20 +74,12 @@ export async function GET(req: NextRequest) {
       .maybeSingle()
     if (existingAlumni) continue
 
-    // Expire active FREE memberships (leave paid ones intact).
-    const { data: actives } = await db
-      .from('member_memberships')
-      .select('id, membership_tiers(is_free)')
-      .eq('member_id', m.id)
-      .eq('renewal_status', 'active')
-    for (const a of actives ?? []) {
-      const tier = Array.isArray(a.membership_tiers) ? a.membership_tiers[0] : a.membership_tiers
-      if ((tier as { is_free?: boolean } | null)?.is_free) {
-        await db.from('member_memberships').update({ renewal_status: 'expired' }).eq('id', a.id)
-      }
-    }
-
-    const { data: mm } = await db.from('member_memberships').insert({
+    // deep review INT-9: grant Alumni BEFORE expiring the free membership, and
+    // roll the dedupe row back if the grant fails. The old order expired the
+    // free membership first, so an Alumni insert failure left the member with no
+    // active membership at all — and the dedupe row (written first) meant the
+    // next run skipped them, making the gap permanent.
+    const { data: mm, error: grantErr } = await db.from('member_memberships').insert({
       member_id: m.id,
       tier_id: alumniTier.id,
       started_at: today.toISOString().split('T')[0],
@@ -80,7 +87,29 @@ export async function GET(req: NextRequest) {
       is_complimentary: true,
       source: 'system',
     }).select('id').maybeSingle()
-    if (mm?.id) await grantTierAllocations(mm.id).catch((e) => console.error('[alumni-upgrades] grantTierAllocations (non-fatal):', e))
+    if (grantErr || !mm?.id) {
+      console.error('[alumni-upgrades] Alumni grant failed for', m.id, '—', grantErr?.message)
+      run.fail(String(m.id), grantErr?.message ?? 'Alumni grant returned no id')
+      // Release the dedupe so the next run retries instead of stranding them.
+      await db.from('sent_reminders').delete()
+        .eq('kind', 'alumni').eq('ref_id', m.id).eq('bucket', String(gradYear))
+      continue
+    }
+    await grantTierAllocations(mm.id).catch((e) => console.error('[alumni-upgrades] grantTierAllocations (non-fatal):', e))
+
+    // Only now expire active FREE memberships (leave paid ones intact).
+    const { data: actives } = await db
+      .from('member_memberships')
+      .select('id, membership_tiers(is_free)')
+      .eq('member_id', m.id)
+      .eq('renewal_status', 'active')
+      .neq('id', mm.id) // never expire the Alumni row we just granted
+    for (const a of actives ?? []) {
+      const tier = Array.isArray(a.membership_tiers) ? a.membership_tiers[0] : a.membership_tiers
+      if ((tier as { is_free?: boolean } | null)?.is_free) {
+        await db.from('member_memberships').update({ renewal_status: 'expired' }).eq('id', a.id)
+      }
+    }
 
     await notifyMember(m.id, {
       type: 'session',
@@ -89,5 +118,6 @@ export async function GET(req: NextRequest) {
     upgraded++
   }
 
+  await run.finish({ upgraded })
   return NextResponse.json({ upgraded })
 }

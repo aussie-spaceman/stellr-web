@@ -79,29 +79,36 @@ export async function POST(req: Request) {
   let found: (CheckInCandidate & { checked_in_at: string | null }) | null = null
   if (byName) {
     const m = matchByNameAndDob(candidates, { firstName, lastName, dob })
-    if (m.kind === 'need_email') {
+    if (m.kind === 'match') {
+      found = m.candidate
+    } else {
+      // deep review REG-8: collapse the three non-match outcomes (need_email,
+      // ambiguous, none) into ONE response. Distinct codes/statuses were a
+      // presence oracle — with only the shared event token, submitting a name +
+      // date of birth told an attacker whether a specific child was on the
+      // roster ("need_email"/"ambiguous" = yes, "none" = no). All non-matches now
+      // return the same 404 and route to the email fallback. That does not weaken
+      // the legitimate door flow: the email you registered with is the real
+      // check-in credential, and it also resolves the unusable-DOB and
+      // duplicate-name cases the old branches handled. The `need_email` code
+      // keeps the client auto-advancing to the email step.
       return NextResponse.json(
-        { code: 'need_email', error: 'We need the email address you registered with to confirm it’s you.' },
+        {
+          code: 'need_email',
+          error: 'We couldn’t confirm that. Enter the email you registered with, or see the registration desk.',
+        },
         { status: 404 }
       )
     }
-    if (m.kind === 'ambiguous') {
-      return NextResponse.json(
-        { code: 'ambiguous', error: 'We found more than one match. Please see the registration desk.' },
-        { status: 409 }
-      )
-    }
-    if (m.kind === 'match') found = m.candidate
   } else {
     found = matchByEmail(candidates, email)
   }
   if (!found) {
+    // Email path only (a byName non-match returned above).
     return NextResponse.json(
       {
         code: 'none',
-        error: byName
-          ? 'We couldn’t match that name and date of birth. Check both, or try the email you registered with.'
-          : 'We couldn’t find a registration for that email. Please see the registration desk.',
+        error: 'We couldn’t find a registration for that email. Please see the registration desk.',
       },
       { status: 404 }
     )

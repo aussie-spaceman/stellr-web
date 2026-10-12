@@ -173,7 +173,11 @@ export async function loadMinorConsents(
 /** NY and CO 13–17-year-olds start with quoting off until they turn it on. */
 export function defaultAllowQuotes(age: number | null, state: string | null | undefined): boolean {
   const code = state ? normaliseState(state) : undefined
-  if (age !== null && age >= 13 && age <= 17 && (code === 'NY' || code === 'CO')) return false
+  // deep review MP-9: an unknown age (null) is treated as a minor in the NY/CO
+  // band — everywhere else in the codebase unknown age fails safe to "could be a
+  // child" (isStudentForAds, ageBlock), so the NY/CO opt-in default must not be
+  // skipped just because the DOB is missing.
+  if ((age === null || (age >= 13 && age <= 17)) && (code === 'NY' || code === 'CO')) return false
   return true
 }
 
@@ -210,7 +214,13 @@ export function quoteEligibility(f: QuoteFacts): QuoteDecision {
   if (f.agreementRestricted) return { eligible: false, reason: 'agreement restricted' }
   if (f.parentQuoteOptOut) return { eligible: false, reason: 'parent opted out' }
   if (f.noQuote) return { eligible: false, reason: "ticked don't quote" }
-  const under13 = f.age !== null && f.age < 13
+  // deep review MP-9: fail safe on an unknown age. A minor whose DOB can't be
+  // read (e.g. an invited member with a null DOB, or a participant whose DOB
+  // fails isValidDob) must be anonymised, not named — and the NY/CO opt-in
+  // default must not be bypassed for them. Unknown age is therefore treated as
+  // under-13 (no identifying attribution), the same cautious rule credentials
+  // and media use.
+  const under13 = f.age === null || f.age < 13
   if (!under13) {
     const allow = f.studentAllowQuotes ?? defaultAllowQuotes(f.age, f.state)
     if (!allow) return { eligible: false, reason: 'student quoting off' }

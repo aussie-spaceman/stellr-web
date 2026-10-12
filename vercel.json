@@ -57,6 +57,10 @@
       "schedule": "0 4 * * *"
     },
     {
+      "path": "/api/cron/hubspot-event-options",
+      "schedule": "45 4 * * *"
+    },
+    {
       "path": "/api/cron/lead-capture-failures",
       "schedule": "0 13 * * 1"
     },

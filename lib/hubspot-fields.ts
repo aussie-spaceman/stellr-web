@@ -12,6 +12,11 @@
 //      shared free text and is clobbered by whichever lead route fires last.
 //
 // Property definitions live in scripts/hubspot-setup.ts; keep the two in sync.
+// The OPTION lists of the event_* properties are not hand-kept: they follow
+// Sanity via lib/hubspot-event-options.ts, using the mappings below.
+
+import { gradeBand, type GradeBandInput } from '@/lib/grade-band'
+import { normaliseState, stateNameFor } from '@/lib/us-states'
 
 /* ── Property names ──────────────────────────────────────────────────────── */
 
@@ -226,71 +231,83 @@ export function hubspotDateValue(date: Date): string {
 
 /* ── Sanity → HubSpot: event location ────────────────────────────────────── */
 
-/** The exact `event` (Event Location) options defined in the portal. */
+/**
+ * The Event Location (`event`) option an event belongs to, derived from Sanity
+ * — which is the source of truth for both the value written here and the
+ * option list itself (lib/hubspot-event-options.ts keeps the portal's options
+ * in step with these labels, so a new event's label exists by the time anyone
+ * is tagged with it).
+ *
+ * In order:
+ *   1. `hubspotLocation` — an editor override, for keeping continuity with an
+ *      existing option ("Nebraska [SAC Museum]" for the Ashland venue, one
+ *      "Colorado [Denver]" for both Colorado events).
+ *   2. A campaign runs at the participant's own school, so it has no venue —
+ *      one option per term.
+ *   3. A virtual event.
+ *   4. Outside the US: "Country [City]".
+ *   5. In the US: "State [City]", with the state spelled out — Sanity's `state`
+ *      is free text holding codes and names alike.
+ *
+ * Anything else (no city, a state we can't read) is undefined and reported,
+ * never guessed.
+ */
 const LOCATION_VIRTUAL = 'Virtual [Zoom + Discord]'
 
-/**
- * Keyed on the Sanity `state` field, which the event pages render as
- * `${city}, ${state}` — in practice a two-letter code, though full names are
- * accepted too. Where one state could host more than one venue the city
- * disambiguates; see LOCATION_BY_CITY.
- */
-const LOCATION_BY_STATE: Record<string, string> = {
-  nv: 'Nevada [Las Vegas]',
-  nevada: 'Nevada [Las Vegas]',
-  co: 'Colorado [Denver]',
-  colorado: 'Colorado [Denver]',
-  nc: 'North Carolina [Raleigh]',
-  'north carolina': 'North Carolina [Raleigh]',
-  sd: 'South Dakota [Brookings]',
-  'south dakota': 'South Dakota [Brookings]',
-  mn: 'Minnesota [Mankato]',
-  minnesota: 'Minnesota [Mankato]',
-  tx: 'Texas [Houston]',
-  texas: 'Texas [Houston]',
-  pa: 'Pennsylvania [Lehigh]',
-  pennsylvania: 'Pennsylvania [Lehigh]',
-  ne: 'Nebraska [SAC Museum]',
-  nebraska: 'Nebraska [SAC Museum]',
-  az: 'Arizona [BS2]',
-  arizona: 'Arizona [BS2]',
-  wa: 'Washington State [Raisbeck]',
-  washington: 'Washington State [Raisbeck]',
-  'washington state': 'Washington State [Raisbeck]',
-  uruguay: 'Uruguay',
+const CAMPAIGN_LOCATION: Record<string, string> = {
+  fall: 'Campaign [Fall]',
+  spring: 'Campaign [Spring]',
 }
 
-/** City overrides, checked before state — for the non-geographic options. */
-const LOCATION_BY_CITY: Record<string, string> = {
-  'las vegas': 'Nevada [Las Vegas]',
-  denver: 'Colorado [Denver]',
-  raleigh: 'North Carolina [Raleigh]',
-  brookings: 'South Dakota [Brookings]',
-  mankato: 'Minnesota [Mankato]',
-  houston: 'Texas [Houston]',
-  lehigh: 'Pennsylvania [Lehigh]',
-  bethlehem: 'Pennsylvania [Lehigh]',
-  montevideo: 'Uruguay',
+/** HubSpot delimits multi-select values with `;`, so a label must never hold one. */
+function cleanLabel(label: string): string | undefined {
+  const cleaned = label.replace(/;/g, ',').replace(/\s+/g, ' ').trim()
+  return cleaned || undefined
+}
+
+function countryName(code: string): string | undefined {
+  try {
+    // fallback 'none': an unknown code is undefined, not "Unknown Region" or
+    // the code echoed back — either of which would become a real option.
+    const name = new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none' }).of(
+      code.toUpperCase(),
+    )
+    return name && name !== 'Unknown Region' ? name : undefined
+  } catch {
+    // A malformed code (not two letters) throws a RangeError.
+    return undefined
+  }
 }
 
 export function mapEventLocation(input: {
+  hubspotLocation?: string | null
+  activityType?: string | null
+  season?: string | null
   setting?: string | null
   city?: string | null
   state?: string | null
-  title?: string | null
+  country?: string | null
 }): string | undefined {
+  const override = input.hubspotLocation?.trim()
+  if (override) return cleanLabel(override)
+
+  if (input.activityType === 'campaign') {
+    return input.season ? CAMPAIGN_LOCATION[input.season] : undefined
+  }
+
   if (input.setting === 'virtual') return LOCATION_VIRTUAL
 
-  // ISSDC Finals is identified by name rather than venue — it moves each year.
-  if (input.title && /issdc/i.test(input.title)) return 'ISSDC Finals'
+  const city = input.city?.trim()
+  if (!city) return undefined
 
-  const city = input.city?.trim().toLowerCase()
-  if (city && LOCATION_BY_CITY[city]) return LOCATION_BY_CITY[city]
+  const country = input.country?.trim()
+  if (country && country.toUpperCase() !== 'US') {
+    const name = countryName(country)
+    return name ? cleanLabel(`${name} [${city}]`) : undefined
+  }
 
-  const state = input.state?.trim().toLowerCase()
-  if (state && LOCATION_BY_STATE[state]) return LOCATION_BY_STATE[state]
-
-  return undefined
+  const state = stateNameFor(normaliseState(input.state ?? undefined))
+  return state ? cleanLabel(`${state} [${city}]`) : undefined
 }
 
 /* ── Sanity → HubSpot: theme ─────────────────────────────────────────────── */
@@ -315,35 +332,43 @@ export function mapEventTheme(sanityType?: string | null): string | undefined {
 /* ── Sanity → HubSpot: demographic ───────────────────────────────────────── */
 
 /**
- * `event_demographic` is a multi-checkbox in the portal (converted by
- * scripts/hubspot-setup.ts) precisely so Sanity's "Both" can be represented
- * honestly rather than collapsed to one grade band. HubSpot delimits
- * multi-select values with a semicolon.
+ * `event_demographic` is a multi-checkbox in the portal so a grades 7–12 event
+ * can be both Middle and High School rather than collapsed to one. HubSpot
+ * delimits multi-select values with a semicolon.
+ *
+ * Derived from the event's effective grade band — the same band, and the same
+ * overlap rule, as the /events grade filter (lib/grade-band.ts) — so the CRM
+ * and the website agree on who an event is for. A band reaching grade 8 or
+ * below is Middle School; one reaching grade 9 or above is High School.
+ *
+ * `College` exists in the portal but no Sanity event produces it; it is tagged
+ * by hand.
  */
-export function mapEventDemographic(gradeLevel?: string | null): string | undefined {
-  switch (gradeLevel?.trim()) {
-    case 'Middle School':
-      return 'Middle School'
-    case 'High School':
-      return 'High School'
-    case 'Both':
-      return 'Middle School;High School'
-    case 'College':
-      return 'College'
-    default:
-      return undefined
-  }
+const HIGH_SCHOOL_START = 9
+const KNOWN_GRADE_LEVELS = new Set(['Middle School', 'High School', 'Both'])
+
+export function mapEventDemographic(input: GradeBandInput): string | undefined {
+  const band = gradeBand(input)
+  // gradeBand defaults an unrecognised level to high school; here that would be
+  // a guess, so only an explicit band or a known level counts.
+  if (!band.isOverride && !KNOWN_GRADE_LEVELS.has(input.gradeLevel?.trim() ?? '')) return undefined
+
+  const values: string[] = []
+  if (band.min < HIGH_SCHOOL_START) values.push('Middle School')
+  if (band.max >= HIGH_SCHOOL_START) values.push('High School')
+  return values.join(';') || undefined
 }
 
 /* ── Sanity → HubSpot: year ──────────────────────────────────────────────── */
 
 /**
- * `event_year` is an enumeration, so an unlisted year would be rejected.
- * scripts/hubspot-setup.ts extends the option list; this guard keeps us inside
- * a sane range rather than trusting whatever a date field holds.
+ * `event_year` is an enumeration whose options lib/hubspot-event-options.ts
+ * adds as Sanity needs them. This guard keeps us inside a sane window rather
+ * than trusting whatever a date field holds — a typo'd 2207 would otherwise
+ * become a permanent option.
  */
 const YEAR_MIN = 2023
-const YEAR_MAX = 2030
+const YEARS_AHEAD = 3
 
 /**
  * The school year an event belongs to — which is NOT its calendar year.
@@ -368,11 +393,14 @@ export function schoolYearFor(date: Date): number {
     : date.getUTCFullYear()
 }
 
-export function mapEventYear(input: {
-  campaignYear?: number | null
-  season?: string | null
-  date?: string | null
-}): string | undefined {
+export function mapEventYear(
+  input: {
+    campaignYear?: number | null
+    season?: string | null
+    date?: string | null
+  },
+  now: Date = new Date(),
+): string | undefined {
   let year: number | undefined
 
   // Campaigns carry `campaignYear`, which IS the school year — campaigns are
@@ -388,8 +416,33 @@ export function mapEventYear(input: {
     year = schoolYearFor(new Date(`${input.date.slice(0, 10)}T00:00:00Z`))
   }
 
-  if (!year || year < YEAR_MIN || year > YEAR_MAX) return undefined
+  if (!year || year < YEAR_MIN || year > schoolYearFor(now) + YEARS_AHEAD) return undefined
   return String(year)
+}
+
+/* ── Multi-select merge ──────────────────────────────────────────────────── */
+
+/**
+ * The contact event properties are multi-checkboxes that record history —
+ * every event, year, theme and band a contact has been part of. A HubSpot
+ * write (form or API) REPLACES a multi-select's whole value, so writing just
+ * this event's value would erase the rest. Lead capture therefore merges onto
+ * what is already there (lib/hubspot.ts, captureLead).
+ */
+export const MULTI_SELECT_EVENT_PROPS: readonly string[] = [
+  HS.eventLocation,
+  HS.eventYear,
+  HS.eventTheme,
+  HS.eventDemographic,
+]
+
+function splitMulti(value?: string | null): string[] {
+  return (value ?? '').split(';').map((v) => v.trim()).filter(Boolean)
+}
+
+/** Union of two `;`-delimited values, existing first, duplicates dropped. */
+export function mergeMultiSelect(existing: string | null | undefined, incoming: string): string {
+  return [...new Set([...splitMulti(existing), ...splitMulti(incoming)])].join(';')
 }
 
 /* ── Composite ───────────────────────────────────────────────────────────── */
@@ -397,10 +450,16 @@ export function mapEventYear(input: {
 export interface EventLike {
   title?: string | null
   type?: string | null
+  activityType?: string | null
   gradeLevel?: string | null
+  gradeMin?: number | null
+  gradeMax?: number | null
   setting?: string | null
   city?: string | null
   state?: string | null
+  country?: string | null
+  /** Editor override for the Event Location label. */
+  hubspotLocation?: string | null
   date?: string | null
   campaignYear?: number | null
   /** 'fall' | 'spring' — proves the campaign year is a deliberate school year. */
@@ -421,7 +480,10 @@ export function eventProperties(
 
   const location = mapEventLocation(event)
   if (location) properties[HS.eventLocation] = location
-  else unmapped.push(`location(setting=${event.setting}, city=${event.city}, state=${event.state})`)
+  else
+    unmapped.push(
+      `location(setting=${event.setting}, city=${event.city}, state=${event.state}, country=${event.country})`,
+    )
 
   const year = mapEventYear(event)
   if (year) properties[HS.eventYear] = year
@@ -431,7 +493,7 @@ export function eventProperties(
   if (theme) properties[HS.eventTheme] = theme
   else unmapped.push(`theme(type=${event.type})`)
 
-  const demographic = mapEventDemographic(event.gradeLevel)
+  const demographic = mapEventDemographic(event)
   if (demographic) properties[HS.eventDemographic] = demographic
   else unmapped.push(`demographic(gradeLevel=${event.gradeLevel})`)
 

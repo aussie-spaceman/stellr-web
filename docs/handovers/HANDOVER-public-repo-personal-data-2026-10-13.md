@@ -72,10 +72,12 @@ How it was checked:
 
 ## Not verified, and gaps
 
-- **The rule is not in force yet** (row `.2`). Project skills load from the
-  main checkout, not from a session's worktree. This close-out loaded a
-  `close-out` skill with no "People" section, because the main checkout is 15
-  commits behind `origin/dev`.
+- **The rule only takes effect once the main checkout is pulled** (row `.2`,
+  now closed). Project skills load from the main checkout, not from a
+  session's worktree. This close-out first loaded a `close-out` skill with no
+  "People" section, because that checkout was 15 commits behind. Another
+  session fast-forwarded it during the close-out, and it now has the rule.
+  Pull it after any future skill change.
 - **#408 published more minor data to `main`** (row `.3`). It merged at
   15:55:34Z, 71 s before #409 was opened. This session had noticed it about ten
   minutes earlier but only mentioned it in a progress note and did not stop for
@@ -100,9 +102,11 @@ How it was checked:
 ## Open items
 
 See the tracker file. In short:
-1. `.2`: fast-forward the main checkout so the rule is in force.
-2. `.3`: redact #408's three files.
-3. `.4`: David decides A.
-4. `.5`: B.
-5. `.6`: C only on request.
-6. `.7`: the `lint:pii` CI guard, started in a separate session.
+1. `.3`: redact #408's three files.
+2. `.4`: David decides A.
+3. `.5`: B.
+4. `.6`: C only on request.
+5. `.7`: the `lint:pii` CI guard, started in a separate session.
+6. `.8`: a rule line in `CLAUDE.md`.
+
+`.2` (main checkout pulled) closed during the close-out.

@@ -61,16 +61,27 @@ So, in anything that goes to GitHub:
   fixtures (`*.seed@example.com`, the e2e "Ada" and "Grace"). Never use a real
   person's details as a fixture.
 
-Before every push, run this over what you are about to publish (the diff, the
-commit messages, and the PR body file). Anything it prints is a stop:
+CI enforces the mechanical part for files. `verify` runs `npm run lint:pii`,
+which fails on personal email addresses, real-format credential numbers, Gmail
+draft and message IDs, and Clerk user IDs in lines a PR **adds** to `docs/`,
+`.claude/` or a root `*.md`. `scripts/lint-pii.mjs` holds the patterns and the
+allowlist. Existing lines are not checked, because redacting the history is a
+separate decision. The lint does not read commit messages, the PR body or code,
+so before every push run the same patterns over those yourself. Anything either
+command reports is a stop:
 
 ```bash
+npm run lint:pii      # docs/, .claude/ and root *.md, exactly as CI runs it
 { git diff origin/dev...HEAD -U0 | grep '^+'; git log origin/dev..HEAD --format=%B; cat <pr-body-file>; } \
-  | grep -nE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}|STL-20[0-9]{2}-[A-Z0-9]{8}|r-?[0-9]{15,}' \
-  | grep -vE '@(mail\.)?stellreducation\.org|@example\.(com|org)|noreply@anthropic\.com|STL-20[0-9]{2}-E2E'
+  | node scripts/lint-pii.mjs --stdin
 ```
 
-The grep can't see names, so read the diff for them too.
+A deliberate exception, such as a vendor's role mailbox, takes a trailing
+`<!-- pii-ok: <reason> -->` on the same line. The reason is required, and the
+comment shows in the diff, so the reviewer sees it. It is for addresses and IDs
+that belong to no member. Never use it for a member's details.
+
+The lint can't see names, so read the diff for them too.
 
 WHY (13 Oct 2026): an audit of `docs/` and `.claude/` on `dev` found 365
 references to real people outside staff, across 45 files. More than half

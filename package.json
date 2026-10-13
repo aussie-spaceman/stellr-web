@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "lint:tokens": "node scripts/ds-lint.mjs",
     "lint:migrations": "node scripts/check-migration-names.mjs && node scripts/check-migration-security.mjs",
+    "lint:pii": "node scripts/lint-pii.mjs",
     "migration:new": "supabase migration new",
     "db:status": "node scripts/db-status.mjs",
     "tracker": "node scripts/tracker.mjs",

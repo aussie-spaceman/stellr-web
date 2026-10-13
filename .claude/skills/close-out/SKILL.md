@@ -67,7 +67,7 @@ commit messages, and the PR body file). Anything it prints is a stop:
 ```bash
 { git diff origin/dev...HEAD -U0 | grep '^+'; git log origin/dev..HEAD --format=%B; cat <pr-body-file>; } \
   | grep -nE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}|STL-20[0-9]{2}-[A-Z0-9]{8}|r-?[0-9]{15,}' \
-  | grep -vE '@(mail\.)?stellreducation\.org|@example\.(com|org)|STL-20[0-9]{2}-E2E'
+  | grep -vE '@(mail\.)?stellreducation\.org|@example\.(com|org)|noreply@anthropic\.com|STL-20[0-9]{2}-E2E'
 ```
 
 The grep can't see names, so read the diff for them too.

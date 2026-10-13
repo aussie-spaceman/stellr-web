@@ -24,6 +24,62 @@ Four close-outs ran together and blocked each other:
 The fixes: one tracker file per session, IDs from a slug and not a number,
 never editing another session's rows, and docs-only changes skipping e2e in CI.
 
+## People: the repo is public
+
+`aussie-spaceman/stellr-web` is a **public** repository. Everything you push
+can be read by anyone and is effectively permanent: files, commit messages, PR
+titles and bodies, and branch names. A commit pushed to a PR stays reachable
+through `refs/pull/*` even after its branch is deleted. Most of the people this
+work touches are students, and most students are minors.
+
+So, in anything that goes to GitHub:
+
+- **Refer to a person by role and ID, never by name.** Write "guardian of
+  student `<members.id>`", "mentor `<members.id>`" or "educator `<members.id>`",
+  using the full `members.id` UUID, which means nothing without database
+  access. Someone with no member row, such as a guardian known only as a
+  student's emergency contact, is "guardian of `<members.id>`".
+- **Never write** names (first names count), personal email addresses, phone
+  numbers, dates of birth, the age or grade of a specific person, schools,
+  health or dietary details, home towns, or a named person's background-check
+  outcome.
+- **A credential number is not a safe ID.** Once a credential is public,
+  `/credentials/<number>` shows the holder's name. Cite the holder's
+  `members.id` instead. The e2e fixtures (`STL-2026-E2E…`) are fine.
+- **Mailbox and vendor IDs also stay out:** Gmail draft, thread and message IDs,
+  DocuSign envelope IDs, Checkr candidate and report IDs, Stripe customer and
+  session IDs, Clerk user IDs. Each one points at a single person's records.
+- **Combinations identify people too.** An award name plus an event, or "the
+  only under-13 at the event", can single out a child without naming them.
+  Write "a student" and leave out the detail.
+- **Who goes in the Doc, not the repo.** If the next session needs to know who
+  is involved, put the name and the IDs in the step 5 Google Doc snapshot,
+  which is private in Drive, and cite the row from the repo ("names in the Doc,
+  row `<slug>.3`"). The repo says *what* is open, and the Doc says *who*.
+- **Fine to name:** Stellr staff acting as staff ("David decided…"); vendors by
+  company, with their people by role ("Checkr support"); and fictional
+  fixtures (`*.seed@example.com`, the e2e "Ada" and "Grace"). Never use a real
+  person's details as a fixture.
+
+Before every push, run this over what you are about to publish (the diff, the
+commit messages, and the PR body file). Anything it prints is a stop:
+
+```bash
+{ git diff origin/dev...HEAD -U0 | grep '^+'; git log origin/dev..HEAD --format=%B; cat <pr-body-file>; } \
+  | grep -nE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}|STL-20[0-9]{2}-[A-Z0-9]{8}|r-?[0-9]{15,}' \
+  | grep -vE '@(mail\.)?stellreducation\.org|@example\.(com|org)|noreply@anthropic\.com|STL-20[0-9]{2}-E2E'
+```
+
+The grep can't see names, so read the diff for them too.
+
+WHY (13 Oct 2026): an audit of `docs/` and `.claude/` on `dev` found 365
+references to real people outside staff, across 45 files. More than half
+concerned minors and their families: students' and parents' names, personal
+emails, member, envelope and Gmail draft IDs, scholarship and refund details,
+and one parent's employer. They were mostly in handovers, tracker files and
+release records, and the same details were in 20 PR bodies. Rewriting the files
+now does not remove any of it from history.
+
 ## Steps
 
 ### 1. Review the session honestly
@@ -62,6 +118,9 @@ branch (ship rule 4). No `npm ci` is needed for a docs-only change.
   them is what makes concurrent PRs conflict.
 - If the session wrote a handover earlier, append a close-out section to it.
   That file is yours.
+- Both files are public. Follow "People: the repo is public" above: people go
+  in by role and `members.id`, and their names go in the Doc (step 5). This
+  applies to row titles too ("Reply to guardian of student `<id>`").
 
 Summary rules, carried over from the global skill:
 - Don't recommend pushing code or smoke tests. The code is assumed deployed,
@@ -72,7 +131,9 @@ Summary rules, carried over from the global skill:
 Use the Drive `create_file` call with base64 HTML and `mimeType: text/html`.
 The columns are Current state / Recommended next step / Complete. Read the Doc
 back to check it, then put its ID in the tracker file's header line. The Doc is
-a copy; the repo file is the source.
+a copy; the repo file is the source. The one exception is people. Names,
+contact details and mailbox IDs go in the Doc only, against the row ID they
+belong to.
 
 ### 6. Land it on `dev` before reporting done
 ```bash
@@ -80,16 +141,40 @@ git add docs/handovers && git commit -m "Close-out <slug>: handover + tracker"
 git push -u origin HEAD
 gh pr create --base dev --title "Close-out <slug>: handover + tracker" --body-file <file>
 gh pr checks <n> --watch      # docs-only: verify runs, e2e reports "skipped"
+git status --porcelain        # must print nothing: all committed and pushed
+cd ../stellr-web              # merge from the MAIN checkout, not the worktree
 gh pr merge <n> --squash --delete-branch
+git worktree list             # the close-out worktree should be gone
 ```
 - A docs-only PR needs only `verify`, so it runs in parallel with other
   sessions and never waits behind their e2e.
 - If `e2e` actually *runs*, you touched something outside `docs/`, `.claude/`
   or root `*.md`. Find out what before merging.
-- `--delete-branch` removes the worktree, so push everything first.
+- **Where you run the merge decides the cleanup.** gh's `--delete-branch` (2.100,
+  `deleteLocalBranch` in `pkg/cmd/pr/merge/merge.go`) works like this:
+  - From the main checkout, gh runs `git worktree remove` on the worktree that
+    holds the branch, then `git branch -D`, then deletes the remote branch.
+  - From inside that worktree, it deletes only the remote branch. It prints
+    "skipping local delete" and leaves the worktree and the local branch.
+  - With `--repo`/`-R`, it never touches local branches.
+- gh does not force the removal. If the worktree still holds untracked or
+  modified files, gh warns "Could not remove worktree" and leaves both. That is
+  the safety net, so look at what is there; do not reach for `--force`.
+- If the worktree is still listed, remove it by hand from the main checkout:
+  `git worktree remove ../stellr-web-close-out-<slug>`, then
+  `git branch -D docs/close-out-<slug>`. Use `-D` because a squash-merged
+  branch is never an ancestor of `dev`. First check that `git rev-parse
+  docs/close-out-<slug>` equals `gh pr view <n> --json headRefOid --jq
+  .headRefOid`.
 - Check `gh pr view <n> --json state` says `MERGED`, and
   `gh pr list --state open --search "close-out"` shows none of yours. A
   handover that is not on `dev` does not exist for the next session.
+
+WHY (13 Oct 2026): this step merged from inside the worktree and said
+`--delete-branch` removed it. Run from there, gh deletes only the remote branch.
+Eight close-out and promotion-record worktrees had piled up beside the repo.
+One of them still held the 7 Oct credential-family-link handover, written but
+never committed, so it had never reached `dev`.
 
 ### 7. Memory
 - Write this session's facts as their own memory file(s). Update an existing

@@ -35,6 +35,14 @@ mechanism; this skill is the sequence.
    a login wall, then a "Deployment is building" placeholder. Both have an `<h1>`
    and log no app errors. `e2e/global-setup.ts` now refuses unless the target
    says "Stellr".
+6. **Nothing that identifies a member goes to GitHub.** The repo is public.
+   That covers files, commit messages, PR titles and bodies, and branch names.
+   Refer to people by role and `members.id`, never by name, personal email or
+   credential number. A slug or branch name never carries a person's name. The
+   full rule and the pre-push check are in `.claude/skills/close-out/SKILL.md`,
+   under "People: the repo is public". (13 Oct 2026: an audit found students',
+   parents' and mentors' names and contact details across handovers, trackers
+   and release records.)
 
 ## Phase 0 — Isolate the session
 
@@ -138,7 +146,10 @@ Neither substitutes for the other.
 ## Phase 5 — Land on `dev`
 
 ```bash
+git status --porcelain        # must print nothing: all committed and pushed
+cd ../stellr-web              # merge from the MAIN checkout, not the worktree
 gh pr merge <n> --squash --delete-branch
+git worktree list             # the session worktree should be gone
 ```
 
 If GitHub reports `BEHIND` (protection is strict), update rather than rebase:
@@ -147,13 +158,16 @@ If GitHub reports `BEHIND` (protection is strict), update rather than rebase:
 gh pr update-branch <n>
 ```
 
-Then tidy up. This is not housekeeping — it is what stops the branch being
-reused after its squash:
-
-```bash
-git worktree remove ../stellr-web-<name>   # --force if node_modules remain
-git branch -d <type>/<slug>
-```
+Cleaning up is not housekeeping. It is what stops the branch being reused
+after its squash. When the merge runs from the main checkout, `--delete-branch`
+removes the session worktree (unforced), runs `git branch -D` and deletes the
+remote branch. Run from inside the worktree, it deletes only the remote
+branch. The full rules are in close-out step 6. Ignored files such as
+`node_modules`, `.next` and `.env.local` do not block the removal. Untracked
+and modified files do, and then gh leaves the worktree with a warning. If it is
+still listed, look at what is there. Then, from the main checkout, run
+`git worktree remove ../stellr-web-<name>` and `git branch -D <type>/<slug>`,
+after checking the branch tip equals the PR's `headRefOid`.
 
 **More work on the same subject starts a NEW branch from `dev`.** Reusing the
 merged one produces `add/add` conflicts on every file it touched, because the
@@ -162,10 +176,11 @@ are already in that state, merge `dev` in (never rebase), keep your side for the
 files you own, and regenerate `package-lock.json` with
 `npm install --package-lock-only` rather than resolving it by hand.
 
-`git worktree remove` refuses on ignored files, and `git branch -d` compares
-against the branch's **upstream**, not `main` — both have wasted time here. If
-`-d` refuses, confirm with `git merge-base --is-ancestor <branch> origin/main`
-before reaching for `-D`.
+`git branch -d` compares against the branch's **upstream**, not `main`, which
+has wasted time here. `-D` is right after a squash: the squashed branch is
+never an ancestor of `dev`, so `-d` and `git merge-base --is-ancestor` both
+always say no. The `headRefOid` check is the proof that everything on the
+branch landed.
 
 ## Phase 6 — Hand over
 

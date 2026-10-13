@@ -56,6 +56,14 @@ whenever the record changes. A promotion spans async gaps and `dev` keeps
 moving; the record is the source of truth for "where are we", not the
 conversation.
 
+The record file and the PR body are both public. Describe who a change affects
+by role and count ("fixes the replies from two guardians of minor credential
+holders"), never by name, email or credential number. When an open item needs
+a person, use their `members.id`. The full rule is in
+`.claude/skills/close-out/SKILL.md`, under "People: the repo is public". Run
+its pre-push grep over the record and the body file before `gh pr create` and
+before every `gh pr edit`.
+
 WHY not a record PR per step (28 Sept 2026): every merge into `dev` is a
 deployment on **both** Vercel projects (one builds, the other is cancelled but
 still counted). Each promotion used to land 2–3 record PRs ("record", "add
@@ -184,15 +192,18 @@ to be:
 
 ```bash
 git fetch origin
-git worktree add -b docs/promote-<YYYY-MM-DD>-record ../stellr-web-promote-record origin/main
-cp <your record> ../stellr-web-promote-record/.claude/releases/promote-<YYYY-MM-DD>.md
-cd ../stellr-web-promote-record
+git worktree add -b docs/promote-<YYYY-MM-DD>-record ../stellr-web-promote-<YYYY-MM-DD>-record origin/main
+cp <your record> ../stellr-web-promote-<YYYY-MM-DD>-record/.claude/releases/promote-<YYYY-MM-DD>.md
+cd ../stellr-web-promote-<YYYY-MM-DD>-record
 # Status: Promoted, the merge SHA, and the production deployment id
 git add .claude/releases && git commit -m "Promotion record <date>: Promoted (#<n>, <sha>)"
 git push -u origin HEAD
 gh pr create --base dev --title "Promotion record <date>: Promoted (#<n>, <sha>)" --body-file <file>
 gh pr checks <m> --watch      # docs-only against dev: verify runs, e2e skips
+git status --porcelain        # must print nothing
+cd ../stellr-web              # merge from the MAIN checkout, so gh removes the worktree
 gh pr merge <m> --merge --delete-branch
+git worktree list             # the record worktree should be gone
 ```
 
 - **`--merge`, not `--squash`, for this one PR.** It is the exception to
@@ -211,3 +222,19 @@ gh pr merge <m> --merge --delete-branch
 
 Check `gh pr view <m> --json state` reads `MERGED`. If anything failed, say so
 with the output. Never round a partial success up to done.
+
+gh cleans up only when the merge runs from the main checkout. Then it removes
+the record worktree (unforced), runs `git branch -D` and deletes the remote
+branch. Run from inside the worktree, it deletes only the remote branch. The
+full rules are in close-out step 6. If the worktree is still listed, remove it
+by hand from the main checkout, after checking the branch tip equals the PR's
+`headRefOid`:
+`git worktree remove ../stellr-web-promote-<YYYY-MM-DD>-record`, then
+`git branch -D docs/promote-<YYYY-MM-DD>-record`. If the removal refuses,
+something untracked is still in there. Look at it before using `--force`.
+
+WHY (13 Oct 2026): the merge used to run from inside the record worktree, at a
+fixed path, so every worktree was left behind. The 6 Oct one was never
+removed, so 13 Oct's record had to go to `../stellr-web-promote-record-1013`.
+The date in the path stops that collision, and merging from the main checkout
+stops the pile-up.

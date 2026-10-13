@@ -64,6 +64,11 @@ Norwester system is retired.
   pre-V2 brand hex literals and old font-family names in `app/**` (excl.
   `app/api`), `components/**`, `packages/**`. Keep the build green by using
   tokens.
+- `npm run lint:pii` (runs in CI's `verify`, docs-only PRs included) fails on
+  personal emails, credential numbers, and Gmail or Clerk IDs in lines a change
+  adds to `docs/**`, `.claude/**` or a root `*.md`. The repo is public: refer to
+  people by role and `members.id`. The rule and the `<!-- pii-ok: <reason> -->`
+  escape are in `.claude/skills/close-out/SKILL.md`, "People: the repo is public".
 
 ## Reference
 - Storybook (`npm run storybook`) is the living component reference.

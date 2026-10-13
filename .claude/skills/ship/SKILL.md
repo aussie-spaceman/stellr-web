@@ -40,9 +40,10 @@ mechanism; this skill is the sequence.
    Refer to people by role and `members.id`, never by name, personal email or
    credential number. A slug or branch name never carries a person's name. The
    full rule and the pre-push check are in `.claude/skills/close-out/SKILL.md`,
-   under "People: the repo is public". (13 Oct 2026: an audit found students',
-   parents' and mentors' names and contact details across handovers, trackers
-   and release records.)
+   under "People: the repo is public". `verify` enforces the mechanical part
+   for added lines in docs (`npm run lint:pii`). (13 Oct 2026: an audit found
+   students', parents' and mentors' names and contact details across
+   handovers, trackers and release records.)
 
 ## Phase 0 — Isolate the session
 
@@ -107,8 +108,8 @@ gh pr create --base dev --title "<title>" --body-file <file>
 gh pr checks <n> --watch
 ```
 
-`verify` runs typecheck, design-system lint, migration-name lint, the unit
-suite, and a full build.
+`verify` runs the PII lint, typecheck, design-system lint, migration-name lint,
+the unit suite, and a full build.
 
 For anything a browser can observe:
 

@@ -86,10 +86,34 @@ gh pr merge <n> --squash --delete-branch
   sessions and never waits behind their e2e.
 - If `e2e` actually *runs*, you touched something outside `docs/`, `.claude/`
   or root `*.md`. Find out what before merging.
-- `--delete-branch` removes the worktree, so push everything first.
+- `--delete-branch` deletes the **remote** branch only. It leaves the local
+  branch and the worktree in place (git will not delete a branch a worktree has
+  checked out), so the worktree is yours to remove, below.
 - Check `gh pr view <n> --json state` says `MERGED`, and
   `gh pr list --state open --search "close-out"` shows none of yours. A
   handover that is not on `dev` does not exist for the next session.
+
+Then remove the worktree, which is not optional. First prove nothing is left
+behind in it: `git status --porcelain` prints nothing, and `git rev-parse HEAD`
+equals `gh pr view <n> --json headRefOid --jq .headRefOid`. Then, from the main
+checkout:
+
+```bash
+git -C ../stellr-web worktree remove ../stellr-web-close-out-<slug>
+git -C ../stellr-web branch -D docs/close-out-<slug>
+```
+
+- `-D`, because a squash-merged branch is never an ancestor of `dev`, so `-d`
+  always refuses. The `headRefOid` check is what makes `-D` safe.
+- If `worktree remove` refuses, something untracked is still in there. Look at
+  it; do not reach for `--force`.
+- `git worktree list` should show nothing from this session.
+
+WHY (13 Oct 2026): this step used to say `--delete-branch` removed the
+worktree. It never did. Eight close-out and promotion-record worktrees had
+piled up beside the repo. One of them still held the 7 Oct
+credential-family-link handover, written but never committed, so it had never
+reached `dev`.
 
 ### 7. Memory
 - Write this session's facts as their own memory file(s). Update an existing

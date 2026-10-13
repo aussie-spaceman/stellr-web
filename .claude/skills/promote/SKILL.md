@@ -184,9 +184,9 @@ to be:
 
 ```bash
 git fetch origin
-git worktree add -b docs/promote-<YYYY-MM-DD>-record ../stellr-web-promote-record origin/main
-cp <your record> ../stellr-web-promote-record/.claude/releases/promote-<YYYY-MM-DD>.md
-cd ../stellr-web-promote-record
+git worktree add -b docs/promote-<YYYY-MM-DD>-record ../stellr-web-promote-<YYYY-MM-DD>-record origin/main
+cp <your record> ../stellr-web-promote-<YYYY-MM-DD>-record/.claude/releases/promote-<YYYY-MM-DD>.md
+cd ../stellr-web-promote-<YYYY-MM-DD>-record
 # Status: Promoted, the merge SHA, and the production deployment id
 git add .claude/releases && git commit -m "Promotion record <date>: Promoted (#<n>, <sha>)"
 git push -u origin HEAD
@@ -211,3 +211,20 @@ gh pr merge <m> --merge --delete-branch
 
 Check `gh pr view <m> --json state` reads `MERGED`. If anything failed, say so
 with the output. Never round a partial success up to done.
+
+Then remove the record worktree. `--delete-branch` deleted only the remote
+branch; the local branch and the worktree are still there. Prove nothing is
+left in it (`git status --porcelain` prints nothing, and `git rev-parse HEAD`
+equals `gh pr view <m> --json headRefOid --jq .headRefOid`), then:
+
+```bash
+git -C ../stellr-web worktree remove ../stellr-web-promote-<YYYY-MM-DD>-record
+git -C ../stellr-web branch -D docs/promote-<YYYY-MM-DD>-record
+```
+
+If `worktree remove` refuses, look at what is untracked before using `--force`.
+
+WHY (13 Oct 2026): the worktree used to be left behind, at a fixed path. The
+6 Oct one was never removed, so 13 Oct's record had to go to
+`../stellr-web-promote-record-1013`. Putting the date in the path stops the
+collision, and removing the worktree stops the pile-up.

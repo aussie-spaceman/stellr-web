@@ -148,11 +148,15 @@ gh pr update-branch <n>
 ```
 
 Then tidy up. This is not housekeeping — it is what stops the branch being
-reused after its squash:
+reused after its squash. `--delete-branch` deleted only the remote branch; the
+local branch and the worktree are still there. First prove nothing is left
+behind: `git status --porcelain` prints nothing, and `git rev-parse HEAD`
+equals `gh pr view <n> --json headRefOid --jq .headRefOid`. Then, from the main
+checkout:
 
 ```bash
-git worktree remove ../stellr-web-<name>   # --force if node_modules remain
-git branch -d <type>/<slug>
+git -C ../stellr-web worktree remove ../stellr-web-<name>   # --force if node_modules remain
+git -C ../stellr-web branch -D <type>/<slug>
 ```
 
 **More work on the same subject starts a NEW branch from `dev`.** Reusing the
@@ -163,9 +167,10 @@ files you own, and regenerate `package-lock.json` with
 `npm install --package-lock-only` rather than resolving it by hand.
 
 `git worktree remove` refuses on ignored files, and `git branch -d` compares
-against the branch's **upstream**, not `main` — both have wasted time here. If
-`-d` refuses, confirm with `git merge-base --is-ancestor <branch> origin/main`
-before reaching for `-D`.
+against the branch's **upstream**, not `main` — both have wasted time here.
+`-D` is right after a squash: the squashed branch is never an ancestor of
+`dev`, so `-d` and `git merge-base --is-ancestor` both always say no. The
+`headRefOid` check above is the proof that everything on the branch landed.
 
 ## Phase 6 — Hand over
 

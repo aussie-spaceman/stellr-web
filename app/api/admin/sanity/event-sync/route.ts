@@ -5,6 +5,8 @@ import { fireObjectCreatedRules } from '@/lib/object-created-rules'
 import { safeStrEqual } from '@/lib/secret-compare'
 import { ensureDistribution } from '@/lib/survey/distributions'
 import { loadSurveyEvent } from '@/lib/survey/events'
+import { isRealProductionApp } from '@/lib/env-guards'
+import { syncEventOptions } from '@/lib/hubspot-event-options'
 
 // POST /api/admin/sanity/event-sync — Sanity → Supabase access-structure sync
 // (HANDOFF-CODE-REVIEW §7). Sanity is the source of truth for event CONTENT;
@@ -96,10 +98,38 @@ export async function POST(req: Request) {
     }
   }
 
+  // HubSpot event options (lib/hubspot-event-options.ts): a new venue, a new
+  // school year or a cancellation changes the CRM's dropdowns, and this is the
+  // moment it happens. The sync re-reads every event from Sanity, so the
+  // payload's shape doesn't matter. One portal, no sandbox — so only the real
+  // production app writes; the daily cron catches anything missed here.
+  let hubspotOptions: string | Record<string, unknown> = 'skipped: not the production app'
+  if (isRealProductionApp()) {
+    try {
+      const r = await syncEventOptions({ apply: true })
+      hubspotOptions = {
+        ok: r.ok,
+        refused: r.refused,
+        updated: r.properties
+          .filter((p) => p.status === 'updated')
+          .map((p) => `${p.object}.${p.property}`),
+        failed: r.properties
+          .filter((p) => p.status === 'failed')
+          .map((p) => `${p.object}.${p.property}: ${p.error}`),
+        form: r.form.status,
+        unmapped: r.unmapped,
+      }
+    } catch (err) {
+      console.error('[event-sync] HubSpot option sync failed:', err)
+      hubspotOptions = 'error'
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     slug,
     survey,
+    hubspotOptions,
     containerId: sync.containerId,
     eventSpaceId: sync.spaceId,
     created: sync.created,

@@ -6,6 +6,7 @@ import {
   mapEventLocation,
   mapEventTheme,
   mapEventYear,
+  mergeMultiSelect,
 } from './hubspot-fields'
 
 /**
@@ -22,21 +23,48 @@ describe('mapEventLocation', () => {
     )
   })
 
-  it('maps by state abbreviation and full name alike', () => {
-    expect(mapEventLocation({ state: 'NV' })).toBe('Nevada [Las Vegas]')
-    expect(mapEventLocation({ state: 'nevada' })).toBe('Nevada [Las Vegas]')
+  it('derives "State [City]" for a US event, whichever way the state is written', () => {
+    expect(mapEventLocation({ city: 'Las Vegas', state: 'NV' })).toBe('Nevada [Las Vegas]')
+    expect(mapEventLocation({ city: 'Brookings', state: 'South Dakota' })).toBe(
+      'South Dakota [Brookings]',
+    )
+    expect(mapEventLocation({ city: 'Austin', state: 'texas' })).toBe('Texas [Austin]')
   })
 
-  it('prefers the city when it is more specific than the state', () => {
-    expect(mapEventLocation({ city: 'Houston', state: 'TX' })).toBe('Texas [Houston]')
+  it('derives "Country [City]" outside the US', () => {
+    expect(
+      mapEventLocation({ city: 'Maldonado', state: 'Departamento de Maldonado', country: 'UY' }),
+    ).toBe('Uruguay [Maldonado]')
   })
 
-  it('recognises ISSDC Finals by title, since the venue moves each year', () => {
-    expect(mapEventLocation({ title: '2027 ISSDC Finals', state: 'FL' })).toBe('ISSDC Finals')
+  it('treats an explicit US country code as the US', () => {
+    expect(mapEventLocation({ city: 'Denver', state: 'CO', country: 'US' })).toBe('Colorado [Denver]')
   })
 
-  it('returns undefined rather than guessing an unknown location', () => {
-    expect(mapEventLocation({ city: 'Boise', state: 'ID' })).toBeUndefined()
+  it('takes the Sanity override over anything derived', () => {
+    // The Ashland venue keeps the option its history already sits under.
+    expect(
+      mapEventLocation({ hubspotLocation: ' Nebraska [SAC Museum] ', city: 'Ashland', state: 'NE' }),
+    ).toBe('Nebraska [SAC Museum]')
+    expect(mapEventLocation({ hubspotLocation: 'Uruguay', city: 'Maldonado', country: 'UY' })).toBe(
+      'Uruguay',
+    )
+  })
+
+  it('never lets a label carry the multi-select delimiter', () => {
+    expect(mapEventLocation({ hubspotLocation: 'Texas; Houston' })).toBe('Texas, Houston')
+  })
+
+  it("maps a campaign to its term, since it runs at the participant's own school", () => {
+    expect(mapEventLocation({ activityType: 'campaign', season: 'fall' })).toBe('Campaign [Fall]')
+    expect(mapEventLocation({ activityType: 'campaign', season: 'spring' })).toBe('Campaign [Spring]')
+    expect(mapEventLocation({ activityType: 'campaign' })).toBeUndefined()
+  })
+
+  it('returns undefined rather than guessing when the place cannot be read', () => {
+    expect(mapEventLocation({ state: 'NV' })).toBeUndefined() // no city
+    expect(mapEventLocation({ city: 'Maldonado', state: 'Departamento de Maldonado' })).toBeUndefined()
+    expect(mapEventLocation({ city: 'Somewhere', country: 'ZZ' })).toBeUndefined()
     expect(mapEventLocation({})).toBeUndefined()
   })
 })
@@ -59,15 +87,50 @@ describe('mapEventTheme', () => {
 
 describe('mapEventDemographic', () => {
   it('expands "Both" into the multi-select pair rather than picking one', () => {
-    expect(mapEventDemographic('Both')).toBe('Middle School;High School')
+    expect(mapEventDemographic({ gradeLevel: 'Both' })).toBe('Middle School;High School')
   })
 
   it('passes through single grade bands', () => {
-    expect(mapEventDemographic('High School')).toBe('High School')
+    expect(mapEventDemographic({ gradeLevel: 'High School' })).toBe('High School')
+    expect(mapEventDemographic({ gradeLevel: 'Middle School' })).toBe('Middle School')
+  })
+
+  it('follows an explicit band, as the /events grade filter does', () => {
+    // Grades 7–12 reaches below 9, so it is both — whatever the bracket says.
+    expect(mapEventDemographic({ gradeLevel: 'High School', gradeMin: 7, gradeMax: 12 })).toBe(
+      'Middle School;High School',
+    )
+    expect(mapEventDemographic({ gradeLevel: 'Both', gradeMin: 9, gradeMax: 12 })).toBe('High School')
+  })
+
+  it('ignores a half-set band and falls back to the bracket', () => {
+    // Uruguay's gradeMin: 8 with no max — gradeBand ignores it, and so do we.
+    expect(mapEventDemographic({ gradeLevel: 'High School', gradeMin: 8 })).toBe('High School')
   })
 
   it('returns undefined for an unknown grade level', () => {
-    expect(mapEventDemographic('Primary')).toBeUndefined()
+    expect(mapEventDemographic({ gradeLevel: 'Primary' })).toBeUndefined()
+    expect(mapEventDemographic({})).toBeUndefined()
+  })
+})
+
+describe('mergeMultiSelect', () => {
+  it("adds the new value to a contact's history instead of replacing it", () => {
+    expect(mergeMultiSelect('Texas [Houston];Uruguay', 'Nevada [Las Vegas]')).toBe(
+      'Texas [Houston];Uruguay;Nevada [Las Vegas]',
+    )
+  })
+
+  it('keeps one copy of a value already there', () => {
+    expect(mergeMultiSelect('2025;2027', '2027')).toBe('2025;2027')
+    expect(mergeMultiSelect('High School', 'Middle School;High School')).toBe(
+      'High School;Middle School',
+    )
+  })
+
+  it('handles a contact with no value yet', () => {
+    expect(mergeMultiSelect(undefined, 'High School')).toBe('High School')
+    expect(mergeMultiSelect('', '2027')).toBe('2027')
   })
 })
 
@@ -111,10 +174,14 @@ describe('mapEventYear', () => {
     expect(mapEventYear({ campaignYear: 2026, date: '2026-11-06' })).toBe('2027')
   })
 
-  it('rejects years outside the portal enumeration', () => {
-    expect(mapEventYear({ campaignYear: 2018, season: 'spring' })).toBeUndefined()
-    expect(mapEventYear({ campaignYear: 2031, season: 'spring' })).toBeUndefined()
-    expect(mapEventYear({})).toBeUndefined()
+  it('rejects years outside a sane window rather than minting an option', () => {
+    // The sync adds year options as Sanity needs them, so the guard is a window
+    // around now — a typo'd year must not become a permanent option.
+    const now = new Date('2026-10-12T00:00:00Z') // school year 2027
+    expect(mapEventYear({ campaignYear: 2018, season: 'spring' }, now)).toBeUndefined()
+    expect(mapEventYear({ campaignYear: 2030, season: 'spring' }, now)).toBe('2030')
+    expect(mapEventYear({ campaignYear: 2031, season: 'spring' }, now)).toBeUndefined()
+    expect(mapEventYear({}, now)).toBeUndefined()
   })
 
   it('ignores a malformed date rather than guessing', () => {
@@ -160,8 +227,8 @@ describe('eventProperties', () => {
 
   it('omits and reports fields it cannot map instead of writing a guess', () => {
     const { properties, unmapped } = eventProperties(
-      { ...nevada, state: 'ID', city: 'Boise', type: 'Robotics Challenge' },
-      'boise-robotics-2026',
+      { ...nevada, state: 'Departamento de Maldonado', city: 'Maldonado', type: 'Robotics Challenge' },
+      'maldonado-robotics-2027',
     )
 
     expect(properties[HS.eventLocation]).toBeUndefined()

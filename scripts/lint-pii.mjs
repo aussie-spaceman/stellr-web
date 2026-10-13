@@ -162,42 +162,45 @@ export function parseAddedLines(diff) {
   return added
 }
 
-function git(args) {
-  return execFileSync('git', ['-c', 'core.quotePath=false', ...args], {
-    encoding: 'utf8',
-    maxBuffer: 256 * 1024 * 1024,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-}
-
 function fail(message) {
   console.error(`\n✗ PII lint: ${message}\n`)
   process.exit(2)
 }
 
+/** git's stdout, or a clear failure (exit 2) naming `why` and git's own error. */
+function git(args, why) {
+  try {
+    return execFileSync('git', ['-c', 'core.quotePath=false', ...args], {
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch (err) {
+    const detail = String(err.stderr ?? err.message).trim()
+    fail(`${why}${detail ? `\n\n  git: ${detail}` : ''}`)
+  }
+}
+
 /** Added lines on this branch and in the working tree, plus untracked files, all in scope. */
 function collectFromGit(base) {
-  try {
-    git(['rev-parse', '--verify', '--quiet', `${base}^{commit}`])
-  } catch {
-    fail(`cannot resolve ${base}. Run \`git fetch origin dev\`, or pass --base <ref>.`)
-  }
-  let mergeBase
-  try {
-    mergeBase = git(['merge-base', base, 'HEAD']).trim()
-  } catch {
-    fail(`no merge base between ${base} and HEAD. A shallow clone needs fetch-depth: 0.`)
-  }
+  git(['rev-parse', '--verify', '--quiet', `${base}^{commit}`], `cannot resolve ${base}. Run \`git fetch origin dev\`, or pass --base <ref>.`)
+  const mergeBase = git(
+    ['merge-base', base, 'HEAD'],
+    `no merge base between ${base} and HEAD. A shallow clone needs fetch-depth: 0.`,
+  ).trim()
 
   // Against the working tree, not HEAD, so uncommitted edits are checked too
   // (in CI the two are the same). -M keeps a moved file to its changed lines:
   // moving a historical file is not adding its contents.
-  const diff = git(['diff', '--no-color', '--no-ext-diff', '--no-textconv', '-U0', '-M', mergeBase, '--', ...PATHSPECS])
+  const diff = git(
+    ['diff', '--no-color', '--no-ext-diff', '--no-textconv', '-U0', '-M', mergeBase, '--', ...PATHSPECS],
+    `git diff against ${mergeBase.slice(0, 8)} failed.`,
+  )
   const lines = parseAddedLines(diff).filter((l) => inScope(l.file))
 
   // A new file nobody has `git add`ed yet is not in the diff, but it is what
   // the next commit publishes.
-  const untracked = git(['ls-files', '--others', '--exclude-standard', '-z', '--', ...PATHSPECS])
+  const untracked = git(['ls-files', '--others', '--exclude-standard', '-z', '--', ...PATHSPECS], 'git ls-files failed.')
     .split('\0')
     .filter((f) => f && inScope(f))
   for (const file of untracked) {

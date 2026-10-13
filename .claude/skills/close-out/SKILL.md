@@ -72,11 +72,13 @@ commit messages, and the PR body file). Anything it prints is a stop:
 
 The grep can't see names, so read the diff for them too.
 
-WHY (13 Oct 2026): an audit of `docs/` and `.claude/` on `dev` found the names
-of real students, parents and mentors, along with their personal emails, a
-credential number and Gmail draft IDs, in handovers, tracker files and
-promotion records. Most of them came from close-outs and promotion records.
-Rewriting the files now does not remove any of it from history.
+WHY (13 Oct 2026): an audit of `docs/` and `.claude/` on `dev` found 365
+references to real people outside staff, across 45 files. More than half
+concerned minors and their families: students' and parents' names, personal
+emails, member, envelope and Gmail draft IDs, scholarship and refund details,
+and one parent's employer. They were mostly in handovers, tracker files and
+release records, and the same details were in 20 PR bodies. Rewriting the files
+now does not remove any of it from history.
 
 ## Steps
 

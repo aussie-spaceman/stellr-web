@@ -16,7 +16,9 @@
  *
  * Only ADDED lines are checked, against the merge base with origin/dev. The
  * existing files hold known historical data, and whether to redact them is a
- * separate decision; this stops new data arriving while that is open.
+ * separate decision; this stops new data arriving while that is open. For the
+ * same reason, a line the change also removes elsewhere (a row moved into an
+ * archive file) is not new, and is skipped.
  *
  *   npm run lint:pii                    # branch + working tree vs origin/dev
  *   npm run lint:pii -- --base origin/main
@@ -30,6 +32,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { readFileSync, realpathSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /** The diff base when --base is not given. */
@@ -61,7 +64,12 @@ export const KIND_LABELS = {
 // Each pattern refuses a letter or digit immediately before it, so `r-…` inside
 // a longer word is not a Gmail ID. Underscore is allowed before, so a value in
 // a snake_case key still counts.
-const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
+//
+// EMAIL also takes `%40`, the `@` in a search or dashboard link. Its lookbehind
+// starts a match only at the beginning of a run of local-part characters: without
+// it, a long run with no `@` (a pasted hash or base64 blob) is retried from every
+// position, which is quadratic and took ~40 s on a 160k-character line.
+const EMAIL = /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+(?:@|%40)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
 // 8 Crockford chars (lib/credentials.ts). STL-20NN-E2E… are the e2e fixtures,
 // and STL-20NN-XXXXXXXX is the placeholder the docs write for the format.
 const CREDENTIAL = /(?<![A-Za-z0-9])STL-20\d{2}-(?!E2E)(?!X{8})[A-Z0-9]{8}(?![A-Za-z0-9])/gi
@@ -77,7 +85,7 @@ export function inScope(path) {
 
 /** True when an address is on the allowlist. Case-insensitive; domains match exactly. */
 export function isAllowedEmail(address) {
-  const lower = address.toLowerCase()
+  const lower = address.replace(/%40/g, '@').toLowerCase()
   if (ALLOWED_EMAIL_ADDRESSES.includes(lower)) return true
   return ALLOWED_EMAIL_DOMAINS.includes(lower.slice(lower.lastIndexOf('@') + 1))
 }
@@ -115,16 +123,18 @@ function headerPath(raw) {
 }
 
 /**
- * The added lines in a unified diff, with their new-file line numbers.
+ * The added and removed lines in a unified diff. Added lines carry their
+ * new-file line numbers.
  *
  * Walks hunks by their header counts rather than by prefix, so an added line
  * whose own text starts with `++` is not mistaken for a file header.
  *
  * @param {string} diff  output of `git diff -U0`
- * @returns {{ file: string, line: number, text: string }[]}
+ * @returns {{ added: { file: string, line: number, text: string }[], removed: string[] }}
  */
-export function parseAddedLines(diff) {
+export function parseDiff(diff) {
   const added = []
+  const removed = []
   let file = null
   let oldLeft = 0
   let newLeft = 0
@@ -138,8 +148,10 @@ export function parseAddedLines(diff) {
         lineNo++
         newLeft--
       } else if (text.startsWith('-')) {
+        removed.push(text.slice(1))
         oldLeft--
-      } else if (text.startsWith(' ')) {
+      } else if (text.startsWith(' ') || text === '') {
+        // A context line; `diff.suppressBlankEmpty` prints a blank one as ''.
         lineNo++
         oldLeft--
         newLeft--
@@ -159,7 +171,32 @@ export function parseAddedLines(diff) {
       newLeft = hunk[3] === undefined ? 1 : Number(hunk[3])
     }
   }
-  return added
+  return { added, removed }
+}
+
+/**
+ * The added lines that are new text, not lines the same diff also removed.
+ *
+ * A row moved word for word into another file, a file split in two, a last
+ * line re-added when a newline is appended after it, CRLF converted to LF:
+ * each shows the old text as removed and re-added. That text is already
+ * published, and failing on it would fail on the historical data this lint
+ * leaves alone. Each removed line excuses one identical added line.
+ *
+ * @template {{ text: string }} T
+ * @param {T[]} added
+ * @param {string[]} removed
+ * @returns {T[]}
+ */
+export function newLines(added, removed) {
+  const pool = new Map()
+  for (const text of removed) pool.set(text, (pool.get(text) ?? 0) + 1)
+  return added.filter(({ text }) => {
+    const left = pool.get(text) ?? 0
+    if (left === 0) return true
+    pool.set(text, left - 1)
+    return false
+  })
 }
 
 function fail(message) {
@@ -168,9 +205,10 @@ function fail(message) {
 }
 
 /** git's stdout, or a clear failure (exit 2) naming `why` and git's own error. */
-function git(args, why) {
+function git(args, why, cwd) {
   try {
     return execFileSync('git', ['-c', 'core.quotePath=false', ...args], {
+      cwd,
       encoding: 'utf8',
       maxBuffer: 256 * 1024 * 1024,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -183,32 +221,48 @@ function git(args, why) {
 
 /** Added lines on this branch and in the working tree, plus untracked files, all in scope. */
 function collectFromGit(base) {
-  git(['rev-parse', '--verify', '--quiet', `${base}^{commit}`], `cannot resolve ${base}. Run \`git fetch origin dev\`, or pass --base <ref>.`)
+  // From the repo root, wherever this was started: the pathspecs and paths
+  // below are root-relative, and from a subdirectory they would match nothing
+  // and pass.
+  const top = git(['rev-parse', '--show-toplevel'], 'not inside a git repository.').trim()
+  git(['rev-parse', '--verify', '--quiet', `${base}^{commit}`], `cannot resolve ${base}. Run \`git fetch origin dev\`, or pass --base <ref>.`, top)
   const mergeBase = git(
     ['merge-base', base, 'HEAD'],
     `no merge base between ${base} and HEAD. A shallow clone needs fetch-depth: 0.`,
+    top,
   ).trim()
 
   // Against the working tree, not HEAD, so uncommitted edits are checked too
   // (in CI the two are the same). -M keeps a moved file to its changed lines:
-  // moving a historical file is not adding its contents.
+  // moving a historical file is not adding its contents. The prefixes,
+  // --no-relative and --inter-hunk-context pin output that personal git config
+  // (diff.mnemonicPrefix, diff.noprefix, diff.relative, diff.interHunkContext)
+  // would otherwise change into something the parser reads as nothing in scope.
   const diff = git(
-    ['diff', '--no-color', '--no-ext-diff', '--no-textconv', '-U0', '-M', mergeBase, '--', ...PATHSPECS],
+    [
+      'diff', '--no-color', '--no-ext-diff', '--no-textconv', '--no-relative',
+      '--src-prefix=a/', '--dst-prefix=b/', '--inter-hunk-context=0', '-U0', '-M',
+      mergeBase, '--', ...PATHSPECS,
+    ],
     `git diff against ${mergeBase.slice(0, 8)} failed.`,
+    top,
   )
-  const lines = parseAddedLines(diff).filter((l) => inScope(l.file))
+  const { added, removed } = parseDiff(diff)
 
   // A new file nobody has `git add`ed yet is not in the diff, but it is what
   // the next commit publishes.
-  const untracked = git(['ls-files', '--others', '--exclude-standard', '-z', '--', ...PATHSPECS], 'git ls-files failed.')
+  const untracked = git(['ls-files', '--others', '--exclude-standard', '-z', '--', ...PATHSPECS], 'git ls-files failed.', top)
     .split('\0')
-    .filter((f) => f && inScope(f))
+    .filter(Boolean)
   for (const file of untracked) {
-    const buf = readFileSync(file)
+    const buf = readFileSync(join(top, file))
     if (buf.includes(0)) continue // binary
-    buf.toString('utf8').split('\n').forEach((text, i) => lines.push({ file, line: i + 1, text: text.replace(/\r$/, '') }))
+    const texts = buf.toString('utf8').split('\n')
+    if (texts.at(-1) === '') texts.pop() // the final newline ends a line; it does not start one
+    texts.forEach((text, i) => added.push({ file, line: i + 1, text: text.replace(/\r$/, '') }))
   }
 
+  const lines = newLines(added, removed).filter((l) => inScope(l.file))
   return { lines, label: `added lines vs ${base} (merge base ${mergeBase.slice(0, 8)})` }
 }
 

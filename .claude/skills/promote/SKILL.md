@@ -56,6 +56,14 @@ whenever the record changes. A promotion spans async gaps and `dev` keeps
 moving; the record is the source of truth for "where are we", not the
 conversation.
 
+The record file and the PR body are both public. Describe who a change affects
+by role and count ("fixes the replies from two guardians of minor credential
+holders"), never by name, email or credential number. When an open item needs
+a person, use their `members.id`. The full rule is in
+`.claude/skills/close-out/SKILL.md`, under "People: the repo is public". Run
+its pre-push grep over the record and the body file before `gh pr create` and
+before every `gh pr edit`.
+
 WHY not a record PR per step (28 Sept 2026): every merge into `dev` is a
 deployment on **both** Vercel projects (one builds, the other is cancelled but
 still counted). Each promotion used to land 2–3 record PRs ("record", "add

@@ -35,6 +35,14 @@ mechanism; this skill is the sequence.
    a login wall, then a "Deployment is building" placeholder. Both have an `<h1>`
    and log no app errors. `e2e/global-setup.ts` now refuses unless the target
    says "Stellr".
+6. **Nothing that identifies a member goes to GitHub.** The repo is public.
+   That covers files, commit messages, PR titles and bodies, and branch names.
+   Refer to people by role and `members.id`, never by name, personal email or
+   credential number. A slug or branch name never carries a person's name. The
+   full rule and the pre-push check are in `.claude/skills/close-out/SKILL.md`,
+   under "People: the repo is public". (13 Oct 2026: an audit found students',
+   parents' and mentors' names and contact details across handovers, trackers
+   and release records.)
 
 ## Phase 0 — Isolate the session
 

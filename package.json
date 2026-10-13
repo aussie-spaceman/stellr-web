@@ -39,6 +39,7 @@
     "audit:event-slugs": "tsx scripts/audit-event-slugs.ts",
     "retention:medical-sql": "tsx scripts/medical-retention-sql.ts",
     "notify:event-waitlist": "tsx scripts/notify-event-waitlist.ts",
+    "hubspot:sync-event-options": "tsx scripts/hubspot-sync-event-options.ts",
     "sync:event-spaces": "tsx scripts/sync-event-spaces.ts",
     "upload:event-flyers": "tsx scripts/upload-event-flyers.ts",
     "fix:event-slug": "tsx scripts/fix-event-slug.ts",

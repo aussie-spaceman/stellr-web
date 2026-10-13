@@ -91,6 +91,8 @@ export interface StellarEvent {
   campaignYear?: number
   deadline?: string
   deliverable?: string
+  /** Editor override for the HubSpot "Event Location" label (lib/hubspot-fields). */
+  hubspotLocation?: string
 }
 
 // ── GROQ Queries ──────────────────────────────────────────────────────────────
@@ -171,10 +173,28 @@ export async function getEventBySlug(slug: string) {
                 "filename": file.asset->originalFilename },
       registrationOpen, registrationOpenDate, registrationCloseDate,
       capacity, stripePriceId, schedule[]{ time, label },
-      country, latitude, longitude, startTime, endTime, status, previousStartDate
+      country, latitude, longitude, startTime, endTime, status, previousStartDate,
+      hubspotLocation
     }`,
     { slug },
     PUBLISHED_CACHE
+  )
+}
+
+// Every event and campaign with the fields the HubSpot option sync derives its
+// labels from (lib/hubspot-event-options.ts). Deliberately uncached: the sync
+// runs from the publish webhook, and an hour-old read would sync the document
+// as it was before the edit that triggered it.
+export async function getEventsForHubspotSync(): Promise<StellarEvent[] | null> {
+  if (!client) return null
+  return client.fetch(
+    `*[_type == "event" && defined(slug.current)] | order(date asc) {
+      _id, title, slug, type, activityType, gradeLevel, gradeMin, gradeMax,
+      date, endDate, season, campaignYear, status, setting, city, state, country,
+      hubspotLocation
+    }`,
+    {},
+    { cache: 'no-store' }
   )
 }
 

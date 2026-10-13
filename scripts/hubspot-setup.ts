@@ -49,7 +49,6 @@ import {
   REGISTRATION_INTEREST,
   GRANT_ACTIVITIES,
   GRANT_PRIOR,
-  GRANT_DEMOGRAPHIC,
   GRANT_STATUS,
   HS,
 } from '../lib/hubspot-fields'
@@ -554,34 +553,6 @@ async function ensureProperties(groupName: string) {
 }
 
 /**
- * `event_year` is an enumeration that stops at 2027, so a 2028 event would be
- * silently rejected. Extend rather than replace, to preserve existing values.
- */
-async function extendEventYears() {
-  const current = await api(`/crm/v3/properties/contacts/${HS.eventYear}`, 'GET')
-  if (!current.ok) {
-    console.log(`  ! ${HS.eventYear} not found — skipping`)
-    return
-  }
-  const have = new Set<string>((current.json?.options ?? []).map((o: any) => o.value))
-  const wanted = ['2023', '2024', '2025', '2026', '2027', '2028', '2029', '2030']
-  const missing = wanted.filter((y) => !have.has(y))
-
-  if (!missing.length) {
-    console.log(`  ✓ ${HS.eventYear} already covers ${wanted.at(-1)}`)
-    return
-  }
-  if (DRY_RUN) {
-    console.log(`  + would add years: ${missing.join(', ')}`)
-    return
-  }
-  const res = await api(`/crm/v3/properties/contacts/${HS.eventYear}`, 'PATCH', {
-    options: opts([...wanted]),
-  })
-  console.log(res.ok ? `  + added years: ${missing.join(', ')}` : `  ✗ year extend failed: ${res.text}`)
-}
-
-/**
  * `ensureProperties` skips anything that already exists, so a *new option* on
  * an existing enumeration would never be applied. That has bitten twice, in
  * both directions this function now covers:
@@ -896,15 +867,14 @@ async function main() {
   await ensureProperties(groupName)
 
   console.log('\nExisting taxonomy repairs:')
-  await extendEventYears()
   await convertDemographicToMultiSelect()
   await ensureEnumOptions(HS.notifyStatus, Object.values(NOTIFY_STATUS), 'notify statuses')
   await ensureEnumOptions(HS.leadSource, Object.values(LEAD_SOURCES), 'lead sources')
-  await ensureEnumOptions(
-    HS.eventDemographic,
-    [GRANT_DEMOGRAPHIC],
-    'event demographics',
-  )
+  // The event_* option lists (location, year, theme, demographic) follow Sanity
+  // and are owned by `npm run hubspot:sync-event-options`. The year step that
+  // used to live here PATCHed a fixed 2023–2030 list, which would have wiped
+  // the sync's hidden flags and any year it had added.
+  console.log('  · event_* options: managed by npm run hubspot:sync-event-options')
 
   console.log('\nForms:')
   const guids = await ensureForms()

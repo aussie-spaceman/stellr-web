@@ -34,3 +34,16 @@ export function normaliseState(raw?: string): string | undefined {
   if (trimmed.length === 2 && US_CODES.has(trimmed.toUpperCase())) return trimmed.toUpperCase()
   return US_STATES[trimmed.toLowerCase()]
 }
+
+/** Full state name for a USPS code ("CO" → "Colorado"), else undefined. */
+export function stateNameFor(code?: string): string | undefined {
+  const upper = code?.trim().toUpperCase()
+  if (!upper) return undefined
+  const name = Object.keys(US_STATES).find((key) => US_STATES[key] === upper)
+  if (!name) return undefined
+  // "district of columbia" → "District of Columbia": title case, joiners kept lower.
+  return name
+    .split(' ')
+    .map((word, i) => (i > 0 && word === 'of' ? word : word[0].toUpperCase() + word.slice(1)))
+    .join(' ')
+}

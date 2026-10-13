@@ -410,6 +410,33 @@ export const event = {
         document?.activityType === 'campaign',
     },
 
+    // ── CRM ───────────────────────────────────────────────────────────────────
+    // HubSpot's "Event Location" options follow Sanity (lib/hubspot-event-options):
+    // each live event's label is derived from this document and the portal's
+    // option list is kept to exactly those labels. The override exists so an
+    // event can keep an option that already holds history — the derived label
+    // for the Ashland venue is "Nebraska [Ashland]", but its contacts sit under
+    // "Nebraska [SAC Museum]".
+    {
+      name: 'hubspotLocation',
+      type: 'string',
+      title: 'HubSpot location (optional)',
+      description:
+        'Leave blank to use "State [City]" — e.g. "Nevada [Las Vegas]" — or "Campaign [Fall]" ' +
+        'for a campaign. Set it only to reuse an existing HubSpot label, e.g. ' +
+        '"Nebraska [SAC Museum]". Two events with the same label share one HubSpot option.',
+      validation: (Rule: {
+        max: (n: number) => {
+          custom: (fn: (v: unknown) => true | string) => unknown
+        }
+      }) =>
+        Rule.max(100).custom((value) =>
+          typeof value === 'string' && value.includes(';')
+            ? 'Cannot contain ";" — HubSpot uses it to separate values.'
+            : true,
+        ),
+    },
+
     // ── Content & Display ─────────────────────────────────────────────────────
     { name: 'tagline', type: 'string', title: 'Tagline' },
     { name: 'description', type: 'array', title: 'Description', of: [{ type: 'block' }] },

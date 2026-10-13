@@ -15,6 +15,19 @@ vi.mock('@/lib/survey/distributions', () => ({ ensureDistribution: async () => (
 vi.mock('@/lib/survey/events', () => ({ loadSurveyEvent: async () => null }))
 // Real constant-time compare — the behaviour under test is which transport is read.
 vi.mock('@/lib/secret-compare', () => ({ safeStrEqual: (a: string, b: string) => a === b }))
+const hubspot = vi.hoisted(() => ({
+  isProd: false,
+  sync: vi.fn(async () => ({
+    ok: true,
+    applied: true,
+    liveEvents: [],
+    unmapped: [],
+    properties: [{ object: 'contacts', property: 'event', status: 'updated' }],
+    form: { status: 'unchanged' },
+  })),
+}))
+vi.mock('@/lib/env-guards', () => ({ isRealProductionApp: () => hubspot.isProd }))
+vi.mock('@/lib/hubspot-event-options', () => ({ syncEventOptions: hubspot.sync }))
 
 const SECRET = 'top-secret-value'
 const { POST } = await import('./route')
@@ -48,5 +61,42 @@ describe('POST /api/admin/sanity/event-sync — secret transport (AUTH-10)', () 
       method: 'POST', headers: { 'content-type': 'application/json' }, body: body(),
     }))
     expect(res.status).toBe(403)
+  })
+})
+
+// One HubSpot portal, no sandbox: only the real production app may change the
+// CRM's option lists, whichever deployment Sanity's webhook happens to reach.
+describe('POST /api/admin/sanity/event-sync — HubSpot option sync', () => {
+  function publish() {
+    return POST(new Request('https://app.test/api/admin/sanity/event-sync', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-webhook-secret': SECRET },
+      body: body(),
+    }))
+  }
+
+  afterEach(() => { hubspot.isProd = false; hubspot.sync.mockClear() })
+
+  it('skips the sync off the production app', async () => {
+    const res = await publish()
+    const json = await res.json()
+    expect(hubspot.sync).not.toHaveBeenCalled()
+    expect(json.hubspotOptions).toMatch(/skipped/)
+  })
+
+  it('applies the sync on the production app and reports what changed', async () => {
+    hubspot.isProd = true
+    const res = await publish()
+    const json = await res.json()
+    expect(hubspot.sync).toHaveBeenCalledWith({ apply: true })
+    expect(json.hubspotOptions).toMatchObject({ ok: true, updated: ['contacts.event'] })
+  })
+
+  it('does not fail the webhook when the sync throws', async () => {
+    hubspot.isProd = true
+    hubspot.sync.mockRejectedValueOnce(new Error('HubSpot down'))
+    const res = await publish()
+    expect(res.status).toBe(200)
+    expect((await res.json()).hubspotOptions).toBe('error')
   })
 })

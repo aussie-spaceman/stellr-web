@@ -44,7 +44,9 @@ import { sleep } from '@/lib/utils'
 import {
   HS,
   LEAD_SOURCES,
+  MULTI_SELECT_EVENT_PROPS,
   formIdFor,
+  mergeMultiSelect,
   type LeadSource,
 } from '@/lib/hubspot-fields'
 
@@ -122,18 +124,32 @@ export async function getContactByEmail(
   email: string,
   properties: string[] = [],
 ): Promise<ExistingContact | null> {
-  if (!HUBSPOT_ACCESS_TOKEN) return null
+  return (await lookupContactByEmail(email, properties)).contact
+}
+
+/**
+ * getContactByEmail, but saying whether the read actually worked. "No such
+ * contact" (404) and "couldn't read" (5xx, network) both come back as a null
+ * contact; only a caller about to read-modify-write needs to tell them apart —
+ * merging onto a contact we failed to read would replace what is there.
+ */
+export async function lookupContactByEmail(
+  email: string,
+  properties: string[] = [],
+): Promise<{ contact: ExistingContact | null; readOk: boolean }> {
+  if (!HUBSPOT_ACCESS_TOKEN) return { contact: null, readOk: false }
   try {
     const query = properties.length ? `&properties=${properties.join(',')}` : ''
     const res = await hubspotFetch(
       `/crm/v3/objects/contacts/${encodeURIComponent(email)}?idProperty=email${query}`,
       'GET',
     )
-    if (!res.ok) return null
+    if (res.status === 404) return { contact: null, readOk: true }
+    if (!res.ok) return { contact: null, readOk: false }
     const json = (await res.json()) as { id: string; properties: Props }
-    return { id: json.id, properties: json.properties ?? {} }
+    return { contact: { id: json.id, properties: json.properties ?? {} }, readOk: true }
   } catch {
-    return null
+    return { contact: null, readOk: false }
   }
 }
 
@@ -654,13 +670,34 @@ export async function captureLead(input: LeadCaptureInput): Promise<LeadCaptureR
   // Reading needs a token. Without one we cannot know what is already on the
   // record, which constrains what we are allowed to write below.
   const canRead = Boolean(HUBSPOT_ACCESS_TOKEN)
-  const existing = canRead
-    ? await getContactByEmail(input.email, [HS.notifyLog, HS.lifecycleStage])
-    : null
+  const lookup = canRead
+    ? await lookupContactByEmail(input.email, [
+        HS.notifyLog,
+        HS.lifecycleStage,
+        ...MULTI_SELECT_EVENT_PROPS,
+      ])
+    : { contact: null, readOk: false }
+  const existing = lookup.contact
 
   const properties: Props = {
     ...(input.properties ?? {}),
     [HS.leadSource]: LEAD_SOURCES[input.source],
+  }
+
+  // The event properties are multi-selects holding a contact's history — every
+  // event, year, theme and band they've been part of — and any write replaces
+  // the whole value. Merge onto what is there. If the read failed we don't know
+  // what is there, so leave them out rather than overwrite it.
+  for (const key of MULTI_SELECT_EVENT_PROPS) {
+    if (properties[key] === undefined) continue
+    if (lookup.readOk) {
+      properties[key] = mergeMultiSelect(existing?.properties?.[key], properties[key])
+    } else {
+      delete properties[key]
+      if (!warnings.includes('multi-select-skipped-unreadable')) {
+        warnings.push('multi-select-skipped-unreadable')
+      }
+    }
   }
 
   // The activity log is append-only, which requires knowing the current value.

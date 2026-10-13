@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ALLOWED_EMAIL_DOMAINS, inScope, isAllowedEmail, parseAddedLines, scanLine } from './lint-pii.mjs'
+import { ALLOWED_EMAIL_DOMAINS, inScope, isAllowedEmail, newLines, parseDiff, scanLine } from './lint-pii.mjs'
 
 // Every value here is invented. Flagged addresses use example.net or reserved
 // TLDs (.test, .invalid), which no real person can hold.
@@ -34,6 +34,18 @@ describe('scanLine: email addresses', () => {
 
   it('leaves package specifiers and version pins alone', () => {
     expect(kinds('import { Button } from "@stellr/web-ui"; react@18.3.1')).toEqual([])
+  })
+
+  it('catches a URL-encoded @ (%40) in a search link, against the same allowlist', () => {
+    expect(kinds('https://mail.example.org/#search/from%3Aguardian%40family.test')).toEqual(['email'])
+    expect(kinds('?q=team%40stellreducation.org')).toEqual([])
+  })
+
+  it('stays linear on a long line with no @', () => {
+    const start = performance.now()
+    expect(kinds('a'.repeat(200_000))).toEqual([])
+    // Quadratic matching took ~40 s at 160k characters; linear is milliseconds.
+    expect(performance.now() - start).toBeLessThan(2000)
   })
 })
 
@@ -105,7 +117,7 @@ describe('inScope', () => {
   })
 })
 
-describe('parseAddedLines', () => {
+describe('parseDiff', () => {
   const diff = [
     'diff --git a/docs/a.md b/docs/a.md',
     'index 1111111..2222222 100644',
@@ -133,16 +145,49 @@ describe('parseAddedLines', () => {
     '\\ No newline at end of file',
   ].join('\n')
 
-  it('returns added lines with new-file line numbers, skipping deletions', () => {
-    expect(parseAddedLines(diff)).toEqual([
-      { file: 'docs/a.md', line: 3, text: 'new line' },
-      { file: 'docs/a.md', line: 11, text: '++ an added line that looks like a header' },
-      { file: 'docs/a.md', line: 12, text: 'second' },
-      { file: 'docs/new file.md', line: 1, text: 'only line' },
-    ])
+  it('returns added lines with new-file line numbers, and removed lines', () => {
+    expect(parseDiff(diff)).toEqual({
+      added: [
+        { file: 'docs/a.md', line: 3, text: 'new line' },
+        { file: 'docs/a.md', line: 11, text: '++ an added line that looks like a header' },
+        { file: 'docs/a.md', line: 12, text: 'second' },
+        { file: 'docs/new file.md', line: 1, text: 'only line' },
+      ],
+      removed: ['old line', 'was here', 'and here'],
+    })
   })
 
   it('returns nothing for an empty diff', () => {
-    expect(parseAddedLines('')).toEqual([])
+    expect(parseDiff('')).toEqual({ added: [], removed: [] })
+  })
+
+  it('counts a blank context line printed as empty (diff.suppressBlankEmpty)', () => {
+    const merged = ['+++ b/docs/a.md', '@@ -1,3 +1,3 @@', '-one', '+uno', '', '-three', '+tres', '+++ b/docs/b.md', '@@ -0,0 +1 @@', '+next'].join('\n')
+    expect(parseDiff(merged).added).toEqual([
+      { file: 'docs/a.md', line: 1, text: 'uno' },
+      { file: 'docs/a.md', line: 3, text: 'tres' },
+      { file: 'docs/b.md', line: 1, text: 'next' },
+    ])
+  })
+
+  it('strips CR, so a CRLF → LF conversion re-adds identical text', () => {
+    const crlf = ['+++ b/docs/a.md', '@@ -1 +1 @@', '-same text\r', '+same text'].join('\n')
+    const { added, removed } = parseDiff(crlf)
+    expect(newLines(added, removed)).toEqual([])
+  })
+})
+
+describe('newLines', () => {
+  const at = (file: string, line: number, text: string) => ({ file, line, text })
+
+  it('drops an added line the diff also removed: a row moved into another file', () => {
+    const added = [at('docs/archive/rows.md', 1, '| row | contact guardian@family.test |'), at('docs/archive/rows.md', 2, 'a genuinely new line')]
+    expect(newLines(added, ['| row | contact guardian@family.test |'])).toEqual([added[1]])
+  })
+
+  it('excuses each removed line once, so a duplicated line still counts', () => {
+    const line = 'reply to guardian@family.test'
+    const added = [at('docs/a.md', 1, line), at('docs/b.md', 1, line)]
+    expect(newLines(added, [line])).toEqual([added[1]])
   })
 })

@@ -97,7 +97,12 @@ jobs:
       CLERK_SECRET_KEY: sk_test_placeholder
 
     steps:
+      # Full history, no blobs (see `changes`), so the PII lint can find the
+      # merge base with origin/dev. Only the blobs it diffs are fetched.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          filter: blob:none
 
       - uses: actions/setup-node@v5
         with:
@@ -105,6 +110,14 @@ jobs:
           # the thing this job exists to predict; .nvmrc and engines.node agree.
           node-version: 24.x
           cache: npm
+
+      # The repo is public. Fails on personal emails, credential numbers, Gmail
+      # and Clerk IDs in lines this change ADDS to docs/, .claude/ or root *.md
+      # (13 Oct 2026: an audit found 365 references to real people there). Here
+      # in `verify`, not `e2e`, because docs-only PRs skip e2e. Before `npm ci`:
+      # it needs only node and git, so a hit fails in seconds.
+      - name: PII lint (added lines in docs)
+        run: npm run lint:pii
 
       - run: npm ci
 

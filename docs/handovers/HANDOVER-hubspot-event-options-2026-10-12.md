@@ -111,3 +111,40 @@ Contact counts per location are unchanged after the apply.
    `lib/survey/access.ts:218` use the calendar year, and
    `lib/grade-logic.ts:126` rolls over in July. These are Supabase-side and
    don't affect HubSpot.
+
+## 6. Close-out (13 Oct 2026)
+
+**Shipped.**
+- #402 landed on dev as `149b6d3b`.
+- It was promoted in #404 (merge `4f45bac5`, deployment
+  `dpl_3kg1YbU19VoS8G6WKzrauHMZbJAm`, READY), together with #405, the docs-only
+  deep-review-v2 close-out. The rollback target was
+  `dpl_9GDrmH6g4rd3aBMRyYVfSFLVj4AB`.
+- The record landed in #406 (`9c0df029`).
+
+**Verified on prod, 13 Oct.**
+- www returned 200, and app redirected (307) to `/sign-in`.
+- `/api/cron/entitlements` returned 401.
+- The new `/api/cron/hubspot-event-options` returned **401, not 404**, so the
+  route is deployed.
+- `/api/admin/sanity/event-sync` without the secret returned 403.
+- The promotion PR's CI on `90a5d93b` passed every step: typecheck, unit
+  tests, build and Playwright e2e.
+
+**Gaps found in review.**
+- **Nothing has yet run on production.** That covers the cron, the webhook
+  step, the merge in `captureLead`, and the Event Notify form since its API
+  PATCH. Everything rests on unit tests plus the live script run and
+  read-backs of 12 Oct. Each item is a row in
+  `tracker/2026-10-13-hubspot-event-options.md`.
+- **The Event Notify form was PATCHed through the Forms API** (the whole
+  `fieldGroups` array was re-sent). Its options read back correctly, but no
+  real submission has gone through it since. If it broke, captures still land
+  through the property-write fallback, but form attribution is lost. Watch
+  for the warning `form-submit-failed`.
+- **The full-repo `eslint .` was not run.** The changed files were linted
+  clean, and CI does not run eslint.
+- **The old ISSDC title regex is gone.** An ISSDC-style event needs its
+  `hubspotLocation` override set in Sanity.
+
+Open rows: `hubspot-event-options.1`–`.8`.

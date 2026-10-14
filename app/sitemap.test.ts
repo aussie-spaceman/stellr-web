@@ -1,7 +1,7 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import sitemap, { STATIC_SITEMAP_PATHS, STATIC_ROUTE_EXCLUSIONS, LANDING_PAGE_SITEMAP_PATHS } from './sitemap'
+import sitemap, { STATIC_SITEMAP_PATHS, STATIC_ROUTE_EXCLUSIONS, LANDING_PAGE_SITEMAP_PATHS, STORE_PRODUCT_SITEMAP_PATHS } from './sitemap'
 
 vi.mock('@/lib/sanity', () => ({
   getAllEvents: async () => [
@@ -99,5 +99,13 @@ describe('sitemap lastModified', () => {
       new Date('2026-01-02T00:00:00Z')
     )
     expect(entries.find((e) => e.url.endsWith('/events/unedited-campaign'))?.lastModified).toBeUndefined()
+  })
+
+  it('indexes only the chosen store product page, never the cart', async () => {
+    expect(STORE_PRODUCT_SITEMAP_PATHS).toEqual(['/store/2027-event-tee'])
+    const urls = (await sitemap()).map((e) => new URL(e.url).pathname)
+    expect(urls).toContain('/store/2027-event-tee')
+    for (const p of ['/store/cart', '/privacy/request', '/community']) expect(urls).not.toContain(p)
+    expect(urls.some((u) => u.startsWith('/register'))).toBe(false)
   })
 })

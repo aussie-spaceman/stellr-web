@@ -83,6 +83,13 @@ export const STATIC_SITEMAP_PATHS = staticPaths.map((r) => r.path)
 export const LANDING_PAGE_SITEMAP_PATHS = LANDING_PAGE_SLUGS.map((slug) => `/lp/${slug}`)
 
 /**
+ * Store product pages (/store/[slug]) that are indexed. Listed by hand: only
+ * the products chosen for search, not every slug the store can serve. Cart and
+ * checkout steps stay out (STATIC_ROUTE_EXCLUSIONS).
+ */
+export const STORE_PRODUCT_SITEMAP_PATHS = ['/store/2027-event-tee']
+
+/**
  * lastModified is deliberately omitted for code-defined routes. They change
  * when a deploy ships, not per request, and stamping `new Date()` told crawlers
  * the whole site changed daily — Google discounts a lastmod it learns is
@@ -93,6 +100,12 @@ const landingPageRoutes: MetadataRoute.Sitemap = LANDING_PAGE_SITEMAP_PATHS.map(
   url: `${BASE_URL}${path}`,
   changeFrequency: 'monthly' as const,
   priority: 0.7,
+}))
+
+const storeProductRoutes: MetadataRoute.Sitemap = STORE_PRODUCT_SITEMAP_PATHS.map((path) => ({
+  url: `${BASE_URL}${path}`,
+  changeFrequency: 'monthly' as const,
+  priority: 0.5,
 }))
 
 const staticRoutes: MetadataRoute.Sitemap = staticPaths.map((r) => ({
@@ -144,5 +157,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })
   )
 
-  return [...staticRoutes, ...landingPageRoutes, ...eventRoutes, ...campaignRoutes, ...newsRoutes]
+  return [...staticRoutes, ...landingPageRoutes, ...storeProductRoutes, ...eventRoutes, ...campaignRoutes, ...newsRoutes]
 }

@@ -9,7 +9,7 @@ const VIEW = `${URL}?k=${'A'.repeat(43)}`
 // credential is private". The button now carries the family link.
 describe('credentialIssuedEmail', () => {
   const guardian = credentialIssuedEmail({
-    recipientFirstName: 'Lily', guardianFirstName: 'Jess', title: 'Anita Gale Award', issuer: 'Stellr Education',
+    recipientFirstName: 'Lily', guardianFirstName: 'Jess', title: 'Award for Creative Vision', issuer: 'Stellr Education',
     url: URL, viewUrl: VIEW, isMinor: true, canShare: true,
   })
 

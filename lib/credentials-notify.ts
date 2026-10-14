@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail, credentialIssuedEmail, credentialsMadePrivateEmail } from '@/lib/email'
 import { shareConsentFor, canShare, credentialUrl, unpublishCredentialsFor, holderIsMinor, type CredentialRow } from '@/lib/credentials'
 import { familyCredentialUrl } from '@/lib/credentials-link'
+import { relabelIssuedAward } from '@/lib/event-awards'
 
 // The "you've earned a credential" email, addressed the way the DocuSign
 // notices are: an adult hears directly; a Minor's guardian is the addressee
@@ -34,7 +35,8 @@ export async function sendCredentialIssuedEmail(
     const mail = credentialIssuedEmail({
       recipientFirstName: to.firstName,
       guardianFirstName:  toGuardian ? to.guardianFirstName : null,
-      title:    row.title,
+      // A renamed award goes out under its current label (resends included).
+      title:    relabelIssuedAward(row).title,
       issuer:   row.issuer,
       url:      credentialUrl(row.number),
       viewUrl:  familyCredentialUrl(row),
@@ -75,7 +77,7 @@ export async function applyGuardianOptOut(
       const mail = credentialsMadePrivateEmail({
         recipientFirstName: to.firstName,
         guardianFirstName:  toGuardian ? to.guardianFirstName : null,
-        titles: rows.map(r => r.title),
+        titles: rows.map(r => relabelIssuedAward(r).title),
       })
       await sendEmail({ to: address, cc: toGuardian && to.email ? [to.email] : undefined, ...mail })
     }

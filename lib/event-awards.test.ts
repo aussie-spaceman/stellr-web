@@ -7,6 +7,8 @@ import {
   isAssignedAwardType,
   isAwardType,
   mentorCredentialTitle,
+  relabelIssuedAward,
+  artworkSupersededFor,
   replacedSpecialist,
   type Assignment,
 } from './event-awards'
@@ -16,12 +18,12 @@ const a = (awardType: Assignment['awardType'], participantId: string, companyId:
 })
 
 describe('award catalogue', () => {
-  it('has the five certificates, labelled as on the artwork', () => {
+  it('has the five certificates with their current labels', () => {
     expect(AWARD_TYPES).toEqual(['participation', 'overall_champion', 'anita_gale', 'dick_edwards', 'mentor'])
     expect(EVENT_AWARDS.mentor.label).toBe('Certificate of Appreciation')
     expect(EVENT_AWARDS.overall_champion.label).toBe('Overall Champion')
-    expect(EVENT_AWARDS.anita_gale.label).toBe('Anita Gale Award for Creative Vision')
-    expect(EVENT_AWARDS.dick_edwards.label).toBe('Dick Edwards Award for Quiet Leadership')
+    expect(EVENT_AWARDS.anita_gale.label).toBe('Award for Creative Vision')
+    expect(EVENT_AWARDS.dick_edwards.label).toBe('Award for Quiet Leadership')
   })
 
   it('guards types', () => {
@@ -40,7 +42,39 @@ describe('award catalogue', () => {
 
   it('titles award credentials with the award then the event', () => {
     expect(awardCredentialTitle('anita_gale', 'Colorado Space Design Challenge'))
-      .toBe('Anita Gale Award for Creative Vision — Colorado Space Design Challenge')
+      .toBe('Award for Creative Vision — Colorado Space Design Challenge')
+  })
+})
+
+describe('relabelIssuedAward', () => {
+  // An issued credential keeps the label text it was issued with; the renamed
+  // awards are shown with their current label. Stand-in wording only here.
+  const issued = { award_type: 'dick_edwards', award: 'Earlier Wording for Quiet Leadership', title: 'Earlier Wording for Quiet Leadership — Colorado Space Design Challenge' }
+
+  it('shows the current label in the award and in front of the event', () => {
+    expect(relabelIssuedAward(issued)).toMatchObject({
+      award: 'Award for Quiet Leadership',
+      title: 'Award for Quiet Leadership — Colorado Space Design Challenge',
+    })
+  })
+
+  it('does not touch the stored row', () => {
+    relabelIssuedAward(issued)
+    expect(issued.award).toBe('Earlier Wording for Quiet Leadership')
+  })
+
+  it('leaves every other credential exactly as stored', () => {
+    const champ = { award_type: 'overall_champion', award: 'Overall Champion', title: 'Overall Champion — Nevada' }
+    expect(relabelIssuedAward(champ)).toBe(champ)
+    const course = { award_type: null, award: null, title: 'STEM Power Skills' }
+    expect(relabelIssuedAward(course)).toBe(course)
+  })
+
+  it('uses the default certificate design for the renamed awards only', () => {
+    expect(artworkSupersededFor('anita_gale')).toBe(true)
+    expect(artworkSupersededFor('dick_edwards')).toBe(true)
+    expect(artworkSupersededFor('overall_champion')).toBe(false)
+    expect(artworkSupersededFor(null)).toBe(false)
   })
 })
 

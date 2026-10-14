@@ -5,7 +5,7 @@ import { type CourseTheme } from '@/lib/training-display'
 import { renderCertificatePdf } from '@/lib/certificate'
 import { credentialUrl, getCredentialByNumber, recordCredentialEvent } from '@/lib/credentials'
 import { generateCertificatesPdf } from '@/lib/event-pdf'
-import { EVENT_AWARDS, isAwardType } from '@/lib/event-awards'
+import { EVENT_AWARDS, artworkSupersededFor, isAwardType } from '@/lib/event-awards'
 import { downloadArtwork, loadTemplate, placementOf } from '@/lib/event-certificates'
 import { certificateGateFor } from '@/lib/survey/certificate-gate'
 import { renderPdCertificatePdf } from '@/lib/pd-certificate'
@@ -60,7 +60,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ number: 
       },
     })
 
-  if (cred.source === 'event' && cred.event_slug && isAwardType(cred.award_type)) {
+  // A renamed award's uploaded artwork still prints its earlier name, so it
+  // uses the default design until new artwork replaces it.
+  if (cred.source === 'event' && cred.event_slug && isAwardType(cred.award_type) && !artworkSupersededFor(cred.award_type)) {
     const template = await loadTemplate(db, cred.event_slug, cred.award_type)
     const artwork = template ? await downloadArtwork(db, template.artwork_path) : null
     if (template && artwork) {

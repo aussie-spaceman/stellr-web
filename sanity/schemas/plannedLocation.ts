@@ -6,7 +6,8 @@
 // provisioning that all key off event slugs — which has bitten this codebase
 // before. A planned location is deliberately inert: nothing but the map reads it.
 //
-// Adding or retiring one is a Studio edit, not a deploy. The legend counts on
+// Adding or retiring one is a Studio edit, not a deploy: retire one by ticking
+// `archived` rather than deleting it, so the record stays. The legend counts on
 // the landing pages derive from these documents plus the live events (see
 // lib/locations.ts), so they cannot disagree with what is published here.
 
@@ -72,6 +73,15 @@ export const plannedLocation = {
       description: 'Decimal degrees.',
       validation: (Rule: { min: (n: number) => { max: (n: number) => unknown } }) =>
         Rule.min(-180).max(180),
+    },
+    {
+      name: 'archived',
+      type: 'boolean',
+      title: 'Archived',
+      description:
+        'Retired: hidden from the map, the legend counts and the accessible list. ' +
+        'Kept rather than deleted so the record remains.',
+      initialValue: false,
     },
     {
       name: 'targetSeason',

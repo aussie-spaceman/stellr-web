@@ -1,4 +1,4 @@
-import { registrationStatus } from './utils'
+import { eventLastDay, registrationStatus } from './utils'
 
 /**
  * The single answer to "can someone register for this right now?"
@@ -18,12 +18,15 @@ export interface RegistrationGateSource {
   registrationOpen?: boolean | null
   registrationOpenDate?: string
   registrationCloseDate?: string
+  date?: string | null
+  endDate?: string | null
 }
 
 export function registrationIsOpen(event: RegistrationGateSource): boolean {
   // Campaigns: the manual toggle is the whole answer. Anything other than an
   // explicit `true` is closed, so a campaign nobody switched on is not open.
   if (event.activityType === 'campaign') return event.registrationOpen === true
-  // Live events: derived from the window, where "no dates set" means open.
-  return registrationStatus(event.registrationOpenDate, event.registrationCloseDate) === 'open'
+  // Live events: derived from the window, where "no dates set" means open —
+  // except that an event which has already run is never open.
+  return registrationStatus(event.registrationOpenDate, event.registrationCloseDate, eventLastDay(event)) === 'open'
 }

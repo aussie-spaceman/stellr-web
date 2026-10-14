@@ -62,7 +62,6 @@ const PLANNED: {
   { slug: 'baylor-waco-tx', venue: 'Baylor University', city: 'Waco', state: 'TX', theme: 'space', query: 'Baylor University, Waco, TX' },
   { slug: 'st-marys-raleigh-nc', venue: "St Mary's School", city: 'Raleigh', state: 'NC', theme: 'space', query: "Saint Mary's School, Raleigh, NC" },
   { slug: 'iowa-state-ames-ia', venue: 'Iowa State University', city: 'Ames', state: 'IA', theme: 'space', query: 'Iowa State University, Ames, IA' },
-  { slug: 'jsc-houston-tx', venue: 'NASA Johnson Space Center', city: 'Houston', state: 'TX', theme: 'space', query: 'NASA Johnson Space Center, Houston, TX' },
 ]
 
 interface Coords {

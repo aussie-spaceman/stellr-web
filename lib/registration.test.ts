@@ -56,6 +56,13 @@ describe('registrationIsOpen', () => {
       ).toBe(false)
     })
 
+    it('is closed once the event itself has run, even with no dates set and the toggle on', () => {
+      // A past event read "Registration Open" because nobody set a close date.
+      expect(
+        registrationIsOpen({ activityType: 'live_event', registrationOpen: true, date: '2020-03-14', endDate: '2020-03-15' })
+      ).toBe(false)
+    })
+
     it('treats a document with no activity type as a live event', () => {
       // Pre-migration documents have no activityType.
       expect(registrationIsOpen({})).toBe(true)

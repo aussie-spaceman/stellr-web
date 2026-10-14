@@ -21,8 +21,7 @@ import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
 import { WorkCard } from '@/components/sections/WorkCard'
 import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
-import { PageMedia } from '@/components/sections/PageMedia'
-import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
+import { PHOTOS, VIDEOS, QUOTES, COMPETITION, STUDENT_WORK } from '@/lib/media-manifest'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { buildCompetitionSeriesJsonLd } from '@/lib/structured-data'
 import { getSeriesMembers } from '@/lib/schema-series'
@@ -36,7 +35,7 @@ export const metadata: Metadata = {
 }
 
 /* Step 3 tier block is mid-rework — keep behind this flag (wire to CMS / a
-   feature flag when the new membership structure is finalised). Default shows
+   feature flag when the new membership structure is finalized). Default shows
    the tier cards as in the approved redesign. */
 const showMaterialTiers = true
 
@@ -45,7 +44,7 @@ const studentSteps = [
   { n: 2, title: 'Form a team', body: 'Students work together like a professional firm.' },
   { n: 3, title: 'Design & decide', body: 'Research, prototype, weigh trade-offs, run the numbers.' },
   { n: 4, title: 'Build the deliverable', body: 'A written proposal or a presentation of the solution.' },
-  { n: 5, title: 'Pitch & be judged', body: 'Present to judges; strong teams progress to finals.' },
+  { n: 5, title: 'Pitch & be judged', body: 'Present to judges; award winners are invited to our International Summer Camp.' },
 ]
 
 const pathways = [
@@ -115,7 +114,7 @@ const themes = [
     explore: [
       'Renewable energy & efficiency',
       'Water, waste & materials',
-      'Carbon & emissions modelling',
+      'Carbon & emissions modeling',
       'Cost vs. environmental impact',
       'Climate & site constraints',
       'Long-term upkeep & payback',
@@ -165,8 +164,8 @@ const COMPETITION_FAQS = [
     a: 'Each team responds to a Request for Proposal with a written proposal (Campaigns) or a live presentation (Challenges). Work is judged by professionals from aerospace, engineering and science industries, and Campaign groups receive written feedback.',
   },
   {
-    q: 'Is there a national championship?',
-    a: 'Yes. Winning teams and exceptional individuals from live Challenges and Campaigns can be invited to Stellr’s annual championship event, held in summer.',
+    q: 'Can I progress to a future event by winning an event I attend?',
+    a: 'Yes! Award winners from all our Challenges and Campaigns are invited to an annual International Summer Camp, held in mid-July. We are currently finalizing a partnership with a new vendor and will be announcing details soon! Stay tuned!',
   },
 ] as const
 
@@ -286,9 +285,9 @@ export default async function CompetitionsPage() {
                 A rotating look at the proposals, presentations and designs students have produced — the
                 kind of deliverable every team builds and pitches.
               </p>
-              <WorkCard asset={COMPETITION['previous-participant-work']} className="mt-6 max-w-lg" />
+              <WorkCard asset={COMPETITION['student-work-dossier-2026']} className="mt-6 max-w-lg" />
             </div>
-            <StudentWorkHero />
+            <StudentWorkHero images={STUDENT_WORK} />
           </div>
 
           {/* Student testimonial */}
@@ -316,11 +315,11 @@ export default async function CompetitionsPage() {
             note="More info coming soon"
             nodes={[
               { label: 'Take part', labelClass: 'text-primary', title: 'Enter a Campaign or Event' },
-              { label: 'Advance', labelClass: 'text-space-violet', title: 'Top teams progress to the finals' },
+              { label: 'Advance', labelClass: 'text-space-violet', title: 'Award Winners are invited to progress' },
               {
-                label: 'The final',
+                label: 'Summer Camp',
                 labelClass: 'text-brand-gold-ink',
-                title: 'Annual Championship event',
+                title: 'International Summer Camp (mid-July)',
                 titleClass: 'text-brand-gold-ink',
                 cardClass: 'bg-pathway-amber-bg border border-pathway-amber/30',
                 star: true,
@@ -330,7 +329,7 @@ export default async function CompetitionsPage() {
         </div>
       </section>
 
-      {/* ── Hear it from a participant (Mia Cox) ──────────────────────── */}
+      {/* ── Hear it from a participant ────────────────────────────────── */}
       <section className="section-padding bg-white">
         <div className="container-max">
           <figure className="max-w-3xl mx-auto text-center">
@@ -412,21 +411,12 @@ export default async function CompetitionsPage() {
             <div className="mt-8 border border-dashed border-line rounded-panel p-9 bg-surface text-center">
               <p className="font-bold text-ink">Membership tiers are being reworked</p>
               <p className="text-content-secondary mt-1.5">
-                This section is hidden while the new membership structure is finalised.
+                This section is hidden while the new membership structure is finalized.
               </p>
             </div>
           )}
         </div>
       </section>
-
-      {/* ── Media: the competition in pictures ────────────────────────── */}
-      <PageMedia
-        heading="What the competition actually looks like"
-        intro="Real teams, real venues, real work."
-        photos={[PHOTOS['competitions-1'], PHOTOS['competitions-2'], PHOTOS['competitions-ksc']]}
-        align="center"
-        photoColumns={3}
-      />
 
       <GuideFaq faqs={COMPETITION_FAQS} />
 

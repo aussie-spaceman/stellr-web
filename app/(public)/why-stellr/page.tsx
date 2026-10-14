@@ -5,8 +5,7 @@ import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 import { AssetGate } from '@/components/sections/AssetGate'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { WorkCard } from '@/components/sections/WorkCard'
-import { VIDEOS, QUOTES, COMPETITION, PHOTOS, mediaDownloadUrl } from '@/lib/media-manifest'
-import { ProofStrip } from '@/components/sections/ProofStrip'
+import { VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/why-stellr' },
@@ -128,7 +127,7 @@ export default function WhyStellrPage() {
               </div>
             ))}
             {/* Free-to-download document (moved here as a fourth card) */}
-            <WorkCard asset={COMPETITION['legacy-rfp-south-dakota-2025']} />
+            <WorkCard asset={COMPETITION['space-rfp-2026-excerpt']} />
           </div>
         </div>
       </section>
@@ -177,12 +176,12 @@ export default function WhyStellrPage() {
             {/* Video testimonial (moved here, under the CTA buttons) */}
             <figure className="mt-8">
               <VideoTestimonial
-                src={VIDEOS['testimonial-sepp'].src}
-                poster={VIDEOS['testimonial-sepp'].poster}
-                captionsSrc={VIDEOS['testimonial-sepp'].captions}
-                title={VIDEOS['testimonial-sepp'].title}
+                src={VIDEOS['testimonial-sepp-sprietsma'].src}
+                poster={VIDEOS['testimonial-sepp-sprietsma'].poster}
+                captionsSrc={VIDEOS['testimonial-sepp-sprietsma'].captions}
+                title={VIDEOS['testimonial-sepp-sprietsma'].title}
               />
-              <figcaption className="mt-3 text-sm font-semibold text-ink">{VIDEOS['testimonial-sepp'].title}</figcaption>
+              <figcaption className="mt-3 text-sm font-semibold text-ink">{VIDEOS['testimonial-sepp-sprietsma'].title}</figcaption>
             </figure>
           </div>
 
@@ -227,7 +226,7 @@ export default function WhyStellrPage() {
               career can really look like.
             </p>
 
-            {/* Testimonial — Jason Zibart, 2025 */}
+            {/* Parent testimonial */}
             <blockquote className="mt-7 bg-space-violet-bg border-l-[3px] border-space-violet rounded-r-xl px-7 py-6">
               <p className="font-display text-xl font-medium text-ink leading-snug">
                 &ldquo;{QUOTES['jason-zibart'].text}&rdquo;
@@ -257,7 +256,7 @@ export default function WhyStellrPage() {
               },
               {
                 title: 'Mentored environment',
-                body: 'Industry professionals guide each team, modelling how real STEM work gets done.',
+                body: 'Industry professionals guide each team, modeling how real STEM work gets done.',
               },
             ].map((c) => (
               <div key={c.title} className="bg-white border border-line rounded-ds-card p-5">
@@ -369,7 +368,6 @@ export default function WhyStellrPage() {
             <AssetGate
               asset="sponsorship-prospectus"
               title="Sponsorship Prospectus"
-              fileUrl={mediaDownloadUrl('/files/Stellr-Sponsorship-Prospectus.pdf')}
               triggerLabel="Request prospectus ↓"
               eyebrow="Partner prospectus"
               triggerClassName="inline-flex items-center justify-center gap-2 rounded-control px-6 py-3 font-subheading font-semibold text-sm text-ink bg-surface border border-line hover:border-primary hover:text-primary transition-colors"
@@ -384,25 +382,6 @@ export default function WhyStellrPage() {
               Full packages, reach statistics and impact data — sent straight to your inbox.
             </p>
           </div>
-        </div>
-      </section>
-
-      {/* ── Proof strip ───────────────────────────────────────────────── */}
-      <section className="section-padding bg-surface border-t border-line-light">
-        <div className="container-max">
-          <Eyebrow>What it looks like</Eyebrow>
-          <h2 className="mt-3 font-display text-3xl font-bold text-ink leading-tight max-w-2xl">
-            A Stellr competition, from the floor
-          </h2>
-          <ProofStrip
-            photos={[
-              PHOTOS['why-auditorium'],
-              PHOTOS['why-teams-working'],
-              PHOTOS['why-biosphere-tour'],
-            ]}
-            columns={3}
-            className="mt-8"
-          />
         </div>
       </section>
 

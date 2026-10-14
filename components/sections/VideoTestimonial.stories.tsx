@@ -1,13 +1,19 @@
 import type { Meta, StoryObj } from '@storybook/nextjs'
 import { VideoTestimonial } from './VideoTestimonial'
-import { VIDEOS } from '@/lib/media-manifest'
+import { mediaUrl } from '@/lib/media-helpers'
 
 // T2/T5 — poster-first, click-to-play video (preload="none" + WebVTT captions).
-const v = VIDEOS['testimonial-allyson-rose']
+// Fixture is inline: lib/media-manifest is server-only.
+const base = '/videos/2026-10/testimonial-allyson-rose'
 const meta: Meta<typeof VideoTestimonial> = {
   title: 'Media/VideoTestimonial',
   component: VideoTestimonial,
-  args: { src: v.src, poster: v.poster, captionsSrc: v.captions, title: v.title },
+  args: {
+    src: mediaUrl(`${base}.mp4`),
+    poster: mediaUrl(`${base}.poster.jpg`),
+    captionsSrc: mediaUrl(`${base}.en.vtt`),
+    title: 'Allyson Rose — participant testimonial',
+  },
   decorators: [(Story) => <div style={{ maxWidth: 640 }}><Story /></div>],
 }
 export default meta

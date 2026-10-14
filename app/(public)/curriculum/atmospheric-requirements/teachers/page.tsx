@@ -40,7 +40,7 @@ const TIMING = [
   { phase: 'Hook & objectives', min: 5, note: 'Frame the design problem: a settlement has to make its own air.' },
   { phase: 'Part 1 — pressure & composition', min: 12, note: 'Two worked examples, then the Pressure Explorer.' },
   { phase: 'Part 2 & 3 — health and fire', min: 12, note: 'Altitude, SP-413, the fire triangle and the trade-off table.' },
-  { phase: 'Part 4 — other air components', min: 6, note: 'N₂, CO₂, water vapour cards; quick class discussion.' },
+  { phase: 'Part 4 — other air components', min: 6, note: 'N₂, CO₂, water vapor cards; quick class discussion.' },
   { phase: 'Part 5 — sizing calculator', min: 15, note: 'Work the container problem together, then let pairs change inputs.' },
   { phase: 'Check & wrap', min: 8, note: 'Three self-check questions; surface reasoning as a class.' },
 ] as const
@@ -91,7 +91,7 @@ const MISCONCEPTIONS = [
   {
     myth: '“Air is basically just oxygen.”',
     reality:
-      'Oxygen is only ~21% of Earth’s air. Nitrogen (an inert safety buffer and biological necessity), CO₂ and water vapour all matter to people, plants, electronics and structures.',
+      'Oxygen is only ~21% of Earth’s air. Nitrogen (an inert safety buffer and biological necessity), CO₂ and water vapor all matter to people, plants, electronics and structures.',
   },
 ] as const
 
@@ -99,7 +99,7 @@ const DISCUSSION = [
   'If shipping gas from Earth is expensive, what’s the argument for a lower total pressure — and what’s the cost of that choice?',
   'Apollo 1 used pure oxygen for engineering convenience. What trade-off were they making, and what changed afterward?',
   'Where else on the settlement (labs, workshops, agriculture) might a different atmosphere be justified?',
-  'The maths assumes ideal gas behaviour. When would that assumption break down, and how would you check it?',
+  'The math assumes ideal gas behavior. When would that assumption break down, and how would you check it?',
 ] as const
 
 export default function TeacherCompanionPage() {

@@ -290,7 +290,7 @@ export function groupConfirmationEmail({
       ? '<li style="margin-bottom:8px"><strong>Member details:</strong> All group member details have been submitted — there\'s nothing further to add.</li>'
     : partialAddNow
       ? `<li style="margin-bottom:8px"><strong>Member details:</strong> You added most of your group, with <strong>${remainingCount}</strong> still to provide. Finish the remaining ${remainingCount === 1 ? 'person' : 'people'} using <strong>either</strong> option above — the pre-filled Google Sheet <strong>or</strong> the registration link.</li>`
-      : '<li style="margin-bottom:8px"><strong>Member details:</strong> Complete your group\'s details using <strong>either</strong> option above — the pre-populated Google Sheet <strong>or</strong> the registration link. We\'ll finalise each member\'s registration as their details come in.</li>'
+      : '<li style="margin-bottom:8px"><strong>Member details:</strong> Complete your group\'s details using <strong>either</strong> option above — the pre-populated Google Sheet <strong>or</strong> the registration link. We\'ll finalize each member\'s registration as their details come in.</li>'
 
   // Both links go out on every group registration. When the roster was already
   // completed on the form they're reference links (add or update someone later)

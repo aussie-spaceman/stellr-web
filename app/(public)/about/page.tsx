@@ -2,9 +2,8 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Linkedin, Award, Lightbulb, Eye, Network as NetworkIcon } from 'lucide-react'
-import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
 import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
-import { VIDEOS, QUOTES } from '@/lib/media-manifest'
+import { QUOTES } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/about' },
@@ -101,7 +100,7 @@ const advisoryBoard: {
     location: 'North-Western Iowa',
     linkedIn: 'https://www.linkedin.com/in/bill-allen-b7006b114/',
     photo: '/team/bill-allen.jpeg',
-    bio: 'Bill remains a believer in and advocate for ISD competitions based on the positive results he has seen with former students continuing their studies and careers in engineering and STEM. By attending these competitions, students from the Midwest truly begin to see a pathway to the careers they are interested in, and begin to understand their dreams can become reality.',
+    bio: 'Bill remains a believer in and advocate for Design Competitions based on the positive results he has seen with former students continuing their studies and careers in engineering and STEM. By attending these competitions, students from the Midwest truly begin to see a pathway to the careers they are interested in, and begin to understand their dreams can become reality.',
   },
   {
     name: 'Janet Ivey-Duensing',
@@ -215,19 +214,6 @@ export default function AboutPage() {
               )
             })}
           </div>
-
-          {/* Founder video testimonial (moved above Our Goal, centred) */}
-          <figure className="max-w-3xl mx-auto mb-16">
-            <VideoTestimonial
-              src={VIDEOS['testimonial-david-shaw'].src}
-              poster={VIDEOS['testimonial-david-shaw'].poster}
-              captionsSrc={VIDEOS['testimonial-david-shaw'].captions}
-              title="David Shaw, Founder, Stellr Education"
-            />
-            <figcaption className="mt-3 text-center text-sm font-semibold text-brand-blue-dark">
-              David Shaw, Founder, Stellr Education
-            </figcaption>
-          </figure>
 
           {/* Our Goal */}
           <h2 className="text-3xl font-bold text-brand-blue-dark mb-4">Our Goal</h2>

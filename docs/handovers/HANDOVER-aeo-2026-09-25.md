@@ -30,7 +30,7 @@ Session Close-Out — 10 Aug 2026 (v2)". Audience decided: **teachers first**.
 - Publish the two news drafts in Sanity with a named author.
 
 ## Standing decisions
-- Never name the ISSDC / Space Settlement Design Competitions / Aerospace Education Competitions / Space Science Engineering Foundation family in public content, prompts or reports.
+- Never name the excluded family of external design competitions (listed in the private AEO notes) in public content, prompts or reports.
 - The how-to guide stays a summary; session plans, the worked trade study and intervention guidance are member material.
 - Stellr live-event fees are described as "varies by event" — no single figure.
 - The prompt panel's prompts are fixed; retire and add, never reword.

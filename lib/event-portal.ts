@@ -1,6 +1,6 @@
 import { supabaseServer } from '@/lib/supabase'
 import { getEventsBySlugs, getAllEvents, getAllCampaigns } from '@/lib/sanity'
-import { registrationStatus, todayInAppZone } from '@/lib/utils'
+import { eventLastDay, registrationStatus, todayInAppZone } from '@/lib/utils'
 import { campaignHasEnded, campaignStatusKey } from '@/lib/campaigns'
 import {
   type CommunityMember,
@@ -122,6 +122,7 @@ export async function getMemberEventCatalog(member: CommunityMember): Promise<Ca
     slug?: { current?: string }
     title?: string
     date?: string
+    endDate?: string
     city?: string
     state?: string
     activityType?: string
@@ -144,7 +145,7 @@ export async function getMemberEventCatalog(member: CommunityMember): Promise<Ca
       city: e.city,
       state: e.state,
       registered: false,
-      status: registrationStatus(e.registrationOpenDate, e.registrationCloseDate),
+      status: registrationStatus(e.registrationOpenDate, e.registrationCloseDate, eventLastDay(e)),
     })
   }
 

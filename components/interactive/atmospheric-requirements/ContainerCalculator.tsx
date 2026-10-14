@@ -121,7 +121,7 @@ export function ContainerCalculator() {
           </div>
         </Step>
 
-        <Step n={4} title="Convert to litres of liquid, then to containers">
+        <Step n={4} title="Convert to liters of liquid, then to containers">
           Liquid volume = partial volume × adjusted expansion ratio, divided into {P.containerSize} m³ containers.
         </Step>
       </ol>

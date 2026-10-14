@@ -15,10 +15,8 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
-import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
-import { ProofStrip } from '@/components/sections/ProofStrip'
 import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
-import { PHOTOS, VIDEOS, QUOTES } from '@/lib/media-manifest'
+import { VIDEOS, QUOTES } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/students' },
@@ -93,7 +91,8 @@ export default function StudentsPage() {
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto grid gap-10 lg:grid-cols-2 lg:items-center">
+        {/* Dark hero, no photo, until a replacement photo is chosen. */}
+        <div className="max-w-7xl mx-auto">
           <div>
           <p className="text-brand-orange font-semibold uppercase tracking-widest text-sm mb-4">
             Community → For Students
@@ -115,14 +114,6 @@ export default function StudentsPage() {
             </Link>
           </div>
           </div>
-          <ResponsivePhoto
-            photo={PHOTOS['students-hero']}
-            sizes="(max-width: 1024px) 100vw, 50vw"
-            priority
-            className="aspect-[4/3] shadow-card-lift"
-            wrapperClassName="lg:justify-self-end"
-            showCredit
-          />
         </div>
       </section>
 
@@ -180,16 +171,10 @@ export default function StudentsPage() {
       {/* ── Directly from a previous participant (moved above College) ─── */}
       <section className="section-padding bg-white">
         <div className="container-max max-w-4xl mx-auto">
-          <ProofStrip
-            photos={[PHOTOS['students-strip-1'], PHOTOS['students-strip-2']]}
-            captions={false}
-            columns={2}
-          />
           <PullQuoteWall
-            quotes={[QUOTES['mitra-sainsbury']]}
+            quotes={[QUOTES['participant-2022']]}
             columns={1}
             label="Directly From A Previous Participant"
-            className="mt-8"
           />
         </div>
       </section>

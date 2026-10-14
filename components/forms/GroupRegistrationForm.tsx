@@ -849,7 +849,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
         <StepBar step={1} />
         <div>
           <h2 className="text-xl font-bold text-brand-blue-dark mb-1">Your Details</h2>
-          <p className="text-sm text-content-body">Step 2 of 4 — Your information as the group organiser</p>
+          <p className="text-sm text-content-body">Step 2 of 4 — Your information as the group organizer</p>
         </div>
 
         {/* Role selector */}
@@ -864,7 +864,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
             <button type="button" onClick={() => setRegistrantRole('student_manager')}
               className={`text-left px-4 py-3 rounded-lg border-2 text-sm transition-colors ${registrantRole === 'student_manager' ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-line hover:border-line text-content-body'}`}>
               <span className="font-semibold block mb-0.5">Student Manager</span>
-              <span className="text-xs text-content-muted">I am a high school student organising a group for this event</span>
+              <span className="text-xs text-content-muted">I am a high school student organizing a group for this event</span>
             </button>
           </div>
         </div>
@@ -1190,7 +1190,7 @@ export default function GroupRegistrationForm({ eventSlug, eventTitle, prefill, 
             className="mt-0.5 rounded border-line text-brand-blue flex-shrink-0"
           />
           <span className="text-sm text-content-body">
-            I confirm that I am authorised to share student data on behalf of my school, and I accept
+            I confirm that I am authorized to share student data on behalf of my school, and I accept
             Stellr Education&apos;s{' '}
             <a href="/school-data-terms" target="_blank" rel="noopener noreferrer" className="text-brand-blue underline">
               School Data Terms

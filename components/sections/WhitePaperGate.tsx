@@ -5,9 +5,9 @@ import { Check, X } from 'lucide-react'
 import { usePrefillNameEmail } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 import { isEmailLike } from '@/lib/utils'
-import { mediaDownloadUrl } from '@/lib/media-manifest'
 
-const PDF_URL = mediaDownloadUrl('/files/Stellr-STEM-Power-Skills-White-Paper.pdf')
+// The full paper is gated: it goes out only by email, as an expiring link from
+// /api/white-paper, so this component holds no file URL at all.
 const PAPER_TITLE = 'From “Soft Skills” to STEM Power Skills'
 
 /* Mock PDF cover thumbnail (navy gradient) shared by the card + modal header. */
@@ -206,11 +206,7 @@ export function WhitePaperGate() {
                   </button>
                   {error && (
                     <p className="text-center text-[13px] text-[#9A4A41]">
-                      Something went wrong sending it. Please try again, or{' '}
-                      <a href={PDF_URL} download className="font-semibold underline">
-                        download it directly
-                      </a>
-                      .
+                      Something went wrong sending it. Please try again in a moment.
                     </p>
                   )}
                   <p className="text-center text-[12.5px] text-content-faint">
@@ -230,17 +226,10 @@ export function WhitePaperGate() {
                     <span className="font-semibold text-ink">{email}</span>. It should arrive in a minute or
                     two.
                   </p>
-                  <a
-                    href={PDF_URL}
-                    download
-                    className="mt-5 w-full inline-flex items-center justify-center rounded-[9px] bg-primary px-6 py-3.5 font-display text-[15px] font-semibold text-white hover:bg-primary-deep transition-colors"
-                  >
-                    Download it now ↓
-                  </a>
                   <button
                     type="button"
                     onClick={close}
-                    className="mt-3 text-sm font-semibold text-content-muted hover:text-ink transition-colors"
+                    className="mt-5 text-sm font-semibold text-content-muted hover:text-ink transition-colors"
                   >
                     Close
                   </button>

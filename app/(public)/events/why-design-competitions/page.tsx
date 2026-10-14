@@ -98,19 +98,6 @@ export default function WhyDesignCompetitionsPage() {
         </div>
       </section>
 
-      {/* ── Quote ────────────────────────────────────────────────────── */}
-      <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto max-w-3xl text-center">
-          <blockquote className="text-2xl sm:text-3xl font-bold leading-snug">
-            &ldquo;Design Competitions are a textbook example of Project Based Learning. We provide
-            an open-ended challenge for students to creatively problem solve.&rdquo;
-          </blockquote>
-          <footer className="mt-6 text-brand-orange font-medium">
-            Mr. Ty White — AZ Rural Teacher of the Year, 2023
-          </footer>
-        </div>
-      </section>
-
       {/* ── Four benefits ────────────────────────────────────────────── */}
       <section className="section-padding bg-brand-grey-light">
         <div className="container-max">

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
-import { type PhotoAsset } from '@/lib/media-manifest'
+import type { PhotoAsset } from '@/lib/media-helpers'
 import { ResponsivePhoto } from './ResponsivePhoto'
 
 /**
@@ -20,8 +20,9 @@ export function ProofStrip({
 }: {
   photos: PhotoAsset[]
   heading?: string
-  /** Desktop column count — 2 for large 50/50 thumbnails, 3/5 for strips. */
-  columns?: 2 | 3 | 5
+  /** Desktop column count — 1 for a single centred photo, 2 for large 50/50
+   *  thumbnails, 3/5 for strips. */
+  columns?: 1 | 2 | 3 | 5
   /** Show the per-photo caption + credit line under each image. */
   captions?: boolean
   className?: string
@@ -80,15 +81,18 @@ export function ProofStrip({
 
   if (photos.length === 0) return null
   const active = photos[index]
+  const single = columns === 1
 
   return (
     <div className={className}>
       {heading && <h3 className="mb-4 font-display text-lg font-bold text-ink">{heading}</h3>}
 
       {/* Strip: scroll-snap row on mobile, responsive grid ≥sm */}
-      <ul className={`-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:overflow-visible sm:px-0 ${columns === 2 ? 'sm:grid-cols-2 lg:grid-cols-2' : columns === 5 ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-3 lg:grid-cols-3'}`}>
+      <ul className={single
+        ? 'mx-auto max-w-2xl'
+        : `-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:overflow-visible sm:px-0 ${columns === 2 ? 'sm:grid-cols-2 lg:grid-cols-2' : columns === 5 ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-3 lg:grid-cols-3'}`}>
         {photos.map((p, i) => (
-          <li key={p.id} className="w-[78%] shrink-0 snap-start sm:w-auto">
+          <li key={p.id} className={single ? 'w-full' : 'w-[78%] shrink-0 snap-start sm:w-auto'}>
             <button
               type="button"
               onClick={() => show(i)}
@@ -97,12 +101,12 @@ export function ProofStrip({
             >
               <ResponsivePhoto
                 photo={p}
-                sizes="(max-width: 640px) 78vw, (max-width: 1024px) 33vw, 220px"
+                sizes={single ? '(max-width: 672px) 100vw, 672px' : '(max-width: 640px) 78vw, (max-width: 1024px) 33vw, 220px'}
                 className="aspect-[4/3] transition-transform group-hover:-translate-y-0.5"
               />
               {captions && (
                 <>
-                  <p className="mt-2 text-[13px] leading-snug text-content-secondary">{p.alt}</p>
+                  <p className="mt-2 text-[13px] leading-snug text-content-secondary">{p.caption ?? p.alt}</p>
                   {p.credit && (
                     <p className="text-[11px] text-content-faint">{p.credit}</p>
                   )}
@@ -157,7 +161,7 @@ export function ProofStrip({
                 imgClassName="object-contain"
               />
               <figcaption className="mt-3 text-center text-sm text-white/90">
-                {active.alt}
+                {active.caption ?? active.alt}
                 {active.credit && <span className="ml-2 text-white/55">· {active.credit}</span>}
                 {photos.length > 1 && (
                   <span className="ml-2 text-white/55">

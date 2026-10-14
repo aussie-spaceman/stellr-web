@@ -8,7 +8,7 @@ Earlier credential work: `stellr-credentials-linkedin` (22 Sept), `HANDOVER-cred
 ## Context
 
 Two parents replied to the "credential issued" email on 6 Oct, saying the credential would not open:
-- **Jess Nylund**, for Lily (Anita Gale Award for Creative Vision, CO SDC). Jess says it happens for all of Lily's awards.
+- **Jess Nylund**, for Lily (the creative-vision award, CO SDC). Jess says it happens for all of Lily's awards.
 - **LaResa Davidson**, for Brooks (2027 CO SDC Participant).
 
 **Cause.** The email for a minor goes to the guardian (`ec_email` / `emergency_contact_email`). Its button linked to `/credentials/<number>`, but a private credential renders only for its owner, signed in. Everyone else gets "This credential is private … ask them to turn on sharing". Guardians have no Stellr account linked to the child (no guardian-member relation exists in the schema), so every guardian hit a dead end.

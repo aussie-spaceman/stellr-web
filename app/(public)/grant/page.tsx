@@ -5,8 +5,7 @@ import { Document, Team } from '@stellr/icons'
 import { Button, Eyebrow, InfoPill } from '@stellr/web-ui'
 import TeacherGrantForm from '@/components/forms/TeacherGrantForm'
 import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
-import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
-import { VIDEOS, QUOTES, mediaUrl } from '@/lib/media-manifest'
+import { QUOTES, mediaUrl } from '@/lib/media-manifest'
 import { getRegistrationPrefill } from '@/lib/registration-prefill'
 import { buildFaqJsonLd } from '@/lib/structured-data'
 import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
@@ -192,28 +191,6 @@ export default async function GrantPage() {
               ))}
             </ol>
           </div>
-        </div>
-      </section>
-
-      {/* ── Educators who have run it ─────────────────────────────────── */}
-      <section className="bg-surface section-padding">
-        <div className="container-max max-w-content">
-          <Eyebrow>From the classroom</Eyebrow>
-          <h2 className="mt-3 text-3xl font-bold text-ink leading-tight">
-            Teachers who have already run it
-          </h2>
-
-          <figure className="mt-8 max-w-2xl">
-            <VideoTestimonial
-              src={VIDEOS['testimonial-jeremiah-dibley'].src}
-              poster={VIDEOS['testimonial-jeremiah-dibley'].poster}
-              captionsSrc={VIDEOS['testimonial-jeremiah-dibley'].captions}
-              title={VIDEOS['testimonial-jeremiah-dibley'].title}
-            />
-            <figcaption className="mt-3 text-sm font-semibold text-ink">
-              {VIDEOS['testimonial-jeremiah-dibley'].title}
-            </figcaption>
-          </figure>
         </div>
       </section>
 

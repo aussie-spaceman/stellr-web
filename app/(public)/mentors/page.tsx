@@ -2,8 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Users, Heart, Globe, Award, Clock, ArrowRight } from 'lucide-react'
 import { ProofStrip } from '@/components/sections/ProofStrip'
-import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
-import { PHOTOS, VIDEOS } from '@/lib/media-manifest'
+import { PHOTOS } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/mentors' },
@@ -114,23 +113,6 @@ export default function MentorsPage() {
         </div>
       </section>
 
-      {/* ── Mentor video testimonial (moved above Ways to get involved) ── */}
-      <section className="section-padding bg-white">
-        <div className="container-max max-w-3xl mx-auto">
-          <figure>
-            <VideoTestimonial
-              src={VIDEOS['testimonial-apoorva-somani'].src}
-              poster={VIDEOS['testimonial-apoorva-somani'].poster}
-              captionsSrc={VIDEOS['testimonial-apoorva-somani'].captions}
-              title="Apoorva Somani — previous student and current mentor, recorded 2024"
-            />
-            <figcaption className="mt-3 text-center text-sm font-semibold text-brand-blue-dark">
-              Apoorva Somani &mdash; previous student and current mentor, recorded 2024
-            </figcaption>
-          </figure>
-        </div>
-      </section>
-
       {/* ── Ways to get involved ──────────────────────────────────────── */}
       <section className="section-padding bg-brand-grey-light">
         <div className="container-max">
@@ -169,12 +151,7 @@ export default function MentorsPage() {
       {/* ── Mentoring in pictures (moved above closing CTA) ───────────── */}
       <section className="section-padding bg-white">
         <div className="container-max">
-          <ProofStrip
-            photos={[PHOTOS['mentors-1'], PHOTOS['mentors-2'], PHOTOS['mentors-3']]}
-            captions={false}
-            columns={3}
-            className="max-w-5xl mx-auto"
-          />
+          <ProofStrip photos={[PHOTOS['mentors-2']]} captions={false} columns={1} />
         </div>
       </section>
 

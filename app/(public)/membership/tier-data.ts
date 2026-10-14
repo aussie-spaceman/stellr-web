@@ -239,7 +239,7 @@ export const VALUE_CARDS: Record<AudienceId, ValueCard[]> = {
   educator: [
     { icon: 'document', title: 'A competition, ready to teach', body: 'Lesson plans, worksheets, judging templates and assessment tools — a full toolkit that drops straight into your classroom.' },
     { icon: 'idea', title: 'AI tools and live support', body: 'Agentic contractors, an agentic project manager, and live kick-off and close-out calls — so you never run a competition alone.' },
-    { icon: 'certificate', title: 'Credentialed impact', body: 'PD certificates worth up to 10 hours, standards alignment (Common Core, NGSS, ISTE, TEKS) and student awards — measurable, recognised outcomes.' },
+    { icon: 'certificate', title: 'Credentialed impact', body: 'PD certificates worth up to 10 hours, standards alignment (Common Core, NGSS, ISTE, TEKS) and student awards — measurable, recognized outcomes.' },
   ],
 }
 

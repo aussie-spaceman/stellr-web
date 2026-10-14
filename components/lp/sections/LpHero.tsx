@@ -14,8 +14,8 @@ import type { LandingPageConfig } from '@/content/lp/types'
  * landing page is not the place to fork it. Its `pill` prop already renders the
  * theme chip + eyebrow row the handoff drew by hand, so that is what it uses.
  *
- * The photo sits in a framed, captioned card on the navy — never full-bleed
- * behind the type. That is what makes candid event photography work here: it
+ * The photo, when a page has one, sits in a framed, captioned card on the navy —
+ * never full-bleed behind the type. That is what makes candid event photography work here: it
  * reads as evidence rather than as stock texture, and needs no gradient scrim.
  */
 export function LpHero({
@@ -26,13 +26,13 @@ export function LpHero({
   eyebrow: string
 }) {
   const { hero, theme, audience, slug } = config
-  const photo = PHOTOS[hero.photoId]
+  const photo = hero.photoId ? PHOTOS[hero.photoId] : undefined
 
   return (
     <Hero
       pill={{ accent: theme === 'enviro' ? 'Environmental' : 'Space', rest: eyebrow }}
       title={hero.headline}
-      media={
+      media={photo && (
         <div className="rounded-panel border border-white/[.12] bg-white/[.05] p-3.5">
           <ResponsivePhoto
             photo={photo}
@@ -41,9 +41,9 @@ export function LpHero({
             rounded={false}
             className="aspect-[4/3] rounded-ds-card"
           />
-          <p className="mt-3 text-ds-meta text-hero-dim">{hero.imageCaption}</p>
+          {hero.imageCaption && <p className="mt-3 text-ds-meta text-hero-dim">{hero.imageCaption}</p>}
         </div>
-      }
+      )}
     >
       <div className="mt-5 grid gap-5">
         <p className="text-[22px] font-semibold leading-[1.25] tracking-heading text-hero-dim">

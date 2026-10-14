@@ -16,6 +16,8 @@ vi.mock('@/lib/hubspot', async () => {
   return { ...actual, captureLead, readHubspotCookie: () => undefined }
 })
 vi.mock('@/lib/rate-limit', () => ({ rateLimitGuard: () => null, HOUR_MS: 3_600_000 }))
+// The emailed link is signed (lib/gated-download-link.ts); give it a test secret.
+vi.stubEnv('ASSET_LINK_SECRET', 'test-asset-link-secret-0123456789abcdef')
 
 const { POST } = await import('./route')
 
@@ -46,6 +48,15 @@ describe('white-paper email escaping (PUB-2)', () => {
     expect(html).not.toContain('<div/style=display:none>')
     expect(html).toContain('&lt;a/href')
     expect(html).toContain('&lt;h2&gt;')
+  })
+
+  it('emails a signed, expiring download link — never the file location', async () => {
+    await post({ name: 'Jordan Blake', email: 'jordan@example.com' })
+    const { html, text } = sendEmail.mock.calls[0][0] as { html: string; text: string }
+    expect(text).toMatch(/\/api\/asset-request\/download\?a=white-paper&e=\d+&s=[A-Za-z0-9_-]{43}/)
+    for (const body of [html, text]) {
+      expect(body).not.toMatch(/blob\.vercel-storage\.com|supabase\.co|\.pdf/)
+    }
   })
 
   it('leaves a clean name intact', async () => {

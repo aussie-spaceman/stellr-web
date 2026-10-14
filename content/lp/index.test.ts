@@ -40,7 +40,7 @@ describe('landing page content', () => {
 
   it('points every photo id at a real manifest entry', () => {
     for (const config of configs) {
-      expect(PHOTOS[config.hero.photoId], config.hero.photoId).toBeDefined()
+      if (config.hero.photoId) expect(PHOTOS[config.hero.photoId], config.hero.photoId).toBeDefined()
       for (const shot of config.gallery?.shots ?? []) {
         expect(PHOTOS[shot.photoId], shot.photoId).toBeDefined()
       }
@@ -52,7 +52,7 @@ describe('landing page content', () => {
     // same photograph twice on the same screen.
     const galleryIds = GALLERY_SHOTS.map((s) => s.photoId)
     for (const config of configs) {
-      expect(galleryIds).not.toContain(config.hero.photoId)
+      if (config.hero.photoId) expect(galleryIds).not.toContain(config.hero.photoId)
     }
   })
 

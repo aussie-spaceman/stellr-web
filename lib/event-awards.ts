@@ -5,7 +5,9 @@
 // assigned by an admin or event manager (event_award_assignments), then
 // issued as credentials.
 // Labels match the certificate artwork word for word — one vocabulary on the
-// print, the credential page and LinkedIn.
+// print, the credential page and LinkedIn — except for an award renamed after
+// its artwork was made (RELABELLED_AWARD_TYPES), which prints on the default
+// design until new artwork is uploaded.
 //
 // Pure: imported by client components and route handlers alike.
 
@@ -46,7 +48,7 @@ export const EVENT_AWARDS: Record<AwardType, AwardDef> = {
   },
   anita_gale: {
     type: 'anita_gale',
-    label: 'Anita Gale Award for Creative Vision',
+    label: 'Award for Creative Vision',
     kind: 'specialist',
     description:
       'Engineering Vision (with a capital V!) requires tenacity, communication, and attention to detail. Awarded for exhibiting all of these traits.',
@@ -54,7 +56,7 @@ export const EVENT_AWARDS: Record<AwardType, AwardDef> = {
   },
   dick_edwards: {
     type: 'dick_edwards',
-    label: 'Dick Edwards Award for Quiet Leadership',
+    label: 'Award for Quiet Leadership',
     kind: 'specialist',
     description:
       'Leadership comes in many guises; this award is for being the person in the room constantly pushing the team to excel without looking for any credit.',
@@ -70,6 +72,35 @@ export const EVENT_AWARDS: Record<AwardType, AwardDef> = {
 }
 
 export const ASSIGNED_AWARD_TYPES: AssignedAwardType[] = ['overall_champion', 'anita_gale', 'dick_edwards']
+
+/**
+ * Awards renamed after credentials carrying them were issued. A credential
+ * stores its award label as text — `award`, and the prefix of `title`
+ * ("<label> — <event>") — so issued rows keep the wording they were issued
+ * with, and every surface that shows a credential passes it through
+ * relabelIssuedAward(). The stored rows are never rewritten. The award type
+ * keys themselves are internal and never shown.
+ */
+export const RELABELLED_AWARD_TYPES: readonly AwardType[] = ['anita_gale', 'dick_edwards']
+
+/** An award whose uploaded certificate artwork predates its current label: its
+ *  PDF uses the default design rather than the artwork, until new artwork is
+ *  uploaded and this list is cleared. */
+export function artworkSupersededFor(t: string | null | undefined): boolean {
+  return isAwardType(t) && RELABELLED_AWARD_TYPES.includes(t)
+}
+
+/**
+ * The credential as it should be shown: for a renamed award, the current label
+ * in `award` and in front of the event in `title`. Anything else unchanged.
+ */
+export function relabelIssuedAward<T extends { award_type?: string | null; award?: string | null; title: string }>(row: T): T {
+  const t = row.award_type
+  if (!isAwardType(t) || !RELABELLED_AWARD_TYPES.includes(t)) return row
+  const label = EVENT_AWARDS[t].label
+  const sep = row.title.indexOf(' — ')
+  return { ...row, award: label, title: sep >= 0 ? `${label}${row.title.slice(sep)}` : label }
+}
 export const SPECIALIST_AWARD_TYPES: AssignedAwardType[] = ['anita_gale', 'dick_edwards']
 
 export function isAwardType(v: unknown): v is AwardType {

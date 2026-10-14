@@ -34,7 +34,7 @@ quietly erase them:**
   and was corrected; don't repeat it.)
 - **Campaigns are entered as a GROUP, never by an individual student**, and the
   group may be registered by a **student manager**, not only a teacher or mentor.
-- **No Congress progression on campaign pages.** The Educator tier's competition
+- **No summer-event progression on campaign pages.** The Educator tier's competition
   engagement is written judging feedback on an optional submission. There is also
   no venue, travel, meal, t-shirt or chaperone story. `campaign-content.test.ts`
   fails if any of those strings reappear.

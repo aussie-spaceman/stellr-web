@@ -84,7 +84,7 @@ second dry run reported every property and the form `unchanged`.
 
 | Property | Contacts | Deals |
 |---|---|---|
-| `event` | Visible: Colorado [Denver], Nevada [Las Vegas], Minnesota [Mankato], Texas [Austin], Nebraska [SAC Museum], South Dakota [Brookings], Uruguay, Campaign [Fall]. Hidden: Virtual, North Carolina, Texas [Houston], ISSDC Finals, Pennsylvania, Arizona, Washington State | Same visible set. 3 stale values dropped (0 records each). `Iowa` and `Canada (Virtual)` hidden |
+| `event` | Visible: Colorado [Denver], Nevada [Las Vegas], Minnesota [Mankato], Texas [Austin], Nebraska [SAC Museum], South Dakota [Brookings], Uruguay, Campaign [Fall]. Hidden: Virtual, North Carolina, Texas [Houston], a legacy external-event label, Pennsylvania, Arizona, Washington State | Same visible set. 3 stale values dropped (0 records each). `Iowa` and `Canada (Virtual)` hidden |
 | `event_year` | 2023–2028 visible; 2029 and 2030 hidden | 2028 added |
 | `event_theme` | Life Sciences and Resources hidden | Life Sciences and Resources hidden |
 | `event_demographic` | Unchanged | Unchanged |
@@ -144,7 +144,7 @@ Contact counts per location are unchanged after the apply.
   for the warning `form-submit-failed`.
 - **The full-repo `eslint .` was not run.** The changed files were linted
   clean, and CI does not run eslint.
-- **The old ISSDC title regex is gone.** An ISSDC-style event needs its
+- **The old special-case title regex is gone.** Such an event needs its
   `hubspotLocation` override set in Sanity.
 
 Open rows: `hubspot-event-options.1`–`.8`.

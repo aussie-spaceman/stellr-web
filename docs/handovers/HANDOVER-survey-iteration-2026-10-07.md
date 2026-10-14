@@ -19,7 +19,7 @@ After reviewing the questions in the new viewer, he asked for wording changes, t
   - Rejected: (A) re-consent through V2.3 envelopes; (C) survey mentors only.
 - **"Open survey now" is admin-only.** I recommended this; David didn't object.
 - **The v1.1 changes:**
-  - The Finals option reads "Attending the Finals event next summer" for students, parents and teachers.
+  - The summer progression option was relabelled for students, parents and teachers (and again in v1.2, 14 Oct 2026).
   - Adult registration ease gets "Not applicable".
   - Mentors and adults are asked explicitly for a quote.
 - **"v1.1" is a label.** Versions are integers, so v1.1 is stored as version 2 with `version_label: "1.1"`.

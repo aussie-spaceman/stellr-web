@@ -6,7 +6,7 @@ school 2026" returned nine list articles; **Stellr appeared in none.** This is
 the work that fixes that. None of it is code; everything that sends a message
 or publishes is David's (or staff's) to do — the drafts below are ready to use.
 
-Rule carried from the content work: one family of space-settlement design
+Rule carried from the content work: one family of external design
 competitions is never named in Stellr's public content or pitches.
 
 ## 1. Get onto the lists assistants cite

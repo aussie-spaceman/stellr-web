@@ -136,7 +136,7 @@ assigned volunteer mentors) go on one line in the clear space above the artwork'
 PR #201 → `dev` as `9f780d3`; promoted in #203 (`839b53c`) by a separate session. Migration `20260925090000_event_awards.sql`.
 Handover: `docs/handovers/HANDOVER-event-award-certificates-2026-09-25.md`. Doc snapshot: `17G-d5fJyavEGDnKzDmdGwWyZ4FbabRunJ_3Bxh3vhrs`.
 Four certificates per event, fixed and global (`lib/event-awards.ts`): participation, Overall Champion (whole
-company), Anita Gale and Dick Edwards (one winner per company each; one specialist award per student). Each has its
+company), the creative-vision and quiet-leadership awards (one winner per company each; one specialist award per student). Each has its
 own artwork; only the name is drawn (Aileron, position set per template with a live preview). Awards are a draft
 until **Issue awards**, which issues/reinstates/revokes credentials. Students download any certificate from
 `/community/credentials`, private or not.

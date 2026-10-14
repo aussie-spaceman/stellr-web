@@ -68,7 +68,7 @@ bytes are in git history at `9fcabb8` if a re-cut is ever needed.
 | Clip | Before | After |
 |---|---|---|
 | tom-wilson | 72.3 MB | 18.4 MB |
-| apoorva-somani | 57.0 | 19.5 |
+| (a mentor clip since removed) | 57.0 | 19.5 |
 | sepp | 53.9 | 13.3 |
 | willcox-teachers | 53.6 | 17.4 |
 | meleah-caron | 49.6 | 32.8 |

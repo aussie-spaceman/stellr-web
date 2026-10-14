@@ -11,7 +11,7 @@ import { Play } from 'lucide-react'
  *   • WebVTT captions track present (required for accessibility / sound-off)
  *
  * Files live in the `stellr-media` Blob store under videos/ (720p H.264 MP4 +
- * .poster.jpg + .en.vtt), resolved via lib/media-manifest `mediaUrl()`. The
+ * .poster.jpg + .en.vtt), resolved via `mediaUrl()` (lib/media-helpers). The
  * host is cross-origin, so the <video> is `crossOrigin="anonymous"` — without
  * it browsers refuse to load the captions <track>.
  * `captionsSrc` is strongly recommended; if absent the component still renders
@@ -68,6 +68,7 @@ export function VideoTestimonial({
           preload="none"
           poster={poster}
           title={title}
+          aria-label={title}
           className="absolute inset-0 h-full w-full"
         >
           <source src={src} type="video/mp4" />

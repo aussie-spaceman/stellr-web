@@ -1,4 +1,4 @@
-import type { Audience, QuoteAsset } from '@/lib/media-manifest'
+import type { Audience, QuoteAsset } from '@/lib/media-helpers'
 
 /**
  * T6 — Pull-quote wall. Attributed text quotes as cards, colour-coded by voice
@@ -33,8 +33,11 @@ function QuoteCard({ quote, labelOverride }: { quote: QuoteAsset; labelOverride?
         “{quote.text}”
       </blockquote>
       <figcaption className="mt-4 border-t border-line-light pt-3">
-        <p className="font-display text-sm font-bold text-ink">{quote.name}</p>
-        <p className="text-[13px] text-content-faint">{quote.meta}</p>
+        {/* One attribution format site-wide: "Name · Meta". */}
+        <p className="font-display text-sm font-bold text-ink">
+          {quote.name}
+          {quote.meta && <span className="font-sans text-[13px] font-normal text-content-faint"> · {quote.meta}</span>}
+        </p>
         {quote.clipHref && (
           <a
             href={quote.clipHref}

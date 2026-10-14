@@ -29,7 +29,7 @@ Environmental Design Challenge. Both are delivered either as one-day live
 events (in person or virtual; grades 7–12; no preparation required) or as
 seasonal Campaigns that
 teachers run in class over 4 or 10 weeks (grades 9–12, free), with a path to
-the national championships. Students work as an engineering company answering
+our International Summer Camp. Students work as an engineering company answering
 a client's Request for Proposal, judged by industry professionals. No lab, kit
 or engineering background is needed.
 
@@ -37,7 +37,7 @@ or engineering background is needed.
 - [Design Competitions](${BASE_URL}/competitions): The Space Design Challenge and Environmental Design Challenge — formats, themes, what a competition day involves, and how to enter.
 - [Upcoming events and campaigns](${BASE_URL}/events): Live competition dates, locations and registration status.
 - [Curriculum](${BASE_URL}/curriculum): Free core engineering challenge material — the Request for Proposal, Mission Handbook and teacher and student guides — to run in class at any time; paid educator tiers add lesson plans, PD hours and standards alignment.
-- [Academy](${BASE_URL}/academy): Mentoring, coaching, competition training and the STEM Power Skills programme.
+- [Academy](${BASE_URL}/academy): Mentoring, coaching, competition training and the STEM Power Skills program.
 - [Membership](${BASE_URL}/membership): Tier structure for students, alumni and educators, including what stays free.
 
 ## Guides for teachers
@@ -58,7 +58,7 @@ or engineering background is needed.
 - [Mentors and volunteers](${BASE_URL}/mentors): How STEM professionals contribute.
 - [Partner network](${BASE_URL}/network): Universities, employers and industry partners.
 
-## Organisation
+## Organization
 - [About Stellr](${BASE_URL}/about): Mission, history and team.
 - [News](${BASE_URL}/news): Announcements, competition results and community stories.
 - [Scholarships](${BASE_URL}/scholarship): Fee assistance so cost is never a barrier to competing.

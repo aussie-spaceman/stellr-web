@@ -32,9 +32,6 @@ export const firstRoboticsTeachers: LandingPageConfig = {
       'Our Space Design Competitions are the perfect complement to FIRST Robotics. ' +
       'Participants join a team of peers and design a futuristic Martian habitat, then ' +
       'defend the design against industry peers.',
-    photoId: 'lp-hero-robotics',
-    imageCaption:
-      'A mission room mid-competition. Students work the trade-off wall while mentors circulate.',
     primaryCta: 'Reserve a spot',
     secondaryCta: 'Learn More',
   },
@@ -75,12 +72,12 @@ export const firstRoboticsTeachers: LandingPageConfig = {
       quote:
         'There’s no other forum available for school-aged students to learn about ' +
         'real-world work. These events should be mandatory for every student, globally.',
-      who: 'Senior aerospace executive and competition judge',
+      who: 'Senior Aerospace Executive and Competition Judge',
     },
     {
       quote:
-        'I didn’t know what I wanted to study when I left high-school. Now I am laser focused.',
-      who: 'Aiden, 2025 competition participant',
+        'I didn’t know what I wanted to study when I left high school. Now I am laser focused.',
+      who: 'Aiden · 2025 Competition Participant',
     },
   ],
   form: {
@@ -106,7 +103,7 @@ export const firstRoboticsTeachers: LandingPageConfig = {
         q: 'Does my school need to enter a full team?',
         a:
           'No. Students are placed into ‘companies’ on the day alongside peers from other ' +
-          'programmes, so you can bring one student or a dozen.',
+          'programs, so you can bring one student or a dozen.',
       },
       {
         q: 'How does this fit around our robotics season?',
@@ -142,7 +139,7 @@ export const firstRoboticsTeachers: LandingPageConfig = {
         q: 'How many students should I bring?',
         a:
           'Anywhere from one to a dozen works. Students are mixed into companies with peers ' +
-          'from other programmes, so group size does not affect their experience.',
+          'from other programs, so group size does not affect their experience.',
       },
       {
         q: 'Do I need to know the subject matter to bring a group?',

@@ -43,9 +43,9 @@ export default async function MembershipPage() {
       <section className="section-padding bg-white">
         <div className="container-max">
           <ProofStrip
-            photos={[PHOTOS['membership-mentor-review'], PHOTOS['membership-room-full']]}
+            photos={[PHOTOS['membership-mentor-review']]}
             heading="Inside a Stellr membership"
-            columns={2}
+            columns={1}
           />
           <div className="mx-auto mt-12 max-w-3xl">
             <MissionFundingNote />

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { MapPin, Calendar, Users, Ticket, Check } from 'lucide-react'
 import { getEventBySlug, urlFor, wmSrc, type StellarEvent } from '@/lib/sanity'
-import { formatDateRange, formatDate, registrationStatus } from '@/lib/utils'
+import { formatDateRange, formatDate, eventLastDay, registrationStatus } from '@/lib/utils'
 import { PortableText } from 'next-sanity'
 import type { PortableTextBlock } from '@portabletext/types'
 import { CampaignDetail } from '@/components/campaigns/CampaignDetail'
@@ -81,7 +81,7 @@ const statusConfig = {
 // event can't read "Registration Open" to a visitor while telling Google it is
 // off — a page and markup disagreeing is what gets structured data ignored.
 const lifecycleConfig = {
-  cancelled: { label: 'Event Cancelled', className: 'bg-red-100 text-red-800 border-red-300' },
+  cancelled: { label: 'Event Canceled', className: 'bg-red-100 text-red-800 border-red-300' },
   postponed: { label: 'Event Postponed', className: 'bg-yellow-50 text-yellow-800 border-yellow-300' },
   rescheduled: { label: 'New Date', className: 'bg-blue-50 text-blue-800 border-blue-200' },
   moved_online: { label: 'Now Virtual', className: 'bg-blue-50 text-blue-800 border-blue-200' },
@@ -99,7 +99,7 @@ const INCLUDED: string[] = [
   `${SEASON_YEAR} limited edition Stellr Community t-shirt`,
   'All event materials and facility access',
   'Meals and snacks',
-  `Opportunity to progress to the ${SEASON_YEAR} International Student Engineering Congress, held at NASA Johnson Space Center (Houston, TX) in summer ${SEASON_YEAR}`,
+  `Award winners are invited to our ${SEASON_YEAR} International Summer Camp (mid-July)`,
 ]
 
 // The event-day arc, same at every venue.
@@ -108,7 +108,7 @@ const HOW_IT_WORKS: string[] = [
   'Each company is briefed on the event engineering challenge and receives a Request For Proposal (RFP) setting out the requirements they need to respond to.',
   'Participants are then guided through their designs, working under time, communication, and information pressures.',
   'Each engineering company presents its design before a panel of judges.',
-  `Awards are presented — to the winning company, and to exceptional individuals, who receive an invitation to our culminating event in the summer of ${SEASON_YEAR}.`,
+  `Awards are presented — to the winning company, and to exceptional individuals, who receive an invitation to our International Summer Camp in mid-July ${SEASON_YEAR}.`,
 ]
 
 /**
@@ -272,7 +272,7 @@ export default async function EventDetailPage({ params }: PageProps) {
   const status =
     lifecycle === 'cancelled' || lifecycle === 'postponed'
       ? 'closed'
-      : registrationStatus(event.registrationOpenDate, event.registrationCloseDate)
+      : registrationStatus(event.registrationOpenDate, event.registrationCloseDate, eventLastDay(event))
   const { label: statusLabel, className: statusClass } = statusConfig[status]
 
   // Per-participant fee, resolved live from Stripe. `priceLabel` is null when

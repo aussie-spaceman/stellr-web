@@ -5,7 +5,7 @@ import { getFeaturedEvents, type StellarEvent } from '@/lib/sanity'
 import { EventCard } from '@/components/ui/EventCard'
 import { QuoteRotator } from '@/components/sections/QuoteRotator'
 import { ProofStrip } from '@/components/sections/ProofStrip'
-import { PHOTOS, photoSrcSet } from '@/lib/media-manifest'
+import { PHOTOS } from '@/lib/media-manifest'
 import { getTierPriceMap, formatTierPrice } from '@/lib/tier-pricing'
 
 export const metadata: Metadata = {
@@ -81,17 +81,17 @@ const membershipTiers = [
 const communityQuotes = [
   {
     quote:
-      "I didn't know what I wanted to study when I left high-school. Now I am laser focused.",
-    author: 'Aiden, 2025 Competition Participant',
+      'I didn’t know what I wanted to study when I left high school. Now I am laser focused.',
+    author: 'Aiden · 2025 Competition Participant',
   },
   {
     quote:
-      "I've never seen my daughter so engaged and excited to be learning. What an opportunity for her!",
-    author: 'Aaron, Parent of 2019 Competition Participant',
+      'I’ve never seen my daughter so engaged and excited to be learning. What an opportunity for her!',
+    author: 'Aaron · Parent of 2019 Competition Participant',
   },
   {
     quote:
-      "There's no other forum available for school-aged students to learn about real-world work. These events should be mandatory for every student, globally.",
+      'There’s no other forum available for school-aged students to learn about real-world work. These events should be mandatory for every student, globally.',
     author: 'Senior Aerospace Executive and Competition Judge',
   },
 ]
@@ -112,30 +112,7 @@ export default async function HomePage() {
     <>
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <section className="relative bg-brand-blue-dark text-white overflow-hidden">
-        {/* The hero photo used to be a CSS background pointing at
-            /images/hero-stem.jpg while the file on disk was hero-stem.JPG —
-            case-sensitive on Vercel, so it 404'd and the hero rendered empty.
-            It is now a manifest photo going through the same responsive
-            AVIF/JPEG pipeline as every other image on the site. */}
-        <picture aria-hidden="true">
-          <source
-            type="image/avif"
-            srcSet={photoSrcSet(PHOTOS['home-hero-floor'], 'avif')}
-            sizes="100vw"
-          />
-          <source
-            type="image/jpeg"
-            srcSet={photoSrcSet(PHOTOS['home-hero-floor'], 'jpg')}
-            sizes="100vw"
-          />
-          {/* eslint-disable-next-line @next/next/no-img-element -- responsive <picture> with explicit srcset/sizes is intentional here */}
-          <img
-            src={`${PHOTOS['home-hero-floor'].src}-1920.jpg`}
-            alt=""
-            fetchPriority="high"
-            className="absolute inset-0 h-full w-full object-cover opacity-20"
-          />
-        </picture>
+        {/* Dark hero, no photo, until a cleared replacement is chosen. */}
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-36">
           <div className="max-w-5xl">
             <h1 className="text-4xl sm:text-5xl xl:text-6xl font-bold leading-tight">
@@ -244,14 +221,7 @@ export default async function HomePage() {
           <h2 className="text-3xl font-bold text-brand-blue-dark mb-8">
             Real students, real competitions
           </h2>
-          <ProofStrip
-            photos={[
-              PHOTOS['home-biosphere2'],
-              PHOTOS['home-florida-prep'],
-              PHOTOS['home-teamwork'],
-              PHOTOS['home-group-dynamics'],
-            ]}
-          />
+          <ProofStrip photos={[PHOTOS['home-strip-3'], PHOTOS['about-team-1']]} columns={2} />
         </div>
       </section>
 

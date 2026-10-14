@@ -69,7 +69,7 @@ const STATUS_STYLES: Record<string, string> = {
 function paymentLabel(p: Participation, reg: ParticipationReg): { label: string; style: string } {
   if (reg.type === 'individual') {
     if (reg.status === 'confirmed') return { label: 'Paid', style: 'bg-green-100 text-green-700' }
-    if (reg.status === 'cancelled') return { label: 'Cancelled', style: 'bg-brand-hairline text-brand-muted-soft' }
+    if (reg.status === 'cancelled') return { label: 'Canceled', style: 'bg-brand-hairline text-brand-muted-soft' }
     return { label: 'Payment Pending', style: 'bg-brand-orange/10 text-brand-gold-ink' }
   }
   if (reg.member_pays_individually) {
@@ -87,7 +87,7 @@ function paymentLabel(p: Participation, reg: ParticipationReg): { label: string;
     // single source of truth, identical to the roster and Teams view.
     if (registrationPaid({ invoiceRequested: reg.invoice_requested, invoicePaidAt: reg.invoice_paid_at, status: reg.status }))
       return { label: 'Invoice paid', style: 'bg-green-100 text-green-700' }
-    return { label: 'Invoice sent to organiser', style: 'bg-brand-blue/10 text-brand-blue' }
+    return { label: 'Invoice sent to organizer', style: 'bg-brand-blue/10 text-brand-blue' }
   }
   return { label: 'Paid by group', style: 'bg-green-100 text-green-700' }
 }
@@ -190,7 +190,7 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
                   <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Date Joined</th>
                   <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Event</th>
                   <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">School</th>
-                  <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Organiser</th>
+                  <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Organizer</th>
                   <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Payment</th>
                   <th className="px-6 py-3 font-medium text-brand-muted-soft text-xs uppercase tracking-wide">Receipt</th>
                 </tr>
@@ -233,7 +233,7 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
                               className="text-xs font-medium text-brand-muted-soft cursor-not-allowed"
                               title={p.is_owner
                                 ? 'Settle this using the invoice below.'
-                                : 'Your group organiser will pay this.'}
+                                : 'Your group organizer will pay this.'}
                             >
                               Pay now →
                             </span>
@@ -272,7 +272,7 @@ export function BillingHistory({ impersonateMemberId, readOnly = false }: Billin
         <div className="bg-white rounded-xl border border-brand-border">
           <div className="p-6 border-b border-brand-hairline">
             <h2 className="text-base font-semibold text-brand-blue-dark">Invoices</h2>
-            <p className="text-sm text-brand-muted-soft mt-0.5">Invoices raised for group registrations you organised.</p>
+            <p className="text-sm text-brand-muted-soft mt-0.5">Invoices raised for group registrations you organized.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

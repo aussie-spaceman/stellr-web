@@ -61,7 +61,7 @@ export default function RunADesignChallengePage() {
             manage owners and deadlines — not the engineering answers.
           </p>
           <p className="text-content-secondary mt-6 leading-relaxed">
-            The engineering is the vehicle. What students actually practise is deciding with incomplete information,
+            The engineering is the vehicle. What students actually practice is deciding with incomplete information,
             handing work between teams, and defending a choice with evidence. You need no lab, no kit and no
             engineering background.
           </p>

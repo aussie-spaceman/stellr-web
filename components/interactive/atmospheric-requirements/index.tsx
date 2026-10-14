@@ -36,7 +36,7 @@ const COMPONENTS = [
     ],
   },
   {
-    name: 'Water vapour',
+    name: 'Water vapor',
     Icon: Droplets,
     accent: 'text-avatar-teal',
     chip: 'bg-white text-avatar-teal',

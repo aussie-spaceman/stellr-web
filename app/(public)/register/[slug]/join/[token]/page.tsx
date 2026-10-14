@@ -40,7 +40,7 @@ export default async function GroupJoinPage({ params }: PageProps) {
         <div className="max-w-md text-center">
           <div className="text-5xl mb-4">🔗</div>
           <h1 className="text-xl font-bold text-ink mb-2">Invalid Link</h1>
-          <p className="text-content-body mb-6">This registration link is not valid. Please check with your group organiser.</p>
+          <p className="text-content-body mb-6">This registration link is not valid. Please check with your group organizer.</p>
           <Link href="/events" className="btn-primary">Browse Events</Link>
         </div>
       </div>
@@ -53,7 +53,7 @@ export default async function GroupJoinPage({ params }: PageProps) {
         <div className="max-w-md text-center">
           <div className="text-5xl mb-4">⏰</div>
           <h1 className="text-xl font-bold text-ink mb-2">Link Expired</h1>
-          <p className="text-content-body mb-6">This registration link expired on {formatDateShort(tokenRow.expires_at)}. Please contact your group organiser for a new link.</p>
+          <p className="text-content-body mb-6">This registration link expired on {formatDateShort(tokenRow.expires_at)}. Please contact your group organizer for a new link.</p>
           <Link href="/events" className="btn-primary">Browse Events</Link>
         </div>
       </div>
@@ -73,7 +73,7 @@ export default async function GroupJoinPage({ params }: PageProps) {
         <div className="max-w-md text-center">
           <div className="text-5xl mb-4">⚠️</div>
           <h1 className="text-xl font-bold text-ink mb-2">Something went wrong</h1>
-          <p className="text-content-body mb-6">We couldn&apos;t load this group registration. Please try again shortly, or contact your group organiser.</p>
+          <p className="text-content-body mb-6">We couldn&apos;t load this group registration. Please try again shortly, or contact your group organizer.</p>
           <Link href="/events" className="btn-primary">Browse Events</Link>
         </div>
       </div>
@@ -170,7 +170,7 @@ export default async function GroupJoinPage({ params }: PageProps) {
             <h2 className="text-xl font-bold text-ink">This group is full</h2>
             <p className="text-content-body">
               Every place {organiserName} registered for <strong>{tokenRow.event_title}</strong> has been filled.
-              Please contact your group organiser if you think this is a mistake.
+              Please contact your group organizer if you think this is a mistake.
             </p>
             <Link href={`/events/${slug}`} className="btn-primary inline-block mt-4">View Event →</Link>
           </div>

@@ -19,7 +19,7 @@ function comfortBand(ppo2: number): { label: string; tone: string } {
 
 function fireBand(pct: number): { label: string; tone: string; fill: string } {
   // Flammability tracks oxygen *fraction* more than partial pressure.
-  if (pct <= 23) return { label: 'Near Earth-like fire behaviour', tone: 'text-enviro-green', fill: 'bg-enviro-green' }
+  if (pct <= 23) return { label: 'Near Earth-like fire behavior', tone: 'text-enviro-green', fill: 'bg-enviro-green' }
   if (pct <= 35) return { label: 'Elevated fire risk', tone: 'text-pathway-amber-deep', fill: 'bg-pathway-amber' }
   return { label: 'High fire risk — materials burn readily', tone: 'text-danger', fill: 'bg-danger' }
 }

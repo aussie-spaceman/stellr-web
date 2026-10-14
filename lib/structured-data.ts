@@ -20,7 +20,7 @@ import { urlFor, type StellarEvent } from '@/lib/sanity'
 import type { EventPrice } from '@/lib/event-pricing'
 import { getCampaignDates, type CampaignSeason } from '@/lib/campaigns'
 import { normaliseState } from '@/lib/locations'
-import { registrationStatus, todayInAppZone } from '@/lib/utils'
+import { eventLastDay, registrationStatus, todayInAppZone } from '@/lib/utils'
 
 const WWW = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
@@ -75,7 +75,6 @@ export function buildOrganizationJsonLd() {
       'STEM education',
       'STEM design competitions',
       'aerospace engineering education',
-      'space settlement design',
       'environmental and sustainability design challenges',
       'project-based learning',
       'career and technical education',
@@ -237,7 +236,7 @@ const MIXED_MODE = 'https://schema.org/MixedEventAttendanceMode'
  */
 function availabilityFor(event: SchemaEvent): string {
   if (event.status === 'cancelled' || event.status === 'postponed') return SOLD_OUT
-  const reg = registrationStatus(event.registrationOpenDate, event.registrationCloseDate)
+  const reg = registrationStatus(event.registrationOpenDate, event.registrationCloseDate, eventLastDay(event))
   if (reg === 'closed') return SOLD_OUT
   if (reg === 'coming-soon') return PRE_ORDER
   return IN_STOCK

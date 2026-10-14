@@ -18,7 +18,7 @@ const BODY = `# Stellr Education
 
 > Stellr Education is a US 501(c)(3) nonprofit, founded in May 2021, that runs
 > industry-simulation STEM design competitions connecting middle and high school
-> students (grades 7–12) with practising aerospace, engineering and
+> students (grades 7–12) with practicing aerospace, engineering and
 > environmental professionals. Classroom Campaigns and the core curriculum are
 > free; live competition events carry a per-participant fee, with scholarships
 > so cost is never a barrier. Membership has a permanently free tier for school

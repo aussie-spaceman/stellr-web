@@ -1,4 +1,5 @@
 import { Mic } from 'lucide-react'
+import { Eyebrow } from '@stellr/web-ui'
 import type { AudioAsset } from '@/lib/media-helpers'
 
 /**
@@ -22,8 +23,8 @@ export function AudioTestimonial({ audio, className = '' }: { audio: AudioAsset;
         Your browser doesn&rsquo;t support embedded audio.
       </audio>
       <div className="mt-5 border-t border-line-light pt-4">
-        <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-content-faint">Transcript</p>
-        <div className="mt-2 space-y-2 text-[14px] leading-relaxed text-content-secondary">
+        <Eyebrow className="text-content-faint">Transcript</Eyebrow>
+        <div className="mt-2 space-y-2 text-ds-body text-content-secondary">
           {lines.map((line, i) => {
             const at = line.indexOf(': ')
             return at > 0 ? (

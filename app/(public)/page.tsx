@@ -112,7 +112,7 @@ export default async function HomePage() {
     <>
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <section className="relative bg-brand-blue-dark text-white overflow-hidden">
-        {/* Dark hero, no photo, until a cleared replacement is chosen. */}
+        {/* Dark hero, no photo, until a replacement photo is chosen. */}
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-36">
           <div className="max-w-5xl">
             <h1 className="text-4xl sm:text-5xl xl:text-6xl font-bold leading-tight">

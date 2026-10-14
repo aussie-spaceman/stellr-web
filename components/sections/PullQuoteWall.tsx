@@ -36,7 +36,7 @@ function QuoteCard({ quote, labelOverride }: { quote: QuoteAsset; labelOverride?
         {/* One attribution format site-wide: "Name · Meta". */}
         <p className="font-display text-sm font-bold text-ink">
           {quote.name}
-          {quote.meta && <span className="font-sans text-[13px] font-normal text-content-faint"> · {quote.meta}</span>}
+          {quote.meta && <span className="font-sans text-ds-meta font-normal text-content-faint"> · {quote.meta}</span>}
         </p>
         {quote.clipHref && (
           <a

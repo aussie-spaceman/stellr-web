@@ -91,7 +91,7 @@ export default function StudentsPage() {
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8">
-        {/* Dark hero, no photo, until a cleared replacement is chosen. */}
+        {/* Dark hero, no photo, until a replacement photo is chosen. */}
         <div className="max-w-7xl mx-auto">
           <div>
           <p className="text-brand-orange font-semibold uppercase tracking-widest text-sm mb-4">

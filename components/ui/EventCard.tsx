@@ -2,7 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowRight, Rocket } from 'lucide-react'
 import { urlFor, wmSrc, type StellarEvent } from '@/lib/sanity'
-import { formatDate, formatDateRange, registrationStatus } from '@/lib/utils'
+import { formatDate, formatDateRange, eventLastDay, registrationStatus } from '@/lib/utils'
 import { CardPills } from '@/components/ui/CardPills'
 import { gradeBand } from '@/lib/grade-band'
 
@@ -17,7 +17,7 @@ const statusConfig = {
 }
 
 export function EventCard({ event }: EventCardProps) {
-  const status = registrationStatus(event.registrationOpenDate, event.registrationCloseDate)
+  const status = registrationStatus(event.registrationOpenDate, event.registrationCloseDate, eventLastDay(event))
   const { label, className } = statusConfig[status]
 
   return (

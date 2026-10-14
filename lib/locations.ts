@@ -10,9 +10,10 @@
 //
 // The rule (docs/PLAN-landing-pages-2026-09-02.md §4):
 //
-//   live     a `live_event` with setting `in_person`, a `date`, a US state, and
-//            `showOnLocationMap` not explicitly false
-//   planned  a `plannedLocation` document
+//   live     a `live_event` with setting `in_person`, a `date`, a US state,
+//            `showOnLocationMap` not explicitly false, and not yet run (its last
+//            day is today or later — a past event is never "running now")
+//   planned  a `plannedLocation` document not marked `archived`
 //
 // An undated live event is a draft, not a venue — Providence RI has sat undated
 // with a $0.51 test price since the August pricing work, and it must not appear
@@ -21,6 +22,7 @@
 
 import { client } from '@/lib/sanity'
 import { normaliseState } from '@/lib/us-states'
+import { eventLastDay, todayInAppZone } from '@/lib/utils'
 import type { LpTheme } from '@/content/lp/types'
 
 // deep review QUAL-12: normaliseState (and its US-state maps) moved to the
@@ -64,6 +66,8 @@ export function themeFor(type?: string): LpTheme {
 interface EventRow {
   slug?: { current?: string }
   type?: string
+  date?: string
+  endDate?: string
   venue?: string
   city?: string
   state?: string
@@ -89,10 +93,11 @@ const LIVE_QUERY = `*[_type == "event"
   && defined(city) && defined(state)
   && showOnLocationMap != false
 ] | order(date asc) {
-  slug, type, venue, city, state, latitude, longitude
+  slug, type, venue, city, state, latitude, longitude, date, endDate
 }`
 
-const PLANNED_QUERY = `*[_type == "plannedLocation" && defined(city) && defined(state)]
+// `archived` retires a planned location without deleting its document.
+const PLANNED_QUERY = `*[_type == "plannedLocation" && defined(city) && defined(state) && archived != true]
   | order(state asc, city asc) {
   _id, slug, theme, venue, city, state, latitude, longitude
 }`
@@ -147,7 +152,10 @@ export async function getMapLocations(): Promise<MapLocation[]> {
     })
   }
 
+  const today = todayInAppZone()
   for (const e of events ?? []) {
+    const lastDay = eventLastDay(e)
+    if (lastDay && lastDay < today) continue
     push(
       e.slug?.current ?? `${e.city}-${e.state}`,
       e.city, e.state, themeFor(e.type), 'live', e.venue, e.latitude, e.longitude,

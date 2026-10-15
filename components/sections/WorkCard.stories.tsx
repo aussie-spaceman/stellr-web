@@ -2,8 +2,9 @@ import type { Meta, StoryObj } from '@storybook/nextjs'
 import { WorkCard } from './WorkCard'
 import { mediaUrl, mediaDownloadUrl, type CompetitionAsset } from '@/lib/media-helpers'
 
-// T4 — work card: preview always open; a gated file opens the email-only gate
-// (the full file only ever goes out by email), an open file downloads directly.
+// T4 — work card: an open file shows a preview and downloads directly; a gated
+// file shows its cover and the email-only gate (no preview; the file only ever
+// goes out by email).
 // Fixtures are inline: lib/media-manifest is server-only.
 const open: CompetitionAsset = {
   id: 'story-open',
@@ -18,9 +19,8 @@ const open: CompetitionAsset = {
 const gated: CompetitionAsset = {
   id: 'story-gated',
   title: '2026 Space Design Challenge — Mission Handbook',
-  pages: null,
-  thumbnail: mediaUrl('/files/2026-10/mission-handbook-2026-excerpt.cover.jpg'),
-  previewHref: mediaUrl('/files/2026-10/mission-handbook-2026-excerpt.pdf'),
+  pages: 5,
+  thumbnail: mediaUrl('/files/2026-10/mission-handbook-2026-excerpt-wm.cover.jpg'),
   gated: true,
   assetKey: 'mission-handbook-2026',
   credit: 'Stellr',

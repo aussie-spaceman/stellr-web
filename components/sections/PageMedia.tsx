@@ -36,7 +36,7 @@ export function PageMedia({
   /** 'center' centres the heading block on screen (e.g. photos-only sections). */
   align?: 'left' | 'center'
   /** Forwarded to ProofStrip — 1 centres a single photo, 3 a 3-photo strip. */
-  photoColumns?: 1 | 3 | 5
+  photoColumns?: 1 | 3 | 4 | 5
   className?: string
 }) {
   const hasAny = photos.length || videos.length || quotes.length || competition.length

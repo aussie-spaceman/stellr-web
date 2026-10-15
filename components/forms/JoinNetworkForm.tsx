@@ -231,7 +231,7 @@ export function JoinNetworkForm() {
             className="mt-0.5 h-4 w-4 rounded border-line text-primary"
           />
           <span className="text-[13.5px] text-content-secondary leading-relaxed">
-            I agree to Stellr Education contacting me about this enquiry, as described in our{' '}
+            I agree to Stellr Education contacting me about this inquiry, as described in our{' '}
             <a href="/privacy" className="font-semibold text-primary underline">
               Privacy Policy
             </a>

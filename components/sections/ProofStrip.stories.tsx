@@ -30,6 +30,7 @@ export default meta
 type Story = StoryObj<typeof ProofStrip>
 
 export const FiveUp: Story = {}
+export const FourUp: Story = { args: { columns: 4, photos: events.slice(1, 5) } }
 export const ThreeUp: Story = { args: { columns: 3, photos: events.slice(0, 3) } }
 export const Single: Story = { args: { columns: 1, photos: events.slice(3, 4) } }
 export const Mobile: Story = { parameters: { viewport: { value: 'mobile' } } }

@@ -47,7 +47,7 @@ export default function RunADesignChallengePage() {
         breadcrumb="Guides · For teachers"
         title={TITLE}
         lead="Your class becomes an engineering company bidding for a client’s contract. You run the process; the students do the engineering."
-        pills={['No lab or kit', '4 or 10 weeks', 'Grades 9–12']}
+        pills={['No lab or kit', '4 or 10 weeks', 'Grades 7–12']}
       />
 
       {/* Answer first — the paragraph an assistant should be able to quote. */}

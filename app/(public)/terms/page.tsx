@@ -679,7 +679,7 @@ export default function TermsPage() {
         </h2>
         <p>
           We may update these Terms from time to time. When we do, we will post the revised version
-          on this page with a new &ldquo;Last Updated&rdquo; date and a notice at the top summarising
+          on this page with a new &ldquo;Last Updated&rdquo; date and a notice at the top summarizing
           what changed. As with our Privacy Policy, we announce changes on our website rather than by
           email. Changes take effect when posted unless we say otherwise. If you continue to use the Services after changes take
           effect, you accept the revised Terms. If you do not agree, please stop using the Services.

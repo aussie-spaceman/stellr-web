@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// The emailed link for a gated download: a valid, unexpired signature streams
-// the file from private storage; anything else gets nothing.
+// The emailed link for a gated download: a valid signature streams the file
+// from private storage; anything else gets nothing.
 
 const download = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/supabase', () => ({ supabaseServer: () => ({ storage: { from: () => ({ download }) } }) }))
@@ -23,20 +23,12 @@ afterEach(() => {
 
 describe('GET /api/asset-request/download', () => {
   it('streams the file as an attachment for a valid link', async () => {
-    const res = await get(gatedDownloadUrl('https://www.stellreducation.org', 'student-proposal-2026')!)
+    const res = await get(gatedDownloadUrl('https://www.stellreducation.org', 'student-work-examples')!)
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('application/pdf')
     expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename=".+\.pdf"$/)
     expect(res.headers.get('cache-control')).toBe('private, no-store')
-    expect(download).toHaveBeenCalledWith('gated-downloads/2026-10/student-proposal-2026-full.pdf')
-  })
-
-  it('refuses an expired link without touching storage', async () => {
-    const url = gatedDownloadUrl('https://www.stellreducation.org', 'white-paper', new Date('2026-01-01T00:00:00Z'))!
-    const res = await get(url)
-    expect(res.status).toBe(410)
-    expect(await res.text()).toMatch(/expired.*\/impact/)
-    expect(download).not.toHaveBeenCalled()
+    expect(download).toHaveBeenCalledWith('gated-downloads/2026-10/student-work-examples-v2-wm.pdf')
   })
 
   it('refuses a tampered or unsigned link', async () => {

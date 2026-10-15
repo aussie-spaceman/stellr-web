@@ -22,7 +22,7 @@ import { JsonLd } from '@/components/seo/JsonLd'
 import { buildAcademyCourseJsonLd, buildBreadcrumbJsonLd } from '@/lib/structured-data'
 
 const DESCRIPTION =
-  'The Stellr Academy is where high-school and college students build career-ready ability — through Competition training, hands-on career preparation, and the STEM Power Skills schools rarely teach.'
+  'The Stellr Academy is where school and college students build career-ready ability — through Competition training, hands-on career preparation, and the STEM Power Skills schools rarely teach.'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/academy' },
@@ -175,7 +175,7 @@ export default function AcademyPage() {
       <Hero
         breadcrumb="The Stellr Academy"
         title="The skills that get you hired aren't on your transcript."
-        lead="The Academy is where high-school and college students build career-ready ability — through training that powers our Competitions, hands-on career preparation, and the STEM Power Skills schools rarely teach."
+        lead="The Academy is where school and college students build career-ready ability — through training that powers our Competitions, hands-on career preparation, and the STEM Power Skills schools rarely teach."
       >
         <div className="flex flex-wrap gap-3.5 mt-8">
           <Button href={MENTORING_URL} variant="primary">

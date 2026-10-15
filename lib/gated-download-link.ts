@@ -1,17 +1,16 @@
-// Expiring signed links for gated downloads (lib/gated-assets.ts).
+// Signed links for gated downloads (lib/gated-assets.ts).
 //
-//   /api/asset-request/download?a=<asset key>&e=<expiry, unix seconds>&s=<sig>
-//   sig = base64url HMAC-SHA256(secret, "stellr-asset|download|<key>|<expiry>")
+//   /api/asset-request/download?a=<asset key>&s=<sig>
+//   sig = base64url HMAC-SHA256(secret, "stellr-asset|download|<key>")
 //
-// The link is emailed to whoever asked for the file and works until it
-// expires. Nothing is stored; the signature is recomputed. Node only.
+// The link is emailed to whoever asked for the file and does not expire. The
+// signature stops a link being edited to reach another file. Nothing is
+// stored; the signature is recomputed. Changing the secret retires every link
+// at once. Node only.
 import 'server-only'
 import { createHmac } from 'node:crypto'
 import { safeStrEqual } from '@/lib/secret-compare'
 import { isGatedAssetKey, type GatedAssetKey } from '@/lib/gated-assets'
-
-/** How long an emailed link works. Seven days at most. */
-export const LINK_TTL_SECONDS = 7 * 24 * 60 * 60
 
 export const DOWNLOAD_PATH = '/api/asset-request/download'
 
@@ -29,37 +28,28 @@ export function downloadLinksConfigured(): boolean {
   return secret() !== null
 }
 
-function sign(key: GatedAssetKey, expires: number): string | null {
+function sign(key: GatedAssetKey): string | null {
   const s = secret()
   if (!s) return null
-  return createHmac('sha256', s).update(`stellr-asset|download|${key}|${expires}`).digest('base64url')
+  return createHmac('sha256', s).update(`stellr-asset|download|${key}`).digest('base64url')
 }
 
 /** Absolute link for the email, or null when no signing secret is configured. */
-export function gatedDownloadUrl(siteUrl: string, key: GatedAssetKey, now: Date = new Date()): string | null {
-  const expires = Math.floor(now.getTime() / 1000) + LINK_TTL_SECONDS
-  const sig = sign(key, expires)
+export function gatedDownloadUrl(siteUrl: string, key: GatedAssetKey): string | null {
+  const sig = sign(key)
   if (!sig) return null
-  const q = new URLSearchParams({ a: key, e: String(expires), s: sig })
+  const q = new URLSearchParams({ a: key, s: sig })
   return `${siteUrl.replace(/\/+$/, '')}${DOWNLOAD_PATH}?${q.toString()}`
 }
 
-export type LinkCheck = { ok: true; key: GatedAssetKey } | { ok: false; reason: 'invalid' | 'expired' }
+export type LinkCheck = { ok: true; key: GatedAssetKey } | { ok: false }
 
-/** Constant-time signature check plus expiry. An expiry further out than the
- *  TTL allows is treated as forged. */
-export function verifyGatedDownload(params: URLSearchParams, now: Date = new Date()): LinkCheck {
+/** Constant-time signature check. */
+export function verifyGatedDownload(params: URLSearchParams): LinkCheck {
   const key = params.get('a')
-  const e = params.get('e')
   const sig = params.get('s')
-  if (!isGatedAssetKey(key) || !e || !/^\d{1,12}$/.test(e) || !sig || !/^[A-Za-z0-9_-]{43}$/.test(sig)) {
-    return { ok: false, reason: 'invalid' }
-  }
-  const expires = Number(e)
-  const expected = sign(key, expires)
-  if (!expected || !safeStrEqual(sig, expected)) return { ok: false, reason: 'invalid' }
-  const nowS = Math.floor(now.getTime() / 1000)
-  if (expires - nowS > LINK_TTL_SECONDS + 60) return { ok: false, reason: 'invalid' }
-  if (expires < nowS) return { ok: false, reason: 'expired' }
+  if (!isGatedAssetKey(key) || !sig || !/^[A-Za-z0-9_-]{43}$/.test(sig)) return { ok: false }
+  const expected = sign(key)
+  if (!expected || !safeStrEqual(sig, expected)) return { ok: false }
   return { ok: true, key }
 }

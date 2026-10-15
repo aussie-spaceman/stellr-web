@@ -5,15 +5,13 @@ import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 import { isEmailLike } from '@/lib/utils'
 import { GATED_ASSETS, isGatedAssetKey } from '@/lib/gated-assets'
-import { LINK_TTL_SECONDS, gatedDownloadUrl } from '@/lib/gated-download-link'
+import { gatedDownloadUrl } from '@/lib/gated-download-link'
 import { gatedAssetEmailHtml, gatedAssetEmailText } from '@/lib/gated-asset-email'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
-const LINK_DAYS = Math.round(LINK_TTL_SECONDS / 86400)
-
 /**
  * Gated marketing downloads. The requester is captured in HubSpot as a
- * `subscriber` and emailed an expiring signed link to the full file. The file
+ * `subscriber` and emailed a signed link to the full file. The file
  * itself sits in private storage (lib/gated-assets.ts); no page, prop or
  * response from this route ever carries its location. Reference a key from an
  * <AssetGate asset="…" /> or a gated WorkCard.
@@ -65,15 +63,15 @@ export async function POST(req: Request) {
       },
     })
 
-    // ── 2. Email the expiring link to the requester ──────────────────────
+    // ── 2. Email the signed link to the requester ────────────────────────
     let emailed = false
     try {
       await sendEmail({
         to: cleanEmail,
         from: MARKETING_FROM,
         subject: config.subject,
-        html: gatedAssetEmailHtml(firstName, config.title, downloadUrl, LINK_DAYS),
-        text: gatedAssetEmailText(firstName, config.title, downloadUrl, LINK_DAYS),
+        html: gatedAssetEmailHtml(firstName, config.title, downloadUrl),
+        text: gatedAssetEmailText(firstName, config.title, downloadUrl),
       })
       emailed = true
     } catch (err) {

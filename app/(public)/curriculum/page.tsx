@@ -7,7 +7,6 @@ import { AssetGate } from '@/components/sections/AssetGate'
 import { StudentWorkHero } from '@/components/sections/StudentWorkHero'
 import { PageMedia } from '@/components/sections/PageMedia'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
-import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
 import { PHOTOS, VIDEOS, STUDENT_WORK, RFP_2026_PREVIEW_HREF } from '@/lib/media-manifest'
 import { getAllCampaigns } from '@/lib/sanity'
 import { getCampaignDates, campaignStatusFromDates, type CampaignSeason } from '@/lib/campaigns'
@@ -44,7 +43,7 @@ const CURRICULUM_FAQS = [
   },
   {
     q: 'What grades is it for?',
-    a: 'Campaigns are for high school students, grades 9–12. The material builds from first principles, so no prior experience is needed.',
+    a: 'Campaigns are available for grades 7–12, although due to the advanced nature of the content we generally recommend teams that include at least some high school students (to mentor less experienced students). That said, if you have some incredible middle schoolers (and we’ve met plenty!) don’t let us hold you back!',
   },
 ] as const
 
@@ -219,9 +218,10 @@ export default async function CampaignsPage() {
       </section>
 
       {/* ── Educator quote ───────────────────────────────────────────── */}
+      {/* No photo beside the quote for now. */}
       <section className="section-padding bg-white">
         <div className="container-max">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+          <div className="mx-auto max-w-3xl">
             <figure className="rounded-panel border border-line bg-surface px-8 py-9 shadow-card-lift">
               <blockquote className="text-xl sm:text-2xl font-semibold text-ink leading-relaxed">
                 &ldquo;These events put project-based learning into practice. Teams are tasked with an
@@ -233,12 +233,6 @@ export default async function CampaignsPage() {
                 <span className="font-normal text-content-muted">· Chief Innovation Officer, The Aldrin Family Foundation</span>
               </figcaption>
             </figure>
-            <ResponsivePhoto
-              photo={PHOTOS['about-team-2']}
-              sizes="(max-width: 1024px) 100vw, 50vw"
-              className="rounded-panel"
-              showCredit
-            />
           </div>
         </div>
       </section>
@@ -521,10 +515,10 @@ export default async function CampaignsPage() {
               src={VIDEOS['testimonial-erin-henderson'].src}
               poster={VIDEOS['testimonial-erin-henderson'].poster}
               captionsSrc={VIDEOS['testimonial-erin-henderson'].captions}
-              title="Erin Henderson — Teacher, 2022 South West Event"
+              title="Erin Henderson — Teacher, 2022"
             />
             <figcaption className="mt-3 text-center text-sm font-semibold text-ink">
-              Erin Henderson &mdash; Teacher, 2022 South West Event
+              Erin Henderson &mdash; Teacher, 2022
             </figcaption>
           </figure>
         </div>

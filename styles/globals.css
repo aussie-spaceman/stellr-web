@@ -1,8 +1,10 @@
-/* Design System V2 fonts — Space Grotesk (display/headings) + Hanken Grotesk (body/UI). */
-/* @import must precede all other rules (Turbopack/CSS spec), so it sits above the Tailwind directives. */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
-/* Generated design tokens (design/tokens.json → styles/tokens.css via `npm run build:tokens`). */
-@import './tokens.css';
+/* Design System V2 fonts — Space Grotesk (display/headings) + Hanken Grotesk
+   (body/UI) — are self-hosted through next/font (lib/fonts.ts), which sets
+   --font-space-grotesk and --font-hanken-grotesk on <html>. */
+/* Generated design tokens (design/tokens.json → styles/tokens.css via
+   `npm run build:tokens`) are imported next to this file wherever it is
+   imported (app/layout.tsx, app/global-error.tsx, .storybook/preview.ts), not
+   with a CSS @import: that made the tokens a second render-blocking request. */
 
 @tailwind base;
 @tailwind components;
@@ -72,7 +74,7 @@
 
 @layer base {
   html {
-    font-family: 'Hanken Grotesk', system-ui, sans-serif;
+    font-family: var(--font-hanken-grotesk), 'Hanken Grotesk', system-ui, sans-serif;
     scroll-behavior: smooth;
   }
 
@@ -81,7 +83,7 @@
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-family: var(--font-space-grotesk), 'Space Grotesk', system-ui, sans-serif;
     @apply leading-tight tracking-heading;
   }
 }

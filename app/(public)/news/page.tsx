@@ -84,6 +84,7 @@ export default async function NewsPage({ searchParams }: PageProps) {
                         src={wmSrc(urlFor(post.coverImage).width(600).height(384).url())}
                         alt={post.title}
                         fill
+                        sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                         className="object-cover"
                       />
                     ) : (

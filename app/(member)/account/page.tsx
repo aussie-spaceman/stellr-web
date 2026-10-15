@@ -77,49 +77,94 @@ export default async function AccountPage({
   // resolve the viewed member's own image instead — otherwise the page shows the
   // right name over the wrong face.
   let clerkUser: { imageUrl: string | null } | null = null
-  if (viewAsId) {
-    const clerkId = (member as { clerk_user_id?: string | null }).clerk_user_id
-    if (clerkId) {
+  // Everything below depends only on the member, so it is fetched together:
+  // the page used to make about a dozen database and Clerk calls one after
+  // another before sending anything, which is seconds on a phone on 4G.
+  async function loadClerkImage(): Promise<{ imageUrl: string | null } | null> {
+    if (viewAsId) {
+      const clerkId = (member as { clerk_user_id?: string | null }).clerk_user_id
+      if (!clerkId) return null
       try {
         const client = await clerkClient()
         const u = await client.users.getUser(clerkId)
-        clerkUser = { imageUrl: u.imageUrl ?? null }
+        return { imageUrl: u.imageUrl ?? null }
       } catch {
         // No Clerk account (or a transient failure) — fall back to the placeholder.
+        return null
       }
     }
-  } else {
     const clerkUserRaw = await currentUser()
-    clerkUser = clerkUserRaw ? { imageUrl: clerkUserRaw.imageUrl ?? null } : null
+    return clerkUserRaw ? { imageUrl: clerkUserRaw.imageUrl ?? null } : null
   }
 
-  const privacyPrefs = await privacyPrefsFor(db, member)
+  // Does this member own any group registration — as the registrant (teacher or
+  // student manager) or the nominated teacher POC? This is the reliable signal
+  // for the Teams tab: members.event_role can't be trusted (a student manager's
+  // row is 'participant', and a teacher POC may carry any role).
+  const groupOwnerOr = member.email
+    ? `teacher_member_id.eq.${member.id},teacher_email.eq.${member.email},teacher_poc_email.eq.${member.email}`
+    : `teacher_member_id.eq.${member.id}`
 
-  const { data: directoryPrefs } = await db
-    .from('member_directory_prefs')
-    .select('is_visible, show_school, show_region')
-    .eq('member_id', member.id)
-    .maybeSingle()
+  // Volunteering card (profile tab) — only for members in the volunteer program.
+  const volunteerData = isVolunteer(member.id).then(async (volunteer) =>
+    volunteer
+      ? {
+          volunteer,
+          details: await Promise.all([
+            getVolunteerInterests(db, member.id),
+            getVolunteerStatuses(db, [{ id: member.id, email: member.email, date_of_birth: member.date_of_birth }]),
+            getVolunteerTrainingProgress(db, [member.id]),
+          ]),
+        }
+      : {
+          volunteer,
+          details: [
+            [] as Awaited<ReturnType<typeof getVolunteerInterests>>,
+            {} as Record<string, VolunteerStatus>,
+            {} as Record<string, VolunteerTrainingProgress>,
+          ] as const,
+        }
+  )
 
-  // Activity log — the same history an admin sees on this member's admin page.
-  const { data: activity } = await db
-    .from('member_activity_log')
-    .select('id, actor_type, actor_label, category, action, summary, metadata, created_at')
-    .eq('member_id', member.id)
-    .order('created_at', { ascending: false })
-    .limit(30)
+  const [
+    clerkUserLoaded,
+    privacyPrefs,
+    { data: directoryPrefs },
+    // Activity log — the same history an admin sees on this member's admin page.
+    { data: activity },
+    // Scholarships they've applied for, and where each one stands. Kept as
+    // history: an accepted or past scholarship stays listed.
+    scholarshipRows,
+    // Current event registrations, with Company assignment when set (PRD 6.7)
+    { data: myParticipantRows },
+    { count: managedGroupCount },
+    { volunteer, details: volunteerDetails },
+    { tab: rawTab, agreement },
+  ] = await Promise.all([
+    loadClerkImage(),
+    privacyPrefsFor(db, member),
+    db.from('member_directory_prefs').select('is_visible, show_school, show_region').eq('member_id', member.id).maybeSingle(),
+    db
+      .from('member_activity_log')
+      .select('id, actor_type, actor_label, category, action, summary, metadata, created_at')
+      .eq('member_id', member.id)
+      .order('created_at', { ascending: false })
+      .limit(30),
+    listMemberScholarships(db, { id: member.id, email: member.email }),
+    db
+      .from('participants')
+      .select(
+        'id, membership_id, checked_in_at, event_companies(number, name), registrations(event_slug, event_title, status, type)'
+      )
+      .or(`member_id.eq.${member.id},email.eq.${member.email}`),
+    db.from('registrations').select('id', { count: 'exact', head: true }).eq('type', 'group').or(groupOwnerOr),
+    volunteerData,
+    searchParams,
+  ])
+  clerkUser = clerkUserLoaded
+  const scholarships = toHistoryItems(scholarshipRows)
+  const [volunteerInterests, volunteerStatuses, volunteerTraining] = volunteerDetails
 
-  // Scholarships they've applied for, and where each one stands. Kept as
-  // history: an accepted or past scholarship stays listed.
-  const scholarships = toHistoryItems(await listMemberScholarships(db, { id: member.id, email: member.email }))
-
-  // Current event registrations, with Company assignment when set (PRD 6.7)
-  const { data: myParticipantRows } = await db
-    .from('participants')
-    .select(
-      'id, membership_id, checked_in_at, event_companies(number, name), registrations(event_slug, event_title, status, type)'
-    )
-    .or(`member_id.eq.${member.id},email.eq.${member.email}`)
   const myRegistrations = (myParticipantRows ?? [])
     .map((p) => {
       const reg = p.registrations as unknown as {
@@ -158,36 +203,14 @@ export default async function AccountPage({
       new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
     )[0]
 
-  // Does this member own any group registration — as the registrant (teacher or
-  // student manager) or the nominated teacher POC? This is the reliable signal
-  // for the Teams tab: members.event_role can't be trusted (a student manager's
-  // row is 'participant', and a teacher POC may carry any role).
-  const groupOwnerOr = member.email
-    ? `teacher_member_id.eq.${member.id},teacher_email.eq.${member.email},teacher_poc_email.eq.${member.email}`
-    : `teacher_member_id.eq.${member.id}`
-  const { count: managedGroupCount } = await db
-    .from('registrations')
-    .select('id', { count: 'exact', head: true })
-    .eq('type', 'group')
-    .or(groupOwnerOr)
   const managesGroup = (managedGroupCount ?? 0) > 0
 
-  // Volunteering card (profile tab) — only for members in the volunteer program.
-  const volunteer = await isVolunteer(member.id)
   const volunteerAssignments = volunteer
     ? ((member.event_participations ?? []) as Array<{ role?: string | null; event_slug: string | null; event_title: string | null; event_year: number | null }>)
         .filter((p) => p.role === 'volunteer')
         .sort((a, b) => (b.event_year ?? 0) - (a.event_year ?? 0))
     : []
-  const [volunteerInterests, volunteerStatuses, volunteerTraining] = volunteer
-    ? await Promise.all([
-        getVolunteerInterests(db, member.id),
-        getVolunteerStatuses(db, [{ id: member.id, email: member.email, date_of_birth: member.date_of_birth }]),
-        getVolunteerTrainingProgress(db, [member.id]),
-      ])
-    : [[], {} as Record<string, VolunteerStatus>, {} as Record<string, VolunteerTrainingProgress>]
 
-  const { tab: rawTab, agreement } = await searchParams
   const isGroupManager =
     managesGroup ||
     member.event_role === 'teacher' ||
@@ -202,29 +225,26 @@ export default async function AccountPage({
   else if (rawTab === 'billing' && showBilling) activeTab = 'billing'
   else if (rawTab === 'activity') activeTab = 'activity'
 
-  // Post-event survey per event, for the event history: submitted (view the
-  // answers) or open now (start). Profile tab only; never blocks the page.
-  const surveyChips: Record<string, SurveyChip> =
+  // Profile tab only, and neither ever blocks the page: the post-event survey
+  // per event (submitted → view answers, open → start), and team profiles
+  // across events (an admin viewing as the member gets no edit link).
+  const [surveyChips, teamProfiles]: [Record<string, SurveyChip>, HistoryEntry[]] =
     activeTab === 'profile'
-      ? await memberSurveyRows(db, member.id)
-          .then((rows) => surveyChipsByEvent(rows))
-          .catch((err) => {
-            console.error('[account] survey status failed:', err)
-            return {}
-          })
-      : {}
-
-  // Team profiles across events. Profile tab only; never blocks the page. An
-  // admin viewing as the member sees the answers but gets no edit link.
-  const teamProfiles: HistoryEntry[] =
-    activeTab === 'profile'
-      ? await memberHistory(db, member.id)
-          .then((rows) => (viewAsId ? rows.map((r) => ({ ...r, editUrl: null })) : rows))
-          .catch((err) => {
-            console.error('[account] team profiles failed:', err)
-            return []
-          })
-      : []
+      ? await Promise.all([
+          memberSurveyRows(db, member.id)
+            .then((rows) => surveyChipsByEvent(rows))
+            .catch((err) => {
+              console.error('[account] survey status failed:', err)
+              return {} as Record<string, SurveyChip>
+            }),
+          memberHistory(db, member.id)
+            .then((rows) => (viewAsId ? rows.map((r) => ({ ...r, editUrl: null })) : rows))
+            .catch((err) => {
+              console.error('[account] team profiles failed:', err)
+              return [] as HistoryEntry[]
+            }),
+        ])
+      : [{}, []]
 
   const tabLinks: { key: Tab; label: string }[] = [
     { key: 'profile', label: 'Profile' },

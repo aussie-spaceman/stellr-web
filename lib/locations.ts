@@ -20,7 +20,7 @@
 // on a marketing page. Non-US locations are excluded because this is a US map;
 // the Uruguay event is real but has no pin to sit on.
 
-import { client } from '@/lib/sanity'
+import { client, PUBLISHED_CACHE } from '@/lib/sanity'
 import { normaliseState } from '@/lib/us-states'
 import { eventLastDay, todayInAppZone } from '@/lib/utils'
 import type { LpTheme } from '@/content/lp/types'
@@ -113,9 +113,12 @@ const PLANNED_QUERY = `*[_type == "plannedLocation" && defined(city) && defined(
 export async function getMapLocations(): Promise<MapLocation[]> {
   if (!client) return []
 
+  // Cached for the same window as every other published read. Uncached, the
+  // Ad Grants landing pages (/lp/*) called Sanity's live API twice per view and
+  // were the slowest pages to first byte.
   const [events, planned] = await Promise.all([
-    client.fetch<EventRow[]>(LIVE_QUERY),
-    client.fetch<PlannedRow[]>(PLANNED_QUERY),
+    client.fetch<EventRow[]>(LIVE_QUERY, {}, PUBLISHED_CACHE),
+    client.fetch<PlannedRow[]>(PLANNED_QUERY, {}, PUBLISHED_CACHE),
   ])
 
   const rows: MapLocation[] = []

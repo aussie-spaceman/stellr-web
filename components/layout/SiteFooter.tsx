@@ -116,10 +116,11 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
           <div className="col-span-2 sm:col-span-3 lg:col-span-1">
             <div className="inline-block mb-5 bg-white rounded-[14px] p-[18px_22px]">
               <Image
-                src="/images/logo-horiz-tight.svg"
+                src="/images/logo-horiz.png"
                 alt="Stellr Education"
-                width={120}
-                height={40}
+                width={960}
+                height={318}
+                sizes="103px"
                 className="h-[34px] w-auto block"
               />
             </div>

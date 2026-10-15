@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { ClerkProvider } from '@clerk/nextjs'
 import { Analytics } from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import { ConsentMode } from '@/components/analytics/ConsentMode'
 import { CookieConsent } from '@/components/analytics/CookieConsent'
 import { GoogleTagManager } from '@/components/analytics/GoogleTagManager'
@@ -8,6 +9,8 @@ import { HubSpotTracking } from '@/components/analytics/HubSpotTracking'
 import { buildOrganizationJsonLd, buildWebSiteJsonLd } from '@/lib/structured-data'
 import { headers } from 'next/headers'
 import { PRIVATE_ROUTE_HEADER } from '@/lib/private-routes'
+import { fontVariables } from '@/lib/fonts'
+import '../styles/tokens.css'
 import '../styles/globals.css'
 
 /* Default social card. Without it every share preview came back blank — the
@@ -62,8 +65,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const tracking = !privateRoute
 
   return (
-    <ClerkProvider>
-      <html lang="en">
+    // prefetchUI={false}: don't preload Clerk's 46 KB UI bundle on every page;
+    // it loads when a sign-in card or account menu actually renders.
+    <ClerkProvider prefetchUI={false}>
+      <html lang="en" className={fontVariables}>
         <head>
           {/* Consent Mode v2 defaults — MUST stay above GTM so advertising tags
               never fire before the denied-by-default state lands. */}
@@ -92,6 +97,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {children}
           {tracking && <CookieConsent />}
           {tracking && <Analytics />}
+          {/* Real-visitor Core Web Vitals (LCP, INP, CLS) by page and device.
+              No cookies; skipped on private-link pages like everything else. */}
+          {tracking && <SpeedInsights />}
           {/* Sets the hubspotutk cookie the lead routes pass to the Forms API
               for source attribution (see lib/hubspot.ts). */}
           {tracking && <HubSpotTracking />}

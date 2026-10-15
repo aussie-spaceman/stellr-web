@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { Play } from 'lucide-react'
 
 /**
@@ -50,8 +51,10 @@ export function VideoTestimonial({
           className="group absolute inset-0 h-full w-full cursor-pointer"
         >
           {poster ? (
-            // eslint-disable-next-line @next/next/no-img-element -- poster is a single above-the-fold still; <img> keeps the click-to-play swap simple
-            <img src={poster} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            // Through next/image: lazy-loaded (these sit below the fold on every
+            // page that uses them) and resized to the frame instead of the
+            // full-size poster (up to ~240 KB).
+            <Image src={poster} alt="" fill sizes="(min-width: 1024px) 540px, 100vw" className="object-cover" />
           ) : (
             <span className="absolute inset-0 bg-[linear-gradient(160deg,#20264F,#0E1330)]" />
           )}

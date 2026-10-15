@@ -173,7 +173,7 @@ export function Navbar({ isSignedIn = false, isAdmin = false }: NavbarProps) {
         <div className="mx-auto max-w-chrome px-8 flex items-center h-[68px] gap-2">
 
           {/* Logo */}
-          <Logo sizeClassName="h-[38px]" className="mr-6 flex-none" />
+          <Logo sizeClassName="h-[38px]" displayWidth={115} className="mr-6 flex-none" />
 
           {/* Desktop nav pillars */}
           <ul className="hidden lg:flex items-center gap-1">

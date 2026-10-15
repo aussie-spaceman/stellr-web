@@ -21,12 +21,18 @@ const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID
  * The matching <noscript> iframe lives in app/layout.tsx (it must be the first
  * child of <body>). Renders nothing until NEXT_PUBLIC_GTM_ID is set, so the tag
  * stays dormant in any environment that hasn't opted in.
+ *
+ * Loading: `lazyOnload`, after the page has loaded and the browser is idle.
+ * The container and the tags it pulls in (GA4, Google Ads) are over 600 KB of
+ * script; started `afterInteractive` they ran exactly when a visitor first
+ * taps, which on a mid-range phone cost about a second of blocked input. Events
+ * pushed to dataLayer before then are kept and processed when GTM arrives.
  */
 export function GoogleTagManager() {
   if (!GTM_ID) return null
 
   return (
-    <Script id="gtm-init" strategy="afterInteractive">
+    <Script id="gtm-init" strategy="lazyOnload">
       {`
         (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
         new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],

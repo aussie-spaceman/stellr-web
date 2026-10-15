@@ -1,7 +1,13 @@
 import type { Preview } from '@storybook/nextjs'
 // Tailwind + generated design tokens — the same stylesheet the app uses, so
 // stories render in the real design system.
+import '../styles/tokens.css'
 import '../styles/globals.css'
+import { fontVariables } from '../lib/fonts'
+
+// The app sets the next/font variables on <html> in app/layout.tsx; Storybook
+// doesn't render that layout, so set them here.
+if (typeof document !== 'undefined') document.documentElement.classList.add(...fontVariables.split(' '))
 
 // The responsive contract: every component is reviewed at all three widths.
 const viewports = {

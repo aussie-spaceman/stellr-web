@@ -73,6 +73,7 @@ export default async function NewsArticlePage({ params }: PageProps) {
               src={wmSrc(urlFor(post.coverImage).width(1400).height(560).url())}
               alt={post.title}
               fill
+              sizes="100vw"
               className="object-cover opacity-40"
               priority
             />
@@ -126,6 +127,7 @@ export default async function NewsArticlePage({ params }: PageProps) {
                         src={wmSrc(urlFor(rel.coverImage).width(400).height(240).url())}
                         alt={rel.title}
                         fill
+                        sizes="(min-width: 640px) 33vw, 100vw"
                         className="object-cover"
                       />
                     )}

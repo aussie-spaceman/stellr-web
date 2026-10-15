@@ -94,10 +94,11 @@ export function AppSidebar({
         <Link href="/home" className="block p-[20px_16px_16px]">
           <div className="inline-block bg-white rounded-[10px] px-3 py-2">
             <Image
-              src="/images/logo-horiz-tight.svg"
+              src="/images/logo-horiz.png"
               alt="Stellr"
-              width={100}
-              height={33}
+              width={960}
+              height={318}
+              sizes="85px"
               className="h-7 w-auto block"
             />
           </div>

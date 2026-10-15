@@ -51,11 +51,22 @@ export function NotificationBell() {
     } catch { /* silent — non-critical */ }
   }, [])
 
-  // Poll every 30 s (stays within Supabase Realtime-free budget).
+  // Poll every 30 s (stays within Supabase Realtime-free budget), but only
+  // while the tab is in view: a phone with the app open in a background tab
+  // kept waking the radio every 30 s. Coming back refreshes at once.
   useEffect(() => {
     fetchCount()
-    const id = setInterval(fetchCount, 30_000)
-    return () => clearInterval(id)
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchCount()
+    }, 30_000)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchCount()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [fetchCount])
 
   // Close dropdown when clicking outside.

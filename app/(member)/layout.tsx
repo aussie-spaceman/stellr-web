@@ -11,16 +11,17 @@ import { isStudentForAds } from '@/lib/no-ads'
 import { NoAdsStudentMarker } from '@/components/analytics/NoAdsStudentMarker'
 
 export default async function MemberLayout({ children }: { children: React.ReactNode }) {
-  const { sessionClaims } = await auth()
+  const [{ sessionClaims }, member] = await Promise.all([auth(), getCurrentMember()])
   const isAdmin = isAdminClaims(sessionClaims)
-
-  const member = await getCurrentMember()
 
   // Admin view-as. getCurrentMember() has already resolved to the impersonated
   // member above, so `member` is who the portal is rendering — the banner just
-  // has to say so, and name the admin behind it.
-  const viewAs = await viewAsBannerProps(member)
-  const caps = member ? await getHostCaps(member.id) : null
+  // has to say so, and name the admin behind it. Both reads need only the
+  // member, so they run together rather than one after the other.
+  const [viewAs, caps] = await Promise.all([
+    viewAsBannerProps(member),
+    member ? getHostCaps(member.id) : Promise.resolve(null),
+  ])
   const showHosting = !!caps && (caps.canCoach || caps.canMentor)
   const isTeacher = member?.event_role === 'teacher'
   // Not while an admin views as the member: that is the admin's browser.

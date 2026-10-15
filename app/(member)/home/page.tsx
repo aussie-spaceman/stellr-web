@@ -23,11 +23,30 @@ export default async function HomePage() {
 
   const firstName = member.first_name || 'there'
 
-  // ---- Next competition + venue ----
-  const [events, catalog] = await Promise.all([
-    getMemberEvents(member),
-    getMemberEventCatalog(member),
+  // Every read below depends only on the member, except assigned training,
+  // which needs the member's events. They all start now and run together;
+  // they used to run in five steps, one after another.
+  const eventRoles: string[] = []
+  if (member.event_role) {
+    eventRoles.push(member.event_role)
+    if (member.event_role === 'school_student_manager') eventRoles.push('participant')
+  }
+  const eventsAndCatalog = Promise.all([getMemberEvents(member), getMemberEventCatalog(member)])
+  const assignedModules = eventsAndCatalog.then(([evts]) =>
+    getAssignedModules(member, {
+      eventRefs: evts.flatMap((e) => [e.eventId, e.slug]).filter((id): id is string => !!id),
+      eventRoles,
+    })
+  )
+  const [[events, catalog], assigned, allModules, memberSessions, homeFeed] = await Promise.all([
+    eventsAndCatalog,
+    assignedModules,
+    listModules(member),
+    listMemberSessions(member.id),
+    getHomeFeed(member, 6),
   ])
+
+  // ---- Next competition + venue ----
   const now = Date.now()
   const nextEvt =
     events
@@ -39,17 +58,6 @@ export default async function HomePage() {
     : ''
 
   // ---- Training (assignments + general library) ----
-  const eventRefs = events.flatMap((e) => [e.eventId, e.slug]).filter((id): id is string => !!id)
-  const eventRoles: string[] = []
-  if (member.event_role) {
-    eventRoles.push(member.event_role)
-    if (member.event_role === 'school_student_manager') eventRoles.push('participant')
-  }
-  const [assigned, allModules] = await Promise.all([
-    getAssignedModules(member, { eventRefs, eventRoles }),
-    listModules(member),
-  ])
-
   // Prep checklist on the hero = mandatory assigned modules for the next event.
   const mandatory = assigned.filter((m) => m.isMandatory && m.itemCount > 0)
   const prepTotal = mandatory.length
@@ -67,13 +75,13 @@ export default async function HomePage() {
     .slice(0, 4)
 
   // ---- Upcoming sessions ----
-  const sessions = (await listMemberSessions(member.id))
+  const sessions = memberSessions
     .filter((s) => s.status === 'scheduled' && new Date(s.scheduled_start).getTime() >= now)
     .sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime())
     .slice(0, 4)
 
   // ---- Community activity ----
-  const feed = (await getHomeFeed(member, 6)).slice(0, 6)
+  const feed = homeFeed.slice(0, 6)
 
   return (
     <div className="mx-auto max-w-4xl">

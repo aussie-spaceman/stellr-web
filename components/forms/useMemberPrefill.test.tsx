@@ -32,11 +32,21 @@ function stubFetch(payload: unknown = MEMBER) {
   )
 }
 
+// A browser with a Clerk session: the prefill request is only made when this
+// cookie says someone is signed in.
+function setSignedInCookie(signedIn: boolean) {
+  document.cookie = `__client_uat=${signedIn ? '1760500000' : '0'}; path=/`
+}
+
 beforeEach(() => {
   __resetMemberPrefillCache()
+  setSignedInCookie(true)
   stubFetch()
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  setSignedInCookie(false)
+})
 
 function RhfForm() {
   const { register, reset } = useForm<{ firstName: string; email: string }>({
@@ -116,6 +126,14 @@ describe('member prefill', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalled())
     expect(screen.getByLabelText('First name')).toHaveValue('')
     expect(screen.getByLabelText('Email')).toHaveValue('')
+  })
+
+  it('makes no request at all when no one is signed in', async () => {
+    setSignedInCookie(false)
+    render(<RhfForm />)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(fetch).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('First name')).toHaveValue('')
   })
 
   it('makes one request no matter how many forms are on the page', async () => {

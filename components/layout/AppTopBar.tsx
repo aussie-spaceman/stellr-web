@@ -24,7 +24,7 @@ export function AppTopBar({ isAdmin, viewingAs = null }: AppTopBarProps) {
     <header className="sticky top-0 z-30 flex h-[60px] shrink-0 items-center justify-between gap-3 border-b border-line bg-white px-6 lg:px-8">
       {/* Mobile-only logo (sidebar not visible on mobile) */}
       <div className="lg:hidden">
-        <Logo sizeClassName="h-8" />
+        <Logo sizeClassName="h-8" displayWidth={97} />
       </div>
 
       {/* Push right on desktop */}

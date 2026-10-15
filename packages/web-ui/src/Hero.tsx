@@ -30,15 +30,19 @@ export function Hero({
   return (
     <section
       className={cn(
-        'relative overflow-hidden bg-midnight text-white py-20 px-4 sm:px-6 lg:px-8',
+        // short: a phone held sideways is ~375px tall; keep the title and first
+        // call to action on the first screen.
+        'relative overflow-hidden bg-midnight text-white py-20 px-4 sm:px-6 lg:px-8 short:py-8',
         'bg-[linear-gradient(180deg,var(--color-midnight),var(--color-midnight-deep))]',
         className,
       )}
     >
+      {/* A radial gradient, not a blurred circle: a 520px blur filter is costly
+          to paint on low-end Android and looks the same. */}
       {glow && (
         <div
           aria-hidden
-          className="pointer-events-none absolute -top-28 -right-20 w-[520px] h-[520px] rounded-full bg-space-violet/20 blur-3xl"
+          className="pointer-events-none absolute -top-40 -right-36 w-[720px] h-[720px] bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--color-space-violet)_22%,transparent),transparent)]"
         />
       )}
       <div className="relative max-w-7xl mx-auto">
@@ -54,7 +58,7 @@ export function Hero({
                 <span>{pill.rest}</span>
               </div>
             )}
-            <h1 className="text-4xl sm:text-5xl lg:text-ds-h1 font-bold tracking-display mb-6 max-w-3xl">{title}</h1>
+            <h1 className="text-4xl sm:text-5xl lg:text-ds-h1 font-bold tracking-display mb-6 max-w-3xl short:text-3xl short:mb-3">{title}</h1>
             {lead && <p className="text-lg text-hero-lead max-w-2xl leading-relaxed">{lead}</p>}
             {pills && pills.length > 0 && (
               <div className="flex flex-wrap gap-3 mt-8">

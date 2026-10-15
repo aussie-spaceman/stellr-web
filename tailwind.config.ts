@@ -73,10 +73,11 @@ const config: Config = {
         },
       },
       fontFamily: {
-        display:     [tokens.font.display, 'system-ui', 'sans-serif'], // Space Grotesk
-        heading:     [tokens.font.display, 'system-ui', 'sans-serif'], // was Norwester
-        subheading:  [tokens.font.body, 'system-ui', 'sans-serif'],    // UI / eyebrows / buttons → Hanken
-        sans:        [tokens.font.body, 'system-ui', 'sans-serif'],    // was Aileron
+        /* next/font variables first (lib/fonts.ts), then the token family name */
+        display:     ['var(--font-space-grotesk)', tokens.font.display, 'system-ui', 'sans-serif'], // Space Grotesk
+        heading:     ['var(--font-space-grotesk)', tokens.font.display, 'system-ui', 'sans-serif'], // was Norwester
+        subheading:  ['var(--font-hanken-grotesk)', tokens.font.body, 'system-ui', 'sans-serif'],   // UI / eyebrows / buttons → Hanken
+        sans:        ['var(--font-hanken-grotesk)', tokens.font.body, 'system-ui', 'sans-serif'],   // was Aileron
         /* Competition print/slide materials only */
         competition:      [tokens.font.competitionDisplay, 'system-ui', 'sans-serif'], // Norwester
         'competition-body':[tokens.font.competitionBody, 'system-ui', 'sans-serif'],   // Aileron

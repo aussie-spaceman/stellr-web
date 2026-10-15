@@ -109,7 +109,7 @@ export interface StellarEvent {
 // (PUB-9). The 'sanity' tag lets a future publish webhook revalidate on demand.
 // Passed as the 3rd arg of client.fetch; no-param queries pass {} as params.
 // Not `as const`: the client's `next.tags` type is a mutable string[].
-const PUBLISHED_CACHE = { next: { revalidate: 3600, tags: ['sanity'] } }
+export const PUBLISHED_CACHE = { next: { revalidate: 3600, tags: ['sanity'] } }
 
 export async function getFeaturedEvents() {
   if (!client) return null

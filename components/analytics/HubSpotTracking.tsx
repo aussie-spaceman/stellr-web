@@ -54,9 +54,12 @@ export async function HubSpotTracking() {
 
   return (
     <HubSpotTrackingNoAdsGate>
+      {/* lazyOnload: the hubspotutk cookie only matters when a form is
+          submitted, and HubSpot's analytics script was the single costliest
+          file on a mid-range phone (~1.6s of main-thread work). */}
       <Script
         id="hs-script-loader"
-        strategy="afterInteractive"
+        strategy="lazyOnload"
         src={`https://js.hs-scripts.com/${portalId}.js`}
       />
     </HubSpotTrackingNoAdsGate>

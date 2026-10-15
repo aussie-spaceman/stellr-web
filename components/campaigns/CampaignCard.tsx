@@ -19,7 +19,7 @@ export function CampaignCard({ campaign }: { campaign: CampaignCardVM }) {
       {/* Image header — same footprint as EventCard */}
       <div className="relative h-44 bg-gradient-to-br from-brand-blue-dark to-blue-900 flex items-center justify-center">
         {campaign.imageUrl ? (
-          <Image src={campaign.imageUrl} alt={campaign.title} fill className="object-cover" />
+          <Image src={campaign.imageUrl} alt={campaign.title} fill sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw" className="object-cover" />
         ) : (
           <ThemeIcon className="h-10 w-10 text-blue-300 opacity-60" />
         )}

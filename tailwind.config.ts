@@ -142,8 +142,9 @@ const config: Config = {
   plugins: [
     /* Two media variants that are not widths. They are plugin variants, not
        `screens`: a raw screen switches off Tailwind's min-[…]/max-[…]
-       variants for the whole project. Plugin variants sort after the width
-       breakpoints, so they win over sm:/md:/lg: on the same property. */
+       variants for the whole project. Plugin variants are emitted BEFORE the
+       width breakpoints, so `short:` adds `:root` to outrank sm:/md:/lg: on
+       the same property (a sideways phone is wider than sm). */
     plugin(({ addVariant }) => {
       /* Short screens: a phone held sideways is 340–415px tall but wide
          enough for the sm/md layouts. `short:` lets chrome and heroes shrink

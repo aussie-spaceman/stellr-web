@@ -44,7 +44,7 @@ export default async function DiscoverPage() {
         <p className="font-subheading text-[13px] font-semibold uppercase tracking-[0.13em] text-space-violet">
           Academy · Mentoring
         </p>
-        <h1 className="mt-1 font-display text-[34px] font-bold leading-tight tracking-[-0.02em] text-ink">
+        <h1 className="mt-1 font-display text-[34px] font-bold leading-tight text-ink">
           Find a cohort to join
         </h1>
         <p className="mt-1.5 max-w-xl text-[15px] text-content-secondary">

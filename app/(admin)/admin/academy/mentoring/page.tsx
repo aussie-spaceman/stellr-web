@@ -16,7 +16,7 @@ export default async function AdminCohortsPage() {
       <AdminMentoringNav />
       <div className="min-w-0 flex-1 space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">Cohorts</h1>
+          <h1 className="font-display text-[28px] font-bold text-ink">Cohorts</h1>
           <Link href="/admin/academy/mentoring/new" className="inline-flex items-center gap-2 rounded-[9px] bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-deep">
             <Plus className="h-4 w-4" /> New cohort
           </Link>
@@ -66,7 +66,7 @@ export default async function AdminCohortsPage() {
                         </div>
                       </td>
                       <td className="px-5 py-3">
-                        <span className={`rounded-pill px-2.5 py-0.5 text-[11px] font-semibold ${c.lifecycle === 'active' ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-surface text-content-muted'}`}>
+                        <span className={`rounded-pill px-2.5 py-0.5 text-xs font-semibold ${c.lifecycle === 'active' ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-surface text-content-muted'}`}>
                           {c.lifecycle === 'active' ? 'Active' : 'Archived'}
                         </span>
                       </td>
@@ -86,7 +86,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'am
   return (
     <div className="rounded-card border border-line bg-white p-4">
       <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-content-faint">{label}</p>
-      <p className={`mt-1 font-display text-[26px] font-bold ${tone === 'amber' && value > 0 ? 'text-pathway-amber' : 'text-ink'}`}>{value}</p>
+      <p className={`mt-1 font-display text-[26px] font-bold ${tone === 'amber' && value > 0 ? 'text-gold-ink' : 'text-ink'}`}>{value}</p>
     </div>
   )
 }

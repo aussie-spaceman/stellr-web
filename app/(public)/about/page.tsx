@@ -137,7 +137,7 @@ function Avatar({
   }
   return (
     <div
-      className={`${dim} mx-auto rounded-full bg-brand-grey-light flex items-center justify-center font-bold text-brand-grey-mid`}
+      className={`${dim} mx-auto rounded-full bg-brand-grey-light flex items-center justify-center font-bold text-content-muted`}
     >
       {name.charAt(0)}
     </div>
@@ -242,7 +242,7 @@ export default function AboutPage() {
               Our Vision
             </p>
             <h2 className="text-2xl sm:text-3xl font-bold mb-6">The Engineering Education Network</h2>
-            <ul className="space-y-3 text-content-faint leading-relaxed">
+            <ul className="space-y-3 text-hero-lead leading-relaxed">
               {[
                 'Develop careers through industry simulation competitions and events.',
                 'Provide future leaders the skills and tools they’ll need to solve tomorrow’s problems.',
@@ -287,8 +287,8 @@ export default function AboutPage() {
             />
             <div className="text-center mt-4">
               <h3 className="font-bold text-brand-blue-dark text-lg">{founder.name}</h3>
-              <p className="text-sm text-brand-grey-mid mt-0.5">{founder.role}</p>
-              <p className="text-sm text-brand-grey-mid mt-0.5">{founder.location}</p>
+              <p className="text-sm text-content-muted mt-0.5">{founder.role}</p>
+              <p className="text-sm text-content-muted mt-0.5">{founder.location}</p>
               <a
                 href={founder.linkedIn}
                 target="_blank"
@@ -319,7 +319,7 @@ export default function AboutPage() {
                   size="sm"
                 />
                 <h4 className="font-bold text-brand-blue-dark mt-4">{member.name}</h4>
-                <p className="text-xs text-brand-grey-mid mt-0.5">{member.location}</p>
+                <p className="text-xs text-content-muted mt-0.5">{member.location}</p>
                 {member.bio && (
                   <p className="text-xs text-brand-grey-dark mt-2 leading-relaxed text-left">
                     {member.bio}

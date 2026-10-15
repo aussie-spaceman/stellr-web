@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Field, Input, Textarea } from '@stellr/web-ui'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 
 type ResourceKind = 'file' | 'link'
@@ -93,6 +94,7 @@ export function ResourceUploadForm() {
           <button
             key={k}
             type="button"
+            aria-pressed={kind === k}
             onClick={() => {
               setKind(k)
               setError(null)
@@ -107,51 +109,42 @@ export function ResourceUploadForm() {
       </div>
 
       {kind === 'file' ? (
-        <div>
-          <label className="block text-sm font-medium text-brand-muted mb-1">File</label>
+        <Field label="File">
           <input
             type="file"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-brand-muted file:mr-3 file:rounded-md file:border-0 file:bg-brand-hairline file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-brand-border"
+            className="block w-full text-sm text-brand-muted file:mr-3 file:min-h-11 file:rounded-md file:border-0 file:bg-brand-hairline file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-brand-border"
           />
-        </div>
+        </Field>
       ) : (
-        <div>
-          <label className="block text-sm font-medium text-brand-muted mb-1">Link URL</label>
-          <input
+        <Field label="Link URL">
+          <Input
             type="url"
+            inputMode="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
             placeholder="https://example.com/resource"
           />
-        </div>
+        </Field>
       )}
 
-      <div>
-        <label className="block text-sm font-medium text-brand-muted mb-1">Title</label>
-        <input
+      <Field label="Title" required>
+        <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={200}
-          required
-          className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
           placeholder="e.g. 2024 Finals Paper — Physics"
         />
-      </div>
+      </Field>
 
-      <div>
-        <label className="block text-sm font-medium text-brand-muted mb-1">
-          Description <span className="font-normal text-brand-muted-soft">(optional)</span>
-        </label>
-        <textarea
+      <Field label="Description" hint="Optional.">
+        <Textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
-          className="w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-border focus:outline-none"
           placeholder="Brief summary visible to all members"
         />
-      </div>
+      </Field>
 
       <p className="text-xs text-brand-muted-soft">
         Access is inherited from the object a resource is attached to — assign this resource to a Space,

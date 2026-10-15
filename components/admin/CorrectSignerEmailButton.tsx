@@ -158,11 +158,11 @@ export function CorrectSignerEmailButton({
                       type="email"
                       value={drafts[s.recipientId] ?? ''}
                       onChange={(e) => setDrafts((d) => ({ ...d, [s.recipientId]: e.target.value }))}
-                      className="mt-1 w-full rounded-control border border-line px-3 py-2 text-sm text-ink"
+                      className="mt-1 w-full rounded-control border border-line-strong px-3 py-2 text-input mouse:text-sm text-ink"
                     />
                   </label>
                   {shared && (
-                    <p className="mt-2 text-xs text-pathway-amber-deep">
+                    <p className="mt-2 text-xs text-gold-ink">
                       Another signer on this agreement uses this address. Both forms will go to one inbox; make sure
                       the family knows to sign both.
                     </p>

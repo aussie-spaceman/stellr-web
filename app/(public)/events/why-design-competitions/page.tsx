@@ -52,7 +52,7 @@ export default function WhyDesignCompetitionsPage() {
           <h1 className="text-4xl sm:text-5xl font-bold mb-6 leading-tight">
             Why Design Competitions?
           </h1>
-          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
+          <p className="text-lg text-hero-lead max-w-2xl leading-relaxed">
             Modern curricula lack the flexibility to teach the soft skills and adaptive
             problem-solving that 21st-century careers demand. Design competitions fill that gap —
             bridging the distance between education and the real world of work.
@@ -60,7 +60,7 @@ export default function WhyDesignCompetitionsPage() {
           <div className="mt-10 flex flex-wrap gap-4">
             <Link
               href="/competitions"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-orange text-white font-heading font-medium rounded-md hover:bg-amber-500 transition-colors"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-orange text-ink font-heading font-medium rounded-md hover:bg-pathway-amber transition-colors"
             >
               Register Now <ArrowRight size={16} />
             </Link>

@@ -21,7 +21,7 @@ export default async function StoreProductsPage() {
           <p className="eyebrow flex items-center gap-2 text-brand-blue">
             <span className="h-2 w-2 rounded-full bg-brand-blue" /> Store
           </p>
-          <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Store</h1>
+          <h1 className="mt-1 font-heading text-ds-h2 text-brand-blue-dark">Store</h1>
           <p className="mt-0.5 mb-4 text-sm text-brand-muted-soft">
             Merchandise catalog. Products sync from Printful; prices and discounts are managed here.
           </p>

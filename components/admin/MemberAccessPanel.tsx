@@ -48,11 +48,11 @@ interface Summary {
 // invisible unless the source is on screen.
 
 const GROUPS: { type: AccessObjectType; title: string; icon: React.ReactNode }[] = [
-  { type: 'space', title: 'Spaces', icon: <MessagesSquare className="h-4 w-4 text-brand-teal" /> },
+  { type: 'space', title: 'Spaces', icon: <MessagesSquare className="h-4 w-4 text-adult-teal-deep" /> },
   { type: 'event', title: 'Competitions', icon: <Trophy className="h-4 w-4 text-brand-gold-ink" /> },
   { type: 'campaign', title: 'Campaigns', icon: <Trophy className="h-4 w-4 text-brand-gold-ink" /> },
   { type: 'cohort', title: 'Mentoring cohorts', icon: <Users className="h-4 w-4 text-brand-blue" /> },
-  { type: 'workshop', title: 'Coaching', icon: <MessageCircle className="h-4 w-4 text-brand-teal" /> },
+  { type: 'workshop', title: 'Coaching', icon: <MessageCircle className="h-4 w-4 text-adult-teal-deep" /> },
   { type: 'course', title: 'Training', icon: <GraduationCap className="h-4 w-4 text-brand-blue" /> },
   { type: 'resource', title: 'Resources', icon: <BookOpen className="h-4 w-4 text-brand-blue" /> },
   { type: 'group', title: 'Groups', icon: <Building2 className="h-4 w-4 text-brand-blue" /> },
@@ -94,7 +94,7 @@ export function MemberAccessPanel({ memberId }: { memberId: string }) {
 
   return (
     <div>
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-brand-muted-soft">
+      <h2 className="mb-3 text-sm font-semibold text-brand-muted-soft">
         Access (spaces &amp; rosters)
       </h2>
       {failed ? (
@@ -147,19 +147,19 @@ function Row({ row }: { row: EffectiveAccessRow }) {
       <span className="min-w-0 flex-1">
         <span className="block truncate text-brand-blue-dark">{row.label}</span>
         {row.role && row.role.toLowerCase() !== 'member' && (
-          <span className="text-[11px] text-brand-grey-dark">{row.role}</span>
+          <span className="text-xs text-brand-grey-dark">{row.role}</span>
         )}
       </span>
       <span className="flex shrink-0 flex-wrap items-center justify-end gap-1">
         {row.archived && (
-          <span className="rounded-full bg-brand-hairline px-2 py-0.5 text-[10px] font-medium uppercase text-brand-muted">
+          <span className="rounded-full bg-brand-hairline px-2 py-0.5 text-xs font-medium uppercase text-brand-muted">
             archived
           </span>
         )}
         {row.sources.map((s, i) => (
           <span
             key={i}
-            className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${SOURCE_TINT[s.kind] ?? 'bg-brand-hairline text-brand-muted'}`}
+            className={`rounded-full px-2 py-0.5 text-xs font-medium ${SOURCE_TINT[s.kind] ?? 'bg-brand-hairline text-brand-muted'}`}
           >
             {s.label}
           </span>

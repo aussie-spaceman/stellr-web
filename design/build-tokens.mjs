@@ -4,7 +4,16 @@
 //   - styles/tokens.css  : :root CSS custom properties (the runtime spine)
 //   - lib/tokens.ts      : typed nested object for TS / tailwind.config consumption
 // Run with `npm run build:tokens` (also runs automatically via `prebuild`).
+import { readFileSync } from 'node:fs'
 import StyleDictionary from 'style-dictionary'
+import { contrastFailures } from './contrast-gate.mjs'
+
+// Contrast first: a palette that fails WCAG AA doesn't get built.
+const failures = contrastFailures(JSON.parse(readFileSync(new URL('./tokens.json', import.meta.url), 'utf8')))
+if (failures.length) {
+  console.error(`✗ design tokens fail the contrast gate (design/contrast-gate.mjs):\n  ${failures.join('\n  ')}`)
+  process.exit(1)
+}
 
 // Custom format: a nested, typed TS object rebuilt from each token's path.
 StyleDictionary.registerFormat({

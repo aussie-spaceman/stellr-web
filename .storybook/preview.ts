@@ -9,8 +9,10 @@ import { fontVariables } from '../lib/fonts'
 // doesn't render that layout, so set them here.
 if (typeof document !== 'undefined') document.documentElement.classList.add(...fontVariables.split(' '))
 
-// The responsive contract: every component is reviewed at all three widths.
+// The responsive contract: every component is reviewed at these widths, and
+// opens on a phone first (most visitors are on one).
 const viewports = {
+  small: { name: 'Small phone (320)', styles: { width: '320px', height: '568px' }, type: 'mobile' as const },
   mobile: { name: 'Mobile (375)', styles: { width: '375px', height: '812px' }, type: 'mobile' as const },
   tablet: { name: 'Tablet (768)', styles: { width: '768px', height: '1024px' }, type: 'tablet' as const },
   desktop: { name: 'Desktop (1280)', styles: { width: '1280px', height: '800px' }, type: 'desktop' as const },
@@ -28,10 +30,12 @@ const preview: Preview = {
       },
     },
     controls: { matchers: { color: /(background|color)$/i, date: /Date$/i } },
+    // The same rule set the e2e axe check uses (WCAG 2.2 AA).
+    a11y: { options: { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] } } },
   },
   initialGlobals: {
     backgrounds: { value: 'surface' },
-    viewport: { value: 'desktop', isRotated: false },
+    viewport: { value: 'mobile', isRotated: false },
   },
 }
 

@@ -62,7 +62,7 @@ export default async function AdminMembersPage({
           <p className="eyebrow flex items-center gap-2 text-brand-blue">
             <span className="h-2 w-2 rounded-full bg-brand-blue-bright" />{' '}Members &amp; membership
           </p>
-          <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Members</h1>
+          <h1 className="mt-1 font-heading text-ds-h2 text-brand-blue-dark">Members</h1>
           <p className="text-sm text-brand-muted-soft mt-0.5">{count ?? 0} matching</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -104,7 +104,7 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
   return (
     <div className="app-card relative overflow-hidden p-4">
       <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
-      <p className="font-display text-display leading-none text-brand-blue-dark">{value.toLocaleString()}</p>
+      <p className="font-display text-ds-h2 leading-none text-brand-blue-dark">{value.toLocaleString()}</p>
       <p className="mt-1 font-subheading text-xs font-medium text-brand-muted-soft">{label}</p>
     </div>
   )

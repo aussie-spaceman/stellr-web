@@ -93,17 +93,17 @@ export default async function NewsArticlePage({ params }: PageProps) {
           </Link>
           <div className="flex flex-wrap items-center gap-3 mb-4">
             {post.category && (
-              <span className={`text-xs font-semibold px-3 py-1 rounded-full ${categoryColors[post.category] ?? 'bg-white/10 text-content-faint'}`}>
+              <span className={`text-xs font-semibold px-3 py-1 rounded-full ${categoryColors[post.category] ?? 'bg-white/10 text-hero-lead'}`}>
                 {post.category}
               </span>
             )}
             {post.publishedAt && (
-              <span className="text-sm text-content-faint">{formatDate(post.publishedAt)}</span>
+              <span className="text-sm text-hero-lead">{formatDate(post.publishedAt)}</span>
             )}
           </div>
           <h1 className="text-3xl sm:text-4xl font-bold leading-tight">{post.title}</h1>
           {post.excerpt && (
-            <p className="mt-4 text-lg text-content-faint">{post.excerpt}</p>
+            <p className="mt-4 text-lg text-hero-lead">{post.excerpt}</p>
           )}
         </div>
       </section>
@@ -142,7 +142,7 @@ export default async function NewsArticlePage({ params }: PageProps) {
                   </div>
                   <div className="p-4">
                     {rel.publishedAt && (
-                      <p className="text-xs text-brand-grey-mid mb-1">{formatDate(rel.publishedAt)}</p>
+                      <p className="text-xs text-content-muted mb-1">{formatDate(rel.publishedAt)}</p>
                     )}
                     <h3 className="font-bold text-brand-blue-dark text-sm leading-snug mb-2">{rel.title}</h3>
                     <Link

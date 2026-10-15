@@ -24,7 +24,7 @@ function QuoteCard({ quote, labelOverride }: { quote: QuoteAsset; labelOverride?
       style={{ borderLeft: `4px solid ${voice.color}`, background: `linear-gradient(180deg, ${voice.tint}, #fff 64%)` }}
     >
       <span
-        className="mb-3 inline-flex w-fit items-center rounded-pill px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[0.06em]"
+        className="mb-3 inline-flex w-fit items-center rounded-pill px-2.5 py-1 text-xs font-bold uppercase tracking-[0.06em]"
         style={{ color: voice.color, background: voice.tint }}
       >
         {labelOverride ?? voice.label}

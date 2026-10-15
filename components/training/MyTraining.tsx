@@ -17,7 +17,7 @@ function kindLabel(c: AssignedCourse): string {
 function StatCard({ label, value, danger }: { label: string; value: number; danger?: boolean }) {
   return (
     <div className="rounded-2xl border border-brand-border bg-white p-5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">{label}</p>
       <p className={`mt-2 text-3xl font-bold ${danger ? 'text-[#C0392B]' : 'text-brand-blue-dark'}`}>{value}</p>
     </div>
   )
@@ -105,7 +105,7 @@ function ContinueCard({ m }: { m: TrainingModuleSummary }) {
       className="group flex flex-col gap-3 rounded-2xl border border-brand-border bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-30px_rgba(20,26,61,.4)]"
       style={{ borderTop: `3px solid ${accent.color}` }}
     >
-      <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: type.ink }}>
+      <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: type.ink }}>
         {type.short}
       </span>
       <h3 className="text-base font-semibold leading-snug text-brand-blue-dark">{m.title}</h3>

@@ -66,7 +66,7 @@ export function AppSearch() {
           aria-label="Search the community"
           // Collapsed, the field is out of the tab order; the icon opens it.
           tabIndex={open ? 0 : -1}
-          className="w-full rounded-md border border-line px-3 py-1.5 text-sm text-brand-grey-dark placeholder:text-content-faint focus:border-brand-blue focus:outline-none"
+          className="w-full rounded-md border border-line-strong px-3 py-1.5 text-input mouse:text-sm text-brand-grey-dark placeholder:text-content-faint focus:border-brand-blue focus:outline-none"
         />
       </div>
       {open ? (

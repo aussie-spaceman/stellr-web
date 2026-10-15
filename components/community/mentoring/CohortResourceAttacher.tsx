@@ -78,7 +78,7 @@ export function CohortResourceAttacher({
               value={q}
               onChange={(e) => search(e.target.value)}
               placeholder="Search the resource library…"
-              className="flex-1 text-sm outline-none"
+              className="flex-1 text-input mouse:text-sm outline-none"
             />
           </div>
           <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto">
@@ -153,7 +153,7 @@ function AttachedRow({
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
       <span className="flex items-center gap-2 font-medium text-ink">
-        {isLink ? <Link2 className="h-4 w-4 text-enviro-green" /> : <FileText className="h-4 w-4 text-primary" />}
+        {isLink ? <Link2 className="h-4 w-4 text-enviro-green-text" /> : <FileText className="h-4 w-4 text-primary" />}
         {r.title}
       </span>
       <div className="flex items-center gap-3">
@@ -163,7 +163,7 @@ function AttachedRow({
           Mandatory
         </label>
         {mandatory && (
-          <input type="date" value={due} onChange={(e) => { setDue(e.target.value); save(mandatory, e.target.value) }} className="rounded-[9px] border border-line px-2.5 py-1.5 text-[13px] text-content" />
+          <input type="date" value={due} onChange={(e) => { setDue(e.target.value); save(mandatory, e.target.value) }} className="rounded-[9px] border border-line-strong px-2.5 py-1.5 text-input mouse:text-sm text-content" />
         )}
         {!mandatory && due && <span className="text-[12px] text-content-faint">due {new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(new Date(due))}</span>}
         <button onClick={() => post({ action: 'detachResource', resourceId: r.resourceId })} className="text-[13px] font-medium text-danger hover:underline">Remove</button>

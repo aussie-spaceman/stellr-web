@@ -20,7 +20,7 @@ function StatusPill({ status }: { status: GroupCellStatus }) {
   const s = CELL[status]
   return (
     <span
-      className="inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+      className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold"
       style={{ background: s.bg, color: s.color }}
     >
       {s.label}
@@ -31,7 +31,7 @@ function StatusPill({ status }: { status: GroupCellStatus }) {
 function SummaryCard({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
     <div className="rounded-2xl border border-brand-border bg-white p-5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">{label}</p>
       <p className="mt-2 text-3xl font-bold" style={{ color: color ?? '#13183A' }}>{value}</p>
     </div>
   )
@@ -92,7 +92,7 @@ export function GroupProgressView({ data }: { data: GroupProgress }) {
             value={data.selectedRef ?? ''}
             onChange={(e) => setObject(e.target.value)}
             aria-label="Object filter"
-            className="rounded-xl border border-brand-border bg-white px-3 py-2 text-sm font-medium text-brand-blue-dark focus:border-brand-blue focus:outline-none"
+            className="rounded-xl border border-line-strong bg-white px-3 py-2 text-input mouse:text-sm font-medium text-brand-blue-dark focus:border-brand-blue focus:outline-none"
           >
             {data.objects.map((o) => (
               <option key={o.ref} value={o.ref}>{o.label}</option>
@@ -103,7 +103,7 @@ export function GroupProgressView({ data }: { data: GroupProgress }) {
               value={groupFilter}
               onChange={(e) => setGroupFilter(e.target.value)}
               aria-label="Group filter"
-              className="rounded-xl border border-brand-border bg-white px-3 py-2 text-sm font-medium text-brand-blue-dark focus:border-brand-blue focus:outline-none"
+              className="rounded-xl border border-line-strong bg-white px-3 py-2 text-input mouse:text-sm font-medium text-brand-blue-dark focus:border-brand-blue focus:outline-none"
             >
               <option value="all">All groups</option>
               {data.groups.map((g) => (
@@ -142,7 +142,7 @@ export function GroupProgressView({ data }: { data: GroupProgress }) {
         <div className="overflow-x-auto rounded-2xl border border-brand-border bg-white">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
-              <tr className="border-b border-brand-hairline text-[11px] uppercase tracking-wide text-brand-muted-soft">
+              <tr className="border-b border-brand-hairline text-xs uppercase tracking-wide text-brand-muted-soft">
                 <th className="px-5 py-3 font-semibold">Student</th>
                 {data.courses.map((c) => (
                   <th key={c.moduleId} className="px-3 py-3 font-semibold">{c.title}</th>

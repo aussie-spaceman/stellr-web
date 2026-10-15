@@ -11,42 +11,44 @@
   --color-utility-navy: #0a1b3c; /** Header top utility bar */
   --color-surface: #f6f7fb; /** Section / panel background */
   --color-white: #ffffff;
-  --color-primary: #3c6df6; /** Primary action / CTA */
+  --color-primary: #3562e4; /** Primary action / CTA. 5.2:1 on white, both as text and under white text (was #3C6DF6, 4.46:1) */
   --color-primary-deep: #2c53c6; /** Hover / gradient end */
   --color-donate-gold: #e0a23a; /** Donate button */
   --color-star-gold: #ffc24b; /** Highlight / milestone */
-  --color-space-violet: #7c5cfc; /** Theme: Space */
-  --color-enviro-green: #1fa97a; /** Theme: Environmental */
+  --color-space-violet: #6646e6; /** Theme: Space. 5.9:1 on white, so it works as text (was #7C5CFC, 4.38:1) */
+  --color-enviro-green: #189468; /** Theme: Environmental, for fills and icons (3.8:1). Text uses themeTint.enviroText */
   --color-pathway-amber: #e0922f; /** Pathway: Campaign */
   --color-pathway-amber-deep: #c2722a; /** Pathway amber hover / gradient end */
   --color-avatar-teal: #16b6c4; /** Account avatar */
+  --color-gold-ink: #9e5b22; /** Gold / amber as TEXT on white (5.3:1). Amber and gold fills carry ink text */
+  --color-hero-muted: #8e98c4; /** Secondary text on midnight (6.4:1), e.g. the footer legal row */
   --color-text-primary: #2a2f45;
   --color-text-body: #454b68;
   --color-text-secondary: #5a6178;
   --color-text-muted: #6a708c;
-  --color-text-faint: #8a90ad;
+  --color-text-faint: #6a708c; /** Quietest text on LIGHT backgrounds: 4.5:1 on surface (was #8A90AD, 3.15:1). On dark use heroMuted */
   --color-border: #e4e7f2; /** Card / divider border */
   --color-border-light: #eceef6;
   --color-border-strong: #868ca9; /** Form-control borders: 3.3:1 on white, the WCAG 1.4.11 minimum for a control's edge. `border` (1.2:1) is for dividers only. */
   --color-danger: #b0554d; /** Avoid / negative copy */
-  --bracket-school: #3c6df6; /** High-school students — aliases color.primary */
+  --bracket-school: #3562e4; /** High-school students — aliases color.primary */
   --bracket-school-tint: #eaf0fe;
   --bracket-school-deep: #2c53c6; /** = color.primaryDeep */
-  --bracket-college: #7c5cfc; /** College students — aliases color.spaceViolet */
+  --bracket-college: #6646e6; /** College students — aliases color.spaceViolet */
   --bracket-college-tint: #f4f0ff;
   --bracket-college-deep: #5b3fd6;
   --bracket-adult: #16b6c4; /** Adults / educators — aliases color.avatarTeal */
   --bracket-adult-tint: #e4f7f9;
-  --bracket-adult-deep: #0e8c99;
+  --bracket-adult-deep: #0a7480; /** Text and selected fills for the adults bracket: 5.5:1 on white, 5:1 on its tint */
   --tier-explorer: #7aa0fb; /** High-school · base */
-  --tier-pathfinder: #3c6df6; /** High-school */
+  --tier-pathfinder: #3562e4; /** High-school */
   --tier-scholar: #1e3fa8; /** High-school · top */
   --tier-alumni: #a892fd; /** College · base */
-  --tier-contributor: #7c5cfc; /** College */
+  --tier-contributor: #6646e6; /** College */
   --tier-counselor: #4e2ec2; /** College · top */
   --tier-educator: #5fd3dd; /** Adults · base */
   --tier-catalyst: #16b6c4; /** Adults */
-  --tier-innovator: #0e8c99; /** Adults */
+  --tier-innovator: #0b7c88; /** Adults */
   --tier-trailblazer: #0a6470; /** Adults · top */
   --theme-tint-space-bg: #f6f2ff;
   --theme-tint-space-chip: #ede6ff;
@@ -60,13 +62,13 @@
   --font-body: Hanken Grotesk; /** Body & UI, weights 400–700 */
   --font-competition-display: Norwester; /** Competition-materials headings (print/slides) */
   --font-competition-body: Aileron; /** Competition-materials body (print/slides) */
-  --font-size-h1: 56px;
-  --font-size-h2: 32px;
+  --font-size-h1: clamp(2.25rem, 1.6rem + 3vw, 3.5rem); /** Fluid: 36px on a 320px phone, 56px from about 1100px wide */
+  --font-size-h2: clamp(1.625rem, 1.35rem + 1.2vw, 2rem); /** Fluid: 26px on a phone, 32px on desktop */
   --font-size-h3: 18px;
   --font-size-eyebrow: 13px; /** Uppercase, letter-spacing .13em */
-  --font-size-lead: 18px;
+  --font-size-lead: clamp(1rem, 0.95rem + 0.3vw, 1.125rem); /** Fluid: 16px on a phone, 18px on desktop */
   --font-size-body: 15px;
-  --font-size-meta: 13px;
+  --font-size-meta: 13px; /** The type floor is 12px (text-xs): nothing in the UI is set smaller (scripts/ds-lint.mjs) */
   --font-size-input: 16px; /** Form-field text on phones and tablets. iOS Safari zooms the page into any field under 16px. */
   --letter-spacing-display: -0.025em;
   --letter-spacing-heading: -0.02em;

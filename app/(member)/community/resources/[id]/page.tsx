@@ -58,7 +58,7 @@ export default async function ResourceDetailPage({ params }: { params: Promise<{
 
       {/* How you have access */}
       <section className="mt-8 rounded-2xl border border-brand-border bg-white p-5">
-        <h2 className="font-heading text-sm uppercase tracking-wide text-brand-blue-dark">How you have access</h2>
+        <h2 className="font-heading text-sm text-brand-blue-dark">How you have access</h2>
         <ul className="mt-3 space-y-2">
           {detail.attachments.map((a) => (
             <li key={a.attachmentId} className="flex items-center justify-between gap-3 text-sm">
@@ -111,7 +111,7 @@ export default async function ResourceDetailPage({ params }: { params: Promise<{
 
       {/* Flag — reuses the shared chat moderation pipeline (community_flags). */}
       <section id="flag-section" className="mt-4 rounded-2xl border border-brand-border bg-white p-5">
-        <h2 className="font-heading text-sm uppercase tracking-wide text-brand-blue-dark">Report a problem</h2>
+        <h2 className="font-heading text-sm text-brand-blue-dark">Report a problem</h2>
         <p className="mb-3 mt-1 text-sm text-brand-muted-soft">
           Reports go to the moderation team. Tell us what’s wrong with this resource.
         </p>

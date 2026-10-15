@@ -144,7 +144,7 @@ export function PeopleTab({ onJumpToObject }: { onJumpToObject?: (ref: string) =
         ) : (
           <>
             <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">Membership tier</h3>
+              <h3 className="mb-2 text-xs font-semibold text-brand-muted-soft">Membership tier</h3>
               <div className="flex flex-wrap gap-1.5">
                 {ALL_TIERS.map((t) => {
                   const held = person.memberships.some((m) => m.tierName === t)
@@ -175,7 +175,7 @@ export function PeopleTab({ onJumpToObject }: { onJumpToObject?: (ref: string) =
             </section>
 
             <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">Web-app roles</h3>
+              <h3 className="mb-2 text-xs font-semibold text-brand-muted-soft">Web-app roles</h3>
               <div className="flex flex-wrap gap-1.5">
                 {ALL_ROLES.map((r) => {
                   const held = person.roles.includes(r)
@@ -190,7 +190,7 @@ export function PeopleTab({ onJumpToObject }: { onJumpToObject?: (ref: string) =
                       className={
                         'rounded-full border px-2.5 py-1 text-xs ' +
                         (held
-                          ? 'border-brand-teal bg-brand-teal text-white font-medium'
+                          ? 'border-adult-teal-deep bg-adult-teal-deep text-white font-medium'
                           : allowed
                             ? 'border-brand-border bg-white text-brand-muted hover:bg-brand-canvas'
                             : 'border-brand-hairline bg-brand-canvas text-brand-muted-soft/60 cursor-not-allowed line-through')
@@ -204,7 +204,7 @@ export function PeopleTab({ onJumpToObject }: { onJumpToObject?: (ref: string) =
             </section>
 
             <section>
-              <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">
+              <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-brand-muted-soft">
                 <ShieldCheck className="h-3.5 w-3.5" /> Effective access
               </h3>
               {person.rows.length === 0 ? (
@@ -216,24 +216,24 @@ export function PeopleTab({ onJumpToObject }: { onJumpToObject?: (ref: string) =
                       key={`${row.objectType}:${row.objectRef}`}
                       className="flex items-center gap-2 rounded-lg border border-brand-hairline bg-white px-3 py-2 text-sm"
                     >
-                      <span className={'rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ' + (TYPE_BADGE[row.objectType] ?? TYPE_BADGE.resource)}>
+                      <span className={'rounded px-1.5 py-0.5 text-xs font-medium uppercase ' + (TYPE_BADGE[row.objectType] ?? TYPE_BADGE.resource)}>
                         {row.objectType}
                       </span>
                       <span className="truncate text-brand-blue-dark">{row.label}</span>
-                      {row.archived && <span className="text-[10px] uppercase text-brand-muted-soft">archived</span>}
+                      {row.archived && <span className="text-xs uppercase text-brand-muted-soft">archived</span>}
                       <span className="ml-auto flex items-center gap-1.5">
                         <span className="text-xs text-brand-muted">{row.role}</span>
                         {row.sources.map((s, i) => (
                           <span
                             key={i}
                             title={SOURCE_HINT[s.label] ?? 'How this access is granted'}
-                            className="rounded-full bg-brand-hairline px-2 py-0.5 text-[10px] text-brand-muted"
+                            className="rounded-full bg-brand-hairline px-2 py-0.5 text-xs text-brand-muted"
                           >
                             {s.label}
                           </span>
                         ))}
                         {row.redundant && (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-800" title="On the roster and a manager of the same object">
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800" title="On the roster and a manager of the same object">
                             redundant
                           </span>
                         )}

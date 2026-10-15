@@ -82,12 +82,12 @@ export function ObjectsTab({ initialRef }: { initialRef?: string | null }) {
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter objects…"
-            className="w-full rounded-md border border-brand-border px-2 py-1.5 text-sm"
+            className="w-full rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm"
           />
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="rounded-md border border-brand-border px-2 py-1.5 text-sm"
+            className="rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm"
           >
             <option value="">all</option>
             {Object.keys(TYPE_BADGE).map((t) => (
@@ -107,11 +107,11 @@ export function ObjectsTab({ initialRef }: { initialRef?: string | null }) {
                     : 'border-brand-hairline bg-white hover:bg-brand-canvas')
                 }
               >
-                <span className={'rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ' + (TYPE_BADGE[o.objectType] ?? TYPE_BADGE.resource)}>
+                <span className={'rounded px-1.5 py-0.5 text-xs font-medium uppercase ' + (TYPE_BADGE[o.objectType] ?? TYPE_BADGE.resource)}>
                   {o.objectType}
                 </span>
                 <span className="truncate text-brand-blue-dark">{o.label}</span>
-                {o.archived && <span className="ml-auto text-[10px] uppercase text-brand-muted-soft">archived</span>}
+                {o.archived && <span className="ml-auto text-xs uppercase text-brand-muted-soft">archived</span>}
               </button>
             </li>
           ))}
@@ -147,14 +147,14 @@ function ObjectDetail({ object }: { object: ObjectListItem }) {
   return (
     <div className="rounded-xl border border-brand-border bg-white p-4">
       <div className="mb-4 flex items-center gap-2">
-        <span className={'rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ' + (TYPE_BADGE[object.objectType] ?? TYPE_BADGE.resource)}>
+        <span className={'rounded px-1.5 py-0.5 text-xs font-medium uppercase ' + (TYPE_BADGE[object.objectType] ?? TYPE_BADGE.resource)}>
           {object.objectType}
         </span>
         <h2 className="truncate font-semibold text-brand-blue-dark">{object.label}</h2>
         {gates && (
           <span className="ml-2 flex gap-1">
-            {gates.payment && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-800">payment gate</span>}
-            {gates.docusign && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-800">DocuSign gate</span>}
+            {gates.payment && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">payment gate</span>}
+            {gates.docusign && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">DocuSign gate</span>}
           </span>
         )}
         {legacyHref && (
@@ -258,7 +258,7 @@ function RosterPane({ object }: { object: ObjectListItem }) {
           {adding ? (
             <div className="flex items-start gap-2">
               <div className="flex-1"><MemberPicker onPick={add} /></div>
-              <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-md border border-brand-border px-2 py-1.5 text-sm">
+              <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm">
                 {['member', 'participant', 'mentor', 'coach', 'moderator', 'volunteer'].map((r) => (
                   <option key={r} value={r}>{r}</option>
                 ))}
@@ -286,11 +286,11 @@ function RosterPane({ object }: { object: ObjectListItem }) {
           {rows.map((r, i) => (
             <li key={r.member_id + i} className="flex items-center gap-2 rounded-lg border border-brand-hairline px-3 py-1.5 text-sm">
               <span className="text-brand-blue-dark">{memberName(r.members)}</span>
-              <span className="rounded-full bg-brand-hairline px-2 py-0.5 text-[10px] text-brand-muted capitalize">
+              <span className="rounded-full bg-brand-hairline px-2 py-0.5 text-xs text-brand-muted capitalize">
                 {r.relationship ?? r.role ?? 'member'}
               </span>
               {r.status && r.status !== 'active' && (
-                <span className="text-[10px] uppercase text-brand-muted-soft">{r.status}</span>
+                <span className="text-xs uppercase text-brand-muted-soft">{r.status}</span>
               )}
               {!isEvent && (
                 <button onClick={() => remove(r.member_id)} className="ml-auto" title="Remove from roster">
@@ -368,9 +368,9 @@ function ManagersPane({ object }: { object: ObjectListItem }) {
           {rows.map((r, i) => (
             <li key={r.member_id + i} className="flex items-center gap-2 rounded-lg border border-brand-hairline px-3 py-1.5 text-sm">
               <span className="text-brand-blue-dark">{memberName(r.members)}</span>
-              <span className="rounded-full bg-brand-hairline px-2 py-0.5 text-[10px] text-brand-muted capitalize">{r.role}</span>
+              <span className="rounded-full bg-brand-hairline px-2 py-0.5 text-xs text-brand-muted capitalize">{r.role}</span>
               {r.source === 'structural' && (
-                <span className="text-[10px] text-brand-muted-soft" title="Set on the container itself (coach/mentor)">structural</span>
+                <span className="text-xs text-brand-muted-soft" title="Set on the container itself (coach/mentor)">structural</span>
               )}
               {r.source === 'grant' && (
                 <button onClick={() => remove(r.member_id)} className="ml-auto" title="Revoke manager grant">
@@ -452,7 +452,7 @@ function ContentsPane({ object }: { object: ObjectListItem }) {
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
-        <select value={pickRef} onChange={(e) => setPickRef(e.target.value)} className="min-w-0 flex-1 rounded-md border border-brand-border px-2 py-1.5 text-sm">
+        <select value={pickRef} onChange={(e) => setPickRef(e.target.value)} className="min-w-0 flex-1 rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm">
           <option value="">Attach an object…</option>
           {attachable.map((o) => (
             <option key={`${o.objectType}:${o.ref}`} value={o.ref}>[{o.objectType}] {o.label}</option>
@@ -465,18 +465,18 @@ function ContentsPane({ object }: { object: ObjectListItem }) {
 
       {sources.length > 0 && (
         <div className="mb-3 rounded-lg border border-brand-hairline bg-brand-canvas px-3 py-2">
-          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-brand-muted-soft">Attached to</p>
+          <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-brand-muted-soft">Attached to</p>
           <ul className="space-y-1">
             {sources.map((s) => (
               <li key={s.id} className="flex items-center gap-2 text-sm">
-                <span className={'rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ' + (TYPE_BADGE[s.objectType] ?? TYPE_BADGE.resource)}>
+                <span className={'rounded px-1.5 py-0.5 text-xs font-medium uppercase ' + (TYPE_BADGE[s.objectType] ?? TYPE_BADGE.resource)}>
                   {s.objectType}
                 </span>
                 <span className="truncate text-brand-blue-dark">{s.label}</span>
               </li>
             ))}
           </ul>
-          <p className="mt-1.5 text-[11px] text-brand-muted-soft">Managed from each object&apos;s Contents.</p>
+          <p className="mt-1.5 text-xs text-brand-muted-soft">Managed from each object&apos;s Contents.</p>
         </div>
       )}
       {!rows ? (
@@ -487,12 +487,12 @@ function ContentsPane({ object }: { object: ObjectListItem }) {
         <ul className="space-y-1">
           {rows.map((r) => (
             <li key={r.id} className="flex items-center gap-2 rounded-lg border border-brand-hairline px-3 py-1.5 text-sm">
-              <span className={'rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ' + (TYPE_BADGE[r.objectType] ?? TYPE_BADGE.resource)}>
+              <span className={'rounded px-1.5 py-0.5 text-xs font-medium uppercase ' + (TYPE_BADGE[r.objectType] ?? TYPE_BADGE.resource)}>
                 {r.objectType}
               </span>
               <span className="truncate text-brand-blue-dark">{r.label}</span>
-              {r.mandatory && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-800">mandatory</span>}
-              {r.dueAt && <span className="text-[10px] text-brand-muted-soft">due {r.dueAt.slice(0, 10)}</span>}
+              {r.mandatory && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">mandatory</span>}
+              {r.dueAt && <span className="text-xs text-brand-muted-soft">due {r.dueAt.slice(0, 10)}</span>}
               <button onClick={() => remove(r)} className="ml-auto" title="Detach">
                 <Trash2 className="h-4 w-4 text-brand-muted-soft hover:text-red-600" />
               </button>

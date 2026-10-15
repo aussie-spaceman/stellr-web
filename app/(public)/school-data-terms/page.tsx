@@ -13,15 +13,15 @@ export default function SchoolDataTermsPage() {
     <div className="section-padding container-max max-w-3xl">
       <h1 className="text-4xl font-bold text-brand-blue-dark mb-8">School Data Terms</h1>
       <div className="prose prose-slate max-w-none space-y-6 text-brand-grey-dark">
-        <p className="text-sm text-brand-grey-mid italic">
+        <p className="text-sm text-content-muted italic">
           Version {SCHOOL_DATA_TERMS_VERSION} &nbsp;·&nbsp; Effective {SCHOOL_DATA_TERMS_EFFECTIVE}
         </p>
         <p>
           When a teacher registers a group of students for a Stellr event, they accept these terms on
           their school&rsquo;s behalf. They set out what we do with the student information the school
           shares, and what we will never do with it. They sit alongside our{' '}
-          <Link href="/privacy" className="text-brand-blue hover:underline">Privacy Policy</Link> and{' '}
-          <Link href="/terms" className="text-brand-blue hover:underline">Terms of Use</Link>.
+          <Link href="/privacy" className="text-brand-blue underline underline-offset-2 hover:no-underline">Privacy Policy</Link> and{' '}
+          <Link href="/terms" className="text-brand-blue underline underline-offset-2 hover:no-underline">Terms of Use</Link>.
         </p>
         {SCHOOL_DATA_TERMS.map((section) => (
           <section key={section.heading}>

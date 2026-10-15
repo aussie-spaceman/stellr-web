@@ -81,7 +81,7 @@ export function AddressBook() {
                 <div className="font-medium text-brand-blue-dark">
                   {a.label || 'Address'}
                   {a.is_default && (
-                    <span className="ml-2 rounded bg-brand-blue/5 px-1.5 py-0.5 text-[11px] text-brand-blue">Default</span>
+                    <span className="ml-2 rounded bg-brand-blue/5 px-1.5 py-0.5 text-xs text-brand-blue">Default</span>
                   )}
                 </div>
                 <div className="text-brand-muted">

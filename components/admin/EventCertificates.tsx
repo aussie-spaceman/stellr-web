@@ -71,7 +71,7 @@ export default function EventCertificates({ eventSlug }: { eventSlug: string }) 
     <div className="bg-white rounded-xl border border-brand-border p-4 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Certificates</h3>
+          <h3 className="text-sm font-semibold text-brand-muted">Certificates</h3>
           <p className="text-xs text-brand-muted-soft mt-1">
             Upload the finished artwork for each certificate. Only the recipient&rsquo;s name is added, centred in the
             space you set.
@@ -81,7 +81,7 @@ export default function EventCertificates({ eventSlug }: { eventSlug: string }) 
           <select
             value={format}
             onChange={(e) => setFormat(e.target.value as 'us_letter' | 'a4')}
-            className="border border-brand-border rounded-lg px-2 py-1.5 text-sm bg-white text-brand-muted"
+            className="border border-line-strong rounded-lg px-2 py-1.5 text-input mouse:text-sm bg-white text-brand-muted"
             aria-label="Paper size"
           >
             <option value="us_letter">US Letter</option>
@@ -226,7 +226,7 @@ function NamePositioner({
         <label className="block text-xs text-brand-muted-soft space-y-1">
           <span>Sample name</span>
           <input
-            className="w-full rounded-md border border-brand-border px-2 py-1.5 text-sm text-brand-blue-dark"
+            className="w-full rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm text-brand-blue-dark"
             value={sample}
             onChange={(e) => setSample(e.target.value)}
           />

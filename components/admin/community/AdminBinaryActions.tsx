@@ -60,7 +60,7 @@ export function AdminBinaryActions({
           onChange={(e) => setValue(e.target.value)}
           maxLength={200}
           autoFocus
-          className="w-44 rounded border border-brand-border px-2 py-1 text-xs focus:border-brand-blue-dark focus:outline-none"
+          className="w-44 rounded border border-line-strong px-2 py-1 text-input mouse:text-xs focus:border-brand-blue-dark focus:outline-none"
         />
         <button onClick={rename} disabled={busy} className="rounded bg-brand-blue-dark px-2 py-1 text-xs font-medium text-white disabled:opacity-50">
           Save

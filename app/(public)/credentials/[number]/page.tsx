@@ -70,7 +70,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
 const STATE_BADGE: Record<CredentialState, { label: string; className: string; Icon: typeof Check }> = {
   valid:     { label: 'Valid',     className: 'bg-enviro-green-bg text-enviro-green-text', Icon: Check },
-  expired:   { label: 'Expired',   className: 'bg-pathway-amber-bg text-pathway-amber-deep', Icon: Clock },
+  expired:   { label: 'Expired',   className: 'bg-pathway-amber-bg text-gold-ink', Icon: Clock },
   revoked:   { label: 'Revoked',   className: 'bg-danger/10 text-danger', Icon: ShieldAlert },
   withdrawn: { label: 'Withdrawn', className: 'bg-surface text-content-muted', Icon: ShieldOff },
 }

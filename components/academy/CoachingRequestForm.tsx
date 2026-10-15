@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, Check } from 'lucide-react'
+import { Field, Fieldset, Select, Textarea } from '@stellr/web-ui'
 
 const STAGE_OPTIONS = [
   { value: 'high-school', label: 'High school student' },
@@ -47,6 +48,8 @@ export function CoachingRequestForm() {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [topicError, setTopicError] = useState<string | null>(null)
+  const topicRef = useRef<HTMLTextAreaElement>(null)
   const [resumed, setResumed] = useState(false)
 
   // Restore an in-progress draft after a guest signs up and returns here.
@@ -73,11 +76,13 @@ export function CoachingRequestForm() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!topic.trim()) {
-      setError('Please tell us what you would like coaching on.')
+      setTopicError('Please tell us what you would like coaching on.')
+      topicRef.current?.focus()
       return
     }
     setBusy(true)
     setError(null)
+    setTopicError(null)
     const payload: Draft = { topic, stage, focusArea, availability, note }
     try {
       const res = await fetch('/api/community/coaching/requests', {
@@ -106,73 +111,57 @@ export function CoachingRequestForm() {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-6">
+    // noValidate: a missing topic shows our message under the field (and the
+    // field takes focus) rather than the browser's bubble.
+    <form onSubmit={submit} className="space-y-6" noValidate>
       {resumed && (
-        <div className="flex items-center gap-2 rounded-panel bg-[#E3F6F8] px-4 py-3 text-sm font-medium text-[#0E8C99]">
-          <Check size={16} /> Welcome back — review your request and submit.
+        <div className="flex items-center gap-2 rounded-panel bg-adult-teal/10 px-4 py-3 text-sm font-medium text-adult-teal-deep">
+          <Check size={16} aria-hidden="true" /> Welcome back — review your request and submit.
         </div>
       )}
 
       {/* Topic */}
-      <div>
-        <label htmlFor="topic" className="block text-sm font-bold text-ink">
-          What would you like coaching on? <span className="text-danger">*</span>
-        </label>
-        <textarea
+      <Field label="What would you like coaching on?" required error={topicError ?? undefined}>
+        <Textarea
+          ref={topicRef}
           id="topic"
           value={topic}
-          onChange={(e) => setTopic(e.target.value)}
+          onChange={(e) => {
+            setTopic(e.target.value)
+            if (topicError) setTopicError(null)
+          }}
           rows={3}
-          required
           placeholder="e.g. Turning my Orbital Habitat project into a portfolio piece for university applications."
-          className="mt-2 w-full rounded-panel border border-line bg-white px-4 py-3 text-[15px] text-ink placeholder:text-content-faint focus:border-[#0E8C99] focus:outline-none focus:ring-2 focus:ring-[#0E8C99]/20"
         />
-      </div>
+      </Field>
 
       {/* Stage + Focus */}
-      <div className="grid gap-5 sm:grid-cols-2">
-        <div>
-          <label htmlFor="stage" className="block text-sm font-bold text-ink">
-            Where are you right now?
-          </label>
-          <select
-            id="stage"
-            value={stage}
-            onChange={(e) => setStage(e.target.value)}
-            className="mt-2 w-full rounded-panel border border-line bg-white px-4 py-3 text-[15px] text-ink focus:border-[#0E8C99] focus:outline-none focus:ring-2 focus:ring-[#0E8C99]/20"
-          >
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <Field label="Where are you right now?">
+          <Select id="stage" value={stage} onChange={(e) => setStage(e.target.value)}>
             <option value="">Select…</option>
             {STAGE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="focus" className="block text-sm font-bold text-ink">
-            Main focus area
-          </label>
-          <select
-            id="focus"
-            value={focusArea}
-            onChange={(e) => setFocusArea(e.target.value)}
-            className="mt-2 w-full rounded-panel border border-line bg-white px-4 py-3 text-[15px] text-ink focus:border-[#0E8C99] focus:outline-none focus:ring-2 focus:ring-[#0E8C99]/20"
-          >
+          </Select>
+        </Field>
+        <Field label="Main focus area">
+          <Select id="focus" value={focusArea} onChange={(e) => setFocusArea(e.target.value)}>
             <option value="">Select…</option>
             {FOCUS_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
-          </select>
-        </div>
+          </Select>
+        </Field>
       </div>
 
-      {/* Availability */}
-      <div>
-        <span className="block text-sm font-bold text-ink">When are you usually free?</span>
-        <div className="mt-2 grid grid-cols-2 gap-2">
+      {/* Availability: toggle buttons (aria-pressed), named as a group. */}
+      <Fieldset legend="When are you usually free?">
+        <div className="grid grid-cols-2 gap-2">
           {AVAILABILITY_OPTIONS.map((o) => {
             const active = availability.includes(o.value)
             return (
@@ -181,13 +170,14 @@ export function CoachingRequestForm() {
                 key={o.value}
                 onClick={() => toggleAvailability(o.value)}
                 aria-pressed={active}
-                className={`flex items-center gap-2 rounded-panel border px-4 py-2.5 text-left text-sm font-medium transition-colors ${
+                className={`flex min-h-11 items-center gap-2 rounded-panel border px-4 py-2.5 text-left text-sm font-medium transition-colors ${
                   active
-                    ? 'border-[#0E8C99] bg-[#E3F6F8] text-[#0E8C99]'
-                    : 'border-line bg-white text-content-secondary hover:border-content-faint'
+                    ? 'border-[#0E8C99] bg-adult-teal/10 text-adult-teal-deep'
+                    : 'border-line-strong bg-white text-content-secondary hover:border-content-faint'
                 }`}
               >
                 <span
+                  aria-hidden="true"
                   className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 ${
                     active ? 'border-[#0E8C99] bg-[#0E8C99] text-white' : 'border-content-faint'
                   }`}
@@ -199,23 +189,18 @@ export function CoachingRequestForm() {
             )
           })}
         </div>
-      </div>
+      </Fieldset>
 
       {/* Note */}
-      <div>
-        <label htmlFor="note" className="block text-sm font-bold text-ink">
-          Anything else your coach should know? <span className="font-normal text-content-faint">(optional)</span>
-        </label>
-        <textarea
-          id="note"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={2}
-          className="mt-2 w-full rounded-panel border border-line bg-white px-4 py-3 text-[15px] text-ink placeholder:text-content-faint focus:border-[#0E8C99] focus:outline-none focus:ring-2 focus:ring-[#0E8C99]/20"
-        />
-      </div>
+      <Field label="Anything else your coach should know?" hint="Optional.">
+        <Textarea id="note" value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
+      </Field>
 
-      {error && <p className="text-sm font-medium text-danger">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm font-medium text-danger">
+          {error}
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <button

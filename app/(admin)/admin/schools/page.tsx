@@ -28,7 +28,7 @@ export default async function AdminSchoolsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-heading uppercase text-title text-brand-blue-dark">Schools</h1>
+          <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Schools</h1>
           <p className="text-sm text-brand-muted-soft mt-0.5">{active.length} active</p>
         </div>
       </div>

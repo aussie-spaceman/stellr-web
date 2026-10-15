@@ -36,7 +36,7 @@ export default async function NewsPage() {
       <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-4xl sm:text-5xl font-bold mb-3">News &amp; Announcements</h1>
-          <p className="text-lg text-content-faint">The latest from Stellr Education.</p>
+          <p className="text-lg text-hero-lead">The latest from Stellr Education.</p>
         </div>
       </section>
 
@@ -67,7 +67,7 @@ export default async function NewsPage() {
                   </span>
                 )}
                 {post.publishedAt && (
-                  <span className="text-xs text-brand-grey-mid">{formatDate(post.publishedAt)}</span>
+                  <span className="text-xs text-content-muted">{formatDate(post.publishedAt)}</span>
                 )}
               </div>
 

@@ -42,7 +42,7 @@ export default async function InvitePage({ params }: { params: Promise<{ cohortI
           <p className="font-subheading text-[12px] font-semibold uppercase tracking-[0.13em] text-hero-dim">
             Cohort invitation
           </p>
-          <h1 className="mt-2 font-display text-[28px] font-bold tracking-[-0.02em]">{cohort.name}</h1>
+          <h1 className="mt-2 font-display text-[28px] font-bold">{cohort.name}</h1>
           <p className="mt-1.5 max-w-md text-[14px] text-hero-lead">
             {cohort.blurb ?? 'A small-group development cohort led by a Stellr mentor — live sessions, resources, actions and chat.'}
           </p>
@@ -79,7 +79,7 @@ export default async function InvitePage({ params }: { params: Promise<{ cohortI
 function StatTile({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="rounded-[12px] border border-line bg-surface px-4 py-3">
-      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-content-faint">
+      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-content-faint">
         <span className="text-space-violet">{icon}</span> {label}
       </p>
       <p className="mt-1 font-display text-[18px] font-bold text-ink">{value}</p>

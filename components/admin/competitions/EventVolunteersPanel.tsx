@@ -27,7 +27,7 @@ function Pill({ tone, label, title }: { tone: 'green' | 'amber' | 'red'; label: 
     red: 'bg-red-100 text-red-700',
   }[tone]
   return (
-    <span title={title} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}>
+    <span title={title} className={`rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${cls}`}>
       {label}
     </span>
   )
@@ -129,7 +129,7 @@ export function EventVolunteersPanel({ slug, isAdmin }: { slug: string; isAdmin:
       <MemberPicker onPick={(m: PickedMember) => post('POST', m.id)} disabled={busy} placeholder="Assign any member as a volunteer…" />
       {notice && <p role="status" className="mt-2 text-xs text-brand-muted">{notice}</p>}
 
-      <h3 className="mt-4 mb-1.5 text-xs font-semibold uppercase tracking-wide text-brand-muted">
+      <h3 className="mt-4 mb-1.5 text-xs font-semibold text-brand-muted">
         Offered to help
       </h3>
       <ul className="space-y-1.5">
@@ -150,7 +150,7 @@ export function EventVolunteersPanel({ slug, isAdmin }: { slug: string; isAdmin:
         )}
       </ul>
 
-      <h3 className="mt-4 mb-1.5 text-xs font-semibold uppercase tracking-wide text-brand-muted">
+      <h3 className="mt-4 mb-1.5 text-xs font-semibold text-brand-muted">
         Assigned
       </h3>
       <ul className="space-y-1.5">

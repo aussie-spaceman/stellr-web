@@ -24,6 +24,7 @@ const config: Config = {
         midnight:     { DEFAULT: c.midnight, deep: c.midnightDeep },
         'hero-lead':  c.heroLead,
         'hero-dim':   c.heroDim,
+        'hero-muted': c.heroMuted, // secondary text on midnight (footer legal row)
         ink:          c.ink,
         'utility-navy': c.utilityNavy,
         surface:      c.surface,
@@ -36,8 +37,12 @@ const config: Config = {
         'enviro-green': { DEFAULT: c.enviroGreen, bg: t.enviroBg, chip: t.enviroChip, text: t.enviroText },
         'pathway-amber': { DEFAULT: c.pathwayAmber, deep: c.pathwayAmberDeep, bg: t.amberSoftBg },
         'donate-gold': c.donateGold,
+        'gold-ink':    c.goldInk,    // gold/amber as TEXT on white; fills carry ink text
         'star-gold':   c.starGold,
         'avatar-teal': c.avatarTeal,
+        // The adults bracket's teal (design/tokens.json bracket.adult*): `deep` passes
+        // as text on white and under white text; the base is for fills and icons.
+        'adult-teal': { DEFAULT: tokens.bracket.adult, deep: tokens.bracket.adultDeep },
         line:        c.border,
         'line-light': c.borderLight,
         'line-strong': c.borderStrong, // form-control borders (≥3:1)
@@ -60,7 +65,7 @@ const config: Config = {
           orange:       c.donateGold,   // Academy gold
           'orange-alt': c.pathwayAmber, // Competitions / energy → amber
           'orange-deep':'#C2722A',      // amber gradient end (handoff)
-          'gold-ink':   '#C2722A',      // contrast-safe gold text on white
+          'gold-ink':   c.goldInk,      // gold text on white (A1: #C2722A was 3.7:1)
           white:        c.white,
           'white-text': c.white,
           grey:         c.text.faint,
@@ -85,16 +90,10 @@ const config: Config = {
         'competition-body':[tokens.font.competitionBody, 'system-ui', 'sans-serif'],   // Aileron
       },
       fontSize: {
-        /* Existing app scale retained to avoid disturbing member-app layout */
-        'hero':    ['56px', { lineHeight: '1.0', letterSpacing: '-0.025em' }],
-        'display': ['34px', { lineHeight: '1.05', letterSpacing: '-0.02em' }],
-        'title':   ['30px', { lineHeight: '1.1', letterSpacing: '-0.02em' }],
-        'h1':      ['32pt', { lineHeight: '1.2' }],
-        'h2':      ['24pt', { lineHeight: '1.3' }],
-        'h3':      ['16pt', { lineHeight: '1.4' }],
-        'body':    ['12pt', { lineHeight: '1.6' }],
-        'caption': ['9pt',  { lineHeight: '1.4' }],
-        /* V2 handoff scale (px) — prefer these on rebuilt pages */
+        /* V2 type scale. h1, h2 and lead are fluid (clamp, design/tokens.json);
+           Tailwind's text-xs…text-5xl cover the rest. The legacy point scale
+           (hero/display/title/h1/h2/h3/body/caption) is retired; nothing is set
+           under 12px (scripts/ds-lint.mjs). */
         'ds-h1':      [tokens.fontSize.h1, { lineHeight: '1.05', letterSpacing: tokens.letterSpacing.display }],
         'ds-h2':      [tokens.fontSize.h2, { lineHeight: '1.1', letterSpacing: tokens.letterSpacing.heading }],
         'ds-h3':      [tokens.fontSize.h3, { lineHeight: '1.3' }],

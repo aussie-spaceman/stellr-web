@@ -130,7 +130,7 @@ export function DiscountsClient({
                   <input
                     type="number" min={0} defaultValue={a.quantity ?? 0} disabled={busy}
                     onBlur={(e) => { const v = Number(e.target.value); if (v !== (a.quantity ?? 0)) setQty(a.id, v) }}
-                    className="w-20 rounded border border-brand-border px-2 py-1"
+                    className="w-20 rounded border border-line-strong px-2 py-1"
                   />
                 </td>
               </tr>
@@ -151,20 +151,20 @@ function TierDiscountForm({ tiers, busy, onSave }: {
   const [appliesTo, setAppliesTo] = useState<OfferingType | ''>('')
   const [percent, setPercent] = useState('')
   return (
-    <div className="mt-3 flex flex-wrap items-end gap-2 rounded-md bg-surface-muted p-3">
+    <div className="mt-3 flex flex-wrap items-end gap-2 rounded-md bg-surface p-3">
       <label className="text-xs">Tier
-        <select value={tierCode} onChange={(e) => setTierCode(e.target.value)} className="block rounded border border-brand-border px-2 py-1">
+        <select value={tierCode} onChange={(e) => setTierCode(e.target.value)} className="block rounded border border-line-strong px-2 py-1">
           {tiers.map((t) => <option key={t.code} value={t.code}>{t.name}</option>)}
         </select>
       </label>
       <label className="text-xs">Applies to
-        <select value={appliesTo} onChange={(e) => setAppliesTo(e.target.value as OfferingType | '')} className="block rounded border border-brand-border px-2 py-1">
+        <select value={appliesTo} onChange={(e) => setAppliesTo(e.target.value as OfferingType | '')} className="block rounded border border-line-strong px-2 py-1">
           <option value="">All</option>
           {OFFERING_OPTS.map((o) => <option key={o} value={o}>{OFFERING_LABELS[o]}</option>)}
         </select>
       </label>
       <label className="text-xs">Percent off
-        <input type="number" min={0} max={100} value={percent} onChange={(e) => setPercent(e.target.value)} className="block w-24 rounded border border-brand-border px-2 py-1" />
+        <input type="number" min={0} max={100} value={percent} onChange={(e) => setPercent(e.target.value)} className="block w-24 rounded border border-line-strong px-2 py-1" />
       </label>
       <button
         disabled={busy || !tierCode || !percent}
@@ -187,33 +187,33 @@ function CouponForm({ busy, onSave }: {
   const [to, setTo] = useState('')
   const [cap, setCap] = useState('')
   return (
-    <div className="mt-3 flex flex-wrap items-end gap-2 rounded-md bg-surface-muted p-3">
+    <div className="mt-3 flex flex-wrap items-end gap-2 rounded-md bg-surface p-3">
       <label className="text-xs">Code
-        <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="block w-32 rounded border border-brand-border px-2 py-1 font-mono" />
+        <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="block w-32 rounded border border-line-strong px-2 py-1 font-mono" />
       </label>
       <label className="text-xs">Type
-        <select value={type} onChange={(e) => setType(e.target.value as DiscountType)} className="block rounded border border-brand-border px-2 py-1">
+        <select value={type} onChange={(e) => setType(e.target.value as DiscountType)} className="block rounded border border-line-strong px-2 py-1">
           <option value="percent">Percent</option>
           <option value="fixed">Fixed $</option>
         </select>
       </label>
       <label className="text-xs">{type === 'percent' ? 'Percent off' : 'Amount ($)'}
-        <input type="number" min={0} value={value} onChange={(e) => setValue(e.target.value)} className="block w-24 rounded border border-brand-border px-2 py-1" />
+        <input type="number" min={0} value={value} onChange={(e) => setValue(e.target.value)} className="block w-24 rounded border border-line-strong px-2 py-1" />
       </label>
       <label className="text-xs">Applies to
-        <select value={appliesTo} onChange={(e) => setAppliesTo(e.target.value as OfferingType | '')} className="block rounded border border-brand-border px-2 py-1">
+        <select value={appliesTo} onChange={(e) => setAppliesTo(e.target.value as OfferingType | '')} className="block rounded border border-line-strong px-2 py-1">
           <option value="">All</option>
           {OFFERING_OPTS.map((o) => <option key={o} value={o}>{OFFERING_LABELS[o]}</option>)}
         </select>
       </label>
       <label className="text-xs">From
-        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="block rounded border border-brand-border px-2 py-1" />
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="block rounded border border-line-strong px-2 py-1" />
       </label>
       <label className="text-xs">To
-        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="block rounded border border-brand-border px-2 py-1" />
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="block rounded border border-line-strong px-2 py-1" />
       </label>
       <label className="text-xs">Max uses
-        <input type="number" min={1} value={cap} onChange={(e) => setCap(e.target.value)} className="block w-20 rounded border border-brand-border px-2 py-1" />
+        <input type="number" min={1} value={cap} onChange={(e) => setCap(e.target.value)} className="block w-20 rounded border border-line-strong px-2 py-1" />
       </label>
       <button
         disabled={busy || !code || !value}

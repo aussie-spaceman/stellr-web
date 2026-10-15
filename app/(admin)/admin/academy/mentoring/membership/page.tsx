@@ -13,7 +13,7 @@ export default async function MembershipAccessPage() {
     <div className="flex flex-col gap-4 lg:flex-row lg:gap-8">
       <AdminMentoringNav />
       <div className="min-w-0 flex-1 space-y-2">
-        <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">Membership &amp; access</h1>
+        <h1 className="font-display text-[28px] font-bold text-ink">Membership &amp; access</h1>
         <p className="max-w-[620px] text-[14.5px] text-content-secondary">
           Set which membership tiers include free mentoring and how many mentoring credits they grant each year, and
           review per-cohort access. Prices are in USD, read live from Stripe — edit them in Stripe.

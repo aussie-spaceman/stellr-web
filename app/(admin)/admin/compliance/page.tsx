@@ -13,7 +13,7 @@ export default async function ComplianceAuditPage() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-heading uppercase text-title text-brand-blue-dark">Background Checks & Licenses</h1>
+          <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Background Checks & Licenses</h1>
           <p className="mt-1 text-sm text-brand-muted-soft">
             Every adult in an event-facing role (teacher, mentor, volunteer, adult) who must be cleared to take part. Background checks are valid for 3 years;
             teacher licenses are valid until the expiry the teacher entered, once you verify them.

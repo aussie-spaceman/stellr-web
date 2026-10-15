@@ -4,12 +4,9 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import FieldError from '@/components/forms/FieldError'
+import { Choice, Field, Input, Select, Textarea } from '@stellr/web-ui'
 import { usePrefillForm } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
-
-const inputClass = (hasError: boolean) =>
-  `w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue ${hasError ? 'border-red-400' : 'border-line'}`
 
 const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -93,91 +90,63 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
   }
 
   return (
+    // noValidate: the schema's messages show under each field instead of the
+    // browser's bubbles. On a failed submit react-hook-form focuses the first
+    // invalid field (shouldFocusError), and that field's error is read with it.
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
-      {/* Name */}
-      <div>
-        <label htmlFor="name" className="block text-sm font-medium text-brand-blue-dark mb-1">
-          Name <span className="text-red-500">*</span>
-        </label>
-        <input
-          id="name"
-          type="text"
-          autoComplete="name"
-          {...register('name')}
-          className={inputClass(!!errors.name)}
-          placeholder="Your full name"
-        />
-        <FieldError message={errors.name?.message} />
-      </div>
+      <Field label="Name" required error={errors.name?.message}>
+        <Input id="name" type="text" autoComplete="name" {...register('name')} placeholder="Your full name" />
+      </Field>
 
-      {/* Email */}
-      <div>
-        <label htmlFor="email" className="block text-sm font-medium text-brand-blue-dark mb-1">
-          Email <span className="text-red-500">*</span>
-        </label>
-        <input
+      <Field label="Email" required error={errors.email?.message}>
+        <Input
           id="email"
           type="email"
+          inputMode="email"
           autoComplete="email"
           {...register('email')}
-          className={inputClass(!!errors.email)}
           placeholder="your@email.com"
         />
-        <FieldError message={errors.email?.message} />
-      </div>
+      </Field>
 
-      {/* Enquiry type */}
-      <div>
-        <label htmlFor="type" className="block text-sm font-medium text-brand-blue-dark mb-1">
-          Inquiry Type <span className="text-red-500">*</span>
-        </label>
-        <select
-          id="type"
-          {...register('type')}
-          className={`${inputClass(!!errors.type)} bg-white`}
-        >
+      <Field label="Inquiry Type" required error={errors.type?.message}>
+        <Select id="type" {...register('type')}>
           {ENQUIRY_TYPES.map((opt) => (
             <option key={opt.value} value={opt.value} disabled={opt.value === ''}>
               {opt.label}
             </option>
           ))}
-        </select>
-        <FieldError message={errors.type?.message} />
-      </div>
+        </Select>
+      </Field>
 
-      {/* Message */}
-      <div>
-        <label htmlFor="message" className="block text-sm font-medium text-brand-blue-dark mb-1">
-          Message <span className="text-red-500">*</span>
-        </label>
-        <textarea
-          id="message"
-          rows={5}
-          {...register('message')}
-          className={`${inputClass(!!errors.message)} resize-none`}
-          placeholder="How can we help?"
+      <Field label="Message" required error={errors.message?.message}>
+        <Textarea id="message" rows={5} {...register('message')} className="resize-none" placeholder="How can we help?" />
+      </Field>
+
+      <div className="space-y-1.5">
+        <Choice
+          {...register('consent')}
+          aria-invalid={errors.consent ? true : undefined}
+          aria-describedby={errors.consent ? 'consent-error' : undefined}
+          label={
+            <>
+              I agree to Stellr Education contacting me in relation to my inquiry. View our{' '}
+              <a href="/privacy" className="font-semibold text-primary-deep underline">
+                Privacy Policy
+              </a>
+              .
+            </>
+          }
         />
-        <FieldError message={errors.message?.message} />
-      </div>
-
-      {/* Consent */}
-      <div>
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            {...register('consent')}
-            className="mt-0.5 h-4 w-4 rounded border-line text-brand-blue"
-          />
-          <span className="text-sm text-brand-grey-dark">
-            I agree to Stellr Education contacting me in relation to my inquiry. View our{' '}
-            <a href="/privacy" className="text-brand-blue hover:underline">Privacy Policy</a>.
-          </span>
-        </label>
-        <FieldError message={errors.consent?.message} />
+        {errors.consent?.message && (
+          <p id="consent-error" className="text-sm text-danger">
+            {errors.consent.message}
+          </p>
+        )}
       </div>
 
       {status === 'error' && (
-        <p className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+        <p role="alert" className="text-sm text-danger bg-danger/5 border border-danger/30 rounded-control px-4 py-3">
           Something went wrong sending your message. Please try again or email us directly at{' '}
           <a href="mailto:hello@stellreducation.org" className="underline">hello@stellreducation.org</a>.
         </p>

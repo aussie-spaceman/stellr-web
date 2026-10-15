@@ -64,7 +64,7 @@ export default async function AdminSchoolDetailPage({
           ← All schools
         </Link>
         <div className="flex items-center gap-3">
-          <h1 className="font-heading uppercase text-title text-brand-blue-dark">{school.name}</h1>
+          <h1 className="font-heading text-ds-h2 text-brand-blue-dark">{school.name}</h1>
           <span
             className={`text-xs px-2 py-0.5 rounded-full font-medium ${
               school.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-brand-hairline text-brand-muted-soft'

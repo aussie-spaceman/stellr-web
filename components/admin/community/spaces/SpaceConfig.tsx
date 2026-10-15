@@ -162,7 +162,7 @@ function GeneralTab({
             <div key={c.id} className="flex items-center gap-2 px-3 py-2">
               {editing?.id === c.id ? (
                 <>
-                  <input value={editing.name} onChange={(e) => setEditing({ id: c.id, name: e.target.value })} className="flex-1 rounded border border-brand-border px-2 py-1 text-sm" />
+                  <input value={editing.name} onChange={(e) => setEditing({ id: c.id, name: e.target.value })} className="flex-1 rounded border border-line-strong px-2 py-1 text-input mouse:text-sm" />
                   <button onClick={async () => { if (await act({ action: 'rename-channel', channelId: c.id, name: editing.name }, 'Channel renamed')) setEditing(null) }} className="text-brand-blue"><Check className="h-4 w-4" /></button>
                   <button onClick={() => setEditing(null)} className="text-brand-muted-soft"><X className="h-4 w-4" /></button>
                 </>
@@ -176,7 +176,7 @@ function GeneralTab({
             </div>
           ))}
           <div className="flex items-center gap-2 px-3 py-2">
-            <input value={newChannel} onChange={(e) => setNewChannel(e.target.value)} placeholder="New channel name" className="flex-1 rounded border border-brand-border px-2 py-1 text-sm" />
+            <input value={newChannel} onChange={(e) => setNewChannel(e.target.value)} placeholder="New channel name" className="flex-1 rounded border border-line-strong px-2 py-1 text-input mouse:text-sm" />
             <button
               onClick={async () => { if (newChannel.trim() && await act({ action: 'add-channel', name: newChannel.trim() }, 'Channel added')) setNewChannel('') }}
               className="inline-flex items-center gap-1 rounded-lg bg-brand-blue px-2.5 py-1 text-xs font-subheading font-semibold text-white hover:bg-brand-blue-dark"
@@ -380,7 +380,7 @@ function AccessTab({
             const typeLabel = SOURCE_TYPES.find((t) => t.value === s.objectType)?.label ?? s.objectType
             return (
               <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
-                <span className="rounded bg-brand-canvas px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand-muted-soft">{typeLabel}</span>
+                <span className="rounded bg-brand-canvas px-1.5 py-0.5 text-xs font-bold uppercase text-brand-muted-soft">{typeLabel}</span>
                 <span className="flex-1 truncate text-brand-blue-dark">{s.label}</span>
                 <button onClick={() => act({ action: 'remove-source', sourceId: s.id }, 'Link removed')} className="text-xs text-red-500 hover:underline">Remove</button>
               </div>
@@ -394,7 +394,7 @@ function AccessTab({
           <select
             value={srcType}
             onChange={(e) => { setSrcType(e.target.value); setSrcQuery(''); setSrcOptions([]); void searchSources(e.target.value, '') }}
-            className="rounded-lg border border-brand-border px-2 py-1.5 text-sm"
+            className="rounded-lg border border-line-strong px-2 py-1.5 text-input mouse:text-sm"
           >
             {SOURCE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
@@ -403,7 +403,7 @@ function AccessTab({
             onChange={(e) => { setSrcQuery(e.target.value); void searchSources(srcType, e.target.value) }}
             onFocus={() => { if (srcOptions.length === 0) void searchSources(srcType, srcQuery) }}
             placeholder={`Search ${SOURCE_TYPES.find((t) => t.value === srcType)?.label.toLowerCase() ?? ''}…`}
-            className="flex-1 rounded-lg border border-brand-border px-2.5 py-1.5 text-sm focus:border-brand-blue focus:outline-none"
+            className="flex-1 rounded-lg border border-line-strong px-2.5 py-1.5 text-input mouse:text-sm focus:border-brand-blue focus:outline-none"
           />
         </div>
         {(srcSearching || srcOptions.length > 0) && (
@@ -545,10 +545,10 @@ function ResourcesTab({
       <div className="divide-y divide-brand-hairline rounded-lg border border-brand-border">
         {resources.map((r) => (
           <div key={r.attachmentId ?? r.id} className="flex items-center gap-3 px-3 py-2.5">
-            <span className="rounded bg-brand-canvas px-1.5 py-0.5 text-[10px] font-bold text-brand-muted-soft">{r.fileType ?? 'FILE'}</span>
+            <span className="rounded bg-brand-canvas px-1.5 py-0.5 text-xs font-bold text-brand-muted-soft">{r.fileType ?? 'FILE'}</span>
             <span className="flex-1 truncate text-sm text-brand-blue-dark">{r.title}</span>
-            {r.fromChat && <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-[10px] uppercase text-brand-muted-soft">from chat</span>}
-            {r.attachmentId && <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-[10px] uppercase text-brand-muted-soft">catalogue</span>}
+            {r.fromChat && <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-xs uppercase text-brand-muted-soft">from chat</span>}
+            {r.attachmentId && <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-xs uppercase text-brand-muted-soft">catalogue</span>}
             {r.attachmentId ? (
               <button onClick={() => act({ action: 'detach-resource', attachmentId: r.attachmentId }, 'Detached')} className="text-xs text-red-500 hover:underline">Detach</button>
             ) : (
@@ -624,7 +624,7 @@ function ResourcesTab({
                     <div className="flex items-center gap-2">
                       <FileText className="h-4 w-4 shrink-0 text-brand-blue" />
                       <span className="flex-1 truncate text-sm text-brand-blue-dark">{h.title}</span>
-                      <span className="rounded bg-brand-canvas px-1.5 py-0.5 text-[10px] font-bold text-brand-muted-soft">{h.fileType ?? 'FILE'}</span>
+                      <span className="rounded bg-brand-canvas px-1.5 py-0.5 text-xs font-bold text-brand-muted-soft">{h.fileType ?? 'FILE'}</span>
                       <button
                         disabled={already}
                         onClick={() => attachExisting(h)}
@@ -636,7 +636,7 @@ function ResourcesTab({
                         value={renames[h.id] ?? ''}
                         onChange={(e) => setRenames((prev) => ({ ...prev, [h.id]: e.target.value }))}
                         placeholder="Rename for this space (optional)"
-                        className="mt-2 w-full rounded-md border border-brand-border px-2 py-1 text-xs focus:border-brand-blue focus:outline-none"
+                        className="mt-2 w-full rounded-md border border-line-strong px-2 py-1 text-input mouse:text-xs focus:border-brand-blue focus:outline-none"
                       />
                     )}
                   </div>
@@ -712,7 +712,7 @@ function BracketRequirementsEditor({ value, onChange }: { value: BracketDraft; o
                 disabled={!row.mandatory}
                 value={row.due_at}
                 onChange={(e) => onChange({ ...value, [b.value]: { ...row, due_at: e.target.value } })}
-                className="rounded border border-brand-border px-2 py-1 text-xs disabled:cursor-not-allowed disabled:bg-brand-canvas disabled:text-brand-muted-soft"
+                className="rounded border border-line-strong px-2 py-1 text-input mouse:text-xs disabled:cursor-not-allowed disabled:bg-brand-canvas disabled:text-brand-muted-soft"
               />
             </label>
           </div>
@@ -861,7 +861,7 @@ function GrantBadge({ m }: { m: SpaceMemberRow }) {
   const meta = GRANT_META[m.reason]
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em]"
+      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.04em]"
       style={{ color: meta.color, background: meta.tint }}
       title={m.grantLabel ? `${meta.label}: ${m.grantLabel}` : meta.label}
     >
@@ -984,13 +984,13 @@ function MembersTab({
             className={`${inputCls} pl-8`}
           />
         </div>
-        <select value={reason} onChange={(e) => setFilter({ reason: e.target.value })} className="rounded-lg border border-brand-border px-2 py-2 text-sm text-brand-muted">
+        <select value={reason} onChange={(e) => setFilter({ reason: e.target.value })} className="rounded-lg border border-line-strong px-2 py-2 text-input mouse:text-sm text-brand-muted">
           <option value="">How they got in</option>
           {(Object.keys(GRANT_META) as SpaceAudienceMember['reason'][]).map((k) => (
             <option key={k} value={k}>{GRANT_META[k].label}</option>
           ))}
         </select>
-        <select value={status} onChange={(e) => setFilter({ status: e.target.value })} className="rounded-lg border border-brand-border px-2 py-2 text-sm text-brand-muted">
+        <select value={status} onChange={(e) => setFilter({ status: e.target.value })} className="rounded-lg border border-line-strong px-2 py-2 text-input mouse:text-sm text-brand-muted">
           <option value="">Any status</option>
           <option value="active">Active</option>
           <option value="invited">Invited</option>
@@ -1009,9 +1009,9 @@ function MembersTab({
             <GrantBadge m={m} />
             {m.tierName && <TierPill name={m.tierName} />}
             {m.role !== 'member' && <RolePill role={m.role} />}
-            {m.status === 'invited' && <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-[10px] uppercase text-brand-muted-soft">invited</span>}
-            {m.postingSuspended && <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] uppercase text-amber-700">suspended</span>}
-            {m.revoked && <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] uppercase text-red-600">revoked</span>}
+            {m.status === 'invited' && <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-xs uppercase text-brand-muted-soft">invited</span>}
+            {m.postingSuspended && <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-xs uppercase text-amber-700">suspended</span>}
+            {m.revoked && <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-xs uppercase text-red-600">revoked</span>}
             <button onClick={() => setManaging(m)} className="shrink-0 text-xs text-brand-blue hover:underline">Manage</button>
           </div>
         ))}
@@ -1346,7 +1346,7 @@ function ModerationTab({ moderation, act }: { moderation: AdminSpaceConfig['mode
           {moderation.map((r) => (
             <div key={r.flagId} className="rounded-lg border border-brand-border p-3">
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600">
                   <Flag className="h-3 w-3" /> {r.reason ?? 'Reported'}
                 </span>
                 <span className="text-xs text-brand-muted-soft">{r.where} · {new Date(r.createdAt).toLocaleDateString()}</span>

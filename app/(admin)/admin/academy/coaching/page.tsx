@@ -15,7 +15,7 @@ export default async function AdminWorkshopsPage() {
       <AdminCoachingNav />
       <div className="min-w-0 flex-1 space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">Coaching workshops</h1>
+          <h1 className="font-display text-[28px] font-bold text-ink">Coaching workshops</h1>
           <Link href="/admin/academy/coaching/new" className="inline-flex items-center gap-2 rounded-[9px] bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-deep">
             <Plus className="h-4 w-4" /> New workshop
           </Link>
@@ -57,7 +57,7 @@ export default async function AdminWorkshopsPage() {
                     <td className="px-5 py-3 text-content-secondary">{w.coachName ?? '—'}</td>
                     <td className="px-5 py-3 text-content-secondary">
                       {w.memberName ?? '—'}
-                      {w.memberStatus === 'invited' && <span className="ml-1.5 rounded-pill bg-pathway-amber-bg px-2 py-0.5 text-[10px] font-bold text-[#C2722A]">INVITED</span>}
+                      {w.memberStatus === 'invited' && <span className="ml-1.5 rounded-pill bg-pathway-amber-bg px-2 py-0.5 text-xs font-bold text-gold-ink">INVITED</span>}
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex w-32 items-center gap-2">
@@ -66,7 +66,7 @@ export default async function AdminWorkshopsPage() {
                       </div>
                     </td>
                     <td className="px-5 py-3">
-                      <span className={`rounded-pill px-2.5 py-0.5 text-[11px] font-semibold ${w.lifecycle === 'active' ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-surface text-content-muted'}`}>
+                      <span className={`rounded-pill px-2.5 py-0.5 text-xs font-semibold ${w.lifecycle === 'active' ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-surface text-content-muted'}`}>
                         {w.lifecycle === 'active' ? 'Active' : 'Archived'}
                       </span>
                     </td>
@@ -85,7 +85,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'am
   return (
     <div className="rounded-card border border-line bg-white p-4">
       <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-content-faint">{label}</p>
-      <p className={`mt-1 font-display text-[26px] font-bold ${tone === 'amber' && value > 0 ? 'text-pathway-amber' : 'text-ink'}`}>{value}</p>
+      <p className={`mt-1 font-display text-[26px] font-bold ${tone === 'amber' && value > 0 ? 'text-gold-ink' : 'text-ink'}`}>{value}</p>
     </div>
   )
 }

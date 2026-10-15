@@ -54,7 +54,7 @@ export default async function AdminMemberSurveyResponsePage({
   return (
     <div className="max-w-content">
       <Link href={`/admin/members/${memberId}`} className="text-sm text-primary hover:underline">← {name}</Link>
-      <h1 className="mt-2 font-heading uppercase text-title text-brand-blue-dark">{item.eventTitle}</h1>
+      <h1 className="mt-2 font-heading text-ds-h2 text-brand-blue-dark">{item.eventTitle}</h1>
       <p className="mt-1 text-sm text-content-muted">
         Submitted {formatDateShort(item.submittedAt)}
         {found.role ? ` · ${surveyRoleLabel({ role: found.role, adultRelationship: null, sendVia: 'self' })}` : ''}

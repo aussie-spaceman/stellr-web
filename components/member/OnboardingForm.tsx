@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Field, Input, Select } from '@stellr/web-ui'
 import { isMinorOn, isValidDob } from '@/lib/age'
 import { T_SHIRT_SIZES } from '@/lib/registration-constants'
 import { SchoolSearchInput, SchoolSelection } from '@/components/member/SchoolSearchInput'
@@ -73,6 +74,9 @@ const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandpar
 
 type StepKey = 'role' | 'details' | 'emergency'
 
+/** A message per field that stops the step, keyed in the order the fields appear. */
+type FieldErrors = Partial<Record<string, string>>
+
 /** Map a tier audience bracket to the member age_bracket enum. */
 function ageBracketFor(tierBracket: SelectedTier['bracket'] | null): string {
   if (tierBracket === 'school') return 'high_school'
@@ -137,8 +141,22 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
   const [stepKey, setStepKey] = useState<StepKey>(skipRoleStep ? 'details' : 'role')
   const stepIndex = Math.max(0, steps.indexOf(stepKey))
 
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const uid = useId()
+  const fid = (field: string) => `${uid}-${field}`
+
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }))
+    setFieldErrors((e) => (e[field] ? { ...e, [field]: undefined } : e))
+  }
+
+  /** Show each message under its field and put focus on the first; true when the step is clear. */
+  function check(errors: FieldErrors): boolean {
+    setFieldErrors(errors)
+    const first = Object.keys(errors).find((k) => errors[k])
+    if (!first) return true
+    requestAnimationFrame(() => document.getElementById(fid(first))?.focus())
+    return false
   }
 
   function handleRoleSelect(role: typeof ROLES[0]) {
@@ -160,24 +178,52 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
 
   const volunteerUnderage = !!volunteerFlow && !!form.date_of_birth && !isAdultDob(form.date_of_birth)
 
-  function detailsValid(): boolean {
-    if (!form.date_of_birth || !form.gender || !form.phone.trim()) return false
-    if (volunteerFlow && !isAdultDob(form.date_of_birth)) return false
-    if (req.grade === 'required' && !form.grade) return false
-    if (req.tshirtSize === 'required' && !form.tshirt_size) return false
-    if (schoolRequired && !schoolValid(schoolSelection)) return false
-    return true
+  // The under-18 volunteer message shows as soon as the date says so, not only
+  // on Continue; it is the date field's error either way.
+  const volunteerUnderageMessage =
+    'Stellr volunteers must be 18 or older. If you’re a high-school student, join as a student member instead.'
+
+  function detailsErrors(): FieldErrors {
+    const e: FieldErrors = {}
+    if (!form.date_of_birth) e.date_of_birth = 'Enter your date of birth.'
+    else if (volunteerFlow && !isAdultDob(form.date_of_birth)) e.date_of_birth = volunteerUnderageMessage
+    if (!form.gender) e.gender = 'Choose your gender.'
+    if (!form.phone.trim()) e.phone = 'Enter your phone number.'
+    if (req.grade === 'required' && !form.grade) e.grade = 'Choose your grade or year.'
+    if (req.tshirtSize === 'required' && !form.tshirt_size) e.tshirt_size = 'Choose a t-shirt size.'
+    if (schoolRequired && !schoolValid(schoolSelection)) {
+      e.school = schoolSelection?.type === 'new'
+        ? 'Fill in the school’s name, street address, city, state and ZIP code.'
+        : 'Choose your school from the list, or add it as a new school.'
+    }
+    return e
   }
 
   const ecState = emergencyContactComplete([
     form.ec_first_name, form.ec_last_name, form.ec_email, form.ec_phone, form.ec_relationship,
   ])
 
-  function emergencyValid(): boolean {
-    if (req.emergencyContact === 'required') return ecState.all
+  function emergencyErrors(): FieldErrors {
     // Optional: leave it entirely blank, or fill it in properly. A half-entered
     // contact is no contact at all, so it is not a third option.
-    return !ecState.any || ecState.all
+    if (req.emergencyContact !== 'required' && !ecState.any) return {}
+    const e: FieldErrors = {}
+    if (!form.ec_first_name.trim()) e.ec_first_name = 'Enter their first name.'
+    if (!form.ec_last_name.trim()) e.ec_last_name = 'Enter their last name.'
+    if (!form.ec_email.trim()) e.ec_email = 'Enter their email address.'
+    if (!form.ec_phone.trim()) e.ec_phone = 'Enter their phone number.'
+    if (!form.ec_relationship.trim()) e.ec_relationship = 'Choose how they are related to you.'
+    return e
+  }
+
+  function continueFromDetails() {
+    if (check(detailsErrors())) goNext()
+  }
+  function submitFromDetails() {
+    if (check(detailsErrors())) handleSubmit()
+  }
+  function submitFromEmergency() {
+    if (check(emergencyErrors())) handleSubmit()
   }
 
   function goNext() {
@@ -186,7 +232,10 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
   }
   function goBack() {
     const prev = steps[stepIndex - 1]
-    if (prev) setStepKey(prev)
+    if (prev) {
+      setFieldErrors({})
+      setStepKey(prev)
+    }
   }
 
   const isLastStep = stepIndex === steps.length - 1
@@ -235,11 +284,8 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
     }
   }
 
-  const inputClass =
-    'w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue'
-
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-8">
+    <div className="bg-white rounded-xl border border-brand-border p-5 sm:p-8">
       {/* Step indicator — reflects the actual number of steps for this member */}
       <div className="flex gap-2 mb-8">
         {steps.map((s, i) => (
@@ -266,6 +312,8 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
             {VOLUNTEER_BRACKETS.map((b) => (
               <button
                 key={b.value}
+                type="button"
+                aria-pressed={form.age_bracket === b.value}
                 onClick={() => set('age_bracket', b.value)}
                 className={`text-left px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
                   form.age_bracket === b.value
@@ -294,6 +342,8 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
             {ROLES.filter((r) => (adultOnlyRoles ? ADULT_ROLE_VALUES.includes(r.value) : true)).map((r) => (
               <button
                 key={r.value}
+                type="button"
+                aria-pressed={form.event_role === r.value}
                 onClick={() => handleRoleSelect(r)}
                 className={`text-left px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
                   form.event_role === r.value
@@ -319,48 +369,63 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
         <div className="space-y-4">
           <h2 className="text-base font-semibold text-brand-blue-dark">Personal details</h2>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Date of birth</label>
-              <input
+          {/* The member's own details: autocomplete tokens let the browser
+              fill them (WCAG 1.3.5). Required fields carry `required` for
+              screen readers; the optional ones say so in their label. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field
+              label="Date of birth"
+              error={fieldErrors.date_of_birth ?? (volunteerUnderage ? volunteerUnderageMessage : undefined)}
+            >
+              <Input
+                id={fid('date_of_birth')}
                 type="date"
+                autoComplete="bday"
+                required
                 value={form.date_of_birth}
                 onChange={(e) => set('date_of_birth', e.target.value)}
-                className={inputClass}
               />
-            </div>
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Gender</label>
-              <select value={form.gender} onChange={(e) => set('gender', e.target.value)} className={inputClass}>
+            </Field>
+            <Field label="Gender" error={fieldErrors.gender}>
+              <Select
+                id={fid('gender')}
+                autoComplete="sex"
+                required
+                value={form.gender}
+                onChange={(e) => set('gender', e.target.value)}
+              >
                 <option value="">Select…</option>
                 {GENDERS.map((g) => (
                   <option key={g} value={g}>
                     {g.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
                   </option>
                 ))}
-              </select>
-            </div>
+              </Select>
+            </Field>
           </div>
 
-          <div>
-            <label className="block text-xs text-brand-muted-soft mb-1">Phone</label>
-            <input type="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} className={inputClass} />
-          </div>
-
-          {volunteerUnderage && (
-            <p className="text-sm text-red-600">
-              Stellr volunteers must be 18 or older. If you&rsquo;re a high-school student, join as a
-              student member instead.
-            </p>
-          )}
+          <Field label="Phone" error={fieldErrors.phone}>
+            <Input
+              id={fid('phone')}
+              type="tel"
+              autoComplete="tel"
+              required
+              value={form.phone}
+              onChange={(e) => set('phone', e.target.value)}
+            />
+          </Field>
 
           {/* Asked independently: a mentor gives a t-shirt size but has no grade. */}
           {(req.grade !== 'hidden' || req.tshirtSize !== 'hidden') && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {req.grade !== 'hidden' && (
-                <div>
-                  <label className="block text-xs text-brand-muted-soft mb-1">Grade / Year</label>
-                  <select value={form.grade} onChange={(e) => set('grade', e.target.value)} className={inputClass}>
+                <Field label="Grade / Year" error={fieldErrors.grade}>
+                  <Select
+                    id={fid('grade')}
+                    required={req.grade === 'required'}
+                    value={form.grade}
+                    onChange={(e) => set('grade', e.target.value)}
+                  >
                     <option value="">Select…</option>
                     {GRADES.filter((g) =>
                       req.isMinor || form.age_bracket === 'high_school'
@@ -369,61 +434,84 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
                     ).map((g) => (
                       <option key={g.value} value={g.value}>{g.label}</option>
                     ))}
-                  </select>
-                </div>
+                  </Select>
+                </Field>
               )}
               {req.tshirtSize !== 'hidden' && (
-                <div>
-                  <label className="block text-xs text-brand-muted-soft mb-1">
-                    T-shirt size
-                    {req.tshirtSize === 'optional' && <span className="text-brand-muted-soft"> (optional)</span>}
-                  </label>
-                  <select value={form.tshirt_size} onChange={(e) => set('tshirt_size', e.target.value)} className={inputClass}>
+                <Field
+                  label={
+                    <>
+                      T-shirt size
+                      {req.tshirtSize === 'optional' && <span className="text-content-muted"> (optional)</span>}
+                    </>
+                  }
+                  error={fieldErrors.tshirt_size}
+                >
+                  <Select
+                    id={fid('tshirt_size')}
+                    required={req.tshirtSize === 'required'}
+                    value={form.tshirt_size}
+                    onChange={(e) => set('tshirt_size', e.target.value)}
+                  >
                     <option value="">Select…</option>
                     {/* deep review QUAL-2: canonical sizes (was '3XL_plus'). */}
                     {T_SHIRT_SIZES.map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}
-                  </select>
-                </div>
+                  </Select>
+                </Field>
               )}
             </div>
           )}
 
           {/* School / district — required for students & teachers, optional otherwise */}
-          <div>
-            <label className="block text-xs text-brand-muted-soft mb-1">
-              {form.event_role === 'teacher' ? 'School / district' : 'School'}
-              {!schoolRequired && <span className="text-brand-muted-soft"> (optional)</span>}
-            </label>
-            <SchoolSearchInput onChange={setSchoolSelection} />
-          </div>
+          <Field
+            label={
+              <>
+                {form.event_role === 'teacher' ? 'School / district' : 'School'}
+                {!schoolRequired && <span className="text-content-muted"> (optional)</span>}
+              </>
+            }
+            error={fieldErrors.school}
+          >
+            <SchoolSearchInput
+              id={fid('school')}
+              required={schoolRequired}
+              onChange={(sel) => {
+                setSchoolSelection(sel)
+                setFieldErrors((e) => (e.school ? { ...e, school: undefined } : e))
+              }}
+            />
+          </Field>
 
           <div className="flex gap-3 pt-2">
             {steps[stepIndex - 1] && (
-              <button onClick={goBack} className="flex-1 border border-brand-border rounded-lg py-2.5 text-sm font-medium text-brand-muted hover:bg-brand-canvas">
+              <button type="button" onClick={goBack} className="flex-1 border border-brand-border rounded-lg py-2.5 text-sm font-medium text-brand-muted hover:bg-brand-canvas">
                 Back
               </button>
             )}
+            {/* Never disabled for missing answers: a press says what is
+                missing, under each field, and moves focus to the first. */}
             {isLastStep ? (
               <button
-                onClick={handleSubmit}
-                disabled={loading || !detailsValid()}
+                type="button"
+                onClick={submitFromDetails}
+                disabled={loading}
                 className="flex-1 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-40"
               >
                 {loading ? 'Saving…' : 'Complete profile'}
               </button>
             ) : (
               <button
-                onClick={goNext}
-                disabled={!detailsValid()}
+                type="button"
+                onClick={continueFromDetails}
                 className="flex-1 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-40"
               >
                 Continue
               </button>
             )}
           </div>
-          {isLastStep && error && <p className="text-sm text-red-600">{error}</p>}
+          {isLastStep && error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         </div>
       )}
 
@@ -441,35 +529,61 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
               : 'Required for event participation.'}
           </p>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">First name</label>
-              <input type="text" value={form.ec_first_name} onChange={(e) => set('ec_first_name', e.target.value)} className={inputClass} />
-            </div>
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Last name</label>
-              <input type="text" value={form.ec_last_name} onChange={(e) => set('ec_last_name', e.target.value)} className={inputClass} />
-            </div>
+          {/* Someone else's details, so no autofill of the member's own. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="First name" error={fieldErrors.ec_first_name}>
+              <Input
+                id={fid('ec_first_name')}
+                type="text"
+                autoComplete="off"
+                required={req.emergencyContact === 'required'}
+                value={form.ec_first_name}
+                onChange={(e) => set('ec_first_name', e.target.value)}
+              />
+            </Field>
+            <Field label="Last name" error={fieldErrors.ec_last_name}>
+              <Input
+                id={fid('ec_last_name')}
+                type="text"
+                autoComplete="off"
+                required={req.emergencyContact === 'required'}
+                value={form.ec_last_name}
+                onChange={(e) => set('ec_last_name', e.target.value)}
+              />
+            </Field>
+            <Field label="Email" error={fieldErrors.ec_email}>
+              <Input
+                id={fid('ec_email')}
+                type="email"
+                autoComplete="off"
+                required={req.emergencyContact === 'required'}
+                value={form.ec_email}
+                onChange={(e) => set('ec_email', e.target.value)}
+              />
+            </Field>
+            <Field label="Phone" error={fieldErrors.ec_phone}>
+              <Input
+                id={fid('ec_phone')}
+                type="tel"
+                autoComplete="off"
+                required={req.emergencyContact === 'required'}
+                value={form.ec_phone}
+                onChange={(e) => set('ec_phone', e.target.value)}
+              />
+            </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Email</label>
-              <input type="email" value={form.ec_email} onChange={(e) => set('ec_email', e.target.value)} className={inputClass} />
-            </div>
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Phone</label>
-              <input type="tel" value={form.ec_phone} onChange={(e) => set('ec_phone', e.target.value)} className={inputClass} />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs text-brand-muted-soft mb-1">Relationship to participant</label>
-            <select value={form.ec_relationship} onChange={(e) => set('ec_relationship', e.target.value)} className={inputClass}>
+          <Field label="Relationship to participant" error={fieldErrors.ec_relationship}>
+            <Select
+              id={fid('ec_relationship')}
+              required={req.emergencyContact === 'required'}
+              value={form.ec_relationship}
+              onChange={(e) => set('ec_relationship', e.target.value)}
+            >
               <option value="">Select…</option>
               {EMERGENCY_RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
-          </div>
+            </Select>
+          </Field>
 
           {req.emergencyContact === 'optional' && ecState.any && !ecState.all && (
             <p className="text-sm text-brand-grey-dark">
@@ -477,15 +591,17 @@ export function OnboardingForm({ existingMember, next, selectedTier, volunteerFl
             </p>
           )}
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
 
           <div className="flex gap-3 pt-2">
-            <button onClick={goBack} className="flex-1 border border-brand-border rounded-lg py-2.5 text-sm font-medium text-brand-muted hover:bg-brand-canvas">
+            <button type="button" onClick={goBack} className="flex-1 border border-brand-border rounded-lg py-2.5 text-sm font-medium text-brand-muted hover:bg-brand-canvas">
               Back
             </button>
+            {/* Never disabled for missing answers: see the details step. */}
             <button
-              onClick={handleSubmit}
-              disabled={loading || !emergencyValid()}
+              type="button"
+              onClick={submitFromEmergency}
+              disabled={loading}
               className="flex-1 bg-brand-blue text-white rounded-lg py-2.5 text-sm font-medium hover:bg-brand-blue-dark disabled:opacity-50"
             >
               {loading ? 'Saving…' : 'Complete profile'}

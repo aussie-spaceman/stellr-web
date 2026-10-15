@@ -439,7 +439,7 @@ export default function CheckInLive({
   const settingsPanel = (
     <div className="space-y-4 rounded-ds-card border border-line bg-white p-5">
       <div className="flex items-center justify-between">
-        <h2 className="font-subheading text-sm font-semibold uppercase tracking-wide text-content-muted">Check-in</h2>
+        <h2 className="font-subheading text-sm font-semibold text-content-muted">Check-in</h2>
         <span
           className={cn(
             'inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium',
@@ -526,7 +526,7 @@ export default function CheckInLive({
               setResourcesNote(null)
             }}
             placeholder="https://drive.google.com/…"
-            className="min-h-11 w-full min-w-0 flex-1 rounded-control border border-line px-3 text-base lg:text-sm"
+            className="min-h-11 w-full min-w-0 flex-1 rounded-control border border-line-strong px-3 text-base lg:text-sm"
           />
           <Button variant="secondary" onClick={saveResources} disabled={resourcesDraft === null} className="min-h-11 self-start px-4 py-2">
             Save
@@ -547,7 +547,7 @@ export default function CheckInLive({
         )}
       >
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h2 className="font-subheading text-sm font-semibold uppercase tracking-wide text-content-muted short:sr-only">Arrivals</h2>
+          <h2 className="font-subheading text-sm font-semibold text-content-muted short:sr-only">Arrivals</h2>
           <span className="font-display text-2xl font-bold tabular-nums text-ink" aria-label={`${arrived} of ${total} arrived`}>
             {arrived}
             <span className="text-sm font-medium text-content-muted"> / {total}</span>
@@ -567,7 +567,7 @@ export default function CheckInLive({
               autoCapitalize="off"
               spellCheck={false}
               enterKeyHint="search"
-              className="min-h-11 w-full rounded-control border border-line pl-9 pr-3 text-base"
+              className="min-h-11 w-full rounded-control border border-line-strong pl-9 pr-3 text-base"
             />
           </label>
         </div>

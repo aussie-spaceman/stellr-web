@@ -196,7 +196,7 @@ export default async function AdminEventDetailPage({
           ← All events
         </Link>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h1 className="min-w-0 font-display text-2xl font-bold text-ink sm:text-title">{event.title}</h1>
+          <h1 className="min-w-0 font-display text-2xl font-bold text-ink sm:text-ds-h2">{event.title}</h1>
           {/* On every tab: on the day, whoever opens this page is looking for check-in. */}
           {!isCampaign && (
             <Link
@@ -264,7 +264,7 @@ export default async function AdminEventDetailPage({
 
           <div className="grid md:grid-cols-2 gap-4">
             <div className="bg-white rounded-xl border border-brand-border p-4">
-              <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide mb-2">Dietary Requirements</h3>
+              <h3 className="text-sm font-semibold text-brand-muted mb-2">Dietary Requirements</h3>
               {summary.dietary.length === 0 ? (
                 <p className="text-sm text-brand-muted-soft">None reported.</p>
               ) : (
@@ -279,7 +279,7 @@ export default async function AdminEventDetailPage({
               )}
             </div>
             <div className="bg-white rounded-xl border border-brand-border p-4">
-              <h3 className="text-sm font-semibold text-brand-muted uppercase tracking-wide mb-2">Health Issues</h3>
+              <h3 className="text-sm font-semibold text-brand-muted mb-2">Health Issues</h3>
               {summary.healthIssues.length === 0 ? (
                 <p className="text-sm text-brand-muted-soft">None reported.</p>
               ) : (
@@ -331,7 +331,7 @@ export default async function AdminEventDetailPage({
       {tab === 'training' && (
         <div className="space-y-4">
           <div>
-            <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Assigned training courses</h2>
+            <h2 className="text-sm font-semibold text-brand-muted">Assigned training courses</h2>
             <p className="text-xs text-brand-muted-soft mt-0.5">
               Modules assigned here appear for all participants of this event.
             </p>
@@ -356,7 +356,7 @@ export default async function AdminEventDetailPage({
           {access.isAdmin && (
             <section className="space-y-3">
               <div>
-                <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Refund Policy</h2>
+                <h2 className="text-sm font-semibold text-brand-muted">Refund Policy</h2>
                 <p className="text-xs text-brand-muted-soft mt-1">
                   {hasRefundOverride ? 'This event uses a custom override.' : 'Using the global default. Save below to override for this event only.'}
                 </p>
@@ -374,7 +374,7 @@ export default async function AdminEventDetailPage({
 
           <section className="space-y-3">
             <div>
-              <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wide">Merchandise</h2>
+              <h2 className="text-sm font-semibold text-brand-muted">Merchandise</h2>
               <p className="text-xs text-brand-muted-soft mt-1">
                 Included shirt (auto-allocated by size) and paid add-ons for this event.
               </p>

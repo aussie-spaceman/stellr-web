@@ -32,7 +32,7 @@ export function ProgressRing({
           style={{ '--ring-c': `${c}`, '--ring-target': `${offset}` } as CSSProperties}
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center font-subheading text-[11px] font-semibold text-brand-blue-dark">
+      <span className="absolute inset-0 flex items-center justify-center font-subheading text-xs font-semibold text-brand-blue-dark">
         {done ? <Check className="h-4 w-4 text-emerald-500" /> : `${pct}%`}
       </span>
     </div>

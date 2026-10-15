@@ -63,7 +63,7 @@ const socialLinks = [
 function CopyrightBar() {
   return (
     <div className="border-t border-white/[0.08]">
-      <div className="mx-auto max-w-chrome px-5 sm:px-8 py-5 flex flex-col sm:flex-row items-center justify-between flex-wrap gap-2.5 text-[13px] text-[#5A6490] font-sans">
+      <div className="mx-auto max-w-chrome px-5 sm:px-8 py-5 flex flex-col sm:flex-row items-center justify-between flex-wrap gap-2.5 text-[13px] text-hero-muted font-sans">
         <span>
           2026 © Stellr Education&nbsp;&nbsp;|&nbsp;&nbsp;Registered 501(c)(3) · EIN {STELLR_EIN}&nbsp;&nbsp;|&nbsp;&nbsp;Built In Utah, Educating The Globe
         </span>
@@ -133,7 +133,7 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
             </p>
 
             {/* 44px hit areas around 18px icons (they were 18×18 targets). */}
-            <div className="-mx-3 flex gap-1 text-[#5A6490]">
+            <div className="-mx-3 flex gap-1 text-hero-muted">
               {socialLinks.map(({ icon: Icon, label, href }) => (
                 <a
                   key={label}
@@ -141,7 +141,7 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
                   aria-label={label}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex min-h-11 min-w-11 items-center justify-center text-[#5A6490] transition-colors hover:text-hero-dim"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center text-hero-muted transition-colors hover:text-hero-dim"
                 >
                   <Icon size={18} aria-hidden />
                 </a>

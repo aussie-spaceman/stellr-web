@@ -45,7 +45,7 @@ export function MembershipCard({ membership, member, membershipId }: Props) {
   if (!membership) {
     return (
       <div className="bg-white rounded-xl border border-brand-border p-6">
-        <h2 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide mb-4">
+        <h2 className="text-sm font-semibold text-brand-muted-soft mb-4">
           Membership
         </h2>
         <MemberIdRow membershipId={membershipId} />

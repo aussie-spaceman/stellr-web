@@ -339,7 +339,7 @@ function QuestionField({ q, value, error, onChange }: { q: Question; value: Answ
           <div className="flex items-center gap-2">
             <input
               {...common}
-              className="mt-2 w-32 rounded-control border border-line px-3 py-2 text-ink"
+              className="mt-2 w-32 rounded-control border border-line-strong px-3 py-2 text-ink"
               type="number"
               inputMode="decimal"
               min={q.min}

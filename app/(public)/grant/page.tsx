@@ -162,7 +162,7 @@ export default async function GrantPage() {
               Built to fit around teaching
             </h2>
             <div className="mt-6 flex gap-4 bg-white border border-line rounded-ds-card px-[22px] py-5">
-              <span className="shrink-0 w-10 h-10 rounded-[10px] flex items-center justify-center bg-enviro-green-bg text-enviro-green">
+              <span className="shrink-0 w-10 h-10 rounded-[10px] flex items-center justify-center bg-enviro-green-bg text-enviro-green-text">
                 <Team size={22} />
               </span>
               <div className="text-sm text-content-secondary leading-relaxed">
@@ -258,7 +258,7 @@ export default async function GrantPage() {
               </div>
 
               <div className="flex gap-4 bg-white border border-line rounded-ds-card px-[22px] py-5">
-                <span className="shrink-0 w-10 h-10 rounded-[10px] flex items-center justify-center bg-enviro-green-bg text-enviro-green">
+                <span className="shrink-0 w-10 h-10 rounded-[10px] flex items-center justify-center bg-enviro-green-bg text-enviro-green-text">
                   <Team size={22} />
                 </span>
                 <div>
@@ -278,7 +278,7 @@ export default async function GrantPage() {
               </div>
 
               <div className="flex gap-3 bg-pathway-amber-bg border border-pathway-amber/30 rounded-ds-card px-[22px] py-[18px]">
-                <span className="shrink-0 font-display font-bold text-pathway-amber-deep text-lg leading-none mt-0.5">
+                <span className="shrink-0 font-display font-bold text-gold-ink text-lg leading-none mt-0.5">
                   !
                 </span>
                 <p className="text-[13.5px] text-content-body leading-relaxed">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 
 export interface MemberMatch {
   first_name: string
@@ -37,6 +37,7 @@ export function MemberIdLookup({
   onUnlink: () => void
   label?: string
 }) {
+  const idFor = useId()
   const [status, setStatus] = useState<'idle' | 'searching' | 'found' | 'notfound' | 'limited' | 'error'>('idle')
   const [match, setMatch] = useState<MemberMatch | null>(null)
   // deep review AUTH-4: the surname the server matches the ID against. Required
@@ -86,10 +87,13 @@ export function MemberIdLookup({
 
   return (
     <div>
-      <label className="label-text">{label}</label>
+      <label htmlFor={idFor} className="label-text">{label}</label>
       <div className="flex flex-col sm:flex-row gap-2">
         <input
+          id={idFor}
           value={value}
+          inputMode="numeric"
+          autoComplete="off"
           onChange={e => { onChange(e.target.value); setStatus('idle'); setMatch(null) }}
           className="input-field font-mono sm:flex-1"
           placeholder="e.g. 0000018 — if they already have a Stellr Member ID"
@@ -101,6 +105,7 @@ export function MemberIdLookup({
           onChange={e => { setLastName(e.target.value); setStatus('idle'); setMatch(null) }}
           className="input-field sm:flex-1"
           placeholder="Their last name (to confirm)"
+          aria-label="Their last name, to confirm the member ID"
           autoComplete="off"
         />
         <button

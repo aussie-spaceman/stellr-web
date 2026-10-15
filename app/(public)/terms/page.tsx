@@ -12,7 +12,7 @@ export default function TermsPage() {
     <div className="section-padding container-max max-w-3xl">
       <h1 className="text-4xl font-bold text-brand-blue-dark mb-8">Terms of Use</h1>
       <div className="prose prose-slate max-w-none space-y-6 text-brand-grey-dark">
-        <p className="text-sm text-brand-grey-mid italic">
+        <p className="text-sm text-content-muted italic">
           Effective Date: 18-Jun-2026 &nbsp;·&nbsp; Last Updated: 09-Oct-2026
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
@@ -42,7 +42,7 @@ export default function TermsPage() {
 
         {/* The short version */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg px-5 py-4 not-prose">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-brand-blue mb-2">
+          <h2 className="text-sm font-bold text-brand-blue mb-2">
             The short version
           </h2>
           <p className="text-sm text-brand-blue-dark mb-2">
@@ -73,7 +73,7 @@ export default function TermsPage() {
 
         {/* Contents */}
         <nav aria-label="Table of contents" className="bg-surface border border-line rounded-lg px-5 py-4 not-prose">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-brand-grey-mid mb-2">
+          <h2 className="text-sm font-bold text-content-muted mb-2">
             Contents
           </h2>
           <ol className="list-decimal pl-5 space-y-1 text-sm sm:columns-2 sm:gap-8">
@@ -103,7 +103,7 @@ export default function TermsPage() {
               ['contact', 'Contact Us'],
             ].map(([id, label]) => (
               <li key={id}>
-                <a href={`#${id}`} className="text-brand-grey-dark hover:text-brand-blue hover:underline">
+                <a href={`#${id}`} className="text-brand-grey-dark hover:text-brand-blue underline underline-offset-2 hover:no-underline">
                   {label}
                 </a>
               </li>
@@ -118,12 +118,12 @@ export default function TermsPage() {
         <p>
           These Terms of Use (the &ldquo;Terms&rdquo;) are a legal agreement between you and Stellr
           (defined below). They govern your access to and use of our website at{' '}
-          <a href="https://www.stellreducation.org" className="text-brand-blue hover:underline">
+          <a href="https://www.stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             stellreducation.org
           </a>
           , our competition registration portals, our online community platform (including any
           associated member application at{' '}
-          <a href="https://app.stellreducation.org" className="text-brand-blue hover:underline">
+          <a href="https://app.stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             app.stellreducation.org
           </a>
           ), our Academy and curriculum resources, our events, and any other services that link to
@@ -133,7 +133,7 @@ export default function TermsPage() {
           By accessing or using the Services, creating an account, registering for a competition,
           purchasing a membership, or otherwise indicating your acceptance, you agree to be bound by
           these Terms and by our{' '}
-          <Link href="/privacy" className="text-brand-blue hover:underline">
+          <Link href="/privacy" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             Privacy Policy
           </Link>
           . If you do not agree, please do not use the Services.
@@ -195,7 +195,7 @@ export default function TermsPage() {
           minor&rsquo;s behalf and are responsible for their use of the Services. A participant under
           18 needs the signed consent of a parent or legal guardian to take part, collected
           electronically as described in our{' '}
-          <Link href="/privacy" className="text-brand-blue hover:underline">
+          <Link href="/privacy" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             Privacy Policy
           </Link>
           . Signing a consent form or agreement for a child you are not the parent or legal guardian
@@ -210,7 +210,7 @@ export default function TermsPage() {
           If you are a teacher or school representative registering a group of students, you represent
           that you are authorized to do so and have obtained any consents your school requires. When
           you register a group you accept our{' '}
-          <Link href="/school-data-terms" className="text-brand-blue hover:underline">
+          <Link href="/school-data-terms" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             School Data Terms
           </Link>{' '}
           on the school&rsquo;s behalf; they set out how we use and protect the student information
@@ -223,7 +223,7 @@ export default function TermsPage() {
           You are responsible for keeping your login credentials secure and for all activity that
           occurs under your account. Do not share your account or let anyone else use it. Notify us
           promptly at{' '}
-          <a href="mailto:hello@stellreducation.org" className="text-brand-blue hover:underline">
+          <a href="mailto:hello@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             hello@stellreducation.org
           </a>{' '}
           if you suspect unauthorized use.
@@ -293,7 +293,7 @@ export default function TermsPage() {
             You decide whether to make it public, and you can make it private again at any time.
             For a Minor, a page can only be made public with the consent of a parent or legal
             guardian, which they may decline, as described in our{' '}
-            <Link href="/privacy" className="text-brand-blue hover:underline">
+            <Link href="/privacy" className="text-brand-blue underline underline-offset-2 hover:no-underline">
               Privacy Policy
             </Link>
             . Credential pages of a child under 13 always stay private.
@@ -333,7 +333,7 @@ export default function TermsPage() {
         <p>
           We offer free and paid membership tiers. The current tiers, prices, and benefits are
           described on our{' '}
-          <Link href="/membership" className="text-brand-blue hover:underline">
+          <Link href="/membership" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             Membership page
           </Link>
           , which forms part of these Terms. Prices are in U.S. dollars and may exclude applicable
@@ -406,7 +406,7 @@ export default function TermsPage() {
           parental or guardian consent forms, which are part of these Terms for those events. To keep
           participants safe, we may collect medical, allergy, and dietary information as described in
           our{' '}
-          <Link href="/privacy" className="text-brand-blue hover:underline">
+          <Link href="/privacy" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             Privacy Policy
           </Link>
           ; please provide accurate information and update us if it changes.
@@ -488,7 +488,7 @@ export default function TermsPage() {
           have their own rules you must also follow. We may moderate, remove content, or suspend
           access to keep the community safe, but we are not obligated to monitor all activity. If you
           see something concerning, please report it to{' '}
-          <a href="mailto:hello@stellreducation.org" className="text-brand-blue hover:underline">
+          <a href="mailto:hello@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             hello@stellreducation.org
           </a>
           .
@@ -519,7 +519,7 @@ export default function TermsPage() {
           permission, with a box to opt out; opting out does not affect participation, and we do not
           publish identifiable images of a participant whose parent or guardian has opted out. Anyone
           may ask us to stop using identifiable submissions or images of a minor, consistent with our{' '}
-          <Link href="/privacy" className="text-brand-blue hover:underline">
+          <Link href="/privacy" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             Privacy Policy
           </Link>
           . Some uses already published or distributed may not be fully reversible. Credential pages
@@ -581,7 +581,7 @@ export default function TermsPage() {
         </h2>
         <p>
           Your privacy matters to us. Our{' '}
-          <Link href="/privacy" className="text-brand-blue hover:underline">
+          <Link href="/privacy" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             Privacy Policy
           </Link>{' '}
           explains what personal information we collect, how we use and protect it, and the rights of
@@ -598,7 +598,7 @@ export default function TermsPage() {
           processor. Unless we say otherwise or the law requires it, donations are non-refundable.
           Information about Stellr&rsquo;s tax status and the deductibility of contributions is
           provided on our{' '}
-          <Link href="/donate" className="text-brand-blue hover:underline">
+          <Link href="/donate" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             Donate page
           </Link>
           ; please consult your own tax advisor, as we do not provide tax advice.
@@ -685,7 +685,7 @@ export default function TermsPage() {
           effect, you accept the revised Terms. If you do not agree, please stop using the Services.
           Changes that affect how we handle the personal information of a Minor follow Section 14 of
           our{' '}
-          <Link href="/privacy" className="text-brand-blue hover:underline">
+          <Link href="/privacy" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             Privacy Policy
           </Link>
           , which may require new parental consent.
@@ -697,7 +697,7 @@ export default function TermsPage() {
         </h2>
         <p>
           <strong>Let&rsquo;s talk first.</strong> If you have a concern, please contact us at{' '}
-          <a href="mailto:hello@stellreducation.org" className="text-brand-blue hover:underline">
+          <a href="mailto:hello@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             hello@stellreducation.org
           </a>{' '}
           so we can try to resolve it. You agree to give us at least 30 days to work things out
@@ -753,7 +753,7 @@ export default function TermsPage() {
           privacy@stellreducation.org; you may withdraw your agreement to sign electronically the same
           way, which does not undo a signature already given. Every signer can download a copy of the
           signed document, and we keep it as described in our{' '}
-          <Link href="/privacy" className="text-brand-blue hover:underline">
+          <Link href="/privacy" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             Privacy Policy
           </Link>
           .
@@ -774,12 +774,12 @@ export default function TermsPage() {
           7533 S Center View Ct, Ste R, West Jordan, UT 84084
           <br />
           Email:{' '}
-          <a href="mailto:hello@stellreducation.org" className="text-brand-blue hover:underline">
+          <a href="mailto:hello@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             hello@stellreducation.org
           </a>
           <br />
           Privacy matters:{' '}
-          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             privacy@stellreducation.org
           </a>
         </p>

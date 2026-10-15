@@ -36,7 +36,7 @@ function Pill({ tone, label, title }: { tone: 'green' | 'amber' | 'red' | 'grey'
     grey: 'bg-brand-hairline text-brand-muted-soft',
   }[tone]
   return (
-    <span title={title} className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}>
+    <span title={title} className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${cls}`}>
       {label}
     </span>
   )
@@ -61,7 +61,7 @@ function EventChecklist({
         onChange={(e) => setQ(e.target.value)}
         placeholder="Filter events & campaigns…"
         aria-label="Filter events and campaigns"
-        className="w-full rounded-t-lg border-b border-brand-hairline px-3 py-2 text-input focus:outline-none mouse:text-sm"
+        className="w-full rounded-t-lg border-b border-line-strong px-3 py-2 text-input focus:outline-none mouse:text-sm"
       />
       <div className="max-h-52 overflow-y-auto p-1">
         {filtered.length === 0 && (
@@ -74,7 +74,7 @@ function EventChecklist({
           >
             <input type="checkbox" checked={selected.has(e.slug)} onChange={() => onToggle(e.slug)} />
             <span className="min-w-0 flex-1 truncate text-brand-blue-dark">{e.title}</span>
-            <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${e.kind === 'campaign' ? 'bg-amber-100 text-amber-700' : 'bg-brand-blue/10 text-brand-blue'}`}>
+            <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold uppercase ${e.kind === 'campaign' ? 'bg-amber-100 text-amber-700' : 'bg-brand-blue/10 text-brand-blue'}`}>
               {e.kind}
             </span>
           </label>

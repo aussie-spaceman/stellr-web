@@ -185,7 +185,7 @@ export function TrainingManager({
                   </div>
                 </button>
                 <div className="flex shrink-0 items-center gap-3">
-                  <span className="hidden rounded-full bg-brand-hairline px-2 py-0.5 text-[11px] font-medium text-brand-muted sm:inline">
+                  <span className="hidden rounded-full bg-brand-hairline px-2 py-0.5 text-xs font-medium text-brand-muted sm:inline">
                     {COURSE_TYPE_LABEL[m.course_type ?? 'self_paced']}
                   </span>
                   <span
@@ -318,14 +318,14 @@ function CourseSettings({ module: m, onDone }: { module: AdminModule; onDone: ()
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Course title"
           autoFocus
-          className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
+          className="w-full rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
         />
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Description (optional)"
           rows={2}
-          className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
+          className="w-full rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
         />
         {error && <p className="text-xs text-red-600">{error}</p>}
         <div className="flex items-center gap-2">
@@ -362,7 +362,7 @@ function CourseSettings({ module: m, onDone }: { module: AdminModule; onDone: ()
             value={m.material_kind}
             onChange={(e) => changeKind(e.target.value)}
             disabled={busy}
-            className="rounded-md border border-brand-border px-2 py-1 text-xs font-medium text-brand-muted disabled:opacity-50"
+            className="rounded-md border border-line-strong px-2 py-1 text-input mouse:text-xs font-medium text-brand-muted disabled:opacity-50"
           >
             {KINDS.map((k) => (
               <option key={k} value={k}>
@@ -377,7 +377,7 @@ function CourseSettings({ module: m, onDone }: { module: AdminModule; onDone: ()
             value={m.theme ?? ''}
             onChange={(e) => changeTheme(e.target.value)}
             disabled={busy}
-            className="rounded-md border border-brand-border px-2 py-1 text-xs font-medium text-brand-muted disabled:opacity-50"
+            className="rounded-md border border-line-strong px-2 py-1 text-input mouse:text-xs font-medium text-brand-muted disabled:opacity-50"
           >
             <option value="">None</option>
             {(['space', 'environmental', 'campaign'] as CourseTheme[]).map((t) => (
@@ -386,7 +386,7 @@ function CourseSettings({ module: m, onDone }: { module: AdminModule; onDone: ()
           </select>
         </label>
         <span
-          className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+          className="rounded-full px-2 py-0.5 text-xs font-semibold"
           style={{ background: typeMeta.tint, color: typeMeta.ink }}
           title="Type is derived from the course kind"
         >
@@ -446,13 +446,13 @@ function CertTemplateControl({ module: m, onDone }: { module: AdminModule; onDon
       Certificate
       {has ? (
         <>
-          <span className="rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700">Template set</span>
+          <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700">Template set</span>
           <button onClick={clear} disabled={busy} className="text-brand-muted-soft hover:text-red-500 disabled:opacity-50">
             <X className="h-3.5 w-3.5" />
           </button>
         </>
       ) : (
-        <label className="cursor-pointer rounded-md border border-brand-border px-2 py-1 text-[11px] font-medium text-brand-muted hover:bg-brand-canvas">
+        <label className="cursor-pointer rounded-md border border-brand-border px-2 py-1 text-xs font-medium text-brand-muted hover:bg-brand-canvas">
           {busy ? 'Uploading…' : 'Upload PDF'}
           <input
             type="file"
@@ -582,21 +582,21 @@ function CreateModule({ onDone }: { onDone: () => void }) {
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Course title"
             autoFocus
-            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
           />
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Description (optional)"
             rows={2}
-            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
           />
           <div className="flex flex-wrap items-center gap-3">
             <select
               value={materialKind}
               onChange={(e) => setMaterialKind(e.target.value as (typeof KINDS)[number])}
               title="Controls where this course surfaces for members"
-              className="rounded-md border border-brand-border px-3 py-2 text-sm"
+              className="rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
             >
               {KINDS.map((k) => (
                 <option key={k} value={k}>
@@ -608,7 +608,7 @@ function CreateModule({ onDone }: { onDone: () => void }) {
               value={eventRef}
               onChange={(e) => setEventRef(e.target.value)}
               placeholder="Competition slug (optional — links course to a specific event)"
-              className="flex-1 rounded-md border border-brand-border px-3 py-2 text-sm"
+              className="flex-1 rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
             />
             <label
               className="flex items-center gap-1.5 text-sm text-brand-muted"
@@ -625,7 +625,7 @@ function CreateModule({ onDone }: { onDone: () => void }) {
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-fit rounded-md border border-brand-border px-3 py-2 text-sm font-normal"
+                className="w-fit rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm font-normal"
               />
             </label>
           )}
@@ -774,7 +774,7 @@ function Curriculum({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-xs font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Curriculum</p>
-        {ordered.length > 1 && <p className="text-[11px] text-brand-muted-soft">Drag sections to reorder</p>}
+        {ordered.length > 1 && <p className="text-xs text-brand-muted-soft">Drag sections to reorder</p>}
       </div>
       <p className="sr-only" aria-live="polite">
         {moveStatus}
@@ -822,7 +822,7 @@ function Curriculum({
             onKeyDown={(e) => e.key === 'Enter' && createSection()}
             placeholder="Section name"
             autoFocus
-            className="flex-1 rounded-md border border-brand-border px-3 py-2 text-sm"
+            className="flex-1 rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
           />
           <button
             onClick={createSection}
@@ -974,7 +974,7 @@ function SectionCard({
               }}
               disabled={busy}
               autoFocus
-              className="min-w-0 flex-1 rounded-md border border-brand-border px-2 py-1 text-sm"
+              className="min-w-0 flex-1 rounded-md border border-line-strong px-2 py-1 text-input mouse:text-sm"
             />
           ) : (
             <button
@@ -1073,7 +1073,7 @@ function DripControl({ section, onDone }: { section: AdminSection; onDone: () =>
         onChange={(e) => setDays(e.target.value)}
         onBlur={save}
         onKeyDown={(e) => e.key === 'Enter' && save()}
-        className="w-14 rounded-md border border-brand-border px-2 py-1 text-xs disabled:opacity-50"
+        className="w-14 rounded-md border border-line-strong px-2 py-1 text-input mouse:text-xs disabled:opacity-50"
       />
       <span>days</span>
     </label>
@@ -1125,14 +1125,14 @@ function LessonRow({ lesson, onDone }: { lesson: AdminLesson; onDone: () => void
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Lesson title"
-          className="mb-2 w-full rounded-md border border-brand-border px-3 py-2 text-sm"
+          className="mb-2 w-full rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
         />
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Lesson notes (shown beneath the featured media)"
           rows={3}
-          className="w-full rounded-md border border-brand-border px-3 py-2 text-sm"
+          className="w-full rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
         />
         <div className="mt-2 flex items-center gap-2">
           <button
@@ -1159,17 +1159,17 @@ function LessonRow({ lesson, onDone }: { lesson: AdminLesson; onDone: () => void
       >
         <Icon className="h-4 w-4 shrink-0 text-brand-muted-soft" />
         <span className="truncate text-sm text-brand-blue-dark hover:underline">{lesson.title}</span>
-        {lesson.body && <span className="shrink-0 text-[10px] text-brand-muted-soft">· notes</span>}
+        {lesson.body && <span className="shrink-0 text-xs text-brand-muted-soft">· notes</span>}
       </button>
       <div className="flex shrink-0 items-center gap-2">
         <select
           value={lesson.status}
           onChange={(e) => patch({ status: e.target.value })}
           disabled={busy}
-          className={`rounded-md border px-2 py-1 text-xs font-medium disabled:opacity-50 ${
+          className={`rounded-md border px-2 py-1 text-input mouse:text-xs font-medium disabled:opacity-50 ${
             lesson.status === 'published'
               ? 'border-green-200 bg-green-50 text-green-700'
-              : 'border-brand-border bg-white text-brand-muted'
+              : 'border-line-strong bg-white text-brand-muted'
           }`}
         >
           <option value="draft">Draft</option>
@@ -1295,7 +1295,7 @@ function AddLessonForm({
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Lesson title"
           autoFocus
-          className="rounded-md border border-brand-border px-3 py-2 text-sm"
+          className="rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
         />
         <select
           value={contentKind}
@@ -1303,7 +1303,7 @@ function AddLessonForm({
             setContentKind(e.target.value as (typeof CONTENT_KINDS)[number])
             setError(null)
           }}
-          className="rounded-md border border-brand-border px-3 py-2 text-sm"
+          className="rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
         >
           {CONTENT_KINDS.map((k) => (
             <option key={k} value={k}>
@@ -1318,7 +1318,7 @@ function AddLessonForm({
             value={externalUrl}
             onChange={(e) => setExternalUrl(e.target.value)}
             placeholder="https://… (Google Doc, YouTube/Vimeo embed, or link)"
-            className="rounded-md border border-brand-border px-3 py-2 text-sm"
+            className="rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
           />
         ) : (
           <p className="self-center text-xs text-brand-muted-soft">
@@ -1329,7 +1329,7 @@ function AddLessonForm({
           value={minutes}
           onChange={(e) => setMinutes(e.target.value)}
           placeholder="Est. minutes (optional)"
-          className="rounded-md border border-brand-border px-3 py-2 text-sm"
+          className="rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
         />
       </div>
       <textarea
@@ -1337,7 +1337,7 @@ function AddLessonForm({
         onChange={(e) => setBodyText(e.target.value)}
         placeholder="Lesson notes (optional) — shown beneath the featured media"
         rows={2}
-        className="mt-2 w-full rounded-md border border-brand-border px-3 py-2 text-sm"
+        className="mt-2 w-full rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm"
       />
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
       <div className="mt-2 flex items-center gap-2">
@@ -1351,7 +1351,7 @@ function AddLessonForm({
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value as 'draft' | 'published')}
-          className="rounded-md border border-brand-border px-2 py-1.5 text-xs"
+          className="rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-xs"
         >
           <option value="published">Published</option>
           <option value="draft">Draft</option>

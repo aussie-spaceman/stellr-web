@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
+import { Choice, Field, Fieldset, Input, Select } from '@stellr/web-ui'
 import { ageOn, isValidDob } from '@/lib/age'
 import { T_SHIRT_SIZES } from '@/lib/registration-constants'
 import { useRouter } from 'next/navigation'
@@ -42,6 +43,9 @@ const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandpar
 const ETHNICITIES = ['Pacific Islander', 'Hispanic', 'White (Caucasian)', 'Black', 'Native American', 'Asian', 'Prefer Not To Say']
 const DIETARY_OPTIONS = ['None', 'Dairy / Lactose Free', 'Gluten Free', 'Halal', 'Kosher', 'Vegetarian', 'Vegan', 'Other']
 
+// The fields a create can't go without, in the order they appear.
+type RequiredField = 'first_name' | 'last_name' | 'email'
+
 function label(val: string) {
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
@@ -52,10 +56,15 @@ function ageFromDob(dob: string): number | null {
   return isValidDob(dob) ? ageOn(dob) : null
 }
 
+// An admin is entering someone else's details, so the text fields opt out of
+// autofill: the browser would otherwise offer the admin's own name and email.
 export function AdminAddMember({ tiers, returnTo }: Props) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<RequiredField, string>>>({})
+  const uid = useId()
+  const fid = (field: string) => `${uid}-${field}`
 
   const [form, setForm] = useState({
     first_name: '',
@@ -86,6 +95,7 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }))
+    setFieldErrors((e) => (e[field as RequiredField] ? { ...e, [field]: undefined } : e))
   }
 
   function toggleMulti(field: 'ethnicity' | 'dietary_requirements', opt: string) {
@@ -117,8 +127,15 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
 
   async function handleSubmit() {
     setError('')
-    if (!form.first_name.trim() || !form.last_name.trim() || !form.email.trim()) {
-      setError('First name, last name, and email are required.')
+    // Each gap shows under its own field, and focus goes to the first one.
+    const missing: Partial<Record<RequiredField, string>> = {}
+    if (!form.first_name.trim()) missing.first_name = 'Enter a first name.'
+    if (!form.last_name.trim()) missing.last_name = 'Enter a last name.'
+    if (!form.email.trim()) missing.email = 'Enter an email address.'
+    setFieldErrors(missing)
+    const first = Object.keys(missing)[0]
+    if (first) {
+      requestAnimationFrame(() => document.getElementById(fid(first))?.focus())
       return
     }
     setSaving(true)
@@ -158,7 +175,7 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
           <Link href="/admin/members" className="text-sm text-brand-muted-soft hover:text-brand-muted mb-1 inline-block">
             ← All members
           </Link>
-          <h1 className="font-heading uppercase text-title text-brand-blue-dark">Add member</h1>
+          <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Add member</h1>
           <p className="text-sm text-brand-muted-soft mt-0.5">
             Manually create a member record. They finish their own profile from the invitation email.
           </p>
@@ -173,7 +190,7 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
       </div>
 
       {error && (
-        <p className="text-sm text-red-600 bg-red-50 rounded-lg px-4 py-3">{error}</p>
+        <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg px-4 py-3">{error}</p>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -182,139 +199,115 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
           {/* Identity */}
           <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
             <h2 className="text-base font-semibold text-brand-blue-dark">Identity</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">First name <span className="text-red-400">*</span></label>
-                <input
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="First name" required error={fieldErrors.first_name}>
+                <Input
+                  id={fid('first_name')}
                   type="text"
+                  autoComplete="off"
                   value={form.first_name}
                   onChange={(e) => set('first_name', e.target.value)}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
-              </div>
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">Last name <span className="text-red-400">*</span></label>
-                <input
+              </Field>
+              <Field label="Last name" required error={fieldErrors.last_name}>
+                <Input
+                  id={fid('last_name')}
                   type="text"
+                  autoComplete="off"
                   value={form.last_name}
                   onChange={(e) => set('last_name', e.target.value)}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
-              </div>
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">Preferred name / nickname</label>
-                <input
+              </Field>
+              <Field label="Preferred name / nickname">
+                <Input
                   type="text"
+                  autoComplete="off"
                   value={form.nickname}
                   onChange={(e) => set('nickname', e.target.value)}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
-              </div>
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">Email <span className="text-red-400">*</span></label>
-                <input
+              </Field>
+              <Field label="Email" required error={fieldErrors.email}>
+                <Input
+                  id={fid('email')}
                   type="email"
+                  autoComplete="off"
                   value={form.email}
                   onChange={(e) => set('email', e.target.value)}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
-              </div>
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">Phone</label>
-                <input
+              </Field>
+              <Field label="Phone">
+                <Input
                   type="tel"
+                  autoComplete="off"
                   value={form.phone}
                   onChange={(e) => set('phone', e.target.value)}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
-              </div>
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">Date of birth</label>
-                <input
+              </Field>
+              <Field
+                label="Date of birth"
+                hint={isMinor ? (
+                  <span className="text-brand-gold-ink">Under 18 — bracket and role auto-set to High School / School Student.</span>
+                ) : undefined}
+              >
+                <Input
                   type="date"
+                  autoComplete="off"
                   value={form.date_of_birth}
                   onChange={(e) => handleDobChange(e.target.value)}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
-                {isMinor && (
-                  <p className="text-xs text-amber-600 mt-1">Under 18 — bracket and role auto-set to High School / School Student.</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">Gender</label>
-                <select
-                  value={form.gender}
-                  onChange={(e) => set('gender', e.target.value)}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                >
+              </Field>
+              <Field label="Gender">
+                <Select value={form.gender} onChange={(e) => set('gender', e.target.value)}>
                   <option value="">Select…</option>
                   {GENDERS.map((g) => (
                     <option key={g} value={g}>{label(g)}</option>
                   ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">Discord handle</label>
-                <input
+                </Select>
+              </Field>
+              <Field label="Discord handle">
+                <Input
                   type="text"
+                  autoComplete="off"
                   value={form.discord_handle}
                   onChange={(e) => set('discord_handle', e.target.value)}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
-              </div>
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">T-shirt size</label>
-                <select
-                  value={form.tshirt_size}
-                  onChange={(e) => set('tshirt_size', e.target.value)}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                >
+              </Field>
+              <Field label="T-shirt size">
+                <Select value={form.tshirt_size} onChange={(e) => set('tshirt_size', e.target.value)}>
                   <option value="">Select…</option>
                   {T_SHIRT_SIZES.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
-                </select>
-              </div>
+                </Select>
+              </Field>
             </div>
           </div>
 
           {/* Classification */}
           <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
             <h2 className="text-base font-semibold text-brand-blue-dark">Classification</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">Age bracket</label>
-                <select
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Age bracket">
+                <Select
                   value={form.age_bracket}
                   onChange={(e) => handleBracketChange(e.target.value)}
                   disabled={isMinor}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue disabled:bg-brand-canvas disabled:text-brand-muted-soft"
                 >
                   {BRACKETS.map((b) => <option key={b} value={b}>{label(b)}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">Event role</label>
-                <select
+                </Select>
+              </Field>
+              <Field label="Event role" hint={eligibleRoles.length <= 1 ? 'Auto-set by age bracket' : undefined}>
+                <Select
                   value={form.event_role}
                   onChange={(e) => set('event_role', e.target.value)}
                   disabled={eligibleRoles.length <= 1}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue disabled:bg-brand-canvas disabled:text-brand-muted-soft"
                 >
                   {eligibleRoles.map((r) => <option key={r} value={r}>{label(r)}</option>)}
-                </select>
-                {eligibleRoles.length <= 1 && (
-                  <p className="text-xs text-brand-muted-soft mt-1">Auto-set by age bracket</p>
-                )}
-              </div>
+                </Select>
+              </Field>
               {showGrade && (
-                <div>
-                  <label className="block text-xs text-brand-muted-soft mb-1">Grade / Year</label>
-                  <select
-                    value={form.grade}
-                    onChange={(e) => set('grade', e.target.value)}
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                  >
+                <Field label="Grade / Year">
+                  <Select value={form.grade} onChange={(e) => set('grade', e.target.value)}>
                     <option value="">Select…</option>
                     {GRADES.filter((g) =>
                       form.age_bracket === 'high_school'
@@ -323,8 +316,8 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
                     ).map((g) => (
                       <option key={g.value} value={g.value}>{g.label}</option>
                     ))}
-                  </select>
-                </div>
+                  </Select>
+                </Field>
               )}
             </div>
           </div>
@@ -333,72 +326,64 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
           {(form.age_bracket === 'high_school' || form.age_bracket === 'college') && (
             <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
               <h2 className="text-base font-semibold text-brand-blue-dark">School</h2>
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">School name</label>
+              <Field label="School name">
                 <SchoolSearchInput onChange={setSchoolSelection} />
-              </div>
+              </Field>
             </div>
           )}
 
           {/* Emergency contact */}
           <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
             <h2 className="text-base font-semibold text-brand-blue-dark">Emergency contact</h2>
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: 'First name', field: 'ec_first_name' },
-                { label: 'Last name', field: 'ec_last_name' },
-                { label: 'Email', field: 'ec_email' },
-                { label: 'Phone', field: 'ec_phone' },
-              ].map(({ label: lbl, field }) => (
-                <div key={field}>
-                  <label className="block text-xs text-brand-muted-soft mb-1">{lbl}</label>
-                  <input
-                    type="text"
-                    value={(form as unknown as Record<string, string>)[field]}
-                    onChange={(e) => set(field, e.target.value)}
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                  />
-                </div>
-              ))}
-              <div>
-                <label className="block text-xs text-brand-muted-soft mb-1">Relationship to participant</label>
-                <select
-                  value={form.ec_relationship}
-                  onChange={(e) => set('ec_relationship', e.target.value)}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="First name">
+                <Input type="text" autoComplete="off" value={form.ec_first_name} onChange={(e) => set('ec_first_name', e.target.value)} />
+              </Field>
+              <Field label="Last name">
+                <Input type="text" autoComplete="off" value={form.ec_last_name} onChange={(e) => set('ec_last_name', e.target.value)} />
+              </Field>
+              <Field label="Email">
+                <Input type="email" autoComplete="off" value={form.ec_email} onChange={(e) => set('ec_email', e.target.value)} />
+              </Field>
+              <Field label="Phone">
+                <Input type="tel" autoComplete="off" value={form.ec_phone} onChange={(e) => set('ec_phone', e.target.value)} />
+              </Field>
+              <Field label="Relationship to participant">
+                <Select value={form.ec_relationship} onChange={(e) => set('ec_relationship', e.target.value)}>
                   <option value="">Select…</option>
                   {EMERGENCY_RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
+                </Select>
+              </Field>
             </div>
           </div>
 
           {/* Ethnicity & dietary */}
           <div className="bg-white rounded-xl border border-brand-border p-6 space-y-4">
             <h2 className="text-base font-semibold text-brand-blue-dark">Ethnicity &amp; dietary</h2>
-            <div>
-              <p className="block text-xs text-brand-muted-soft mb-2">Ethnicity</p>
-              <div className="flex flex-wrap gap-x-4 gap-y-2">
+            <Fieldset legend="Ethnicity">
+              <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
                 {ETHNICITIES.map((opt) => (
-                  <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" checked={form.ethnicity.includes(opt)} onChange={() => toggleMulti('ethnicity', opt)} className="rounded" />
-                    <span className="text-sm">{opt}</span>
-                  </label>
+                  <Choice
+                    key={opt}
+                    checked={form.ethnicity.includes(opt)}
+                    onChange={() => toggleMulti('ethnicity', opt)}
+                    label={opt}
+                  />
                 ))}
               </div>
-            </div>
-            <div>
-              <p className="block text-xs text-brand-muted-soft mb-2">Dietary requirements</p>
-              <div className="flex flex-wrap gap-x-4 gap-y-2">
+            </Fieldset>
+            <Fieldset legend="Dietary requirements">
+              <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
                 {DIETARY_OPTIONS.map((opt) => (
-                  <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" checked={form.dietary_requirements.includes(opt)} onChange={() => toggleMulti('dietary_requirements', opt)} className="rounded" />
-                    <span className="text-sm">{opt}</span>
-                  </label>
+                  <Choice
+                    key={opt}
+                    checked={form.dietary_requirements.includes(opt)}
+                    onChange={() => toggleMulti('dietary_requirements', opt)}
+                    label={opt}
+                  />
                 ))}
               </div>
-            </div>
+            </Fieldset>
           </div>
 
         </div>
@@ -406,37 +391,32 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
         {/* Sidebar */}
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-brand-border p-5">
-            <h2 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide mb-3">
+            <h2 id={fid('tier-heading')} className="text-sm font-semibold text-brand-muted-soft mb-3">
               Membership tier
             </h2>
             <p className="text-xs text-brand-muted-soft mb-3">
               Assign an initial tier, or leave blank to set later.
             </p>
             {eligibleTiers.length > 0 ? (
-              <div className="space-y-1.5">
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input
+              <div role="radiogroup" aria-labelledby={fid('tier-heading')}>
+                <Choice
+                  type="radio"
+                  name="tier"
+                  value=""
+                  checked={form.tier_id === ''}
+                  onChange={() => set('tier_id', '')}
+                  label={<span className="text-brand-muted-soft">No tier yet</span>}
+                />
+                {eligibleTiers.map((t) => (
+                  <Choice
+                    key={t.id}
                     type="radio"
                     name="tier"
-                    value=""
-                    checked={form.tier_id === ''}
-                    onChange={() => set('tier_id', '')}
-                    className="text-brand-blue"
+                    value={t.id}
+                    checked={form.tier_id === t.id}
+                    onChange={() => set('tier_id', t.id)}
+                    label={t.name}
                   />
-                  <span className="text-brand-muted-soft">No tier yet</span>
-                </label>
-                {eligibleTiers.map((t) => (
-                  <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input
-                      type="radio"
-                      name="tier"
-                      value={t.id}
-                      checked={form.tier_id === t.id}
-                      onChange={() => set('tier_id', t.id)}
-                      className="text-brand-blue"
-                    />
-                    {t.name}
-                  </label>
                 ))}
               </div>
             ) : (
@@ -447,18 +427,14 @@ export function AdminAddMember({ tiers, returnTo }: Props) {
           </div>
 
           <div className="bg-white rounded-xl border border-brand-border p-5 space-y-3">
-            <h2 className="text-sm font-semibold text-brand-muted-soft uppercase tracking-wide">
+            <h2 className="text-sm font-semibold text-brand-muted-soft">
               Invitation
             </h2>
-            <label className="flex items-start gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={sendInvite}
-                onChange={(e) => setSendInvite(e.target.checked)}
-                className="mt-0.5 text-brand-blue"
-              />
-              <span>Email them a link to complete their account</span>
-            </label>
+            <Choice
+              checked={sendInvite}
+              onChange={(e) => setSendInvite(e.target.checked)}
+              label="Email them a link to complete their account"
+            />
             <p className="text-xs text-brand-muted-soft">
               A login is set up for the email above. The link takes them to complete their
               profile — date of birth, gender and phone — before they can use the app. You can

@@ -42,7 +42,7 @@ function IntegrationHealth() {
   return (
     <div className="app-card p-6">
       <div className="flex items-baseline justify-between gap-4">
-        <h2 className="font-heading uppercase text-brand-blue-dark">Integration environments</h2>
+        <h2 className="font-heading text-brand-blue-dark">Integration environments</h2>
         <span className="text-xs text-brand-muted-soft">
           Deployment: {vercelTarget()}
         </span>
@@ -85,7 +85,7 @@ export default async function AdminDashboardPage() {
         <p className="eyebrow flex items-center gap-2 text-brand-blue">
           <span className="h-2 w-2 rounded-full bg-brand-blue-bright" /> Admin
         </p>
-        <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Dashboard</h1>
+        <h1 className="mt-1 font-heading text-ds-h2 text-brand-blue-dark">Dashboard</h1>
       </div>
 
       <IntegrationHealth />

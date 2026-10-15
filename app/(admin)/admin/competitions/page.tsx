@@ -112,11 +112,19 @@ export default async function AdminEventsPage() {
               : 'Events you are assigned to manage'}
           </p>
         </div>
-        {access.isAdmin && (
-          <Link href="/admin/competitions/refund-policy" className="text-sm font-medium text-brand-blue hover:text-brand-blue border border-brand-blue rounded-lg px-3 py-1.5 shrink-0">
-            Refund Policy
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <Link
+            href="/admin/competitions/check-in-banner"
+            className="rounded-lg border border-primary px-3 py-1.5 text-sm font-medium text-primary"
+          >
+            Check-in banner
           </Link>
-        )}
+          {access.isAdmin && (
+            <Link href="/admin/competitions/refund-policy" className="text-sm font-medium text-brand-blue hover:text-brand-blue border border-brand-blue rounded-lg px-3 py-1.5 shrink-0">
+              Refund Policy
+            </Link>
+          )}
+        </div>
       </div>
 
       {sections.map(({ label, items, isCampaign }) => (

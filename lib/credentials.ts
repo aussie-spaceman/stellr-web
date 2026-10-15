@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { agreementValid } from '@/lib/docusign-agreements'
+import { relabelIssuedAward } from '@/lib/event-awards'
 import { isMinorPerPolicy, type MinorFacts } from '@/lib/minor-policy'
 import {
   CREDENTIAL_COLUMNS,
@@ -446,7 +447,8 @@ function withDob(row: Record<string, unknown>): CredentialView {
   const one = (v: unknown) =>
     (Array.isArray(v) ? v[0] : v) as { date_of_birth?: string | null; member_id?: string | null } | null
   const { members, participants, ...rest } = row
-  const cred = rest as unknown as CredentialRow
+  // Reads are for display, so a renamed award shows its current label.
+  const cred = relabelIssuedAward(rest as unknown as CredentialRow)
   const dob = one(members)?.date_of_birth ?? one(participants)?.date_of_birth ?? null
   return { ...cred, date_of_birth: dob, owner_member_id: cred.member_id ?? one(participants)?.member_id ?? null }
 }

@@ -6,7 +6,7 @@
  * inferred. Checked 24 Sept 2026 for the 2026–27 season; re-check each August
  * when fees and dates roll over, and update CHECKED_ON.
  *
- * Editorial rule: one family of space-settlement design competitions is never
+ * Editorial rule: one family of external design competitions is never
  * named in Stellr's public content (standing decision, 24 Sept 2026). Do not
  * add it here.
  */
@@ -146,7 +146,7 @@ export const PROGRAMS: readonly Program[] = [
   {
     name: 'Stellr Campaign',
     organizer: 'Stellr Education',
-    grades: '9–12',
+    grades: '7–12',
     team: 'Groups; a school can enter as many as it likes',
     cost: 'Free (Educator membership)',
     equipment: 'None — no lab, no kit',

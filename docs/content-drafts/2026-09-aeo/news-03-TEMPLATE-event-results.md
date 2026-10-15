@@ -25,6 +25,6 @@ On [date], [N] students in grades [x–y] from [N] schools across [region] compe
 
 **By the numbers.** [N] students · [N] schools · [N] engineering companies · [N] industry judges from [employers].
 
-**What’s next.** [Invitations to the championship; next event date and link.]
+**What’s next.** [Invitations to the International Summer Camp; next event date and link.]
 
 [See upcoming events →](/events)

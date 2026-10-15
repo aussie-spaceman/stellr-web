@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { formatDateShort, formatDate, formatDateRange, ageFromDob, registrationStatus, timeAgo, slugify, isEmailLike } from './utils'
+import { formatDateShort, formatDate, formatDateRange, ageFromDob, registrationStatus, eventLastDay, timeAgo, slugify, isEmailLike } from './utils'
 
 describe('formatDateShort', () => {
   it('renders a bare calendar date without shifting a day (W6.7 regression)', () => {
@@ -84,6 +84,28 @@ describe('registrationStatus (date-only bounds in app timezone)', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-07-09T12:00:00Z'))
     expect(registrationStatus('2026-07-10', undefined)).toBe('coming-soon')
+  })
+  it('closes an event whose last day has passed, whatever its window says', () => {
+    vi.useFakeTimers()
+    // 2026-10-14 MT: an event that ran on 2026-10-03 with no close date set.
+    vi.setSystemTime(new Date('2026-10-14T18:00:00Z'))
+    expect(registrationStatus(undefined, undefined, '2026-10-03')).toBe('closed')
+    expect(registrationStatus('2026-08-01', '2026-12-31', '2026-10-03')).toBe('closed')
+  })
+
+  it('keeps an event open through its own last day in Mountain time', () => {
+    vi.useFakeTimers()
+    // 2026-10-04T05:00Z = 11:00 PM MDT on Oct 3, still the event day.
+    vi.setSystemTime(new Date('2026-10-04T05:00:00Z'))
+    expect(registrationStatus(undefined, undefined, '2026-10-03')).toBe('open')
+  })
+})
+
+describe('eventLastDay', () => {
+  it('prefers the end date, falls back to the date, and trims a timestamp', () => {
+    expect(eventLastDay({ date: '2026-11-06', endDate: '2026-11-07' })).toBe('2026-11-07')
+    expect(eventLastDay({ date: '2026-11-06T15:00:00Z' })).toBe('2026-11-06')
+    expect(eventLastDay({})).toBeUndefined()
   })
 })
 

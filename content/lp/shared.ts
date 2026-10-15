@@ -39,15 +39,12 @@ export const GALLERY_HEADING = 'Real students, real competitions'
 export const GALLERY_LEAD = 'Scenes from past Stellr design challenges.'
 
 /**
- * The same four photos on every page. None of them may be a hero image — the
- * hero photo differs per audience and repeating it here would make the page
- * look like it has two of one photograph.
+ * The same gallery on every page. No shot may be a hero image — a hero photo
+ * repeated here would make the page look like it has two of one photograph.
+ * One shot renders as a single framed photo rather than a one-item grid.
  */
 export const GALLERY_SHOTS: LpGalleryShot[] = [
-  { photoId: 'lp-gallery-1', caption: 'Students collaborate endlessly as they design and engineer' },
-  { photoId: 'lp-gallery-2', caption: 'Company hard at work' },
   { photoId: 'lp-gallery-3', caption: 'Students of different ages collaborate together' },
-  { photoId: 'lp-gallery-4', caption: 'A successful conclusion!' },
 ]
 
 export const WHY_EYEBROW = 'Why design competitions'
@@ -68,7 +65,7 @@ export const FORM_SHELL = {
   submitLabel: 'Learn more now',
   reassurance: 'No payment now. This takes you to a calendar to book a short call.',
   callNote:
-    'Every enquiry ends with a short call. You will pick a time straight after the ' +
+    'Every inquiry ends with a short call. You will pick a time straight after the ' +
     'form — no waiting on an email.',
   consentLabel: 'I agree to Stellr Education contacting me about this competition.',
   /**

@@ -12,7 +12,7 @@ export const Steps: StoryObj = {
       <StepCard n={2} title="Form a team" body="Students work together like a professional firm." />
       <StepCard n={3} title="Design & decide" body="Research, prototype, weigh trade-offs, run the numbers." />
       <StepCard n={4} title="Build the deliverable" body="A written proposal or a presentation of the solution." />
-      <StepCard n={5} title="Pitch & be judged" body="Present to judges; strong teams progress to finals." />
+      <StepCard n={5} title="Pitch & be judged" body="Present to judges; award winners are invited to our International Summer Camp." />
     </div>
   ),
 }
@@ -90,8 +90,8 @@ export const Progression: StoryObj = {
         note="More info coming soon"
         nodes={[
           { label: 'Take part', labelClass: 'text-primary', title: 'Enter a Campaign or Event' },
-          { label: 'Advance', labelClass: 'text-space-violet', title: 'Top teams progress to the finals' },
-          { label: 'The final', labelClass: 'text-brand-gold-ink', title: 'Annual Championship event', titleClass: 'text-brand-gold-ink', cardClass: 'bg-pathway-amber-bg border border-pathway-amber/30', star: true },
+          { label: 'Advance', labelClass: 'text-space-violet', title: 'Award Winners are invited to progress' },
+          { label: 'Summer Camp', labelClass: 'text-brand-gold-ink', title: 'International Summer Camp (mid-July)', titleClass: 'text-brand-gold-ink', cardClass: 'bg-pathway-amber-bg border border-pathway-amber/30', star: true },
         ]}
       />
     </div>

@@ -1,62 +1,21 @@
 import { NextResponse } from 'next/server'
 import { sendEmail, MARKETING_FROM } from '@/lib/email'
-import { escapeHtml } from '@/lib/email-layout'
 import { LEAD_SOURCE_LIFECYCLE } from '@/lib/hubspot-fields'
 import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 import { isEmailLike } from '@/lib/utils'
-import { mediaDownloadUrl } from '@/lib/media-manifest'
+import { GATED_ASSETS, isGatedAssetKey } from '@/lib/gated-assets'
+import { gatedDownloadUrl } from '@/lib/gated-download-link'
+import { gatedAssetEmailHtml, gatedAssetEmailText } from '@/lib/gated-asset-email'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
-
 /**
- * Registry of gated marketing assets. Each entry is emailed to the requester
- * and made available for direct download, and the requester is captured in
- * HubSpot as a `subscriber`. Add new gated downloads here and reference them by
- * key from an <AssetGate asset="…" /> on the relevant page.
+ * Gated marketing downloads. The requester is captured in HubSpot as a
+ * `subscriber` and emailed a signed link to the full file. The file
+ * itself sits in private storage (lib/gated-assets.ts); no page, prop or
+ * response from this route ever carries its location. Reference a key from an
+ * <AssetGate asset="…" /> or a gated WorkCard.
  */
-const ASSETS = {
-  'student-rfp': {
-    title: 'Example Student RFP',
-    file: '/files/Stellr-Example-Student-RFP.pdf',
-    subject: 'Your example student RFP',
-    note: 'Requested example student RFP (Curriculum Campaigns page)',
-  },
-  'sponsorship-prospectus': {
-    title: 'Sponsorship Prospectus',
-    file: '/files/Stellr-Sponsorship-Prospectus.pdf',
-    subject: 'Your Stellr Sponsorship Prospectus',
-    note: 'Requested Sponsorship Prospectus (Network / Why Stellr page)',
-  },
-  // Media-rollout gated competition material (T4). Files self-hosted in /public.
-  'jsc-2025-program-book': {
-    title: '2025 JSC — Program Book',
-    file: '/files/jsc-2025-program-book.pdf',
-    subject: 'Your copy of the 2025 JSC Program Book',
-    note: 'Requested 2025 JSC Program Book (Educators page)',
-  },
-  'jsc-2025-student-presentation': {
-    title: '2025 JSC — Student Presentation',
-    file: '/files/jsc-2025-student-presentation.pdf',
-    subject: 'Your copy of the 2025 JSC Student Presentation',
-    note: 'Requested 2025 JSC Student Presentation (Educators page)',
-  },
-  'south-west-2022-student-presentation': {
-    title: '2022 South West — Student Presentation',
-    file: '/files/south-west-2022-student-presentation.pdf',
-    subject: 'Your copy of the 2022 South West Student Presentation',
-    note: 'Requested 2022 South West Student Presentation (Events page)',
-  },
-  'south-west-2025-rfp': {
-    title: '2025 South West — RFP',
-    file: '/files/south-west-2025-rfp.pdf',
-    subject: 'Your copy of the 2025 South West RFP',
-    note: 'Requested 2025 South West RFP (Events page)',
-  },
-} as const
-
-type AssetKey = keyof typeof ASSETS
-
 export async function POST(req: Request) {
   // Sends outbound email to the submitted address — an email-bomb vector.
   const limited = rateLimitGuard(req, 'asset-request', { limit: 3, windowMs: HOUR_MS })
@@ -64,10 +23,10 @@ export async function POST(req: Request) {
   try {
     const { name, email, asset } = await req.json()
 
-    const config = ASSETS[asset as AssetKey]
-    if (!config) {
+    if (!isGatedAssetKey(asset)) {
       return NextResponse.json({ error: 'Unknown asset' }, { status: 400 })
     }
+    const config = GATED_ASSETS[asset]
 
     const cleanName = typeof name === 'string' ? name.trim() : ''
     const cleanEmail = typeof email === 'string' ? email.trim() : ''
@@ -76,12 +35,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'A valid email is required.' }, { status: 400 })
     }
 
+    const downloadUrl = gatedDownloadUrl(SITE_URL, asset)
+    if (!downloadUrl) {
+      console.error('[asset-request] No signing secret configured — cannot issue a download link.')
+      return NextResponse.json({ error: 'Downloads are unavailable right now.' }, { status: 503 })
+    }
+
     const [firstName, ...rest] = cleanName.split(/\s+/)
     const lastName = rest.join(' ')
-    // Absolute on the media host (lib/media-manifest) when one is set; otherwise
-    // the site serves it from /public.
-    const hosted = mediaDownloadUrl(config.file)
-    const downloadUrl = hosted.startsWith('http') ? hosted : `${SITE_URL}${hosted}`
 
     // ── 1. Capture the lead in HubSpot as a subscriber (best-effort) ──────
     // Form submission + note engagement, so the request is visible under
@@ -97,72 +58,31 @@ export async function POST(req: Request) {
       logEntry: logLine('asset_request', config.title),
       context: {
         hutk: readHubspotCookie(req),
-        pageUri: `${SITE_URL}${config.file}`,
+        pageUri: `${SITE_URL}${config.pagePath}`,
         pageName: `Asset request — ${config.title}`,
       },
     })
 
-    // ── 2. Email the asset to the requester (best-effort, link-only) ──────
+    // ── 2. Email the signed link to the requester ────────────────────────
     let emailed = false
     try {
       await sendEmail({
         to: cleanEmail,
         from: MARKETING_FROM,
         subject: config.subject,
-        html: assetEmailHtml(firstName, config.title, downloadUrl),
-        text: assetEmailText(firstName, config.title, downloadUrl),
+        html: gatedAssetEmailHtml(firstName, config.title, downloadUrl),
+        text: gatedAssetEmailText(firstName, config.title, downloadUrl),
       })
       emailed = true
     } catch (err) {
       console.error('[asset-request] Email send failed:', err)
     }
 
+    // The link only ever travels by email, so a failed send is a failure.
+    if (!emailed) return NextResponse.json({ error: 'We could not send the email.' }, { status: 502 })
     return NextResponse.json({ ok: true, emailed, crm: crm.ok })
   } catch (err) {
     console.error('[asset-request] Unexpected error:', err)
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
-}
-
-function assetEmailHtml(firstName: string, title: string, downloadUrl: string) {
-  // deep review PUB-2: sent from the marketing sender to the submitted address,
-  // so escape the submitted name and every other interpolated value to stop
-  // injected markup rendering. The plain-text copy below is unaffected.
-  const greeting = escapeHtml(firstName || 'there')
-  const safeTitle = escapeHtml(title)
-  const href = escapeHtml(downloadUrl)
-  return `
-  <div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;background:#F6F7FB;padding:32px 16px">
-    <div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #E4E7F2;border-radius:16px;overflow:hidden">
-      <div style="background:#0E1330;padding:28px 32px">
-        <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;color:#fff;font-size:18px;letter-spacing:-.01em">Stellr Education</div>
-      </div>
-      <div style="padding:32px">
-        <p style="color:#13183A;font-size:16px;margin:0 0 12px">Hi ${greeting},</p>
-        <p style="color:#454B68;font-size:15px;line-height:1.6;margin:0 0 18px">
-          Thanks for your interest — your copy of <strong>${safeTitle}</strong> is ready. Download it any
-          time using the button below.
-        </p>
-        <p style="margin:24px 0">
-          <a href="${href}" style="display:inline-block;background:#3C6DF6;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:13px 26px;border-radius:8px">Download now</a>
-        </p>
-        <p style="color:#6A708C;font-size:13px;line-height:1.6;margin:18px 0 0">
-          You'll get the occasional update from the Stellr community — you can unsubscribe any time.
-        </p>
-      </div>
-    </div>
-  </div>`
-}
-
-function assetEmailText(firstName: string, title: string, downloadUrl: string) {
-  return [
-    `Hi ${firstName || 'there'},`,
-    '',
-    `Thanks for your interest — your copy of ${title} is ready. Download it here:`,
-    downloadUrl,
-    '',
-    "You'll get the occasional update from the Stellr community — you can unsubscribe any time.",
-    '',
-    '— Stellr Education',
-  ].join('\n')
 }

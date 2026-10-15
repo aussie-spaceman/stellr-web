@@ -10,6 +10,7 @@ import {
   type CredentialVisibility,
 } from '@/lib/credentials-core'
 import { badgeAccent, BadgeGlyph } from './badge/glyph'
+import { relabelIssuedAward } from '@/lib/event-awards'
 
 /**
  * The share card: what a LinkedIn feed post (or Slack, or iMessage) shows for
@@ -92,7 +93,7 @@ export default async function Image({ params }: { params: Promise<{ number: stri
     const { data } = await supabaseServer()
       .from('credentials')
       .select(
-        'number, recipient_name, title, issuer, theme, status, expires_at, tombstoned_at, visibility, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth)',
+        'number, recipient_name, title, award, award_type, issuer, theme, status, expires_at, tombstoned_at, visibility, members!credentials_member_id_fkey(date_of_birth), participants(date_of_birth)',
       )
       .eq('number', n)
       .maybeSingle()
@@ -101,7 +102,8 @@ export default async function Image({ params }: { params: Promise<{ number: stri
       card = ogCardFor({
         number: row.number as string,
         recipient_name: row.recipient_name as string,
-        title: row.title as string,
+        // A renamed award shows its current label, as on the page.
+        title: relabelIssuedAward({ award_type: row.award_type as string | null, award: row.award as string | null, title: row.title as string }).title,
         issuer: row.issuer as string,
         theme: (row.theme as CredentialTheme | null) ?? null,
         status: row.status as CredentialStatus,

@@ -99,16 +99,17 @@ export default function WhyDesignCompetitionsPage() {
       </section>
 
       {/* ── Quote ────────────────────────────────────────────────────── */}
-      <section className="bg-brand-blue-dark text-white py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto max-w-3xl text-center">
-          <blockquote className="text-2xl sm:text-3xl font-bold leading-snug">
-            &ldquo;Design Competitions are a textbook example of Project Based Learning. We provide
-            an open-ended challenge for students to creatively problem solve.&rdquo;
+      <section className="bg-midnight text-white py-16 px-4 sm:px-6 lg:px-8">
+        <figure className="mx-auto max-w-3xl text-center">
+          <blockquote className="font-display text-2xl sm:text-3xl font-bold leading-snug">
+            &ldquo;These events put project-based learning into practice. Teams are tasked with an
+            unscripted problem, dig into the science to find engineering solutions, and develop teamwork
+            and communication durable skills.&rdquo;
           </blockquote>
-          <footer className="mt-6 text-brand-orange font-medium">
-            Mr. Ty White — AZ Rural Teacher of the Year, 2023
-          </footer>
-        </div>
+          <figcaption className="mt-6 font-medium text-star-gold">
+            Mr Jim Christensen &middot; Chief Innovation Officer, The Aldrin Family Foundation
+          </figcaption>
+        </figure>
       </section>
 
       {/* ── Four benefits ────────────────────────────────────────────── */}

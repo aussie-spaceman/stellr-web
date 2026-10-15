@@ -114,8 +114,8 @@ export function JoinCheckout({ tierSlug, tierName, priceLabel, priceNote, billin
 
       <p className="mt-5 text-[12.5px] leading-[1.55] text-content-faint">
         {invoiceEligible
-          ? 'Card payments renew annually and can be cancelled anytime. Invoices are billed once for 12 months — ideal for school or district purchase orders.'
-          : `Your membership renews ${billingInterval === 'monthly' ? 'monthly' : 'annually'} and can be cancelled anytime.`}
+          ? 'Card payments renew annually and can be canceled anytime. Invoices are billed once for 12 months — ideal for school or district purchase orders.'
+          : `Your membership renews ${billingInterval === 'monthly' ? 'monthly' : 'annually'} and can be canceled anytime.`}
       </p>
     </div>
   )

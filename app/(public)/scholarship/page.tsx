@@ -117,13 +117,13 @@ export default async function ScholarshipPage() {
         <div className="container-max">
           <figure className="max-w-3xl mx-auto text-center">
             <VideoTestimonial
-              src={VIDEOS['testimonial-meleah-caron'].src}
-              poster={VIDEOS['testimonial-meleah-caron'].poster}
-              captionsSrc={VIDEOS['testimonial-meleah-caron'].captions}
-              title={VIDEOS['testimonial-meleah-caron'].title}
+              src={VIDEOS['testimonial-mel-carson'].src}
+              poster={VIDEOS['testimonial-mel-carson'].poster}
+              captionsSrc={VIDEOS['testimonial-mel-carson'].captions}
+              title={VIDEOS['testimonial-mel-carson'].title}
             />
             <figcaption className="mt-3 text-sm font-semibold text-ink">
-              {VIDEOS['testimonial-meleah-caron'].title}
+              {VIDEOS['testimonial-mel-carson'].title}
             </figcaption>
           </figure>
         </div>

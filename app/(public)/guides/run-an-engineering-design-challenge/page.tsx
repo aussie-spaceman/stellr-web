@@ -47,7 +47,7 @@ export default function RunADesignChallengePage() {
         breadcrumb="Guides · For teachers"
         title={TITLE}
         lead="Your class becomes an engineering company bidding for a client’s contract. You run the process; the students do the engineering."
-        pills={['No lab or kit', '4 or 10 weeks', 'Grades 9–12']}
+        pills={['No lab or kit', '4 or 10 weeks', 'Grades 7–12']}
       />
 
       {/* Answer first — the paragraph an assistant should be able to quote. */}
@@ -61,7 +61,7 @@ export default function RunADesignChallengePage() {
             manage owners and deadlines — not the engineering answers.
           </p>
           <p className="text-content-secondary mt-6 leading-relaxed">
-            The engineering is the vehicle. What students actually practise is deciding with incomplete information,
+            The engineering is the vehicle. What students actually practice is deciding with incomplete information,
             handing work between teams, and defending a choice with evidence. You need no lab, no kit and no
             engineering background.
           </p>

@@ -138,7 +138,7 @@ Querying the live dataset returns **12 `event` documents**: 10 `live_event` and
 | Mankato, MN — MSU | Live, Enviro | `minnesota-environmental-design-challenge`, 24 Nov 2026 | ✅ agrees |
 | Waco, TX — Baylor | Planned, Space | *absent* | ✅ becomes a `plannedLocation` |
 | Ames, IA — Iowa State | Planned, Space | *absent* | ✅ becomes a `plannedLocation` |
-| Houston, TX — JSC / Clear Lake | Planned, Space | *absent* | ✅ becomes a `plannedLocation` |
+| Houston, TX — planned venue (archived 14 Oct 2026) | Planned, Space | *absent* | ✅ becomes a `plannedLocation` |
 | **Raleigh, NC — St Mary's** | **Planned**, Space | **`north-carolina-space-design-challenge`, dated 6 Feb 2027** | ⚠️ **conflict** — Sanity has it as a dated live event |
 | **Austin, TX** | *absent* | **`texas-space-design-competition`, dated 30 Jan 2027** | ⚠️ **not on your list** |
 | Providence, RI | *absent* | `rhode-island-space-design-challenge`, **no date** | Excluded by the rule below (undated ⇒ draft) |

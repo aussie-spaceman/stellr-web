@@ -11,8 +11,6 @@ type AssetGateProps = {
   asset: string
   /** Title of the gated asset (shown in the modal + success state). */
   title: string
-  /** Public path to the file, used for the direct-download fallback. */
-  fileUrl: string
   /** Trigger button label. */
   triggerLabel: string
   /** Small uppercase badge shown in the modal header. */
@@ -26,9 +24,10 @@ type AssetGateProps = {
 }
 
 /**
- * Generic lead-capture gate: a trigger button that opens a name/email modal,
- * posts to /api/asset-request (HubSpot subscriber + emailed link), then offers
- * an immediate download. Reused for any gated marketing download.
+ * Generic lead-capture gate: a trigger button that opens a name/email modal and
+ * posts to /api/asset-request (HubSpot subscriber + an emailed, signed link).
+ * The full file never reaches the page — no URL, prop or direct-download
+ * fallback — so the email is the only way to it. Reused for every gated download.
  *
  * Accessibility (README §9): the modal traps focus, closes on Esc, restores
  * focus to the trigger on close, and locks body scroll while open.
@@ -36,7 +35,6 @@ type AssetGateProps = {
 export function AssetGate({
   asset,
   title,
-  fileUrl,
   triggerLabel,
   eyebrow = 'Free resource',
   helper,
@@ -120,13 +118,8 @@ export function AssetGate({
         body: JSON.stringify({ name: name.trim(), email: email.trim(), asset }),
       })
       if (!res.ok) throw new Error('Request failed')
-      // Persist the subscriber flag so other gated downloads skip the modal
-      // (README §8). Best-effort — never block the success path on storage.
-      try {
-        localStorage.setItem('stellr_subscriber', email.trim())
-      } catch {
-        /* storage unavailable (private mode) — gate just asks again next time */
-      }
+      // No "already subscribed" shortcut: a gated file only ever goes out by
+      // email, so every request comes through here.
       trackLeadSubmitted('asset_request', { asset })
       setSubmitted(true)
     } catch {
@@ -233,11 +226,7 @@ export function AssetGate({
                   </button>
                   {error && (
                     <p className="text-center text-[13px] text-[#9A4A41]">
-                      Something went wrong sending it. Please try again, or{' '}
-                      <a href={fileUrl} download className="font-semibold underline">
-                        download it directly
-                      </a>
-                      .
+                      Something went wrong sending it. Please try again in a moment.
                     </p>
                   )}
                   <p className="text-center text-[12.5px] text-content-faint">
@@ -257,17 +246,10 @@ export function AssetGate({
                     <span className="font-semibold text-ink">{email}</span>. It should arrive in a minute or
                     two.
                   </p>
-                  <a
-                    href={fileUrl}
-                    download
-                    className="mt-5 w-full inline-flex items-center justify-center rounded-[9px] bg-primary px-6 py-3.5 font-display text-[15px] font-semibold text-white hover:bg-primary-deep transition-colors"
-                  >
-                    Download it now ↓
-                  </a>
                   <button
                     type="button"
                     onClick={close}
-                    className="mt-3 text-sm font-semibold text-content-muted hover:text-ink transition-colors"
+                    className="mt-5 text-sm font-semibold text-content-muted hover:text-ink transition-colors"
                   >
                     Close
                   </button>

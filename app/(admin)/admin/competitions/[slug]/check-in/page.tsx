@@ -26,7 +26,7 @@ export default async function EventCheckInPage({ params }: { params: Promise<{ s
         </Link>
         <h1 className="font-heading uppercase text-title text-brand-blue-dark mt-1">Check-In — {event.title}</h1>
       </div>
-      <CheckInLive eventSlug={slug} siteUrl={siteUrl} />
+      <CheckInLive eventSlug={slug} siteUrl={siteUrl} isVirtual={event.setting === 'virtual'} />
     </div>
   )
 }

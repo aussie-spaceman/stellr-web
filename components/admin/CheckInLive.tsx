@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import QRCode from 'qrcode'
-import { Printer, Search } from 'lucide-react'
+import { Printer, QrCode, Search } from 'lucide-react'
 import { Button, cn } from '@stellr/web-ui'
 
 interface LiveParticipant {
@@ -24,6 +24,10 @@ interface LiveState {
   checkInToken: string | null
   resourcesUrl: string | null
   participants: LiveParticipant[]
+  /** The check-in banner (/check-in) sends phones to this event. */
+  bannerTarget: boolean
+  /** Other in-person events with check-in open; opening this one closes them. */
+  otherOpen: { slug: string; title: string }[]
 }
 
 type Filter = 'all' | 'waiting' | 'arrived'
@@ -34,7 +38,15 @@ const POLL_MS = 5000
 // targets, and a list in a fixed first-name order so a row never moves under
 // the admin's finger when someone checks in (CO, Oct 2026). Taps update the row
 // at once; the 5-second poll picks up phones checking themselves in.
-export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string; siteUrl: string }) {
+export default function CheckInLive({
+  eventSlug,
+  siteUrl,
+  isVirtual,
+}: {
+  eventSlug: string
+  siteUrl: string
+  isVirtual: boolean
+}) {
   const [state, setState] = useState<LiveState | null>(null)
   const [pending, setPending] = useState<Record<string, Partial<LiveParticipant>>>({})
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
@@ -77,6 +89,12 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
   }
 
   async function settingsAction(action: 'open' | 'close' | 'regenerate') {
+    // One banner, one event: opening here closes the other in-person check-in.
+    const others = state?.otherOpen ?? []
+    if (action === 'open' && !isVirtual && others.length) {
+      const names = others.map((o) => o.title).join(', ')
+      if (!window.confirm(`Check-in is open for ${names}. Opening this one closes it and points the banner here.`)) return
+    }
     setBusy(true)
     await post({ action })
     setBusy(false)
@@ -161,6 +179,11 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
             {state.checkInOpen ? 'Open' : 'Closed'}
           </span>
         </div>
+        {state.bannerTarget && (
+          <p className="rounded-control bg-primary/10 px-3 py-2 text-sm font-medium text-primary">
+            The check-in banner points here.
+          </p>
+        )}
 
         {state.checkInOpen && qrDataUrl ? (
           <>
@@ -194,6 +217,16 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
               <Printer className="h-4 w-4" aria-hidden /> Door poster
             </Button>
           )}
+          {!isVirtual && (
+            <Button
+              variant="softBlue"
+              href="/admin/competitions/check-in-banner"
+              as={Link}
+              className="min-h-11 px-4 py-2"
+            >
+              <QrCode className="h-4 w-4" aria-hidden /> Banner
+            </Button>
+          )}
           <button
             onClick={() => {
               if (window.confirm('Regenerating invalidates the current QR code, any printed posters, and links. Continue?')) {
@@ -207,8 +240,9 @@ export default function CheckInLive({ eventSlug, siteUrl }: { eventSlug: string;
           </button>
         </div>
         <p className="text-xs text-content-muted">
-          Print the door poster for the start of the line: people check themselves in on their phones with their name
-          and date of birth while they wait. For virtual events, email the link instead.
+          {isVirtual
+            ? 'For a virtual event, email the link: people confirm their attendance with their name and date of birth.'
+            : 'The check-in banner sends phones to whichever in-person event has check-in open, so opening this one closes any other. People check themselves in with their name and date of birth while they wait. The door poster works for this event only.'}
         </p>
 
         <div className="space-y-2 border-t border-line-light pt-4">

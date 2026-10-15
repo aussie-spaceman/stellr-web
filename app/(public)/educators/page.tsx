@@ -11,9 +11,10 @@ import {
 } from 'lucide-react'
 import { PullQuoteWall } from '@/components/sections/PullQuoteWall'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
+import { AudioTestimonial } from '@/components/sections/AudioTestimonial'
 import { ProofStrip } from '@/components/sections/ProofStrip'
 import { WorkCard } from '@/components/sections/WorkCard'
-import { PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
+import { AUDIO, PHOTOS, VIDEOS, QUOTES, COMPETITION } from '@/lib/media-manifest'
 import {
   GRANT_AMOUNTS,
   GRANT_PD_HOURS,
@@ -141,7 +142,7 @@ export default function EducatorsPage() {
       {/* ── Written testimonial (moved to top, below heading) ─────────── */}
       <section className="section-padding bg-white">
         <div className="container-max">
-          <PullQuoteWall quotes={[QUOTES['nahuel-de-bittencourt']]} columns={1} className="max-w-2xl mx-auto" />
+          <PullQuoteWall quotes={[QUOTES['teacher-multiple-events']]} columns={1} className="max-w-2xl mx-auto" />
         </div>
       </section>
 
@@ -187,8 +188,9 @@ export default function EducatorsPage() {
       {/* ── Educator video testimonials (moved above Teacher Grant) ─── */}
       <section className="section-padding bg-white">
         <div className="container-max">
-          <div className="grid gap-6 sm:grid-cols-2 max-w-5xl mx-auto">
-            {[VIDEOS['testimonial-jeremiah-dibley'], VIDEOS['testimonial-willcox-teachers']].map((v) => (
+          <div className="grid gap-6 sm:grid-cols-2 max-w-5xl mx-auto items-start">
+            <AudioTestimonial audio={AUDIO['testimonial-jeremiah-dibley']} />
+            {[VIDEOS['testimonial-maureen-lancaster']].map((v) => (
               <figure key={v.id}>
                 <VideoTestimonial src={v.src} poster={v.poster} captionsSrc={v.captions} title={v.title} />
                 <figcaption className="mt-3 text-sm font-semibold text-brand-blue-dark">{v.title}</figcaption>
@@ -295,13 +297,9 @@ export default function EducatorsPage() {
       {/* ── What educators see: photos + previous competition resources ─ */}
       <section className="section-padding bg-brand-grey-light">
         <div className="container-max max-w-4xl mx-auto">
-          <ProofStrip
-            photos={[PHOTOS['educators-1'], PHOTOS['educators-2']]}
-            captions={false}
-            columns={2}
-          />
+          <ProofStrip photos={[PHOTOS['educators-2']]} captions={false} columns={1} />
           <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-5">
-            {[COMPETITION['jsc-2025-program-book'], COMPETITION['jsc-2025-student-presentation']].map((c) => (
+            {[COMPETITION['mission-handbook-2026'], COMPETITION['student-presentation-2026']].map((c) => (
               <WorkCard key={c.id} asset={c} eyebrow="Previous Competition Resource" />
             ))}
           </div>

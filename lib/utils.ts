@@ -66,7 +66,11 @@ export function formatDateRange(start: string, end?: string): string {
 }
 
 /**
- * Live-event registration state, derived purely from the Open/Close dates:
+ * Live-event registration state, derived from the Open/Close dates and, when
+ * given, the event's own last day:
+ *   • the event's last day has passed → 'closed', whatever the Open/Close dates
+ *     or CMS flags say (an event with no close date set used to read "open"
+ *     for ever after it ran)
  *   • open date in the future  → 'coming-soon'
  *   • close date in the past   → 'closed'
  *   • otherwise (incl. no dates set) → 'open'
@@ -77,7 +81,9 @@ export function formatDateRange(start: string, end?: string): string {
  */
 export function registrationStatus(
   openDate?: string,
-  closeDate?: string
+  closeDate?: string,
+  /** The event's last calendar day ("YYYY-MM-DD"); see eventLastDay(). */
+  lastDay?: string,
 ): 'open' | 'coming-soon' | 'closed' {
   const now = new Date()
   const isDateOnly = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s)
@@ -88,6 +94,7 @@ export function registrationStatus(
   // is open through the whole close day (Mountain) and opens at the start of the
   // open day (Mountain). Full timestamps keep exact-instant comparison.
   const todayMT = todayInAppZone()
+  if (lastDay && /^\d{4}-\d{2}-\d{2}$/.test(lastDay) && lastDay < todayMT) return 'closed'
   if (openDate) {
     if (isDateOnly(openDate)) { if (openDate > todayMT) return 'coming-soon' }
     else if (new Date(openDate) > now) return 'coming-soon'
@@ -97,6 +104,13 @@ export function registrationStatus(
     else if (new Date(closeDate) < now) return 'closed'
   }
   return 'open'
+}
+
+/** The last calendar day an event runs ("YYYY-MM-DD"): its end date, else its
+ *  date. Undefined when neither is set (an undated event is not "past"). */
+export function eventLastDay(e: { date?: string | null; endDate?: string | null }): string | undefined {
+  const d = e.endDate || e.date
+  return d ? d.slice(0, 10) : undefined
 }
 
 /** "Now" as a "YYYY-MM-DD" calendar date in APP_TIME_ZONE (en-CA gives ISO

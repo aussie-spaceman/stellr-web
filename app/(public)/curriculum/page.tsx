@@ -7,8 +7,7 @@ import { AssetGate } from '@/components/sections/AssetGate'
 import { StudentWorkHero } from '@/components/sections/StudentWorkHero'
 import { PageMedia } from '@/components/sections/PageMedia'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
-import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
-import { PHOTOS, VIDEOS, mediaDownloadUrl } from '@/lib/media-manifest'
+import { PHOTOS, VIDEOS, STUDENT_WORK, RFP_2026_PREVIEW_HREF } from '@/lib/media-manifest'
 import { getAllCampaigns } from '@/lib/sanity'
 import { getCampaignDates, campaignStatusFromDates, type CampaignSeason } from '@/lib/campaigns'
 import { GuideFaq } from '@/components/guides/GuideFaq'
@@ -17,7 +16,7 @@ export const metadata: Metadata = {
   alternates: { canonical: '/curriculum' },
   title: 'Curriculum',
   description:
-    'Download real engineering challenge material and run it in your classroom any time, for free. Optionally enter a seasonal Campaign for a path to the national championships.',
+    'Download real engineering challenge material and run it in your classroom any time, for free. Optionally enter a seasonal Campaign for a path to our International Summer Camp.',
 }
 
 export const revalidate = 3600
@@ -40,11 +39,11 @@ const CURRICULUM_FAQS = [
   },
   {
     q: 'What is the difference between using the material and entering a Campaign?',
-    a: 'The material is yours to use any time, with no deadline. Entering a Fall or Spring Campaign is optional and free: your group submits a proposal by the deadline, receives written feedback from Stellr’s judging panel, and can be invited toward the national championships.',
+    a: 'The material is yours to use any time, with no deadline. Entering a Fall or Spring Campaign is optional and free: your group submits a proposal by the deadline, receives written feedback from Stellr’s judging panel, and can be invited to our International Summer Camp.',
   },
   {
     q: 'What grades is it for?',
-    a: 'Campaigns are for high school students, grades 9–12. The material builds from first principles, so no prior experience is needed.',
+    a: 'Campaigns are available for grades 7–12, although due to the advanced nature of the content we generally recommend teams that include at least some high school students (to mentor less experienced students). That said, if you have some incredible middle schoolers (and we’ve met plenty!) don’t let us hold you back!',
   },
 ] as const
 
@@ -96,7 +95,7 @@ const gettingStarted = [
   {
     n: 4,
     title: 'Optionally, enter a Campaign',
-    body: 'Want it to count? Submit in the Fall or Spring window for a shot at the national championships.',
+    body: 'Want it to count? Submit in the Fall or Spring window for a shot at an invitation to our International Summer Camp.',
     amber: true,
   },
 ]
@@ -141,7 +140,7 @@ const paidBullets = [
   'Worksheets, assessment guides & marking rubric',
   'Student certificates & awards',
   'Mentoring & coaching for award winners',
-  'A path to the National Championships',
+  'A path to the International Summer Camp',
 ]
 
 // `fallbackYear` is a school year, matching campaignYear.
@@ -165,7 +164,7 @@ export default async function CampaignsPage() {
       <Hero
         breadcrumb="Competitions · Curriculum"
         title="Real engineering challenges, ready for your classroom."
-        lead="Download the material and use it any time you like — it's yours to run on your own schedule. Or enter a seasonal Campaign and give your students a path all the way to the national championships."
+        lead="Download the material and use it any time you like — it's yours to run on your own schedule. Or enter a seasonal Campaign and give your students a path all the way to our International Summer Camp."
       >
         <div className="flex flex-wrap gap-3 mt-8">
           <Button href={SIGNUP_URL} variant="primary">
@@ -218,29 +217,22 @@ export default async function CampaignsPage() {
         </div>
       </section>
 
-      {/* ── Educator quote (Ty White) ─────────────────────────────────── */}
+      {/* ── Educator quote ───────────────────────────────────────────── */}
+      {/* No photo beside the quote for now. */}
       <section className="section-padding bg-white">
         <div className="container-max">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+          <div className="mx-auto max-w-3xl">
             <figure className="rounded-panel border border-line bg-surface px-8 py-9 shadow-card-lift">
               <blockquote className="text-xl sm:text-2xl font-semibold text-ink leading-relaxed">
-                &ldquo;Design Competitions are a textbook example of Project Based Learning (PBL). We provide
-                an open-ended challenge for students to creatively problem solve. They pursue deeper
-                understanding to overcome challenges. Students learn communication, collaboration, and
-                resilience as they struggle as part of a larger team to design and present their space
-                infrastructure.&rdquo;
+                &ldquo;These events put project-based learning into practice. Teams are tasked with an
+                unscripted problem, dig into the science to find engineering solutions, and develop teamwork
+                and communication durable skills.&rdquo;
               </blockquote>
               <figcaption className="mt-5 text-sm font-semibold text-content-secondary">
-                Mr Ty White{' '}
-                <span className="font-normal text-content-muted">· AZ Rural Teacher of the Year (2023)</span>
+                Mr Jim Christensen{' '}
+                <span className="font-normal text-content-muted">· Chief Innovation Officer, The Aldrin Family Foundation</span>
               </figcaption>
             </figure>
-            <ResponsivePhoto
-              photo={PHOTOS['curriculum-ty-white']}
-              sizes="(max-width: 1024px) 100vw, 50vw"
-              className="rounded-panel"
-              showCredit
-            />
           </div>
         </div>
       </section>
@@ -296,7 +288,7 @@ export default async function CampaignsPage() {
               <ul className="mt-4 space-y-2.5 flex-1">
                 {[
                   'Two windows a year — Fall and Spring',
-                  'A path to national championship activities',
+                  'A path to International Summer Camp invitations',
                   'Register in minutes — not required to use the material',
                 ].map((b) => (
                   <li key={b} className="flex gap-2.5 text-sm text-content-secondary leading-relaxed">
@@ -320,19 +312,27 @@ export default async function CampaignsPage() {
           </span>
           <h2 className="text-3xl font-bold text-ink mt-4">See Exactly What Students Work On</h2>
           <p className="text-lg text-content-secondary mt-3 leading-relaxed">
-            Download one of our older Request For Proposals (RFP&rsquo;s) — the same industry-simulation
+            Download one of our older Request For Proposals (RFPs) — the same industry-simulation
             design brief we issue participating students. We&rsquo;ll email you a copy to keep.
           </p>
           <div className="mt-8 flex flex-col items-center">
             <AssetGate
-              asset="student-rfp"
+              asset="space-rfp-2026"
               title="Example Student RFP"
-              fileUrl={mediaDownloadUrl('/files/Stellr-Example-Student-RFP.pdf')}
               triggerLabel="See a student Request for Proposal ↓"
               eyebrow="Free · example RFP"
               helper="A real student RFP, sent straight to your inbox."
               triggerClassName="inline-flex items-center justify-center gap-2 rounded-[10px] bg-primary px-8 py-4 font-display text-base font-semibold text-white shadow-card-lift hover:bg-primary-deep transition-colors"
             />
+            {/* The open preview is the 2-page excerpt; the full RFP goes out by email only. */}
+            <a
+              href={RFP_2026_PREVIEW_HREF}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 text-sm font-semibold text-primary hover:text-primary-deep"
+            >
+              Preview the first two pages (PDF)
+            </a>
           </div>
         </div>
       </section>
@@ -400,7 +400,7 @@ export default async function CampaignsPage() {
                 presentations and designs your students could be building.
               </p>
             </div>
-            <StudentWorkHero />
+            <StudentWorkHero images={STUDENT_WORK} />
           </div>
         </div>
       </section>
@@ -412,13 +412,13 @@ export default async function CampaignsPage() {
             <div className="px-7 sm:px-11 pt-10">
               <Eyebrow className="text-[#F0B864]">Campaigns · optional</Eyebrow>
               <h2 className="text-display font-bold mt-3 max-w-xl leading-tight">
-                Two Campaigns a year. A path to the national championships.
+                Two Campaigns a year. A path to the International Summer Camp.
               </h2>
               <p className="text-hero-lead mt-4 max-w-2xl leading-relaxed">
                 Classes, clubs, and student groups can choose to take the Competition material and
                 participate in a Campaign — competing with others nationally. Submitting student work opens
                 the door to award winners receiving industry-leading mentoring and coaching, and the
-                possibility of invites to National Championships!
+                possibility of invites to our International Summer Camp!
               </p>
             </div>
             {/* Window cells */}
@@ -459,7 +459,7 @@ export default async function CampaignsPage() {
             {[
               { title: 'Run the challenge', sub: 'In your classroom', highlight: false },
               { title: 'Participate in a Campaign', sub: 'Fall or Spring window', highlight: false },
-              { title: 'National championships', sub: 'Top participants progress', highlight: true },
+              { title: 'International Summer Camp', sub: 'Award winners receive invitations', highlight: true },
             ].map((node, i, arr) => (
               <div key={node.title} className="flex items-center gap-3.5">
                 <div
@@ -512,13 +512,13 @@ export default async function CampaignsPage() {
         <div className="container-max max-w-3xl mx-auto">
           <figure>
             <VideoTestimonial
-              src={VIDEOS['testimonial-teacher'].src}
-              poster={VIDEOS['testimonial-teacher'].poster}
-              captionsSrc={VIDEOS['testimonial-teacher'].captions}
-              title="Erin Henderson — Teacher, 2022 South West Event"
+              src={VIDEOS['testimonial-erin-henderson'].src}
+              poster={VIDEOS['testimonial-erin-henderson'].poster}
+              captionsSrc={VIDEOS['testimonial-erin-henderson'].captions}
+              title="Erin Henderson — Teacher, 2022"
             />
             <figcaption className="mt-3 text-center text-sm font-semibold text-ink">
-              Erin Henderson &mdash; Teacher, 2022 South West Event
+              Erin Henderson &mdash; Teacher, 2022
             </figcaption>
           </figure>
         </div>
@@ -622,9 +622,9 @@ export default async function CampaignsPage() {
       <PageMedia
         heading="From brief to design"
         intro="What it looks like when students run the material."
-        photos={[PHOTOS['curriculum-group-work'], PHOTOS['curriculum-2'], PHOTOS['curriculum-3']]}
+        photos={[PHOTOS['curriculum-3']]}
         align="center"
-        photoColumns={3}
+        photoColumns={1}
         background="white"
       />
     </>

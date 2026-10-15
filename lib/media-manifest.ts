@@ -1,110 +1,40 @@
 // Media-rollout manifest — single source of truth for the media components
-// (T1–T6) across the public site. Mirrors the approved Drive sources locked on
-// 2026-06-30 (the "Photo Deployment" Google Doc; the handoff folder it came
-// with is not in the repo).
+// (T1–T6) across the public site.
 //
-// Components read assets from here. An asset whose bytes are not yet hosted is
-// marked `pending: true` (or has an empty `src`); components render a labelled
-// placeholder for it and `flagMissing()` logs a dev warning, so unfinished
-// media never ships silently as a broken <img>/<video>. After the transcode +
-// resize pass writes files into /public, flip `pending` to false.
+// SERVER-ONLY. Pages read assets here and pass each client component only the
+// fields it renders, as props. A client component that imported this module
+// would ship every entry below in its browser chunk, linked or not, so the
+// types and pure helpers live in lib/media-helpers.ts (client-safe) and are
+// re-exported here for server callers. Gated full files are not in this module
+// at all: their storage locations are in lib/gated-assets.ts.
 //
-// Output-path conventions (honoured by the transcode pass, README §4):
-//   videos  /videos/testimonial-<person>.mp4 · .poster.jpg · .en.vtt
-//   photos  /media/<subject>-<width>.<ext>   (avif/webp/jpg @ 480/768/1200/1920)
-//   pdfs    /files/<name>.pdf  (+ /files/<name>-preview.pdf for gated previews)
+// An asset whose bytes are not yet hosted is marked `pending: true` (or has an
+// empty `src`); components render a labelled placeholder for it and
+// `flagMissing()` logs a dev warning, so unfinished media never ships silently.
+//
+// Output-path conventions (new files go to new, dated paths; an existing blob
+// path is never overwritten):
+//   videos  /videos/<yyyy-mm>/<name>.mp4 · .poster.jpg · .en.vtt
+//   audio   /audio/<yyyy-mm>/<name>.m4a
+//   photos  /media/<subject>-<width>.<ext>   (avif/jpg @ 480/768/1200/1920)
+//   pdfs    /files/<yyyy-mm>/<name>.pdf · .cover.jpg (+ -preview.pdf for gated)
+import 'server-only'
+import {
+  DEFAULT_PHOTO_CREDIT,
+  PHOTO_WIDTHS,
+  mediaDownloadUrl,
+  mediaUrl,
+  type AudioAsset,
+  type CompetitionAsset,
+  type PhotoAsset,
+  type QuoteAsset,
+  type VideoAsset,
+} from './media-helpers'
 
-/** Voice colour-coding for the T6 pull-quote wall (token classes, not hex). */
-export type Audience = 'student' | 'educator' | 'mentor' | 'parent'
-
-interface BaseAsset {
-  id: string
-  /** Bytes not yet produced/hosted → component shows a placeholder + is flagged. */
-  pending?: boolean
-}
-
-export interface PhotoAsset extends BaseAsset {
-  /** Base path without width/ext suffix, e.g. "/media/event-floor"; the
-   *  component composes srcset from `widths`. Empty while pending. */
-  src: string
-  alt: string
-  /** Required on student work (README §9). */
-  credit?: string
-  widths?: number[]
-}
-
-export interface VideoAsset extends BaseAsset {
-  src: string // /videos/<file>.mp4
-  poster: string // /videos/<file>.poster.jpg
-  captions: string // /videos/<file>.en.vtt (WebVTT, required)
-  title: string
-}
-
-export interface QuoteAsset extends BaseAsset {
-  text: string
-  name: string
-  /** Role / cohort / where-they-are-now. */
-  meta: string
-  audience: Audience
-  /** Optional link to the source film (pairs T6 text with T5/T2 footage). */
-  clipHref?: string
-}
-
-export interface CompetitionAsset extends BaseAsset {
-  title: string
-  /** Page count for the preview card label; null if unknown. */
-  pages: number | null
-  thumbnail: string
-  /** Open 2–3pp preview — ALWAYS visible, never gated (README §8). */
-  previewHref: string
-  gated: boolean
-  /** Full PDF path (open) — used directly + as the post-gate download. */
-  fileHref: string
-  /** Registry key in /api/asset-request ASSETS map (gated only). */
-  assetKey?: string
-  credit?: string
-}
-
-const PHOTO_WIDTHS = [480, 768, 1200, 1920]
+export * from './media-helpers'
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Media host base. The bytes for /videos, /media and /files live in the
- * `stellr-media` public Vercel Blob store (since 21 Sept 2026 — they used to
- * ship in /public, 515 MB per deployment, which is what filled the Hobby
- * team's 10 GB Deployment Storage). The store mirrors the old /public paths,
- * and NEXT_PUBLIC_MEDIA_BASE_URL is its root, so every video, poster, caption,
- * photo, PDF, cover and preview URL below resolves there. Upload with
- * `scripts/upload-media.ts`; the raw files are not versioned in this repo.
- *
- * Empty (local dev without the var) → relative paths, which only work if the
- * files are also present in /public. Set it in .env.local.
- *
- * Raw <picture>/<video>/<a> take absolute URLs directly, so no next.config
- * image-domain config is needed. NEXT_PUBLIC_ so it inlines into client +
- * server bundles alike.
- * ───────────────────────────────────────────────────────────────────────── */
-const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ?? '').replace(/\/+$/, '')
-
-/** Prefix a /public-relative media path with the configured host (if any). */
-export function mediaUrl(path: string): string {
-  return MEDIA_BASE ? `${MEDIA_BASE}${path}` : path
-}
-
-/**
- * Same, for links that should save rather than open. Browsers ignore the
- * `download` attribute on cross-origin URLs, so once the host is external the
- * link itself has to ask for `Content-Disposition: attachment` — Vercel Blob
- * does that for `?download=1`. Self-hosted, the attribute still works and the
- * plain path is returned. Absolute either way when a host is set, so it is
- * safe to put straight into an email.
- */
-export function mediaDownloadUrl(path: string): string {
-  return MEDIA_BASE ? `${MEDIA_BASE}${path}?download=1` : path
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
- * The 7 approved "WEBSITE QUOTES" (page 1 of the Written Testimonials doc).
- * Verbatim. Audience drives the T6 card colour.
+ * Approved written quotes. Verbatim. Audience drives the T6 card colour.
  * ───────────────────────────────────────────────────────────────────────── */
 export const QUOTES: Record<string, QuoteAsset> = {
   'hunter-dobson': {
@@ -132,265 +62,232 @@ export const QUOTES: Record<string, QuoteAsset> = {
     id: 'alvina-gakhokidze',
     text: 'The reason I joined the competition in the first place was because it was on the topic of space, which is something I never really learned about in high school.',
     name: 'Alvina Gakhokidze',
-    meta: 'Former Participant & Current Mentor',
-    audience: 'mentor',
-  },
-  'mitra-sainsbury': {
-    id: 'mitra-sainsbury',
-    text: 'What I find so exciting about space design competitions is how you are coming up with solutions for problems that do not have definitive answers yet, or haven’t even been conceptualized as problems.',
-    name: 'Mitra Sainsbury',
-    meta: '2022 Participant',
+    meta: 'Former Participant',
     audience: 'student',
   },
-  'nahuel-de-bittencourt': {
-    id: 'nahuel-de-bittencourt',
+  'participant-2022': {
+    id: 'participant-2022',
+    text: 'What I find so exciting about space design competitions is how you are coming up with solutions for problems that do not have definitive answers yet, or haven’t even been conceptualized as problems.',
+    name: 'Anonymous female participant',
+    meta: '2022',
+    audience: 'student',
+  },
+  'teacher-multiple-events': {
+    id: 'teacher-multiple-events',
     text: 'I already had a very big interest in space at that time, but I soon found out that this competition was the best way to actually convert that interest into something useful.',
-    name: 'Nahuel de Bittencourt',
-    meta: 'Teacher, Multiple Events',
+    name: 'Anonymous science teacher',
+    meta: 'Commenting on experience across multiple events',
     audience: 'educator',
   },
   'jason-zibart': {
     id: 'jason-zibart',
     text: 'My son described it as the most intense, crazy and unbelievable group project he has ever been a part of… It wasn’t just the work that he loved, it was the complexity around managing all the tasks and people while working toward one goal. He is really looking forward to next year!',
     name: 'Jason Zibart',
-    meta: '2025 South West Space Design Competition Parent',
+    meta: '2025 Participant Parent',
     audience: 'parent',
   },
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Videos (the 16 approved clips; only the deployed subset is mapped). Bytes
- * pending until the transcode pass runs.
+ * Videos. Each lives under /videos/2026-10/ with its poster and WebVTT
+ * captions (generated from the file itself and reviewed).
  * ───────────────────────────────────────────────────────────────────────── */
 function video(id: string, title: string): VideoAsset {
   return {
     id,
     title,
-    src: mediaUrl(`/videos/${id}.mp4`),
-    poster: mediaUrl(`/videos/${id}.poster.jpg`),
-    captions: mediaUrl(`/videos/${id}.en.vtt`),
-
+    src: mediaUrl(`/videos/2026-10/${id}.mp4`),
+    poster: mediaUrl(`/videos/2026-10/${id}.poster.jpg`),
+    captions: mediaUrl(`/videos/2026-10/${id}.en.vtt`),
   }
 }
 
 export const VIDEOS: Record<string, VideoAsset> = {
   'testimonial-mia-cox': video('testimonial-mia-cox', 'Mia Cox — participant testimonial'),
   'testimonial-noah-swingle': video('testimonial-noah-swingle', 'Noah Swingle — participant testimonial'),
-  'testimonial-meleah-caron': video('testimonial-meleah-caron', 'Meleah Caron — participant testimonial'),
-  'testimonial-david-shaw': video('testimonial-david-shaw', 'David Shaw — mission'),
+  'testimonial-mel-carson': video('testimonial-mel-carson', 'Mel Carson — previous participant'),
   'testimonial-allyson-rose': video('testimonial-allyson-rose', 'Allyson Rose — participant testimonial'),
-  'testimonial-alvina-gakhokidze': video('testimonial-alvina-gakhokidze', 'Alvina Gakhokidze — participant & mentor'),
-  'testimonial-jeremiah-dibley': video('testimonial-jeremiah-dibley', 'Jeremiah Dibley — teacher (MVI_9290)'),
-  'testimonial-willcox-teachers': video('testimonial-willcox-teachers', 'Maureen Lancaster & Praveen Payyadakathu — Willcox Unified School District'),
-  'testimonial-apoorva-somani': video('testimonial-apoorva-somani', 'Apoorva Somani — red-team mentor (MVI_9316)'),
-  'testimonial-sepp': video('testimonial-sepp', 'Joseph “Sepp” Sprietsma — College Career Pathways'),
-  'testimonial-teacher': video('testimonial-teacher', 'Teacher — English & life skills in 24 hours'),
+  'testimonial-alvina-gakhokidze': video('testimonial-alvina-gakhokidze', 'Alvina Gakhokidze — former participant'),
+  'testimonial-maureen-lancaster': video('testimonial-maureen-lancaster', 'Maureen Lancaster — Willcox Unified School District'),
+  'testimonial-sepp-sprietsma': video('testimonial-sepp-sprietsma', 'Joseph “Sepp” Sprietsma — College Career Pathways'),
+  'testimonial-erin-henderson': video('testimonial-erin-henderson', 'Erin Henderson — Teacher, 2022'),
   'testimonial-tom-wilson': video('testimonial-tom-wilson', 'Tom Wilson — educator testimonial'),
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Competition PDFs. Free files render an open T4; gated files sit behind the
- * /api/asset-request modal (assetKey must be registered in that route's ASSETS).
+ * Audio-only clips. The transcript is a separate PDF download.
+ * ───────────────────────────────────────────────────────────────────────── */
+export const AUDIO: Record<string, AudioAsset> = {
+  'testimonial-jeremiah-dibley': {
+    id: 'testimonial-jeremiah-dibley',
+    title: 'Jeremiah Dibley — teacher',
+    src: mediaUrl('/audio/2026-10/testimonial-jeremiah-dibley.m4a'),
+    transcriptHref: mediaDownloadUrl('/files/2026-10/testimonial-jeremiah-dibley-transcript.pdf'),
+  },
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Competition PDFs. Open files render a WorkCard with a preview and a direct
+ * download. Gated files carry only an `assetKey` and no preview: the file sits
+ * in private storage (lib/gated-assets.ts) and goes out only by email, as a
+ * signed link.
  * ───────────────────────────────────────────────────────────────────────── */
 export const COMPETITION: Record<string, CompetitionAsset> = {
-  'previous-participant-work': {
-    id: 'previous-participant-work',
+  'student-work-dossier-2026': {
+    id: 'student-work-dossier-2026',
     title: 'Previous Design Dossier',
-    pages: null,
-    thumbnail: '/files/previous-participant-work.cover.jpg',
-    previewHref: '/files/previous-participant-work.pdf',
+    pages: 3,
+    thumbnail: '/files/2026-10/student-work-dossier-2026.cover.jpg',
+    previewHref: '/files/2026-10/student-work-dossier-2026.pdf',
     gated: false,
-    fileHref: '/files/previous-participant-work.pdf',
+    fileHref: '/files/2026-10/student-work-dossier-2026.pdf',
     credit: '100% high school student developed material',
   },
-  'legacy-rfp-south-dakota-2025': {
-    id: 'legacy-rfp-south-dakota-2025',
-    title: 'Legacy RFP — South Dakota 2025',
-    pages: null,
-    thumbnail: '/files/legacy-rfp-south-dakota-2025.cover.jpg',
-    previewHref: '/files/legacy-rfp-south-dakota-2025.pdf',
+  'space-rfp-2026-excerpt': {
+    id: 'space-rfp-2026-excerpt',
+    title: '2026 Space RFP (Excerpt)',
+    pages: 2,
+    thumbnail: '/files/2026-10/space-rfp-2026-excerpt.cover.jpg',
+    previewHref: '/files/2026-10/space-rfp-2026-excerpt.pdf',
     gated: false,
-    fileHref: '/files/legacy-rfp-south-dakota-2025.pdf',
+    fileHref: '/files/2026-10/space-rfp-2026-excerpt.pdf',
     credit: 'Stellr',
   },
-  'jsc-2025-program-book': {
-    id: 'jsc-2025-program-book',
-    title: '2025 JSC Event — Program Book',
-    pages: null,
-    thumbnail: '/files/jsc-2025-program-book.cover.jpg',
-    previewHref: '/files/jsc-2025-program-book-preview.pdf',
+  'mission-handbook-2026': {
+    id: 'mission-handbook-2026',
+    title: '2026 Space Design Challenge — Mission Handbook',
+    pages: 5,
+    thumbnail: '/files/2026-10/mission-handbook-2026-excerpt-wm.cover.jpg',
     gated: true,
-    fileHref: '/files/jsc-2025-program-book.pdf',
-    assetKey: 'jsc-2025-program-book',
+    assetKey: 'mission-handbook-2026',
     credit: 'Stellr',
   },
-  'jsc-2025-student-presentation': {
-    id: 'jsc-2025-student-presentation',
-    title: '2025 JSC Event — Student Presentation',
-    pages: null,
-    thumbnail: '/files/jsc-2025-student-presentation.cover.jpg',
-    previewHref: '/files/jsc-2025-student-presentation-preview.pdf',
+  'student-presentation-2026': {
+    id: 'student-presentation-2026',
+    title: '2026 Student Presentation (excerpt)',
+    pages: 5,
+    thumbnail: '/files/2026-10/student-presentation-2026-wm.cover.jpg',
     gated: true,
-    fileHref: '/files/jsc-2025-student-presentation.pdf',
-    assetKey: 'jsc-2025-student-presentation',
-    credit: 'Participant team \u00B7 \u00A9 Stellr Education',
+    assetKey: 'student-presentation-2026',
+    credit: 'Participant team',
   },
-  'south-west-2022-student-presentation': {
-    id: 'south-west-2022-student-presentation',
-    title: '2022 South West — Student Presentation',
-    pages: null,
-    thumbnail: '/files/south-west-2022-student-presentation.cover.jpg',
-    previewHref: '/files/south-west-2022-student-presentation-preview.pdf',
+  'student-work-examples': {
+    id: 'student-work-examples',
+    title: 'Examples of previous student work, from multiple Stellr events',
+    pages: 3,
+    thumbnail: '/files/2026-10/student-work-examples-v2-wm.cover.jpg',
     gated: true,
-    fileHref: '/files/south-west-2022-student-presentation.pdf',
-    assetKey: 'south-west-2022-student-presentation',
-    credit: 'Participant team \u00B7 \u00A9 Stellr Education',
-  },
-  'south-west-2025-rfp': {
-    id: 'south-west-2025-rfp',
-    title: '2025 South West — RFP',
-    pages: null,
-    thumbnail: '/files/south-west-2025-rfp.cover.jpg',
-    previewHref: '/files/south-west-2025-rfp-preview.pdf',
-    gated: true,
-    fileHref: '/files/south-west-2025-rfp.pdf',
-    assetKey: 'south-west-2025-rfp',
-    credit: 'InSimEd',
+    assetKey: 'student-work-examples',
+    credit: 'Previous participants',
   },
 }
 
 // Apply the media host base to competition file URLs (kept relative above for
-// readability). thumbnail/previewHref/fileHref are all /public-relative paths.
+// readability). Open files download; previews and covers open.
 for (const c of Object.values(COMPETITION)) {
   c.thumbnail = mediaUrl(c.thumbnail)
-  c.previewHref = mediaUrl(c.previewHref)
-  c.fileHref = mediaDownloadUrl(c.fileHref) // <a download> + AssetGate, never opened inline
+  if (c.previewHref) c.previewHref = mediaUrl(c.previewHref)
+  if (c.fileHref) c.fileHref = mediaDownloadUrl(c.fileHref)
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
- * Photos — my chosen deployment (the doc leaves photo placement to me). Base
- * paths only; the component composes srcset from PHOTO_WIDTHS. Bytes pending.
- * ───────────────────────────────────────────────────────────────────────── */
-/** Shown when a photo carries no more specific credit. */
-export const DEFAULT_PHOTO_CREDIT = '\u00A9 Stellr Education'
+/** The 2026 RFP excerpt as a plain link, for the RFP gate's open preview. */
+export const RFP_2026_PREVIEW_HREF = COMPETITION['space-rfp-2026-excerpt'].previewHref as string
 
-function photo(id: string, source: string, alt: string, credit?: string): PhotoAsset {
-  // `source` records the approved Drive original this derives from (for the
+/* ─────────────────────────────────────────────────────────────────────────
+ * Student work shown in the rotating showcase on /competitions and
+ * /curriculum: 2026 work only, each with its own description.
+ * ───────────────────────────────────────────────────────────────────────── */
+export interface StudentWorkImage {
+  src: string
+  alt: string
+}
+
+export const STUDENT_WORK: StudentWorkImage[] = [
+  {
+    src: mediaUrl('/media/2026-10/student-work-2026-1.png'),
+    alt: 'Student proposal slide, Location Justification: a lunar south-pole temperature map with the chosen crater circled, beside notes on resources and sunlight',
+  },
+  {
+    src: mediaUrl('/media/2026-10/student-work-2026-2.png'),
+    alt: 'Student proposal slide, Food Supply: two-floor plan of hydroponic growing towers with notes on crops, algae and water use',
+  },
+  {
+    src: mediaUrl('/media/2026-10/student-work-2026-3.png'),
+    alt: 'Student proposal slide, Main Base Layout: a site plan and 3D floor model of a lunar base with an emergency bunker below the first floor',
+  },
+]
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Photos. Base paths only; the component composes srcset from PHOTO_WIDTHS.
+ * `alt` describes the image; `caption` is the visible caption where a strip
+ * shows one (falls back to `alt`).
+ * ───────────────────────────────────────────────────────────────────────── */
+function photo(
+  id: string,
+  source: string,
+  alt: string,
+  opts: { caption?: string; credit?: string; widths?: number[] } = {},
+): PhotoAsset {
+  // `source` records the approved original this derives from (for the
   // transcode pass); not used at runtime.
   void source
-  // The copyright notice used to be baked into the bottom-right pixels of every
-  // derivative. It now rides along as a caption instead, so it defaults here
-  // rather than at each of the ~60 call sites.
   return {
     id,
     src: mediaUrl(`/media/${id}`),
     alt,
-    credit: credit ?? DEFAULT_PHOTO_CREDIT,
-    widths: PHOTO_WIDTHS,
+    caption: opts.caption,
+    // The copyright notice rides along as a caption rather than being baked
+    // into the pixels, so it defaults here rather than at each call site.
+    credit: opts.credit ?? DEFAULT_PHOTO_CREDIT,
+    widths: opts.widths ?? PHOTO_WIDTHS,
   }
 }
 
 export const PHOTOS: Record<string, PhotoAsset> = {
   // Home
-  'home-hero': photo('home-hero', 'DSC_5544', 'Competition floor — participant teams at work'),
-  'home-strip-1': photo('home-strip-1', 'DSC_5526', 'A full room of participants and mentors'),
-  'home-strip-2': photo('home-strip-2', 'IMG_9183', 'Participants collaborating during a design session'),
-  'home-strip-3': photo('home-strip-3', 'IMG_2741', 'Teams presenting their work'),
-  // Home proof strip — 2026-07 feedback-doc replacements
-  'home-biosphere2': photo('home-biosphere2', 'Drive 1NUyS7_k', 'Touring Biosphere2 in Arizona'),
-  'home-florida-prep': {
-    // Source is 1440px wide — no 1920 derivative exists.
-    ...photo('home-florida-prep', 'Drive 1LnJt-bR', 'Preparing for an event in Florida'),
-    widths: [480, 768, 1200],
-  },
-  'home-teamwork': photo('home-teamwork', 'Drive 1wmO0jBV', 'Teamwork makes successful STEM professionals'),
-  'home-group-dynamics': photo('home-group-dynamics', 'Drive 1_D_0qIV', 'Group dynamics at play'),
-  'home-hero-floor': photo('home-hero-floor', 'DSC_5282', 'The competition floor'),
+  'home-strip-3': photo('home-strip-3', 'IMG_2741', 'A presenter at a whiteboard addressing a classroom of seated students', {
+    caption: 'Teams presenting their work',
+  }),
+  'about-team-1': photo('about-team-1', 'DSC_5529', 'A mentor talking with a small group of students seated around him', {
+    caption: 'Mentors and participants at work',
+  }),
+  // Curriculum
+  'about-team-2': photo('about-team-2', 'IMG_7685', 'Students seated in a lecture hall listening to a presenter'),
+  'curriculum-3': photo('curriculum-3', 'IMG_2283', 'Two students standing in front of a whiteboard covered in design notes', {
+    caption: 'Requirements analysis',
+  }),
   // Competitions
-  'competitions-1': photo('competitions-1', 'IMG_9052', 'Collaboration - both in person and digital', 'Participant team \u00B7 \u00A9 Stellr Education'),
-  'competitions-2': photo('competitions-2', 'IMG_9215', 'Participants learn 3D modelling as a core skill', 'Participant team \u00B7 \u00A9 Stellr Education'),
-  'competitions-3': photo('competitions-3', 'DSC_5501', 'Teams at the competition'),
-  'competitions-ksc': photo('competitions-ksc', 'Drive 1dkLNSN9', 'Exploring Kennedy Space Center before an event'),
+  'competitions-3': photo('competitions-3', 'DSC_5501', 'Students working on laptops around a table at a competition', {
+    caption: 'Teams at the competition',
+  }),
   // Membership
   'membership-mentor-review': photo('membership-mentor-review', 'DSC_5479', 'A mentor reviewing work with a participant'),
-  'membership-room-full': photo('membership-room-full', 'IMG_7758', 'The room, full — a Stellr competition'),
+  'membership-room-full': photo('membership-room-full', 'IMG_7758', 'A full room of participants and mentors at a Stellr competition', {
+    caption: 'The room, full — a Stellr competition',
+  }),
   // Events (gallery)
-  'events-1': photo('events-1', 'DSC_5501', 'Future engineers learning the joys of early mornings'),
-  'events-2': photo('events-2', 'DSC_5521', 'Collaboration = listening'),
-  'events-3': photo('events-3', 'DSC_5752', 'Teamwork makes the dream work'),
-  'events-4': photo('events-4', 'IMG_9201', 'Space constraints at an overnight event in Florida'),
-  'events-5': photo('events-5', 'IMG_9197', 'Designers hard at work'),
-  // About
-  'about-award-1': photo('about-award-1', 'IMG_4014', 'Award-winner banner'),
-  'about-award-2': photo('about-award-2', 'IMG_4015', 'Washington Achievement banner'),
-  'about-team-1': photo('about-team-1', 'DSC_5529', 'The team and participants'),
-  'about-team-2': photo('about-team-2', 'IMG_7685', 'Mentors with participants'),
-  // Students
-  'students-hero': photo('students-hero', 'DSC_5740', 'Participants at laptops during a design session'),
-  'students-strip-1': photo('students-strip-1', 'IMG_9046', 'A participant presenting work', 'Participant team \u00B7 \u00A9 Stellr Education'),
-  'students-strip-2': photo('students-strip-2', 'IMG_9060', 'Participants reviewing their design', 'Participant team \u00B7 \u00A9 Stellr Education'),
+  'events-1': photo('events-1', 'DSC_5501', 'Students working on laptops around a table at a competition', {
+    caption: 'Future engineers learning the joys of early mornings',
+  }),
+  'events-2': photo('events-2', 'DSC_5521', 'A participant with a laptop listening during a team discussion', {
+    caption: 'Collaboration = listening',
+  }),
+  'events-3': photo('events-3', 'DSC_5752', 'Three participants smiling together at an event', {
+    caption: 'Teamwork makes the dream work',
+  }),
+  'events-4': photo('events-4', 'IMG_9201', 'Working late into the night at one of our residential events'),
+  'events-5': photo('events-5', 'IMG_9197', 'Students sitting on the floor working on a 3D design on a laptop', {
+    caption: 'Designers hard at work',
+  }),
   // Educators
-  'educators-1': photo('educators-1', 'DSC_5776', 'Mentors and participants collaborating'),
-  'educators-2': photo('educators-2', 'IMG_7702', 'Structural-board design session'),
+  'educators-2': photo('educators-2', 'IMG_7702', 'A student drawing a structural diagram on a whiteboard', {
+    caption: 'Structural-board design session',
+  }),
   // Mentors
-  'mentors-1': photo('mentors-1', 'IMG_7700', 'Team delegation at the whiteboard'),
-  'mentors-2': photo('mentors-2', 'IMG_2213', 'Mentors judging participant presentations'),
-  'mentors-3': photo('mentors-3', 'IMG_2260', 'Mentor reviewing a team submission'),
-  // Why-Stellr
-  'why-auditorium': {
-    // Source is 1440px wide — no 1920 derivative exists.
-    ...photo('why-auditorium', 'Drive 484027872', 'A full auditorium at a design briefing'),
-    widths: [480, 768, 1200],
-  },
-  'why-biosphere-tour': photo('why-biosphere-tour', 'BS2 Friday Tour 3', 'Touring Biosphere 2 in Arizona'),
-  'why-teams-working': photo('why-teams-working', 'IMG_9395', 'Teams working through a design problem'),
-  // Curriculum
-  'curriculum-2': photo('curriculum-2', 'IMG_9052', 'Preparing to pitch', 'Participant team \u00B7 \u00A9 Stellr Education'),
-  'curriculum-3': photo('curriculum-3', 'IMG_2283', 'Requirements analysis'),
-  'curriculum-group-work': {
-    // Source is 1440px wide — no 1920 derivative exists.
-    ...photo('curriculum-group-work', 'Drive 1PPNwa3A', 'Participants work in large groups, learning group dynamics and communication'),
-    widths: [480, 768, 1200],
-  },
-  'curriculum-ty-white': photo('curriculum-ty-white', 'Drive 1plUOEjF', 'Mr Ty White with participants at a competition'),
-  // Academy · Training
-  'academy-mentoring-cohort': photo('academy-mentoring-cohort', 'IMG_9061', 'A Stellr mentoring cohort collaborating'),
-  // Audience landing pages (/lp/[slug]) — client event photography supplied with
-  // the 2026-09 landing-page handoff. The two heroes are per-audience and must
-  // never appear in the gallery, or a page shows the same photograph twice.
-  'lp-hero-robotics': {
-    // Source is 1600px wide — no 1920 derivative exists.
-    ...photo('lp-hero-robotics', 'handoff mission-room', 'A competition mission room with students at tables in front of a wall of design notes'),
-    widths: [480, 768, 1200],
-  },
-  'lp-hero-homeschool': photo('lp-hero-homeschool', 'handoff teams-working', 'Students gathered around laptops and tablets working on a design together'),
-  'lp-gallery-1': photo('lp-gallery-1', 'handoff tablet-pair', 'Two students working through a design together on a tablet'),
-  'lp-gallery-2': photo('lp-gallery-2', 'handoff design-doc', "A laptop showing a company's design documentation part-way through the weekend"),
+  'mentors-2': photo('mentors-2', 'IMG_2213', 'A classroom of students facing a projected screen while team members work at the whiteboards', {
+    caption: 'Mentors judging participant presentations',
+  }),
+  // Audience landing pages (/lp/[slug]) — client event photography supplied
+  // with the 2026-09 landing-page handoff.
   'lp-gallery-3': photo('lp-gallery-3', 'handoff mentor-student', 'A mentor and a student reviewing work on a tablet together'),
-  'lp-gallery-4': photo('lp-gallery-4', 'handoff cohort-group', 'A large group of student participants together at the end of a competition'),
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
- * Helpers
- * ───────────────────────────────────────────────────────────────────────── */
-
-/** True when an asset's bytes aren't ready yet → render a placeholder. */
-export function isPending(asset: BaseAsset | undefined | null): boolean {
-  return !asset || asset.pending === true
-}
-
-/** Dev-only warning so a pending/missing asset is never shipped unnoticed. */
-export function flagMissing(kind: string, id: string): void {
-  if (process.env.NODE_ENV !== 'production') {
-    console.warn(`[media-manifest] ${kind} "${id}" is pending — rendering placeholder. Fill its bytes + flip pending:false.`)
-  }
-}
-
-/** srcset/sizes helper for responsive photos. The JPEG *fallback* is capped at
- *  1200w so every fallback file stays within the §4b budget (the 1920 JPEG runs
- *  300–600KB); AVIF — what virtually every browser receives — still serves all
- *  widths at ~180KB, so large screens lose no quality. */
-export function photoSrcSet(p: PhotoAsset, ext: 'avif' | 'webp' | 'jpg' = 'webp'): string {
-  const widths = (p.widths ?? PHOTO_WIDTHS).filter((w) => ext !== 'jpg' || w <= 1200)
-  return widths.map((w) => `${p.src}-${w}.${ext} ${w}w`).join(', ')
 }

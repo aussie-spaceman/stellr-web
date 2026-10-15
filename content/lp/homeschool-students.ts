@@ -34,9 +34,6 @@ export const homeschoolStudents: LandingPageConfig = {
       'Our Space Design Challenges are open to any student, nation-wide. Participants join ' +
       'a team of peers and design a futuristic Martian habitat, then defend the design ' +
       'against industry peers.',
-    photoId: 'lp-hero-homeschool',
-    imageCaption:
-      'Students meet their company on arrival and work together for the whole weekend.',
     primaryCta: 'Reserve a spot',
     secondaryCta: 'Learn More',
   },
@@ -77,19 +74,19 @@ export const homeschoolStudents: LandingPageConfig = {
       quote:
         'I’ve never seen my daughter so engaged and excited to be learning. What an ' +
         'opportunity for her!',
-      who: 'Aaron, parent of 2019 competition participant',
+      who: 'Aaron · Parent of 2019 Competition Participant',
     },
     {
       quote:
-        'I didn’t know what I wanted to study when I left high-school. Now I am laser focused.',
-      who: 'Aiden, 2025 competition participant',
+        'I didn’t know what I wanted to study when I left high school. Now I am laser focused.',
+      who: 'Aiden · 2025 Competition Participant',
     },
   ],
   form: {
     ...FORM_SHELL,
     eyebrow: 'Space design competition',
     lead:
-      'Tell us who you are and how many students you are enquiring for. We will send ' +
+      'Tell us who you are and how many students you are inquiring for. We will send ' +
       'follow up information, and schedule a call to answer your questions.',
     points: [
       'Preferential registration for your student/s',
@@ -121,7 +118,7 @@ export const homeschoolStudents: LandingPageConfig = {
         q: 'Who mentors and judges?',
         a:
           'Professionals from college and local businesses volunteer to mentor across the ' +
-          'weekend, then act as judges for the final design defence.',
+          'weekend, then act as judges for the final design defense.',
       },
       {
         q: 'What does it cost?',
@@ -132,7 +129,7 @@ export const homeschoolStudents: LandingPageConfig = {
       {
         q: 'Can parents attend?',
         a:
-          'Parents are welcome for the opening briefing and the final design defence. ' +
+          'Parents are welcome for the opening briefing and the final design defense. ' +
           'Students work with their company for the rest of the weekend. If parents wish ' +
           'to stay for the duration of the event, we do our best to accommodate them.',
       },

@@ -263,7 +263,7 @@ export function HostEventForm() {
             className="mt-0.5 h-4 w-4 rounded border-line text-brand-blue"
           />
           <span className="text-sm text-brand-grey-dark">
-            I agree to Stellr Education contacting me in relation to this enquiry. View our{' '}
+            I agree to Stellr Education contacting me in relation to this inquiry. View our{' '}
             <a href="/privacy" className="text-brand-blue hover:underline">
               Privacy Policy
             </a>

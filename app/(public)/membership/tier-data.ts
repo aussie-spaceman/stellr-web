@@ -239,7 +239,7 @@ export const VALUE_CARDS: Record<AudienceId, ValueCard[]> = {
   educator: [
     { icon: 'document', title: 'A competition, ready to teach', body: 'Lesson plans, worksheets, judging templates and assessment tools — a full toolkit that drops straight into your classroom.' },
     { icon: 'idea', title: 'AI tools and live support', body: 'Agentic contractors, an agentic project manager, and live kick-off and close-out calls — so you never run a competition alone.' },
-    { icon: 'certificate', title: 'Credentialed impact', body: 'PD certificates worth up to 10 hours, standards alignment (Common Core, NGSS, ISTE, TEKS) and student awards — measurable, recognised outcomes.' },
+    { icon: 'certificate', title: 'Credentialed impact', body: 'PD certificates worth up to 10 hours, standards alignment (Common Core, NGSS, ISTE, TEKS) and student awards — measurable, recognized outcomes.' },
   ],
 }
 
@@ -249,7 +249,7 @@ export const FAQS: { q: string; a: string }[] = [
   { q: 'Can I buy a paid tier directly?', a: 'Yes. If you see the benefit, sign up today! Otherwise, register for a Competition and you’ll automatically upgrade your membership.' },
   { q: 'What happens when my tier expires?', a: 'All tier increases are valid for 12 months — regardless of whether you were granted one through competition participation or purchased an upgrade. Refer to our Terms of Service if you’re looking for refund information.' },
   { q: 'What’s the difference between Store and Academy discounts?', a: 'They are two separate tracks on the school and college ladders. Your Store discount (5–10%) applies to merchandise in the web store; your Academy discount (0–25%) applies to mentoring, coaching and training. Higher tiers carry deeper discounts on both. Teacher memberships work differently — they include material, support and PD hours outright rather than carrying discounts.' },
-  { q: 'Can a teacher or school district enrol students on their behalf?', a: 'Absolutely! A staff member, or nominated student manager, must register as a Stellr member — but they can do that as part of the competition registration process.' },
+  { q: 'Can a teacher or school district enroll students on their behalf?', a: 'Absolutely! A staff member, or nominated student manager, must register as a Stellr member — but they can do that as part of the competition registration process.' },
 ]
 
 /* ── Educator content waterfall — canon: "2027 Membership Tiers" flyer ─────── */

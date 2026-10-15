@@ -128,7 +128,7 @@ linking apollo.io/dpa, CPRA section claiming **no-sale only**.
 ### Known deviations from the literal brief
 
 - Section heading renders **"How the Challenge Works"**; the brief wrote "How The Challenge Works".
-- "NASA JSC" was expanded to "NASA Johnson Space Center (Houston, TX)".
+- The progression venue name was written out in full (that line was replaced by the International Summer Camp wording on 14 Oct 2026).
 - The two new sections were described in the plan as "your copy verbatim" but were **lightly edited
   for house style** — typo fixes ("osit" → "or sit", "then winning" → "the winning") were flagged at
   the time, but "invite" → "invitation" and similar tightening were not.
@@ -167,7 +167,7 @@ linking apollo.io/dpa, CPRA section claiming **no-sale only**.
 - **Free ≠ blank.** Anything that reintroduces `!stripePriceId` as the free test will re-break $0
   events. Use `collectsNothing()`.
 - **The FAQ JSON-LD twin** (`text`) must be updated alongside any FAQ copy change.
-- **`SEASON_YEAR`** at the top of the event page drives the t-shirt year and the Congress year in
+- **`SEASON_YEAR`** at the top of the event page drives the t-shirt year and the summer-camp year in
   the What's Included / How it Works copy — one line to bump each season.
 - Browser-pane screenshots go blank/stale once a page is scrolled; measure with
   `getBoundingClientRect` via `javascript_tool` instead, and assert `window.innerWidth` after any

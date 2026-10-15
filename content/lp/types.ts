@@ -67,9 +67,10 @@ export interface LandingPageConfig {
     headline: string
     kicker: string
     body: string
-    /** Keys into lib/media-manifest PHOTOS. Never a gallery photo. */
-    photoId: string
-    imageCaption: string
+    /** Keys into lib/media-manifest PHOTOS. Never a gallery photo. Optional:
+     *  without one the hero is the dark band alone, no framed photo. */
+    photoId?: string
+    imageCaption?: string
     primaryCta: string
     secondaryCta: string
   }

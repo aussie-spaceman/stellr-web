@@ -1,4 +1,4 @@
-import type { VideoAsset, QuoteAsset, CompetitionAsset, PhotoAsset } from '@/lib/media-manifest'
+import type { VideoAsset, QuoteAsset, CompetitionAsset, PhotoAsset } from '@/lib/media-helpers'
 import { VideoTestimonial } from './VideoTestimonial'
 import { ProofStrip } from './ProofStrip'
 import { PullQuoteWall } from './PullQuoteWall'
@@ -35,8 +35,8 @@ export function PageMedia({
   background?: 'surface' | 'white'
   /** 'center' centres the heading block on screen (e.g. photos-only sections). */
   align?: 'left' | 'center'
-  /** Forwarded to ProofStrip — use 3 to centre a 3-photo strip on desktop. */
-  photoColumns?: 3 | 5
+  /** Forwarded to ProofStrip — 1 centres a single photo, 3 a 3-photo strip. */
+  photoColumns?: 1 | 3 | 4 | 5
   className?: string
 }) {
   const hasAny = photos.length || videos.length || quotes.length || competition.length

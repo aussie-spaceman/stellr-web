@@ -89,7 +89,7 @@ export default async function RegistrationPayPage({ params, searchParams }: Page
       <Shell icon="🧾" title="This registration isn't paid here">
         <p className="text-content-body mb-6">
           {reg.invoice_requested
-            ? 'This group is paid by invoice — check the organiser’s inbox for the Stripe invoice, or reply to it if it hasn’t arrived.'
+            ? 'This group is paid by invoice — check the organizer’s inbox for the Stripe invoice, or reply to it if it hasn’t arrived.'
             : 'Each member of this group pays for their own place from the link in their email.'}
         </p>
         <Link href="/events" className="btn-primary">Browse Events</Link>

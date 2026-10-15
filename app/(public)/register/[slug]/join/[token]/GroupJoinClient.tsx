@@ -297,7 +297,7 @@ export default function GroupJoinClient({
                 <td className="py-3 text-ink">{schoolName}</td>
               </tr>
               <tr className="border-b border-line-light">
-                <td className="py-3 pr-4 font-medium text-content-muted">Organised by</td>
+                <td className="py-3 pr-4 font-medium text-content-muted">Organized by</td>
                 <td className="py-3 text-ink">{organiserName} <span className="text-xs text-content-faint">({organiserRole})</span></td>
               </tr>
               <tr>
@@ -305,7 +305,7 @@ export default function GroupJoinClient({
                 <td className="py-3 text-ink">
                   {memberPaysIndividually
                     ? 'You will pay individually — a payment link will be emailed to you'
-                    : 'Group payment — handled by your organiser'}
+                    : 'Group payment — handled by your organizer'}
                 </td>
               </tr>
             </tbody>

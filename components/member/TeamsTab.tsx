@@ -140,7 +140,7 @@ function JoinedTeamsView({
   const [payError, setPayError] = useState<string | null>(null)
 
   async function handleLeave(participantId: string, registrationId: string) {
-    if (!confirm('Are you sure you want to leave this team? Your organiser will be notified.')) return
+    if (!confirm('Are you sure you want to leave this team? Your organizer will be notified.')) return
     setLeaving(participantId)
     await fetch(`/api/members/teams/${registrationId}/participants/${participantId}`, { method: 'DELETE' })
     onLeft(participantId)
@@ -176,7 +176,7 @@ function JoinedTeamsView({
       if (registrationPaid({ invoiceRequested: reg.invoice_requested, invoicePaidAt: reg.invoice_paid_at, status: reg.status })) {
         return { label: 'Invoice paid', style: 'bg-green-100 text-green-700' }
       }
-      return { label: 'Invoice sent to organiser', style: 'bg-brand-blue/10 text-brand-blue' }
+      return { label: 'Invoice sent to organizer', style: 'bg-brand-blue/10 text-brand-blue' }
     }
     return { label: 'Paid by group', style: 'bg-green-100 text-green-700' }
   }
@@ -200,7 +200,7 @@ function JoinedTeamsView({
                 <p className="text-sm text-brand-muted-soft mt-0.5">{reg.school_name ?? '—'}</p>
                 {reg.teacher_first_name && (
                   <p className="text-sm text-brand-muted-soft mt-0.5">
-                    Organiser: {reg.teacher_first_name} {reg.teacher_last_name ?? ''}
+                    Organizer: {reg.teacher_first_name} {reg.teacher_last_name ?? ''}
                   </p>
                 )}
               </div>
@@ -223,8 +223,8 @@ function JoinedTeamsView({
                     title={
                       label === 'Paid' ? 'Payment has been received for this registration.' :
                       label === 'Payment Required' ? 'Individual payment required — use the Pay Now button below to complete.' :
-                      label === 'Invoice sent to organiser' ? 'An invoice has been raised and sent to the group organiser.' :
-                      'Registration fee is covered by the group organiser — no individual payment needed.'
+                      label === 'Invoice sent to organizer' ? 'An invoice has been raised and sent to the group organizer.' :
+                      'Registration fee is covered by the group organizer — no individual payment needed.'
                     }
                   >
                     {label}

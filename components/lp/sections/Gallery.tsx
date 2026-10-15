@@ -3,7 +3,8 @@ import { DEFAULT_PHOTO_CREDIT, PHOTOS } from '@/lib/media-manifest'
 import type { LandingPageConfig } from '@/content/lp/types'
 
 /**
- * Four framed photos with their own captions.
+ * Framed photos with their own captions. A single shot renders as one framed
+ * photo at reading width; several become the grid below.
  *
  * Each photo is a card — white, hairline border, the image clipped to a 4/3 box
  * inside it — rather than a bleed tile. Framed and captioned imagery is what
@@ -19,7 +20,8 @@ import type { LandingPageConfig } from '@/content/lp/types'
  */
 export function Gallery({ config }: { config: LandingPageConfig }) {
   const gallery = config.gallery
-  if (!gallery) return null
+  if (!gallery || gallery.shots.length === 0) return null
+  const single = gallery.shots.length === 1
 
   return (
     <section aria-labelledby="gallery-h" className="bg-surface px-4 py-16 sm:px-6 lg:px-8">
@@ -33,7 +35,11 @@ export function Gallery({ config }: { config: LandingPageConfig }) {
         <p className="mt-3 text-lg leading-relaxed text-content-secondary">{gallery.lead}</p>
 
         <ul
-          className="mt-7 grid list-none grid-flow-col auto-cols-[78%] gap-4 overflow-x-auto p-0 [scroll-snap-type:x_mandatory] sm:auto-cols-[46%] md:grid-flow-row md:auto-cols-auto md:grid-cols-2 md:overflow-visible lg:grid-cols-4"
+          className={
+            single
+              ? 'mt-7 max-w-2xl list-none p-0'
+              : 'mt-7 grid list-none grid-flow-col auto-cols-[78%] gap-4 overflow-x-auto p-0 [scroll-snap-type:x_mandatory] sm:auto-cols-[46%] md:grid-flow-row md:auto-cols-auto md:grid-cols-2 md:overflow-visible lg:grid-cols-4'
+          }
         >
           {gallery.shots.map((shot) => {
             const photo = PHOTOS[shot.photoId]
@@ -44,7 +50,7 @@ export function Gallery({ config }: { config: LandingPageConfig }) {
               >
                 <ResponsivePhoto
                   photo={photo}
-                  sizes="(max-width: 767px) 78vw, (max-width: 1023px) 46vw, 250px"
+                  sizes={single ? '(max-width: 704px) 100vw, 672px' : '(max-width: 767px) 78vw, (max-width: 1023px) 46vw, 250px'}
                   rounded={false}
                   className="aspect-[4/3] rounded-[9px]"
                 />

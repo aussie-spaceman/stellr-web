@@ -16,14 +16,13 @@ import {
 import { Launch, Certificate, Idea, Document, Team, Award } from '@stellr/icons'
 import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 import { VideoTestimonial } from '@/components/sections/VideoTestimonial'
-import { ResponsivePhoto } from '@/components/sections/ResponsivePhoto'
-import { PHOTOS, VIDEOS } from '@/lib/media-manifest'
+import { VIDEOS } from '@/lib/media-manifest'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { buildAcademyCourseJsonLd, buildBreadcrumbJsonLd } from '@/lib/structured-data'
 
 const DESCRIPTION =
-  'The Stellr Academy is where high-school and college students build career-ready ability — through Competition training, hands-on career preparation, and the STEM Power Skills schools rarely teach.'
+  'The Stellr Academy is where school and college students build career-ready ability — through Competition training, hands-on career preparation, and the STEM Power Skills schools rarely teach.'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/academy' },
@@ -98,7 +97,7 @@ const formats = [
     name: 'Mentoring',
     featured: true,
     badge: 'Most popular',
-    leadBold: 'Practise it in a group.',
+    leadBold: 'Practice it in a group.',
     leadRest: 'A cohort led by a working STEM professional over several weeks.',
     format: 'Small group, multi-week',
     guidance: 'Led by industry professionals',
@@ -176,7 +175,7 @@ export default function AcademyPage() {
       <Hero
         breadcrumb="The Stellr Academy"
         title="The skills that get you hired aren't on your transcript."
-        lead="The Academy is where high-school and college students build career-ready ability — through training that powers our Competitions, hands-on career preparation, and the STEM Power Skills schools rarely teach."
+        lead="The Academy is where school and college students build career-ready ability — through training that powers our Competitions, hands-on career preparation, and the STEM Power Skills schools rarely teach."
       >
         <div className="flex flex-wrap gap-3.5 mt-8">
           <Button href={MENTORING_URL} variant="primary">
@@ -431,14 +430,8 @@ export default function AcademyPage() {
 
       {/* ── Mentoring deep-dive ───────────────────────────────────────── */}
       <section id="mentoring" className="section-padding bg-white scroll-mt-24">
-        <div className="container-max grid grid-cols-1 lg:grid-cols-[1fr_1.15fr] gap-14 items-center">
-          <ResponsivePhoto
-            photo={PHOTOS['academy-mentoring-cohort']}
-            sizes="(max-width: 1024px) 100vw, 45vw"
-            className="rounded-panel border border-line"
-            showCredit
-          />
-          <div>
+        <div className="container-max">
+          <div className="max-w-3xl">
             <Eyebrow className="text-space-violet">Mentoring</Eyebrow>
             <h2 className="text-3xl font-bold text-ink mt-3">Go deeper, in a small group</h2>
             <ul className="mt-6 space-y-5">

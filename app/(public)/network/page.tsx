@@ -7,7 +7,7 @@ import { Hero, Eyebrow, Button } from '@stellr/web-ui'
 import { JoinNetworkForm } from '@/components/forms/JoinNetworkForm'
 import { AssetGate } from '@/components/sections/AssetGate'
 import { PageMedia } from '@/components/sections/PageMedia'
-import { PHOTOS, COMPETITION, mediaDownloadUrl } from '@/lib/media-manifest'
+import { PHOTOS, COMPETITION } from '@/lib/media-manifest'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/network' },
@@ -137,7 +137,7 @@ const details: Detail[] = [
     eyebrow: 'Corporate Partners',
     eyebrowColor: 'text-space-violet-text',
     checkColor: 'text-space-violet',
-    headline: 'For professional organisations',
+    headline: 'For professional organizations',
     who: [
       'Stellr exists to promote STEM careers, and get future STEM professionals career ready. Our Professional members are critical to supporting our student members. We work with organizations of every size, from independent contractors to multinationals.',
       'In a fast-changing professional world, better collaboration across the whole ecosystem produces better outcomes — for our members and for you.',
@@ -174,7 +174,7 @@ export default function NetworkPage() {
       <Hero
         breadcrumb="The Stellr Network"
         title="Great STEM education takes more than a classroom."
-        lead="Stellr gives high-school and college students premier events, hands-on mentoring, and real career pathways. The Network is the providers, universities, and employers who make that happen — and who grow alongside it."
+        lead="Stellr gives school and college students premier events, hands-on mentoring, and real career pathways. The Network is the providers, universities, and employers who make that happen — and who grow alongside it."
       >
         <div className="flex flex-wrap gap-3.5 mt-8">
           <Button href="#join" variant="primary">
@@ -256,7 +256,6 @@ export default function NetworkPage() {
                   <AssetGate
                     asset="sponsorship-prospectus"
                     title="Sponsorship Prospectus"
-                    fileUrl={mediaDownloadUrl('/files/Stellr-Sponsorship-Prospectus.pdf')}
                     triggerLabel="Download Our Prospectus ↓"
                     eyebrow="Partner prospectus"
                     helper="Full packages, reach statistics and impact data — sent straight to your inbox."
@@ -292,8 +291,9 @@ export default function NetworkPage() {
             eyebrow="See it for yourself"
             heading="Inside the Stellr community"
             intro="Where your partnership lands — students at Stellr events across the US."
-            photos={[PHOTOS['events-1'], PHOTOS['events-2'], PHOTOS['events-3'], PHOTOS['events-4'], PHOTOS['events-5']]}
+            photos={[PHOTOS['events-2'], PHOTOS['events-3'], PHOTOS['events-4'], PHOTOS['events-5']]}
             photoHeading="On the competition floor"
+            photoColumns={4}
             background="white"
           />
         )}
@@ -304,7 +304,7 @@ export default function NetworkPage() {
             eyebrow="Subscriber resources"
             heading="See the work up close"
             intro="Real student deliverables from past competitions — subscribe and we’ll email you the full PDF."
-            competition={[COMPETITION['south-west-2022-student-presentation'], COMPETITION['south-west-2025-rfp']]}
+            competition={[COMPETITION['student-work-examples'], COMPETITION['space-rfp-2026-excerpt']]}
             background="surface"
           />
         )}

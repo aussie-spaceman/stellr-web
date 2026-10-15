@@ -21,7 +21,7 @@ export const STAGES = [
 
 export const CRITERIA = [
   { name: 'Economic feasibility', ask: 'Is every major expense justified? Do they understand what things cost and return?' },
-  { name: 'Design credibility', ask: 'Did they see how the systems depend on each other, and prioritise with data?' },
+  { name: 'Design credibility', ask: 'Did they see how the systems depend on each other, and prioritize with data?' },
   { name: 'Social viability', ask: 'Would people actually thrive here — or were the humans added at the end?' },
 ] as const
 

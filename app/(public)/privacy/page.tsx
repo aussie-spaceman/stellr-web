@@ -47,7 +47,7 @@ export default function PrivacyPage() {
           by email. The 21 Sep 2026 update first introduced credential pages in Section 7.4. The 17
           Aug 2026 update covered Sections 3, 5, 7 and 9 to
           describe our use of <strong>Apollo.io</strong>, a business-audience tool that identifies
-          the <em>organisation</em> — not the individual — associated with visitors to our educator
+          the <em>organization</em> — not the individual — associated with visitors to our educator
           and partner pages. It runs only on those pages, only where you have accepted advertising
           cookies, and never on student registration pages or the participant platform. The 10 Aug
           2026 update covered our cookie categories, the providers involved, and how to give or
@@ -217,7 +217,7 @@ export default function PrivacyPage() {
           <li>Gender, where a registration form asks for it</li>
           <li>
             Ethnicity, where a registration form asks for it. It is used only in totals, to see
-            whether our programmes reach a broad range of students, and is never published about an
+            whether our programs reach a broad range of students, and is never published about an
             individual
           </li>
           <li>T-shirt size, for event shirts</li>
@@ -272,7 +272,7 @@ export default function PrivacyPage() {
           <li>Pages visited and features used within our platform</li>
           <li>Cookies and similar tracking technologies (see Section 9)</li>
           <li>
-            The <strong>organisation</strong>{' '}— for example a school, district, or company —
+            The <strong>organization</strong>{' '}— for example a school, district, or company —
             associated with your IP address. This is inferred on our educator and partner pages
             only, and only where you have accepted advertising cookies. It tells us that
             &ldquo;someone at this school district read our educators page,&rdquo; not who you are
@@ -378,9 +378,9 @@ export default function PrivacyPage() {
                 ['Issuing verifiable credentials, emailing a link to the credential (for a Minor, to their parent or legal guardian), and showing a credential page publicly when you choose to (credential pages of children under 13 are never public)', 'Name, credential details, date of birth (to apply the age rules in Section 7.4), email address of the holder or of a Minor’s parent or legal guardian, parental consent record for students under 18'],
                 ['Improving programs, and quoting survey responses in promotional materials (attributed by first name and last initial, grade, and school or state; anonymous for children under 13; subject to opt-out)', 'Survey and feedback responses; first name, last initial, grade, school or state'],
                 ['Improving our Services through analytics', 'Technical and usage data'],
-                ['Understanding which schools and organisations are interested in partnering with us', 'Technical data and inferred organisation — educator and partner pages only, with advertising consent'],
+                ['Understanding which schools and organizations are interested in partnering with us', 'Technical data and inferred organization — educator and partner pages only, with advertising consent'],
                 ['Complying with legal obligations', 'All categories as required'],
-                ['Responding to enquiries and support requests', 'Contact information'],
+                ['Responding to inquiries and support requests', 'Contact information'],
               ].map(([purpose, data]) => (
                 <tr key={purpose} className="even:bg-surface">
                   <td className="border border-line px-4 py-2">{purpose}</td>
@@ -398,7 +398,7 @@ export default function PrivacyPage() {
           We do <strong>not</strong> use the information you give us — your name, email, registration
           details, or anything in your account — for targeted advertising. Where you have accepted
           advertising cookies, we measure our advertising using cookie identifiers only, in aggregate,
-          to understand which campaigns bring people to our programmes. Registration and education
+          to understand which campaigns bring people to our programs. Registration and education
           records are never used for this purpose (see Sections 7.7 and 9).
         </p>
 
@@ -407,7 +407,7 @@ export default function PrivacyPage() {
         <p>We process personal information on the following legal grounds:</p>
         <ul className="list-disc pl-6 space-y-2">
           <li><strong>Consent</strong> — for sensitive data (medical, dietary) and for users under 13 (parental consent)</li>
-          <li><strong>Contract performance</strong> — to fulfil competition registration and service agreements</li>
+          <li><strong>Contract performance</strong> — to fulfill competition registration and service agreements</li>
           <li><strong>Legitimate interests</strong> — for platform improvement, security, and fraud prevention, where these do not override your rights</li>
           <li><strong>Legal obligation</strong> — to comply with applicable laws including COPPA and FERPA</li>
         </ul>
@@ -441,10 +441,10 @@ export default function PrivacyPage() {
                 ['Discord', 'Community chat, for members who choose to join it', 'Your Discord username and what you post there'],
                 ['Timestamp authority (from mid-October 2026)', 'Adding a trusted timestamp to signed agreements', 'A one-way fingerprint (hash) of the document only — no personal information'],
                 ['Sanity', 'Content management', 'No personal data'],
-                ['HubSpot', 'Marketing contact management and enquiry handling', 'Name, email, and the enquiry you submitted'],
+                ['HubSpot', 'Marketing contact management and inquiry handling', 'Name, email, and the inquiry you submitted'],
                 ['Google (Analytics, Tag Manager, Ads)', 'Aggregate website analytics; advertising measurement where you have accepted advertising cookies', 'Usage/technical data and cookie identifiers — no name, email, or registration data. Not loaded on signing pages or on private payment and join links'],
                 ['Meta and LinkedIn', 'Advertising measurement, configured within Google Tag Manager, only where you have accepted advertising cookies', 'Cookie identifiers and pages visited — no name, email, or registration data. Not loaded on signing pages or private links'],
-                ['Apollo.io', 'Identifying the organisation associated with visitors to our educator and partner pages, where you have accepted advertising cookies', "IP address, cookie identifiers, and the pages visited — no name, email, or registration data; not loaded on student registration pages or the participant platform. Governed by Apollo's standard Data Processing Addendum, linked below"],
+                ['Apollo.io', 'Identifying the organization associated with visitors to our educator and partner pages, where you have accepted advertising cookies', "IP address, cookie identifiers, and the pages visited — no name, email, or registration data; not loaded on student registration pages or the participant platform. Governed by Apollo's standard Data Processing Addendum, linked below"],
               ].map(([provider, purpose, data]) => (
                 <tr key={provider} className="even:bg-surface">
                   <td className="border border-line px-4 py-2 font-medium">{provider}</td>
@@ -491,7 +491,7 @@ export default function PrivacyPage() {
         <h3 className="text-lg font-semibold text-brand-blue-dark">7.3 Competition Partners and Sponsors</h3>
         <p>
           Competition results, participant names, and school affiliations may be shared with
-          co-organising institutions or sponsors where you have been notified and consented at
+          co-organizing institutions or sponsors where you have been notified and consented at
           registration.
         </p>
 
@@ -571,7 +571,7 @@ export default function PrivacyPage() {
         <h3 className="text-lg font-semibold text-brand-blue-dark">7.6 Business Transfers</h3>
         <p>
           In the event of a merger, acquisition, or transfer of assets, personal information may be
-          transferred to a successor organisation, subject to the same privacy protections described
+          transferred to a successor organization, subject to the same privacy protections described
           here.
         </p>
 
@@ -631,7 +631,7 @@ export default function PrivacyPage() {
             meant to reach — <strong>only if you accept advertising cookies</strong>
           </li>
           <li>
-            Recognise which schools, districts and organisations are reading our educator and
+            Recognize which schools, districts and organizations are reading our educator and
             partner pages, so we can follow up with those exploring a partnership —{' '}
             <strong>only if you accept advertising cookies</strong>
           </li>
@@ -665,16 +665,16 @@ export default function PrivacyPage() {
 
         <h3 className="text-lg font-semibold text-brand-blue-dark">9.2 Business-Audience Identification</h3>
         <p>
-          Stellr works with schools, districts, universities, and sponsoring organisations as well
-          as with students. To understand which of those organisations are interested in partnering
+          Stellr works with schools, districts, universities, and sponsoring organizations as well
+          as with students. To understand which of those organizations are interested in partnering
           with us, we use <strong>Apollo.io</strong> on our educator and partner pages. It matches
           the IP address a visit comes from against a database of business networks and tells us the
-          organisation that address belongs to.
+          organization that address belongs to.
         </p>
         <p>We want to be precise about the limits of this:</p>
         <ul className="list-disc pl-6 space-y-2">
           <li>
-            <strong>It identifies organisations, not people.</strong> It tells us that someone at a
+            <strong>It identifies organizations, not people.</strong> It tells us that someone at a
             given school district or company visited a page. It does not tell us your name, your
             email address, or anything about you as an individual, and we do not attempt to combine
             it with registration data to work out who you are.
@@ -693,7 +693,7 @@ export default function PrivacyPage() {
           <li>
             <strong>Home and school networks are generally not identifiable</strong> in this way.
             The matching relies on business network records, so most residential connections return
-            no organisation at all.
+            no organization at all.
           </li>
         </ul>
 
@@ -713,7 +713,7 @@ export default function PrivacyPage() {
         <p>
           We do <strong>not</strong> sell your personal information, and we do not use advertising
           cookies to build profiles of individual students. Advertising measurement is used to
-          understand which campaigns bring people to our programmes in aggregate. Disabling
+          understand which campaigns bring people to our programs in aggregate. Disabling
           non-essential cookies does not affect your ability to register for or take part in any
           Stellr event.
         </p>
@@ -764,7 +764,7 @@ export default function PrivacyPage() {
                 ['Payment transaction records', '7 years (US tax/accounting requirements)'],
                 ['Signed consent forms and agreements, and their signing records (names, emails, internet address, browser, timestamps, audit trail)', 'Duration of membership + 7 years after deactivation. After a deletion request, only the minimal signed-agreement record is kept, restricted so it can be produced if a claim is made and used for nothing else'],
                 ['Encrypted backup copies of signed agreements', 'Deleted with the original. Our nightly encrypted database copies, which may also contain it, are each kept for 30 days'],
-                ['Requests to sign that are never completed', 'Cancelled 30 days after the last signing link we sent, and everything entered on the form (including any partial signature) deleted then; the request itself is deleted with the participant record'],
+                ['Requests to sign that are never completed', 'Canceled 30 days after the last signing link we sent, and everything entered on the form (including any partial signature) deleted then; the request itself is deleted with the participant record'],
                 ['Data subject to a deletion request (school, parent, or student)', "Deleted within 30 days of the request (sooner if a school's agreement requires), except the minimal signed-agreement record"],
                 ['Parent/guardian contact information', 'Duration of account, or until the associated minor participant record is deleted. The copy within a signed consent form is kept with that form'],
                 ['Profile photos', 'Same as account and competition records'],
@@ -906,7 +906,7 @@ export default function PrivacyPage() {
             <strong>We do not sell personal information.</strong>{' '}Where you have accepted
             advertising cookies, technical identifiers may be disclosed to our advertising and
             business-audience providers in a way that CPRA treats as &ldquo;sharing&rdquo; for
-            cross-context behavioural advertising. You can opt out at any time by selecting{' '}
+            cross-context behavioral advertising. You can opt out at any time by selecting{' '}
             <strong>Cookie settings</strong> at the bottom of any page
           </li>
           <li>Right to non-discrimination for exercising your privacy rights</li>
@@ -925,7 +925,7 @@ export default function PrivacyPage() {
         <h2 className="text-xl font-bold text-brand-blue-dark">13. Third-Party Links</h2>
         <p>
           Our platform may contain links to third-party websites or resources (e.g., partner
-          organisations, competition hosts) and to <strong>LinkedIn</strong>, where you can choose to
+          organizations, competition hosts) and to <strong>LinkedIn</strong>, where you can choose to
           add or share a credential (see Section 7.4). We are not responsible for the privacy
           practices of those sites and encourage you to review their policies independently.
         </p>
@@ -935,7 +935,7 @@ export default function PrivacyPage() {
         <p>
           We may update this Privacy Policy from time to time. When we do, we will post the revised
           version on this page with an updated &ldquo;Last Updated&rdquo; date and a notice at the top of
-          the page summarising what changed. Except as described below, we give notice of changes
+          the page summarizing what changed. Except as described below, we give notice of changes
           on our public website only; we do not send notice by email. Please check this page from
           time to time. Continued use of our Services after a change is posted constitutes
           acceptance of the updated Policy.

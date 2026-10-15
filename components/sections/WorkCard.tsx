@@ -1,37 +1,22 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { FileText, Download, ExternalLink } from 'lucide-react'
-import { type CompetitionAsset, isPending, flagMissing } from '@/lib/media-manifest'
+import { type CompetitionAsset, isPending, flagMissing } from '@/lib/media-helpers'
 import { AssetGate } from './AssetGate'
 
 /**
- * T4 — Work card → gated download. The preview (cover + page-browsable PDF) is
- * ALWAYS open; only the full dossier download is gated behind the one-field
- * subscriber modal (README §8). Open briefs bypass the gate entirely. Once the
- * visitor has subscribed (localStorage `stellr_subscriber`), gated downloads
- * skip the modal too.
- *
- * Gated assets must have an `assetKey` registered in /api/asset-request's ASSETS
- * map (so the file is emailed + the lead captured in HubSpot).
+ * T4 — Work card. An open file shows its cover, a preview and a direct
+ * download. A gated file shows its cover and the email gate only: the file
+ * reaches the requester by email, as a signed link, so a gated asset carries no
+ * file URL at all — just the `assetKey` registered in lib/gated-assets.ts.
  */
 const CTA =
   'inline-flex items-center justify-center gap-2 rounded-[9px] bg-primary px-5 py-3 font-display text-[15px] font-semibold text-white hover:bg-primary-deep transition-colors'
 
 export function WorkCard({ asset, eyebrow: eyebrowOverride, className = '' }: { asset: CompetitionAsset; eyebrow?: string; className?: string }) {
-  const [subscribed, setSubscribed] = useState(false)
-  useEffect(() => {
-    try {
-      setSubscribed(!!localStorage.getItem('stellr_subscriber'))
-    } catch {
-      /* storage unavailable — treat as not subscribed */
-    }
-  }, [])
-
   const pending = isPending(asset)
   if (pending) flagMissing('competition', asset.id)
 
-  const gated = asset.gated && !subscribed
   const eyebrow = eyebrowOverride ?? (asset.gated ? 'Subscriber resource' : 'Free to download')
 
   return (
@@ -59,8 +44,8 @@ export function WorkCard({ asset, eyebrow: eyebrowOverride, className = '' }: { 
         </p>
 
         <div className="mt-auto flex flex-wrap items-center gap-3 pt-4">
-          {/* Preview is always visible */}
-          {!pending && (
+          {/* Open files only: a gated card has no preview */}
+          {!pending && asset.previewHref && (
             <a
               href={asset.previewHref}
               target="_blank"
@@ -71,24 +56,23 @@ export function WorkCard({ asset, eyebrow: eyebrowOverride, className = '' }: { 
             </a>
           )}
 
-          {/* Download — gated vs open */}
+          {/* Download — gated (email only) vs open */}
           {pending ? (
             <span className="text-[13px] text-content-faint">Download available once hosted</span>
-          ) : gated ? (
+          ) : asset.gated && asset.assetKey ? (
             <AssetGate
-              asset={asset.assetKey ?? asset.id}
+              asset={asset.assetKey}
               title={asset.title}
-              fileUrl={asset.fileHref}
               triggerLabel="Get the full PDF ↓"
               eyebrow="Subscriber resource"
               triggerClassName={CTA}
               emailOnly
             />
-          ) : (
+          ) : asset.fileHref ? (
             <a href={asset.fileHref} download className={CTA}>
               <Download className="h-4 w-4" /> Download
             </a>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

@@ -165,7 +165,7 @@ const paperBullets = [
 const pillars = [
   { Icon: Award, tint: 'text-star-gold', title: 'Quantified in competition', body: 'Students show what AI bought them. Every entry reports the ROI — time saved, quality gained. (New to ROI? There’s an Academy course.)' },
   { Icon: Certificate, tint: 'text-[#5FE0C0]', title: 'Taught in the Academy', body: 'Engineering is applied knowledge. We give members the grounding to apply AI deliberately, not blindly.' },
-  { Icon: Satellite, tint: 'text-[#7CA0FF]', title: 'Built into the simulation', body: 'Custom agentic “subcontractors” behave like real vendors — so students practise managing AI, not just prompting it.' },
+  { Icon: Satellite, tint: 'text-[#7CA0FF]', title: 'Built into the simulation', body: 'Custom agentic “subcontractors” behave like real vendors — so students practice managing AI, not just prompting it.' },
   { Icon: Team, tint: 'text-[#C3A4FF]', title: 'Supported for educators', body: 'We give educators the lessons, tools, and guardrails to use AI — and to let students use it safely.' },
 ]
 
@@ -317,7 +317,7 @@ export default function ImpactPage() {
             </h3>
             <p className="mt-4 text-content-secondary leading-relaxed">
               Technical ability gets you in the room. What you do next decides how far you go — and every
-              competition is built to exercise it in public, under judgement, with feedback.
+              competition is built to exercise it in public, under judgment, with feedback.
             </p>
           </div>
 

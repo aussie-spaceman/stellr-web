@@ -1,4 +1,4 @@
-import { type PhotoAsset, isPending, photoSrcSet, flagMissing } from '@/lib/media-manifest'
+import { type PhotoAsset, isPending, photoSrcSet, flagMissing } from '@/lib/media-helpers'
 
 /**
  * Shared responsive image used by T1 (hero band) and T3 (proof strip/gallery).

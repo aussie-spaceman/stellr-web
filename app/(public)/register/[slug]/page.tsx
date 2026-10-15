@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Users, User, Calendar, MapPin } from 'lucide-react'
 import { getEventBySlug } from '@/lib/sanity'
-import { formatDate, formatDateRange, registrationStatus } from '@/lib/utils'
+import { formatDate, formatDateRange, eventLastDay, registrationStatus } from '@/lib/utils'
 import { getCurrentMember } from '@/lib/community'
 import { RegistrationAuthBanner } from '@/components/registration/RegistrationAuthBanner'
 
@@ -22,7 +22,7 @@ export default async function RegisterTypePage({ params }: PageProps) {
   const returnUrl = `${WWW}/register/${slug}`
   const signInUrl = `${APP}/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`
 
-  const status = registrationStatus(event.registrationOpenDate, event.registrationCloseDate)
+  const status = registrationStatus(event.registrationOpenDate, event.registrationCloseDate, eventLastDay(event))
 
   if (status !== 'open') {
     const comingSoon = status === 'coming-soon'

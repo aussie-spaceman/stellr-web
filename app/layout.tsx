@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { ConsentMode } from '@/components/analytics/ConsentMode'
 import { SiteTracking } from '@/components/analytics/SiteTracking'
+import { Toaster } from '@/components/ui/Toast'
 import { buildOrganizationJsonLd, buildWebSiteJsonLd } from '@/lib/structured-data'
 import { fontVariables } from '@/lib/fonts'
 import { tokens } from '@/lib/tokens'
@@ -78,7 +79,9 @@ const siteSchema = [buildOrganizationJsonLd(), buildWebSiteJsonLd()]
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={fontVariables}>
+    // suppressHydrationWarning: the head consent script may add
+    // data-consent-needed to <html> before React hydrates.
+    <html lang="en" className={fontVariables} suppressHydrationWarning>
       <head>
         {/* Consent Mode v2 defaults — MUST stay above GTM so advertising tags
             never fire before the denied-by-default state lands. Not a tag: it
@@ -97,6 +100,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         {children}
         <SiteTracking />
+        {/* Toasts from anywhere in the app (admin included). */}
+        <Toaster />
       </body>
     </html>
   )

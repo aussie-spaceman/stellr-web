@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { Check, X } from 'lucide-react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Check } from 'lucide-react'
+import { Dialog, fieldControlClass } from '@stellr/web-ui'
 import { usePrefillNameEmail } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 import { isEmailLike } from '@/lib/utils'
@@ -9,20 +10,6 @@ import { isEmailLike } from '@/lib/utils'
 // The full paper is gated: it goes out only by email, as a signed link from
 // /api/white-paper, so this component holds no file URL at all.
 const PAPER_TITLE = 'From “Soft Skills” to STEM Power Skills'
-
-/* Mock PDF cover thumbnail (navy gradient) shared by the card + modal header. */
-function CoverThumb({ className = '' }: { className?: string }) {
-  return (
-    <div
-      className={`rounded-md bg-[linear-gradient(160deg,#20264F,#0E1330)] border border-white/10 flex flex-col justify-end p-2 ${className}`}
-    >
-      <span className="block w-6 h-[3px] rounded-full bg-star-gold mb-1" />
-      <span className="text-[7px] font-display font-bold uppercase tracking-[0.1em] text-white leading-tight">
-        Power Skills
-      </span>
-    </div>
-  )
-}
 
 export function WhitePaperGate() {
   const [open, setOpen] = useState(false)
@@ -34,62 +21,27 @@ export function WhitePaperGate() {
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
-  const dialogRef = useRef<HTMLDivElement>(null)
-  const lastFocused = useRef<HTMLElement | null>(null)
+  const doneRef = useRef<HTMLButtonElement>(null)
+  const id = useId()
+  const formId = `${id}-form`
 
   const valid = name.trim().length > 0 && isEmailLike(email)
   const greeting = name.trim().split(/\s+/)[0] || 'there'
-
-  function openModal() {
-    lastFocused.current = document.activeElement as HTMLElement
-    setOpen(true)
-  }
 
   function close() {
     setOpen(false)
     setSubmitted(false)
     setError(false)
     setLoading(false)
-    lastFocused.current?.focus()
   }
 
-  // deep review PUB-10: give the modal real dialog behaviour (matching AssetGate,
-  // README §9). Esc closes, Tab is trapped inside the dialog, body scroll locks,
-  // the first field is focused on open, and focus is restored to the trigger on
-  // close — otherwise a screen-reader/keyboard user can tab into the page behind.
+  // deep review PUB-10: real dialog behaviour (matching AssetGate, README §9)
+  // comes from the shared Dialog — Esc closes, Tab stays inside, the page behind
+  // is inert, the first field takes focus and the trigger gets it back on close.
+  // The submit button is replaced by Close on success; keep focus in the dialog.
   useEffect(() => {
-    if (!open) return
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    dialogRef.current?.querySelector<HTMLElement>('input, button, a[href]')?.focus()
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        close()
-        return
-      }
-      if (e.key !== 'Tab') return
-      const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled])',
-      )
-      if (!focusables || focusables.length === 0) return
-      const first = focusables[0]
-      const last = focusables[focusables.length - 1]
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault()
-        last.focus()
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault()
-        first.focus()
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prevOverflow
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs on open/close only; the handler reads the dialog through refs
-  }, [open])
+    if (submitted) doneRef.current?.focus()
+  }, [submitted])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -116,129 +68,103 @@ export function WhitePaperGate() {
     <>
       <button
         type="button"
-        onClick={openModal}
+        onClick={() => setOpen(true)}
         className="inline-flex items-center justify-center gap-2 rounded-[9px] bg-primary px-6 py-3.5 font-display text-[15px] font-semibold text-white hover:bg-primary-deep transition-colors"
       >
         Get the white paper ↓
       </button>
       <p className="mt-2.5 text-[13px] text-content-faint">Free · 6-page PDF, sent to your inbox.</p>
 
-      {open && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[rgba(8,12,28,.62)]"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) close()
-          }}
-        >
-          <div
-            ref={dialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label={PAPER_TITLE}
-            className="w-full max-w-[460px] bg-white rounded-panel overflow-hidden shadow-[0_40px_90px_-28px_rgba(8,12,28,.72)]"
-          >
-            {/* Header band */}
-            <div className="relative bg-[linear-gradient(135deg,#20264F,#0E1330)] px-7 py-6 flex items-center gap-4">
-              <CoverThumb className="w-14 h-[72px] shrink-0" />
-              <div>
-                <p className="text-[10.5px] font-display font-bold uppercase tracking-[0.13em] text-star-gold">
-                  White paper · free
+      <Dialog
+        open={open}
+        onClose={close}
+        title={PAPER_TITLE}
+        description="White paper · free"
+        size="md"
+        dismissible={!loading}
+        footer={
+          !submitted ? (
+            <>
+              {error && (
+                <p role="alert" className="w-full text-center text-ds-meta text-danger">
+                  Something went wrong sending it. Please try again in a moment.
                 </p>
-                <p className="mt-1 font-display text-[15px] font-bold text-white leading-tight">
-                  {PAPER_TITLE}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={close}
-                aria-label="Close"
-                className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="px-7 py-6">
-              {!submitted ? (
-                <form onSubmit={submit} className="space-y-4" noValidate>
-                  <div>
-                    <h3 className="font-display text-[21px] font-bold text-ink">Where should we send it?</h3>
-                    <p className="mt-1.5 text-sm text-content-secondary leading-relaxed">
-                      Add your details and we&rsquo;ll email you the PDF. You&rsquo;ll get the occasional
-                      update from our community — unsubscribe anytime.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label htmlFor="wp-name" className="block text-[13px] font-semibold text-ink mb-1.5">
-                      Full name
-                    </label>
-                    <input
-                      id="wp-name"
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full px-3.5 py-3 rounded-[9px] border border-[#D7DCEC] text-[15px] text-ink focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/[0.16]"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="wp-email" className="block text-[13px] font-semibold text-ink mb-1.5">
-                      Email address
-                    </label>
-                    <input
-                      id="wp-email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full px-3.5 py-3 rounded-[9px] border border-[#D7DCEC] text-[15px] text-ink focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/[0.16]"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={!valid || loading}
-                    className={`w-full inline-flex items-center justify-center rounded-[9px] px-6 py-3.5 font-display text-[15px] font-semibold text-white transition-colors ${
-                      valid && !loading ? 'bg-primary hover:bg-primary-deep' : 'bg-[#A9BEF5] cursor-not-allowed'
-                    }`}
-                  >
-                    {loading ? 'Sending…' : 'Email me the white paper ↓'}
-                  </button>
-                  {error && (
-                    <p className="text-center text-[13px] text-[#9A4A41]">
-                      Something went wrong sending it. Please try again in a moment.
-                    </p>
-                  )}
-                  <p className="text-center text-[12.5px] text-content-faint">
-                    We respect your inbox. No spam — just the paper and the occasional update.
-                  </p>
-                </form>
-              ) : (
-                <div className="flex flex-col items-center text-center py-2">
-                  <div className="w-16 h-16 rounded-full bg-enviro-green-bg flex items-center justify-center">
-                    <Check size={30} strokeWidth={2.4} className="text-enviro-green" />
-                  </div>
-                  <h3 className="font-display text-[21px] font-bold text-ink mt-5">
-                    Check your inbox, {greeting}
-                  </h3>
-                  <p className="mt-2 text-sm text-content-secondary leading-relaxed">
-                    We&rsquo;ve sent {PAPER_TITLE} to{' '}
-                    <span className="font-semibold text-ink">{email}</span>. It should arrive in a minute or
-                    two.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={close}
-                    className="mt-5 text-sm font-semibold text-content-muted hover:text-ink transition-colors"
-                  >
-                    Close
-                  </button>
-                </div>
               )}
+              <button
+                type="submit"
+                form={formId}
+                disabled={!valid || loading}
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-control bg-primary px-6 py-3 font-display text-ds-body font-semibold text-white transition-colors hover:bg-primary-deep disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? 'Sending…' : 'Email me the white paper ↓'}
+              </button>
+            </>
+          ) : (
+            <button
+              ref={doneRef}
+              type="button"
+              onClick={close}
+              className="min-h-11 rounded-control px-4 text-sm font-semibold text-content-muted transition-colors hover:bg-surface hover:text-ink"
+            >
+              Close
+            </button>
+          )
+        }
+      >
+        {!submitted ? (
+          <form id={formId} onSubmit={submit} className="space-y-4" noValidate>
+            <div>
+              <h3 className="font-display text-ds-h3 font-bold text-ink">Where should we send it?</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-content-secondary">
+                Add your details and we&rsquo;ll email you the PDF. You&rsquo;ll get the occasional
+                update from our community — unsubscribe anytime.
+              </p>
             </div>
+
+            <div>
+              <label htmlFor={`${id}-name`} className="mb-1.5 block text-ds-meta font-semibold text-ink">
+                Full name
+              </label>
+              <input
+                id={`${id}-name`}
+                type="text"
+                autoComplete="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className={fieldControlClass}
+              />
+            </div>
+            <div>
+              <label htmlFor={`${id}-email`} className="mb-1.5 block text-ds-meta font-semibold text-ink">
+                Email address
+              </label>
+              <input
+                id={`${id}-email`}
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={fieldControlClass}
+              />
+            </div>
+
+            <p className="text-center text-ds-meta text-content-faint">
+              We respect your inbox. No spam — just the paper and the occasional update.
+            </p>
+          </form>
+        ) : (
+          <div className="flex flex-col items-center py-2 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-enviro-green-bg">
+              <Check size={30} strokeWidth={2.4} className="text-enviro-green" aria-hidden="true" />
+            </div>
+            <h3 className="mt-5 font-display text-ds-h3 font-bold text-ink">Check your inbox, {greeting}</h3>
+            <p className="mt-2 text-sm leading-relaxed text-content-secondary">
+              We&rsquo;ve sent {PAPER_TITLE} to <span className="font-semibold text-ink">{email}</span>. It should
+              arrive in a minute or two.
+            </p>
           </div>
-        </div>
-      )}
+        )}
+      </Dialog>
     </>
   )
 }

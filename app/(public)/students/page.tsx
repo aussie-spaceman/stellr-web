@@ -90,22 +90,22 @@ export default function StudentsPage() {
   return (
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8">
+      <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8 short:py-8">
         {/* Dark hero, no photo, until a replacement photo is chosen. */}
         <div className="max-w-7xl mx-auto">
           <div>
           <p className="text-brand-orange font-semibold uppercase tracking-widest text-sm mb-4">
             Community → For Students
           </p>
-          <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">
+          <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl short:text-3xl short:mb-3">
             Students are the core of our Community
           </h1>
-          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
+          <p className="text-lg text-content-faint max-w-2xl leading-relaxed short:text-base short:leading-snug">
             You&rsquo;re the focus of the majority of our activities. Whether you&rsquo;re in high
             school or college, Stellr is where you start building the career — and the network —
             you&rsquo;ll carry for life.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-8 flex flex-wrap gap-3 short:mt-4">
             <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange hover:bg-amber-500">
               Join Free
             </a>

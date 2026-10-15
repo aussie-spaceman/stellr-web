@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Download } from 'lucide-react'
+import { openPendingTab } from '@/lib/open-in-new-tab'
 
 interface Props {
   /** community_resources id — used when the file is not a catalogue attachment. */
@@ -27,6 +28,9 @@ export function ResourceDownloadButton({ resourceId, attachmentId, kind = 'file'
   const download = async () => {
     setLoading(true)
     setError(null)
+    // A link opens in a new tab. Open it now, inside the tap: iOS Safari drops
+    // a window opened after the fetch below.
+    const tab = kind === 'link' ? openPendingTab() : null
     try {
       const res = await fetch(
         attachmentId
@@ -35,13 +39,17 @@ export function ResourceDownloadButton({ resourceId, attachmentId, kind = 'file'
       )
       const json = await res.json()
       if (!res.ok) {
+        tab?.close()
         setError(json.error ?? 'Download failed')
         return
       }
       if ((json.kind ?? kind) === 'link') {
-        window.open(json.url, '_blank', 'noopener,noreferrer')
+        // No tab yet (the server says link, the button said file): go there here.
+        if (tab) tab.go(json.url)
+        else window.location.assign(json.url)
         return
       }
+      tab?.close()
       // Trigger download without exposing the signed URL in the DOM.
       const a = document.createElement('a')
       a.href = json.url
@@ -51,6 +59,7 @@ export function ResourceDownloadButton({ resourceId, attachmentId, kind = 'file'
       a.click()
       document.body.removeChild(a)
     } catch {
+      tab?.close()
       setError('Network error — please try again.')
     } finally {
       setLoading(false)

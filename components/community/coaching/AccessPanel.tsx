@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, X, Plus, CreditCard } from 'lucide-react'
+import { Check, Plus, CreditCard } from 'lucide-react'
+import { Dialog, fieldControlClass } from '@stellr/web-ui'
 import { formatUsd, tzAbbr } from '@/lib/mentoring-format'
 
 export function AccessPanel({
@@ -169,49 +170,58 @@ function BuyModal({ workshopId, sessionPriceCents, onClose }: { workshopId: stri
     }
   }
 
-  const Option = ({ value, label, sub }: { value: 1 | 3; label: string; sub?: string }) => (
+  // A plain render helper, not a component: a component declared in here would
+  // be a new type every render and remount, dropping focus after each click.
+  const option = (value: 1 | 3, label: string, sub?: string) => (
     <button
+      key={value}
+      type="button"
       onClick={() => setQty(value)}
-      className={`flex w-full items-center justify-between rounded-[12px] border px-4 py-3 text-left transition-colors ${qty === value ? 'border-space-violet bg-space-violet-bg' : 'border-line hover:border-space-violet/50'}`}
+      aria-pressed={qty === value}
+      className={`flex w-full items-center justify-between rounded-ds-card border px-4 py-3 text-left transition-colors ${qty === value ? 'border-space-violet bg-space-violet-bg' : 'border-line hover:border-space-violet/50'}`}
     >
       <div>
         <p className="font-semibold text-ink">{label}</p>
-        {sub && <p className="text-[12.5px] text-enviro-green-text">{sub}</p>}
+        {sub && <p className="text-ds-meta text-enviro-green-text">{sub}</p>}
       </div>
-      <span className="font-display text-[18px] font-bold text-ink">
+      <span className="font-display text-ds-h3 font-bold text-ink">
         {value === 3 ? formatUsd(Math.round(sessionPriceCents * 3 * 0.9)) : formatUsd(sessionPriceCents)}
       </span>
     </button>
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(14,19,48,.55)' }} onClick={onClose}>
-      <div
-        className="w-full max-w-[440px] rounded-[18px] bg-white p-6 shadow-[0_30px_70px_-20px_rgba(0,0,0,.5)]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between">
-          <h3 className="font-display text-[20px] font-bold text-ink">Buy coaching sessions</h3>
-          <button onClick={onClose} className="rounded-md p-1 text-content-faint hover:bg-surface" aria-label="Close">
-            <X className="h-4 w-4" />
+    <Dialog
+      open
+      onClose={onClose}
+      title="Buy coaching sessions"
+      description="Extra sessions never expire and stack on top of your free allowance."
+      size="md"
+      dismissible={!busy}
+      footer={
+        <>
+          {err && (
+            <p role="alert" className="w-full text-ds-meta text-danger">
+              {err}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={buy}
+            disabled={busy}
+            className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-control bg-space-violet px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            <CreditCard className="h-4 w-4" aria-hidden="true" /> {busy ? 'Starting…' : `Continue to payment · ${formatUsd(total)}`}
           </button>
-        </div>
-        <p className="mt-1 text-[13px] text-content-muted">Extra sessions never expire and stack on top of your free allowance.</p>
-        <div className="mt-4 space-y-2.5">
-          <Option value={1} label="1 session" />
-          <Option value={3} label="3 sessions" sub="Save 10%" />
-        </div>
-        {err && <p className="mt-3 text-[13px] text-danger">{err}</p>}
-        <button
-          onClick={buy}
-          disabled={busy}
-          className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-[9px] bg-space-violet px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#5B3FE0] disabled:opacity-50"
-        >
-          <CreditCard className="h-4 w-4" /> {busy ? 'Starting…' : `Continue to payment · ${formatUsd(total)}`}
-        </button>
-        <p className="mt-2 text-center text-[12px] text-content-faint">Secured by Stripe · USD</p>
+          <p className="w-full text-center text-xs text-content-faint">Secured by Stripe · USD</p>
+        </>
+      }
+    >
+      <div className="space-y-2.5">
+        {option(1, '1 session')}
+        {option(3, '3 sessions', 'Save 10%')}
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -224,4 +234,4 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-const inputCls = 'w-full rounded-[9px] border border-line px-3.5 py-2.5 text-sm text-content outline-none focus:border-space-violet'
+const inputCls = fieldControlClass

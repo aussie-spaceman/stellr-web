@@ -129,6 +129,29 @@
     scroll-padding-bottom: 5rem;
   }
 
+  /* The app's bottom tab bar (member and admin, below lg), so the cookie
+     banner and toasts sit above it instead of covering it. The bar is 44px of
+     buttons, 8px above, at least 10px below (more on a phone with a home
+     indicator) and a 1px border. */
+  :root {
+    --tabbar-h: 0px;
+  }
+  @media (max-width: 1023.98px) {
+    body:has([data-tabbar]) {
+      --tabbar-h: calc(3.3125rem + max(0.625rem, env(safe-area-inset-bottom)));
+    }
+  }
+
+  /* The cookie banner is in the server HTML but hidden. The head script
+     (ConsentMode) flags <html> when no choice is stored, so it shows at first
+     paint rather than after hydration; the footer link reopens it (data-open). */
+  [data-cookie-banner]:not([data-open]) {
+    display: none;
+  }
+  html[data-consent-needed] [data-cookie-banner] {
+    display: block;
+  }
+
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-space-grotesk), 'Space Grotesk', system-ui, sans-serif;
     @apply leading-tight tracking-heading;
@@ -144,6 +167,14 @@
     textarea,
     [contenteditable='true'] {
       font-size: max(16px, 1em) !important;
+    }
+    /* Checkboxes and radios are 13–16px by default here: too small to hit
+       reliably with a thumb. 20px on touch screens, whatever the classes say. */
+    input[type='checkbox'],
+    input[type='radio'] {
+      width: 1.25rem !important;
+      height: 1.25rem !important;
+      flex-shrink: 0;
     }
   }
 }

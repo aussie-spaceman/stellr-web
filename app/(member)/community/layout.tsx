@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation'
 import { auth } from '@clerk/nextjs/server'
 import { getCurrentMember } from '@/lib/community'
-import { Toaster } from '@/components/ui/Toast'
 import { getImpersonation } from '@/lib/impersonation'
 import { supabaseServer } from '@/lib/supabase'
 import { dispatchMembershipAgreement, membershipAgreementEnforced, membershipGate } from '@/lib/membership-agreement'
@@ -45,7 +44,6 @@ export default async function CommunityLayout({
   return (
     <>
       {children}
-      <Toaster />
     </>
   )
 }

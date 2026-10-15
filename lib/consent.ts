@@ -53,6 +53,9 @@ const CONSENT_VERSION = 1
 
 export const CONSENT_STORAGE_KEY = `stellr_consent_v${CONSENT_VERSION}`
 
+/** Set on <html> by the head script (ConsentMode) while no choice is stored. */
+export const CONSENT_NEEDED_ATTR = 'data-consent-needed'
+
 /**
  * Dispatched by the footer link to reopen the banner. A DOM event rather than
  * shared React state because the two components sit in different trees — the

@@ -15,7 +15,9 @@ const apiVersion = '2024-01-01'
 // Only create the client when a real project ID is present.
 // During build without env vars configured, all queries return null/[] via the
 // fallback data in each page — no client needed.
-const sanityConfigured = Boolean(projectId && projectId.length > 0)
+// CI's build check sets the project ID to "placeholder" (no such project):
+// treat it as unconfigured, now that public pages are prerendered at build.
+const sanityConfigured = Boolean(projectId && projectId.length > 0 && projectId !== 'placeholder')
 
 export const client = sanityConfigured
   ? createClient({

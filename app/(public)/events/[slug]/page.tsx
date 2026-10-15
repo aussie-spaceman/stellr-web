@@ -337,9 +337,9 @@ export default async function EventDetailPage({ params }: PageProps) {
           </div>
         )}
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 pt-8">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 pt-8 short:pb-6 short:pt-4">
           {/* Standardised three-pill row (Event · Grade · Theme) + status */}
-          <div className="flex flex-wrap items-center gap-2 mb-4">
+          <div className="flex flex-wrap items-center gap-2 mb-4 short:mb-2">
             <CardPills kind="event" gradeLevel={gradeBand(event).label} type={event.type} size="md" />
             {lifecycle && (
               <span
@@ -353,23 +353,23 @@ export default async function EventDetailPage({ params }: PageProps) {
             </span>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight mb-3">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight mb-3 short:text-2xl short:mb-2">
             {event.title}
           </h1>
 
           {event.date && (
-            <p className="text-blue-300 text-lg mb-1">
+            <p className="text-blue-300 text-lg mb-1 short:text-sm short:mb-0">
               📅 {formatDateRange(event.date, event.endDate)}
             </p>
           )}
 
           {(event.venue || event.city) && (
-            <p className="text-blue-300 text-lg mb-1">
+            <p className="text-blue-300 text-lg mb-1 short:text-sm short:mb-0">
               📍 {[event.venue, event.city && event.state ? `${event.city}, ${event.state}` : event.city].filter(Boolean).join(' · ')}
             </p>
           )}
 
-          {priceLabel && <p className="text-blue-300 text-lg">🎟️ {priceLabel}</p>}
+          {priceLabel && <p className="text-blue-300 text-lg short:text-sm">🎟️ {priceLabel}</p>}
 
           {/* Hero CTAs — Individual + Group registration; when registration
               isn't open both buttons open the subscriber modal instead. */}

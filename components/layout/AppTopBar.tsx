@@ -18,10 +18,15 @@ interface AppTopBarProps {
  * Fixed top bar for the member web app shell (app.stellreducation.org).
  * 60 px white bar with search, notifications, and user avatar on the right.
  * On mobile the Stellr logo appears on the left (sidebar is a bottom tab bar).
+ *
+ * The header is the positioned box the phone layouts hang from: the open
+ * search takes a full-width row under it, and the notifications panel is a
+ * sheet from its bottom edge. Its 44px buttons fit a 320px phone with the
+ * 16px gutter the page content uses.
  */
 export function AppTopBar({ isAdmin, viewingAs = null }: AppTopBarProps) {
   return (
-    <header className="sticky top-0 z-30 flex h-[60px] shrink-0 items-center justify-between gap-3 border-b border-line bg-white px-6 lg:px-8">
+    <header className="sticky top-0 z-30 flex h-[60px] shrink-0 items-center justify-between gap-3 border-b border-line bg-white px-4 sm:px-6 lg:px-8">
       {/* Mobile-only logo (sidebar not visible on mobile) */}
       <div className="lg:hidden">
         <Logo sizeClassName="h-8" displayWidth={97} />
@@ -31,11 +36,11 @@ export function AppTopBar({ isAdmin, viewingAs = null }: AppTopBarProps) {
       <div className="hidden flex-1 lg:block" />
 
       {/* Right cluster: search / notifications / account */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 sm:gap-2">
         <AppSearch />
         <NotificationBell />
         {viewingAs ? (
-          <span className="max-w-[14rem] truncate rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
+          <span className="max-w-32 truncate sm:max-w-56 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
             Viewing as {viewingAs}
           </span>
         ) : (

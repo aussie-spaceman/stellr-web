@@ -1,7 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
+import { Dialog, fieldControlClass } from '@stellr/web-ui'
 import { MemberIdLookup, type MemberMatch } from '@/components/forms/MemberIdLookup'
+
+const labelCls = 'mb-1 block text-sm font-medium text-content-body'
+const subLabelCls = 'mb-1 block text-xs text-content-muted'
 
 interface ParticipantData {
   id?: string
@@ -64,6 +68,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const formId = `${useId()}-participant`
 
   const isStudent = form.event_role === 'participant'
 
@@ -130,271 +135,275 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-brand-border">
-          <h2 className="text-lg font-semibold text-brand-blue-dark">
-            {initial?.id ? 'Edit Participant' : 'Add Participant'}
-          </h2>
+    <Dialog
+      open
+      onClose={onCancel}
+      title={initial?.id ? 'Edit Participant' : 'Add Participant'}
+      size="2xl"
+      // A long form: closed with Cancel only, so a stray tap on the scrim or
+      // Escape can't throw away what was typed.
+      dismissible={false}
+      footer={
+        <>
+          {error && (
+            <p role="alert" className="w-full rounded-control bg-danger/10 px-3 py-2 text-sm text-danger">
+              {error}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="min-h-11 rounded-control border border-line-strong px-4 text-sm font-semibold text-content-secondary hover:bg-surface disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form={formId}
+            disabled={saving}
+            className="min-h-11 rounded-control bg-primary-deep px-4 text-sm font-semibold text-white hover:bg-ink disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : (initial?.id ? 'Save changes' : 'Add participant')}
+          </button>
+        </>
+      }
+    >
+      <form id={formId} onSubmit={handleSubmit} className="space-y-5">
+        {/* Member ID lookup — accept a match to reuse an existing member's record */}
+        <MemberIdLookup value={form.membership_id ?? ''} linked={!!form.linked}
+          linkedName={`${form.first_name} ${form.last_name}`.trim()}
+          onChange={v => set('membership_id', v)} onAccept={acceptMatch} onUnlink={unlinkMatch} label="Member ID (optional)" />
+
+        {!form.linked && (
+        <>
+        {/* Role */}
+        <div>
+          <label className={labelCls}>Participant type</label>
+          <div className="flex gap-4">
+            {([['participant', 'Student'], ['adult', 'Adult']] as const).map(([role, label]) => (
+              <label key={role} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="event_role"
+                  value={role}
+                  checked={form.event_role === role}
+                  onChange={() => set('event_role', role)}
+                />
+                <span className="text-sm">{label}</span>
+              </label>
+            ))}
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Member ID lookup — accept a match to reuse an existing member's record */}
-          <MemberIdLookup value={form.membership_id ?? ''} linked={!!form.linked}
-            linkedName={`${form.first_name} ${form.last_name}`.trim()}
-            onChange={v => set('membership_id', v)} onAccept={acceptMatch} onUnlink={unlinkMatch} label="Member ID (optional)" />
-
-          {!form.linked && (
-          <>
-          {/* Role */}
+        {/* Name */}
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium text-brand-muted mb-1">Participant type</label>
-            <div className="flex gap-4">
-              {([['participant', 'Student'], ['adult', 'Adult']] as const).map(([role, label]) => (
-                <label key={role} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="event_role"
-                    value={role}
-                    checked={form.event_role === role}
-                    onChange={() => set('event_role', role)}
-                  />
-                  <span className="text-sm">{label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Name */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-brand-muted mb-1">First name <span className="text-red-500">*</span></label>
-              <input
-                required
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                value={form.first_name}
-                onChange={e => set('first_name', e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-brand-muted mb-1">Last name <span className="text-red-500">*</span></label>
-              <input
-                required
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                value={form.last_name}
-                onChange={e => set('last_name', e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Preferred name */}
-          <div>
-            <label className="block text-sm font-medium text-brand-muted mb-1">Preferred name / nickname</label>
+            <label className={labelCls}>First name <span className="text-danger">*</span></label>
             <input
-              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-              value={form.nickname}
-              onChange={e => set('nickname', e.target.value)}
-              placeholder="Optional"
+              required
+              className={fieldControlClass}
+              value={form.first_name}
+              onChange={e => set('first_name', e.target.value)}
             />
           </div>
-
-          {/* Email & Phone */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-brand-muted mb-1">Email <span className="text-red-500">*</span></label>
-              <input
-                required
-                type="email"
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                value={form.email}
-                onChange={e => set('email', e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-brand-muted mb-1">Phone</label>
-              <input
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                value={form.phone}
-                onChange={e => set('phone', e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* DOB, Gender, T-Shirt */}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-brand-muted mb-1">Date of birth</label>
-              <input
-                type="date"
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                value={form.date_of_birth}
-                onChange={e => set('date_of_birth', e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-brand-muted mb-1">Gender</label>
-              <select
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                value={form.gender}
-                onChange={e => set('gender', e.target.value)}
-              >
-                <option value="">Select…</option>
-                {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-brand-muted mb-1">T-shirt size</label>
-              <select
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                value={form.t_shirt_size}
-                onChange={e => set('t_shirt_size', e.target.value)}
-              >
-                <option value="">Select…</option>
-                {T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Grade — students only */}
-          {isStudent && (
-            <div>
-              <label className="block text-sm font-medium text-brand-muted mb-1">Grade</label>
-              <select
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                value={form.grade}
-                onChange={e => set('grade', e.target.value)}
-              >
-                <option value="">Select…</option>
-                {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
-            </div>
-          )}
-
-          {/* Ethnicity */}
           <div>
-            <label className="block text-sm font-medium text-brand-muted mb-2">Ethnicity</label>
-            <div className="flex flex-wrap gap-2">
-              {ETHNICITIES.map(opt => (
-                <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={form.ethnicity.includes(opt)}
-                    onChange={() => toggleEthnicity(opt)}
-                    className="rounded"
-                  />
-                  <span className="text-sm">{opt}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Dietary */}
-          <div>
-            <label className="block text-sm font-medium text-brand-muted mb-2">Dietary requirements</label>
-            <div className="flex flex-wrap gap-2">
-              {DIETARY_OPTIONS.map(opt => (
-                <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={form.dietary_requirements.includes(opt)}
-                    onChange={() => toggleDietary(opt)}
-                    className="rounded"
-                  />
-                  <span className="text-sm">{opt}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Health conditions */}
-          <div>
-            <label className="block text-sm font-medium text-brand-muted mb-1">Health conditions / allergies</label>
-            <textarea
-              rows={2}
-              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none"
-              value={form.health_conditions}
-              onChange={e => set('health_conditions', e.target.value)}
+            <label className={labelCls}>Last name <span className="text-danger">*</span></label>
+            <input
+              required
+              className={fieldControlClass}
+              value={form.last_name}
+              onChange={e => set('last_name', e.target.value)}
             />
           </div>
+        </div>
 
-          {/* Emergency contact — required for students (guardian for their agreement) */}
-          {isStudent && (
-            <div className="border-t border-brand-hairline pt-4">
-              <p className="text-sm font-medium text-brand-muted mb-1">Emergency contact <span className="text-red-500">*</span></p>
-              <p className="text-xs text-brand-muted-soft mb-3">Acts as the guardian for the student&apos;s participation agreement.</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-brand-muted-soft mb-1">First name</label>
-                  <input
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                    value={form.emergency_contact_first_name}
-                    onChange={e => set('emergency_contact_first_name', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-brand-muted-soft mb-1">Last name</label>
-                  <input
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                    value={form.emergency_contact_last_name}
-                    onChange={e => set('emergency_contact_last_name', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-brand-muted-soft mb-1">Email</label>
-                  <input
-                    type="email"
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                    value={form.emergency_contact_email}
-                    onChange={e => set('emergency_contact_email', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-brand-muted-soft mb-1">Phone</label>
-                  <input
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                    value={form.emergency_contact_phone}
-                    onChange={e => set('emergency_contact_phone', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-brand-muted-soft mb-1">Relationship to participant</label>
-                  <select
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                    value={form.emergency_contact_relationship}
-                    onChange={e => set('emergency_contact_relationship', e.target.value)}
-                  >
-                    <option value="">Select…</option>
-                    {EMERGENCY_RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </div>
+        {/* Preferred name */}
+        <div>
+          <label className={labelCls}>Preferred name / nickname</label>
+          <input
+            className={fieldControlClass}
+            value={form.nickname}
+            onChange={e => set('nickname', e.target.value)}
+            placeholder="Optional"
+          />
+        </div>
+
+        {/* Email & Phone */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className={labelCls}>Email <span className="text-danger">*</span></label>
+            <input
+              required
+              type="email"
+              className={fieldControlClass}
+              value={form.email}
+              onChange={e => set('email', e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Phone</label>
+            <input
+              className={fieldControlClass}
+              value={form.phone}
+              onChange={e => set('phone', e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* DOB, Gender, T-Shirt */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div>
+            <label className={labelCls}>Date of birth</label>
+            <input
+              type="date"
+              className={fieldControlClass}
+              value={form.date_of_birth}
+              onChange={e => set('date_of_birth', e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Gender</label>
+            <select
+              className={fieldControlClass}
+              value={form.gender}
+              onChange={e => set('gender', e.target.value)}
+            >
+              <option value="">Select…</option>
+              {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>T-shirt size</label>
+            <select
+              className={fieldControlClass}
+              value={form.t_shirt_size}
+              onChange={e => set('t_shirt_size', e.target.value)}
+            >
+              <option value="">Select…</option>
+              {T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Grade — students only */}
+        {isStudent && (
+          <div>
+            <label className={labelCls}>Grade</label>
+            <select
+              className={fieldControlClass}
+              value={form.grade}
+              onChange={e => set('grade', e.target.value)}
+            >
+              <option value="">Select…</option>
+              {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </div>
+        )}
+
+        {/* Ethnicity */}
+        <div>
+          <label className="mb-2 block text-sm font-medium text-content-body">Ethnicity</label>
+          <div className="flex flex-wrap gap-2">
+            {ETHNICITIES.map(opt => (
+              <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.ethnicity.includes(opt)}
+                  onChange={() => toggleEthnicity(opt)}
+                  className="rounded"
+                />
+                <span className="text-sm">{opt}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Dietary */}
+        <div>
+          <label className="mb-2 block text-sm font-medium text-content-body">Dietary requirements</label>
+          <div className="flex flex-wrap gap-2">
+            {DIETARY_OPTIONS.map(opt => (
+              <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.dietary_requirements.includes(opt)}
+                  onChange={() => toggleDietary(opt)}
+                  className="rounded"
+                />
+                <span className="text-sm">{opt}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Health conditions */}
+        <div>
+          <label className={labelCls}>Health conditions / allergies</label>
+          <textarea
+            rows={2}
+            className={`${fieldControlClass} resize-none`}
+            value={form.health_conditions}
+            onChange={e => set('health_conditions', e.target.value)}
+          />
+        </div>
+
+        {/* Emergency contact — required for students (guardian for their agreement) */}
+        {isStudent && (
+          <div className="border-t border-line-light pt-4">
+            <p className="mb-1 text-sm font-medium text-content-body">Emergency contact <span className="text-danger">*</span></p>
+            <p className="mb-3 text-xs text-content-muted">Acts as the guardian for the student&apos;s participation agreement.</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className={subLabelCls}>First name</label>
+                <input
+                  className={fieldControlClass}
+                  value={form.emergency_contact_first_name}
+                  onChange={e => set('emergency_contact_first_name', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={subLabelCls}>Last name</label>
+                <input
+                  className={fieldControlClass}
+                  value={form.emergency_contact_last_name}
+                  onChange={e => set('emergency_contact_last_name', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={subLabelCls}>Email</label>
+                <input
+                  type="email"
+                  className={fieldControlClass}
+                  value={form.emergency_contact_email}
+                  onChange={e => set('emergency_contact_email', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={subLabelCls}>Phone</label>
+                <input
+                  className={fieldControlClass}
+                  value={form.emergency_contact_phone}
+                  onChange={e => set('emergency_contact_phone', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={subLabelCls}>Relationship to participant</label>
+                <select
+                  className={fieldControlClass}
+                  value={form.emergency_contact_relationship}
+                  onChange={e => set('emergency_contact_relationship', e.target.value)}
+                >
+                  <option value="">Select…</option>
+                  {EMERGENCY_RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
               </div>
             </div>
-          )}
-          </>
-          )}
-
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
-          )}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="px-4 py-2 text-sm text-brand-muted border border-brand-border rounded-lg hover:bg-brand-canvas"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-white bg-brand-blue rounded-lg hover:bg-brand-blue-dark disabled:opacity-50"
-            >
-              {saving ? 'Saving…' : (initial?.id ? 'Save changes' : 'Add participant')}
-            </button>
           </div>
-        </form>
-      </div>
-    </div>
+        )}
+        </>
+        )}
+      </form>
+    </Dialog>
   )
 }

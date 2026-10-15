@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { X } from 'lucide-react'
+import { useId, useState } from 'react'
+import { Dialog } from '@stellr/web-ui'
 import { formatUsd } from '@/lib/mentoring-format'
 
 interface TierRow {
@@ -81,7 +81,8 @@ export function MembershipAccess({ tiers: initialTiers, cohorts: initialCohorts 
                     min={0}
                     value={t.creditsGrant}
                     onChange={(e) => setCredits(t.id, Math.max(0, Number(e.target.value) || 0))}
-                    className="w-20 rounded-[8px] border border-line px-2.5 py-1.5 text-sm"
+                    aria-label={`Cohort credits per year, ${t.name}`}
+                    className="w-20 rounded-control border border-line-strong px-2.5 py-1.5 text-input mouse:text-sm"
                   />
                 </td>
                 <td className="py-3">
@@ -90,7 +91,8 @@ export function MembershipAccess({ tiers: initialTiers, cohorts: initialCohorts 
                     min={0}
                     value={t.workshopCreditsGrant}
                     onChange={(e) => setWorkshopCredits(t.id, Math.max(0, Number(e.target.value) || 0))}
-                    className="w-20 rounded-[8px] border border-line px-2.5 py-1.5 text-sm"
+                    aria-label={`Workshop credits per year, ${t.name}`}
+                    className="w-20 rounded-control border border-line-strong px-2.5 py-1.5 text-input mouse:text-sm"
                   />
                 </td>
               </tr>
@@ -164,6 +166,8 @@ function EditAccessModal({
   const [freeTiers, setFreeTiers] = useState<string[]>(cohort.freeForTierIds)
   const [price, setPrice] = useState(cohort.oneOffPriceCents != null ? String(cohort.oneOffPriceCents / 100) : '')
   const [busy, setBusy] = useState(false)
+  const tiersLabelId = useId()
+  const priceId = useId()
 
   const save = async () => {
     setBusy(true)
@@ -174,44 +178,59 @@ function EditAccessModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(14,19,48,.55)' }} onClick={onClose}>
-      <div className="w-full max-w-[460px] rounded-[18px] bg-white p-6 shadow-[0_30px_70px_-20px_rgba(0,0,0,.5)]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between">
-          <h2 className="font-display text-[20px] font-bold text-ink">Edit access · {cohort.name}</h2>
-          <button onClick={onClose} className="rounded-md p-1 text-content-faint hover:bg-surface" aria-label="Close"><X className="h-5 w-5" /></button>
-        </div>
-        <div className="mt-4 space-y-4">
-          <div>
-            <label className="mb-1.5 block text-[12.5px] font-semibold text-content-secondary">Free for membership tiers</label>
-            <div className="flex flex-wrap gap-1.5">
-              {tiers.map((t) => {
-                const on = freeTiers.includes(t.id)
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => setFreeTiers((p) => (on ? p.filter((x) => x !== t.id) : [...p, t.id]))}
-                    className={`rounded-pill px-2.5 py-1 text-[12.5px] font-medium ${on ? 'bg-space-violet text-white' : 'bg-surface text-content-secondary'}`}
-                  >
-                    {t.name}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[12.5px] font-semibold text-content-secondary">One-off price (USD)</label>
-            <div className="inline-flex items-center gap-1.5 rounded-[9px] border border-line px-3 py-2">
-              <span className="text-sm text-content-muted">$</span>
-              <input value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0" inputMode="decimal" className="w-24 text-sm outline-none" />
-            </div>
-            <p className="mt-1 text-[12px] text-content-faint">Set 0 (or blank) for free; paid via Stripe.</p>
-          </div>
-          <div className="flex justify-end gap-2">
-            <button onClick={onClose} className="rounded-[9px] px-4 py-2.5 text-sm font-medium text-content-secondary hover:bg-surface">Cancel</button>
-            <button onClick={save} disabled={busy} className="rounded-[9px] bg-space-violet px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#5B3FE0] disabled:opacity-50">{busy ? 'Saving…' : 'Save'}</button>
-          </div>
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Edit access · ${cohort.name}`}
+      size="lg"
+      dismissible={!busy}
+      bodyClassName="space-y-4"
+      footer={
+        <>
+          <button type="button" onClick={onClose} disabled={busy} className="min-h-11 rounded-control px-4 text-sm font-medium text-content-secondary hover:bg-surface disabled:opacity-50">
+            Cancel
+          </button>
+          <button type="button" onClick={save} disabled={busy} className="min-h-11 rounded-control bg-space-violet px-5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50">
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </>
+      }
+    >
+      <div role="group" aria-labelledby={tiersLabelId}>
+        <p id={tiersLabelId} className="mb-1.5 text-xs font-semibold text-content-secondary">Free for membership tiers</p>
+        <div className="flex flex-wrap gap-1.5">
+          {tiers.map((t) => {
+            const on = freeTiers.includes(t.id)
+            return (
+              <button
+                key={t.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setFreeTiers((p) => (on ? p.filter((x) => x !== t.id) : [...p, t.id]))}
+                className={`rounded-pill px-2.5 py-1 text-xs font-medium ${on ? 'bg-space-violet text-white' : 'bg-surface text-content-secondary'}`}
+              >
+                {t.name}
+              </button>
+            )
+          })}
         </div>
       </div>
-    </div>
+      <div>
+        <label htmlFor={priceId} className="mb-1.5 block text-xs font-semibold text-content-secondary">One-off price (USD)</label>
+        <div className="inline-flex min-h-11 items-center gap-1.5 rounded-control border border-line-strong px-3 focus-within:border-space-violet">
+          <span className="text-sm text-content-muted" aria-hidden="true">$</span>
+          <input
+            id={priceId}
+            value={price}
+            onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ''))}
+            placeholder="0"
+            inputMode="decimal"
+            aria-describedby={`${priceId}-hint`}
+            className="w-24 bg-transparent text-input outline-none mouse:text-sm"
+          />
+        </div>
+        <p id={`${priceId}-hint`} className="mt-1 text-xs text-content-faint">Set 0 (or blank) for free; paid via Stripe.</p>
+      </div>
+    </Dialog>
   )
 }

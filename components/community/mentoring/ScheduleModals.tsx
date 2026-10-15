@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { X } from 'lucide-react'
+import { isValidElement, useId, useState } from 'react'
+import { Dialog, Field } from '@stellr/web-ui'
 import { zonedToUtcIso, TIMEZONES } from '@/lib/mentoring-format'
 
 function localParts(iso: string, tz: string): { date: string; time: string } {
@@ -11,26 +11,34 @@ function localParts(iso: string, tz: string): { date: string; time: string } {
   return { date, time }
 }
 
-export const inputCls = 'w-full rounded-[9px] border border-line px-3.5 py-2.5 text-sm outline-none focus:border-space-violet'
+export const inputCls = 'min-h-11 w-full rounded-[9px] border border-line-strong px-3.5 py-2.5 text-input mouse:text-sm outline-none focus:border-space-violet'
 
+// Every "ModalShell" in coaching and mentoring is the shared Dialog: a bottom
+// sheet on phones, capped to the screen, focus held inside.
 export function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(14,19,48,.55)' }} onClick={onClose}>
-      <div className="w-full max-w-[460px] rounded-[18px] bg-white p-6 shadow-[0_30px_70px_-20px_rgba(0,0,0,.5)]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between">
-          <h2 className="font-display text-[20px] font-bold text-ink">{title}</h2>
-          <button onClick={onClose} className="rounded-md p-1 text-content-faint hover:bg-surface" aria-label="Close"><X className="h-5 w-5" /></button>
-        </div>
-        <div className="mt-4 space-y-4">{children}</div>
-      </div>
-    </div>
+    <Dialog open onClose={onClose} title={title} size="md" bodyClassName="space-y-4 pt-1">
+      {children}
+    </Dialog>
   )
 }
 
+const CONTROL_TAGS = new Set(['input', 'select', 'textarea'])
+
+// A labelled field. A single input, select or textarea gets a real <label for>;
+// anything else (a group of choices) is a labelled group.
 export function ModalField({ label, children }: { label: string; children: React.ReactNode }) {
+  const labelId = useId()
+  if (isValidElement(children) && typeof children.type === 'string' && CONTROL_TAGS.has(children.type)) {
+    return (
+      <Field label={label} labelSize="small">
+        {children}
+      </Field>
+    )
+  }
   return (
-    <div>
-      <label className="mb-1.5 block text-[12.5px] font-semibold text-content-secondary">{label}</label>
+    <div role="group" aria-labelledby={labelId}>
+      <span id={labelId} className="mb-1.5 block text-xs font-semibold text-content-secondary">{label}</span>
       {children}
     </div>
   )

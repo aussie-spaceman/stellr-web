@@ -291,6 +291,7 @@ export function Navbar() {
                         <li key={item.href}>
                           <Link
                             href={item.href}
+                            aria-current={pathname === item.href ? 'page' : undefined}
                             className="block px-4 py-2.5 text-sm text-content transition-colors hover:bg-surface hover:text-midnight"
                           >
                             {item.label}
@@ -337,6 +338,7 @@ export function Navbar() {
                     <li key={item.href}>
                       <Link
                         href={item.href}
+                        aria-current={pathname === item.href ? 'page' : undefined}
                         className="block px-4 py-2.5 text-sm text-content transition-colors hover:bg-surface hover:text-midnight"
                       >
                         {item.label}
@@ -404,6 +406,7 @@ export function Navbar() {
                         <li>
                           <Link
                             href={link.href}
+                            aria-current={pathname === link.href ? 'page' : undefined}
                             className="flex min-h-11 items-center px-3 text-sm font-semibold text-primary-deep"
                             onClick={() => closeMobile(false)}
                           >
@@ -415,6 +418,7 @@ export function Navbar() {
                         <li key={item.href}>
                           <Link
                             href={item.href}
+                            aria-current={pathname === item.href ? 'page' : undefined}
                             className="flex min-h-11 items-center px-3 text-sm text-content hover:text-midnight"
                             onClick={() => closeMobile(false)}
                           >

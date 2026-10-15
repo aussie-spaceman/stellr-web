@@ -97,20 +97,20 @@ export default function EducatorsPage() {
   return (
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8">
+      <section className="bg-brand-blue-dark text-white py-20 px-4 sm:px-6 lg:px-8 short:py-8">
         <div className="max-w-7xl mx-auto">
           <p className="text-brand-orange font-semibold uppercase tracking-widest text-sm mb-4">
             Community → For Educators &amp; Schools
           </p>
-          <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl">
+          <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl short:text-3xl short:mb-3">
             Bring real-world STEM to your students
           </h1>
-          <p className="text-lg text-content-faint max-w-2xl leading-relaxed">
+          <p className="text-lg text-content-faint max-w-2xl leading-relaxed short:text-base short:leading-snug">
             Educators are at the heart of how Stellr reaches students. We give you the curriculum,
             the training, and the support to deliver industry-grade STEM experiences — without
             adding to your workload.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-8 flex flex-wrap gap-3 short:mt-4">
             <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange hover:bg-amber-500">
               Register as an Educator
             </a>

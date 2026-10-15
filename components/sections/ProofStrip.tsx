@@ -132,25 +132,26 @@ export function ProofStrip({
           onClick={(e) => {
             if (e.target === e.currentTarget) close()
           }}
-          className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 outline-none"
-          style={{ background: 'rgba(8,12,28,.82)' }}
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-midnight-deep/90 px-2 py-4 outline-none sm:p-4"
         >
           <button
             type="button"
             onClick={close}
             aria-label="Close"
-            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+            className="absolute right-2 top-[max(0.5rem,env(safe-area-inset-top))] z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 sm:right-4 sm:top-4"
           >
             <X className="h-5 w-5" />
           </button>
 
-          <div className="flex w-full max-w-5xl items-center gap-3" onClick={(e) => e.stopPropagation()}>
+          {/* On a phone the arrows sit over the photo, so it can use the full
+              width (beside it, they shrank photos to about 230px). */}
+          <div className="relative flex w-full max-w-5xl items-center gap-3" onClick={(e) => e.stopPropagation()}>
             {photos.length > 1 && (
               <button
                 type="button"
                 onClick={() => step(-1)}
                 aria-label="Previous photo"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                className="absolute left-1 top-1/2 z-10 flex h-11 w-11 shrink-0 -translate-y-1/2 items-center justify-center rounded-full bg-midnight-deep/60 text-white transition-colors hover:bg-white/20 sm:static sm:translate-y-0 sm:bg-white/10"
               >
                 <ChevronLeft className="h-6 w-6" />
               </button>
@@ -158,9 +159,9 @@ export function ProofStrip({
             <figure className="min-w-0 flex-1">
               <ResponsivePhoto
                 photo={active}
-                sizes="(max-width: 1024px) 90vw, 960px"
+                sizes="(max-width: 1024px) 100vw, 960px"
                 priority
-                className="max-h-[78vh] bg-black"
+                className="max-h-[78svh] bg-black"
                 imgClassName="object-contain"
               />
               <figcaption className="mt-3 text-center text-sm text-white/90">
@@ -178,7 +179,7 @@ export function ProofStrip({
                 type="button"
                 onClick={() => step(1)}
                 aria-label="Next photo"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                className="absolute right-1 top-1/2 z-10 flex h-11 w-11 shrink-0 -translate-y-1/2 items-center justify-center rounded-full bg-midnight-deep/60 text-white transition-colors hover:bg-white/20 sm:static sm:translate-y-0 sm:bg-white/10"
               >
                 <ChevronRight className="h-6 w-6" />
               </button>

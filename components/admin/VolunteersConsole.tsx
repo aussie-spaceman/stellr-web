@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { UserPlus, FileSignature, ShieldCheck, X, CalendarPlus } from 'lucide-react'
+import { Dialog } from '@stellr/web-ui'
 import MemberPicker, { type PickedMember } from '@/components/admin/MemberPicker'
 
 export interface VolunteerConsoleRow {
@@ -54,12 +55,13 @@ function EventChecklist({
   const [q, setQ] = useState('')
   const filtered = events.filter((e) => e.title.toLowerCase().includes(q.trim().toLowerCase()))
   return (
-    <div className="rounded-lg border border-brand-border">
+    <div className="rounded-lg border border-line-strong focus-within:border-primary-deep">
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Filter events & campaigns…"
-        className="w-full rounded-t-lg border-b border-brand-hairline px-3 py-2 text-sm focus:outline-none"
+        aria-label="Filter events and campaigns"
+        className="w-full rounded-t-lg border-b border-brand-hairline px-3 py-2 text-input focus:outline-none mouse:text-sm"
       />
       <div className="max-h-52 overflow-y-auto p-1">
         {filtered.length === 0 && (
@@ -363,33 +365,37 @@ export function VolunteersConsole({ rows, events }: { rows: VolunteerConsoleRow[
         </table>
       </div>
 
-      {/* Per-row assign-to-events modal */}
-      {assignTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => busy === null && setAssignTarget(null)}>
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-semibold text-brand-blue-dark">Assign {name(assignTarget)} to events</h3>
-              <button onClick={() => setAssignTarget(null)} disabled={busy !== null} className="text-brand-muted-soft hover:text-brand-muted disabled:opacity-50">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <p className="mb-3 text-xs text-brand-muted-soft">Select one or more events. Already-assigned events are left unchanged.</p>
-            <EventChecklist events={events} selected={assignEvents} onToggle={toggle(setAssignEvents)} />
-            <div className="mt-4 flex items-center gap-2">
-              <button
-                onClick={submitAssign}
-                disabled={busy !== null || assignEvents.size === 0}
-                className="rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-blue-bright disabled:opacity-50"
-              >
-                {busy ? 'Assigning…' : `Assign to ${assignEvents.size || ''}`.trim()}
-              </button>
-              <button onClick={() => setAssignTarget(null)} disabled={busy !== null} className="px-2 py-2 text-sm text-brand-muted-soft hover:text-brand-muted disabled:opacity-50">
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Per-row assign-to-events dialog */}
+      <Dialog
+        open={assignTarget !== null}
+        onClose={() => setAssignTarget(null)}
+        title={assignTarget ? `Assign ${name(assignTarget)} to events` : 'Assign to events'}
+        description="Select one or more events. Already-assigned events are left unchanged."
+        size="md"
+        dismissible={busy === null}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setAssignTarget(null)}
+              disabled={busy !== null}
+              className="min-h-11 rounded-control px-4 text-sm font-semibold text-content-secondary hover:bg-surface disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={submitAssign}
+              disabled={busy !== null || assignEvents.size === 0}
+              className="min-h-11 rounded-control bg-primary-deep px-4 text-sm font-semibold text-white transition hover:bg-ink disabled:opacity-50"
+            >
+              {busy ? 'Assigning…' : `Assign to ${assignEvents.size || ''}`.trim()}
+            </button>
+          </>
+        }
+      >
+        <EventChecklist events={events} selected={assignEvents} onToggle={toggle(setAssignEvents)} />
+      </Dialog>
     </div>
   )
 }

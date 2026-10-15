@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { Bell, Check, X } from 'lucide-react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Bell, Check } from 'lucide-react'
+import { Dialog, fieldControlClass } from '@stellr/web-ui'
 import { usePrefillNameEmail } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 import { isEmailLike } from '@/lib/utils'
@@ -13,8 +14,8 @@ type Interest = 'individual' | 'group' | 'unspecified'
 
 /* ── Subscriber modal ─────────────────────────────────────────────────────────
  * Name + email capture for event updates, posting to /api/subscribe. Same
- * modal pattern as the AssetGate / WhitePaperGate lead-capture flows (focus
- * trap, Esc to close, body-scroll lock, success state).
+ * shared Dialog as the AssetGate / WhitePaperGate lead-capture flows (focus
+ * held inside, Esc to close, page behind inert, success state).
  *
  * Only the slug and the intent go over the wire — the route resolves every CRM
  * field from Sanity server-side. */
@@ -42,7 +43,9 @@ function EventNotifyModal({
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
-  const dialogRef = useRef<HTMLDivElement>(null)
+  const doneRef = useRef<HTMLButtonElement>(null)
+  const id = useId()
+  const formId = `${id}-form`
 
   const valid = name.trim().length > 0 && isEmailLike(email)
   const greeting = name.trim().split(/\s+/)[0] || 'there'
@@ -54,41 +57,10 @@ function EventNotifyModal({
     setLoading(false)
   }
 
-  // A11y: Esc closes, Tab is trapped inside the dialog, body scroll locks,
-  // and the first field is focused on open.
+  // The submit button is replaced by Close on success; keep focus in the dialog.
   useEffect(() => {
-    if (!open) return
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    dialogRef.current?.querySelector<HTMLElement>('input, button, a[href]')?.focus()
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        close()
-        return
-      }
-      if (e.key !== 'Tab') return
-      const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled])',
-      )
-      if (!focusables || focusables.length === 0) return
-      const first = focusables[0]
-      const last = focusables[focusables.length - 1]
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault()
-        last.focus()
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault()
-        first.focus()
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prevOverflow
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs on open/close only; the handler reads the dialog through refs
-  }, [open])
+    if (submitted) doneRef.current?.focus()
+  }, [submitted])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -120,127 +92,98 @@ function EventNotifyModal({
     }
   }
 
-  if (!open) return null
-
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[rgba(8,12,28,.62)]"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) close()
-      }}
-    >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Get notified about ${eventTitle}`}
-        className="w-full max-w-[460px] bg-white rounded-panel overflow-hidden shadow-[0_40px_90px_-28px_rgba(8,12,28,.72)]"
-      >
-        {/* Header band */}
-        <div className="relative bg-[linear-gradient(135deg,#20264F,#0E1330)] px-7 py-6 flex items-center gap-4">
-          <div className="w-12 h-12 shrink-0 rounded-full bg-white/10 border border-white/10 flex items-center justify-center">
-            <Bell size={22} className="text-star-gold" />
-          </div>
-          <div>
-            <p className="text-[10.5px] font-display font-bold uppercase tracking-[0.13em] text-star-gold">
-              Event updates
-            </p>
-            <p className="mt-1 font-display text-[15px] font-bold text-white leading-tight">
-              {eventTitle}
-            </p>
-          </div>
+    <Dialog
+      open={open}
+      onClose={close}
+      title={eventTitle}
+      description="Event updates"
+      size="md"
+      dismissible={!loading}
+      footer={
+        !submitted ? (
+          <>
+            {error && (
+              <p role="alert" className="w-full text-center text-ds-meta text-danger">
+                Something went wrong — please try again.
+              </p>
+            )}
+            <button
+              type="submit"
+              form={formId}
+              disabled={!valid || loading}
+              className="inline-flex min-h-11 w-full items-center justify-center rounded-control bg-primary px-6 py-3 font-display text-ds-body font-semibold text-white transition-colors hover:bg-primary-deep disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? 'Signing you up…' : 'Notify me'}
+            </button>
+          </>
+        ) : (
           <button
+            ref={doneRef}
             type="button"
             onClick={close}
-            aria-label="Close"
-            className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
+            className="min-h-11 rounded-control px-4 text-sm font-semibold text-content-muted transition-colors hover:bg-surface hover:text-ink"
           >
-            <X size={20} />
+            Close
           </button>
+        )
+      }
+    >
+      {!submitted ? (
+        <form id={formId} onSubmit={submit} className="space-y-4" noValidate>
+          <div>
+            <h3 className="font-display text-ds-h3 font-bold text-ink">We&rsquo;ll save you a spot in line</h3>
+            <p className="mt-1.5 text-sm leading-relaxed text-content-secondary">
+              {status === 'closed'
+                ? 'Registration has closed for this event. Leave your details and we’ll email you the moment the next one opens.'
+                : 'Leave your details and we’ll email you the moment registration opens — no spam, just the heads-up.'}
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor={`${id}-name`} className="mb-1.5 block text-ds-meta font-semibold text-ink">
+              Full name
+            </label>
+            <input
+              id={`${id}-name`}
+              type="text"
+              autoComplete="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={fieldControlClass}
+            />
+          </div>
+          <div>
+            <label htmlFor={`${id}-email`} className="mb-1.5 block text-ds-meta font-semibold text-ink">
+              Email address
+            </label>
+            <input
+              id={`${id}-email`}
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={fieldControlClass}
+            />
+          </div>
+
+          <p className="text-center text-ds-meta text-content-faint">
+            We respect your inbox. Just the heads-up and the occasional update.
+          </p>
+        </form>
+      ) : (
+        <div className="flex flex-col items-center py-2 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-enviro-green-bg">
+            <Check size={30} strokeWidth={2.4} className="text-enviro-green" aria-hidden="true" />
+          </div>
+          <h3 className="mt-5 font-display text-ds-h3 font-bold text-ink">You&rsquo;re on the list, {greeting}</h3>
+          <p className="mt-2 text-sm leading-relaxed text-content-secondary">
+            We&rsquo;ll email <span className="font-semibold text-ink">{email}</span> with registration news for{' '}
+            {eventTitle}.
+          </p>
         </div>
-
-        {/* Body */}
-        <div className="px-7 py-6">
-          {!submitted ? (
-            <form onSubmit={submit} className="space-y-4" noValidate>
-              <div>
-                <h3 className="font-display text-[21px] font-bold text-ink">
-                  We&rsquo;ll save you a spot in line
-                </h3>
-                <p className="mt-1.5 text-sm text-content-secondary leading-relaxed">
-                  {status === 'closed'
-                    ? 'Registration has closed for this event. Leave your details and we’ll email you the moment the next one opens.'
-                    : 'Leave your details and we’ll email you the moment registration opens — no spam, just the heads-up.'}
-                </p>
-              </div>
-
-              <div>
-                <label htmlFor="en-name" className="block text-[13px] font-semibold text-ink mb-1.5">
-                  Full name
-                </label>
-                <input
-                  id="en-name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3.5 py-3 rounded-[9px] border border-[#D7DCEC] text-[15px] text-ink focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/[0.16]"
-                />
-              </div>
-              <div>
-                <label htmlFor="en-email" className="block text-[13px] font-semibold text-ink mb-1.5">
-                  Email address
-                </label>
-                <input
-                  id="en-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3.5 py-3 rounded-[9px] border border-[#D7DCEC] text-[15px] text-ink focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/[0.16]"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={!valid || loading}
-                className={`w-full inline-flex items-center justify-center rounded-[9px] px-6 py-3.5 font-display text-[15px] font-semibold text-white transition-colors ${
-                  valid && !loading ? 'bg-primary hover:bg-primary-deep' : 'bg-[#A9BEF5] cursor-not-allowed'
-                }`}
-              >
-                {loading ? 'Signing you up…' : 'Notify me'}
-              </button>
-              {error && (
-                <p className="text-center text-[13px] text-[#9A4A41]">
-                  Something went wrong — please try again.
-                </p>
-              )}
-              <p className="text-center text-[12.5px] text-content-faint">
-                We respect your inbox. Just the heads-up and the occasional update.
-              </p>
-            </form>
-          ) : (
-            <div className="flex flex-col items-center text-center py-2">
-              <div className="w-16 h-16 rounded-full bg-enviro-green-bg flex items-center justify-center">
-                <Check size={30} strokeWidth={2.4} className="text-enviro-green" />
-              </div>
-              <h3 className="font-display text-[21px] font-bold text-ink mt-5">
-                You&rsquo;re on the list, {greeting}
-              </h3>
-              <p className="mt-2 text-sm text-content-secondary leading-relaxed">
-                We&rsquo;ll email <span className="font-semibold text-ink">{email}</span> with
-                registration news for {eventTitle}.
-              </p>
-              <button
-                type="button"
-                onClick={close}
-                className="mt-5 text-sm font-semibold text-content-muted hover:text-ink transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+      )}
+    </Dialog>
   )
 }
 
@@ -265,19 +208,19 @@ export function EventHeroCtas({
   const isOpen = status === 'open'
 
   return (
-    <div className="mt-8">
+    <div className="mt-8 short:mt-3">
       <p className="text-xs font-display font-bold uppercase tracking-[0.13em] text-blue-300">
         Compete Now
       </p>
       <div className="mt-3 flex flex-wrap gap-4">
         {isOpen ? (
           <>
-            <a href={`/register/${slug}/individual`} className="btn-primary text-base px-8 py-4">
+            <a href={`/register/${slug}/individual`} className="btn-primary text-base px-8 py-4 short:py-2.5">
               Individual Registration
             </a>
             <a
               href={`/register/${slug}/group`}
-              className="bg-white text-brand-blue font-semibold text-base px-8 py-4 rounded-lg hover:bg-blue-50 transition-colors"
+              className="bg-white text-brand-blue font-semibold text-base px-8 py-4 short:py-2.5 rounded-lg hover:bg-blue-50 transition-colors"
             >
               Group Registration
             </a>
@@ -287,14 +230,14 @@ export function EventHeroCtas({
             <button
               type="button"
               onClick={() => setIntent('individual')}
-              className="btn-outline-white text-base px-8 py-4 inline-flex items-center gap-2"
+              className="btn-outline-white text-base px-8 py-4 short:py-2.5 inline-flex items-center gap-2"
             >
               <Bell size={16} /> Individual Registration
             </button>
             <button
               type="button"
               onClick={() => setIntent('group')}
-              className="btn-outline-white text-base px-8 py-4 inline-flex items-center gap-2"
+              className="btn-outline-white text-base px-8 py-4 short:py-2.5 inline-flex items-center gap-2"
             >
               <Bell size={16} /> Group Registration
             </button>

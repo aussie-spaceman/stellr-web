@@ -60,7 +60,7 @@ const MentionList = forwardRef<
   if (items.length === 0) return null
 
   return (
-    <div className="w-56 overflow-hidden rounded-lg border border-brand-border bg-white py-1 shadow-lg">
+    <div className="w-56 max-w-full overflow-hidden rounded-lg border border-brand-border bg-white py-1 shadow-lg">
       {items.map((item, i) => (
         <button
           type="button"
@@ -69,7 +69,8 @@ const MentionList = forwardRef<
             e.preventDefault()
             command({ id: item.id, label: item.label })
           }}
-          className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm ${
+          // 44px rows to tap on a touch screen; compact under a mouse.
+          className={`flex min-h-11 w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm mouse:min-h-0 ${
             i === index ? 'bg-brand-hairline' : ''
           }`}
         >
@@ -80,6 +81,39 @@ const MentionList = forwardRef<
     </div>
   )
 })
+
+const GAP = 4
+const EDGE = 8
+// Used before the list has rendered and been measured.
+const FALLBACK_HEIGHT = 240
+
+/**
+ * Where the @mention list goes, in screen (fixed) coordinates. It sits under
+ * the caret if it fits there, otherwise above it when there is more room
+ * above (the keyboard has taken the bottom of the screen), and it is kept
+ * inside the visible area left to right. maxWidth / maxHeight cap it to the
+ * room it got; it scrolls inside that.
+ */
+export function placeMentionMenu(
+  caret: { left: number; top: number; bottom: number },
+  menu: { width: number; height: number },
+  view: { left: number; top: number; width: number; height: number },
+): { left: number; top: number; maxWidth: number; maxHeight: number } {
+  const viewRight = view.left + view.width
+  const viewBottom = view.top + view.height
+  const maxWidth = Math.max(0, view.width - EDGE * 2)
+  const width = Math.min(menu.width, maxWidth)
+  const left = Math.max(view.left + EDGE, Math.min(caret.left, viewRight - EDGE - width))
+
+  const height = menu.height || FALLBACK_HEIGHT
+  const below = viewBottom - caret.bottom - GAP - EDGE
+  const above = caret.top - view.top - GAP - EDGE
+  if (height <= below || below >= above) {
+    return { left, top: caret.bottom + GAP, maxWidth, maxHeight: Math.max(0, below) }
+  }
+  const shown = Math.min(height, above)
+  return { left, top: caret.top - GAP - shown, maxWidth, maxHeight: Math.max(0, above) }
+}
 
 // Suggestion config for the Mention extension. Fetches directory-visible members
 // from the mention-search API and renders the dropdown. If the request fails or
@@ -100,16 +134,41 @@ export function mentionSuggestion(): MentionOptions['suggestion'] {
     render: () => {
       let component: ReactRenderer<MentionListRef> | null = null
       let el: HTMLDivElement | null = null
+      let clientRect: (() => DOMRect | null) | null | undefined = null
+      let frame = 0
 
-      const place = (clientRect?: (() => DOMRect | null) | null) => {
+      // Fixed to the screen and placed within what can actually be seen: the
+      // visual viewport, which on a phone is the part above the on-screen
+      // keyboard (and is offset from the page while Safari pans it).
+      const place = () => {
         if (!el || !clientRect) return
         const rect = clientRect()
         if (!rect) return
-        el.style.left = `${rect.left + window.scrollX}px`
-        el.style.top = `${rect.bottom + window.scrollY + 4}px`
+        const vv = window.visualViewport
+        const view = {
+          left: vv?.offsetLeft ?? 0,
+          top: vv?.offsetTop ?? 0,
+          width: vv?.width ?? window.innerWidth,
+          height: vv?.height ?? window.innerHeight,
+        }
+        const pos = placeMentionMenu(rect, { width: el.offsetWidth, height: el.scrollHeight }, view)
+        el.style.left = `${pos.left}px`
+        el.style.top = `${pos.top}px`
+        el.style.maxWidth = `${pos.maxWidth}px`
+        el.style.maxHeight = `${pos.maxHeight}px`
+      }
+      // The list renders after the first placement, so place again once it
+      // has a size (and whenever the keyboard or a scroll moves things).
+      const schedule = () => {
+        cancelAnimationFrame(frame)
+        frame = requestAnimationFrame(place)
       }
 
       const teardown = () => {
+        cancelAnimationFrame(frame)
+        window.visualViewport?.removeEventListener('resize', schedule)
+        window.visualViewport?.removeEventListener('scroll', schedule)
+        window.removeEventListener('scroll', schedule, true)
         el?.remove()
         el = null
         component?.destroy()
@@ -120,15 +179,24 @@ export function mentionSuggestion(): MentionOptions['suggestion'] {
         onStart: (props: SuggestionProps<MentionItem>) => {
           component = new ReactRenderer(MentionList, { props, editor: props.editor })
           el = document.createElement('div')
-          el.style.position = 'absolute'
+          el.style.position = 'fixed'
           el.style.zIndex = '50'
+          el.style.overflowY = 'auto'
+          el.style.overscrollBehavior = 'contain'
           document.body.appendChild(el)
           el.appendChild(component.element)
-          place(props.clientRect)
+          clientRect = props.clientRect
+          place()
+          schedule()
+          window.visualViewport?.addEventListener('resize', schedule)
+          window.visualViewport?.addEventListener('scroll', schedule)
+          window.addEventListener('scroll', schedule, true)
         },
         onUpdate: (props: SuggestionProps<MentionItem>) => {
           component?.updateProps(props)
-          place(props.clientRect)
+          clientRect = props.clientRect
+          place()
+          schedule()
         },
         onKeyDown: (props: SuggestionKeyDownProps) => {
           if (props.event.key === 'Escape') {

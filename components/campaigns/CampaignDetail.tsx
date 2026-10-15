@@ -58,8 +58,10 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
   return (
     <>
       {/* ── Hero ─────────────────────────────────────────────────────── */}
-      <section className="bg-midnight px-8 py-14 text-white">
-        <div className="mx-auto max-w-content">
+      <section className="bg-midnight px-4 py-14 text-white sm:px-8 short:py-6">
+        {/* On a sideways phone the Compete button comes before the dates
+            (flex order; the reading order is unchanged), so it is on screen. */}
+        <div className="mx-auto max-w-content short:flex short:flex-col short:items-start">
           <Link href="/events" className="text-sm text-hero-dim hover:text-white">
             ← All events &amp; campaigns
           </Link>
@@ -79,19 +81,19 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
             </span>
           </div>
 
-          <h1 className="mt-5 font-heading text-4xl font-bold sm:text-5xl">{campaign.title}</h1>
+          <h1 className="mt-5 font-heading text-4xl font-bold sm:text-5xl short:mt-2 short:text-3xl">{campaign.title}</h1>
           {campaign.tagline && (
-            <p className="mt-4 max-w-2xl text-lg text-hero-lead">{campaign.tagline}</p>
+            <p className="mt-4 max-w-2xl text-lg text-hero-lead short:mt-2 short:text-base short:line-clamp-2">{campaign.tagline}</p>
           )}
 
-          <dl className="mt-8 flex flex-wrap gap-x-12 gap-y-4">
+          <dl className="mt-8 flex flex-wrap gap-x-12 gap-y-4 short:order-last short:mt-4 short:gap-y-2">
             {/* Calendar year, not the school-year brand — Fall 2027 runs in 2026. */}
             <Stat label="Runs" value={dates ? `${dayMonth(dates.startDate)} – ${dayMonth(dates.endDate)} ${dates.calendarYear}` : season} />
             <Stat label="Deadline" value={dl?.label ?? 'TBC'} valueClassName="text-star-gold" />
             <Stat label="Cost" value="Free with membership" />
           </dl>
 
-          <div className="mt-8">
+          <div className="mt-8 short:mt-4">
             <CampaignCta
               slug={campaign.slug.current}
               isOpen={isOpen}

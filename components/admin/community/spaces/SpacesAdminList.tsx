@@ -20,6 +20,10 @@ export interface AdminSpaceRow {
   tierNames: string[]
 }
 
+const TH = 'whitespace-nowrap border-b border-line-light px-4 py-3 font-subheading font-semibold'
+const TD = 'border-b border-line-light px-4 py-3 group-last:border-b-0'
+const STICKY = 'sticky left-0 z-10 border-r border-line-light'
+
 export function SpacesAdminList({ initial }: { initial: AdminSpaceRow[] }) {
   const router = useRouter()
   const [creating, setCreating] = useState(false)
@@ -49,47 +53,61 @@ export function SpacesAdminList({ initial }: { initial: AdminSpaceRow[] }) {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-[14px] border border-brand-border bg-white">
-        <table className="w-full text-left text-sm">
+      {/* Scrolls sideways on a phone instead of clipping; the space name is
+          the link into it and stays at the left edge, so Edit is never the
+          only way in. border-separate: a sticky cell in a collapsed table
+          leaves its borders behind when it moves, so row lines live on cells. */}
+      <div
+        role="region"
+        aria-label="Spaces"
+        tabIndex={0}
+        className="relative overflow-x-auto rounded-ds-card border border-line bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+      >
+        <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
           <thead>
-            <tr className="border-b border-brand-hairline text-xs uppercase tracking-[0.05em] text-brand-muted-soft">
-              <th className="px-4 py-3 font-subheading font-semibold">Space</th>
-              <th className="px-4 py-3 font-subheading font-semibold">Access</th>
-              <th className="px-4 py-3 font-subheading font-semibold">Assigned tiers</th>
-              <th className="px-4 py-3 font-subheading font-semibold">Members</th>
-              <th className="px-4 py-3 font-subheading font-semibold">Posting</th>
-              <th className="px-4 py-3" />
+            <tr className="text-xs uppercase tracking-[0.05em] text-content-muted">
+              <th scope="col" className={`${TH} ${STICKY} bg-white`}>Space</th>
+              <th scope="col" className={TH}>Access</th>
+              <th scope="col" className={TH}>Assigned tiers</th>
+              <th scope="col" className={TH}>Members</th>
+              <th scope="col" className={TH}>Posting</th>
+              <th scope="col" className={TH}>
+                <span className="sr-only">Edit</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {initial.map((s) => (
-              <tr key={s.id} className="border-b border-brand-hairline last:border-0">
-                <td className="px-4 py-3">
-                  <span className="flex items-center gap-2">
+              <tr key={s.id} className="group">
+                <td className={`${TD} ${STICKY} bg-white`}>
+                  <Link
+                    href={`/admin/community/spaces/${s.id}`}
+                    className="flex items-center gap-2 font-subheading font-semibold text-ink hover:text-primary hover:underline"
+                  >
                     <ThemeDot theme={s.theme} size={14} />
-                    <span className="font-subheading font-semibold text-brand-blue-dark">{s.name}</span>
-                  </span>
+                    <span>{s.name}</span>
+                  </Link>
                 </td>
-                <td className="px-4 py-3"><AccessBadge type={s.access_type} size="sm" /></td>
-                <td className="px-4 py-3">
+                <td className={`${TD} whitespace-nowrap`}><AccessBadge type={s.access_type} size="sm" /></td>
+                <td className={`${TD} min-w-40`}>
                   {s.access_type === 'open' ? (
-                    <span className="text-brand-muted-soft">All members</span>
+                    <span className="whitespace-nowrap text-content-muted">All members</span>
                   ) : s.tierNames.length ? (
                     <span className="flex flex-wrap gap-1">
                       {s.tierNames.map((n) => <TierPill key={n} name={n} />)}
                     </span>
                   ) : (
-                    <span className="text-brand-muted-soft">—</span>
+                    <span className="text-content-muted">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-brand-muted">{s.memberCount}</td>
-                <td className="px-4 py-3 text-brand-muted">
+                <td className={`${TD} whitespace-nowrap text-content-body`}>{s.memberCount}</td>
+                <td className={`${TD} whitespace-nowrap text-content-body`}>
                   {s.postingPolicy === 'all' ? 'All members' : 'Moderators only'}
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className={`${TD} text-right`}>
                   <Link
                     href={`/admin/community/spaces/${s.id}`}
-                    className="inline-flex items-center gap-1 rounded-lg border border-brand-border px-2.5 py-1.5 text-xs font-subheading font-semibold text-brand-muted hover:bg-brand-canvas"
+                    className="inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-xs font-subheading font-semibold text-content-body hover:bg-surface"
                   >
                     <Pencil className="h-3.5 w-3.5" /> Edit
                   </Link>
@@ -98,7 +116,7 @@ export function SpacesAdminList({ initial }: { initial: AdminSpaceRow[] }) {
             ))}
             {initial.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-brand-muted-soft">
+                <td colSpan={6} className="px-4 py-8 text-center text-content-muted">
                   No spaces yet. Create your first one.
                 </td>
               </tr>

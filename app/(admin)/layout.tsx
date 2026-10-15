@@ -1,6 +1,8 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
-import { UserButton } from '@clerk/nextjs'
+import { ClerkProvider } from '@clerk/nextjs'
+import { AdminUserButton } from '@/components/admin/AdminUserButton'
+import { clerkAppearance } from '@/lib/clerk-appearance'
 import { hasAdminPortalAccess, isAdminClaims } from '@/lib/admin-auth'
 import { AdminSidebar } from '@/components/admin/AdminSidebar'
 import { SiteFooter } from '@/components/layout/SiteFooter'
@@ -15,7 +17,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const isAdmin = isAdminClaims(sessionClaims)
 
   return (
-    <div className="min-h-screen bg-brand-canvas">
+    <ClerkProvider appearance={clerkAppearance}>
+    <div className="min-h-[100svh] bg-brand-canvas">
       <div className="flex">
         <AdminSidebar isAdmin={isAdmin} />
 
@@ -25,10 +28,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <span className="rounded-full bg-brand-blue/10 px-2.5 py-0.5 font-subheading text-xs font-semibold text-brand-blue">
               {isAdmin ? 'Admin' : 'Event Manager'}
             </span>
-            <UserButton />
+            <AdminUserButton />
           </header>
 
-          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 pb-24 lg:px-8 lg:pb-10">
+          <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 pb-24 lg:px-8 lg:pb-10">
             {children}
           </main>
 
@@ -39,5 +42,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
       </div>
     </div>
+    </ClerkProvider>
   )
 }

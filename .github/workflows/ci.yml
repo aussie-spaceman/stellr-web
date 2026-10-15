@@ -277,3 +277,21 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+      # Lighthouse, mobile preset, on the production build this job already
+      # made: the budgets in lighthouserc.json (LCP 2.5s, TBT 200ms, CLS 0.1,
+      # script size, accessibility). Report-only for now — the step can't fail
+      # the job — so the numbers settle before any budget becomes a gate. Read
+      # the summary in the job log or the lighthouse-report artifact.
+      - if: steps.config.outputs.ready == 'true'
+        name: Lighthouse (mobile, report-only)
+        continue-on-error: true
+        run: npx --yes @lhci/cli@0.15.1 autorun --config=./lighthouserc.json
+
+      - if: always() && steps.config.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: lhci-report/
+          retention-days: 14
+          if-no-files-found: ignore

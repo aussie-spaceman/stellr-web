@@ -12,6 +12,14 @@ import { SubscribeForm } from '@/components/forms/SubscribeForm'
 
 export const revalidate = 3600
 
+// No paths are built ahead (no build-time Sanity or Stripe calls): each page is
+// rendered on its first visit and then served from the cache, refreshed on the
+// window above or at once by a Sanity publish (/api/webhooks/sanity). Without
+// this the page renders on every request.
+export function generateStaticParams(): { slug: string }[] {
+  return []
+}
+
 interface PageProps {
   params: Promise<{ slug: string }>
 }
@@ -73,6 +81,7 @@ export default async function NewsArticlePage({ params }: PageProps) {
               src={wmSrc(urlFor(post.coverImage).width(1400).height(560).url())}
               alt={post.title}
               fill
+              sizes="100vw"
               className="object-cover opacity-40"
               priority
             />
@@ -126,6 +135,7 @@ export default async function NewsArticlePage({ params }: PageProps) {
                         src={wmSrc(urlFor(rel.coverImage).width(400).height(240).url())}
                         alt={rel.title}
                         fill
+                        sizes="(min-width: 640px) 33vw, 100vw"
                         className="object-cover"
                       />
                     )}

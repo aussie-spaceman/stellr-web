@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss'
+import plugin from 'tailwindcss/plugin'
 import { tokens } from './lib/tokens'
 
 /* Design System V2 (Claude Design) — generated tokens are the single source of
@@ -74,10 +75,11 @@ const config: Config = {
         },
       },
       fontFamily: {
-        display:     [tokens.font.display, 'system-ui', 'sans-serif'], // Space Grotesk
-        heading:     [tokens.font.display, 'system-ui', 'sans-serif'], // was Norwester
-        subheading:  [tokens.font.body, 'system-ui', 'sans-serif'],    // UI / eyebrows / buttons → Hanken
-        sans:        [tokens.font.body, 'system-ui', 'sans-serif'],    // was Aileron
+        /* next/font variables first (lib/fonts.ts), then the token family name */
+        display:     ['var(--font-space-grotesk)', tokens.font.display, 'system-ui', 'sans-serif'], // Space Grotesk
+        heading:     ['var(--font-space-grotesk)', tokens.font.display, 'system-ui', 'sans-serif'], // was Norwester
+        subheading:  ['var(--font-hanken-grotesk)', tokens.font.body, 'system-ui', 'sans-serif'],   // UI / eyebrows / buttons → Hanken
+        sans:        ['var(--font-hanken-grotesk)', tokens.font.body, 'system-ui', 'sans-serif'],   // was Aileron
         /* Competition print/slide materials only */
         competition:      [tokens.font.competitionDisplay, 'system-ui', 'sans-serif'], // Norwester
         'competition-body':[tokens.font.competitionBody, 'system-ui', 'sans-serif'],   // Aileron
@@ -132,22 +134,28 @@ const config: Config = {
         'featured':  tokens.shadow.featured,
         'panel':     tokens.shadow.panel,
       },
-      screens: {
-        /* Short screens: a phone held sideways is 340–415px tall but wide
-           enough for the sm/md layouts. `short:` lets chrome and heroes shrink
-           on height, which the width breakpoints can't see. */
-        short: { raw: '(max-height: 500px)' },
-        /* Devices whose main pointer is a mouse or trackpad. Form fields drop
-           to 14px only here: on touch screens (phones, iPads at any width)
-           they stay at 16px so iOS doesn't zoom in on focus. */
-        mouse: { raw: '(pointer: fine)' },
-      },
     },
   },
   /* Touch screens keep :hover after a tap (a "stuck" lifted card or a pill
      that looks selected). Only apply hover styles where hover exists. */
   future: { hoverOnlyWhenSupported: true },
-  plugins: [],
+  plugins: [
+    /* Two media variants that are not widths. They are plugin variants, not
+       `screens`: a raw screen switches off Tailwind's min-[…]/max-[…]
+       variants for the whole project. Plugin variants are emitted BEFORE the
+       width breakpoints, so `short:` adds `:root` to outrank sm:/md:/lg: on
+       the same property (a sideways phone is wider than sm). */
+    plugin(({ addVariant }) => {
+      /* Short screens: a phone held sideways is 340–415px tall but wide
+         enough for the sm/md layouts. `short:` lets chrome and heroes shrink
+         on height, which the width breakpoints can't see. */
+      addVariant('short', '@media (max-height: 500px) { :root & }')
+      /* Devices whose main pointer is a mouse or trackpad. Form fields drop
+         to 14px only here: on touch screens (phones, iPads at any width)
+         they stay at 16px so iOS doesn't zoom in on focus. */
+      addVariant('mouse', '@media (pointer: fine)')
+    }),
+  ],
 }
 
 export default config

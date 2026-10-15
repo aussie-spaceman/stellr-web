@@ -20,6 +20,14 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all', label: 'All' },
 ]
 
+// On a phone the table scrolls sideways inside its card instead of being
+// clipped, with the member's name (the link to them) held at the left edge.
+// border-separate: a sticky cell in a collapsed table leaves its borders
+// behind when it moves, so row lines live on the cells.
+const TH = 'whitespace-nowrap border-b border-line-light px-4 py-2.5 font-medium'
+const TD = 'border-b border-line-light px-4 py-2.5 group-last:border-b-0'
+const STICKY = 'sticky left-0 z-10 border-r border-line-light'
+
 function fmt(iso: string) {
   return formatDateShort(iso)
 }
@@ -80,31 +88,40 @@ export function ComplianceAuditTable({
           No members match this filter.
         </p>
       ) : (
-        <div className="rounded-xl border border-brand-border bg-white overflow-hidden">
-          <table className="w-full text-sm">
+        <div
+          role="region"
+          aria-label="Background checks and licenses"
+          tabIndex={0}
+          className="relative overflow-x-auto rounded-ds-card border border-line bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+        >
+          <table className="min-w-full border-separate border-spacing-0 text-sm">
             <thead>
-              <tr className="border-b border-brand-hairline text-left text-xs uppercase tracking-wide text-brand-muted-soft">
-                <th className="px-4 py-2.5 font-medium">Member</th>
-                <th className="px-4 py-2.5 font-medium">Role</th>
-                <th className="px-4 py-2.5 font-medium">Status</th>
-                <th className="px-4 py-2.5 font-medium">Detail</th>
-                <th className="px-4 py-2.5 font-medium text-right">Action</th>
+              <tr className="text-left text-xs uppercase tracking-wide text-content-muted">
+                <th scope="col" className={`${TH} ${STICKY} bg-white`}>Member</th>
+                <th scope="col" className={TH}>Role</th>
+                <th scope="col" className={TH}>Status</th>
+                <th scope="col" className={TH}>Detail</th>
+                <th scope="col" className={`${TH} text-right`}>Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-brand-hairline">
+            <tbody>
               {filtered.map((r) => {
                 const pill = COMPLIANCE_PILL[r.state]
                 const reviewable = r.license && !r.license.verified_at
                 return (
-                  <tr key={r.memberId} className="hover:bg-brand-canvas">
-                    <td className="px-4 py-2.5">
-                      <Link href={`/admin/members/${r.memberId}`} className="font-medium text-brand-blue hover:text-brand-blue">
-                        {r.name}
-                      </Link>
-                      {r.email && <p className="text-xs text-brand-muted-soft truncate">{r.email}</p>}
+                  <tr key={r.memberId} className="group hover:bg-surface">
+                    <td className={`${TD} ${STICKY} bg-white group-hover:bg-surface`}>
+                      {/* Capped so a long email truncates instead of widening
+                          the column that stays on screen. */}
+                      <div className="max-w-48 sm:max-w-60">
+                        <Link href={`/admin/members/${r.memberId}`} className="font-medium text-primary hover:underline">
+                          {r.name}
+                        </Link>
+                        {r.email && <p className="text-xs text-content-muted truncate" title={r.email}>{r.email}</p>}
+                      </div>
                     </td>
-                    <td className="px-4 py-2.5 text-brand-muted">{displayEventRole(r.eventRole) ?? r.eventRole ?? '—'}</td>
-                    <td className="px-4 py-2.5">
+                    <td className={`${TD} whitespace-nowrap text-content-body`}>{displayEventRole(r.eventRole) ?? r.eventRole ?? '—'}</td>
+                    <td className={`${TD} whitespace-nowrap`}>
                       <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${pill.cls}`}>{pill.label}</span>
                       {reviewable && (
                         <span className="ml-1.5 inline-flex text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">
@@ -112,11 +129,11 @@ export function ComplianceAuditTable({
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-brand-muted-soft text-xs">{r.detail ?? '—'}</td>
-                    <td className="px-4 py-2.5 text-right">
+                    <td className={`${TD} min-w-48 text-content-muted text-xs`}>{r.detail ?? '—'}</td>
+                    <td className={`${TD} whitespace-nowrap text-right`}>
                       <Link
                         href={`/admin/members/${r.memberId}`}
-                        className="text-xs font-medium text-brand-blue hover:text-brand-blue"
+                        className="text-xs font-medium text-primary hover:underline"
                       >
                         Manage →
                       </Link>

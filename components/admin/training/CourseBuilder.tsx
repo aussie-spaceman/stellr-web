@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import {
-  Plus, Trash2, GripVertical, Pencil, Check, X, ChevronDown, ChevronRight,
+  Plus, Trash2, GripVertical, Pencil, Check, X, ChevronDown, ChevronRight, ChevronUp,
   Radio, Video, FileText, Paperclip, Play, Upload, Sparkles,
 } from 'lucide-react'
 import { INTERACTIVE_OPTIONS } from '@/lib/interactive-lessons-meta'
@@ -326,9 +326,17 @@ function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => 
   const [sectionTitle, setSectionTitle] = useState('')
   const [orderIds, setOrderIds] = useState<string[]>(sections.map((s) => s.id))
   const [dragId, setDragId] = useState<string | null>(null)
+  const [moveStatus, setMoveStatus] = useState('')
 
   const idsKey = sections.map((s) => s.id).join(',')
   useEffect(() => setOrderIds(sections.map((s) => s.id)), [idsKey]) // eslint-disable-line react-hooks/exhaustive-deps -- `sections` is rebuilt every render; the joined id string is the stable identity
+
+  // The order the server holds, as far as this tab knows: reset from the
+  // props, then updated as each PATCH goes out, so a second move made before
+  // the refresh lands diffs against what was just sent, not the stale props.
+  const orderKey = sections.map((s) => `${s.id}:${s.display_order}`).join(',')
+  const savedOrder = useRef(new Map<string, number>())
+  useEffect(() => { savedOrder.current = new Map(sections.map((s) => [s.id, s.display_order])) }, [orderKey]) // eslint-disable-line react-hooks/exhaustive-deps -- keyed on the joined id:order string, as above
 
   const byId = new Map(sections.map((s) => [s.id, s]))
   const ordered = orderIds.map((id) => byId.get(id)).filter((s): s is AdminSection => !!s)
@@ -353,16 +361,32 @@ function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => 
       const next = [...prev]; next.splice(from, 1); next.splice(to, 0, dragId); return next
     })
   }
-  const persistOrder = async () => {
-    const ids = orderIds; setDragId(null)
-    const moved = ids.some((id, idx) => (byId.get(id)?.display_order ?? idx) !== idx)
-    if (!moved) return
+  // Saves every section whose position changed. Shared by drag-and-drop and
+  // the Move up / Move down buttons.
+  const persist = async (ids: string[]) => {
+    const saved = savedOrder.current
+    const changed = ids.filter((id, idx) => (saved.get(id) ?? idx) !== idx)
+    if (changed.length === 0) return
+    for (const id of changed) saved.set(id, ids.indexOf(id))
     await Promise.all(
-      ids.map((id, idx) => (byId.get(id)?.display_order ?? idx) === idx ? null
-        : fetch('/api/admin/community/training/sections', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, displayOrder: idx }) }))
-        .filter((p): p is Promise<Response> => p !== null)
+      changed.map((id) =>
+        fetch('/api/admin/community/training/sections', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, displayOrder: ids.indexOf(id) }) }))
     )
     onDone()
+  }
+  const persistOrder = async () => {
+    const ids = orderIds; setDragId(null)
+    await persist(ids)
+  }
+  // The non-drag way to reorder (WCAG 2.5.7): one step up or down per press.
+  const move = (id: string, dir: -1 | 1) => {
+    const from = orderIds.indexOf(id)
+    const to = from + dir
+    if (from === -1 || to < 0 || to >= orderIds.length) return
+    const next = [...orderIds]; next.splice(from, 1); next.splice(to, 0, id)
+    setOrderIds(next)
+    setMoveStatus(`“${byId.get(id)?.title ?? 'Section'}” moved to position ${to + 1} of ${next.length}.`)
+    void persist(next)
   }
 
   return (
@@ -371,11 +395,12 @@ function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => 
         <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Curriculum</p>
         {ordered.length > 1 && <p className="text-[11px] text-brand-muted-soft">Drag sections to reorder</p>}
       </div>
+      <p className="sr-only" aria-live="polite">{moveStatus}</p>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_1.15fr]">
         {/* Left — sections + lessons */}
         <div className="space-y-3">
-          {ordered.map((s) => (
+          {ordered.map((s, idx) => (
             <SectionCard
               key={s.id}
               moduleId={m.id}
@@ -383,6 +408,9 @@ function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => 
               lessons={lessonsIn(s.id)}
               selectedLessonId={editing?.lesson?.id ?? null}
               reorderable={ordered.length > 1}
+              isFirst={idx === 0}
+              isLast={idx === ordered.length - 1}
+              onMove={(dir) => move(s.id, dir)}
               dragging={dragId === s.id}
               onDragStart={() => setDragId(s.id)}
               onDragEnter={() => reorderOver(s.id)}
@@ -421,18 +449,33 @@ function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => 
   )
 }
 
+const MOVE_BUTTON =
+  'inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-control text-content-muted hover:bg-surface hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent'
+
 function SectionCard({
-  moduleId, section: s, lessons, selectedLessonId, reorderable, dragging,
+  moduleId, section: s, lessons, selectedLessonId, reorderable, isFirst, isLast, onMove, dragging,
   onDragStart, onDragEnter, onDrop, onDragEnd, onSelectLesson, onAddLesson, onDone,
 }: {
   moduleId: string; section: AdminSection; lessons: AdminLesson[]; selectedLessonId: string | null
-  reorderable: boolean; dragging: boolean
+  reorderable: boolean; isFirst: boolean; isLast: boolean; onMove: (dir: -1 | 1) => void; dragging: boolean
   onDragStart: () => void; onDragEnter: () => void; onDrop: () => void; onDragEnd: () => void
   onSelectLesson: (l: AdminLesson) => void; onAddLesson: () => void; onDone: () => void
 }) {
   const [open, setOpen] = useState(true)
   const [editingTitle, setEditingTitle] = useState(false)
   const [title, setTitle] = useState(s.title)
+  // Keep focus on the arrow that was pressed as the card moves (or on the
+  // other one once it reaches an end and the pressed one is disabled).
+  const upRef = useRef<HTMLButtonElement>(null)
+  const downRef = useRef<HTMLButtonElement>(null)
+  const [refocus, setRefocus] = useState<-1 | 1 | null>(null)
+  useEffect(() => {
+    if (refocus === null) return
+    const target = refocus === -1 ? (isFirst ? downRef : upRef) : (isLast ? upRef : downRef)
+    target.current?.focus()
+    setRefocus(null)
+  }, [refocus, isFirst, isLast])
+  const moveBy = (dir: -1 | 1) => { onMove(dir); setRefocus(dir) }
 
   const rename = async () => {
     const next = title.trim()
@@ -463,6 +506,16 @@ function SectionCard({
           <button onClick={() => setEditingTitle(true)} className="min-w-0 flex-1 truncate text-left text-sm font-bold text-brand-blue-dark">{s.title}</button>
         )}
         <span className="shrink-0 text-xs text-brand-muted-soft">{lessons.length} {lessons.length === 1 ? 'lesson' : 'lessons'}</span>
+        {reorderable && (
+          <>
+            <button ref={upRef} type="button" onClick={() => moveBy(-1)} disabled={isFirst} aria-label={`Move ${s.title} up`} className={MOVE_BUTTON}>
+              <ChevronUp className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button ref={downRef} type="button" onClick={() => moveBy(1)} disabled={isLast} aria-label={`Move ${s.title} down`} className={MOVE_BUTTON}>
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </>
+        )}
         <button onClick={() => setEditingTitle(true)} className="text-brand-muted-soft hover:text-brand-muted" aria-label="Rename section"><Pencil className="h-3.5 w-3.5" /></button>
         <button onClick={remove} className="text-brand-muted-soft hover:text-red-500" aria-label="Delete section"><Trash2 className="h-3.5 w-3.5" /></button>
       </div>

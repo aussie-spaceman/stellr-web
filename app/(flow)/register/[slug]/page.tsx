@@ -5,6 +5,7 @@ import { getEventBySlug } from '@/lib/sanity'
 import { formatDate, formatDateRange, eventLastDay, registrationStatus } from '@/lib/utils'
 import { getCurrentMember } from '@/lib/community'
 import { RegistrationAuthBanner } from '@/components/registration/RegistrationAuthBanner'
+import { StepBar } from '@/components/registration/StepBar'
 
 const APP = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.stellreducation.org'
 const WWW = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
@@ -77,16 +78,7 @@ export default async function RegisterTypePage({ params }: PageProps) {
       {/* Step indicator */}
       <div className="bg-white border-b border-line">
         <div className="max-w-2xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="w-6 h-6 rounded-full bg-brand-blue text-white flex items-center justify-center text-xs font-bold">1</span>
-            <span className="font-medium text-brand-blue-dark">Registration Type</span>
-            <span className="text-content-faint mx-2">›</span>
-            <span className="w-6 h-6 rounded-full bg-line-light text-content-faint flex items-center justify-center text-xs font-bold">2</span>
-            <span className="text-content-faint">Your Details</span>
-            <span className="text-content-faint mx-2">›</span>
-            <span className="w-6 h-6 rounded-full bg-line-light text-content-faint flex items-center justify-center text-xs font-bold">3</span>
-            <span className="text-content-faint">Confirmation</span>
-          </div>
+          <StepBar steps={['Registration Type', 'Your Details', 'Confirmation']} current={1} />
         </div>
       </div>
 

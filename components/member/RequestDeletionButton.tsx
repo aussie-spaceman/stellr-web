@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Dialog, fieldControlClass } from '@stellr/web-ui'
 
 interface Props {
   /** One of the member-requestable entity types: 'event_participation' | 'school' | 'session'. */
@@ -19,6 +20,7 @@ export function RequestDeletionButton({ entity, id, label, className }: Props) {
   const [reason, setReason] = useState('')
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
+  const sending = state === 'sending'
 
   async function submit() {
     setState('sending')
@@ -51,34 +53,49 @@ export function RequestDeletionButton({ entity, id, label, className }: Props) {
         Request deletion
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => state !== 'sending' && setOpen(false)}>
-          <div className="bg-white rounded-xl border border-brand-border shadow-xl max-w-md w-full p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-brand-blue-dark">Request deletion</h2>
-            <p className="text-sm text-brand-muted">
-              Ask an administrator to delete {label}. This is reviewed before anything is removed.
-            </p>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Reason (optional)"
-              rows={3}
-              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-            />
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <div className="flex items-center justify-end gap-3">
-              <button onClick={() => setOpen(false)} className="text-sm text-brand-muted-soft hover:text-brand-muted px-3 py-1.5">Cancel</button>
-              <button
-                onClick={submit}
-                disabled={state === 'sending'}
-                className="bg-brand-blue text-white text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-brand-blue-dark disabled:opacity-50"
-              >
-                {state === 'sending' ? 'Sending…' : 'Send request'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Request deletion"
+        description={<>Ask an administrator to delete {label}. This is reviewed before anything is removed.</>}
+        size="md"
+        role="alertdialog"
+        dismissible={!sending}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              disabled={sending}
+              className="min-h-11 rounded-control px-4 text-sm font-semibold text-content-secondary hover:bg-surface disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={sending}
+              className="min-h-11 rounded-control bg-danger px-4 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+            >
+              {sending ? 'Sending…' : 'Send request'}
+            </button>
+          </>
+        }
+      >
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Reason (optional)"
+          aria-label="Reason (optional)"
+          rows={3}
+          className={fieldControlClass}
+        />
+        {error && (
+          <p role="alert" className="mt-3 text-sm text-danger">
+            {error}
+          </p>
+        )}
+      </Dialog>
     </>
   )
 }

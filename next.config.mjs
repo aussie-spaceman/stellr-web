@@ -209,10 +209,16 @@ const nextConfig = {
     ]
   },
   images: {
+    // AVIF first: about 20–30% smaller than WebP for photos, and every phone
+    // browser in use decodes it. Browsers that don't get WebP.
+    formats: ['image/avif', 'image/webp'],
     remotePatterns: [
       { protocol: 'https', hostname: 'cdn.sanity.io' },
       { protocol: 'https', hostname: 'images.unsplash.com' },
       { protocol: 'https', hostname: 'img.clerk.com' },
+      // The media host (lib/media-manifest mediaUrl): lets large PNG/JPEG
+      // assets such as the student-work slides go through the optimizer.
+      { protocol: 'https', hostname: '*.public.blob.vercel-storage.com' },
     ],
     // Next's default local pattern is `{ pathname: '/**', search: '' }`, which
     // forbids query strings on local images. Our watermark serve-route emits

@@ -1,9 +1,9 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import type { EventRosterData, PaymentPill, RosterParticipant } from '@/lib/event-admin'
+import type { EventRosterData, PaymentPill, RosterGroup, RosterParticipant } from '@/lib/event-admin'
 import { PILL_CLASSES as DOCUSIGN_PILL_CLASSES, type DocusignPill } from '@/lib/docusign-status'
 import type { ComplianceState } from '@/lib/compliance'
 import type { CompanyRow } from '@/components/admin/EventCompanies'
@@ -48,6 +48,11 @@ const COMPLIANCE_PILLS: Record<ComplianceState, { label: string; className: stri
 
 // Shared column widths so every group/individual table aligns line-to-line.
 // table-fixed + a common colgroup keeps the columns identical across sections.
+// The table only shows from lg up (phones and portrait tablets get one card
+// per participant), and it never shrinks below the content column: squeezed
+// into a 732px pane beside the sidebar, eleven percentage columns left Grade
+// a few pixels wide. Narrower than that, the table scrolls sideways with the
+// name column held at the left edge.
 const COLUMNS = [
   { label: 'Name', width: '15%' },
   { label: 'Role', width: '7%' },
@@ -61,6 +66,18 @@ const COLUMNS = [
   { label: 'Status', width: '8%' },
   { label: 'Actions', width: '10%' },
 ] as const
+
+// border-separate: a sticky cell in a collapsed table leaves its borders
+// behind when it moves, so the row lines live on the cells, not the rows.
+const TD = 'border-b border-line-light px-4 py-2.5 group-last:border-b-0'
+const STICKY = 'sticky left-0 z-10 border-r border-line-light'
+
+// Row actions on a participant card: 44px tall, so they can be hit with a
+// thumb. TAP_WRAPPED styles the button inside SendPayLinkButton and
+// ReissueDocusignButton, whose className lands on a wrapping <span>.
+const TAP = 'inline-flex min-h-11 items-center justify-center rounded-control border border-line bg-white px-3 text-sm font-medium'
+const TAP_WRAPPED =
+  'flex-wrap [&>button]:inline-flex [&>button]:min-h-11 [&>button]:items-center [&>button]:rounded-control [&>button]:border [&>button]:border-line [&>button]:bg-white [&>button]:px-3 [&>button]:text-sm'
 
 type PaymentFilter = 'all' | 'paid' | 'unpaid'
 type DocusignFilter = 'all' | 'completed' | 'outstanding'
@@ -137,6 +154,103 @@ export default function EventRoster({
   }
 
   const companyLabel = (c: CompanyRow) => (c.name ? `${c.number} — ${c.name}` : `Company ${c.number}`)
+
+  // Each participant renders twice — a card below lg, a table row from lg up —
+  // so the cells and actions are built once here and used by both.
+
+  // Students (auto-assign places them) and mentors (placed here by hand) get a
+  // company number to be told at check-in.
+  const placeable = (p: RosterParticipant) => STUDENT_ROLES.includes(p.event_role ?? '') || p.event_role === 'mentor'
+
+  const companySelect = (p: RosterParticipant, className: string) => (
+    <select
+      value={p.company_id ?? ''}
+      disabled={moving === p.id}
+      onChange={(e) => moveParticipant(p.id, e.target.value || null)}
+      aria-label={`Company for ${p.first_name} ${p.last_name}`}
+      className={className}
+    >
+      <option value="">Unassigned</option>
+      {companies.map((c) => (
+        <option key={c.id} value={c.id}>
+          {companyLabel(c)}
+        </option>
+      ))}
+    </select>
+  )
+
+  const paymentCell = (p: RosterParticipant) => (
+    <>
+      <Pill {...PAYMENT_PILLS[p.payment_pill]} />
+      {/* Refunded in the Stripe dashboard. The pill stays "paid"
+          because the money did arrive; this says it went back. */}
+      {p.refund_detail && <p className="mt-1 text-[11px] leading-tight text-brand-grey-dark">{p.refund_detail}</p>}
+    </>
+  )
+
+  const docusignCell = (p: RosterParticipant) => (
+    <>
+      <Pill label={p.docusign_label} className={DOCUSIGN_PILL_CLASSES[p.docusign_pill]} />
+      {/* Names the outstanding signer. Without this, answering
+          "we already signed it" meant querying the DB and then
+          DocuSign — which is exactly what happened on 4 Sept 2026. */}
+      {p.docusign_detail && <p className="mt-1 text-[11px] leading-tight text-brand-grey-dark">{p.docusign_detail}</p>}
+    </>
+  )
+
+  const statusPill = (p: RosterParticipant) =>
+    p.checked_in_at ? (
+      <Pill label="Checked In" className="bg-green-100 text-green-700" />
+    ) : (
+      <Pill label="Registered" className="bg-orange-100 text-orange-700" />
+    )
+
+  const rowActions = (group: RosterGroup, p: RosterParticipant, card: boolean) => (
+    <>
+      {group.type === 'individual' && group.payLinkSendable && (
+        <SendPayLinkButton
+          eventSlug={eventSlug}
+          registrationId={group.registrationId}
+          className={card ? TAP_WRAPPED : undefined}
+        />
+      )}
+      {p.event_role === 'mentor' && p.compliance_pill === 'valid_bc' && (
+        <a
+          href={`/api/admin/events/${eventSlug}/background-reports?participant=${p.id}`}
+          className={card ? `${TAP} text-primary` : 'text-xs font-medium text-brand-blue hover:text-brand-blue-dark'}
+        >
+          {isAdmin ? 'Checkr Report' : 'Clearance PDF'}
+        </a>
+      )}
+      {/* Fixes a typo or bounce on the same envelope: keeps
+          signatures and uses no monthly envelope, so it comes
+          before Reissue (which voids and starts again). */}
+      {p.correctable_agreement_id && (
+        <CorrectSignerEmailButton
+          agreementId={p.correctable_agreement_id}
+          emphasise={p.docusign_pill === 'bounced'}
+          className={card ? TAP : undefined}
+        />
+      )}
+      {REISSUABLE_PILLS.has(p.docusign_pill) && (
+        <ReissueDocusignButton
+          eventSlug={eventSlug}
+          participantId={p.id}
+          className={card ? TAP_WRAPPED : undefined}
+        />
+      )}
+      <DeleteEntityButton
+        entity="participant"
+        id={p.id}
+        name={`${p.first_name} ${p.last_name}'s registration`}
+        label="Delete Registration"
+        softDeletable={false}
+        requireTypedConfirm={false}
+        refundable
+        className={card ? `${TAP} text-danger` : 'text-xs font-medium text-red-600 hover:text-red-800'}
+      />
+    </>
+  )
 
   const filtered = useMemo(
     () =>
@@ -259,11 +373,11 @@ export default function EventRoster({
               }`}
             >
               <div
-                className={`px-4 py-2 flex items-center justify-between gap-3 text-xs font-subheading font-semibold uppercase tracking-wide ${
+                className={`px-4 py-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs font-subheading font-semibold uppercase tracking-wide ${
                   group.type === 'group' ? 'bg-brand-blue/5 text-brand-blue' : 'bg-brand-canvas text-brand-muted-soft'
                 }`}
               >
-                <span className="flex items-center gap-2">
+                <span className="flex flex-wrap items-center gap-2">
                   {group.type === 'group' ? `Group — ${group.groupLabel}` : 'Individual Registration'}
                   {group.scholarship && (
                     <ScholarshipBadge percent={group.scholarship.percentOff} refundCents={group.scholarship.refundCents} />
@@ -272,7 +386,7 @@ export default function EventRoster({
                 {/* Individual registrations need no header delete — the per-row
                     "Delete Registration" removes the participant and auto-withdraws
                     the emptied registration. */}
-                <span className="flex items-center gap-3">
+                <span className="flex flex-wrap items-center gap-3">
                   {/* Invoiced groups are settled offline — an admin records payment
                       here so member/roster pills read truthfully and a receipt opens. */}
                   {group.type === 'group' && group.invoiceRequested && (
@@ -313,136 +427,132 @@ export default function EventRoster({
                   )}
                 </span>
               </div>
-              <table className="w-full table-fixed text-sm bg-white">
-                <colgroup>
-                  {COLUMNS.map((c) => (
-                    <col key={c.label} style={{ width: c.width }} />
-                  ))}
-                </colgroup>
-                <thead>
-                  <tr className="border-b border-brand-hairline text-left">
-                    {COLUMNS.map((c) => (
-                      <th
-                        key={c.label}
-                        className={`px-4 py-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide ${
-                          c.label === 'Actions' ? 'text-right' : ''
-                        }`}
-                      >
-                        {c.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-brand-hairline">
-                  {group.participants.map((p) => (
-                    <tr key={p.id} className="hover:bg-brand-canvas">
-                      <td className="px-4 py-2.5">
-                        <span className="font-medium text-brand-blue-dark">
+              {/* Below lg: one card per participant. */}
+              <ul className="divide-y divide-line-light bg-white lg:hidden">
+                {group.participants.map((p) => (
+                  <li key={p.id} className="space-y-3 px-4 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="font-subheading text-base font-semibold text-ink">
                           {p.first_name} {p.last_name}
-                        </span>
-                        <p className="text-xs text-brand-muted-soft truncate" title={p.email}>
+                        </h3>
+                        <p className="truncate text-xs text-content-muted" title={p.email}>
                           {p.email}
                         </p>
-                      </td>
-                      <td className="px-4 py-2.5 text-brand-muted">{displayEventRole(p.event_role) ?? p.event_role ?? '—'}</td>
-                      <td className="px-4 py-2.5 text-brand-muted">{p.school_name ?? '—'}</td>
-                      <td className="px-4 py-2.5 text-brand-muted">{p.grade ?? '—'}</td>
-                      <td className="px-4 py-2.5 text-brand-muted">{p.t_shirt_size ?? '—'}</td>
-                      <td className="px-4 py-2.5">
-                        {/* Students (auto-assign places them) and mentors (placed here by
-                            hand) get a company number to be told at check-in. */}
-                        {STUDENT_ROLES.includes(p.event_role ?? '') || p.event_role === 'mentor' ? (
-                          companies.length === 0 ? (
-                            <span className="text-brand-muted-soft">—</span>
-                          ) : (
-                            <select
-                              value={p.company_id ?? ''}
-                              disabled={moving === p.id}
-                              onChange={(e) => moveParticipant(p.id, e.target.value || null)}
-                              className="border border-brand-border rounded px-2 py-1 text-xs bg-white text-brand-muted disabled:opacity-50 max-w-full"
-                            >
-                              <option value="">Unassigned</option>
-                              {companies.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                  {companyLabel(c)}
-                                </option>
-                              ))}
-                            </select>
-                          )
-                        ) : (
-                          <span className="text-brand-muted-soft">n/a</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Pill {...PAYMENT_PILLS[p.payment_pill]} />
-                        {/* Refunded in the Stripe dashboard. The pill stays "paid"
-                            because the money did arrive; this says it went back. */}
-                        {p.refund_detail && (
-                          <p className="mt-1 text-[11px] leading-tight text-brand-grey-dark">{p.refund_detail}</p>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Pill label={p.docusign_label} className={DOCUSIGN_PILL_CLASSES[p.docusign_pill]} />
-                        {/* Names the outstanding signer. Without this, answering
-                            "we already signed it" meant querying the DB and then
-                            DocuSign — which is exactly what happened on 4 Sept 2026. */}
-                        {p.docusign_detail && (
-                          <p className="mt-1 text-[11px] leading-tight text-brand-grey-dark">{p.docusign_detail}</p>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5">
+                      </div>
+                      <span className="shrink-0">{statusPill(p)}</span>
+                    </div>
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
+                      <CardField label="Role">{displayEventRole(p.event_role) ?? p.event_role ?? '—'}</CardField>
+                      <CardField label="School">{p.school_name ?? '—'}</CardField>
+                      <CardField label="Grade">{p.grade ?? '—'}</CardField>
+                      <CardField label="Shirt">{p.t_shirt_size ?? '—'}</CardField>
+                      <CardField label="Payment">{paymentCell(p)}</CardField>
+                      <CardField label="DocuSign">{docusignCell(p)}</CardField>
+                      <CardField label="Background">
                         <Pill {...COMPLIANCE_PILLS[p.compliance_pill]} />
-                      </td>
-                      <td className="px-4 py-2.5">
-                        {p.checked_in_at ? (
-                          <Pill label="Checked In" className="bg-green-100 text-green-700" />
-                        ) : (
-                          <Pill label="Registered" className="bg-orange-100 text-orange-700" />
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-right space-x-3">
-                        {group.type === 'individual' && group.payLinkSendable && (
-                          <SendPayLinkButton eventSlug={eventSlug} registrationId={group.registrationId} />
-                        )}
-                        {p.event_role === 'mentor' && p.compliance_pill === 'valid_bc' && (
-                          <a
-                            href={`/api/admin/events/${eventSlug}/background-reports?participant=${p.id}`}
-                            className="text-xs font-medium text-brand-blue hover:text-brand-blue-dark"
-                          >
-                            {isAdmin ? 'Checkr Report' : 'Clearance PDF'}
-                          </a>
-                        )}
-                        {/* Fixes a typo or bounce on the same envelope: keeps
-                            signatures and uses no monthly envelope, so it comes
-                            before Reissue (which voids and starts again). */}
-                        {p.correctable_agreement_id && (
-                          <CorrectSignerEmailButton
-                            agreementId={p.correctable_agreement_id}
-                            emphasise={p.docusign_pill === 'bounced'}
-                          />
-                        )}
-                        {REISSUABLE_PILLS.has(p.docusign_pill) && (
-                          <ReissueDocusignButton eventSlug={eventSlug} participantId={p.id} />
-                        )}
-                        <DeleteEntityButton
-                          entity="participant"
-                          id={p.id}
-                          name={`${p.first_name} ${p.last_name}'s registration`}
-                          label="Delete Registration"
-                          softDeletable={false}
-                          requireTypedConfirm={false}
-                          refundable
-                          className="text-xs font-medium text-red-600 hover:text-red-800"
-                        />
-                      </td>
+                      </CardField>
+                    </dl>
+                    {placeable(p) && companies.length > 0 && (
+                      <label className="block">
+                        <span className="mb-1 block text-xs text-content-muted">Company</span>
+                        {companySelect(p, 'input-field disabled:opacity-50')}
+                      </label>
+                    )}
+                    {/* [&>button]:text-sm: CorrectSignerEmailButton keeps its
+                        own text-xs, which outranks TAP's text-sm in the CSS. */}
+                    <div className="flex flex-wrap gap-2 [&>button]:text-sm">{rowActions(group, p, true)}</div>
+                  </li>
+                ))}
+              </ul>
+
+              {/* From lg up: the table. */}
+              <div
+                role="region"
+                aria-label={
+                  group.type === 'group'
+                    ? `Group roster: ${group.groupLabel}`
+                    : `Individual registration: ${group.participants.map((p) => `${p.first_name} ${p.last_name}`).join(', ')}`
+                }
+                tabIndex={0}
+                className="hidden relative overflow-x-auto bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary lg:block"
+              >
+                <table className="w-full min-w-[theme(maxWidth.content)] table-fixed border-separate border-spacing-0 text-sm">
+                  <colgroup>
+                    {COLUMNS.map((c) => (
+                      <col key={c.label} style={{ width: c.width }} />
+                    ))}
+                  </colgroup>
+                  <thead>
+                    <tr className="text-left">
+                      {COLUMNS.map((c, i) => (
+                        <th
+                          key={c.label}
+                          scope="col"
+                          className={`border-b border-line-light px-4 py-2 font-medium text-brand-muted-soft text-xs uppercase tracking-wide ${
+                            c.label === 'Actions' ? 'text-right' : ''
+                          } ${i === 0 ? `${STICKY} bg-white` : ''}`}
+                        >
+                          {c.label}
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {group.participants.map((p) => (
+                      <tr key={p.id} className="group hover:bg-brand-canvas">
+                        <td className={`${TD} ${STICKY} bg-white group-hover:bg-brand-canvas`}>
+                          <span className="font-medium text-brand-blue-dark">
+                            {p.first_name} {p.last_name}
+                          </span>
+                          <p className="text-xs text-brand-muted-soft truncate" title={p.email}>
+                            {p.email}
+                          </p>
+                        </td>
+                        <td className={`${TD} text-brand-muted`}>{displayEventRole(p.event_role) ?? p.event_role ?? '—'}</td>
+                        <td className={`${TD} text-brand-muted`}>{p.school_name ?? '—'}</td>
+                        <td className={`${TD} text-brand-muted`}>{p.grade ?? '—'}</td>
+                        <td className={`${TD} text-brand-muted`}>{p.t_shirt_size ?? '—'}</td>
+                        <td className={TD}>
+                          {placeable(p) ? (
+                            companies.length === 0 ? (
+                              <span className="text-brand-muted-soft">—</span>
+                            ) : (
+                              companySelect(
+                                p,
+                                'border border-brand-border rounded px-2 py-1 text-xs bg-white text-brand-muted disabled:opacity-50 max-w-full',
+                              )
+                            )
+                          ) : (
+                            <span className="text-brand-muted-soft">n/a</span>
+                          )}
+                        </td>
+                        <td className={TD}>{paymentCell(p)}</td>
+                        <td className={TD}>{docusignCell(p)}</td>
+                        <td className={TD}>
+                          <Pill {...COMPLIANCE_PILLS[p.compliance_pill]} />
+                        </td>
+                        <td className={TD}>{statusPill(p)}</td>
+                        <td className={`${TD} text-right space-x-3`}>{rowActions(group, p, false)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// One labelled value on a participant card.
+function CardField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-content-muted">{label}</dt>
+      <dd className="mt-0.5 break-words text-content-body">{children}</dd>
     </div>
   )
 }

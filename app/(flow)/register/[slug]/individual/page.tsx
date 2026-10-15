@@ -11,6 +11,7 @@ import { stripeClient } from '@/lib/stripe'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { participationTypeFor } from '@/lib/analytics'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
+import { StepBar } from '@/components/registration/StepBar'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -86,16 +87,7 @@ export default async function IndividualRegistrationPage({ params, searchParams 
       {/* Step indicator */}
       <div className="bg-white border-b border-line">
         <div className="max-w-2xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="w-6 h-6 rounded-full bg-green-500 text-white flex items-center justify-center text-xs">✓</span>
-            <span className="text-content-faint">Registration Type</span>
-            <span className="text-content-faint mx-2">›</span>
-            <span className="w-6 h-6 rounded-full bg-brand-blue text-white flex items-center justify-center text-xs font-bold">2</span>
-            <span className="font-medium text-brand-blue-dark">Your Details</span>
-            <span className="text-content-faint mx-2">›</span>
-            <span className="w-6 h-6 rounded-full bg-line-light text-content-faint flex items-center justify-center text-xs font-bold">3</span>
-            <span className="text-content-faint">Confirmation</span>
-          </div>
+          <StepBar steps={['Registration Type', 'Your Details', 'Confirmation']} current={2} />
         </div>
       </div>
 

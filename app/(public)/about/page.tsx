@@ -162,7 +162,7 @@ export default function AboutPage() {
       {/* ── In-page anchor nav ────────────────────────────────────────── */}
       <nav
         aria-label="About sections"
-        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-line-light"
+        className="sticky top-[var(--header-h)] z-30 bg-white border-b border-line-light"
       >
         <div className="container-max flex gap-2 sm:gap-6 px-4 sm:px-6 lg:px-8 overflow-x-auto">
           {[
@@ -187,7 +187,7 @@ export default function AboutPage() {
       </nav>
 
       {/* ── #mission ─────────────────────────────────────────────────── */}
-      <section id="mission" className="section-padding bg-white scroll-mt-36">
+      <section id="mission" className="section-padding bg-white scroll-mt-14">
         <div className="container-max max-w-5xl">
           <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">
             Our Mission
@@ -273,7 +273,7 @@ export default function AboutPage() {
       </section>
 
       {/* ── #team ────────────────────────────────────────────────────── */}
-      <section id="team" className="section-padding bg-brand-grey-light scroll-mt-36">
+      <section id="team" className="section-padding bg-brand-grey-light scroll-mt-14">
         <div className="container-max text-center">
           <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">Team and Board</p>
           <h2 className="text-3xl font-bold text-brand-blue-dark mb-10">The people behind Stellr</h2>

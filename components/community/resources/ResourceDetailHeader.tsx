@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Download, Pencil, Flag, ExternalLink, PlayCircle } from 'lucide-react'
 import type { ResourceKind } from '@/lib/resources-catalogue'
+import { openPendingTab } from '@/lib/open-in-new-tab'
 
 interface Props {
   attachmentId: string
@@ -46,12 +47,16 @@ export function ResourceDetailHeader({ attachmentId, initialName, kind, canRenam
   }
 
   const primary = async () => {
+    // Links and videos open in a new tab, opened now while the tap still
+    // counts: iOS Safari drops a window.open made after the fetch.
+    const tab = kind === 'file' ? null : openPendingTab()
     setBusy(true)
     setErr(null)
-    const res = await fetch(`/api/community/resources/attachment/${attachmentId}/download`)
-    const json = await res.json().catch(() => ({}))
+    const res = await fetch(`/api/community/resources/attachment/${attachmentId}/download`).catch(() => null)
+    const json = res ? await res.json().catch(() => ({})) : {}
     setBusy(false)
-    if (!res.ok) {
+    if (!res || !res.ok) {
+      tab?.close()
       setErr(json.error ?? 'Could not open this resource')
       return
     }
@@ -63,8 +68,8 @@ export function ResourceDetailHeader({ attachmentId, initialName, kind, canRenam
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-    } else {
-      window.open(json.url, '_blank', 'noopener,noreferrer')
+    } else if (tab) {
+      tab.go(json.url)
     }
   }
 

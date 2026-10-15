@@ -15,6 +15,10 @@ export const metadata: Metadata = {
     'A professional community for school students, college students, and educators — built around real engineering challenges. Start free. Grow as you go.',
 }
 
+// Static, refreshed hourly. Tier prices come from a cache that a Stripe price
+// edit can bust (lib/tier-pricing.ts), which refreshes this page with it.
+export const revalidate = 3600
+
 export default async function MembershipPage() {
   // Prices come from membership_tiers (single source of truth) — never hard-coded.
   const [prices, monthly] = await Promise.all([getTierPriceMap(), getMonthlyPriceMap()])

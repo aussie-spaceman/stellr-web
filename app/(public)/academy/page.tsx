@@ -391,7 +391,7 @@ export default function AcademyPage() {
       </section>
 
       {/* ── Training deep-dive ────────────────────────────────────────── */}
-      <section id="training" className="section-padding bg-surface border-t border-line-light scroll-mt-24">
+      <section id="training" className="section-padding bg-surface border-t border-line-light">
         <div className="container-max grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-16 items-start">
           <div>
             <Eyebrow>Training</Eyebrow>
@@ -429,7 +429,7 @@ export default function AcademyPage() {
       </section>
 
       {/* ── Mentoring deep-dive ───────────────────────────────────────── */}
-      <section id="mentoring" className="section-padding bg-white scroll-mt-24">
+      <section id="mentoring" className="section-padding bg-white">
         <div className="container-max">
           <div className="max-w-3xl">
             <Eyebrow className="text-space-violet">Mentoring</Eyebrow>
@@ -460,7 +460,7 @@ export default function AcademyPage() {
       </section>
 
       {/* ── Coaching deep-dive ────────────────────────────────────────── */}
-      <section id="coaching" className="section-padding bg-surface border-t border-line-light scroll-mt-24">
+      <section id="coaching" className="section-padding bg-surface border-t border-line-light">
         <div className="container-max grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-16 items-start">
           <div>
             <Eyebrow className="text-[#0E8C99]">Coaching</Eyebrow>

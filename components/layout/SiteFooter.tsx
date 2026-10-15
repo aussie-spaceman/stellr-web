@@ -118,10 +118,11 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
           <div className="col-span-2 sm:col-span-3 lg:col-span-1">
             <div className="inline-block mb-5 bg-white rounded-[14px] p-[18px_22px]">
               <Image
-                src="/images/logo-horiz-tight.svg"
+                src="/images/logo-horiz.png"
                 alt="Stellr Education"
-                width={120}
-                height={40}
+                width={960}
+                height={318}
+                sizes="103px"
                 className="h-[34px] w-auto block"
               />
             </div>
@@ -131,7 +132,8 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
               professionals with the skills, relationships, and career pathways they need.
             </p>
 
-            <div className="flex gap-4 text-[#5A6490]">
+            {/* 44px hit areas around 18px icons (they were 18×18 targets). */}
+            <div className="-mx-3 flex gap-1 text-[#5A6490]">
               {socialLinks.map(({ icon: Icon, label, href }) => (
                 <a
                   key={label}
@@ -139,9 +141,9 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
                   aria-label={label}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[#5A6490] inline-flex transition-colors hover:text-hero-dim"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center text-[#5A6490] transition-colors hover:text-hero-dim"
                 >
-                  <Icon size={18} />
+                  <Icon size={18} aria-hidden />
                 </a>
               ))}
             </div>

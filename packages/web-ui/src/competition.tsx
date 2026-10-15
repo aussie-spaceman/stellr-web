@@ -288,23 +288,27 @@ export function ProgressionGraphic({ heading, note, nodes }: { heading: string; 
           <span className="text-xs font-bold uppercase tracking-[0.05em] text-brand-gold-ink bg-pathway-amber-bg rounded-full px-3 py-1">{note}</span>
         )}
       </div>
-      <div className="flex flex-wrap items-stretch gap-3">
+      {/* A column with down arrows on phones and small tablets, a row from md.
+          (Wrapping a row left arrows dangling at the ends of lines.) */}
+      <ol className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-3">
         {nodes.map((node, i) => (
           <React.Fragment key={node.title}>
-            <div className={cn('flex-1 min-w-[160px] rounded-ds-card p-4', node.cardClass ?? 'bg-white border border-line')}>
+            <li className={cn('rounded-ds-card p-4 md:min-w-0 md:flex-1', node.cardClass ?? 'bg-white border border-line')}>
               <p className={cn('text-xs font-bold uppercase tracking-wide mb-1 flex items-center gap-1.5', node.labelClass)}>
                 {node.star && <Star />} {node.label}
               </p>
               <p className={cn('text-sm font-bold', node.titleClass ?? 'text-ink')}>{node.title}</p>
-            </div>
+            </li>
             {i < nodes.length - 1 && (
-              <div className="flex items-center text-content-faint">
-                <Arrow size={22} />
-              </div>
+              <li aria-hidden="true" className="flex items-center justify-center text-content-faint">
+                <span className="rotate-90 md:rotate-0">
+                  <Arrow size={22} />
+                </span>
+              </li>
             )}
           </React.Fragment>
         ))}
-      </div>
+      </ol>
     </div>
   )
 }

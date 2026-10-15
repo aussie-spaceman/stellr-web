@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyRequestPage() {
   return (
-    <main className="min-h-screen bg-surface px-4 py-10 sm:py-16">
+    <div className="bg-surface px-4 py-10 sm:py-16">
       <div className="mx-auto max-w-2xl space-y-6">
         <header>
           <p className="font-subheading text-xs font-semibold uppercase tracking-[0.14em] text-primary-deep">Your privacy</p>
@@ -30,6 +30,6 @@ export default function PrivacyRequestPage() {
         </header>
         <PrivacyRequestForm />
       </div>
-    </main>
+    </div>
   )
 }

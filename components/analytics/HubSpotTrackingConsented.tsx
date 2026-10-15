@@ -40,7 +40,7 @@ export function HubSpotTrackingConsented({ portalId }: { portalId: string }) {
   return (
     <Script
       id="hs-script-loader"
-      strategy="afterInteractive"
+      strategy="lazyOnload"
       src={`https://js.hs-scripts.com/${portalId}.js`}
     />
   )

@@ -13,6 +13,8 @@
     "@stellr/icons": "0.1.0"
   },
   "peerDependencies": {
-    "react": ">=18"
+    "react": ">=18",
+    "lucide-react": "*",
+    "react-dom": ">=18"
   }
 }

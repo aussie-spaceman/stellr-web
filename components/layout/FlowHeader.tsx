@@ -9,7 +9,7 @@ export function FlowHeader() {
   return (
     <header className="border-b border-line bg-white">
       <div className="mx-auto flex h-14 max-w-chrome items-center px-4 sm:px-6">
-        <Logo sizeClassName="h-8" />
+        <Logo sizeClassName="h-8" displayWidth={97} />
       </div>
     </header>
   )

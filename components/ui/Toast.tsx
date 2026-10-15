@@ -7,7 +7,7 @@ import { Check, AlertCircle } from 'lucide-react'
 // Transient confirmation toast: bottom-center, dark navy pill, green check,
 // auto-dismiss ~2.8s. Module-level pub/sub so any client component can fire a
 // toast via `toast('Saved')` without threading a context. <Toaster /> is mounted
-// once in the community layout.
+// once, in the root layout, so admin and campaign toasts show too.
 //
 // Optional second argument: `{ tone: 'error' }` swaps the check for a warning
 // glyph; `{ action: { label, href } }` renders a link and holds the toast open
@@ -58,17 +58,25 @@ export function Toaster() {
   }, [])
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex flex-col items-center gap-2">
+    // One live region that is always in the page: iOS VoiceOver often misses a
+    // region that appears together with its message. Above the app's tab bar
+    // (--tabbar-h) and the home indicator, and left live while a Dialog makes
+    // the rest of the page inert (data-keep-active).
+    <div
+      role="status"
+      aria-live="polite"
+      data-keep-active=""
+      className="pointer-events-none fixed inset-x-0 bottom-[max(calc(var(--tabbar-h,0px)+0.75rem),calc(env(safe-area-inset-bottom)+0.75rem))] z-[60] flex flex-col items-center gap-2 px-4"
+    >
       {items.map((i) => (
         <div
           key={i.id}
-          className="pointer-events-auto flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-medium text-white shadow-lg"
-          role="status"
+          className="pointer-events-auto flex max-w-full items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-medium text-white shadow-lg"
         >
           {i.tone === 'error' ? (
-            <AlertCircle className="h-4 w-4 shrink-0 text-star-gold" />
+            <AlertCircle className="h-4 w-4 shrink-0 text-star-gold" aria-label="Error:" />
           ) : (
-            <Check className="h-4 w-4 shrink-0 text-enviro-green" />
+            <Check className="h-4 w-4 shrink-0 text-enviro-green" aria-hidden="true" />
           )}
           {i.msg}
           {i.action && (

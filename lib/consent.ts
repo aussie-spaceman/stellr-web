@@ -41,10 +41,20 @@ export function isStrictRegion(country: string | null | undefined): boolean {
   return STRICT_REGIONS.includes(country.toUpperCase())
 }
 
+/**
+ * Cookie proxy.ts sets to `1` for a visitor in a strict region (from Vercel's
+ * geo header), so browser code can apply the HubSpot split without the page
+ * reading request headers — which would stop it being cached.
+ */
+export const STRICT_REGION_COOKIE = 'stellr_strict_region'
+
 /** Bump when the meaning of a stored decision changes, to re-ask everyone. */
 const CONSENT_VERSION = 1
 
 export const CONSENT_STORAGE_KEY = `stellr_consent_v${CONSENT_VERSION}`
+
+/** Set on <html> by the head script (ConsentMode) while no choice is stored. */
+export const CONSENT_NEEDED_ATTR = 'data-consent-needed'
 
 /**
  * Dispatched by the footer link to reopen the banner. A DOM event rather than

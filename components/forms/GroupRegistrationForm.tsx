@@ -17,6 +17,7 @@ import { gradeOptions } from '@/lib/grade-band'
 import { resolveSchoolPayload } from '@/lib/school-utils'
 import { MemberIdLookup, type MemberMatch } from '@/components/forms/MemberIdLookup'
 import type { RegistrationPrefill } from '@/lib/registration-prefill'
+import { StepBar as SharedStepBar } from '@/components/registration/StepBar'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type RegistrantRole = 'teacher' | 'student_manager'
@@ -95,27 +96,9 @@ type StudentManagerFormData = z.infer<typeof studentManagerSchema>
 
 // ── Step bar ──────────────────────────────────────────────────────────────────
 function StepBar({ step }: { step: 1 | 2 }) {
-  const steps = [
-    { n: 1, label: 'Registration Type', done: true },
-    { n: 2, label: 'Your Details', done: step > 1, current: step === 1 },
-    { n: 3, label: 'Group Details', done: false, current: step === 2 },
-    { n: 4, label: 'Confirmation', done: false, current: false },
-  ]
   return (
     <div className="bg-white border-b border-line -mx-4 px-4 py-4 mb-6 sm:-mx-0">
-      <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm flex-wrap">
-        {steps.map((s, i) => (
-          <div key={s.n} className="flex items-center gap-1 sm:gap-2">
-            {i > 0 && <span className="text-content-faint">›</span>}
-            <span className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-              s.done ? 'bg-green-500 text-white' : s.current ? 'bg-brand-blue text-white' : 'bg-line-light text-content-faint'
-            }`}>
-              {s.done ? '✓' : s.n}
-            </span>
-            <span className={s.current ? 'font-medium text-brand-blue-dark' : 'text-content-faint'}>{s.label}</span>
-          </div>
-        ))}
-      </div>
+      <SharedStepBar steps={['Registration Type', 'Your Details', 'Group Details', 'Confirmation']} current={step + 1} />
     </div>
   )
 }

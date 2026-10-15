@@ -173,6 +173,10 @@ const TIER_HIGHLIGHT: Record<string, { badge: string; featured: boolean }> = {
   innovator: { badge: 'Best Value', featured: true },
 }
 
+// Static, refreshed hourly. Tier prices come from a cache that a Stripe price
+// edit can bust (lib/tier-pricing.ts), which refreshes this page with it.
+export const revalidate = 3600
+
 export default async function CompetitionsPage() {
   // The series nodes describe themselves from the events that make them up —
   // dates, venues and the real fee range — so `EventSeries`, which Google

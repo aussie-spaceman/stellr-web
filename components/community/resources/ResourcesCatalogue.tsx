@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import type { CatalogueRow, ResourceKind, CatalogueSort } from '@/lib/resources-catalogue'
 import { ResourceFlagModal } from '@/components/community/resources/ResourceFlagModal'
+import { openPendingTab } from '@/lib/open-in-new-tab'
 
 // Source object colour-code (handover §6). Not in the named token set — kept as a
 // small local map so the dot/border can tint by origin object type.
@@ -65,26 +66,40 @@ function actionLabel(kind: ResourceKind): string {
 /**
  * Open a catalogue attachment via the container-gated route (re-checks the gate).
  * Files download; links/recordings open in a new tab.
+ *
+ * Call it straight from the click: the tab for a link opens before the fetch,
+ * while the tap still counts (iOS Safari drops a window opened after an await).
  */
 async function openAttachment(row: CatalogueRow, name: string): Promise<string | null> {
   const endpoint =
     row.source === 'training'
       ? `/api/community/resources/training-open?ref=${encodeURIComponent(row.attachmentId)}`
       : `/api/community/resources/attachment/${row.attachmentId}/download`
-  const res = await fetch(endpoint)
-  const json = await res.json().catch(() => ({}))
-  if (!res.ok) return json.error ?? 'Could not open this resource'
-  if (row.kind === 'file') {
-    const a = document.createElement('a')
-    a.href = json.url
-    a.download = name
-    a.rel = 'noopener noreferrer'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-  } else {
-    window.open(json.url, '_blank', 'noopener,noreferrer')
+  const tab = row.kind === 'file' ? null : openPendingTab()
+  let res: Response
+  let json: { url?: string; error?: string }
+  try {
+    res = await fetch(endpoint)
+    json = await res.json().catch(() => ({}))
+  } catch {
+    tab?.close()
+    return 'Could not open this resource'
   }
+  if (!res.ok || !json.url) {
+    tab?.close()
+    return json.error ?? 'Could not open this resource'
+  }
+  if (tab) {
+    tab.go(json.url)
+    return null
+  }
+  const a = document.createElement('a')
+  a.href = json.url
+  a.download = name
+  a.rel = 'noopener noreferrer'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
   return null
 }
 

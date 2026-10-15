@@ -51,20 +51,21 @@ export default async function GrantPage() {
       />
 
       {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-midnight text-white pt-16 pb-[70px] px-4 sm:px-6 lg:px-8 bg-[radial-gradient(120%_130%_at_85%_-10%,#28306B_0%,#141A3D_45%,#0E1330_100%)]">
+      <section className="relative overflow-hidden bg-midnight text-white pt-16 pb-[70px] short:pt-6 short:pb-8 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(120%_130%_at_85%_-10%,#28306B_0%,#141A3D_45%,#0E1330_100%)]">
         <div className="container-max">
           <Eyebrow className="text-hero-dim">Educate · Teacher Grant</Eyebrow>
-          <h1 className="mt-4 text-4xl sm:text-5xl font-bold tracking-display leading-[1.05] max-w-[760px]">
+          <h1 className="mt-4 text-4xl sm:text-5xl font-bold tracking-display leading-[1.05] max-w-[760px] short:mt-2 short:text-3xl">
             We support the teachers who want to offer Stellr activities to their students
           </h1>
-          <p className="mt-5 text-lg text-hero-lead leading-relaxed max-w-[640px]">
+          <p className="mt-5 text-lg text-hero-lead leading-relaxed max-w-[640px] short:mt-3 short:text-base short:leading-snug short:line-clamp-3">
             Taking a team to a live Challenge or running a Campaign at your school takes real
             time — recruiting students, coordinating logistics, and following through afterward.
             The Teacher Grant Program is how we recognize that work. The grant pays as you
             participate, supporting both your students and yourself.
           </p>
 
-          <div className="mt-7 flex flex-wrap gap-3">
+          {/* The facts repeat below; on a sideways phone the Apply button wins the room. */}
+          <div className="mt-7 flex flex-wrap gap-3 short:hidden">
             <InfoPill>
               Up to {grantAmount(GRANT_AMOUNTS.annualMaximum)} a year
             </InfoPill>
@@ -72,7 +73,7 @@ export default async function GrantPage() {
             <InfoPill>US high school teachers</InfoPill>
           </div>
 
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-8 flex flex-wrap gap-3 short:mt-4">
             <Button href="#apply">Apply for the grant</Button>
             <Button href={ONE_PAGER} variant="outlineWhite" target="_blank" rel="noopener">
               <Document size={18} /> Download the one-pager
@@ -220,7 +221,7 @@ export default async function GrantPage() {
       </section>
 
       {/* ── Apply ─────────────────────────────────────────────────────── */}
-      <section id="apply" className="bg-surface section-padding scroll-mt-24">
+      <section id="apply" className="bg-surface section-padding">
         <div className="container-max max-w-content grid gap-12 lg:grid-cols-[0.82fr_1.18fr] items-start">
           <div>
             <Eyebrow>Ready to take part?</Eyebrow>

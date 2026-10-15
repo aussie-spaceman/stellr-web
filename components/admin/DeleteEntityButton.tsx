@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Choice, Dialog, Field, Input } from '@stellr/web-ui'
 
 interface Blocker {
   table: string
@@ -38,6 +39,11 @@ interface RefundResult {
 function money(cents: number, currency: string) {
   return `${(cents / 100).toFixed(2)} ${currency.toUpperCase()}`
 }
+
+const SECONDARY_BUTTON =
+  'min-h-11 rounded-control px-4 text-sm font-semibold text-content-secondary hover:bg-surface disabled:opacity-50'
+const DANGER_BUTTON =
+  'min-h-11 rounded-control bg-danger px-4 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50'
 
 interface Props {
   /** Registry entity type, e.g. 'member', 'school', 'event'. */
@@ -78,6 +84,10 @@ export function DeleteEntityButton({
   className,
 }: Props) {
   const router = useRouter()
+  // Radio group names, so each set is one group (arrow keys, one announcement).
+  const uid = useId()
+  const modeName = `${uid}-mode`
+  const refundName = `${uid}-refund`
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [blockers, setBlockers] = useState<Blocker[] | null>(null)
@@ -206,25 +216,54 @@ export function DeleteEntityButton({
     !needsRefundChoice || (refundChoice !== null && (refundChoice !== 'none' || refundNote.trim().length > 0))
 
   const reasonField = (
-    <div>
-      <label className="block text-xs text-brand-muted-soft mb-1">Reason (kept with the refund record)</label>
-      <input
+    <Field label="Reason (kept with the refund record)" labelSize="small">
+      <Input
         value={refundNote}
         onChange={(e) => setRefundNote(e.target.value)}
         placeholder="e.g. Refunded in full in Stripe — special circumstances"
         maxLength={500}
-        className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue"
       />
-    </div>
+    </Field>
   )
 
   const noRefundOption = (
     <>
-      <label className="flex items-center gap-1.5 text-brand-muted">
-        <input type="radio" checked={refundChoice === 'none'} onChange={() => setRefundChoice('none')} />
-        No refund — remove only
-      </label>
+      <Choice
+        type="radio"
+        name={refundName}
+        checked={refundChoice === 'none'}
+        onChange={() => setRefundChoice('none')}
+        label="No refund — remove only"
+      />
       {refundChoice === 'none' && reasonField}
+    </>
+  )
+
+  // Once the data is gone (even with follow-ups to do by hand), closing the
+  // dialog refreshes or redirects so the deleted row isn't left on screen.
+  const close = () => (deletedWithIssues ? finish() : setOpen(false))
+
+  const footer = hasBlockers ? (
+    <button type="button" onClick={() => setOpen(false)} className={SECONDARY_BUTTON}>
+      Close
+    </button>
+  ) : blockers === null ? null : deletedWithIssues ? (
+    <button type="button" onClick={finish} className={SECONDARY_BUTTON}>
+      Close
+    </button>
+  ) : (
+    <>
+      <button type="button" onClick={() => setOpen(false)} disabled={loading} className={SECONDARY_BUTTON}>
+        Cancel
+      </button>
+      <button
+        type="button"
+        onClick={doDelete}
+        disabled={loading || !hardConfirmed || !refundReady}
+        className={DANGER_BUTTON}
+      >
+        {loading ? 'Deleting…' : mode === 'hard' ? 'Permanently delete' : 'Soft-delete'}
+      </button>
     </>
   )
 
@@ -237,166 +276,151 @@ export function DeleteEntityButton({
         {label ?? 'Delete'}
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !loading && setOpen(false)}>
-          <div className="bg-white rounded-xl border border-brand-border shadow-xl max-w-md w-full p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-brand-blue-dark">Delete {name}?</h2>
+      <Dialog
+        open={open}
+        onClose={close}
+        title={<>Delete {name}?</>}
+        role="alertdialog"
+        size="md"
+        dismissible={!loading}
+        footer={footer}
+        bodyClassName="space-y-4"
+      >
+        {loading && !blockers && <p className="text-sm text-brand-muted-soft">Checking dependencies…</p>}
 
-            {loading && !blockers && <p className="text-sm text-brand-muted-soft">Checking dependencies…</p>}
+        {error && (
+          <div role="alert" className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
+        )}
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
-            )}
-
-            {hasBlockers ? (
-              <div className="space-y-2">
-                <p className="text-sm text-brand-muted">
-                  This can&apos;t be deleted yet. Remove the following linked items first:
-                </p>
-                <ul className="text-sm text-brand-muted space-y-1 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  {blockers!.map((b) => (
-                    <li key={b.table} className="flex justify-between gap-3">
-                      <span>{b.label}</span>
-                      <span className="font-medium">
-                        {b.count}
-                        {b.adminHref && (
-                          <a href={b.adminHref} className="ml-2 text-brand-blue hover:text-brand-blue">view</a>
-                        )}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="flex justify-end pt-2">
-                  <button onClick={() => setOpen(false)} className="text-sm text-brand-muted-soft hover:text-brand-muted px-3 py-1.5">Close</button>
-                </div>
-              </div>
-            ) : (
-              blockers !== null && (
-                <div className="space-y-4">
-                  {showModeChoice ? (
-                    <div className="space-y-2">
-                      <label className="flex items-start gap-2 text-sm text-brand-muted">
-                        <input type="radio" checked={mode === 'soft'} onChange={() => setMode('soft')} className="mt-0.5" />
-                        <span><span className="font-medium">Soft-delete</span> — hide it but keep the data (recoverable).</span>
-                      </label>
-                      <label className="flex items-start gap-2 text-sm text-brand-muted">
-                        <input type="radio" checked={mode === 'hard'} onChange={() => setMode('hard')} className="mt-0.5" />
-                        <span><span className="font-medium">Permanently delete</span> — purge from the database. An archive snapshot is kept for support.</span>
-                      </label>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-brand-muted">
-                      This permanently removes <span className="font-medium">{name}</span> from the database. An archive snapshot is kept for support.
-                    </p>
-                  )}
-
-                  {mode === 'hard' && entity === 'member' && (
-                    <p className="text-sm text-brand-muted">
-                      Their sign-in account is deleted too, so they can&apos;t log back in and start a new profile. Staff accounts are left in place.
-                    </p>
-                  )}
-
-                  {mode === 'hard' && requireTypedConfirm && (
-                    <div>
-                      <label className="block text-xs text-brand-muted-soft mb-1">Type DELETE to confirm</label>
-                      <input
-                        value={confirmText}
-                        onChange={(e) => setConfirmText(e.target.value)}
-                        className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                      />
-                    </div>
-                  )}
-
-                  {/* Refund step */}
-                  {refundable && entity === 'registration' && (
-                    <div className="rounded-lg border border-brand-border bg-brand-canvas p-3 space-y-2 text-sm">
-                      <p className="text-brand-muted">Paid participants will be refunded per the event&apos;s refund policy. Anyone already refunded in Stripe gets nothing further. Where a tier offers a choice:</p>
-                      <div className="flex gap-4">
-                        <label className="flex items-center gap-1.5 text-brand-muted">
-                          <input type="radio" checked={refundChoice === 'cash'} onChange={() => setRefundChoice('cash')} /> Cash
-                        </label>
-                        <label className="flex items-center gap-1.5 text-brand-muted">
-                          <input type="radio" checked={refundChoice === 'credit'} onChange={() => setRefundChoice('credit')} /> Credit
-                        </label>
-                      </div>
-                      {noRefundOption}
-                    </div>
-                  )}
-
-                  {refundable && entity === 'participant' && refund && (
-                    <div className="rounded-lg border border-brand-border bg-brand-canvas p-3 space-y-2 text-sm">
-                      {refund.alreadyRefunded ? (
-                        <p className="text-brand-muted">Already refunded — no further refund will be issued.</p>
-                      ) : !refund.paid ? (
-                        <p className="text-brand-muted">No payment on record — nothing to refund.</p>
-                      ) : externalFull ? (
-                        <>
-                          <p className="text-brand-muted">
-                            Already refunded {money(refund.externalRefund!.refundedCents, refund.externalRefund!.currency)} in Stripe. No further refund will be issued.
-                          </p>
-                          {reasonField}
-                        </>
-                      ) : Object.keys(refund.options).length === 0 ? (
-                        <p className="text-brand-muted">No refund is due at this point ({refund.daysOut} days out).</p>
-                      ) : (
-                        <>
-                          <p className="text-brand-muted">
-                            Paid {money(refund.paidCents, refund.currency)} · {refund.daysOut} days out. Refund:
-                          </p>
-                          {refund.externalRefund && (
-                            <p className="text-amber-700 text-xs">
-                              {money(refund.externalRefund.refundedCents, refund.externalRefund.currency)} was already refunded in Stripe. The amounts below are capped at what&apos;s left.
-                            </p>
-                          )}
-                          {refund.options.cash && (
-                            <label className="flex items-center justify-between gap-2 text-brand-muted">
-                              <span className="flex items-center gap-1.5">
-                                <input type="radio" checked={refundChoice === 'cash'} onChange={() => setRefundChoice('cash')} />
-                                Cash ({refund.options.cash.pct}%)
-                              </span>
-                              <span className="font-medium">{money(refund.options.cash.cents, refund.currency)}</span>
-                            </label>
-                          )}
-                          {refund.options.credit && (
-                            <label className="flex items-center justify-between gap-2 text-brand-muted">
-                              <span className="flex items-center gap-1.5">
-                                <input type="radio" checked={refundChoice === 'credit'} onChange={() => setRefundChoice('credit')} />
-                                Credit ({refund.options.credit.pct}%{refund.options.credit.validityDays ? `, ${Math.round(refund.options.credit.validityDays / 365)}yr` : ''})
-                              </span>
-                              <span className="font-medium">{money(refund.options.credit.cents, refund.currency)}</span>
-                            </label>
-                          )}
-                          {noRefundOption}
-                          {refundChoice === 'cash' && !refund.hasPaymentRef && (
-                            <p className="text-amber-700 text-xs">No Stripe payment reference on file — this will be flagged for a manual refund.</p>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {deletedWithIssues ? (
-                    <div className="flex justify-end pt-1">
-                      <button onClick={finish} className="text-sm font-medium text-brand-muted hover:text-brand-blue-dark px-3 py-1.5">Close</button>
-                    </div>
-                  ) : (
-                  <div className="flex items-center justify-end gap-3 pt-1">
-                    <button onClick={() => setOpen(false)} className="text-sm text-brand-muted-soft hover:text-brand-muted px-3 py-1.5">Cancel</button>
-                    <button
-                      onClick={doDelete}
-                      disabled={loading || !hardConfirmed || !refundReady}
-                      className="bg-red-600 text-white text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-red-700 disabled:opacity-50"
-                    >
-                      {loading ? 'Deleting…' : mode === 'hard' ? 'Permanently delete' : 'Soft-delete'}
-                    </button>
-                  </div>
-                  )}
-                </div>
-              )
-            )}
+        {hasBlockers ? (
+          <div className="space-y-2">
+            <p className="text-sm text-brand-muted">
+              This can&apos;t be deleted yet. Remove the following linked items first:
+            </p>
+            <ul className="text-sm text-brand-muted space-y-1 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              {blockers!.map((b) => (
+                <li key={b.table} className="flex justify-between gap-3">
+                  <span>{b.label}</span>
+                  <span className="font-medium">
+                    {b.count}
+                    {b.adminHref && (
+                      <a href={b.adminHref} className="ml-2 text-brand-blue hover:text-brand-blue">view</a>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
-        </div>
-      )}
+        ) : (
+          blockers !== null && (
+            <div className="space-y-4">
+              {showModeChoice ? (
+                <div role="radiogroup" aria-label="How to delete" className="space-y-1">
+                  <Choice
+                    type="radio"
+                    name={modeName}
+                    checked={mode === 'soft'}
+                    onChange={() => setMode('soft')}
+                    label={<><span className="font-medium">Soft-delete</span> — hide it but keep the data (recoverable).</>}
+                  />
+                  <Choice
+                    type="radio"
+                    name={modeName}
+                    checked={mode === 'hard'}
+                    onChange={() => setMode('hard')}
+                    label={<><span className="font-medium">Permanently delete</span> — purge from the database. An archive snapshot is kept for support.</>}
+                  />
+                </div>
+              ) : (
+                <p className="text-sm text-brand-muted">
+                  This permanently removes <span className="font-medium">{name}</span> from the database. An archive snapshot is kept for support.
+                </p>
+              )}
+
+              {mode === 'hard' && entity === 'member' && (
+                <p className="text-sm text-brand-muted">
+                  Their sign-in account is deleted too, so they can&apos;t log back in and start a new profile. Staff accounts are left in place.
+                </p>
+              )}
+
+              {mode === 'hard' && requireTypedConfirm && (
+                <Field label="Type DELETE to confirm" labelSize="small">
+                  <Input
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                  />
+                </Field>
+              )}
+
+              {/* Refund step */}
+              {refundable && entity === 'registration' && (
+                <div className="rounded-lg border border-brand-border bg-brand-canvas p-3 space-y-2 text-sm">
+                  <p className="text-brand-muted">Paid participants will be refunded per the event&apos;s refund policy. Anyone already refunded in Stripe gets nothing further. Where a tier offers a choice:</p>
+                  <div className="flex gap-4">
+                    <Choice type="radio" name={refundName} checked={refundChoice === 'cash'} onChange={() => setRefundChoice('cash')} label="Cash" />
+                    <Choice type="radio" name={refundName} checked={refundChoice === 'credit'} onChange={() => setRefundChoice('credit')} label="Credit" />
+                  </div>
+                  {noRefundOption}
+                </div>
+              )}
+
+              {refundable && entity === 'participant' && refund && (
+                <div className="rounded-lg border border-brand-border bg-brand-canvas p-3 space-y-2 text-sm">
+                  {refund.alreadyRefunded ? (
+                    <p className="text-brand-muted">Already refunded — no further refund will be issued.</p>
+                  ) : !refund.paid ? (
+                    <p className="text-brand-muted">No payment on record — nothing to refund.</p>
+                  ) : externalFull ? (
+                    <>
+                      <p className="text-brand-muted">
+                        Already refunded {money(refund.externalRefund!.refundedCents, refund.externalRefund!.currency)} in Stripe. No further refund will be issued.
+                      </p>
+                      {reasonField}
+                    </>
+                  ) : Object.keys(refund.options).length === 0 ? (
+                    <p className="text-brand-muted">No refund is due at this point ({refund.daysOut} days out).</p>
+                  ) : (
+                    <>
+                      <p className="text-brand-muted">
+                        Paid {money(refund.paidCents, refund.currency)} · {refund.daysOut} days out. Refund:
+                      </p>
+                      {refund.externalRefund && (
+                        <p className="text-amber-700 text-xs">
+                          {money(refund.externalRefund.refundedCents, refund.externalRefund.currency)} was already refunded in Stripe. The amounts below are capped at what&apos;s left.
+                        </p>
+                      )}
+                      {refund.options.cash && (
+                        <label className="flex min-h-11 cursor-pointer items-center justify-between gap-2 text-brand-muted">
+                          <span className="flex items-center gap-3">
+                            <input type="radio" name={refundName} checked={refundChoice === 'cash'} onChange={() => setRefundChoice('cash')} className="h-5 w-5 shrink-0 accent-primary-deep" />
+                            Cash ({refund.options.cash.pct}%)
+                          </span>
+                          <span className="font-medium">{money(refund.options.cash.cents, refund.currency)}</span>
+                        </label>
+                      )}
+                      {refund.options.credit && (
+                        <label className="flex min-h-11 cursor-pointer items-center justify-between gap-2 text-brand-muted">
+                          <span className="flex items-center gap-3">
+                            <input type="radio" name={refundName} checked={refundChoice === 'credit'} onChange={() => setRefundChoice('credit')} className="h-5 w-5 shrink-0 accent-primary-deep" />
+                            Credit ({refund.options.credit.pct}%{refund.options.credit.validityDays ? `, ${Math.round(refund.options.credit.validityDays / 365)}yr` : ''})
+                          </span>
+                          <span className="font-medium">{money(refund.options.credit.cents, refund.currency)}</span>
+                        </label>
+                      )}
+                      {noRefundOption}
+                      {refundChoice === 'cash' && !refund.hasPaymentRef && (
+                        <p className="text-amber-700 text-xs">No Stripe payment reference on file — this will be flagged for a manual refund.</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        )}
+      </Dialog>
     </>
   )
 }

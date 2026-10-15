@@ -45,6 +45,9 @@ export async function generateMetadata({
   }
 }
 
+// Static per slug, refreshed hourly (the location counts come from Sanity).
+export const revalidate = 3600
+
 export default async function LandingPageRoute({
   params,
 }: {

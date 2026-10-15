@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { formatDateShort } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
@@ -8,6 +8,7 @@ import {
   Plus,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Eye,
   EyeOff,
   Check,
@@ -663,12 +664,23 @@ function Curriculum({
   // Local section order for drag-and-drop; resynced when the server set changes.
   const [orderIds, setOrderIds] = useState<string[]>(sections.map((s) => s.id))
   const [dragId, setDragId] = useState<string | null>(null)
+  const [moveStatus, setMoveStatus] = useState('')
 
   const idsKey = sections.map((s) => s.id).join(',')
   useEffect(() => {
     setOrderIds(sections.map((s) => s.id))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `sections` is rebuilt every render; the joined id string is the stable identity
   }, [idsKey])
+
+  // The order the server holds, as far as this tab knows: reset from the
+  // props, then updated as each PATCH goes out, so a second move made before
+  // the refresh lands diffs against what was just sent, not the stale props.
+  const orderKey = sections.map((s) => `${s.id}:${s.display_order}`).join(',')
+  const savedOrder = useRef(new Map<string, number>())
+  useEffect(() => {
+    savedOrder.current = new Map(sections.map((s) => [s.id, s.display_order]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the joined id:order string, as above
+  }, [orderKey])
 
   const byId = new Map(sections.map((s) => [s.id, s]))
   const ordered = orderIds.map((id) => byId.get(id)).filter((s): s is AdminSection => !!s)
@@ -717,28 +729,45 @@ function Curriculum({
     })
   }
 
-  const persistOrder = async () => {
-    const ids = orderIds
-    setDragId(null)
-    const moved = ids.some((id, idx) => (byId.get(id)?.display_order ?? idx) !== idx)
-    if (!moved) return
+  // Saves every section whose position changed. Shared by drag-and-drop and
+  // the Move up / Move down buttons.
+  const persist = async (ids: string[]) => {
+    const saved = savedOrder.current
+    const changed = ids.filter((id, idx) => (saved.get(id) ?? idx) !== idx)
+    if (changed.length === 0) return
+    for (const id of changed) saved.set(id, ids.indexOf(id))
     try {
       await Promise.all(
-        ids
-          .map((id, idx) =>
-            (byId.get(id)?.display_order ?? idx) === idx
-              ? null
-              : fetch('/api/admin/community/training/sections', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id, displayOrder: idx }),
-                })
-          )
-          .filter((p): p is Promise<Response> => p !== null)
+        changed.map((id) =>
+          fetch('/api/admin/community/training/sections', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, displayOrder: ids.indexOf(id) }),
+          })
+        )
       )
     } finally {
       onDone()
     }
+  }
+
+  const persistOrder = async () => {
+    const ids = orderIds
+    setDragId(null)
+    await persist(ids)
+  }
+
+  // The non-drag way to reorder (WCAG 2.5.7): one step up or down per press.
+  const move = (id: string, dir: -1 | 1) => {
+    const from = orderIds.indexOf(id)
+    const to = from + dir
+    if (from === -1 || to < 0 || to >= orderIds.length) return
+    const next = [...orderIds]
+    next.splice(from, 1)
+    next.splice(to, 0, id)
+    setOrderIds(next)
+    setMoveStatus(`“${byId.get(id)?.title ?? 'Section'}” moved to position ${to + 1} of ${next.length}.`)
+    void persist(next)
   }
 
   return (
@@ -747,14 +776,20 @@ function Curriculum({
         <p className="text-xs font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Curriculum</p>
         {ordered.length > 1 && <p className="text-[11px] text-brand-muted-soft">Drag sections to reorder</p>}
       </div>
+      <p className="sr-only" aria-live="polite">
+        {moveStatus}
+      </p>
 
-      {ordered.map((s) => (
+      {ordered.map((s, idx) => (
         <SectionCard
           key={s.id}
           module={m}
           section={s}
           lessons={lessonsIn(s.id)}
           reorderable={ordered.length > 1}
+          isFirst={idx === 0}
+          isLast={idx === ordered.length - 1}
+          onMove={(dir) => move(s.id, dir)}
           dragging={dragId === s.id}
           onDragStart={() => setDragId(s.id)}
           onDragEnter={() => reorderOver(s.id)}
@@ -817,11 +852,17 @@ function Curriculum({
   )
 }
 
+const MOVE_BUTTON =
+  'inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-control text-content-muted hover:bg-surface hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent'
+
 function SectionCard({
   module: m,
   section: s,
   lessons,
   reorderable,
+  isFirst,
+  isLast,
+  onMove,
   dragging,
   onDragStart,
   onDragEnter,
@@ -833,6 +874,9 @@ function SectionCard({
   section: AdminSection
   lessons: AdminLesson[]
   reorderable: boolean
+  isFirst: boolean
+  isLast: boolean
+  onMove: (dir: -1 | 1) => void
   dragging: boolean
   onDragStart: () => void
   onDragEnter: () => void
@@ -843,6 +887,21 @@ function SectionCard({
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(s.title)
+  // Keep focus on the arrow that was pressed as the card moves (or on the
+  // other one once it reaches an end and the pressed one is disabled).
+  const upRef = useRef<HTMLButtonElement>(null)
+  const downRef = useRef<HTMLButtonElement>(null)
+  const [refocus, setRefocus] = useState<-1 | 1 | null>(null)
+  useEffect(() => {
+    if (refocus === null) return
+    const target = refocus === -1 ? (isFirst ? downRef : upRef) : isLast ? upRef : downRef
+    target.current?.focus()
+    setRefocus(null)
+  }, [refocus, isFirst, isLast])
+  const moveBy = (dir: -1 | 1) => {
+    onMove(dir)
+    setRefocus(dir)
+  }
 
   const rename = async () => {
     const next = title.trim()
@@ -929,6 +988,30 @@ function SectionCard({
         </div>
         <div className="flex shrink-0 items-center gap-3">
           {m.course_type !== 'self_paced' && <DripControl section={s} onDone={onDone} />}
+          {reorderable && (
+            <span className="flex items-center">
+              <button
+                ref={upRef}
+                type="button"
+                onClick={() => moveBy(-1)}
+                disabled={isFirst}
+                aria-label={`Move ${s.title} up`}
+                className={MOVE_BUTTON}
+              >
+                <ChevronUp className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button
+                ref={downRef}
+                type="button"
+                onClick={() => moveBy(1)}
+                disabled={isLast}
+                aria-label={`Move ${s.title} down`}
+                className={MOVE_BUTTON}
+              >
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </span>
+          )}
           {!editing && (
             <button
               onClick={() => setEditing(true)}

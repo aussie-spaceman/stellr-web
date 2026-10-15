@@ -1,0 +1,34 @@
+{
+  "ci": {
+    "collect": {
+      "startServerCommand": "npm start",
+      "startServerReadyPattern": "Ready",
+      "startServerReadyTimeout": 60000,
+      "url": [
+        "http://localhost:3000/",
+        "http://localhost:3000/competitions",
+        "http://localhost:3000/events/nevada-space-design-challenge",
+        "http://localhost:3000/lp/homeschool-students",
+        "http://localhost:3000/register/nevada-space-design-challenge/individual"
+      ],
+      "numberOfRuns": 1,
+      "settings": {
+        "onlyCategories": ["performance", "accessibility", "best-practices"],
+        "chromeFlags": "--no-sandbox --headless=new"
+      }
+    },
+    "assert": {
+      "assertions": {
+        "largest-contentful-paint": ["warn", { "maxNumericValue": 2500 }],
+        "total-blocking-time": ["warn", { "maxNumericValue": 200 }],
+        "cumulative-layout-shift": ["warn", { "maxNumericValue": 0.1 }],
+        "resource-summary:script:size": ["warn", { "maxNumericValue": 450000 }],
+        "categories:accessibility": ["warn", { "minScore": 0.95 }]
+      }
+    },
+    "upload": {
+      "target": "filesystem",
+      "outputDir": "./lhci-report"
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { X } from 'lucide-react'
+import { Dialog } from '@stellr/web-ui'
 import { accessLabel, formatUsd, themeTile, type AccessKind, type CohortTheme } from '@/lib/mentoring-format'
 
 export interface DiscoverCohort {
@@ -132,87 +132,88 @@ function RegisterModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(14,19,48,.55)' }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-[460px] rounded-[18px] bg-white p-6 shadow-[0_30px_70px_-20px_rgba(0,0,0,.5)]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between">
-          <h2 className="font-display text-[20px] font-bold text-ink">Register for this cohort</h2>
-          <button onClick={onClose} className="rounded-md p-1 text-content-faint hover:bg-surface" aria-label="Close">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Summary */}
-        <div className="mt-4 flex items-center gap-3 rounded-[12px] bg-surface p-3.5">
-          <div
-            className="flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-[11px] font-display text-base font-bold text-white"
-            style={{ background: tile.gradient }}
-          >
-            {cohort.name.charAt(0)}
-          </div>
-          <div>
-            <p className="font-display text-[16px] font-bold text-ink">{cohort.name}</p>
-            <p className="text-[13px] text-content-secondary">
-              {cohort.mentorName ?? 'Stellr mentor'} · {cohort.plannedSessions} sessions
+    <Dialog
+      open
+      onClose={onClose}
+      title="Register for this cohort"
+      size="md"
+      dismissible={!busy}
+      footer={
+        <>
+          {error && (
+            <p role="alert" className="w-full text-sm font-medium text-danger">
+              {error}
             </p>
-          </div>
-        </div>
-
-        {/* Pay choice */}
-        {isFree ? (
-          <p className="mt-4 rounded-[10px] bg-enviro-green-bg px-4 py-3 text-sm font-medium text-enviro-green-text">
-            Included with your membership — no payment needed.
-          </p>
-        ) : (
-          <div className="mt-4 space-y-2">
-            <p className="text-[12.5px] font-semibold text-content-secondary">Choose how to pay</p>
-            {canCredit && (
-              <PayOption
-                selected={method === 'credit'}
-                onSelect={() => setMethod('credit')}
-                title={`Use ${cohort.access.creditCost} session credit${cohort.access.creditCost === 1 ? '' : 's'}`}
-                sub={`${creditsRemaining} session credit${creditsRemaining === 1 ? '' : 's'} remaining`}
-              />
-            )}
-            {hasPaid && (
-              <PayOption
-                selected={method === 'paid'}
-                onSelect={() => setMethod('paid')}
-                title={`Pay ${formatUsd(cohort.access.priceCents ?? 0)} one-off`}
-                sub="Secure payment via Stripe"
-              />
-            )}
-            {!canCredit && !hasPaid && (
-              <p className="rounded-[10px] bg-surface px-4 py-3 text-sm text-content-muted">
-                This cohort uses {cohort.access.creditCost} session credit{cohort.access.creditCost === 1 ? '' : 's'} and
-                you have {creditsRemaining} remaining. Buy more sessions from the Discover page, or upgrade your membership.
-              </p>
-            )}
-          </div>
-        )}
-
-        {error && <p className="mt-3 text-sm font-medium text-danger">{error}</p>}
-
-        <div className="mt-5 flex items-center justify-end gap-2">
-          <button onClick={onClose} className="rounded-[9px] px-4 py-2.5 text-sm font-medium text-content-secondary hover:bg-surface">
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="min-h-11 rounded-control px-4 text-sm font-medium text-content-secondary hover:bg-surface disabled:opacity-50"
+          >
             Cancel
           </button>
           <button
+            type="button"
             onClick={submit}
             disabled={busy || (!isFree && !canCredit && !hasPaid)}
-            className="rounded-[9px] bg-space-violet px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#5B3FE0] disabled:opacity-50"
+            className="min-h-11 rounded-control bg-space-violet px-5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {busy ? 'Working…' : isFree ? 'Confirm & join' : method === 'paid' ? 'Continue to payment' : 'Confirm & join'}
           </button>
+        </>
+      }
+    >
+      {/* Summary */}
+      <div className="flex items-center gap-3 rounded-ds-card bg-surface p-3.5">
+        <div
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control font-display text-base font-bold text-white"
+          style={{ background: tile.gradient }}
+          aria-hidden="true"
+        >
+          {cohort.name.charAt(0)}
+        </div>
+        <div>
+          <p className="font-display text-base font-bold text-ink">{cohort.name}</p>
+          <p className="text-ds-meta text-content-secondary">
+            {cohort.mentorName ?? 'Stellr mentor'} · {cohort.plannedSessions} sessions
+          </p>
         </div>
       </div>
-    </div>
+
+      {/* Pay choice */}
+      {isFree ? (
+        <p className="mt-4 rounded-control bg-enviro-green-bg px-4 py-3 text-sm font-medium text-enviro-green-text">
+          Included with your membership — no payment needed.
+        </p>
+      ) : (
+        <div className="mt-4 space-y-2">
+          <p className="text-ds-meta font-semibold text-content-secondary">Choose how to pay</p>
+          {canCredit && (
+            <PayOption
+              selected={method === 'credit'}
+              onSelect={() => setMethod('credit')}
+              title={`Use ${cohort.access.creditCost} session credit${cohort.access.creditCost === 1 ? '' : 's'}`}
+              sub={`${creditsRemaining} session credit${creditsRemaining === 1 ? '' : 's'} remaining`}
+            />
+          )}
+          {hasPaid && (
+            <PayOption
+              selected={method === 'paid'}
+              onSelect={() => setMethod('paid')}
+              title={`Pay ${formatUsd(cohort.access.priceCents ?? 0)} one-off`}
+              sub="Secure payment via Stripe"
+            />
+          )}
+          {!canCredit && !hasPaid && (
+            <p className="rounded-control bg-surface px-4 py-3 text-sm text-content-muted">
+              This cohort uses {cohort.access.creditCost} session credit{cohort.access.creditCost === 1 ? '' : 's'} and
+              you have {creditsRemaining} remaining. Buy more sessions from the Discover page, or upgrade your membership.
+            </p>
+          )}
+        </div>
+      )}
+    </Dialog>
   )
 }
 
@@ -229,8 +230,10 @@ function PayOption({
 }) {
   return (
     <button
+      type="button"
       onClick={onSelect}
-      className={`flex w-full items-center gap-3 rounded-[12px] border px-4 py-3 text-left transition-colors ${
+      aria-pressed={selected}
+      className={`flex w-full items-center gap-3 rounded-ds-card border px-4 py-3 text-left transition-colors ${
         selected ? 'border-space-violet bg-space-violet-bg' : 'border-line hover:border-content-faint'
       }`}
     >
@@ -243,7 +246,7 @@ function PayOption({
       </span>
       <span>
         <span className="block text-sm font-semibold text-ink">{title}</span>
-        <span className="block text-[12.5px] text-content-muted">{sub}</span>
+        <span className="block text-ds-meta text-content-muted">{sub}</span>
       </span>
     </button>
   )

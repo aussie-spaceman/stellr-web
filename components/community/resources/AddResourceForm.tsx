@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileText, Link2, Upload, Search, Users, AlertTriangle } from 'lucide-react'
+import { Dialog, fieldControlClass } from '@stellr/web-ui'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 
 // Manager "Add a resource" form (handover §4.5). Lives in the manager workspace,
@@ -184,7 +185,8 @@ export function AddResourceForm({
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://…"
-            className="w-full rounded-[9px] border border-line px-3 py-2 text-sm outline-none focus:border-primary"
+            aria-label="Link URL"
+            className={fieldControlClass}
           />
         )}
 
@@ -192,8 +194,9 @@ export function AddResourceForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Display name (optional)"
+          aria-label="Display name (optional)"
           maxLength={200}
-          className="w-full rounded-[9px] border border-line px-3 py-2 text-sm outline-none focus:border-primary"
+          className={fieldControlClass}
         />
 
         {error && <p className="text-[13px] text-danger">{error}</p>}
@@ -210,13 +213,14 @@ export function AddResourceForm({
       {/* Attach-from-library search */}
       {searchOpen && (
         <div className="mt-4 rounded-[12px] bg-surface p-3">
-          <div className="flex items-center gap-2 rounded-[9px] border border-line bg-white px-3 py-2">
-            <Search className="h-4 w-4 text-content-faint" />
+          <div className="flex min-h-11 items-center gap-2 rounded-control border border-line-strong bg-white px-3 focus-within:border-primary-deep">
+            <Search className="h-4 w-4 text-content-faint" aria-hidden="true" />
             <input
               value={q}
               onChange={(e) => search(e.target.value)}
               placeholder="Search the resource library…"
-              className="flex-1 text-sm outline-none"
+              aria-label="Search the resource library"
+              className="min-w-0 flex-1 py-2 text-input outline-none mouse:text-sm"
             />
           </div>
           <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto">
@@ -241,30 +245,48 @@ export function AddResourceForm({
 
       {/* Dedup soft-warn modal */}
       {dup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-card bg-white p-6">
-            <div className="mb-3 flex items-center gap-2 text-pathway-amber">
-              <AlertTriangle className="h-5 w-5" />
-              <h3 className="font-display text-[17px] font-bold text-ink">This already exists</h3>
-            </div>
-            <p className="text-sm text-content-secondary">
-              “{dup.title}” is already in the library. Attach the existing file instead of storing another copy —
-              updates and removals stay in sync, and you don’t grow storage.
-            </p>
-            <div className="mt-5 flex items-center justify-end gap-3">
-              <button onClick={() => setDup(null)} className="text-sm font-medium text-content-muted hover:text-ink">
+        <Dialog
+          open
+          onClose={() => setDup(null)}
+          title={
+            <span className="inline-flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 shrink-0 text-pathway-amber" aria-hidden="true" />
+              This already exists
+            </span>
+          }
+          size="md"
+          dismissible={!busy}
+          footer={
+            <>
+              {error && (
+                <p role="alert" className="w-full text-ds-meta text-danger">
+                  {error}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => setDup(null)}
+                disabled={busy}
+                className="min-h-11 rounded-control px-4 text-sm font-semibold text-content-muted hover:bg-surface hover:text-ink disabled:opacity-50"
+              >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={() => attachExisting(dup.binaryId, name)}
                 disabled={busy}
-                className="rounded-[9px] bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-deep disabled:opacity-50"
+                className="min-h-11 rounded-control bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-deep disabled:opacity-50"
               >
                 Attach the existing file
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="text-sm text-content-secondary">
+            “{dup.title}” is already in the library. Attach the existing file instead of storing another copy —
+            updates and removals stay in sync, and you don’t grow storage.
+          </p>
+        </Dialog>
       )}
     </div>
   )

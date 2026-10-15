@@ -67,6 +67,7 @@ const staticPaths: { path: string; changeFrequency: MetadataRoute.Sitemap[number
 // private route (no trackers), and its confirm page needs the emailed link.
 export const STATIC_ROUTE_EXCLUSIONS = [
   '/store/cart', '/store/success', '/sign', '/sign/copy', '/privacy/request', '/privacy/request/confirm',
+  '/check-in',
 ]
 
 export const STATIC_SITEMAP_PATHS = staticPaths.map((r) => r.path)

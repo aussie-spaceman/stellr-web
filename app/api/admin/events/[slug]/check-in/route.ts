@@ -2,10 +2,15 @@ import { NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { supabaseServer } from '@/lib/supabase'
 import { requireEventAccess } from '@/lib/event-access'
+import { getEventBySlug } from '@/lib/sanity'
+import { loadOpenCheckIns, pickBannerEvent, todayUtc } from '@/lib/check-in-banner'
 
 // Check-in management for an event (admins + assigned event managers).
-//   GET  — settings + live list of checked-in participants (polled by the door screen)
+//   GET  — settings + live list of checked-in participants (polled by the door screen),
+//          and where the check-in banner points (lib/check-in-banner.ts)
 //   POST — { action: 'open' } | { action: 'close' } | { action: 'regenerate' }
+//          Opening an in-person event closes any other in-person event's check-in,
+//          so the banner has one place to go.
 //          { action: 'manual', participantId } | { action: 'undo', participantId }
 //          { action: 'resources_url', url } — the event's Docs folder ('' clears it)
 
@@ -17,7 +22,7 @@ export async function GET(_req: Request, { params }: Params) {
   if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
 
   const db = supabaseServer()
-  const [{ data: settings }, { data: regs }, { data: merchRows }] = await Promise.all([
+  const [{ data: settings }, { data: regs }, { data: merchRows }, openCheckIns] = await Promise.all([
     db.from('event_settings').select('check_in_token, check_in_open, resources_url').eq('event_slug', slug).maybeSingle(),
     db
       .from('registrations')
@@ -30,6 +35,8 @@ export async function GET(_req: Request, { params }: Params) {
       .select('name, qty, participant_member_id, store_orders!inner(event_slug)')
       .eq('store_orders.event_slug', slug)
       .not('participant_member_id', 'is', null),
+    // Polled every few seconds: a hiccup here must not blank the desk list.
+    loadOpenCheckIns(db).catch(() => []),
   ])
 
   const merchByMember = new Map<string, { name: string; qty: number }[]>()
@@ -59,6 +66,10 @@ export async function GET(_req: Request, { params }: Params) {
     checkInToken: settings?.check_in_token ?? null,
     resourcesUrl: settings?.resources_url ?? null,
     participants,
+    bannerTarget: pickBannerEvent(openCheckIns, todayUtc())?.slug === slug,
+    otherOpen: openCheckIns
+      .filter((e) => e.inPerson && e.slug !== slug)
+      .map((e) => ({ slug: e.slug, title: e.title ?? e.slug })),
   })
 }
 
@@ -78,6 +89,25 @@ export async function POST(req: Request, { params }: Params) {
       .eq('event_slug', slug)
       .maybeSingle()
 
+    let closed: { slug: string; title: string }[] = []
+    if (action === 'open') {
+      // One banner, one event. A virtual event's check-in is its emailed
+      // attendance link, so opening one leaves the in-person event alone.
+      const event = (await getEventBySlug(slug)) as { setting?: string } | null
+      if (event?.setting !== 'virtual') {
+        const open = await loadOpenCheckIns(db).catch(() => null)
+        if (!open) return NextResponse.json({ error: 'Database error' }, { status: 500 })
+        closed = open.filter((e) => e.inPerson && e.slug !== slug).map((e) => ({ slug: e.slug, title: e.title ?? e.slug }))
+        if (closed.length) {
+          const { error } = await db
+            .from('event_settings')
+            .update({ check_in_open: false })
+            .in('event_slug', closed.map((e) => e.slug))
+          if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 })
+        }
+      }
+    }
+
     const update: Record<string, unknown> = { event_slug: slug }
     if (action === 'open') {
       update.check_in_open = true
@@ -90,7 +120,7 @@ export async function POST(req: Request, { params }: Params) {
 
     const { error } = await db.from('event_settings').upsert(update, { onConflict: 'event_slug' })
     if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, closed })
   }
 
   if (action === 'resources_url') {

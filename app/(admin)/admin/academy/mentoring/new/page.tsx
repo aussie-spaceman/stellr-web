@@ -18,7 +18,7 @@ export default async function AdminNewCohortPage() {
   const [modules, tiers] = await Promise.all([listModules(member), listMentoringTiers()])
 
   return (
-    <div className="flex gap-8">
+    <div className="flex flex-col gap-4 lg:flex-row lg:gap-8">
       <AdminMentoringNav />
       <div className="min-w-0 flex-1 max-w-[760px] space-y-5">
         <Link href="/admin/academy/mentoring" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-content-muted hover:text-primary">

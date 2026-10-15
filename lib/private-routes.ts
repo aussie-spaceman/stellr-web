@@ -25,6 +25,11 @@
 //                               token URL is never sent to GA4 / HubSpot / Vercel
 //                               Analytics. The /scholarship landing page stays
 //                               public and tracked — only the token path is keyed.
+//   /check-in, /check-in/<slug> event check-in from the door QR code. The link
+//                               carries the event's check-in token and attendees
+//                               (mostly minors) enter a name and date of birth,
+//                               so no tags load and no cookie banner covers the
+//                               form on a phone.
 
 export const PRIVATE_ROUTE_HEADER = 'x-stellr-private-route'
 
@@ -36,6 +41,7 @@ const PRIVATE = [
   /^\/team-profile\//,
   /^\/credentials(\/|$)/,
   /^\/scholarship\/offer\//,
+  /^\/check-in(\/|$)/,
 ]
 
 export function isPrivatePath(pathname: string): boolean {

@@ -12,7 +12,7 @@ export default async function AdminCohortsPage() {
   const [cohorts, stats] = await Promise.all([listAllCohorts(), getAdminCohortStats()])
 
   return (
-    <div className="flex gap-8">
+    <div className="flex flex-col gap-4 lg:flex-row lg:gap-8">
       <AdminMentoringNav />
       <div className="min-w-0 flex-1 space-y-6">
         <div className="flex items-center justify-between">

@@ -240,7 +240,8 @@ jobs:
           echo "ESIGN_TOKEN_SECRET=$secret" >> "$GITHUB_ENV"
 
       # Cached by version: a browser download is ~90MB and does not change
-      # between runs of the same Playwright release.
+      # between runs of the same Playwright release. WebKit is for the
+      # mobile-safari project (e2e/mobile), the closest CI gets to an iPhone.
       - if: steps.config.outputs.ready == 'true'
         id: pw-version
         run: echo "v=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
@@ -250,14 +251,14 @@ jobs:
         id: pw-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.v }}
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.v }}-chromium-webkit
 
       - if: steps.config.outputs.ready == 'true' && steps.pw-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium webkit
 
       # Deps only when the browser was cached — the system libraries are not.
       - if: steps.config.outputs.ready == 'true' && steps.pw-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
+        run: npx playwright install-deps chromium webkit
 
       # Built and served here rather than tested against a Vercel preview.
       # Preview builds queue behind one another on this plan, and a suite that

@@ -323,19 +323,22 @@ export default function ImpactPage() {
 
           <div>
             {skills.map((s, i) => (
+              // Phones: number beside the title, the text underneath. From sm, the
+              // three columns. (The fixed 170px title column left the text 48px
+              // wide at 320px.)
               <div
                 key={s.n}
-                className={`flex gap-5 sm:gap-[22px] py-[22px] border-t border-line ${
+                className={`grid grid-cols-[30px_minmax(0,1fr)] gap-x-5 gap-y-2 py-[22px] border-t border-line sm:grid-cols-[30px_170px_minmax(0,1fr)] sm:gap-x-[22px] ${
                   i === skills.length - 1 ? 'border-b' : ''
                 }`}
               >
-                <span className="w-[30px] shrink-0 font-display text-lg font-bold text-space-violet">
+                <span className="font-display text-lg font-bold text-space-violet">
                   {s.n}
                 </span>
-                <h4 className="w-[170px] shrink-0 font-display text-[17px] font-bold text-ink leading-snug">
+                <h4 className="font-display text-[17px] font-bold text-ink leading-snug">
                   {s.title}
                 </h4>
-                <p className="text-content-secondary leading-relaxed">{s.body}</p>
+                <p className="col-start-2 text-content-secondary leading-relaxed sm:col-start-3 sm:row-start-1">{s.body}</p>
               </div>
             ))}
           </div>

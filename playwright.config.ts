@@ -100,6 +100,28 @@ export default defineConfig({
       dependencies: ['auth'],
       use: { ...devices['Desktop Chrome'] },
     },
+
+    // Phone-sized runs of the mobile specs (e2e/mobile): the narrowest common
+    // Android width, a current Android phone, and Safari's engine on an iPhone.
+    // Before these, nothing here ran below 1280px or in WebKit.
+    {
+      name: 'mobile-320',
+      testMatch: /mobile\/.*\.spec\.ts/,
+      dependencies: ['auth'],
+      use: { ...devices['Galaxy S9+'] },
+    },
+    {
+      name: 'mobile-chrome',
+      testMatch: /mobile\/.*\.spec\.ts/,
+      dependencies: ['auth'],
+      use: { ...devices['Pixel 7'] },
+    },
+    {
+      name: 'mobile-safari',
+      testMatch: /mobile\/.*\.spec\.ts/,
+      dependencies: ['auth'],
+      use: { ...devices['iPhone 13'] },
+    },
   ],
 
   // Started only when testing locally; skipped when E2E_BASE_URL names a

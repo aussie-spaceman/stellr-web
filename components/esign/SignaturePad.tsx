@@ -16,21 +16,51 @@ export function SignaturePad({ onChange, describedBy }: { onChange: (png: string
   const drawing = useRef(false)
   const last = useRef<{ x: number; y: number } | null>(null)
   const box = useRef<{ minX: number; minY: number; maxX: number; maxY: number } | null>(null)
+  const sizedWidth = useRef(0)
   const [empty, setEmpty] = useState(true)
+  const [resetNotice, setResetNotice] = useState(false)
+  // Read inside the resize observer without re-subscribing on every stroke.
+  const emptyRef = useRef(true)
+  emptyRef.current = empty
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
 
+  // The canvas bitmap is sized to the pad's width. Turning a phone sideways
+  // (which people often do to sign) changes that width, and a stale bitmap puts
+  // strokes away from the finger and distorts the saved image. So the pad is
+  // re-sized whenever its width changes, which clears it; if there was a
+  // signature, the signer is told to sign again.
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const ratio = Math.min(window.devicePixelRatio || 1, 2)
-    canvas.width = Math.floor(canvas.clientWidth * ratio)
-    canvas.height = Math.floor(CSS_HEIGHT * ratio)
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.scale(ratio, ratio)
-    ctx.lineWidth = 2.4
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-    ctx.strokeStyle = INK
+    const size = () => {
+      const width = canvas.clientWidth
+      if (!width || Math.abs(width - sizedWidth.current) < 1) return
+      const hadSignature = sizedWidth.current > 0 && !emptyRef.current
+      sizedWidth.current = width
+      const ratio = Math.min(window.devicePixelRatio || 1, 2)
+      canvas.width = Math.floor(width * ratio)
+      canvas.height = Math.floor(CSS_HEIGHT * ratio)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
+      ctx.lineWidth = 2.4
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+      ctx.strokeStyle = INK
+      drawing.current = false
+      last.current = null
+      box.current = null
+      if (hadSignature) {
+        setEmpty(true)
+        setResetNotice(true)
+        onChangeRef.current(null)
+      }
+    }
+    size()
+    const observer = new ResizeObserver(size)
+    observer.observe(canvas)
+    return () => observer.disconnect()
   }, [])
 
   const point = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -46,6 +76,7 @@ export function SignaturePad({ onChange, describedBy }: { onChange: (png: string
   }
 
   function start(e: React.PointerEvent<HTMLCanvasElement>) {
+    setResetNotice(false)
     e.currentTarget.setPointerCapture(e.pointerId)
     drawing.current = true
     last.current = point(e)
@@ -107,6 +138,9 @@ export function SignaturePad({ onChange, describedBy }: { onChange: (png: string
         onPointerCancel={end}
         onPointerLeave={end}
       />
+      <p role="status" className="text-sm text-content-body empty:hidden">
+        {resetNotice ? 'The screen turned, so the pad was cleared. Please sign again.' : ''}
+      </p>
       <Button type="button" variant="secondaryStrong" onClick={clear} disabled={empty}>Clear</Button>
     </div>
   )

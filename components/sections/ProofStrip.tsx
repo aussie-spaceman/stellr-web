@@ -87,10 +87,13 @@ export function ProofStrip({
     <div className={className}>
       {heading && <h3 className="mb-4 font-display text-lg font-bold text-ink">{heading}</h3>}
 
-      {/* Strip: scroll-snap row on mobile, responsive grid ≥sm */}
+      {/* Strip: scroll-snap row on mobile, responsive grid ≥sm. `relative` makes
+          the list the containing block for the photos' absolutely positioned
+          (sr-only) credits; without it they escaped the scroller and widened
+          /network to 867px on every phone. */}
       <ul className={single
-        ? 'mx-auto max-w-2xl'
-        : `-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:overflow-visible sm:px-0 ${columns === 2 ? 'sm:grid-cols-2 lg:grid-cols-2' : columns === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : columns === 5 ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-3 lg:grid-cols-3'}`}>
+        ? 'relative mx-auto max-w-2xl'
+        : `relative -mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:overflow-visible sm:px-0 ${columns === 2 ? 'sm:grid-cols-2 lg:grid-cols-2' : columns === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : columns === 5 ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-3 lg:grid-cols-3'}`}>
         {photos.map((p, i) => (
           <li key={p.id} className={single ? 'w-full' : 'w-[78%] shrink-0 snap-start sm:w-auto'}>
             <button

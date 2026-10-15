@@ -23,7 +23,7 @@ export default async function NewWorkshopPage() {
   const tiers = ((tierRows ?? []) as { id: string; name: string }[]).map((t) => ({ id: t.id, name: t.name }))
 
   return (
-    <div className="flex gap-8">
+    <div className="flex flex-col gap-4 lg:flex-row lg:gap-8">
       <AdminCoachingNav />
       <div className="min-w-0 flex-1 space-y-5">
         <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">New coaching workshop</h1>

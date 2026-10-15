@@ -119,7 +119,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
   }
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-6">
+    <div className="bg-white rounded-xl border border-brand-border p-4 sm:p-6">
       <div className="flex items-center gap-4 mb-6">
         {(clerkUser?.imageUrl || member.profile_photo_url) && (
           <Image
@@ -127,10 +127,12 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
             alt={member.first_name}
             width={56}
             height={56}
-            className="rounded-full object-cover"
+            className="shrink-0 rounded-full object-cover"
           />
         )}
-        <div>
+        {/* min-w-0 + anywhere-wrapping: an email has no break points and
+            pushed /account sideways on a 320px phone. */}
+        <div className="min-w-0 [overflow-wrap:anywhere]">
           <h2 className="text-lg font-semibold text-brand-blue-dark">
             {member.first_name} {member.last_name}
             {member.nickname && (
@@ -141,7 +143,7 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
         </div>
       </div>
 
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm mb-6">
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm mb-6 min-[400px]:grid-cols-2">
         <div>
           <dt className="text-brand-muted-soft">Role</dt>
           <dd className="font-medium text-brand-blue-dark capitalize">

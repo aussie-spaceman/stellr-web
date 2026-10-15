@@ -5,16 +5,14 @@ import { captureLead, logLine, readHubspotCookie } from '@/lib/hubspot'
 import { rateLimitGuard, HOUR_MS } from '@/lib/rate-limit'
 import { isEmailLike } from '@/lib/utils'
 import { GATED_ASSETS } from '@/lib/gated-assets'
-import { LINK_TTL_SECONDS, gatedDownloadUrl } from '@/lib/gated-download-link'
+import { gatedDownloadUrl } from '@/lib/gated-download-link'
 import { gatedAssetEmailHtml, gatedAssetEmailText } from '@/lib/gated-asset-email'
 
 const PAPER = GATED_ASSETS['white-paper']
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
-const LINK_DAYS = Math.round(LINK_TTL_SECONDS / 86400)
-
 /**
  * The /impact white paper. Like every gated download, the full file sits in
- * private storage and goes out only by email, as an expiring signed link
+ * private storage and goes out only by email, as a signed link
  * (lib/gated-download-link.ts) — never from the page.
  */
 export async function POST(req: Request) {
@@ -58,7 +56,7 @@ export async function POST(req: Request) {
       },
     })
 
-    // ── 2. Email the expiring link to the requester ──────────────────────
+    // ── 2. Email the signed link to the requester ────────────────────────
     // deep review PUB-2: the shared builder escapes the submitted name.
     let emailed = false
     try {
@@ -66,8 +64,8 @@ export async function POST(req: Request) {
         to: cleanEmail,
         from: MARKETING_FROM,
         subject: PAPER.subject,
-        html: gatedAssetEmailHtml(firstName, PAPER.title, downloadUrl, LINK_DAYS),
-        text: gatedAssetEmailText(firstName, PAPER.title, downloadUrl, LINK_DAYS),
+        html: gatedAssetEmailHtml(firstName, PAPER.title, downloadUrl),
+        text: gatedAssetEmailText(firstName, PAPER.title, downloadUrl),
       })
       emailed = true
     } catch (err) {

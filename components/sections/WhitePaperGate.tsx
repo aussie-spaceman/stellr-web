@@ -6,7 +6,7 @@ import { usePrefillNameEmail } from '@/components/forms/useMemberPrefill'
 import { trackLeadSubmitted } from '@/lib/analytics'
 import { isEmailLike } from '@/lib/utils'
 
-// The full paper is gated: it goes out only by email, as an expiring link from
+// The full paper is gated: it goes out only by email, as a signed link from
 // /api/white-paper, so this component holds no file URL at all.
 const PAPER_TITLE = 'From “Soft Skills” to STEM Power Skills'
 

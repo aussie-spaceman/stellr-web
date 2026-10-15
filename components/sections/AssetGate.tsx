@@ -25,7 +25,7 @@ type AssetGateProps = {
 
 /**
  * Generic lead-capture gate: a trigger button that opens a name/email modal and
- * posts to /api/asset-request (HubSpot subscriber + an emailed, expiring link).
+ * posts to /api/asset-request (HubSpot subscriber + an emailed, signed link).
  * The full file never reaches the page — no URL, prop or direct-download
  * fallback — so the email is the only way to it. Reused for every gated download.
  *

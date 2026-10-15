@@ -6,8 +6,6 @@ import { verifyGatedDownload } from '@/lib/gated-download-link'
 
 export const dynamic = 'force-dynamic'
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
-
 const NO_STORE = {
   'Cache-Control': 'private, no-store',
   'X-Robots-Tag': 'noindex, nofollow',
@@ -15,8 +13,8 @@ const NO_STORE = {
 
 /**
  * The emailed link for a gated download (lib/gated-download-link.ts). Checks
- * the signature and expiry, then sends the file from private storage as an
- * attachment. The storage location is never revealed to the client.
+ * the signature, then sends the file from private storage as an attachment.
+ * The storage location is never revealed to the client.
  */
 export async function GET(req: Request) {
   const limited = rateLimitGuard(req, 'asset-download', { limit: 30, windowMs: HOUR_MS })
@@ -25,15 +23,8 @@ export async function GET(req: Request) {
   const params = new URL(req.url).searchParams
   const check = verifyGatedDownload(params)
   if (!check.ok) {
-    const key = params.get('a')
-    const page = check.reason === 'expired' && key && key in GATED_ASSETS
-      ? GATED_ASSETS[key as keyof typeof GATED_ASSETS].pagePath
-      : ''
-    const message = check.reason === 'expired'
-      ? `This download link has expired. You can ask for a fresh copy at ${SITE_URL}${page}.`
-      : 'This download link is not valid.'
-    return new NextResponse(message, {
-      status: check.reason === 'expired' ? 410 : 403,
+    return new NextResponse('This download link is not valid.', {
+      status: 403,
       headers: { 'Content-Type': 'text/plain; charset=utf-8', ...NO_STORE },
     })
   }

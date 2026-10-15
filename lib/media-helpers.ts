@@ -34,12 +34,12 @@ export interface VideoAsset extends BaseAsset {
   title: string
 }
 
-/** An audio-only clip with its transcript shown alongside (no video track). */
+/** An audio-only clip (no video track); its transcript is a separate download. */
 export interface AudioAsset extends BaseAsset {
   src: string // /audio/<file>.m4a
   title: string
-  /** Full transcript, rendered as text beneath the player. */
-  transcript: string
+  /** Transcript PDF, offered as a download beneath the player. */
+  transcriptHref: string
 }
 
 export interface QuoteAsset extends BaseAsset {
@@ -57,8 +57,9 @@ export interface CompetitionAsset extends BaseAsset {
   /** Page count for the preview card label; null if unknown. */
   pages: number | null
   thumbnail: string
-  /** Open preview — ALWAYS visible, never gated (README §8). */
-  previewHref: string
+  /** Open preview. Open assets only: a gated card shows its cover and the
+   *  email form, with no preview (D41). */
+  previewHref?: string
   gated: boolean
   /** Full PDF download. Open assets only: a gated file's location stays on the
    *  server (lib/gated-assets.ts) and only ever reaches the requester by email. */

@@ -61,9 +61,9 @@ export const GATED_ASSETS = {
   },
   'student-work-examples': {
     title: 'Examples of previous student work, from multiple Stellr events',
-    storagePath: 'gated-downloads/2026-10/student-work-examples-wm.pdf',
+    storagePath: 'gated-downloads/2026-10/student-work-examples-v2-wm.pdf',
     filename: 'Stellr-Student-Work-Examples.pdf',
-    subject: 'Your examples of previous student work',
+    subject: 'Your examples of student work from previous Stellr events',
     note: 'Requested examples of previous student work (Network page)',
     pagePath: '/network',
   },

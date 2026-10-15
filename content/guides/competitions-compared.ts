@@ -146,7 +146,7 @@ export const PROGRAMS: readonly Program[] = [
   {
     name: 'Stellr Campaign',
     organizer: 'Stellr Education',
-    grades: '9–12',
+    grades: '7–12',
     team: 'Groups; a school can enter as many as it likes',
     cost: 'Free (Educator membership)',
     equipment: 'None — no lab, no kit',

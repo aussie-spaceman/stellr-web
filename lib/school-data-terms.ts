@@ -11,8 +11,10 @@ import { createHash } from 'node:crypto'
 
 // v2 (2 Oct 2026): retention and signed-record wording aligned with the Privacy
 // Policy's 02-Oct-2026 update (membership + 7 years; minimal signed record).
-export const SCHOOL_DATA_TERMS_VERSION = '2026-10-v2'
-export const SCHOOL_DATA_TERMS_EFFECTIVE = '2 October 2026'
+// v3 (15 Oct 2026): US spelling only (authorized, programs, authorization,
+// honor); no change in meaning.
+export const SCHOOL_DATA_TERMS_VERSION = '2026-10-v3'
+export const SCHOOL_DATA_TERMS_EFFECTIVE = '15 October 2026'
 
 export interface TermsSection {
   heading: string
@@ -23,7 +25,7 @@ export const SCHOOL_DATA_TERMS: TermsSection[] = [
   {
     heading: '1. Who these terms are between',
     paragraphs: [
-      'These terms are between Stellr Education ("Stellr") and the school or district whose teacher, staff member or student manager registers a group of students for a Stellr event (the "School"). The person registering confirms they are authorised to accept them for the School.',
+      'These terms are between Stellr Education ("Stellr") and the school or district whose teacher, staff member or student manager registers a group of students for a Stellr event (the "School"). The person registering confirms they are authorized to accept them for the School.',
       'They cover the student information the School shares with Stellr to register and manage that group ("School Data"): for example names, email addresses, dates of birth, grades, school details, dietary and medical needs, and emergency contacts, however it is shared (a registration form, a roster spreadsheet, or a join link).',
     ],
   },
@@ -31,7 +33,7 @@ export const SCHOOL_DATA_TERMS: TermsSection[] = [
     heading: '2. What Stellr uses School Data for',
     paragraphs: [
       'Only to run the competition the students are registered for and to keep them safe at it: registration, team and company assignment, event communications, consent forms, check-in, results, awards and credentials, and follow-up about that event.',
-      'Stellr does not sell School Data, use it for targeted advertising, build profiles of students for any purpose unrelated to the event, or use it to develop or test products. Stellr may use School Data in aggregate, with no student identifiable, to report on who its programmes reach.',
+      'Stellr does not sell School Data, use it for targeted advertising, build profiles of students for any purpose unrelated to the event, or use it to develop or test products. Stellr may use School Data in aggregate, with no student identifiable, to report on who its programs reach.',
     ],
   },
   {
@@ -51,7 +53,7 @@ export const SCHOOL_DATA_TERMS: TermsSection[] = [
     heading: '5. Keeping School Data safe',
     paragraphs: [
       'Stellr protects School Data with reasonable administrative, technical and physical safeguards, including encryption in transit and at rest, access limited to the people who need it, multi-factor sign-in for administrators, and logging of access to signed records.',
-      'If Stellr learns that School Data has been accessed or disclosed without authorisation, it will tell the School within 72 hours of confirming it, say what happened and what is being done, and cooperate with the School in notifying families where the law requires.',
+      'If Stellr learns that School Data has been accessed or disclosed without authorization, it will tell the School within 72 hours of confirming it, say what happened and what is being done, and cooperate with the School in notifying families where the law requires.',
     ],
   },
   {
@@ -65,7 +67,7 @@ export const SCHOOL_DATA_TERMS: TermsSection[] = [
     heading: '7. The School\'s rights',
     paragraphs: [
       'The School may ask to see the School Data Stellr holds about its students, to correct it, and to have it deleted as in Section 6. It may ask for a copy of these terms and of Stellr\'s list of service providers at any time.',
-      'Where a state law gives the School further rights over student data held by an outside provider (for example Colorado\'s Student Data Transparency and Security Act or Utah\'s Student Data Protection Act), Stellr will honour them. A School that needs its own data agreement can ask for one.',
+      'Where a state law gives the School further rights over student data held by an outside provider (for example Colorado\'s Student Data Transparency and Security Act or Utah\'s Student Data Protection Act), Stellr will honor them. A School that needs its own data agreement can ask for one.',
     ],
   },
   {

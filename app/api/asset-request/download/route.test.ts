@@ -28,7 +28,7 @@ describe('GET /api/asset-request/download', () => {
     expect(res.headers.get('content-type')).toBe('application/pdf')
     expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename=".+\.pdf"$/)
     expect(res.headers.get('cache-control')).toBe('private, no-store')
-    expect(download).toHaveBeenCalledWith('gated-downloads/2026-10/student-work-examples-wm.pdf')
+    expect(download).toHaveBeenCalledWith('gated-downloads/2026-10/student-work-examples-v2-wm.pdf')
   })
 
   it('refuses a tampered or unsigned link', async () => {

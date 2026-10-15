@@ -175,7 +175,7 @@ export const COMPETITION: Record<string, CompetitionAsset> = {
     id: 'student-work-examples',
     title: 'Examples of previous student work, from multiple Stellr events',
     pages: 3,
-    thumbnail: '/files/2026-10/student-work-examples-wm.cover.jpg',
+    thumbnail: '/files/2026-10/student-work-examples-v2-wm.cover.jpg',
     gated: true,
     assetKey: 'student-work-examples',
     credit: 'Previous participants',

@@ -33,7 +33,7 @@ export async function GET(req: Request) {
   const { data, error } = await supabaseServer().storage.from(GATED_BUCKET).download(asset.storagePath)
   if (error || !data) {
     console.error('[asset-download] Storage read failed:', check.key, error?.message)
-    return new NextResponse('The file is unavailable right now. Please try again later.', {
+    return new NextResponse('The file is unavailable right now. Please try again later, or contact hello@stellreducation.org directly.', {
       status: 503,
       headers: { 'Content-Type': 'text/plain; charset=utf-8', ...NO_STORE },
     })

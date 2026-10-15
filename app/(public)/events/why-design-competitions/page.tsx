@@ -98,6 +98,20 @@ export default function WhyDesignCompetitionsPage() {
         </div>
       </section>
 
+      {/* ── Quote ────────────────────────────────────────────────────── */}
+      <section className="bg-midnight text-white py-16 px-4 sm:px-6 lg:px-8">
+        <figure className="mx-auto max-w-3xl text-center">
+          <blockquote className="font-display text-2xl sm:text-3xl font-bold leading-snug">
+            &ldquo;These events put project-based learning into practice. Teams are tasked with an
+            unscripted problem, dig into the science to find engineering solutions, and develop teamwork
+            and communication durable skills.&rdquo;
+          </blockquote>
+          <figcaption className="mt-6 font-medium text-star-gold">
+            Mr Jim Christensen &middot; Chief Innovation Officer, The Aldrin Family Foundation
+          </figcaption>
+        </figure>
+      </section>
+
       {/* ── Four benefits ────────────────────────────────────────────── */}
       <section className="section-padding bg-brand-grey-light">
         <div className="container-max">

@@ -1,15 +1,12 @@
-import { Mic } from 'lucide-react'
-import { Eyebrow } from '@stellr/web-ui'
+import { Download, Mic } from 'lucide-react'
 import type { AudioAsset } from '@/lib/media-helpers'
 
 /**
  * Audio-only testimonial: native <audio> controls (keyboard and screen-reader
- * operable, nothing loads until play) with the full transcript printed beneath,
- * so the clip is accessible without sound. `transcript` is one line per turn,
- * "Speaker: words".
+ * operable, nothing loads until play) with the transcript offered as a PDF
+ * download beneath, so the clip is accessible without sound.
  */
 export function AudioTestimonial({ audio, className = '' }: { audio: AudioAsset; className?: string }) {
-  const lines = audio.transcript.split('\n').filter(Boolean)
   return (
     <figure className={`rounded-panel border border-line bg-white p-6 shadow-card ${className}`}>
       <figcaption className="flex items-center gap-3">
@@ -22,21 +19,13 @@ export function AudioTestimonial({ audio, className = '' }: { audio: AudioAsset;
         <source src={audio.src} type="audio/mp4" />
         Your browser doesn&rsquo;t support embedded audio.
       </audio>
-      <div className="mt-5 border-t border-line-light pt-4">
-        <Eyebrow className="text-content-faint">Transcript</Eyebrow>
-        <div className="mt-2 space-y-2 text-ds-body text-content-secondary">
-          {lines.map((line, i) => {
-            const at = line.indexOf(': ')
-            return at > 0 ? (
-              <p key={i}>
-                <span className="font-semibold text-ink">{line.slice(0, at)}:</span> {line.slice(at + 2)}
-              </p>
-            ) : (
-              <p key={i}>{line}</p>
-            )
-          })}
-        </div>
-      </div>
+      <a
+        href={audio.transcriptHref}
+        download
+        className="mt-4 inline-flex items-center gap-1.5 text-ds-body font-semibold text-primary hover:text-primary-deep"
+      >
+        <Download className="h-4 w-4" aria-hidden="true" /> Download the transcript (PDF)
+      </a>
     </figure>
   )
 }

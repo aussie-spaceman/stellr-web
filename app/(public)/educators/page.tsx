@@ -142,7 +142,7 @@ export default function EducatorsPage() {
       {/* ── Written testimonial (moved to top, below heading) ─────────── */}
       <section className="section-padding bg-white">
         <div className="container-max">
-          <PullQuoteWall quotes={[QUOTES['nahuel-de-bittencourt']]} columns={1} className="max-w-2xl mx-auto" />
+          <PullQuoteWall quotes={[QUOTES['teacher-multiple-events']]} columns={1} className="max-w-2xl mx-auto" />
         </div>
       </section>
 

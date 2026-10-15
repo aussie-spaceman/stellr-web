@@ -262,12 +262,14 @@ export default async function AccountPage({
 
       {/* Tab bar — only shown when there are multiple tabs */}
       {tabLinks.length > 1 && (
-        <div className="flex gap-1 border-b border-brand-border">
+        // Scrolls sideways on a narrow phone instead of widening the page.
+        <nav aria-label="Account sections" className="-mx-4 flex gap-1 overflow-x-auto border-b border-brand-border px-4 [scrollbar-width:none] sm:mx-0 sm:px-0">
           {tabLinks.map(({ key, label }) => (
             <Link
               key={key}
               href={key === 'profile' ? '/account' : `/account?tab=${key}`}
-              className={`px-4 py-2.5 font-subheading text-sm font-medium border-b-2 transition-colors ${
+              aria-current={activeTab === key ? 'page' : undefined}
+              className={`inline-flex min-h-11 shrink-0 items-center whitespace-nowrap px-4 font-subheading text-sm font-medium border-b-2 transition-colors ${
                 activeTab === key
                   ? 'border-brand-blue text-brand-blue'
                   : 'border-transparent text-brand-muted-soft hover:text-brand-muted hover:border-brand-border'
@@ -276,7 +278,7 @@ export default async function AccountPage({
               {label}
             </Link>
           ))}
-        </div>
+        </nav>
       )}
 
       {/* Profile tab */}

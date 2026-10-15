@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, ClipboardList, FolderOpen, Mail } from 'lucide-react'
 import { Button, Eyebrow } from '@stellr/web-ui'
 import type { CheckInView } from '@/lib/check-in-view'
@@ -18,6 +18,25 @@ const INPUT =
   'mt-1.5 w-full rounded-control border border-line bg-white px-4 py-3.5 text-base text-ink placeholder:text-content-faint focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30'
 const LABEL = 'block font-subheading text-sm font-medium text-content-body'
 
+/** Month, day and year as typed; the API takes ISO YYYY-MM-DD. */
+type DobParts = { month: string; day: string; year: string }
+
+export function dobToIso({ month, day, year }: DobParts): string | null {
+  const m = Number(month)
+  const d = Number(day)
+  const y = Number(year)
+  if (!/^\d{1,2}$/.test(month) || !/^\d{1,2}$/.test(day) || !/^\d{4}$/.test(year)) return null
+  const date = new Date(Date.UTC(y, m - 1, d))
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) return null
+  if (date.getTime() > Date.now()) return null
+  return `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+/** "3XL (or larger)" doesn't fit a phone-width tile; the desk reads "3XL+". */
+export function shortShirtSize(size: string): string {
+  return size.replace(/\s*\(or larger\)\s*$/i, '+').trim()
+}
+
 export default function CheckInForm({
   slug,
   token,
@@ -33,18 +52,31 @@ export default function CheckInForm({
   const [step, setStep] = useState<Step>('name')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
-  const [dob, setDob] = useState('')
+  const [dob, setDob] = useState<DobParts>({ month: '', day: '', year: '' })
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<CheckInView | null>(initialView)
   const [already, setAlready] = useState(false)
+  // Only a check-in made on this screen moves focus to the result; a phone
+  // that reopens the page lands on its result without being interrupted.
+  const [justCheckedIn, setJustCheckedIn] = useState(false)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    setBusy(true)
     setError(null)
-    const payload = step === 'name' ? { slug, token, firstName, lastName, dob } : { slug, token, email }
+    let payload: Record<string, unknown>
+    if (step === 'name') {
+      const iso = dobToIso(dob)
+      if (!iso) {
+        setError('Check your date of birth: month, day and a four-digit year.')
+        return
+      }
+      payload = { slug, token, firstName, lastName, dob: iso }
+    } else {
+      payload = { slug, token, email }
+    }
+    setBusy(true)
     const res = await fetch('/api/check-in', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -52,12 +84,17 @@ export default function CheckInForm({
     }).catch(() => null)
     const body = await res?.json().catch(() => null)
     setBusy(false)
-    if (!res?.ok) {
+    if (!res) {
+      setError('We couldn’t reach Stellr. Check your phone’s connection and try again.')
+      return
+    }
+    if (!res.ok) {
       if (body?.code === 'need_email') setStep('email')
       setError(body?.error ?? 'Something went wrong. Please see the registration desk.')
       return
     }
     setAlready(Boolean(body.alreadyCheckedIn))
+    setJustCheckedIn(true)
     setView(body.view)
   }
 
@@ -68,12 +105,23 @@ export default function CheckInForm({
     setStep('name')
     setFirstName('')
     setLastName('')
-    setDob('')
+    setDob({ month: '', day: '', year: '' })
     setEmail('')
     setError(null)
+    setJustCheckedIn(false)
   }
 
-  if (view) return <CheckedIn view={view} isVirtual={isVirtual} already={already} onForget={forget} canCheckInAnother={!!token} />
+  if (view)
+    return (
+      <CheckedIn
+        view={view}
+        isVirtual={isVirtual}
+        already={already}
+        onForget={forget}
+        canCheckInAnother={!!token}
+        focusOnMount={justCheckedIn}
+      />
+    )
 
   if (!token) {
     return (
@@ -87,7 +135,7 @@ export default function CheckInForm({
     <form onSubmit={submit} className="space-y-4">
       {step === 'name' ? (
         <>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
             <label className={LABEL}>
               First name
               <input
@@ -111,18 +159,59 @@ export default function CheckInForm({
               />
             </label>
           </div>
-          <label className={LABEL}>
-            Date of birth
-            <input
-              type="date"
-              required
-              value={dob}
-              onChange={(e) => setDob(e.target.value)}
-              autoComplete="bday"
-              max={new Date().toISOString().slice(0, 10)}
-              className={INPUT}
-            />
-          </label>
+          {/* Three number fields rather than a date picker: the iPhone date
+              wheel opens on today, so a student born in 2011 would scroll back
+              fifteen years at the door. */}
+          <fieldset>
+            <legend className={LABEL}>Date of birth</legend>
+            <div className="mt-1.5 grid grid-cols-[1fr_1fr_1.6fr] gap-2">
+              <label className="block">
+                <span className="text-xs text-content-muted">Month</span>
+                <input
+                  required
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={2}
+                  placeholder="MM"
+                  value={dob.month}
+                  onChange={(e) => setDob({ ...dob, month: e.target.value.replace(/\D/g, '') })}
+                  autoComplete="bday-month"
+                  enterKeyHint="next"
+                  className={INPUT.replace('mt-1.5 ', 'mt-1 ')}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs text-content-muted">Day</span>
+                <input
+                  required
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={2}
+                  placeholder="DD"
+                  value={dob.day}
+                  onChange={(e) => setDob({ ...dob, day: e.target.value.replace(/\D/g, '') })}
+                  autoComplete="bday-day"
+                  enterKeyHint="next"
+                  className={INPUT.replace('mt-1.5 ', 'mt-1 ')}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs text-content-muted">Year</span>
+                <input
+                  required
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={4}
+                  placeholder="YYYY"
+                  value={dob.year}
+                  onChange={(e) => setDob({ ...dob, year: e.target.value.replace(/\D/g, '') })}
+                  autoComplete="bday-year"
+                  enterKeyHint="go"
+                  className={INPUT.replace('mt-1.5 ', 'mt-1 ')}
+                />
+              </label>
+            </div>
+          </fieldset>
         </>
       ) : (
         <label className={LABEL}>
@@ -178,12 +267,14 @@ function CheckedIn({
   already,
   onForget,
   canCheckInAnother,
+  focusOnMount,
 }: {
   view: CheckInView
   isVirtual: boolean
   already: boolean
   onForget: () => void
   canCheckInAnother: boolean
+  focusOnMount: boolean
 }) {
   const status = !view.checkedInAt
     ? null
@@ -193,6 +284,13 @@ function CheckedIn({
         ? 'Attendance confirmed'
         : 'You’re checked in'
 
+  // Move focus to the result so a screen reader announces it: the form the
+  // person just submitted has gone, and nothing else would be read out.
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    if (focusOnMount) headingRef.current?.focus()
+  }, [focusOnMount])
+
   return (
     <div className="space-y-6">
       <div className="text-center">
@@ -201,26 +299,33 @@ function CheckedIn({
             <Check className="h-7 w-7 text-enviro-green" strokeWidth={3} aria-hidden />
           </div>
         )}
-        {status && <Eyebrow className="text-enviro-green-text">{status}</Eyebrow>}
-        <h2 className="mt-1 font-display text-3xl font-bold text-ink">
+        {status && (
+          <div aria-hidden>
+            <Eyebrow className="text-enviro-green-text">{status}</Eyebrow>
+          </div>
+        )}
+        <h2 ref={headingRef} tabIndex={-1} className="mt-1 font-display text-3xl font-bold text-ink focus:outline-none">
+          {status && <span className="sr-only">{status}: </span>}
           {view.firstName} {view.lastName}
         </h2>
       </div>
 
       {!isVirtual && (
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-ds-card bg-midnight px-4 py-5 text-center text-white">
+          <div className="min-w-0 rounded-ds-card bg-midnight px-3 py-5 text-center text-white">
             <p className="font-subheading text-xs uppercase tracking-wide text-hero-dim">Company</p>
             {view.companyNumber != null ? (
-              <p className="mt-1 font-display text-6xl font-bold leading-none tabular-nums">{view.companyNumber}</p>
+              <p className="mt-1 font-display text-5xl font-bold leading-none tabular-nums sm:text-6xl">{view.companyNumber}</p>
             ) : (
               <p className="mt-3 text-sm text-hero-lead">Ask at the desk</p>
             )}
           </div>
-          <div className="rounded-ds-card border border-line bg-surface px-4 py-5 text-center">
+          <div className="min-w-0 rounded-ds-card border border-line bg-surface px-3 py-5 text-center">
             <p className="font-subheading text-xs uppercase tracking-wide text-content-muted">Shirt size</p>
             {view.shirtSize ? (
-              <p className="mt-1 font-display text-5xl font-bold leading-none text-ink">{view.shirtSize}</p>
+              <p className="mt-1 break-words font-display text-4xl font-bold leading-none text-ink sm:text-5xl">
+                {shortShirtSize(view.shirtSize)}
+              </p>
             ) : (
               <p className="mt-3 text-sm text-content-muted">Not on file</p>
             )}

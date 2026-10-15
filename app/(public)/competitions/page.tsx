@@ -253,7 +253,7 @@ export default async function CompetitionsPage() {
             <span className="font-subheading font-semibold uppercase tracking-[0.06em] text-xs text-brand-orange shrink-0">
               The output
             </span>
-            <span className="text-base text-hero-lead leading-relaxed flex-1 min-w-[280px]">
+            <span className="text-base text-hero-lead leading-relaxed flex-1 min-w-0 basis-full sm:basis-auto sm:min-w-[280px]">
               Every team produces a <strong className="text-white">deliverable</strong> — a written
               proposal or a live presentation — assessed against an industry-style marking rubric.
             </span>
@@ -264,7 +264,7 @@ export default async function CompetitionsPage() {
             <span className="font-subheading font-semibold uppercase tracking-[0.06em] text-xs text-primary shrink-0">
               STEM Power Skills
             </span>
-            <span className="text-base text-content-secondary leading-relaxed flex-1 min-w-[280px]">
+            <span className="text-base text-content-secondary leading-relaxed flex-1 min-w-0 basis-full sm:basis-auto sm:min-w-[280px]">
               Beyond the engineering, students build the{' '}
               <strong className="text-ink">soft skills industry hires for</strong> — communication,
               teamwork, project management and presenting under pressure.

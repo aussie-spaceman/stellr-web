@@ -192,23 +192,24 @@ export default async function AdminEventDetailPage({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <Link href="/admin/competitions" className="text-sm text-brand-blue hover:text-brand-blue">
+        <Link href="/admin/competitions" className="inline-flex min-h-11 items-center text-sm text-primary-deep hover:underline">
           ← All events
         </Link>
-        <div className="flex items-center gap-3 mt-1">
-          <h1 className="font-heading uppercase text-title text-brand-blue-dark">{event.title}</h1>
-          {!isCampaign && tab === 'overview' && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="min-w-0 font-display text-2xl font-bold text-ink sm:text-title">{event.title}</h1>
+          {/* On every tab: on the day, whoever opens this page is looking for check-in. */}
+          {!isCampaign && (
             <Link
               href={`/admin/competitions/${slug}/check-in`}
-              className="ml-auto text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5"
+              className="inline-flex min-h-11 items-center rounded-control bg-primary-deep px-4 text-sm font-semibold text-white sm:ml-auto"
             >
-              Check-In Console
+              Check-in console
             </Link>
           )}
           {isCampaign && tab === 'overview' && (
             <Link
               href={`/admin/campaigns/${slug}`}
-              className="ml-auto text-sm font-medium bg-brand-blue text-white rounded-lg px-3 py-1.5"
+              className="inline-flex min-h-11 items-center rounded-control bg-primary-deep px-4 text-sm font-semibold text-white sm:ml-auto"
             >
               Proposals &amp; email
             </Link>
@@ -231,13 +232,14 @@ export default async function AdminEventDetailPage({
         </p>
       </div>
 
-      {/* Tab nav */}
-      <nav className="flex gap-1 border-b border-brand-border">
+      {/* Tab nav — scrolls sideways on a phone instead of widening the page. */}
+      <nav aria-label="Event sections" className="-mx-4 flex gap-1 overflow-x-auto border-b border-brand-border px-4 [scrollbar-width:none] sm:mx-0 sm:px-0">
         {visibleTabs.map((t) => (
           <Link
             key={t.id}
             href={`${baseHref}?tab=${t.id}`}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            aria-current={tab === t.id ? 'page' : undefined}
+            className={`inline-flex min-h-11 shrink-0 items-center whitespace-nowrap px-4 text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === t.id
                 ? 'border-brand-blue text-brand-blue'
                 : 'border-transparent text-brand-muted-soft hover:text-brand-muted'

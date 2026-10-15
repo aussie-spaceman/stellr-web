@@ -11,7 +11,7 @@ export default async function AdminWorkshopsPage() {
   const [workshops, stats] = await Promise.all([listAllWorkshops(), getAdminWorkshopStats()])
 
   return (
-    <div className="flex gap-8">
+    <div className="flex flex-col gap-4 lg:flex-row lg:gap-8">
       <AdminCoachingNav />
       <div className="min-w-0 flex-1 space-y-6">
         <div className="flex items-center justify-between">

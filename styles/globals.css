@@ -86,6 +86,19 @@
     font-family: var(--font-space-grotesk), 'Space Grotesk', system-ui, sans-serif;
     @apply leading-tight tracking-heading;
   }
+
+  /* iOS Safari zooms the whole page into any focused field whose text is under
+     16px, and many forms here set text-sm. On touch screens every text field is
+     at least 16px whatever its classes say; a mouse keeps the compact sizes.
+     (!important because component classes are utilities, which win otherwise.) */
+  @media (pointer: coarse) {
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']):not([type='button']):not([type='submit']):not([type='reset']):not([type='image']),
+    select,
+    textarea,
+    [contenteditable='true'] {
+      font-size: max(16px, 1em) !important;
+    }
+  }
 }
 
 @layer components {
@@ -126,8 +139,10 @@
     @apply max-w-7xl mx-auto;
   }
 
+  /* Same look as @stellr/web-ui's fieldControlClass: 16px on touch screens
+     (iOS zooms into anything smaller), a ≥3:1 border, 44px tall. */
   .input-field {
-    @apply w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-brand-blue-dark bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent placeholder:text-gray-400;
+    @apply w-full min-h-11 rounded-lg border border-line-strong px-3 py-2.5 text-input text-brand-blue-dark bg-white focus:outline-none focus:ring-2 focus:ring-primary-deep/30 focus:border-primary-deep placeholder:text-content-muted mouse:text-sm;
   }
 
   .label-text {

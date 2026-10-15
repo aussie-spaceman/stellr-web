@@ -73,7 +73,7 @@ function EnvelopeProgressBadge({ env }: { env: Envelope }) {
         {d.label}
       </span>
       {d.detail && (
-        <p className="mt-1 text-xs leading-tight text-brand-grey-dark">{d.detail}</p>
+        <p className="basis-full text-xs leading-tight text-brand-grey-dark [overflow-wrap:anywhere] sm:text-right">{d.detail}</p>
       )}
     </>
   )
@@ -170,8 +170,10 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
           const showExpiry = expiry && !(isMinorEnv && graduated)
 
           return (
-            <div key={env.id} className="flex items-start justify-between gap-4 py-3.5">
-              <div className="min-w-0">
+            <div key={env.id} className="flex flex-col gap-2 py-3.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              {/* A guardian's email has no break points; let it wrap anywhere
+                  rather than push the page sideways on a phone. */}
+              <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                 <p className="text-sm font-medium text-brand-blue-dark">{env.event_title}</p>
                 <p className="text-xs text-brand-muted-soft mt-0.5">{TYPE_LABEL[type] ?? 'Agreement'}</p>
                 {isMinorEnv && (
@@ -197,12 +199,14 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
                   <p className="text-xs text-brand-muted-soft mt-1 italic">Historical record</p>
                 )}
               </div>
-              <div className="flex items-center gap-3 shrink-0 mt-0.5">
+              {/* Under the details on a phone; beside them from sm. The status
+                  detail ("Waiting on …") wraps instead of widening the row. */}
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 sm:mt-0.5 sm:max-w-[45%] sm:justify-end">
                 <EnvelopeProgressBadge env={env} />
                 {env.signNowUrl && (
                   <a
                     href={env.signNowUrl}
-                    className="rounded-control bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-deep"
+                    className="inline-flex min-h-11 items-center rounded-control bg-primary-deep px-4 text-sm font-semibold text-white hover:bg-ink sm:min-h-9 sm:px-3 sm:text-xs"
                   >
                     Sign now
                   </a>
@@ -211,7 +215,7 @@ export function DocusignsSection({ dateOfBirth, eventRole, initialEnvelopes, adm
                   <button
                     onClick={() => handleDownload(env.id, env.minor_name, type)}
                     disabled={downloading === env.id}
-                    className="text-xs text-brand-blue hover:text-brand-blue-dark font-medium disabled:opacity-50"
+                    className="inline-flex min-h-11 items-center text-sm font-medium text-primary-deep hover:underline disabled:opacity-50 sm:min-h-9 sm:text-xs"
                   >
                     {downloading === env.id ? 'Downloading…' : 'Download PDF'}
                   </button>

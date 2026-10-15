@@ -27,6 +27,7 @@
   --color-text-faint: #8a90ad;
   --color-border: #e4e7f2; /** Card / divider border */
   --color-border-light: #eceef6;
+  --color-border-strong: #868ca9; /** Form-control borders: 3.3:1 on white, the WCAG 1.4.11 minimum for a control's edge. `border` (1.2:1) is for dividers only. */
   --color-danger: #b0554d; /** Avoid / negative copy */
   --bracket-school: #3c6df6; /** High-school students — aliases color.primary */
   --bracket-school-tint: #eaf0fe;
@@ -66,6 +67,7 @@
   --font-size-lead: 18px;
   --font-size-body: 15px;
   --font-size-meta: 13px;
+  --font-size-input: 16px; /** Form-field text on phones and tablets. iOS Safari zooms the page into any field under 16px. */
   --letter-spacing-display: -0.025em;
   --letter-spacing-heading: -0.02em;
   --letter-spacing-eyebrow: 0.13em;

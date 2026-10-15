@@ -39,6 +39,7 @@ const config: Config = {
         'avatar-teal': c.avatarTeal,
         line:        c.border,
         'line-light': c.borderLight,
+        'line-strong': c.borderStrong, // form-control borders (≥3:1)
         danger:      c.danger,
         content: {
           DEFAULT:   c.text.primary,
@@ -100,6 +101,8 @@ const config: Config = {
         'ds-lead':    [tokens.fontSize.lead, { lineHeight: '1.5' }],
         'ds-body':    [tokens.fontSize.body, { lineHeight: '1.6' }],
         'ds-meta':    [tokens.fontSize.meta, { lineHeight: '1.4' }],
+        /* Form fields below lg: anything smaller makes iOS Safari zoom in */
+        'input':      [tokens.fontSize.input, { lineHeight: '1.5' }],
       },
       letterSpacing: {
         display: tokens.letterSpacing.display,
@@ -130,8 +133,21 @@ const config: Config = {
         'featured':  tokens.shadow.featured,
         'panel':     tokens.shadow.panel,
       },
+      screens: {
+        /* Short screens: a phone held sideways is 340–415px tall but wide
+           enough for the sm/md layouts. `short:` lets chrome and heroes shrink
+           on height, which the width breakpoints can't see. */
+        short: { raw: '(max-height: 500px)' },
+        /* Devices whose main pointer is a mouse or trackpad. Form fields drop
+           to 14px only here: on touch screens (phones, iPads at any width)
+           they stay at 16px so iOS doesn't zoom in on focus. */
+        mouse: { raw: '(pointer: fine)' },
+      },
     },
   },
+  /* Touch screens keep :hover after a tap (a "stuck" lifted card or a pill
+     that looks selected). Only apply hover styles where hover exists. */
+  future: { hoverOnlyWhenSupported: true },
   plugins: [],
 }
 

@@ -67,11 +67,13 @@ function CopyrightBar() {
         <span>
           2026 © Stellr Education&nbsp;&nbsp;|&nbsp;&nbsp;Registered 501(c)(3) · EIN {STELLR_EIN}&nbsp;&nbsp;|&nbsp;&nbsp;Built In Utah, Educating The Globe
         </span>
-        <span className="flex items-center gap-5">
-          <Link href="/privacy" className="hover:text-hero-lead transition-colors">Privacy Policy</Link>
-          <Link href="/terms" className="hover:text-hero-lead transition-colors">Terms of Use</Link>
-          <CookieSettingsLink className="hover:text-hero-lead transition-colors" />
-          <a href="mailto:hello@stellreducation.org" className="hover:text-hero-lead transition-colors">
+        {/* Wraps on narrow phones: unwrapped, this row was ~363px wide and made
+            every page scroll sideways at 320px. */}
+        <span className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 sm:justify-end">
+          <Link href="/privacy" className="inline-flex min-h-6 items-center hover:text-hero-lead transition-colors">Privacy Policy</Link>
+          <Link href="/terms" className="inline-flex min-h-6 items-center hover:text-hero-lead transition-colors">Terms of Use</Link>
+          <CookieSettingsLink className="inline-flex min-h-6 items-center hover:text-hero-lead transition-colors" />
+          <a href="mailto:hello@stellreducation.org" className="inline-flex min-h-6 items-center break-all hover:text-hero-lead transition-colors">
             hello@stellreducation.org
           </a>
         </span>

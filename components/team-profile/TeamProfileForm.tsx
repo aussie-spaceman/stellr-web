@@ -320,7 +320,9 @@ function Checks({
 function Choice({ name, checked, label, onSelect, compact }: { name: string; checked: boolean; label: string; onSelect: () => void; compact?: boolean }) {
   return (
     <label
-      className={`flex cursor-pointer items-center gap-3 rounded-control border ${compact ? 'justify-center px-3 py-2 text-sm' : 'px-3 py-3'} ${
+      // Compact choices sit three to a row; on a 375px phone each is about 88px,
+      // so "Intermediate" needs the smaller type and tight padding to fit.
+      className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-control border has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary-deep ${compact ? 'min-w-0 justify-center px-1.5 py-2 text-center text-xs sm:px-3 sm:text-sm' : 'px-3 py-3'} ${
         checked ? 'border-primary-deep bg-primary-soft font-semibold text-primary-deep' : 'border-line bg-white text-ink'
       }`}
     >

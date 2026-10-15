@@ -1,5 +1,6 @@
 import { SignIn } from '@clerk/nextjs'
 import { safeNext } from '@/lib/safe-next'
+import { clerkAppearance } from '@/lib/clerk-appearance'
 
 export const metadata = { title: 'Sign In' }
 
@@ -17,12 +18,14 @@ export default async function SignInPage({
 }) {
   const next = safeNext((await searchParams).next)
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface py-12 px-4">
+    <div className="flex min-h-[100svh] items-center justify-center bg-surface px-4 py-12">
       <SignIn
         forceRedirectUrl={next ?? undefined}
         signUpUrl={next ? `/sign-up?next=${encodeURIComponent(next)}` : '/sign-up'}
         appearance={
-          SIGNUPS_OPEN ? undefined : { elements: { footerAction: { display: 'none' } } }
+          SIGNUPS_OPEN
+            ? clerkAppearance
+            : { ...clerkAppearance, elements: { ...clerkAppearance.elements, footerAction: { display: 'none' } } }
         }
       />
     </div>

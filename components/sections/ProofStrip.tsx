@@ -22,7 +22,7 @@ export function ProofStrip({
   heading?: string
   /** Desktop column count — 1 for a single centred photo, 2 for large 50/50
    *  thumbnails, 3/5 for strips. */
-  columns?: 1 | 2 | 3 | 5
+  columns?: 1 | 2 | 3 | 4 | 5
   /** Show the per-photo caption + credit line under each image. */
   captions?: boolean
   className?: string
@@ -90,7 +90,7 @@ export function ProofStrip({
       {/* Strip: scroll-snap row on mobile, responsive grid ≥sm */}
       <ul className={single
         ? 'mx-auto max-w-2xl'
-        : `-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:overflow-visible sm:px-0 ${columns === 2 ? 'sm:grid-cols-2 lg:grid-cols-2' : columns === 5 ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-3 lg:grid-cols-3'}`}>
+        : `-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:overflow-visible sm:px-0 ${columns === 2 ? 'sm:grid-cols-2 lg:grid-cols-2' : columns === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : columns === 5 ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-3 lg:grid-cols-3'}`}>
         {photos.map((p, i) => (
           <li key={p.id} className={single ? 'w-full' : 'w-[78%] shrink-0 snap-start sm:w-auto'}>
             <button

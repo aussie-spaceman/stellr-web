@@ -46,12 +46,13 @@ describe('asset-request email escaping (PUB-2)', () => {
 })
 
 describe('asset-request gate (the full file only ever goes out by email)', () => {
-  it('emails a signed, expiring download link and returns no file location', async () => {
+  it('emails a signed download link and returns no file location', async () => {
     const res = await post({ name: 'Jordan Blake', email: 'jordan@example.com', asset: 'mission-handbook-2026' })
     expect(res.status).toBe(200)
     const body = JSON.stringify(await res.json())
     const { html, text } = sendEmail.mock.calls[0][0] as { html: string; text: string }
-    expect(text).toMatch(/\/api\/asset-request\/download\?a=mission-handbook-2026&e=\d+&s=[A-Za-z0-9_-]{43}/)
+    expect(text).toMatch(/\/api\/asset-request\/download\?a=mission-handbook-2026&s=[A-Za-z0-9_-]{43}/)
+    expect(text).not.toMatch(/expire|works for/i)
     for (const out of [html, text, body]) {
       expect(out).not.toMatch(/blob\.vercel-storage\.com|supabase\.co|gated-downloads|\.pdf/)
     }

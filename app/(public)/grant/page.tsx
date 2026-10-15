@@ -214,7 +214,7 @@ export default async function GrantPage() {
               ))}
             </div>
 
-            <PullQuoteWall quotes={[QUOTES['nahuel-de-bittencourt']]} columns={1} />
+            <PullQuoteWall quotes={[QUOTES['teacher-multiple-events']]} columns={1} />
           </div>
         </div>
       </section>

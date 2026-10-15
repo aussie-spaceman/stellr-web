@@ -5,11 +5,10 @@ import { type CompetitionAsset, isPending, flagMissing } from '@/lib/media-helpe
 import { AssetGate } from './AssetGate'
 
 /**
- * T4 — Work card. The preview (cover + page-browsable PDF) is ALWAYS open
- * (README §8). An open file downloads directly; a gated file opens the email
- * gate, and the full file only ever reaches the requester by email, as an
- * expiring link. A gated asset therefore carries no file URL at all — just the
- * `assetKey` registered in lib/gated-assets.ts.
+ * T4 — Work card. An open file shows its cover, a preview and a direct
+ * download. A gated file shows its cover and the email gate only: the file
+ * reaches the requester by email, as a signed link, so a gated asset carries no
+ * file URL at all — just the `assetKey` registered in lib/gated-assets.ts.
  */
 const CTA =
   'inline-flex items-center justify-center gap-2 rounded-[9px] bg-primary px-5 py-3 font-display text-[15px] font-semibold text-white hover:bg-primary-deep transition-colors'
@@ -45,8 +44,8 @@ export function WorkCard({ asset, eyebrow: eyebrowOverride, className = '' }: { 
         </p>
 
         <div className="mt-auto flex flex-wrap items-center gap-3 pt-4">
-          {/* Preview is always visible */}
-          {!pending && (
+          {/* Open files only: a gated card has no preview */}
+          {!pending && asset.previewHref && (
             <a
               href={asset.previewHref}
               target="_blank"

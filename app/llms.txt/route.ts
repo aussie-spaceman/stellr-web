@@ -28,7 +28,7 @@ Two competition themes run each year: the Space Design Challenge and the
 Environmental Design Challenge. Both are delivered either as one-day live
 events (in person or virtual; grades 7–12; no preparation required) or as
 seasonal Campaigns that
-teachers run in class over 4 or 10 weeks (grades 9–12, free), with a path to
+teachers run in class over 4 or 10 weeks (grades 7–12, free), with a path to
 our International Summer Camp. Students work as an engineering company answering
 a client's Request for Proposal, judged by industry professionals. No lab, kit
 or engineering background is needed.

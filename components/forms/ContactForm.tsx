@@ -14,7 +14,7 @@ const inputClass = (hasError: boolean) =>
 const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Please enter a valid email address'),
-  type: z.string().min(1, 'Please select an enquiry type'),
+  type: z.string().min(1, 'Please select an inquiry type'),
   message: z.string().min(10, 'Message must be at least 10 characters'),
   consent: z.literal(true, { errorMap: () => ({ message: 'You must agree to be contacted' }) }),
 })
@@ -22,7 +22,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 const ENQUIRY_TYPES = [
-  { value: '', label: 'Select enquiry type…' },
+  { value: '', label: 'Select inquiry type…' },
   { value: 'General', label: 'General' },
   { value: 'Event Registration Help', label: 'Event Registration Help' },
   { value: 'Sponsorship / Donation', label: 'Sponsorship / Donation' },
@@ -114,7 +114,7 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
       {/* Enquiry type */}
       <div>
         <label htmlFor="type" className="block text-sm font-medium text-brand-blue-dark mb-1">
-          Enquiry Type <span className="text-red-500">*</span>
+          Inquiry Type <span className="text-red-500">*</span>
         </label>
         <select
           id="type"
@@ -154,7 +154,7 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
             className="mt-0.5 h-4 w-4 rounded border-line text-brand-blue"
           />
           <span className="text-sm text-brand-grey-dark">
-            I agree to Stellr Education contacting me in relation to my enquiry. View our{' '}
+            I agree to Stellr Education contacting me in relation to my inquiry. View our{' '}
             <a href="/privacy" className="text-brand-blue hover:underline">Privacy Policy</a>.
           </span>
         </label>

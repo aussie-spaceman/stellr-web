@@ -50,10 +50,10 @@ describe('white-paper email escaping (PUB-2)', () => {
     expect(html).toContain('&lt;h2&gt;')
   })
 
-  it('emails a signed, expiring download link — never the file location', async () => {
+  it('emails a signed download link — never the file location', async () => {
     await post({ name: 'Jordan Blake', email: 'jordan@example.com' })
     const { html, text } = sendEmail.mock.calls[0][0] as { html: string; text: string }
-    expect(text).toMatch(/\/api\/asset-request\/download\?a=white-paper&e=\d+&s=[A-Za-z0-9_-]{43}/)
+    expect(text).toMatch(/\/api\/asset-request\/download\?a=white-paper&s=[A-Za-z0-9_-]{43}/)
     for (const body of [html, text]) {
       expect(body).not.toMatch(/blob\.vercel-storage\.com|supabase\.co|\.pdf/)
     }

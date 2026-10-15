@@ -72,11 +72,11 @@ export const QUOTES: Record<string, QuoteAsset> = {
     meta: '2022',
     audience: 'student',
   },
-  'nahuel-de-bittencourt': {
-    id: 'nahuel-de-bittencourt',
+  'teacher-multiple-events': {
+    id: 'teacher-multiple-events',
     text: 'I already had a very big interest in space at that time, but I soon found out that this competition was the best way to actually convert that interest into something useful.',
-    name: 'Nahuel de Bittencourt',
-    meta: 'Science teacher, commenting on experience across multiple events',
+    name: 'Anonymous science teacher',
+    meta: 'Commenting on experience across multiple events',
     audience: 'educator',
   },
   'jason-zibart': {
@@ -110,36 +110,27 @@ export const VIDEOS: Record<string, VideoAsset> = {
   'testimonial-alvina-gakhokidze': video('testimonial-alvina-gakhokidze', 'Alvina Gakhokidze — former participant'),
   'testimonial-maureen-lancaster': video('testimonial-maureen-lancaster', 'Maureen Lancaster — Willcox Unified School District'),
   'testimonial-sepp-sprietsma': video('testimonial-sepp-sprietsma', 'Joseph “Sepp” Sprietsma — College Career Pathways'),
-  'testimonial-erin-henderson': video('testimonial-erin-henderson', 'Erin Henderson — Teacher, 2022 South West Event'),
+  'testimonial-erin-henderson': video('testimonial-erin-henderson', 'Erin Henderson — Teacher, 2022'),
   'testimonial-tom-wilson': video('testimonial-tom-wilson', 'Tom Wilson — educator testimonial'),
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Audio-only clips, shown with their transcript.
+ * Audio-only clips. The transcript is a separate PDF download.
  * ───────────────────────────────────────────────────────────────────────── */
 export const AUDIO: Record<string, AudioAsset> = {
   'testimonial-jeremiah-dibley': {
     id: 'testimonial-jeremiah-dibley',
     title: 'Jeremiah Dibley — teacher',
     src: mediaUrl('/audio/2026-10/testimonial-jeremiah-dibley.m4a'),
-    transcript: [
-      'Interviewer: So, what is your name, where are you from, and what are you doing at this competition?',
-      'Jeremiah Dibley: My name is Jeremiah Dibley, and I’m here just to be a chaperone for the students who are competing in this event.',
-      'Interviewer: What’s it like watching the students compete in this competition?',
-      'Jeremiah Dibley: Well, they’re very focused, very driven, very talented, and so it’s inspiring. I’m a teacher by trade, so I just love to see kids working and learning without being told to do so. I mean, they just want it, and they’re showing off their talents and their collaborative skills and their soft skills too, so it’s just cool to see them.',
-      'Interviewer: You said you brought some kids here, right?',
-      'Jeremiah Dibley: I did, yes.',
-      'Interviewer: How have you seen them grow or change due to this competition?',
-      'Jeremiah Dibley: Yeah, they’re conquering some fears. They’re just being real courageous and interacting with people from other cultures who speak other languages, who maybe are just different from them in every way, and so it’s cool to see them break out of their shell and be confident.',
-      'Interviewer: Awesome, thank you.',
-    ].join('\n'),
+    transcriptHref: mediaDownloadUrl('/files/2026-10/testimonial-jeremiah-dibley-transcript.pdf'),
   },
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Competition PDFs. Open files render a WorkCard with a direct download.
- * Gated files carry only an `assetKey`: the full file sits in private storage
- * (lib/gated-assets.ts) and goes out only by email, as an expiring link.
+ * Competition PDFs. Open files render a WorkCard with a preview and a direct
+ * download. Gated files carry only an `assetKey` and no preview: the file sits
+ * in private storage (lib/gated-assets.ts) and goes out only by email, as a
+ * signed link.
  * ───────────────────────────────────────────────────────────────────────── */
 export const COMPETITION: Record<string, CompetitionAsset> = {
   'student-work-dossier-2026': {
@@ -165,9 +156,8 @@ export const COMPETITION: Record<string, CompetitionAsset> = {
   'mission-handbook-2026': {
     id: 'mission-handbook-2026',
     title: '2026 Space Design Challenge — Mission Handbook',
-    pages: null,
-    thumbnail: '/files/2026-10/mission-handbook-2026-excerpt.cover.jpg',
-    previewHref: '/files/2026-10/mission-handbook-2026-excerpt.pdf',
+    pages: 5,
+    thumbnail: '/files/2026-10/mission-handbook-2026-excerpt-wm.cover.jpg',
     gated: true,
     assetKey: 'mission-handbook-2026',
     credit: 'Stellr',
@@ -176,21 +166,19 @@ export const COMPETITION: Record<string, CompetitionAsset> = {
     id: 'student-presentation-2026',
     title: '2026 Student Presentation (excerpt)',
     pages: 5,
-    thumbnail: '/files/2026-10/student-presentation-2026.cover.jpg',
-    previewHref: '/files/2026-10/student-presentation-2026-preview.pdf',
+    thumbnail: '/files/2026-10/student-presentation-2026-wm.cover.jpg',
     gated: true,
     assetKey: 'student-presentation-2026',
     credit: 'Participant team',
   },
-  'student-proposal-2026': {
-    id: 'student-proposal-2026',
-    title: '2026 Student Proposal — Solaris Engineering',
-    pages: 5,
-    thumbnail: '/files/2026-10/student-proposal-2026.cover.jpg',
-    previewHref: '/files/2026-10/student-proposal-2026-preview.pdf',
+  'student-work-examples': {
+    id: 'student-work-examples',
+    title: 'Examples of previous student work, from multiple Stellr events',
+    pages: 3,
+    thumbnail: '/files/2026-10/student-work-examples-v2-wm.cover.jpg',
     gated: true,
-    assetKey: 'student-proposal-2026',
-    credit: 'Participant team',
+    assetKey: 'student-work-examples',
+    credit: 'Previous participants',
   },
 }
 
@@ -198,12 +186,12 @@ export const COMPETITION: Record<string, CompetitionAsset> = {
 // readability). Open files download; previews and covers open.
 for (const c of Object.values(COMPETITION)) {
   c.thumbnail = mediaUrl(c.thumbnail)
-  c.previewHref = mediaUrl(c.previewHref)
+  if (c.previewHref) c.previewHref = mediaUrl(c.previewHref)
   if (c.fileHref) c.fileHref = mediaDownloadUrl(c.fileHref)
 }
 
 /** The 2026 RFP excerpt as a plain link, for the RFP gate's open preview. */
-export const RFP_2026_PREVIEW_HREF = COMPETITION['space-rfp-2026-excerpt'].previewHref
+export const RFP_2026_PREVIEW_HREF = COMPETITION['space-rfp-2026-excerpt'].previewHref as string
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Student work shown in the rotating showcase on /competitions and
@@ -274,6 +262,9 @@ export const PHOTOS: Record<string, PhotoAsset> = {
   }),
   // Membership
   'membership-mentor-review': photo('membership-mentor-review', 'DSC_5479', 'A mentor reviewing work with a participant'),
+  'membership-room-full': photo('membership-room-full', 'IMG_7758', 'A full room of participants and mentors at a Stellr competition', {
+    caption: 'The room, full — a Stellr competition',
+  }),
   // Events (gallery)
   'events-1': photo('events-1', 'DSC_5501', 'Students working on laptops around a table at a competition', {
     caption: 'Future engineers learning the joys of early mornings',

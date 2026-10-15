@@ -82,7 +82,7 @@ export default async function ContactPage({ searchParams }: PageProps) {
               <div className="bg-brand-blue-dark text-white rounded-xl p-6 space-y-3">
                 <h2 className="font-bold text-lg">Response time</h2>
                 <p className="text-sm text-content-faint">
-                  We aim to respond to all enquiries within 2 business days.
+                  We aim to respond to all inquiries within 2 business days.
                 </p>
                 <p className="text-sm text-content-faint">
                   For urgent event-related questions, include your event name in the subject.

@@ -77,7 +77,7 @@ export function ManageWorkshop(props: {
   return (
     <div className="mx-auto max-w-content space-y-6">
       {/* Mini-hero */}
-      <div className="rounded-panel px-7 py-6 text-white" style={{ background: 'radial-gradient(130% 150% at 88% -30%, #36306F, #181D44 48%, #0E1330)' }}>
+      <div className="rounded-panel px-4 py-6 text-white sm:px-7" style={{ background: 'radial-gradient(130% 150% at 88% -30%, #36306F, #181D44 48%, #0E1330)' }}>
         <p className="text-[12.5px] text-hero-dim">
           <Link href="/community/coaching/coach" className="hover:text-white">Your workshops</Link>
           <span className="mx-1.5 text-white/30">/</span>
@@ -107,11 +107,11 @@ export function ManageWorkshop(props: {
           </div>
         </div>
 
-        <nav className="mt-5 flex gap-6 border-b border-white/10">
+        <nav role="tablist" className="mt-5 flex gap-6 overflow-x-auto border-b border-white/10 [scrollbar-width:none]">
           {TABS.map((t) => {
             const active = tab === t.key
             return (
-              <button key={t.key} onClick={() => setTab(t.key)} className={`relative -mb-px pb-3 text-sm transition-colors ${active ? 'font-bold text-white' : 'font-medium text-hero-dim hover:text-hero-lead'}`}>
+              <button key={t.key} role="tab" aria-selected={active} onClick={() => setTab(t.key)} className={`relative -mb-px min-h-11 shrink-0 whitespace-nowrap pt-2 pb-3 text-sm transition-colors ${active ? 'font-bold text-white' : 'font-medium text-hero-dim hover:text-hero-lead'}`}>
                 {t.label}
                 {t.count ? <span className="ml-1.5 text-[11px] text-star-gold">{t.count}</span> : null}
                 {active && <span className="absolute inset-x-0 bottom-0 h-[3px] rounded-t bg-star-gold" />}

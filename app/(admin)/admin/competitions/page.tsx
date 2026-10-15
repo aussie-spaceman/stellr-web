@@ -100,8 +100,8 @@ export default async function AdminEventsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-start justify-between gap-4">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <p className="eyebrow flex items-center gap-2 text-brand-orange-alt">
             <span className="h-2 w-2 rounded-full bg-brand-orange-alt" /> Competitions
           </p>
@@ -112,7 +112,7 @@ export default async function AdminEventsPage() {
               : 'Events you are assigned to manage'}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap gap-2 sm:shrink-0 sm:justify-end">
           <Link
             href="/admin/competitions/check-in-banner"
             className="rounded-lg border border-primary px-3 py-1.5 text-sm font-medium text-primary"

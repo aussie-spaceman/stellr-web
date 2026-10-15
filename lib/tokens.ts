@@ -28,6 +28,7 @@ export const tokens = {
     },
     "border": "#E4E7F2",
     "borderLight": "#ECEEF6",
+    "borderStrong": "#868CA9",
     "danger": "#B0554D"
   },
   "bracket": {
@@ -76,7 +77,8 @@ export const tokens = {
     "eyebrow": "13px",
     "lead": "18px",
     "body": "15px",
-    "meta": "13px"
+    "meta": "13px",
+    "input": "16px"
   },
   "letterSpacing": {
     "display": "-0.025em",

@@ -273,12 +273,13 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link href="/admin/members" className="text-sm text-brand-muted-soft hover:text-brand-muted mb-1 inline-block">
+      {/* Stacks on phones: the action buttons in one row were about 460px wide. */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <Link href="/admin/members" className="mb-1 inline-flex min-h-11 items-center text-sm text-brand-muted-soft hover:text-brand-muted">
             ← All members
           </Link>
-          <h1 className="font-heading uppercase text-title text-brand-blue-dark">
+          <h1 className="break-words font-heading uppercase text-title text-brand-blue-dark">
             {member.first_name} {member.last_name}
           </h1>
           {member.member_code && (
@@ -294,7 +295,7 @@ export function AdminMemberDetail({ member, tiers, schools, ethnicityOptions, al
             </p>
           )}
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {profileIncomplete && (
             <button
               onClick={handleSendInvite}

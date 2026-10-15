@@ -112,9 +112,12 @@ function Section({
         </h2>
         <span className="text-xs text-brand-muted-soft">{hint}</span>
       </div>
-      <ul className="grid gap-3 sm:grid-cols-2">
+      {/* grid-cols-1 (minmax(0,1fr)), not an implicit column: an implicit
+          column grows to the longest truncated space name and pushed the page
+          sideways on phones. */}
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {spaces.map((s) => (
-          <li key={s.id}>
+          <li key={s.id} className="min-w-0">
             <SpaceCard
               space={s}
               restricted={restricted}

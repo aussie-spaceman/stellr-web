@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { SignUp } from '@clerk/nextjs'
 import { safeNext } from '@/lib/safe-next'
+import { clerkAppearance } from '@/lib/clerk-appearance'
 
 export const metadata = { title: 'Create Account' }
 
@@ -32,8 +33,8 @@ export default async function SignUpPage({
     : '/account/onboarding'
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface py-12 px-4">
-      <SignUp forceRedirectUrl={afterUrl} signInUrl={signInUrl} />
+    <div className="flex min-h-[100svh] items-center justify-center bg-surface px-4 py-12">
+      <SignUp forceRedirectUrl={afterUrl} signInUrl={signInUrl} appearance={clerkAppearance} />
     </div>
   )
 }

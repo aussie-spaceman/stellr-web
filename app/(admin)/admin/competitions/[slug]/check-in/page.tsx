@@ -19,14 +19,17 @@ export default async function EventCheckInPage({ params }: { params: Promise<{ s
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.stellreducation.org'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
-        <Link href={`/admin/competitions/${slug}`} className="text-sm text-brand-blue hover:text-brand-blue">
+        <Link
+          href={`/admin/competitions/${slug}`}
+          className="inline-flex min-h-11 items-center text-sm text-primary-deep hover:underline"
+        >
           ← {event.title}
         </Link>
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark mt-1">Check-In — {event.title}</h1>
+        <h1 className="font-display text-2xl font-bold text-ink">Check-in</h1>
       </div>
-      <CheckInLive eventSlug={slug} siteUrl={siteUrl} isVirtual={event.setting === 'virtual'} />
+      <CheckInLive eventSlug={slug} eventTitle={event.title} siteUrl={siteUrl} isVirtual={event.setting === 'virtual'} />
     </div>
   )
 }

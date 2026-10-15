@@ -43,7 +43,7 @@ export default async function AdminManageWorkshopPage({ params }: { params: Prom
     .is('deleted_at', null)
 
   return (
-    <div className="flex gap-8">
+    <div className="flex flex-col gap-4 lg:flex-row lg:gap-8">
       <AdminCoachingNav />
       <div className="min-w-0 flex-1">
         <AdminManageWorkshop

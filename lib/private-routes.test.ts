@@ -32,6 +32,12 @@ describe('isPrivatePath', () => {
     expect(isPrivatePath('/privacy/request')).toBe(true)
   })
 
+  it('treats event check-in as private: the QR link carries the check-in token and minors enter a date of birth', () => {
+    expect(isPrivatePath('/check-in')).toBe(true)
+    expect(isPrivatePath('/check-in/nevada-space-design-challenge')).toBe(true)
+    expect(isPrivatePath('/check-inside')).toBe(false)
+  })
+
   it('leaves ordinary public pages public', () => {
     expect(isPrivatePath('/about')).toBe(false)
     expect(isPrivatePath('/events')).toBe(false)
@@ -46,9 +52,10 @@ describe('isPrivatePath', () => {
 // app/(public) must be registered as private so the root layout loads no
 // analytics on it and the token URL never reaches a third party. This guard
 // fails if a new `[token]` page is added without adding it here (and the
-// matching next.config.mjs privateLink header).
+// matching next.config.mjs privateLink header). Single-task pages live in
+// app/(flow), which shares the public URL space, so both groups are walked.
 describe('every public [token] bearer-link page is private (PUB-13)', () => {
-  const PUBLIC_DIR = join(process.cwd(), 'app', '(public)')
+  const PUBLIC_DIRS = [join(process.cwd(), 'app', '(public)'), join(process.cwd(), 'app', '(flow)')]
 
   // Walk app/(public) for page.tsx files whose route contains a `[token]`
   // segment, returning a concrete sample path for each (placeholders for the
@@ -74,7 +81,7 @@ describe('every public [token] bearer-link page is private (PUB-13)', () => {
     return routes
   }
 
-  const routes = tokenRoutes(PUBLIC_DIR)
+  const routes = PUBLIC_DIRS.flatMap((dir) => tokenRoutes(dir))
 
   it('finds the known bearer-link pages on disk (walker sanity check)', () => {
     expect(routes).toContain('/scholarship/offer/sampletoken')

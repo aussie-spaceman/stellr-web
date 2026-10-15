@@ -312,14 +312,19 @@ export default async function EventDetailPage({ params }: PageProps) {
 
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <section className="relative bg-brand-blue-dark text-white">
+        {/* The photo is the 21:9 crop it's cut to, capped at 40% of the screen,
+            and left out on a phone held sideways, so the title and the Register
+            buttons are on the first screen. It's the page's LCP image. */}
         {event.image && (
-          <div className="relative h-72 sm:h-96">
+          <div className="relative aspect-[21/9] max-h-[40svh] w-full sm:aspect-auto sm:h-96 short:hidden">
             <Image
               src={wmSrc(urlFor(event.image).width(1400).height(600).url())}
               alt={event.title}
               fill
+              sizes="100vw"
               className="object-cover opacity-40"
               priority
+              fetchPriority="high"
             />
           </div>
         )}

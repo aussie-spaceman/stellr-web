@@ -165,7 +165,7 @@ const COMPETITION_FAQS = [
   },
   {
     q: 'Can I progress to a future event by winning an event I attend?',
-    a: 'Yes! Award winners from all our Challenges and Campaigns are invited to an annual International Summer Camp, held in mid-July. We are currently finalizing a partnership with a new vendor and will be announcing details soon! Stay tuned!',
+    a: 'Yes! Award winners from all our Challenges and Campaigns are invited to an annual International Summer Camp, held mid-July annually. We are currently finalizing a partnership with a new vendor and will be announcing details soon! Stay tuned!',
   },
 ] as const
 

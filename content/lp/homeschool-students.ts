@@ -86,7 +86,7 @@ export const homeschoolStudents: LandingPageConfig = {
     ...FORM_SHELL,
     eyebrow: 'Space design competition',
     lead:
-      'Tell us who you are and how many students you are enquiring for. We will send ' +
+      'Tell us who you are and how many students you are inquiring for. We will send ' +
       'follow up information, and schedule a call to answer your questions.',
     points: [
       'Preferential registration for your student/s',

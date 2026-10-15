@@ -380,7 +380,7 @@ export default function PrivacyPage() {
                 ['Improving our Services through analytics', 'Technical and usage data'],
                 ['Understanding which schools and organizations are interested in partnering with us', 'Technical data and inferred organization — educator and partner pages only, with advertising consent'],
                 ['Complying with legal obligations', 'All categories as required'],
-                ['Responding to enquiries and support requests', 'Contact information'],
+                ['Responding to inquiries and support requests', 'Contact information'],
               ].map(([purpose, data]) => (
                 <tr key={purpose} className="even:bg-surface">
                   <td className="border border-line px-4 py-2">{purpose}</td>
@@ -441,7 +441,7 @@ export default function PrivacyPage() {
                 ['Discord', 'Community chat, for members who choose to join it', 'Your Discord username and what you post there'],
                 ['Timestamp authority (from mid-October 2026)', 'Adding a trusted timestamp to signed agreements', 'A one-way fingerprint (hash) of the document only — no personal information'],
                 ['Sanity', 'Content management', 'No personal data'],
-                ['HubSpot', 'Marketing contact management and enquiry handling', 'Name, email, and the enquiry you submitted'],
+                ['HubSpot', 'Marketing contact management and inquiry handling', 'Name, email, and the inquiry you submitted'],
                 ['Google (Analytics, Tag Manager, Ads)', 'Aggregate website analytics; advertising measurement where you have accepted advertising cookies', 'Usage/technical data and cookie identifiers — no name, email, or registration data. Not loaded on signing pages or on private payment and join links'],
                 ['Meta and LinkedIn', 'Advertising measurement, configured within Google Tag Manager, only where you have accepted advertising cookies', 'Cookie identifiers and pages visited — no name, email, or registration data. Not loaded on signing pages or private links'],
                 ['Apollo.io', 'Identifying the organization associated with visitors to our educator and partner pages, where you have accepted advertising cookies', "IP address, cookie identifiers, and the pages visited — no name, email, or registration data; not loaded on student registration pages or the participant platform. Governed by Apollo's standard Data Processing Addendum, linked below"],

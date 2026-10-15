@@ -65,7 +65,7 @@ export const FORM_SHELL = {
   submitLabel: 'Learn more now',
   reassurance: 'No payment now. This takes you to a calendar to book a short call.',
   callNote:
-    'Every enquiry ends with a short call. You will pick a time straight after the ' +
+    'Every inquiry ends with a short call. You will pick a time straight after the ' +
     'form — no waiting on an email.',
   consentLabel: 'I agree to Stellr Education contacting me about this competition.',
   /**

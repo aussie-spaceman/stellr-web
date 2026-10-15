@@ -226,12 +226,15 @@ export interface EventMeta {
   slug: { current: string }
   activityType?: string
   date?: string
+  /** Only fetched by getEventsBySlugs(), for the check-in banner. */
+  endDate?: string
+  setting?: 'in_person' | 'virtual'
 }
 
 export async function getEventsBySlugs(slugs: string[]): Promise<EventMeta[]> {
   if (!client || slugs.length === 0) return []
   return client.fetch(
-    `*[_type == "event" && slug.current in $slugs]{ _id, title, slug, activityType, date }`,
+    `*[_type == "event" && slug.current in $slugs]{ _id, title, slug, activityType, date, endDate, setting }`,
     { slugs },
     PUBLISHED_CACHE
   )

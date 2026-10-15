@@ -120,7 +120,7 @@ export default function StudentsPage() {
       {/* ── In-page anchor nav ────────────────────────────────────────── */}
       <nav
         aria-label="Student sections"
-        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-line-light"
+        className="sticky top-[var(--header-h)] z-30 bg-white border-b border-line-light"
       >
         <div className="container-max flex gap-2 sm:gap-6 px-4 sm:px-6 lg:px-8 overflow-x-auto">
           {sections.map((s) => (
@@ -136,7 +136,7 @@ export default function StudentsPage() {
       </nav>
 
       {/* ── #high-school ──────────────────────────────────────────────── */}
-      <section id="high-school" className="section-padding bg-white scroll-mt-36">
+      <section id="high-school" className="section-padding bg-white scroll-mt-14">
         <div className="container-max">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-11 h-11 rounded-lg bg-brand-blue/10 flex items-center justify-center">
@@ -180,7 +180,7 @@ export default function StudentsPage() {
       </section>
 
       {/* ── #college ──────────────────────────────────────────────────── */}
-      <section id="college" className="section-padding bg-brand-grey-light scroll-mt-36">
+      <section id="college" className="section-padding bg-brand-grey-light scroll-mt-14">
         <div className="container-max">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-11 h-11 rounded-lg bg-brand-blue/10 flex items-center justify-center">
@@ -247,7 +247,7 @@ export default function StudentsPage() {
       </section>
 
       {/* ── #parents ──────────────────────────────────────────────────── */}
-      <section id="parents" className="section-padding bg-white scroll-mt-36">
+      <section id="parents" className="section-padding bg-white scroll-mt-14">
         <div className="container-max">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
             <div>

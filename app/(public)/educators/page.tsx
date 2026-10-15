@@ -124,7 +124,7 @@ export default function EducatorsPage() {
       {/* ── In-page anchor nav ────────────────────────────────────────── */}
       <nav
         aria-label="Educator sections"
-        className="sticky top-20 z-30 bg-white/95 backdrop-blur border-b border-line-light"
+        className="sticky top-[var(--header-h)] z-30 bg-white border-b border-line-light"
       >
         <div className="container-max flex gap-2 sm:gap-6 px-4 sm:px-6 lg:px-8 overflow-x-auto">
           {sections.map((s) => (
@@ -147,7 +147,7 @@ export default function EducatorsPage() {
       </section>
 
       {/* ── #educators ────────────────────────────────────────────────── */}
-      <section id="educators" className="section-padding bg-white scroll-mt-36">
+      <section id="educators" className="section-padding bg-white scroll-mt-14">
         <div className="container-max">
           <div className="max-w-2xl mb-10">
             <p className="text-sm font-bold uppercase tracking-widest text-brand-blue mb-3">
@@ -205,7 +205,7 @@ export default function EducatorsPage() {
           schema) and the application form — lives once, at /grant. Two pages
           carrying the same copy would compete for the same search terms and
           double every future edit. */}
-      <section id="grant" className="section-padding bg-brand-grey-light scroll-mt-36">
+      <section id="grant" className="section-padding bg-brand-grey-light scroll-mt-14">
         <div className="container-max">
           <div className="max-w-3xl">
             <div className="flex items-center gap-3 mb-4">
@@ -240,7 +240,7 @@ export default function EducatorsPage() {
       </section>
 
       {/* ── #schools ──────────────────────────────────────────────────── */}
-      <section id="schools" className="section-padding bg-white scroll-mt-36">
+      <section id="schools" className="section-padding bg-white scroll-mt-14">
         <div className="container-max">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
             <div>

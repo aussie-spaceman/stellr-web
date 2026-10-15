@@ -10,7 +10,6 @@ import type { PortableTextBlock } from '@portabletext/types'
 import { CampaignDetail } from '@/components/campaigns/CampaignDetail'
 import { EventHeroCtas, EventNotifyButton } from '@/components/sections/EventCtas'
 import { EventFlyers } from '@/components/sections/EventFlyers'
-import { getMemberCampaignContext } from '@/lib/campaign-registrations'
 import { CardPills } from '@/components/ui/CardPills'
 import { TrackEvent } from '@/components/analytics/TrackEvent'
 import { participationTypeFor } from '@/lib/analytics'
@@ -22,6 +21,14 @@ import { CAMPAIGN_FAQS } from '@/lib/campaign-content'
 import { MissionFundingNote } from '@/components/ui/MissionFundingNote'
 
 export const revalidate = 3600
+
+// No paths are built ahead (no build-time Sanity or Stripe calls): each page is
+// rendered on its first visit and then served from the cache, refreshed on the
+// window above or at once by a Sanity publish (/api/webhooks/sanity). Without
+// this the page renders on every request.
+export function generateStaticParams(): { slug: string }[] {
+  return []
+}
 
 interface EventData extends StellarEvent {
   description?: PortableTextBlock[]
@@ -231,7 +238,8 @@ export default async function EventDetailPage({ params }: PageProps) {
 
   // Campaigns render a dedicated, membership-aware detail view (no ticketing).
   if (event.activityType === 'campaign') {
-    const ctx = await getMemberCampaignContext()
+    // Registered state and the membership note fill in in the browser
+    // (CampaignMemberAware), so this page can be cached.
     return (
       <>
         <script
@@ -260,8 +268,8 @@ export default async function EventDetailPage({ params }: PageProps) {
         />
         <CampaignDetail
           campaign={event}
-          membership={ctx.membership}
-          registered={ctx.registeredSlugs.has(slug)}
+          membership={null}
+          registered={false}
         />
       </>
     )

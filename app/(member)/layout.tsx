@@ -1,4 +1,6 @@
+import { ClerkProvider } from '@clerk/nextjs'
 import { auth } from '@clerk/nextjs/server'
+import { clerkAppearance } from '@/lib/clerk-appearance'
 import { AppSidebar } from '@/components/layout/AppSidebar'
 import { AppTopBar } from '@/components/layout/AppTopBar'
 import { SiteFooter } from '@/components/layout/SiteFooter'
@@ -27,8 +29,11 @@ export default async function MemberLayout({ children }: { children: React.React
   // Not while an admin views as the member: that is the admin's browser.
   const markStudent = !!member && !viewAs && isStudentForAds({ date_of_birth: member.date_of_birth ?? null, age_bracket: member.age_bracket })
 
+  // Clerk lives here (and in the admin, auth and register layouts), not at
+  // the root: the public site ships no Clerk code to anonymous visitors.
   return (
-    <div className="min-h-screen bg-surface">
+    <ClerkProvider appearance={clerkAppearance}>
+    <div className="min-h-[100svh] bg-surface">
       {markStudent && <NoAdsStudentMarker />}
       {viewAs && <ImpersonationBanner {...viewAs} />}
       <div className="flex">
@@ -37,7 +42,7 @@ export default async function MemberLayout({ children }: { children: React.React
         <div className="flex min-h-screen min-w-0 flex-1 flex-col">
           <AppTopBar isAdmin={isAdmin} viewingAs={viewAs?.memberName ?? null} />
 
-          <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 pb-24 lg:px-8 lg:pb-10">
+          <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 pb-24 lg:px-8 lg:pb-10">
             {children}
           </main>
 
@@ -48,5 +53,6 @@ export default async function MemberLayout({ children }: { children: React.React
         </div>
       </div>
     </div>
+    </ClerkProvider>
   )
 }

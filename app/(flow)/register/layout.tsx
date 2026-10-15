@@ -1,4 +1,6 @@
 import type { Metadata } from 'next'
+import { ClerkProvider } from '@clerk/nextjs'
+import { clerkAppearance } from '@/lib/clerk-appearance'
 
 /**
  * Registration is a transactional funnel, not content: the type chooser, the
@@ -11,6 +13,12 @@ export const metadata: Metadata = {
   robots: { index: false, follow: true },
 }
 
+// The registration forms use Clerk (sign-in state, the join link's sign-in),
+// so registration gets its own provider; the rest of the public site has none.
 export default function RegisterLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>
+  return (
+    <ClerkProvider prefetchUI={false} appearance={clerkAppearance}>
+      {children}
+    </ClerkProvider>
+  )
 }

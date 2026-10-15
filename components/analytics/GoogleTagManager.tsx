@@ -18,9 +18,11 @@ const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID
  * accepts, but Consent Mode only withholds what the tags themselves are
  * configured to check — the default is enforced in the container, not here.
  *
- * The matching <noscript> iframe lives in app/layout.tsx (it must be the first
- * child of <body>). Renders nothing until NEXT_PUBLIC_GTM_ID is set, so the tag
- * stays dormant in any environment that hasn't opted in.
+ * Rendered by SiteTracking, which leaves it out on private-link pages. There is
+ * no <noscript> iframe: the root layout can't know a page is private without
+ * reading the request, and a JavaScript-free visit is almost always a bot.
+ * Renders nothing until NEXT_PUBLIC_GTM_ID is set, so the tag stays dormant in
+ * any environment that hasn't opted in.
  *
  * Loading: `lazyOnload`, after the page has loaded and the browser is idle.
  * The container and the tags it pulls in (GA4, Google Ads) are over 600 KB of

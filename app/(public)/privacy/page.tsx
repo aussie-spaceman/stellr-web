@@ -495,7 +495,7 @@ export default function PrivacyPage() {
           registration.
         </p>
 
-        <h3 id="credentials" className="text-lg font-semibold text-brand-blue-dark scroll-mt-24">7.4 Public Recognition and Credentials</h3>
+        <h3 id="credentials" className="text-lg font-semibold text-brand-blue-dark">7.4 Public Recognition and Credentials</h3>
         <p>
           Unless you opt out, competition results, names, school affiliations, and photographs may
           be published on our website, social media channels, or press releases. For participants

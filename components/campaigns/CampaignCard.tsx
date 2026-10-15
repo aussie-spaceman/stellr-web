@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Orbit, Environment } from '@stellr/icons'
-import { Button } from '@stellr/web-ui'
+import { CampaignCardAction } from './CampaignMemberAware'
 import { CardPills } from '@/components/ui/CardPills'
 import type { CampaignCardData } from '@/lib/campaigns'
 
@@ -54,15 +54,8 @@ export function CampaignCard({ campaign }: { campaign: CampaignCardVM }) {
           >
             View details
           </Link>
-          {campaign.registered ? (
-            <span className="rounded-pill bg-enviro-green-bg px-3 py-1 text-xs font-semibold text-enviro-green-text">
-              Registered
-            </span>
-          ) : (
-            <Button href={`/register/${campaign.slug}/group`} variant="primary" className="!px-4 !py-2 text-sm">
-              Register group →
-            </Button>
-          )}
+          {/* Registered state fills in in the browser, so /events can be cached. */}
+          <CampaignCardAction slug={campaign.slug} registered={campaign.registered} />
         </div>
       </div>
     </article>

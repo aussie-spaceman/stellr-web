@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -31,6 +31,13 @@ const ENQUIRY_TYPES = [
   { value: 'Other', label: 'Other' },
 ]
 
+// `/contact?type=mentor` and `?type=sponsorship` deep links pick the inquiry
+// type. Read in the browser, so /contact stays a static page.
+const TYPE_FROM_QUERY: Record<string, string> = {
+  mentor: 'Volunteer / Mentor',
+  sponsorship: 'Sponsorship / Donation',
+}
+
 export function ContactForm({ prefillType }: { prefillType?: string }) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
 
@@ -38,11 +45,19 @@ export function ContactForm({ prefillType }: { prefillType?: string }) {
     register,
     handleSubmit,
     reset,
+    getValues,
+    setValue,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { type: prefillType ?? '' },
   })
+
+  useEffect(() => {
+    if (prefillType) return
+    const fromQuery = TYPE_FROM_QUERY[new URLSearchParams(window.location.search).get('type') ?? '']
+    if (fromQuery && !getValues('type')) setValue('type', fromQuery)
+  }, [prefillType, getValues, setValue])
 
   // Pre-fill from the signed-in member's record; never clobbers typing.
   usePrefillForm(reset, (p) => ({

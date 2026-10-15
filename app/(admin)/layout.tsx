@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
-import { UserButton } from '@clerk/nextjs'
+import { ClerkProvider, UserButton } from '@clerk/nextjs'
+import { clerkAppearance } from '@/lib/clerk-appearance'
 import { hasAdminPortalAccess, isAdminClaims } from '@/lib/admin-auth'
 import { AdminSidebar } from '@/components/admin/AdminSidebar'
 import { SiteFooter } from '@/components/layout/SiteFooter'
@@ -15,7 +16,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const isAdmin = isAdminClaims(sessionClaims)
 
   return (
-    <div className="min-h-screen bg-brand-canvas">
+    <ClerkProvider appearance={clerkAppearance}>
+    <div className="min-h-[100svh] bg-brand-canvas">
       <div className="flex">
         <AdminSidebar isAdmin={isAdmin} />
 
@@ -28,7 +30,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <UserButton />
           </header>
 
-          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 pb-24 lg:px-8 lg:pb-10">
+          <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 pb-24 lg:px-8 lg:pb-10">
             {children}
           </main>
 
@@ -39,5 +41,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
       </div>
     </div>
+    </ClerkProvider>
   )
 }

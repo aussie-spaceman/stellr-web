@@ -220,7 +220,7 @@ export default async function GrantPage() {
       </section>
 
       {/* ── Apply ─────────────────────────────────────────────────────── */}
-      <section id="apply" className="bg-surface section-padding scroll-mt-24">
+      <section id="apply" className="bg-surface section-padding">
         <div className="container-max max-w-content grid gap-12 lg:grid-cols-[0.82fr_1.18fr] items-start">
           <div>
             <Eyebrow>Ready to take part?</Eyebrow>

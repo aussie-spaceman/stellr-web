@@ -5,6 +5,7 @@ import { ArrowRight } from 'lucide-react'
 import { getAllNewsPosts, urlFor, wmSrc } from '@/lib/sanity'
 import { formatDate } from '@/lib/utils'
 import { categoryColors } from '@/lib/news-utils'
+import { NewsBoard } from '@/components/sections/NewsBoard'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/news' },
@@ -12,10 +13,9 @@ export const metadata: Metadata = {
   description: 'The latest news, event results, and STEM updates from Stellr Education.',
 }
 
+// Static, refreshed hourly. The category chips filter in the browser
+// (NewsBoard), so nothing here reads the request.
 export const revalidate = 3600
-
-const CATEGORIES = ['All', 'Announcement', 'Event Results', 'STEM News', 'Community'] as const
-type Category = typeof CATEGORIES[number]
 
 interface NewsPost {
   _id: string
@@ -27,19 +27,8 @@ interface NewsPost {
   coverImage?: { asset: { _ref: string } }
 }
 
-interface PageProps {
-  searchParams: Promise<{ category?: string }>
-}
-
-
-export default async function NewsPage({ searchParams }: PageProps) {
-  const { category } = await searchParams
+export default async function NewsPage() {
   const allPosts: NewsPost[] = await getAllNewsPosts().catch(() => []) ?? []
-
-  const activeCategory = category ?? 'All'
-  const filtered = activeCategory === 'All'
-    ? allPosts
-    : allPosts.filter((p) => p.category === activeCategory)
 
   return (
     <>
@@ -51,91 +40,53 @@ export default async function NewsPage({ searchParams }: PageProps) {
         </div>
       </section>
 
-      {/* ── Category Filter ───────────────────────────────────────────── */}
-      <section className="bg-brand-grey-light border-b border-line px-4 sm:px-6 lg:px-8 py-4">
-        <div className="max-w-7xl mx-auto flex flex-wrap gap-2">
-          {CATEGORIES.map((cat) => (
-            <Link
-              key={cat}
-              href={cat === 'All' ? '/news' : `/news?category=${encodeURIComponent(cat)}`}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors border ${
-                activeCategory === cat
-                  ? 'bg-brand-blue text-white border-brand-blue'
-                  : 'bg-white text-brand-grey-dark border-line hover:border-brand-blue hover:text-brand-blue'
-              }`}
-            >
-              {cat}
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Article Grid ─────────────────────────────────────────────── */}
-      <section className="section-padding">
-        <div className="container-max">
-          {filtered.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {filtered.map((post) => (
-                <article key={post._id} className="bg-white rounded-xl border border-line-light shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col">
-                  {/* Cover image */}
-                  <div className="relative h-48 bg-gradient-to-br from-brand-blue-dark to-blue-900">
-                    {post.coverImage ? (
-                      <Image
-                        src={wmSrc(urlFor(post.coverImage).width(600).height(384).url())}
-                        alt={post.title}
-                        fill
-                        sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="absolute inset-0 flex items-center justify-center text-blue-300 opacity-30 text-6xl font-bold">S</div>
-                    )}
-                  </div>
-
-                  <div className="p-5 flex flex-col flex-1">
-                    <div className="flex items-center gap-3 mb-3">
-                      {post.category && (
-                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${categoryColors[post.category] ?? 'bg-surface text-content-body'}`}>
-                          {post.category}
-                        </span>
-                      )}
-                      {post.publishedAt && (
-                        <span className="text-xs text-brand-grey-mid">{formatDate(post.publishedAt)}</span>
-                      )}
-                    </div>
-
-                    <h2 className="font-bold text-brand-blue-dark leading-snug mb-2">{post.title}</h2>
-
-                    {post.excerpt && (
-                      <p className="text-sm text-brand-grey-dark line-clamp-3 flex-1">{post.excerpt}</p>
-                    )}
-
-                    <Link
-                      href={`/news/${post.slug.current}`}
-                      className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-blue hover:underline"
-                    >
-                      Read More <ArrowRight size={14} />
-                    </Link>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-24">
-              <p className="text-xl text-brand-grey-mid">
-                {allPosts.length === 0
-                  ? 'No news posts yet — check back soon.'
-                  : 'No posts in this category yet.'}
-              </p>
-              {allPosts.length > 0 && (
-                <Link href="/news" className="mt-4 inline-block text-brand-blue hover:underline text-sm">
-                  View all posts
-                </Link>
+      {/* ── Category Filter + Article Grid ───────────────────────────── */}
+      <NewsBoard categories={allPosts.map((p) => p.category)}>
+        {allPosts.map((post) => (
+          <article key={post._id} className="bg-white rounded-xl border border-line-light shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col">
+            {/* Cover image */}
+            <div className="relative h-48 bg-gradient-to-br from-brand-blue-dark to-blue-900">
+              {post.coverImage ? (
+                <Image
+                  src={wmSrc(urlFor(post.coverImage).width(600).height(384).url())}
+                  alt={post.title}
+                  fill
+                  sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                  className="object-cover"
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-blue-300 opacity-30 text-6xl font-bold">S</div>
               )}
             </div>
-          )}
-        </div>
-      </section>
+
+            <div className="p-5 flex flex-col flex-1">
+              <div className="flex items-center gap-3 mb-3">
+                {post.category && (
+                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${categoryColors[post.category] ?? 'bg-surface text-content-body'}`}>
+                    {post.category}
+                  </span>
+                )}
+                {post.publishedAt && (
+                  <span className="text-xs text-brand-grey-mid">{formatDate(post.publishedAt)}</span>
+                )}
+              </div>
+
+              <h2 className="font-bold text-brand-blue-dark leading-snug mb-2">{post.title}</h2>
+
+              {post.excerpt && (
+                <p className="text-sm text-brand-grey-dark line-clamp-3 flex-1">{post.excerpt}</p>
+              )}
+
+              <Link
+                href={`/news/${post.slug.current}`}
+                className="mt-4 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-brand-blue hover:underline"
+              >
+                Read More <ArrowRight size={14} />
+              </Link>
+            </div>
+          </article>
+        ))}
+      </NewsBoard>
     </>
   )
 }

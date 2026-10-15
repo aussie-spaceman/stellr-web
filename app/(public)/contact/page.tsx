@@ -8,17 +8,8 @@ export const metadata: Metadata = {
   description: 'Get in touch with the Stellr Education team.',
 }
 
-interface PageProps {
-  searchParams: Promise<{ type?: string }>
-}
-
-export default async function ContactPage({ searchParams }: PageProps) {
-  const { type } = await searchParams
-  const prefillType = type === 'mentor'
-    ? 'Volunteer / Mentor'
-    : type === 'sponsorship'
-    ? 'Sponsorship / Donation'
-    : undefined
+// Static: the `?type=` deep link is read by ContactForm in the browser.
+export default function ContactPage() {
 
   return (
     <>
@@ -39,7 +30,7 @@ export default async function ContactPage({ searchParams }: PageProps) {
 
             {/* Form */}
             <div className="lg:col-span-2">
-              <ContactForm prefillType={prefillType} />
+              <ContactForm />
             </div>
 
             {/* Sidebar */}

@@ -406,7 +406,7 @@ export default async function CampaignsPage() {
       </section>
 
       {/* ── Campaigns ─────────────────────────────────────────────────── */}
-      <section id="campaigns" className="section-padding bg-surface scroll-mt-24">
+      <section id="campaigns" className="section-padding bg-surface">
         <div className="container-max">
           <div className="rounded-cta overflow-hidden bg-gradient-to-br from-[#1B2350] to-[#10153A] text-white">
             <div className="px-7 sm:px-11 pt-10">
@@ -525,7 +525,7 @@ export default async function CampaignsPage() {
       </section>
 
       {/* ── Material levels ───────────────────────────────────────────── */}
-      <section id="tiers" className="section-padding bg-surface scroll-mt-24">
+      <section id="tiers" className="section-padding bg-surface">
         <div className="container-max">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="max-w-2xl">

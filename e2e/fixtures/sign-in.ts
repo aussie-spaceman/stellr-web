@@ -34,6 +34,13 @@ export async function signInAs(page: Page, role: FixtureRole, baseURL: string | 
 
   // The app's own pages, not /sign-in: clerk.signIn drives the Clerk client
   // directly and the sign-in route's own component competes with it.
+  //
+  // The public pages load Clerk only for a browser that looks signed in (the
+  // `__client_uat` hint, lib/session-hint.ts), so set the hint first, as a
+  // returning member's browser would have it. Clerk corrects it to 0 on load.
+  await page.context().addCookies([
+    { name: '__client_uat', value: '1', url: baseURL ?? 'http://localhost:3000' },
+  ])
   await page.goto('/')
 
   // Wait for the Clerk client explicitly before signing in.

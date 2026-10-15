@@ -112,7 +112,7 @@ export default function TermsPage() {
         </nav>
 
         {/* 1. Acceptance */}
-        <h2 id="accept" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="accept" className="text-xl font-bold text-brand-blue-dark">
           1. Acceptance of These Terms
         </h2>
         <p>
@@ -144,7 +144,7 @@ export default function TermsPage() {
         </p>
 
         {/* 2. Who We Are */}
-        <h2 id="who" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="who" className="text-xl font-bold text-brand-blue-dark">
           2. Who We Are
         </h2>
         <p>
@@ -157,7 +157,7 @@ export default function TermsPage() {
         </p>
 
         {/* 3. Other Agreements */}
-        <h2 id="related" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="related" className="text-xl font-bold text-brand-blue-dark">
           3. These Terms and Other Agreements
         </h2>
         <p>
@@ -173,7 +173,7 @@ export default function TermsPage() {
         </p>
 
         {/* 4. Eligibility */}
-        <h2 id="eligibility" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="eligibility" className="text-xl font-bold text-brand-blue-dark">
           4. Eligibility, Accounts &amp; Minors
         </h2>
         <h3 className="text-lg font-semibold text-brand-blue-dark">4.1 Who may use the Services</h3>
@@ -244,7 +244,7 @@ export default function TermsPage() {
         </p>
 
         {/* 5. Our Services */}
-        <h2 id="services" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="services" className="text-xl font-bold text-brand-blue-dark">
           5. Our Services
         </h2>
         <p>The Services may include, depending on your role and membership:</p>
@@ -327,7 +327,7 @@ export default function TermsPage() {
         </ul>
 
         {/* 6. Membership */}
-        <h2 id="membership" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="membership" className="text-xl font-bold text-brand-blue-dark">
           6. Membership Plans, Fees &amp; Billing
         </h2>
         <p>
@@ -367,7 +367,7 @@ export default function TermsPage() {
         </p>
 
         {/* 7. Competitions */}
-        <h2 id="competitions" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="competitions" className="text-xl font-bold text-brand-blue-dark">
           7. Competition Registration &amp; Participation
         </h2>
         <h3 className="text-lg font-semibold text-brand-blue-dark">7.1 Registration and eligibility</h3>
@@ -398,7 +398,7 @@ export default function TermsPage() {
         </p>
 
         {/* 8. Events */}
-        <h2 id="events" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="events" className="text-xl font-bold text-brand-blue-dark">
           8. In-Person Events &amp; Safety
         </h2>
         <p>
@@ -428,7 +428,7 @@ export default function TermsPage() {
         </p>
 
         {/* 9. Refunds */}
-        <h2 id="refunds" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="refunds" className="text-xl font-bold text-brand-blue-dark">
           9. Refunds &amp; Cancellations
         </h2>
         <p>The following applies unless a specific competition, event, or membership states otherwise:</p>
@@ -459,7 +459,7 @@ export default function TermsPage() {
         <p>Approved refunds are issued to the original payment method through our payment processor.</p>
 
         {/* 10. Acceptable Use */}
-        <h2 id="acceptable" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="acceptable" className="text-xl font-bold text-brand-blue-dark">
           10. Acceptable Use &amp; Community Conduct
         </h2>
         <p>
@@ -495,7 +495,7 @@ export default function TermsPage() {
         </p>
 
         {/* 11. Your Content */}
-        <h2 id="usercontent" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="usercontent" className="text-xl font-bold text-brand-blue-dark">
           11. Your Content &amp; Competition Submissions
         </h2>
         <h3 className="text-lg font-semibold text-brand-blue-dark">11.1 You keep ownership</h3>
@@ -542,7 +542,7 @@ export default function TermsPage() {
         </p>
 
         {/* 12. Our IP */}
-        <h2 id="ourip" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="ourip" className="text-xl font-bold text-brand-blue-dark">
           12. Our Intellectual Property
         </h2>
         <p>
@@ -561,7 +561,7 @@ export default function TermsPage() {
         </p>
 
         {/* 13. Third-Party */}
-        <h2 id="thirdparty" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="thirdparty" className="text-xl font-bold text-brand-blue-dark">
           13. Third-Party Services &amp; Links
         </h2>
         <p>
@@ -576,7 +576,7 @@ export default function TermsPage() {
         </p>
 
         {/* 14. Privacy */}
-        <h2 id="privacy" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="privacy" className="text-xl font-bold text-brand-blue-dark">
           14. Privacy
         </h2>
         <p>
@@ -590,7 +590,7 @@ export default function TermsPage() {
         </p>
 
         {/* 15. Donations */}
-        <h2 id="donations" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="donations" className="text-xl font-bold text-brand-blue-dark">
           15. Donations
         </h2>
         <p>
@@ -605,7 +605,7 @@ export default function TermsPage() {
         </p>
 
         {/* 16. Disclaimers */}
-        <h2 id="disclaimers" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="disclaimers" className="text-xl font-bold text-brand-blue-dark">
           16. Disclaimers
         </h2>
         <p>
@@ -622,7 +622,7 @@ export default function TermsPage() {
         </p>
 
         {/* 17. Liability */}
-        <h2 id="liability" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="liability" className="text-xl font-bold text-brand-blue-dark">
           17. Limitation of Liability
         </h2>
         <p>
@@ -645,7 +645,7 @@ export default function TermsPage() {
         </p>
 
         {/* 18. Indemnification */}
-        <h2 id="indemnity" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="indemnity" className="text-xl font-bold text-brand-blue-dark">
           18. Indemnification
         </h2>
         <p>
@@ -658,7 +658,7 @@ export default function TermsPage() {
         </p>
 
         {/* 19. Termination */}
-        <h2 id="termination" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="termination" className="text-xl font-bold text-brand-blue-dark">
           19. Suspension &amp; Termination
         </h2>
         <p>
@@ -674,7 +674,7 @@ export default function TermsPage() {
         </p>
 
         {/* 20. Changes */}
-        <h2 id="changes" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="changes" className="text-xl font-bold text-brand-blue-dark">
           20. Changes to the Services and These Terms
         </h2>
         <p>
@@ -692,7 +692,7 @@ export default function TermsPage() {
         </p>
 
         {/* 21. Disputes */}
-        <h2 id="disputes" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="disputes" className="text-xl font-bold text-brand-blue-dark">
           21. Dispute Resolution &amp; Governing Law
         </h2>
         <p>
@@ -714,7 +714,7 @@ export default function TermsPage() {
         </p>
 
         {/* 22. General */}
-        <h2 id="general" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="general" className="text-xl font-bold text-brand-blue-dark">
           22. General Terms
         </h2>
         <p>
@@ -764,7 +764,7 @@ export default function TermsPage() {
         </p>
 
         {/* 23. Contact */}
-        <h2 id="contact" className="text-xl font-bold text-brand-blue-dark scroll-mt-24">
+        <h2 id="contact" className="text-xl font-bold text-brand-blue-dark">
           23. Contact Us
         </h2>
         <p>Questions about these Terms? We&rsquo;re happy to help.</p>

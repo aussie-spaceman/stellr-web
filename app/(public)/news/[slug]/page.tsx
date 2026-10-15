@@ -12,6 +12,14 @@ import { SubscribeForm } from '@/components/forms/SubscribeForm'
 
 export const revalidate = 3600
 
+// No paths are built ahead (no build-time Sanity or Stripe calls): each page is
+// rendered on its first visit and then served from the cache, refreshed on the
+// window above or at once by a Sanity publish (/api/webhooks/sanity). Without
+// this the page renders on every request.
+export function generateStaticParams(): { slug: string }[] {
+  return []
+}
+
 interface PageProps {
   params: Promise<{ slug: string }>
 }

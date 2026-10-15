@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { Check } from 'lucide-react'
-import { Button } from '@stellr/web-ui'
 import type { StellarEvent } from '@/lib/sanity'
 import {
   themeFromType,
@@ -20,8 +19,8 @@ import {
 import { CardPills } from '@/components/ui/CardPills'
 import { gradeBand } from '@/lib/grade-band'
 import { EventFlyers } from '@/components/sections/EventFlyers'
+import { CampaignCta, CampaignMembershipNote } from './CampaignMemberAware'
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.stellreducation.org'
 
 interface Props {
   campaign: StellarEvent
@@ -48,12 +47,9 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
   const status = campaignStatus(campaign)
   const isOpen = status === 'Open'
 
-  // One CTA for campaigns — Group Registration (or straight to the portal if the
-  // member has already registered). A member who is already in keeps their way
-  // back in whatever the registration window is doing.
-  const competeHref = registered ? `${APP_URL}/events` : `/register/${campaign.slug.current}/group`
-  const competeLabel = registered ? 'Access Campaign →' : 'Compete Now →'
-  const showCta = registered || isOpen
+  // One CTA for campaigns — Group Registration, or straight to the portal for a
+  // member who has already registered. Which one is decided in the browser
+  // (CampaignCta), so this page can be cached; `registered` is the start value.
   const closedNote =
     status === 'Coming soon'
       ? 'Registration for this campaign opens closer to the season.'
@@ -96,11 +92,13 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
           </dl>
 
           <div className="mt-8">
-            {showCta ? (
-              <Button href={competeHref} variant="primary">{competeLabel}</Button>
-            ) : (
-              <p className="text-sm text-hero-lead">{closedNote}</p>
-            )}
+            <CampaignCta
+              slug={campaign.slug.current}
+              isOpen={isOpen}
+              closedNote={closedNote}
+              registered={registered}
+              closedClassName="text-sm text-hero-lead"
+            />
           </div>
         </div>
       </section>
@@ -165,16 +163,10 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
               {campaign.deliverable ?? 'A written proposal'} · due {dl?.label ?? 'the deadline'}.
             </p>
 
-            {membership?.schoolName ? (
-              <p className="mt-4 rounded-ds-card bg-enviro-green-bg px-4 py-3 text-sm text-enviro-green-text">
-                Signed in as <strong>{membership.schoolName}</strong>
-                {membership.roleLabel ? ` · ${membership.roleLabel}` : ''} — no payment needed.
-              </p>
-            ) : (
-              <p className="mt-4 rounded-ds-card bg-enviro-green-bg px-4 py-3 text-sm text-enviro-green-text">
-                Free — no payment required for Campaigns.
-              </p>
-            )}
+            <CampaignMembershipNote
+              membership={membership}
+              className="mt-4 rounded-ds-card bg-enviro-green-bg px-4 py-3 text-sm text-enviro-green-text"
+            />
 
             <p className="mt-4 text-sm text-content-secondary">
               <span className="font-heading font-bold text-ink">Eligibility</span>
@@ -183,13 +175,14 @@ export function CampaignDetail({ campaign, membership, registered }: Props) {
             </p>
 
             <div className="mt-5">
-              {showCta ? (
-                <Button href={competeHref} variant="primary" className="w-full justify-center">
-                  {competeLabel}
-                </Button>
-              ) : (
-                <p className="text-sm text-content-secondary">{closedNote}</p>
-              )}
+              <CampaignCta
+                slug={campaign.slug.current}
+                isOpen={isOpen}
+                closedNote={closedNote}
+                registered={registered}
+                className="w-full justify-center"
+                closedClassName="text-sm text-content-secondary"
+              />
             </div>
           </div>
 

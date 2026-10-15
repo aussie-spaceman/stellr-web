@@ -173,7 +173,7 @@ export default function MembershipExplorer({
               {/* educator: compact selectable cards feed the content waterfall */}
               <div className="flex flex-wrap gap-[13px]">
                 {audience.tiers.map((t) => (
-                  <div key={t.id} id={t.id} className="flex-1 basis-[200px] scroll-mt-24">
+                  <div key={t.id} id={t.id} className="flex-1 basis-[200px]">
                     <TierCard
                       tier={t.id}
                       role={t.role}
@@ -194,7 +194,7 @@ export default function MembershipExplorer({
                   </div>
                 ))}
               </div>
-              <div ref={detailRef} className="scroll-mt-24">
+              <div ref={detailRef}>
                 <Waterfall selIdx={selIdx} priceOf={priceOf} />
               </div>
             </>
@@ -202,7 +202,7 @@ export default function MembershipExplorer({
             /* school / college: every tier is a full perk-clarity card (Academy → Community → Store) */
             <div className="flex flex-wrap items-start gap-4">
               {audience.tiers.map((t, i) => (
-                <div key={t.id} id={t.id} className="flex-1 basis-[360px] max-w-[440px] scroll-mt-24">
+                <div key={t.id} id={t.id} className="flex-1 basis-[360px] max-w-[440px]">
                   <MembershipTierCard
                     tier={t}
                     audienceName={audience.name}

@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
-import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { MapPin, Calendar, Users, Ticket, Check } from 'lucide-react'
-import { getEventBySlug, urlFor, wmSrc, type StellarEvent } from '@/lib/sanity'
+import { getEventBySlug, urlFor, type StellarEvent } from '@/lib/sanity'
+import { sanityImage } from '@/lib/sanity-image'
+import { CoverImage } from '@/components/ui/CoverImage'
 import { formatDateRange, formatDate, eventLastDay, registrationStatus } from '@/lib/utils'
 import { PortableText } from 'next-sanity'
 import type { PortableTextBlock } from '@portabletext/types'
@@ -325,14 +326,11 @@ export default async function EventDetailPage({ params }: PageProps) {
             buttons are on the first screen. It's the page's LCP image. */}
         {event.image && (
           <div className="relative aspect-[21/9] max-h-[40svh] w-full sm:aspect-auto sm:h-96 short:hidden">
-            <Image
-              src={wmSrc(urlFor(event.image).width(1400).height(600).url())}
+            <CoverImage
+              image={sanityImage(event.image, 'eventHero', '100vw')}
               alt={event.title}
-              fill
-              sizes="100vw"
-              className="object-cover opacity-40"
+              className="opacity-40"
               priority
-              fetchPriority="high"
             />
           </div>
         )}

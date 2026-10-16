@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
-import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { PortableText } from 'next-sanity'
-import { getNewsPostBySlug, getRelatedNewsPosts, urlFor, wmSrc } from '@/lib/sanity'
+import { getNewsPostBySlug, getRelatedNewsPosts, urlFor } from '@/lib/sanity'
+import { sanityImage } from '@/lib/sanity-image'
+import { CoverImage, CARD_IMAGE_SIZES } from '@/components/ui/CoverImage'
 import { formatDate } from '@/lib/utils'
 import { categoryColors } from '@/lib/news-utils'
 import { buildArticleJsonLd } from '@/lib/structured-data'
@@ -77,12 +78,10 @@ export default async function NewsArticlePage({ params }: PageProps) {
       <section className="bg-brand-blue-dark text-white">
         {post.coverImage && (
           <div className="relative h-64 sm:h-80">
-            <Image
-              src={wmSrc(urlFor(post.coverImage).width(1400).height(560).url())}
+            <CoverImage
+              image={sanityImage(post.coverImage, 'newsHero', '100vw')}
               alt={post.title}
-              fill
-              sizes="100vw"
-              className="object-cover opacity-40"
+              className="opacity-40"
               priority
             />
           </div>
@@ -131,13 +130,7 @@ export default async function NewsArticlePage({ params }: PageProps) {
                 <article key={rel._id} className="bg-white rounded-xl border border-line-light shadow-sm overflow-hidden">
                   <div className="relative h-40 bg-gradient-to-br from-brand-blue-dark to-blue-900">
                     {rel.coverImage && (
-                      <Image
-                        src={wmSrc(urlFor(rel.coverImage).width(400).height(240).url())}
-                        alt={rel.title}
-                        fill
-                        sizes="(min-width: 640px) 33vw, 100vw"
-                        className="object-cover"
-                      />
+                      <CoverImage image={sanityImage(rel.coverImage, 'card', CARD_IMAGE_SIZES.threeUp)} alt={rel.title} />
                     )}
                   </div>
                   <div className="p-4">

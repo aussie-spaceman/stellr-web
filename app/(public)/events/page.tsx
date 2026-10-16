@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
 import { Hero } from '@stellr/web-ui'
-import { getAllEvents, getAllCampaigns, urlFor, wmSrc, type StellarEvent } from '@/lib/sanity'
+import { getAllEvents, getAllCampaigns, type StellarEvent } from '@/lib/sanity'
+import { sanityImage } from '@/lib/sanity-image'
 import { toCampaignCardData, themeFromType, type CampaignCardData } from '@/lib/campaigns'
 import { CampaignGridCard } from '@/components/campaigns/CampaignGridCard'
 import { EventCard } from '@/components/ui/EventCard'
+import { CARD_IMAGE_SIZES } from '@/components/ui/CoverImage'
 import { EventsBoard, type BoardItem } from '@/components/sections/EventsBoard'
 import { matchesGradeFilter } from '@/lib/grade-band'
 
@@ -55,7 +57,7 @@ export default async function EventsPage() {
       campaign: {
         ...toCampaignCardData(c),
         registered: false,
-        imageUrl: c.image ? wmSrc(urlFor(c.image).width(600).height(352).url()) : null,
+        image: c.image ? sanityImage(c.image, 'card', CARD_IMAGE_SIZES.eventsBoard) : null,
       },
       filter: {
         kind: 'campaign',

@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import Image from 'next/image'
 import { ArrowRight } from 'lucide-react'
-import { getAllNewsPosts, urlFor, wmSrc } from '@/lib/sanity'
+import { getAllNewsPosts } from '@/lib/sanity'
+import { sanityImage } from '@/lib/sanity-image'
+import { CoverImage, CARD_IMAGE_SIZES } from '@/components/ui/CoverImage'
 import { formatDate } from '@/lib/utils'
 import { categoryColors } from '@/lib/news-utils'
 import { NewsBoard } from '@/components/sections/NewsBoard'
@@ -47,13 +48,7 @@ export default async function NewsPage() {
             {/* Cover image */}
             <div className="relative h-48 bg-gradient-to-br from-brand-blue-dark to-blue-900">
               {post.coverImage ? (
-                <Image
-                  src={wmSrc(urlFor(post.coverImage).width(600).height(384).url())}
-                  alt={post.title}
-                  fill
-                  sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-                  className="object-cover"
-                />
+                <CoverImage image={sanityImage(post.coverImage, 'card', CARD_IMAGE_SIZES.newsBoard)} alt={post.title} />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-blue-300 opacity-30 text-6xl font-bold">S</div>
               )}

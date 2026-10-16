@@ -128,6 +128,9 @@ export function AccountProfile({ member, clerkUser, ethnicityOptions, allergyOpt
             alt={member.first_name}
             width={56}
             height={56}
+            // Clerk's CDN already serves a small avatar; resizing it again
+            // only spends image transformations.
+            unoptimized
             className="shrink-0 rounded-full object-cover"
           />
         )}

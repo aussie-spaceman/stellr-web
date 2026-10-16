@@ -9,6 +9,74 @@ export const VIDEO_ROUTES = [
 const VIDEO_ORIGINS = '"https://8x8.vc" "https://meet.jit.si"'
 export const VIDEO_PERMISSIONS_POLICY = `camera=(self ${VIDEO_ORIGINS}), microphone=(self ${VIDEO_ORIGINS}), geolocation=(), payment=(self)`
 
+// The stellr-web-dev Vercel project (same ID as scripts/vercel-ignore-build.sh).
+export const DEV_PROJECT_ID = 'prj_Nd2kmpMj3bBuXbSjc6teUdwh9gPO'
+
+/**
+ * next/image settings. Vercel counts a transformation each time it generates
+ * an image it hasn't cached: one per source, width and format, in each project,
+ * until the copy expires. Hobby includes 5,000 a month across both projects,
+ * and three quarters of it was gone by 16 Oct 2026. So: one format, few
+ * widths, long-lived copies, and only our own sources. Takes the env so
+ * next-config-images.test.ts can check each case.
+ *
+ * @param {Record<string, string | undefined>} [env]
+ */
+export function imagesConfig(env = process.env) {
+  let mediaHost = null
+  try {
+    mediaHost = new URL(env.NEXT_PUBLIC_MEDIA_BASE_URL ?? '').hostname
+  } catch {
+    // Unset: mediaUrl() serves the local paths below instead.
+  }
+  const sanityProject = env.NEXT_PUBLIC_SANITY_PROJECT_ID
+  const sanityDataset = env.NEXT_PUBLIC_SANITY_DATASET ?? 'production'
+
+  return {
+    // The dev project keeps a cache of its own, so every image viewed there was
+    // generated a second time. Dev serves the originals; only the team sees it.
+    unoptimized: env.VERCEL_PROJECT_ID === DEV_PROJECT_ID,
+    // WebP only. AVIF is smaller again, but each format is another copy of
+    // every image.
+    formats: ['image/webp'],
+    // Subsets of Next's defaults, so copies cached before this change still
+    // match. Nothing needs more than 1920: the largest sources are the 1400px
+    // event and news heroes.
+    deviceSizes: [640, 828, 1080, 1200, 1920],
+    imageSizes: [64, 128, 256, 384],
+    qualities: [75],
+    // Keep generated copies for 31 days (Next's default is 4 hours for remote
+    // sources). Sanity and /public files change URL when they change; a media
+    // file replaced in place needs `vercel cache invalidate --srcimg <url>`.
+    minimumCacheTTL: 2678400,
+    remotePatterns: [
+      // Sanity images normally come through /api/img with the watermark. This
+      // covers a direct use, and only for our own project.
+      ...(sanityProject
+        ? [{ protocol: 'https', hostname: 'cdn.sanity.io', pathname: `/images/${sanityProject}/${sanityDataset}/**` }]
+        : []),
+      // The media host (lib/media-helpers mediaUrl).
+      ...(mediaHost ? [{ protocol: 'https', hostname: mediaHost, pathname: '/**', search: '' }] : []),
+    ],
+    // First-party paths next/image may load. Only the watermark route takes a
+    // query string (`/api/img?src=…`). Any other path fails: `npm run dev`
+    // throws, and a production build gets a 400 and shows the alt text. So add
+    // a new image folder here.
+    localPatterns: [
+      { pathname: '/api/img' },
+      { pathname: '/images/**', search: '' },
+      { pathname: '/team/**', search: '' },
+      // mediaUrl() falls back to these when NEXT_PUBLIC_MEDIA_BASE_URL is unset.
+      { pathname: '/media/**', search: '' },
+      { pathname: '/videos/**', search: '' },
+    ],
+    // No dangerouslyAllowSVG: without it Next serves .svg sources as they are,
+    // which is all an SVG needs. These two stay as a backstop.
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+  }
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Workspace UI packages ship TS source — let Next transpile them.
@@ -208,32 +276,7 @@ const nextConfig = {
       { source: '/admin/community/gates', destination: '/admin/academy/training?tab=reminders', permanent: false },
     ]
   },
-  images: {
-    // AVIF first: about 20–30% smaller than WebP for photos, and every phone
-    // browser in use decodes it. Browsers that don't get WebP.
-    formats: ['image/avif', 'image/webp'],
-    remotePatterns: [
-      { protocol: 'https', hostname: 'cdn.sanity.io' },
-      { protocol: 'https', hostname: 'images.unsplash.com' },
-      { protocol: 'https', hostname: 'img.clerk.com' },
-      // The media host (lib/media-manifest mediaUrl): lets large PNG/JPEG
-      // assets such as the student-work slides go through the optimizer.
-      { protocol: 'https', hostname: '*.public.blob.vercel-storage.com' },
-    ],
-    // Next's default local pattern is `{ pathname: '/**', search: '' }`, which
-    // forbids query strings on local images. Our watermark serve-route emits
-    // `/api/img?src=…`, so allow any query on first-party local paths (omitting
-    // `search` permits any query string). Without this, next/image throws
-    // "using a query string which is not configured" and 500s the page.
-    localPatterns: [{ pathname: '/**' }],
-    // Allow the brand SVGs in /public to be served through next/image. Without
-    // this the optimizer returns 400 "image type is not allowed" and every
-    // <Image src="*.svg"> (logo mark, wordmark) renders blank. The CSP + sandbox
-    // neutralise any script in an SVG; all our SVGs are first-party assets.
-    dangerouslyAllowSVG: true,
-    contentDispositionType: 'attachment',
-    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
-  },
+  images: imagesConfig(),
 }
 
 export default nextConfig

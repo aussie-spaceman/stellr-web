@@ -36,7 +36,7 @@ const infoCards = [
   {
     Icon: Team,
     tileBg: 'bg-enviro-green-bg',
-    iconColor: 'text-enviro-green',
+    iconColor: 'text-enviro-green-text',
     title: "Who it's for",
     body: "Any student whose circumstances might otherwise prevent them from taking part. You don't need to explain more than you're comfortable with.",
   },

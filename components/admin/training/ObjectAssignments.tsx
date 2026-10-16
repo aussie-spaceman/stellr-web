@@ -121,7 +121,7 @@ function AssignmentCard({
     <div className="rounded-xl border border-brand-border bg-white p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold" style={{ background: '#EAF0FE', color: '#2C53C6' }}>
+          <span className="rounded-full bg-primary-soft px-2 py-0.5 text-xs font-semibold" style={{ background: '#EAF0FE', color: '#2C53C6' }}>
             {OBJECT_TYPE_LABELS[assignment.object_type]}
           </span>
           <span className="font-semibold text-brand-blue-dark">{assignment.object_label ?? assignment.object_ref}</span>
@@ -142,10 +142,10 @@ function AssignmentCard({
         {[...groups.entries()].map(([bracket, ts]) => (
           <div key={bracket}>
             <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">
                 {BRACKET_LABEL[bracket] ?? 'Other'}
               </p>
-              <div className="flex items-center gap-1 text-[10px] text-brand-muted-soft">
+              <div className="flex items-center gap-1 text-xs text-brand-muted-soft">
                 <span>Set all:</span>
                 {REQ_OPTS.map((o) => (
                   <button
@@ -186,13 +186,13 @@ function AssignmentCard({
           disabled={!isMandatoryAnywhere}
           value={assignment.due_at ? assignment.due_at.slice(0, 10) : ''}
           onChange={(e) => onChange({ due_at: e.target.value ? new Date(e.target.value).toISOString() : null })}
-          className="rounded-md border border-brand-border px-2 py-1 text-xs font-normal text-brand-blue-dark disabled:cursor-not-allowed disabled:bg-brand-canvas disabled:opacity-60"
+          className="rounded-md border border-line-strong px-2 py-1 text-input mouse:text-xs font-normal text-brand-blue-dark disabled:cursor-not-allowed disabled:bg-brand-canvas disabled:opacity-60"
         />
       </label>
 
       {/* Explicit save — changes are staged locally until saved. */}
       <div className="mt-3 flex items-center justify-end gap-2 border-t border-brand-hairline pt-3">
-        {dirty && <span className="text-[11px] text-brand-muted-soft">Unsaved changes</span>}
+        {dirty && <span className="text-xs text-brand-muted-soft">Unsaved changes</span>}
         <button
           type="button"
           onClick={onSave}

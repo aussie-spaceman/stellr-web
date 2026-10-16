@@ -33,7 +33,7 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    label: 'Competitions', href: '/admin/competitions', tone: 'text-pathway-amber', icon: Trophy,
+    label: 'Competitions', href: '/admin/competitions', tone: 'text-gold-ink', icon: Trophy,
     items: [
       { href: '/admin/competitions', label: 'Competitions' },
       { href: '/admin/surveys', label: 'Surveys' },
@@ -48,7 +48,7 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    label: 'Academy', href: '/admin/academy/training', tone: 'text-donate-gold', icon: GraduationCap,
+    label: 'Academy', href: '/admin/academy/training', tone: 'text-gold-ink', icon: GraduationCap,
     items: [
       { href: '/admin/academy/training', label: 'Training' },
       { href: '/admin/academy/mentoring', label: 'Mentoring' },

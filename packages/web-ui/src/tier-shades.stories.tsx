@@ -43,7 +43,7 @@ export const Guidelines: StoryObj = {
                 {TIER_IDS_BY_BRACKET[b].map((t) => (
                   <div key={t} className="flex flex-col items-center gap-1.5">
                     <span className="w-20 h-12 rounded-lg border border-black/[0.06]" style={{ background: tierShade(t) }} />
-                    <span className="text-[11px] capitalize text-content-secondary">{t}</span>
+                    <span className="text-xs capitalize text-content-secondary">{t}</span>
                   </div>
                 ))}
               </div>

@@ -52,7 +52,7 @@ export function ResourcesList({ items }: { items: ResourceItem[] }) {
             return (
               <div key={r.attachmentId ?? r.id} className="flex items-center gap-3 px-4 py-3">
                 <span
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-[10px] font-subheading font-bold"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-xs font-subheading font-bold"
                   style={{ color: c.fg, background: c.bg }}
                 >
                   {r.fileType ?? 'FILE'}
@@ -61,7 +61,7 @@ export function ResourcesList({ items }: { items: ResourceItem[] }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-sm font-subheading font-semibold text-brand-blue-dark">{r.title}</span>
                     {r.fromChat && (
-                      <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-brand-muted-soft">
+                      <span className="rounded-full bg-brand-canvas px-1.5 py-0.5 text-xs uppercase tracking-wide text-brand-muted-soft">
                         from chat
                       </span>
                     )}

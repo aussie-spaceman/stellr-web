@@ -11,16 +11,16 @@ const EARTH_PPO2 = 0.16 // atm, sea-level partial pressure of oxygen (~120 mmHg 
 function comfortBand(ppo2: number): { label: string; tone: string } {
   // Based on NASA SP-413: tolerable pO2 roughly 0.10–0.30 atm; comfort near Earth.
   if (ppo2 < 0.1) return { label: 'Too little O₂ — hypoxia risk', tone: 'text-danger' }
-  if (ppo2 < 0.13) return { label: 'Low — mild altitude effects', tone: 'text-pathway-amber-deep' }
-  if (ppo2 <= 0.21) return { label: 'Comfortable for people', tone: 'text-enviro-green' }
-  if (ppo2 <= 0.3) return { label: 'High — usable, watch fire risk', tone: 'text-pathway-amber-deep' }
+  if (ppo2 < 0.13) return { label: 'Low — mild altitude effects', tone: 'text-gold-ink' }
+  if (ppo2 <= 0.21) return { label: 'Comfortable for people', tone: 'text-enviro-green-text' }
+  if (ppo2 <= 0.3) return { label: 'High — usable, watch fire risk', tone: 'text-gold-ink' }
   return { label: 'Very high O₂ — hazardous', tone: 'text-danger' }
 }
 
 function fireBand(pct: number): { label: string; tone: string; fill: string } {
   // Flammability tracks oxygen *fraction* more than partial pressure.
-  if (pct <= 23) return { label: 'Near Earth-like fire behavior', tone: 'text-enviro-green', fill: 'bg-enviro-green' }
-  if (pct <= 35) return { label: 'Elevated fire risk', tone: 'text-pathway-amber-deep', fill: 'bg-pathway-amber' }
+  if (pct <= 23) return { label: 'Near Earth-like fire behavior', tone: 'text-enviro-green-text', fill: 'bg-enviro-green' }
+  if (pct <= 35) return { label: 'Elevated fire risk', tone: 'text-gold-ink', fill: 'bg-pathway-amber' }
   return { label: 'High fire risk — materials burn readily', tone: 'text-danger', fill: 'bg-danger' }
 }
 

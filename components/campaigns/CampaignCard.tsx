@@ -36,11 +36,11 @@ export function CampaignCard({ campaign }: { campaign: CampaignCardVM }) {
 
         <h3 className="font-bold text-brand-blue-dark mb-1 leading-snug">{campaign.title}</h3>
 
-        <p className="text-sm text-brand-grey-mid">
+        <p className="text-sm text-content-muted">
           {[campaign.seasonLabel, 'Async — runs at your school'].filter(Boolean).join(' · ')}
         </p>
         {campaign.deadlineLabel && (
-          <p className="text-sm text-brand-grey-mid">Proposal due {campaign.deadlineLabel}</p>
+          <p className="text-sm text-content-muted">Proposal due {campaign.deadlineLabel}</p>
         )}
 
         {campaign.tagline && (

@@ -55,7 +55,7 @@ export function ScheduleMentoringForm({
         <select
           value={cohortId}
           onChange={(e) => setCohortId(e.target.value)}
-          className="rounded-md border border-brand-border px-2 py-1.5 text-sm"
+          className="rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm"
         >
           {cohorts.map((c) => (
             <option key={c.id} value={c.id}>
@@ -69,14 +69,14 @@ export function ScheduleMentoringForm({
             step={1800}
             value={start}
             onChange={(e) => setStart(e.target.value)}
-            className="rounded-md border border-brand-border px-2 py-1.5 text-sm"
+            className="rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm"
           />
-          <span className="text-[11px] text-brand-muted-soft">{tz}</span>
+          <span className="text-xs text-brand-muted-soft">{tz}</span>
         </div>
         <select
           value={durationMin}
           onChange={(e) => setDurationMin(Number(e.target.value))}
-          className="rounded-md border border-brand-border px-2 py-1.5 text-sm"
+          className="rounded-md border border-line-strong px-2 py-1.5 text-input mouse:text-sm"
         >
           {DURATION_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>

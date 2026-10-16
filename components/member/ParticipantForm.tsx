@@ -1,11 +1,8 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Dialog, fieldControlClass } from '@stellr/web-ui'
+import { Choice, Dialog, Field, Fieldset, Input, Select, Textarea } from '@stellr/web-ui'
 import { MemberIdLookup, type MemberMatch } from '@/components/forms/MemberIdLookup'
-
-const labelCls = 'mb-1 block text-sm font-medium text-content-body'
-const subLabelCls = 'mb-1 block text-xs text-content-muted'
 
 interface ParticipantData {
   id?: string
@@ -33,6 +30,8 @@ interface ParticipantData {
   emergency_contact_relationship: string
 }
 
+type FieldErrors = Partial<Record<keyof ParticipantData, string>>
+
 const EMPTY: ParticipantData = {
   membership_id: '', linked: false,
   first_name: '', last_name: '', nickname: '', email: '', phone: '',
@@ -52,6 +51,31 @@ const T_SHIRT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL (or larger)']
 const GENDERS = ['Male', 'Female', 'Other']
 const EMERGENCY_RELATIONSHIPS = ['Parent', 'Legal Guardian', 'Spouse', 'Grandparent', 'Teacher']
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/**
+ * What a save needs, keyed in the order the fields appear so the first key is
+ * the first field to fix. A member linked by ID is built from their on-file
+ * record, so nothing is checked. Students sign the minor participation
+ * agreement with their emergency contact as the guardian signer, so every
+ * student needs one.
+ */
+function validate(form: ParticipantData, isStudent: boolean): FieldErrors {
+  if (form.linked) return {}
+  const errors: FieldErrors = {}
+  if (!form.first_name.trim()) errors.first_name = 'Enter a first name.'
+  if (!form.last_name.trim()) errors.last_name = 'Enter a last name.'
+  if (!EMAIL_RE.test(form.email.trim())) errors.email = 'Enter an email address.'
+  if (isStudent) {
+    if (!form.emergency_contact_first_name.trim()) errors.emergency_contact_first_name = 'Enter their first name.'
+    if (!form.emergency_contact_last_name.trim()) errors.emergency_contact_last_name = 'Enter their last name.'
+    if (!EMAIL_RE.test(form.emergency_contact_email.trim())) errors.emergency_contact_email = 'Enter their email address.'
+    if (!form.emergency_contact_phone.trim()) errors.emergency_contact_phone = 'Enter their phone number.'
+    if (!form.emergency_contact_relationship) errors.emergency_contact_relationship = 'Choose how they are related.'
+  }
+  return errors
+}
+
 interface Props {
   registrationId: string
   initial?: ParticipantData
@@ -59,6 +83,8 @@ interface Props {
   onCancel: () => void
 }
 
+// An adult is entering someone else's details here, so every field opts out of
+// autofill: the browser would otherwise offer the adult's own name and email.
 export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: Props) {
   // Roles are the members enum values; legacy rows may still hold 'student'.
   const [form, setForm] = useState<ParticipantData>(() =>
@@ -68,12 +94,16 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const formId = `${useId()}-participant`
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const uid = useId()
+  const formId = `${uid}-participant`
+  const fid = (field: keyof ParticipantData) => `${uid}-${field}`
 
   const isStudent = form.event_role === 'participant'
 
   function set(field: keyof ParticipantData, value: string | string[]) {
     setForm(prev => ({ ...prev, [field]: value }))
+    setFieldErrors(prev => (prev[field] ? { ...prev, [field]: undefined } : prev))
   }
 
   function toggleDietary(opt: string) {
@@ -88,6 +118,7 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
 
   function acceptMatch(m: MemberMatch) {
     setForm(prev => ({ ...prev, linked: true, first_name: m.first_name, last_name: m.last_name }))
+    setFieldErrors({})
   }
   function unlinkMatch() {
     setForm(prev => ({ ...prev, linked: false }))
@@ -96,22 +127,19 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
-    // A member linked by ID is built from their on-file record — skip field checks.
-    // Otherwise students sign the minor participation agreement, with their
-    // emergency contact as the guardian signer — so it's required for every student.
-    if (!form.linked && isStudent && (
-      !form.emergency_contact_first_name.trim() ||
-      !form.emergency_contact_last_name.trim() ||
-      !form.emergency_contact_email.trim() ||
-      !form.emergency_contact_phone.trim() ||
-      !form.emergency_contact_relationship.trim()
-    )) {
-      setError('Emergency contact details are required for student participants.')
+    // Each problem shows under its own field; focus goes to the first of them.
+    const errors = validate(form, isStudent)
+    const first = Object.keys(errors)[0] as keyof ParticipantData | undefined
+    if (first) {
+      setFieldErrors(errors)
+      setError(null)
+      requestAnimationFrame(() => document.getElementById(fid(first))?.focus())
       return
     }
 
     setSaving(true)
     setError(null)
+    setFieldErrors({})
 
     const isEdit = Boolean(initial?.id)
     const url = isEdit
@@ -169,7 +197,9 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
         </>
       }
     >
-      <form id={formId} onSubmit={handleSubmit} className="space-y-5">
+      {/* noValidate: the checks above put each message under its field, where
+          the browser's own bubbles would stack in a corner of the dialog. */}
+      <form id={formId} onSubmit={handleSubmit} noValidate autoComplete="off" className="space-y-5">
         {/* Member ID lookup — accept a match to reuse an existing member's record */}
         <MemberIdLookup value={form.membership_id ?? ''} linked={!!form.linked}
           linkedName={`${form.first_name} ${form.last_name}`.trim()}
@@ -178,227 +208,201 @@ export function ParticipantForm({ registrationId, initial, onSaved, onCancel }: 
         {!form.linked && (
         <>
         {/* Role */}
-        <div>
-          <label className={labelCls}>Participant type</label>
-          <div className="flex gap-4">
+        <Fieldset legend="Participant type">
+          <div className="flex flex-wrap gap-x-6">
             {([['participant', 'Student'], ['adult', 'Adult']] as const).map(([role, label]) => (
-              <label key={role} className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="event_role"
-                  value={role}
-                  checked={form.event_role === role}
-                  onChange={() => set('event_role', role)}
-                />
-                <span className="text-sm">{label}</span>
-              </label>
+              <Choice
+                key={role}
+                type="radio"
+                name="event_role"
+                value={role}
+                checked={form.event_role === role}
+                onChange={() => set('event_role', role)}
+                label={label}
+              />
             ))}
           </div>
-        </div>
+        </Fieldset>
 
         {/* Name */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className={labelCls}>First name <span className="text-danger">*</span></label>
-            <input
-              required
-              className={fieldControlClass}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="First name" required error={fieldErrors.first_name}>
+            <Input
+              id={fid('first_name')}
+              autoComplete="off"
               value={form.first_name}
               onChange={e => set('first_name', e.target.value)}
             />
-          </div>
-          <div>
-            <label className={labelCls}>Last name <span className="text-danger">*</span></label>
-            <input
-              required
-              className={fieldControlClass}
+          </Field>
+          <Field label="Last name" required error={fieldErrors.last_name}>
+            <Input
+              id={fid('last_name')}
+              autoComplete="off"
               value={form.last_name}
               onChange={e => set('last_name', e.target.value)}
             />
-          </div>
+          </Field>
         </div>
 
         {/* Preferred name */}
-        <div>
-          <label className={labelCls}>Preferred name / nickname</label>
-          <input
-            className={fieldControlClass}
+        <Field label="Preferred name / nickname">
+          <Input
+            autoComplete="off"
             value={form.nickname}
             onChange={e => set('nickname', e.target.value)}
             placeholder="Optional"
           />
-        </div>
+        </Field>
 
         {/* Email & Phone */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className={labelCls}>Email <span className="text-danger">*</span></label>
-            <input
-              required
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Email" required error={fieldErrors.email}>
+            <Input
+              id={fid('email')}
               type="email"
-              className={fieldControlClass}
+              autoComplete="off"
               value={form.email}
               onChange={e => set('email', e.target.value)}
             />
-          </div>
-          <div>
-            <label className={labelCls}>Phone</label>
-            <input
-              className={fieldControlClass}
+          </Field>
+          <Field label="Phone">
+            <Input
+              type="tel"
+              autoComplete="off"
               value={form.phone}
               onChange={e => set('phone', e.target.value)}
             />
-          </div>
+          </Field>
         </div>
 
         {/* DOB, Gender, T-Shirt */}
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div>
-            <label className={labelCls}>Date of birth</label>
-            <input
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Field label="Date of birth">
+            <Input
               type="date"
-              className={fieldControlClass}
+              autoComplete="off"
               value={form.date_of_birth}
               onChange={e => set('date_of_birth', e.target.value)}
             />
-          </div>
-          <div>
-            <label className={labelCls}>Gender</label>
-            <select
-              className={fieldControlClass}
-              value={form.gender}
-              onChange={e => set('gender', e.target.value)}
-            >
+          </Field>
+          <Field label="Gender">
+            <Select value={form.gender} onChange={e => set('gender', e.target.value)}>
               <option value="">Select…</option>
               {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>T-shirt size</label>
-            <select
-              className={fieldControlClass}
-              value={form.t_shirt_size}
-              onChange={e => set('t_shirt_size', e.target.value)}
-            >
+            </Select>
+          </Field>
+          <Field label="T-shirt size">
+            <Select value={form.t_shirt_size} onChange={e => set('t_shirt_size', e.target.value)}>
               <option value="">Select…</option>
               {T_SHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
+            </Select>
+          </Field>
         </div>
 
         {/* Grade — students only */}
         {isStudent && (
-          <div>
-            <label className={labelCls}>Grade</label>
-            <select
-              className={fieldControlClass}
-              value={form.grade}
-              onChange={e => set('grade', e.target.value)}
-            >
+          <Field label="Grade">
+            <Select value={form.grade} onChange={e => set('grade', e.target.value)}>
               <option value="">Select…</option>
               {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </div>
+            </Select>
+          </Field>
         )}
 
         {/* Ethnicity */}
-        <div>
-          <label className="mb-2 block text-sm font-medium text-content-body">Ethnicity</label>
-          <div className="flex flex-wrap gap-2">
+        <Fieldset legend="Ethnicity">
+          <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
             {ETHNICITIES.map(opt => (
-              <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.ethnicity.includes(opt)}
-                  onChange={() => toggleEthnicity(opt)}
-                  className="rounded"
-                />
-                <span className="text-sm">{opt}</span>
-              </label>
+              <Choice
+                key={opt}
+                checked={form.ethnicity.includes(opt)}
+                onChange={() => toggleEthnicity(opt)}
+                label={opt}
+              />
             ))}
           </div>
-        </div>
+        </Fieldset>
 
         {/* Dietary */}
-        <div>
-          <label className="mb-2 block text-sm font-medium text-content-body">Dietary requirements</label>
-          <div className="flex flex-wrap gap-2">
+        <Fieldset legend="Dietary requirements">
+          <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
             {DIETARY_OPTIONS.map(opt => (
-              <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.dietary_requirements.includes(opt)}
-                  onChange={() => toggleDietary(opt)}
-                  className="rounded"
-                />
-                <span className="text-sm">{opt}</span>
-              </label>
+              <Choice
+                key={opt}
+                checked={form.dietary_requirements.includes(opt)}
+                onChange={() => toggleDietary(opt)}
+                label={opt}
+              />
             ))}
           </div>
-        </div>
+        </Fieldset>
 
         {/* Health conditions */}
-        <div>
-          <label className={labelCls}>Health conditions / allergies</label>
-          <textarea
+        <Field label="Health conditions / allergies">
+          <Textarea
             rows={2}
-            className={`${fieldControlClass} resize-none`}
+            className="resize-none"
             value={form.health_conditions}
             onChange={e => set('health_conditions', e.target.value)}
           />
-        </div>
+        </Field>
 
         {/* Emergency contact — required for students (guardian for their agreement) */}
         {isStudent && (
           <div className="border-t border-line-light pt-4">
-            <p className="mb-1 text-sm font-medium text-content-body">Emergency contact <span className="text-danger">*</span></p>
-            <p className="mb-3 text-xs text-content-muted">Acts as the guardian for the student&apos;s participation agreement.</p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className={subLabelCls}>First name</label>
-                <input
-                  className={fieldControlClass}
+          <Fieldset legend="Emergency contact" hint="Acts as the guardian for the student's participation agreement.">
+            <div className="grid grid-cols-1 gap-4 pt-2 sm:grid-cols-2">
+              <Field label="First name" labelSize="small" required error={fieldErrors.emergency_contact_first_name}>
+                <Input
+                  id={fid('emergency_contact_first_name')}
+                  autoComplete="off"
                   value={form.emergency_contact_first_name}
                   onChange={e => set('emergency_contact_first_name', e.target.value)}
                 />
-              </div>
-              <div>
-                <label className={subLabelCls}>Last name</label>
-                <input
-                  className={fieldControlClass}
+              </Field>
+              <Field label="Last name" labelSize="small" required error={fieldErrors.emergency_contact_last_name}>
+                <Input
+                  id={fid('emergency_contact_last_name')}
+                  autoComplete="off"
                   value={form.emergency_contact_last_name}
                   onChange={e => set('emergency_contact_last_name', e.target.value)}
                 />
-              </div>
-              <div>
-                <label className={subLabelCls}>Email</label>
-                <input
+              </Field>
+              <Field label="Email" labelSize="small" required error={fieldErrors.emergency_contact_email}>
+                <Input
+                  id={fid('emergency_contact_email')}
                   type="email"
-                  className={fieldControlClass}
+                  autoComplete="off"
                   value={form.emergency_contact_email}
                   onChange={e => set('emergency_contact_email', e.target.value)}
                 />
-              </div>
-              <div>
-                <label className={subLabelCls}>Phone</label>
-                <input
-                  className={fieldControlClass}
+              </Field>
+              <Field label="Phone" labelSize="small" required error={fieldErrors.emergency_contact_phone}>
+                <Input
+                  id={fid('emergency_contact_phone')}
+                  type="tel"
+                  autoComplete="off"
                   value={form.emergency_contact_phone}
                   onChange={e => set('emergency_contact_phone', e.target.value)}
                 />
-              </div>
-              <div>
-                <label className={subLabelCls}>Relationship to participant</label>
-                <select
-                  className={fieldControlClass}
+              </Field>
+              <Field
+                label="Relationship to participant"
+                labelSize="small"
+                required
+                error={fieldErrors.emergency_contact_relationship}
+              >
+                <Select
+                  id={fid('emergency_contact_relationship')}
                   value={form.emergency_contact_relationship}
                   onChange={e => set('emergency_contact_relationship', e.target.value)}
                 >
                   <option value="">Select…</option>
                   {EMERGENCY_RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
+                </Select>
+              </Field>
             </div>
+          </Fieldset>
           </div>
         )}
         </>

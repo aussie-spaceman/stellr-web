@@ -32,7 +32,7 @@ export default async function AdminEmailPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Email Campaigns</h1>
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Email Campaigns</h1>
         <p className="mt-0.5 text-sm text-brand-muted-soft">
           Reusable templates and scheduled / event-triggered sends to members. Marketing-consent suppression is always applied.
         </p>

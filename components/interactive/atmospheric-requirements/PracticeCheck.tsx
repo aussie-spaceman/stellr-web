@@ -45,7 +45,7 @@ function NumericQ({ q, index }: { q: Numeric; index: number }) {
         {checked && value !== '' && (
           <span
             className={`inline-flex items-center gap-1 text-sm font-semibold ${
-              correct ? 'text-enviro-green' : 'text-danger'
+              correct ? 'text-enviro-green-text' : 'text-danger'
             }`}
           >
             {correct ? <Check size={16} /> : <X size={16} />}

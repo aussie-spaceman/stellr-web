@@ -44,7 +44,7 @@ export default async function AdminCommunityResourcesPage() {
         <p className="eyebrow flex items-center gap-2 text-brand-blue">
           <span className="h-2 w-2 rounded-full bg-brand-blue" /> Community
         </p>
-        <h1 className="mt-1 font-heading uppercase text-title text-brand-blue-dark">Community Resources</h1>
+        <h1 className="mt-1 font-heading text-ds-h2 text-brand-blue-dark">Community Resources</h1>
         <p className="mt-0.5 text-sm text-brand-muted-soft">
           One row per stored file. Access is inherited from the object a resource is attached to.
         </p>
@@ -90,7 +90,7 @@ export default async function AdminCommunityResourcesPage() {
                           {r.pendingFlags > 0 && (
                             <Link
                               href="/admin/community/moderation"
-                              className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600"
+                              className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600"
                             >
                               {r.pendingFlags} flag{r.pendingFlags === 1 ? '' : 's'}
                             </Link>

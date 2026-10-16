@@ -11,7 +11,7 @@ export default function PrivacyPage() {
     <div className="section-padding container-max max-w-3xl">
       <h1 className="text-4xl font-bold text-brand-blue-dark mb-8">Privacy Policy</h1>
       <div className="prose prose-slate max-w-none space-y-6 text-brand-grey-dark">
-        <p className="text-sm text-brand-grey-mid italic">
+        <p className="text-sm text-content-muted italic">
           Effective Date: 09-Jun-2026 &nbsp;·&nbsp; Last Updated: 09-Oct-2026
         </p>
         <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-brand-blue-dark">
@@ -108,7 +108,7 @@ export default function PrivacyPage() {
             signs their own section of a form only after their parent or guardian has signed. If we
             discover we have collected a child&rsquo;s information without consent, we will delete
             it promptly. Parents or guardians may contact us at{' '}
-            <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+            <a href="mailto:privacy@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
               privacy@stellreducation.org
             </a>{' '}
             to review, correct, or request deletion of their child&rsquo;s information. When a
@@ -134,7 +134,7 @@ export default function PrivacyPage() {
             <strong>FERPA.</strong>{' '}We treat the information we hold about students as education
             records protected by FERPA. When a school registers students, we act as a &ldquo;school
             official&rdquo; under a data processing agreement with the school — our{' '}
-            <a href="/school-data-terms" className="text-brand-blue hover:underline">School Data Terms</a>
+            <a href="/school-data-terms" className="text-brand-blue underline underline-offset-2 hover:no-underline">School Data Terms</a>
             , which the registering teacher accepts on the school&rsquo;s behalf. When a student
             joins on their own, we apply the same protections. We use student information only to
             run our programs and do not disclose it except as FERPA permits or with consent. The
@@ -170,7 +170,7 @@ export default function PrivacyPage() {
             their survey responses (attributed by first name and last initial, grade, and school or
             state; anonymous for children under 13) in our promotional materials unless they or
             their parent or legal guardian opt out, which they can do at any time by emailing{' '}
-            <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+            <a href="mailto:privacy@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
               privacy@stellreducation.org
             </a>
             . Credential pages stay private unless the student chooses to make each one public. A
@@ -302,7 +302,7 @@ export default function PrivacyPage() {
             document, so a copy can be checked against the original
           </li>
         </ul>
-        <p className="text-sm text-brand-grey-mid">
+        <p className="text-sm text-content-muted">
           Forms signed through Stellr&rsquo;s own signing system are generated and held by Stellr.
           Forms signed through DocuSign are held by DocuSign, and we keep our own copy of each,
           including DocuSign&rsquo;s certificate of completion. A typed signature is stored as text.
@@ -313,7 +313,7 @@ export default function PrivacyPage() {
           Signing records are used only to obtain and prove the signature. They are not used for
           marketing or analytics.
         </p>
-        <p className="text-sm text-brand-grey-mid">
+        <p className="text-sm text-content-muted">
           We also record how the student joined Stellr (school or group registration, or
           self-registration), the version of the Participation Agreement signed, and, for students
           who are adults but still in high school, the co-signing parent&rsquo;s or legal
@@ -449,7 +449,7 @@ export default function PrivacyPage() {
                 <tr key={provider} className="even:bg-surface">
                   <td className="border border-line px-4 py-2 font-medium">{provider}</td>
                   <td className="border border-line px-4 py-2">{purpose}</td>
-                  <td className="border border-line px-4 py-2 text-xs text-brand-grey-mid">{data}</td>
+                  <td className="border border-line px-4 py-2 text-xs text-content-muted">{data}</td>
                 </tr>
               ))}
             </tbody>
@@ -471,7 +471,7 @@ export default function PrivacyPage() {
             href="https://www.apollo.io/dpa"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-brand-blue hover:underline"
+            className="text-brand-blue underline underline-offset-2 hover:no-underline"
           >
             apollo.io/dpa
           </a>
@@ -525,7 +525,7 @@ export default function PrivacyPage() {
           sharing controls, and it is not listed anywhere or submitted to search engines. The
           link does not expire, and anyone who has it can open the page, so please do not forward
           that email. If you think the link has reached someone it should not have, contact{' '}
-          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             privacy@stellreducation.org
           </a>
           .
@@ -553,7 +553,7 @@ export default function PrivacyPage() {
           <strong>Students who are Minors.</strong> Permission for a Minor to make credential pages
           public is part of the Participation Agreement their parent or legal guardian signs.
           Parents and guardians may decline, or withdraw permission at any time by contacting{' '}
-          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             privacy@stellreducation.org
           </a>
           , and any public pages are made private. Credential pages of a child under 13 always stay
@@ -584,7 +584,7 @@ export default function PrivacyPage() {
           <li>
             <strong>From a school or teacher</strong>{' '}registering a group. We act as a &ldquo;school
             official&rdquo; under a data processing agreement with the school: our{' '}
-            <a href="/school-data-terms" className="text-brand-blue hover:underline">School Data Terms</a>
+            <a href="/school-data-terms" className="text-brand-blue underline underline-offset-2 hover:no-underline">School Data Terms</a>
             , which the registering teacher accepts on the school&rsquo;s behalf, or the
             school&rsquo;s own agreement where it has one. We use that information only to run the
             competition, never for advertising, profiling or product development, and we do not
@@ -601,7 +601,7 @@ export default function PrivacyPage() {
           </li>
           <li>
             Schools and parents may exercise their rights by contacting us at{' '}
-            <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+            <a href="mailto:privacy@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
               privacy@stellreducation.org
             </a>
             .
@@ -656,7 +656,7 @@ export default function PrivacyPage() {
                 <tr key={category} className="even:bg-surface">
                   <td className="border border-line px-4 py-2 font-medium">{category}</td>
                   <td className="border border-line px-4 py-2">{purpose}</td>
-                  <td className="border border-line px-4 py-2 text-xs text-brand-grey-mid">{consent}</td>
+                  <td className="border border-line px-4 py-2 text-xs text-content-muted">{consent}</td>
                 </tr>
               ))}
             </tbody>
@@ -817,7 +817,7 @@ export default function PrivacyPage() {
         <p>
           No system is completely secure. If you believe your account has been compromised, contact
           us immediately at{' '}
-          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             privacy@stellreducation.org
           </a>
           .
@@ -838,8 +838,8 @@ export default function PrivacyPage() {
         </ul>
         <p>
           To make a request, use our{' '}
-          <a href="/privacy/request" className="text-brand-blue hover:underline">privacy request form</a> or email{' '}
-          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">privacy@stellreducation.org</a>.
+          <a href="/privacy/request" className="text-brand-blue underline underline-offset-2 hover:no-underline">privacy request form</a> or email{' '}
+          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">privacy@stellreducation.org</a>.
           We email a link to the address you give, to confirm the request came from you, and answer within 30 days of
           confirmation. Requests never confirmed are deleted after 30 days; we keep a record of how each confirmed
           request was answered for 3 years.
@@ -858,7 +858,7 @@ export default function PrivacyPage() {
           </li>
           <li>
             Contact us at any time:{' '}
-            <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+            <a href="mailto:privacy@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
               privacy@stellreducation.org
             </a>
           </li>
@@ -890,7 +890,7 @@ export default function PrivacyPage() {
         </ul>
         <p>
           Contact us at{' '}
-          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             privacy@stellreducation.org
           </a>{' '}
           with the subject line <strong>FERPA Request</strong>.
@@ -915,7 +915,7 @@ export default function PrivacyPage() {
         </ul>
         <p>
           To exercise any of these rights, contact{' '}
-          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             privacy@stellreducation.org
           </a>
           . We will respond within 45 days.
@@ -954,7 +954,7 @@ export default function PrivacyPage() {
           <strong>Stellr Education — Privacy Team</strong>
           <br />
           Email:{' '}
-          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue hover:underline">
+          <a href="mailto:privacy@stellreducation.org" className="text-brand-blue underline underline-offset-2 hover:no-underline">
             privacy@stellreducation.org
           </a>
         </p>

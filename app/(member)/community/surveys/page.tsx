@@ -21,7 +21,7 @@ export default async function MySurveysPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">My surveys</h1>
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">My surveys</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">
           After each event we ask what worked and what to change. Your answers are seen by Stellr staff and reported only as combined totals.
         </p>
@@ -29,7 +29,7 @@ export default async function MySurveysPage() {
 
       {open.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-ds-eyebrow font-bold uppercase tracking-widest text-primary">Open now</h2>
+          <h2 className="text-ds-eyebrow font-bold text-primary">Open now</h2>
           <ul className="mt-3 divide-y divide-line-light rounded-ds-card border border-line bg-white">
             {open.map((s) => (
               <li key={s.invitationId} className="flex flex-wrap items-center justify-between gap-3 p-4">
@@ -47,7 +47,7 @@ export default async function MySurveysPage() {
       )}
 
       <section>
-        <h2 className="text-ds-eyebrow font-bold uppercase tracking-widest text-content-muted">Submitted</h2>
+        <h2 className="text-ds-eyebrow font-bold text-content-muted">Submitted</h2>
         {history.length === 0 ? (
           <div className="mt-3 rounded-ds-card border border-line bg-white p-8 text-center">
             <ClipboardCheck size={28} className="mx-auto text-content-faint" aria-hidden="true" />

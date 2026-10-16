@@ -4,7 +4,7 @@ import { themeAccent, type CourseTheme } from '@/lib/training-display'
 // dynamic hex (from THEME_META), so those use inline styles; everything else uses
 // brand-* Tailwind tokens.
 
-const PILL = 'inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide'
+const PILL = 'inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide'
 
 /** Theme-tinted kind pill, e.g. EVENT / CAMPAIGN / CTE / LIBRARY. */
 export function ThemePill({ theme, label }: { theme: CourseTheme | null; label: string }) {

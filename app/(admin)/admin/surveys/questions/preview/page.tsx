@@ -31,7 +31,7 @@ export default async function SurveyPreviewPage({ searchParams }: { searchParams
         <Link href={`/admin/surveys/questions?${new URLSearchParams({ id: row.id as string, role })}`} className="text-sm text-primary hover:underline">
           ← {row.title as string} {versionName(definition.version, definition.versionLabel)} questions
         </Link>
-        <h1 className="mt-2 font-heading uppercase text-title text-brand-blue-dark">Survey preview</h1>
+        <h1 className="mt-2 font-heading text-ds-h2 text-brand-blue-dark">Survey preview</h1>
         <p className="mt-0.5 text-sm text-brand-muted-soft">Choose who you’re previewing as. Questions that depend on these facts appear or disappear to match.</p>
       </div>
       <SurveyPreview definition={definition} runtimeOptions={options} initialRole={role} />

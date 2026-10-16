@@ -64,7 +64,7 @@ export function SpaceCard({ space, restricted = false, joinable = false, unread 
         )}
         <div className="relative z-10 flex items-center gap-2">
           {!restricted && unread > 0 && (
-            <span className="rounded-full bg-brand-blue px-2 py-0.5 text-[11px] font-subheading font-semibold text-white">
+            <span className="rounded-full bg-brand-blue px-2 py-0.5 text-xs font-subheading font-semibold text-white">
               {unread} new
             </span>
           )}

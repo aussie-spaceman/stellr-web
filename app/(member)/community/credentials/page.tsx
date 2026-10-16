@@ -19,7 +19,7 @@ export const metadata = { title: 'Credentials' }
 
 const STATE_LABEL: Record<CredentialState, { text: string; className: string }> = {
   valid:     { text: 'Valid',     className: 'bg-enviro-green-bg text-enviro-green-text' },
-  expired:   { text: 'Expired',   className: 'bg-pathway-amber-bg text-pathway-amber-deep' },
+  expired:   { text: 'Expired',   className: 'bg-pathway-amber-bg text-gold-ink' },
   revoked:   { text: 'Revoked',   className: 'bg-danger/10 text-danger' },
   withdrawn: { text: 'Withdrawn', className: 'bg-surface text-content-muted' },
 }
@@ -39,7 +39,7 @@ export default async function CredentialsPage({ searchParams }: { searchParams: 
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Credentials</h1>
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Credentials</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">
           What you have earned with Stellr — course completions, event participation, mentoring and awards. Each one has a
           certificate to download and a page you can make public, share, and add to LinkedIn.

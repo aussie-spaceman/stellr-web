@@ -29,7 +29,7 @@ const BRACKET_LABEL: Record<string, string> = { high_school: 'High school', coll
 function SummaryCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div className="rounded-2xl border border-brand-border bg-white p-5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">{label}</p>
       <p className="mt-2 text-3xl font-bold" style={{ color }}>{value}</p>
     </div>
   )
@@ -179,7 +179,7 @@ export function EventTrackingTab({
       <div className="overflow-x-auto rounded-2xl border border-brand-border bg-white">
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead>
-            <tr className="border-b border-brand-hairline text-[11px] uppercase tracking-wide text-brand-muted-soft">
+            <tr className="border-b border-brand-hairline text-xs uppercase tracking-wide text-brand-muted-soft">
               <th className="px-4 py-3">
                 <input
                   type="checkbox"
@@ -228,7 +228,7 @@ export function EventTrackingTab({
                   <td className="px-3 py-3 text-brand-muted">{r.ageBracket ? BRACKET_LABEL[r.ageBracket] ?? r.ageBracket : '—'}</td>
                   <td className="px-3 py-3 text-brand-muted">{r.group}</td>
                   <td className="px-3 py-3">
-                    <span className="inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold" style={{ background: s.bg, color: s.color }}>
+                    <span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold" style={{ background: s.bg, color: s.color }}>
                       {s.label}
                     </span>
                   </td>

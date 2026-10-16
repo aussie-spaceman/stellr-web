@@ -52,7 +52,7 @@ export function CardPills({
       <span
         className={`font-bold uppercase tracking-[0.08em] rounded-full ${pad} ${
           kind === 'campaign'
-            ? 'bg-pathway-amber-bg text-pathway-amber'
+            ? 'bg-pathway-amber-bg text-gold-ink'
             : 'bg-blue-50 text-brand-blue'
         }`}
       >

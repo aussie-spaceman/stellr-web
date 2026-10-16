@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import type { ComplianceState, TeacherLicense } from '@/lib/compliance'
 import { formatDateShort } from '@/lib/utils'
+import { Field, Input } from '@stellr/web-ui'
 
 interface ComplianceData {
   required: boolean
@@ -202,12 +203,14 @@ export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: st
                 >
                   View uploaded license
                 </a>
-                <label className="text-xs font-medium text-brand-blue hover:text-brand-blue-dark cursor-pointer">
+                {/* sr-only, not hidden: a display:none file input can't take
+                    keyboard focus, so the upload was mouse-only. */}
+                <label className="relative text-xs font-medium text-brand-blue hover:text-brand-blue-dark cursor-pointer focus-within:ring-2 focus-within:ring-primary-deep">
                   Replace
                   <input
                     type="file"
                     accept="image/*,application/pdf"
-                    className="hidden"
+                    className="sr-only"
                     disabled={uploading}
                     onChange={(e) => e.target.files?.[0] && uploadDocument(e.target.files[0])}
                   />
@@ -221,12 +224,12 @@ export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: st
                 </button>
               </div>
             ) : (
-              <label className="inline-flex items-center gap-2 text-xs font-medium text-white bg-brand-blue hover:bg-brand-blue-dark rounded-lg px-3 py-1.5 cursor-pointer">
+              <label className="relative inline-flex items-center gap-2 text-xs font-medium text-white bg-brand-blue hover:bg-brand-blue-dark rounded-lg px-3 py-1.5 cursor-pointer focus-within:ring-2 focus-within:ring-primary-deep focus-within:ring-offset-2">
                 {uploading ? 'Uploading…' : 'Upload license photo'}
                 <input
                   type="file"
                   accept="image/*,application/pdf"
-                  className="hidden"
+                  className="sr-only"
                   disabled={uploading}
                   onChange={(e) => e.target.files?.[0] && uploadDocument(e.target.files[0])}
                 />
@@ -244,36 +247,34 @@ export function ComplianceSection({ dateOfBirth, eventRole }: { dateOfBirth?: st
         </button>
       ) : (
         <div className="space-y-3">
+          {/* A license's details, not the member's contact details: no autofill. */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">License number</label>
-              <input
+            <Field label="License number">
+              <Input
                 type="text"
+                autoComplete="off"
                 value={form.license_number}
                 onChange={(e) => setForm((f) => ({ ...f, license_number: e.target.value }))}
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
-            </div>
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Licensing state</label>
-              <input
+            </Field>
+            <Field label="Licensing state">
+              <Input
                 type="text"
+                autoComplete="off"
                 value={form.licensing_state}
                 onChange={(e) => setForm((f) => ({ ...f, licensing_state: e.target.value }))}
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
-            </div>
-            <div>
-              <label className="block text-xs text-brand-muted-soft mb-1">Expiry date</label>
-              <input
+            </Field>
+            <Field label="Expiry date">
+              <Input
                 type="date"
+                autoComplete="off"
                 value={form.expiry_date}
                 onChange={(e) => setForm((f) => ({ ...f, expiry_date: e.target.value }))}
-                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
-            </div>
+            </Field>
           </div>
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
           <div className="flex gap-2">
             <button
               onClick={save}

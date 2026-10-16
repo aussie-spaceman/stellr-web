@@ -183,7 +183,7 @@ export function ChannelFeed({
                 placeholder="Add a title (optional)"
                 maxLength={300}
                 aria-label="Post title (optional)"
-                className="w-full rounded-lg border border-brand-border px-3 py-2 text-sm font-medium focus:border-brand-blue focus:outline-none"
+                className="w-full rounded-lg border border-line-strong px-3 py-2 text-input mouse:text-sm font-medium focus:border-brand-blue focus:outline-none"
               />
               <RichTextEditor
                 value={bodyJson}
@@ -310,7 +310,7 @@ function PostCard({
     <article className="rounded-[16px] border border-brand-border bg-white p-4 shadow-card">
       {post.isAnnouncement && (
         <div
-          className="mb-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-subheading font-semibold uppercase tracking-[0.05em]"
+          className="mb-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-subheading font-semibold uppercase tracking-[0.05em]"
           style={{ background: '#FBEFDD', color: '#B5711F' }}
         >
           <Pin className="h-3 w-3" /> Pinned post
@@ -342,13 +342,13 @@ function PostCard({
                   alt={post.attachment.name}
                   className="max-h-80 max-w-full rounded-[12px] border border-brand-border object-cover"
                 />
-                <span className="mt-1 block text-[11px] text-brand-muted-soft">{post.attachment.name}</span>
+                <span className="mt-1 block text-xs text-brand-muted-soft">{post.attachment.name}</span>
               </a>
             ) : (
               <div className="mt-2 inline-flex items-center gap-2 rounded-lg border border-brand-border px-2.5 py-1.5 text-xs text-brand-muted">
                 <FileText className="h-4 w-4 text-brand-blue" />
                 {post.attachment.name}
-                <span className="rounded bg-brand-canvas px-1.5 py-0.5 text-[10px] uppercase text-brand-muted-soft">
+                <span className="rounded bg-brand-canvas px-1.5 py-0.5 text-xs uppercase text-brand-muted-soft">
                   {post.attachment.fileType ?? 'file'}
                 </span>
               </div>
@@ -401,7 +401,7 @@ function PostCard({
                 onChange={(e) => setReply(e.target.value)}
                 rows={1}
                 placeholder="Write a reply…"
-                className="min-h-[40px] flex-1 resize-none rounded-lg border border-brand-border px-3 py-2 text-sm focus:border-brand-blue focus:outline-none"
+                className="min-h-[40px] flex-1 resize-none rounded-lg border border-line-strong px-3 py-2 text-input mouse:text-sm focus:border-brand-blue focus:outline-none"
               />
               <button
                 onClick={sendReply}

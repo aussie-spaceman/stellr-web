@@ -98,8 +98,8 @@ export function ManageCohort(props: {
         </p>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <h1 className="font-display text-[28px] font-bold tracking-[-0.02em]">{cohort.name}</h1>
-            <span className="rounded-pill bg-primary-soft px-2.5 py-0.5 text-[11px] font-bold text-primary">MENTOR</span>
+            <h1 className="font-display text-[28px] font-bold">{cohort.name}</h1>
+            <span className="rounded-pill bg-primary-soft px-2.5 py-0.5 text-xs font-bold text-primary">MENTOR</span>
           </div>
           <div className="flex items-center gap-2">
             {nextSession && <JoinButton sessionId={nextSession.id} scheduledStart={nextSession.start} isHost />}
@@ -115,7 +115,7 @@ export function ManageCohort(props: {
             return (
               <button key={t.key} role="tab" aria-selected={active} onClick={() => setTab(t.key)} className={`relative -mb-px min-h-11 shrink-0 whitespace-nowrap pt-2 pb-3 text-sm transition-colors ${active ? 'font-bold text-white' : 'font-medium text-hero-dim hover:text-hero-lead'}`}>
                 {t.label}
-                {t.count ? <span className="ml-1.5 text-[11px] text-star-gold">{t.count}</span> : null}
+                {t.count ? <span className="ml-1.5 text-xs text-star-gold">{t.count}</span> : null}
                 {active && <span className="absolute inset-x-0 bottom-0 h-[3px] rounded-t bg-star-gold" />}
               </button>
             )
@@ -194,7 +194,7 @@ function MembersPane({ roster, onInvite }: { roster: RosterMember[]; onInvite: (
                   <div className="h-1.5 flex-1 overflow-hidden rounded-pill bg-[#EEF0F7]"><div className="h-full rounded-pill bg-space-violet" style={{ width: `${pct}%` }} /></div>
                   <span className="text-[12px] text-content-muted">{m.actionsDone}/{m.actionsTotal}</span>
                 </div>
-                <span className={`rounded-pill px-2.5 py-0.5 text-[11px] font-semibold ${m.status === 'active' ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-pathway-amber-bg text-[#C2722A]'}`}>
+                <span className={`rounded-pill px-2.5 py-0.5 text-xs font-semibold ${m.status === 'active' ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-pathway-amber-bg text-gold-ink'}`}>
                   {m.status === 'active' ? 'Active' : 'Invited'}
                 </span>
               </li>
@@ -245,12 +245,12 @@ function SchedulePane({
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-[10px] bg-surface">
                   <span className="font-display text-[15px] font-bold leading-none text-ink">{t.day}</span>
-                  <span className="text-[10px] uppercase text-content-muted">{t.month}</span>
+                  <span className="text-xs uppercase text-content-muted">{t.month}</span>
                 </div>
                 <div>
                   <p className="flex items-center gap-2 font-medium text-ink">
                     {s.title ?? 'Mentoring session'}
-                    <span className={`rounded-pill px-2 py-0.5 text-[10px] font-bold ${badge.cls}`}>{badge.text}</span>
+                    <span className={`rounded-pill px-2 py-0.5 text-xs font-bold ${badge.cls}`}>{badge.text}</span>
                   </p>
                   <p className="text-[13px] text-content-secondary">{t.timeLine}</p>
                 </div>
@@ -317,7 +317,7 @@ function ResourcesPane({
 
       {adding && (
         <div className="mb-4 flex items-center gap-2 rounded-[12px] bg-surface p-3">
-          <select value={moduleId} onChange={(e) => setModuleId(e.target.value)} className="flex-1 rounded-[9px] border border-line bg-white px-3 py-2 text-sm">
+          <select value={moduleId} onChange={(e) => setModuleId(e.target.value)} className="flex-1 rounded-[9px] border border-line-strong bg-white px-3 py-2 text-input mouse:text-sm">
             <option value="">Choose a course…</option>
             {available.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
           </select>
@@ -370,7 +370,7 @@ function ResourceManageRow({ r, tz, post }: { r: ResourceRow; tz: string; post: 
             type="date"
             value={due}
             onChange={(e) => { setDue(e.target.value); save(mandatory, e.target.value) }}
-            className="rounded-[9px] border border-line px-2.5 py-1.5 text-[13px] text-content"
+            className="rounded-[9px] border border-line-strong px-2.5 py-1.5 text-input mouse:text-sm text-content"
           />
         )}
         {!mandatory && due && <span className="text-[12px] text-content-faint">due {new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(new Date(due))}</span>}
@@ -401,7 +401,7 @@ function ActionsPane({ groups, tz, onAssign }: { groups: CohortActionGroup[]; tz
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-2 font-medium text-ink">
                     {g.title}
-                    <span className={`rounded-pill px-2 py-0.5 text-[10px] font-bold ${g.kind === 'training' ? 'bg-space-violet-chip text-space-violet-text' : 'bg-primary-soft text-primary'}`}>{g.kind === 'training' ? 'TRAINING' : 'TASK'}</span>
+                    <span className={`rounded-pill px-2 py-0.5 text-xs font-bold ${g.kind === 'training' ? 'bg-space-violet-chip text-space-violet-text' : 'bg-primary-soft text-primary'}`}>{g.kind === 'training' ? 'TRAINING' : 'TASK'}</span>
                   </p>
                   <p className="mt-0.5 text-[12.5px] text-content-muted">
                     {g.assigneeLabel}

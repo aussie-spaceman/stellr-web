@@ -50,7 +50,7 @@ export default async function AdminSpacesPage() {
       <div className="mb-1 flex items-start justify-between gap-3">
         <div>
           <p className="eyebrow text-brand-muted-soft">Admin · Community</p>
-          <h1 className="font-heading uppercase text-title text-brand-blue-dark">Manage Spaces</h1>
+          <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Manage Spaces</h1>
         </div>
       </div>
       <p className="mb-5 text-sm text-brand-muted-soft">

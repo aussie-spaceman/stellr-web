@@ -20,7 +20,7 @@ export default async function ResourcesPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Resources</h1>
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Resources</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">
           Files, links and recordings shared across everything you’re part of. Each one lives in the
           cohort, course, space or competition it came from.

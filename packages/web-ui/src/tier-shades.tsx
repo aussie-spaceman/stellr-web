@@ -90,7 +90,7 @@ export function BracketShadeKey({
 }) {
   return (
     <div className={cn('flex flex-wrap items-center gap-x-7 gap-y-3.5', className)}>
-      <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-content-faint">{label}</span>
+      <span className="text-xs font-bold uppercase tracking-[0.08em] text-content-faint">{label}</span>
       {(Object.keys(TIER_IDS_BY_BRACKET) as BracketId[]).map((b) => (
         <div key={b} className="flex items-center gap-[9px]">
           <span className="flex rounded-[5px] overflow-hidden border border-black/[0.06]">

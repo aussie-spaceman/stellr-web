@@ -94,7 +94,7 @@ export default async function CommunitySearchPage({
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Search</h1>
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Search</h1>
       </div>
 
       <form method="GET" className="mb-6 flex gap-2">
@@ -105,7 +105,7 @@ export default async function CommunitySearchPage({
             defaultValue={trimmedQ}
             placeholder="Search posts and resources…"
             autoFocus
-            className="w-full rounded-md border border-brand-border py-2 pl-9 pr-3 text-sm focus:border-brand-border focus:outline-none"
+            className="w-full rounded-md border border-line-strong py-2 pl-9 pr-3 text-input mouse:text-sm focus:border-brand-border focus:outline-none"
           />
         </div>
         <button
@@ -124,7 +124,7 @@ export default async function CommunitySearchPage({
 
       {posts.length > 0 && (
         <section className="mb-8">
-          <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Posts</h2>
+          <h2 className="mb-3 text-sm font-subheading font-semibold text-brand-muted-soft">Posts</h2>
           <ul className="space-y-2">
             {posts.map((post) => {
               const space = spaceOf(post.community_spaces)
@@ -153,7 +153,7 @@ export default async function CommunitySearchPage({
 
       {resources.length > 0 && (
         <section>
-          <h2 className="mb-3 text-sm font-subheading font-semibold uppercase tracking-wide text-brand-muted-soft">Resources</h2>
+          <h2 className="mb-3 text-sm font-subheading font-semibold text-brand-muted-soft">Resources</h2>
           <ul className="space-y-2">
             {resources.map((r) => (
               <li key={r.id}>

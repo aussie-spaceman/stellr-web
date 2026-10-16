@@ -34,7 +34,7 @@ function LessonRow({
       <Lock className="h-3 w-3" />
     </span>
   ) : current ? (
-    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-blue text-white text-[10px]">▸</span>
+    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-blue text-white text-xs">▸</span>
   ) : (
     <span className="h-5 w-5 rounded-full border-2 border-brand-border" />
   )
@@ -42,7 +42,7 @@ function LessonRow({
   const inner = (
     <div
       className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 ${
-        current ? 'bg-brand-soft' : locked ? 'opacity-60' : 'hover:bg-brand-canvas'
+        current ? 'bg-primary-soft' : locked ? 'opacity-60' : 'hover:bg-brand-canvas'
       }`}
       style={current ? { background: '#EAF0FE' } : undefined}
     >
@@ -52,7 +52,7 @@ function LessonRow({
         {item.title}
       </span>
       {item.estimated_minutes ? (
-        <span className="shrink-0 text-[11px] text-brand-muted-soft">{item.estimated_minutes} min</span>
+        <span className="shrink-0 text-xs text-brand-muted-soft">{item.estimated_minutes} min</span>
       ) : null}
     </div>
   )
@@ -80,7 +80,7 @@ export function CourseOutline({
   return (
     <aside className="rounded-2xl border border-brand-border bg-white">
       <div className="border-b border-brand-hairline px-5 py-4">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Course content</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">Course content</p>
       </div>
       <div className="max-h-[70vh] space-y-4 overflow-y-auto p-3">
         {sections.map((s, i) => (

@@ -163,7 +163,7 @@ export default async function CourseDetailPage({
           )}
 
           {eyebrow && (
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">{eyebrow}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">{eyebrow}</p>
           )}
           <h2 className="text-xl font-bold text-brand-blue-dark">{lesson.title}</h2>
           {lesson.body && (
@@ -176,7 +176,7 @@ export default async function CourseDetailPage({
               and routes Office documents through the in-browser viewer. */}
           {!lesson.locked && resources.length > 0 && (
             <div className="rounded-2xl border border-brand-border bg-white p-4">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Resources</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">Resources</p>
               <ul className="space-y-1.5">
                 {resources.map((r) => (
                   <li key={r.id}>

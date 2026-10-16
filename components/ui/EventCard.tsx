@@ -49,13 +49,13 @@ export function EventCard({ event }: EventCardProps) {
         <h3 className="font-bold text-brand-blue-dark mb-1 leading-snug">{event.title}</h3>
 
         {event.date && (
-          <p className="text-sm text-brand-grey-mid">
+          <p className="text-sm text-content-muted">
             {formatDateRange(event.date, event.endDate)}
           </p>
         )}
 
         {(event.venue || event.city) && (
-          <p className="text-sm text-brand-grey-mid">
+          <p className="text-sm text-content-muted">
             {[event.venue, event.city && event.state ? `${event.city}, ${event.state}` : event.city].filter(Boolean).join(' · ')}
           </p>
         )}
@@ -79,7 +79,7 @@ export function EventCard({ event }: EventCardProps) {
                 </Link>
               </div>
               {event.registrationCloseDate && (
-                <p className="mt-2 text-xs text-brand-grey-mid">
+                <p className="mt-2 text-xs text-content-muted">
                   Registration closes {formatDate(event.registrationCloseDate)}
                 </p>
               )}

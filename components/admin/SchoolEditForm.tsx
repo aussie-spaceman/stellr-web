@@ -134,7 +134,7 @@ export function SchoolEditForm({ school }: { school: School }) {
 function Field({ label, value }: { label: string; value: string | null }) {
   return (
     <div>
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">{label}</dt>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">{label}</dt>
       <dd className="text-sm text-brand-blue-dark">{value || <span className="text-brand-muted-soft">—</span>}</dd>
     </div>
   )
@@ -150,13 +150,13 @@ function Input({
 }) {
   return (
     <label className="block">
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">
+      <span className="text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">
         {label}{required && <span className="text-red-500"> *</span>}
       </span>
       <input
         value={value}
         onChange={onChange}
-        className="mt-1 w-full rounded-md border border-brand-border px-3 py-2 text-sm focus:border-brand-blue focus:outline-none"
+        className="mt-1 w-full rounded-md border border-line-strong px-3 py-2 text-input mouse:text-sm focus:border-brand-blue focus:outline-none"
       />
     </label>
   )

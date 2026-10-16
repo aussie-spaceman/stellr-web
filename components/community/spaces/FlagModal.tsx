@@ -124,7 +124,7 @@ export function FlagModal({ open, onClose, contentType, contentId, label, onRepo
         rows={3}
         maxLength={500}
         placeholder="Add a note (optional)"
-        className="mt-3 w-full rounded-lg border border-brand-border px-3 py-2 text-sm focus:border-brand-blue focus:outline-none"
+        className="mt-3 w-full rounded-lg border border-line-strong px-3 py-2 text-input mouse:text-sm focus:border-brand-blue focus:outline-none"
       />
     </Modal>
   )

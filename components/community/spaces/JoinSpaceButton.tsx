@@ -42,7 +42,7 @@ export function JoinSpaceButton({ spaceSlug, spaceName }: { spaceSlug: string; s
     <button
       onClick={join}
       disabled={state !== 'idle'}
-      className="rounded-full bg-brand-blue px-3 py-1 text-[11px] font-subheading font-semibold text-white transition hover:bg-brand-blue-dark disabled:opacity-60"
+      className="rounded-full bg-brand-blue px-3 py-1 text-xs font-subheading font-semibold text-white transition hover:bg-brand-blue-dark disabled:opacity-60"
     >
       {state === 'joining' ? 'Joining…' : state === 'joined' ? 'Joined ✓' : 'Join'}
     </button>

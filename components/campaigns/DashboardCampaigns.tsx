@@ -27,7 +27,7 @@ export async function DashboardCampaigns() {
 
   return (
     <section className="space-y-4">
-      <h2 className="text-ds-eyebrow font-bold uppercase tracking-widest text-pathway-amber">
+      <h2 className="text-ds-eyebrow font-bold text-gold-ink">
         Your campaigns
       </h2>
 

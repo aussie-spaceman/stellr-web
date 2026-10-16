@@ -154,7 +154,7 @@ export function RichTextEditor({
                 onChange={(e) => {
                   if (e.target.value) editor.chain().focus().insertContent(`{{${e.target.value}}}`).run()
                 }}
-                className="rounded border border-brand-border bg-white px-1.5 py-0.5 text-xs text-brand-muted"
+                className="rounded border border-line-strong bg-white px-1.5 py-0.5 text-input mouse:text-xs text-brand-muted"
               >
                 <option value="">Insert field…</option>
                 {mergeFields.map((f) => (

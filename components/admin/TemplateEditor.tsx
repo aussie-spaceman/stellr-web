@@ -216,13 +216,13 @@ export function TemplateEditor(props: TemplateEditorProps) {
       <div className="flex flex-wrap items-end gap-4 rounded-xl border border-line bg-white p-4">
         <label className="text-sm text-ink">
           <span className="block font-semibold">Document</span>
-          <select className="mt-1 rounded-control border border-line px-2 py-1.5" value={documentKey} onChange={(e) => setDocumentKey(e.target.value)} disabled={!!props.fromVersion}>
+          <select className="mt-1 rounded-control border border-line-strong px-2 py-1.5" value={documentKey} onChange={(e) => setDocumentKey(e.target.value)} disabled={!!props.fromVersion}>
             {props.keys.map((k) => <option key={k} value={k}>{k}</option>)}
           </select>
         </label>
         <label className="min-w-64 flex-1 text-sm text-ink">
           <span className="block font-semibold">Title signers see</span>
-          <input className="mt-1 w-full rounded-control border border-line px-2 py-1.5" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input className="mt-1 w-full rounded-control border border-line-strong px-2 py-1.5" value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
         <label className="text-sm text-ink">
           <span className="block font-semibold">{pdfPath ? 'Replace the PDF' : 'Upload the PDF'}</span>
@@ -259,7 +259,7 @@ export function TemplateEditor(props: TemplateEditorProps) {
                     type="button"
                     aria-label={`${fl.label} (${fl.role}, ${fl.type}), page ${fl.page} at ${fl.x}, ${fl.y}. Arrow keys move it.`}
                     aria-pressed={selected === i}
-                    className={`absolute touch-none overflow-hidden whitespace-nowrap rounded-sm border px-0.5 text-left text-[9px] leading-tight ${ROLE_STYLE[fl.role]} ${selected === i ? 'ring-2 ring-primary-deep' : ''}`}
+                    className={`absolute touch-none overflow-hidden whitespace-nowrap rounded-sm border px-0.5 text-left text-xs leading-tight ${ROLE_STYLE[fl.role]} ${selected === i ? 'ring-2 ring-primary-deep' : ''}`}
                     style={{ left: `${(fl.x / page.width) * 100}%`, top: `${(fl.y / page.height) * 100}%`, width: `${(w / page.width) * 100}%`, height: `${(h / page.height) * 100}%`, minHeight: 10, minWidth: 10 }}
                     onPointerDown={(e) => startDrag(e, i)}
                     onPointerMove={moveDrag}
@@ -346,7 +346,7 @@ function Text({ label, value, onChange }: { label: string; value: string; onChan
   return (
     <label className="block text-sm text-ink">
       <span className="block font-semibold">{label}</span>
-      <input className="mt-1 w-full rounded-control border border-line px-2 py-1" value={value} onChange={(e) => onChange(e.target.value)} />
+      <input className="mt-1 w-full rounded-control border border-line-strong px-2 py-1" value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   )
 }
@@ -355,7 +355,7 @@ function Select({ label, value, options, onChange }: { label: string; value: str
   return (
     <label className="block text-sm text-ink">
       <span className="block font-semibold">{label}</span>
-      <select className="mt-1 w-full rounded-control border border-line px-2 py-1" value={value} onChange={(e) => onChange(e.target.value)}>
+      <select className="mt-1 w-full rounded-control border border-line-strong px-2 py-1" value={value} onChange={(e) => onChange(e.target.value)}>
         {options.map((o) => <option key={o} value={o}>{o.replace('_', ' ')}</option>)}
       </select>
     </label>
@@ -366,7 +366,7 @@ function Num({ label, value, onChange, min = 0, max, hideLabel }: { label: strin
   return (
     <label className="block text-sm text-ink">
       <span className={hideLabel ? 'sr-only' : 'block font-semibold'}>{label}</span>
-      <input type="number" step={0.5} min={min} max={max} className="mt-1 w-full rounded-control border border-line px-2 py-1"
+      <input type="number" step={0.5} min={min} max={max} className="mt-1 w-full rounded-control border border-line-strong px-2 py-1"
         value={value} onChange={(e) => { const n = Number(e.target.value); if (Number.isFinite(n)) onChange(n) }} />
     </label>
   )

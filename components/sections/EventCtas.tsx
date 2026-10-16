@@ -174,7 +174,7 @@ function EventNotifyModal({
       ) : (
         <div className="flex flex-col items-center py-2 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-enviro-green-bg">
-            <Check size={30} strokeWidth={2.4} className="text-enviro-green" aria-hidden="true" />
+            <Check size={30} strokeWidth={2.4} className="text-enviro-green-text" aria-hidden="true" />
           </div>
           <h3 className="mt-5 font-display text-ds-h3 font-bold text-ink">You&rsquo;re on the list, {greeting}</h3>
           <p className="mt-2 text-sm leading-relaxed text-content-secondary">

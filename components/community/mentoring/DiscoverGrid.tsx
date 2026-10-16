@@ -52,7 +52,7 @@ export function DiscoverGrid({ cohorts, creditsRemaining }: { cohorts: DiscoverC
                 >
                   {c.name.charAt(0)}
                 </div>
-                <span className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-[11px] font-bold tracking-[0.04em] ${tile.chip}`}>
+                <span className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-xs font-bold tracking-[0.04em] ${tile.chip}`}>
                   {tile.label}
                 </span>
               </div>
@@ -64,7 +64,7 @@ export function DiscoverGrid({ cohorts, creditsRemaining }: { cohorts: DiscoverC
 
               <div className="mt-auto flex items-center justify-between gap-3 pt-4">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-content-faint">Access</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-content-faint">Access</p>
                   <p className={`text-sm font-bold ${label.className}`}>{label.text}</p>
                 </div>
                 <button

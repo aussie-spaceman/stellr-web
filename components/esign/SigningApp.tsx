@@ -213,7 +213,7 @@ function VerifyYear({ documentLabel, aboutSigner, retry, onSubmit }: { documentL
           value={year}
           onChange={(e) => setYear(e.target.value.replace(/\D/g, ''))}
           aria-describedby={retry ? 'birth-year-error' : undefined}
-          className="w-32 rounded-control border border-line px-3 py-2 text-ink"
+          className="w-32 rounded-control border border-line-strong px-3 py-2 text-ink"
         />
         {retry && (
           <p id="birth-year-error" role="alert" className="text-sm text-danger">
@@ -515,7 +515,7 @@ function DetailsStep({ headingRef, fields, values, errors, onChange, onBack, onN
               aria-invalid={!!err}
               aria-describedby={err ? `${id}-error` : undefined}
               onChange={(e) => onChange(f.name, e.target.value)}
-              className="mt-1 w-full rounded-control border border-line px-3 py-2 text-ink"
+              className="mt-1 w-full rounded-control border border-line-strong px-3 py-2 text-ink"
             />
             {err && <p id={`${id}-error`} className="mt-1 text-sm text-danger">{err}</p>}
           </div>
@@ -597,7 +597,7 @@ function SignStep({ headingRef, view, values, busy, error, nameDiffers, onBack, 
           onChange={(e) => setSignature(e.target.value)}
           aria-invalid={!!error}
           aria-describedby={error ? 'signature-error' : 'signature-hint'}
-          className="mt-1 w-full rounded-control border border-line px-3 py-2 font-display text-xl text-ink"
+          className="mt-1 w-full rounded-control border border-line-strong px-3 py-2 font-display text-xl text-ink"
           placeholder={view.signerName}
         />
         <p id="signature-hint" className="mt-1 text-xs text-content-muted">
@@ -656,7 +656,7 @@ function DeclineLink({ busy, onDecline }: { busy: boolean; onDecline: (reason: s
         value={reason}
         maxLength={500}
         onChange={(e) => setReason(e.target.value)}
-        className="w-full rounded-control border border-line px-3 py-2 text-ink"
+        className="w-full rounded-control border border-line-strong px-3 py-2 text-ink"
         rows={3}
       />
       <div className="flex flex-wrap gap-3">

@@ -100,13 +100,13 @@ export default function StudentsPage() {
           <h1 className="text-4xl sm:text-5xl font-bold mb-6 max-w-3xl short:text-3xl short:mb-3">
             Students are the core of our Community
           </h1>
-          <p className="text-lg text-content-faint max-w-2xl leading-relaxed short:text-base short:leading-snug">
+          <p className="text-lg text-hero-lead max-w-2xl leading-relaxed short:text-base short:leading-snug">
             You&rsquo;re the focus of the majority of our activities. Whether you&rsquo;re in high
             school or college, Stellr is where you start building the career — and the network —
             you&rsquo;ll carry for life.
           </p>
           <div className="mt-8 flex flex-wrap gap-3 short:mt-4">
-            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange hover:bg-amber-500">
+            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange text-ink hover:bg-pathway-amber">
               Join Free
             </a>
             <Link href="/events" className="btn-outline-white">
@@ -148,7 +148,7 @@ export default function StudentsPage() {
             A down-payment on your future as a professional
           </h2>
 
-          <p className="text-sm font-bold uppercase tracking-wide text-brand-orange-alt mb-4">
+          <p className="text-sm font-bold uppercase tracking-wide text-gold-ink mb-4">
             Why join?
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
@@ -193,7 +193,7 @@ export default function StudentsPage() {
           </h2>
 
           {/* NOTE: Draft placeholder copy — College section was blank in source doc. */}
-          <p className="text-sm font-bold uppercase tracking-wide text-brand-orange-alt mb-4">
+          <p className="text-sm font-bold uppercase tracking-wide text-gold-ink mb-4">
             Why join?
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -325,7 +325,7 @@ export default function StudentsPage() {
               {hsDownPayment.map((point) => (
                 <li key={point} className="flex gap-3">
                   <Trophy size={18} className="text-brand-orange shrink-0 mt-0.5" />
-                  <span className="text-sm text-content-faint leading-relaxed">{point}</span>
+                  <span className="text-sm text-hero-lead leading-relaxed">{point}</span>
                 </li>
               ))}
             </ul>
@@ -337,11 +337,11 @@ export default function StudentsPage() {
       <section className="section-padding bg-brand-blue-dark text-white text-center">
         <div className="container-max max-w-2xl">
           <h2 className="text-3xl font-bold mb-4">Your career starts now</h2>
-          <p className="text-content-faint leading-relaxed mb-8">
+          <p className="text-hero-lead leading-relaxed mb-8">
             Join free, find a competition, and start building the STEM Skills that set you apart.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
-            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange hover:bg-amber-500">
+            <a href={`${AUTH_URL}/sign-up`} className="btn-primary bg-brand-orange text-ink hover:bg-pathway-amber">
               Join Free
             </a>
             <Link href="/competitions" className="btn-outline-white">

@@ -51,7 +51,7 @@ function CourseCard({ m }: { m: TrainingModuleSummary }) {
           ) : (
             <Link
               href="/membership"
-              className="block w-full rounded-lg bg-brand-soft px-4 py-2 text-center text-sm font-semibold text-brand-blue-bright transition hover:bg-[#DCE6FD]"
+              className="block w-full rounded-lg bg-primary-soft px-4 py-2 text-center text-sm font-semibold text-brand-blue-bright transition hover:bg-[#DCE6FD]"
               style={{ background: '#EAF0FE', color: '#2C53C6' }}
             >
               View Access Options
@@ -85,7 +85,7 @@ export function BrowseCourses({ modules }: { modules: TrainingModuleSummary[] })
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search all courses"
           aria-label="Search all courses"
-          className="w-full rounded-xl border border-brand-border bg-white py-2.5 pl-10 pr-4 text-sm text-brand-blue-dark placeholder:text-brand-muted-soft focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          className="w-full rounded-xl border border-line-strong bg-white py-2.5 pl-10 pr-4 text-input mouse:text-sm text-brand-blue-dark placeholder:text-brand-muted-soft focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
         />
       </div>
 

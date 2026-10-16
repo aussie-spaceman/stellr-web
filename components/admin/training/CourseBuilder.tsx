@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useId, useState, useEffect, useRef } from 'react'
+import { Field, Input, Select, Textarea } from '@stellr/web-ui'
 import { postUpload, uploadDirectToStorage } from '@/lib/upload-client'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import {
@@ -57,6 +58,7 @@ export function CourseBuilder({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const courseSelectId = useId()
   const [selectedId, setSelectedId] = useState<string>(
     initialCourseId && courses.some((c) => c.id === initialCourseId) ? initialCourseId : courses[0]?.id ?? ''
   )
@@ -99,21 +101,16 @@ export function CourseBuilder({
     <div className="space-y-5">
       {/* Course selector */}
       <div className="flex flex-wrap items-center gap-3">
-        <label className="text-sm font-semibold text-brand-muted">Editing</label>
-        <div className="relative">
-          <select
-            value={selectedId}
-            onChange={(e) => setSelectedId(e.target.value)}
-            className="appearance-none rounded-lg border border-brand-border bg-white py-2 pl-3 pr-9 text-sm font-medium text-brand-blue-dark focus:border-brand-blue focus:outline-none"
-          >
+        <label htmlFor={courseSelectId} className="text-sm font-semibold text-brand-muted">Editing</label>
+        <div className="w-72 max-w-full">
+          <Select id={courseSelectId} value={selectedId} onChange={(e) => setSelectedId(e.target.value)} className="font-medium">
             {courses.length === 0 && <option value="">No courses yet</option>}
             {courses.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.title} {c.is_published ? '' : '(draft)'}
               </option>
             ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted-soft" />
+          </Select>
         </div>
       </div>
 
@@ -154,6 +151,7 @@ export function CourseBuilder({
 function CourseMetaCard({ course: m, onDone }: { course: AdminModule; onDone: () => void }) {
   const [title, setTitle] = useState(m.title)
   const [busy, setBusy] = useState(false)
+  const titleId = useId()
 
   const patch = async (body: Record<string, unknown>) => {
     setBusy(true)
@@ -173,8 +171,12 @@ function CourseMetaCard({ course: m, onDone }: { course: AdminModule; onDone: ()
     <div className="rounded-2xl border border-brand-border bg-white p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Course title</p>
+          {/* Edited in place at heading size (24px, so no iOS zoom); a real label names it. */}
+          <label htmlFor={titleId} className="block text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">
+            Course title
+          </label>
           <input
+            id={titleId}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={() => title.trim() && title !== m.title && patch({ title: title.trim() })}
@@ -225,7 +227,6 @@ function CredentialFields({ course: m, patch, busy }: { course: AdminModule; pat
   const [description, setDescription] = useState(m.credential_description ?? '')
   const [criteria, setCriteria] = useState(m.credential_criteria ?? '')
   const [skills, setSkills] = useState((m.credential_skills ?? []).join(', '))
-  const input = 'mt-1 w-full rounded-md border border-brand-border px-2.5 py-1.5 text-sm text-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-blue'
   const save = () =>
     patch({
       credentialTitle: title,
@@ -239,23 +240,19 @@ function CredentialFields({ course: m, patch, busy }: { course: AdminModule; pat
         {open ? 'Hide credential details' : 'Credential details (page + LinkedIn)'}
       </button>
       {open && (
-        <div className="mt-2 grid gap-3 rounded-lg border border-brand-border bg-brand-canvas p-3 md:grid-cols-2">
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft md:col-span-2">
-            Title on LinkedIn
-            <input className={input} value={title} placeholder={m.title} onChange={(e) => setTitle(e.target.value)} />
-          </label>
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">
-            Description
-            <textarea className={input} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-          </label>
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">
-            How it was earned
-            <textarea className={input} rows={3} value={criteria} onChange={(e) => setCriteria(e.target.value)} />
-          </label>
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft md:col-span-2">
-            Skills (comma-separated)
-            <input className={input} value={skills} onChange={(e) => setSkills(e.target.value)} />
-          </label>
+        <div className="mt-2 grid grid-cols-1 gap-3 rounded-lg border border-brand-border bg-brand-canvas p-3 md:grid-cols-2">
+          <Field label="Title on LinkedIn" labelSize="small" className="md:col-span-2">
+            <Input value={title} placeholder={m.title} onChange={(e) => setTitle(e.target.value)} />
+          </Field>
+          <Field label="Description" labelSize="small">
+            <Textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </Field>
+          <Field label="How it was earned" labelSize="small">
+            <Textarea rows={3} value={criteria} onChange={(e) => setCriteria(e.target.value)} />
+          </Field>
+          <Field label="Skills (comma-separated)" labelSize="small" className="md:col-span-2">
+            <Input value={skills} onChange={(e) => setSkills(e.target.value)} />
+          </Field>
           <div className="md:col-span-2">
             <button type="button" onClick={save} disabled={busy} className="rounded-lg border border-brand-border bg-white px-3 py-1.5 text-xs font-semibold text-brand-blue-dark hover:bg-brand-canvas disabled:opacity-50">
               {busy ? 'Saving…' : 'Save credential details'}
@@ -300,16 +297,17 @@ function CertTemplate({ moduleId, hasTemplate, onDone }: { moduleId: string; has
       Certificate
       {hasTemplate ? (
         <>
-          <span className="rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700">Template set</span>
-          <button onClick={clear} disabled={busy} className="text-brand-muted-soft hover:text-red-500 disabled:opacity-50"><X className="h-3.5 w-3.5" /></button>
+          <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700">Template set</span>
+          <button onClick={clear} disabled={busy} aria-label="Remove certificate template" className="text-brand-muted-soft hover:text-red-500 disabled:opacity-50"><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
         </>
       ) : (
-        <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-brand-border px-2 py-1 text-[11px] font-medium text-brand-muted hover:bg-brand-canvas">
-          <Upload className="h-3 w-3" /> {busy ? 'Uploading…' : 'Upload PDF'}
-          <input type="file" accept="application/pdf" className="hidden" disabled={busy} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+        <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-brand-border px-2 py-1 text-xs font-medium text-brand-muted hover:bg-brand-canvas focus-within:ring-2 focus-within:ring-primary-deep/30">
+          <Upload className="h-3 w-3" aria-hidden="true" /> {busy ? 'Uploading…' : 'Upload PDF'}
+          {/* sr-only, not display:none, so the picker is reachable by keyboard. */}
+          <input type="file" accept="application/pdf" className="sr-only" disabled={busy} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
         </label>
       )}
-      <a href={previewHref} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium text-brand-blue-bright hover:underline">
+      <a href={previewHref} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-brand-blue-bright hover:underline">
         Preview
       </a>
     </span>
@@ -392,8 +390,8 @@ function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Curriculum</p>
-        {ordered.length > 1 && <p className="text-[11px] text-brand-muted-soft">Drag sections to reorder</p>}
+        <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">Curriculum</p>
+        {ordered.length > 1 && <p className="text-xs text-brand-muted-soft">Drag sections to reorder</p>}
       </div>
       <p className="sr-only" aria-live="polite">{moveStatus}</p>
 
@@ -424,7 +422,9 @@ function Curriculum({ course: m, onDone }: { course: AdminModule; onDone: () => 
 
           {addingSection ? (
             <div className="flex items-center gap-2">
-              <input value={sectionTitle} onChange={(e) => setSectionTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createSection()} placeholder="Section name" autoFocus className="flex-1 rounded-md border border-brand-border px-3 py-2 text-sm" />
+              <div className="min-w-0 flex-1">
+                <Input value={sectionTitle} onChange={(e) => setSectionTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createSection()} placeholder="Section name" aria-label="Section name" autoFocus />
+              </div>
               <button onClick={createSection} disabled={!sectionTitle.trim()} className="rounded-md bg-brand-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Add</button>
               <button onClick={() => setAddingSection(false)} className="px-2 py-2 text-sm text-brand-muted-soft">Cancel</button>
             </div>
@@ -501,7 +501,9 @@ function SectionCard({
           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
         {editingTitle ? (
-          <input value={title} onChange={(e) => setTitle(e.target.value)} onBlur={rename} onKeyDown={(e) => { if (e.key === 'Enter') rename(); if (e.key === 'Escape') { setTitle(s.title); setEditingTitle(false) } }} autoFocus className="min-w-0 flex-1 rounded-md border border-brand-border px-2 py-1 text-sm" />
+          <div className="min-w-0 flex-1">
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} onBlur={rename} onKeyDown={(e) => { if (e.key === 'Enter') rename(); if (e.key === 'Escape') { setTitle(s.title); setEditingTitle(false) } }} aria-label={`Rename section ${s.title}`} autoFocus />
+          </div>
         ) : (
           <button onClick={() => setEditingTitle(true)} className="min-w-0 flex-1 truncate text-left text-sm font-bold text-brand-blue-dark">{s.title}</button>
         )}
@@ -528,7 +530,7 @@ function SectionCard({
               <button key={l.id} onClick={() => onSelectLesson(l)} className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition ${active ? 'bg-brand-soft' : 'hover:bg-brand-canvas'}`} style={active ? { background: '#EAF0FE' } : undefined}>
                 <Icon className="h-4 w-4 shrink-0 text-brand-muted-soft" />
                 <span className={`min-w-0 flex-1 truncate ${active ? 'font-semibold text-brand-blue-dark' : 'text-brand-muted'}`}>{l.title}</span>
-                {l.status === 'draft' && <span className="shrink-0 rounded-full bg-brand-hairline px-1.5 py-0.5 text-[10px] font-medium text-brand-muted-soft">Draft</span>}
+                {l.status === 'draft' && <span className="shrink-0 rounded-full bg-brand-hairline px-1.5 py-0.5 text-xs font-medium text-brand-muted-soft">Draft</span>}
               </button>
             )
           })}
@@ -688,11 +690,13 @@ function LessonEditor({
         <button onClick={onCancel} className="text-brand-muted-soft hover:text-brand-muted" aria-label="Close editor"><X className="h-4 w-4" /></button>
       </div>
 
-      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Lesson title" autoFocus className="w-full rounded-lg border border-brand-border px-3 py-2 text-sm" />
+      <Field label="Lesson title" labelSize="small">
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Lesson title" autoFocus />
+      </Field>
 
       {/* Content-type picker */}
       <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-brand-muted-soft">Lesson content</p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-muted-soft">Lesson content</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           {CONTENT_TYPES.map((c) => {
             const selected = contentKind === c.key
@@ -722,25 +726,26 @@ function LessonEditor({
           </div>
           <p className="mt-0.5 text-xs text-brand-muted-soft">{active.desc}</p>
           {active.input === 'url' && (
-            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className="mt-2 w-full rounded-md border border-brand-border px-3 py-2 text-sm" />
+            <div className="mt-2">
+              <Input type="url" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" aria-label={`${active.title} URL`} />
+            </div>
           )}
           {active.input === 'file' && (
-            <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-brand-border bg-white px-3 py-2 text-sm font-medium text-brand-muted hover:bg-brand-canvas">
-              <Upload className="h-4 w-4" /> {file ? file.name : active.cta}
-              <input type="file" accept={active.accept} className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+            <label className="mt-2 inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-md border border-brand-border bg-white px-3 py-2 text-sm font-medium text-brand-muted hover:bg-brand-canvas focus-within:ring-2 focus-within:ring-primary-deep/30">
+              <Upload className="h-4 w-4" aria-hidden="true" /> {file ? file.name : active.cta}
+              {/* sr-only, not display:none, so the picker is reachable by keyboard. */}
+              <input type="file" accept={active.accept} className="sr-only" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             </label>
           )}
           {active.input === 'select' && (
-            <select
-              value={interactiveKey}
-              onChange={(e) => setInteractiveKey(e.target.value)}
-              className="mt-2 w-full rounded-md border border-brand-border bg-white px-3 py-2 text-sm"
-            >
-              <option value="">{active.cta}…</option>
-              {INTERACTIVE_OPTIONS.map((o) => (
-                <option key={o.key} value={o.key}>{o.label}</option>
-              ))}
-            </select>
+            <div className="mt-2">
+              <Select value={interactiveKey} onChange={(e) => setInteractiveKey(e.target.value)} aria-label={active.title}>
+                <option value="">{active.cta}…</option>
+                {INTERACTIVE_OPTIONS.map((o) => (
+                  <option key={o.key} value={o.key}>{o.label}</option>
+                ))}
+              </Select>
+            </div>
           )}
         </div>
       )}
@@ -759,14 +764,20 @@ function LessonEditor({
       {/* Attached resources (files / links beneath the primary content). */}
       {existing && <LessonResources itemId={existing.id} />}
 
-      <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Lesson notes (optional) — shown beneath the content" rows={3} className="w-full rounded-lg border border-brand-border px-3 py-2 text-sm" />
+      <Field label="Lesson notes" labelSize="small" hint="Optional — shown beneath the content.">
+        <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Lesson notes (optional) — shown beneath the content" rows={3} />
+      </Field>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <input value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="Est. minutes" className="w-28 rounded-md border border-brand-border px-3 py-2 text-sm" />
-        <select value={status} onChange={(e) => setStatus(e.target.value as 'draft' | 'published')} className="rounded-md border border-brand-border px-2 py-2 text-sm">
-          <option value="published">Published</option>
-          <option value="draft">Draft</option>
-        </select>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Est. minutes" labelSize="small">
+          <Input value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="Est. minutes" inputMode="numeric" />
+        </Field>
+        <Field label="Status" labelSize="small">
+          <Select value={status} onChange={(e) => setStatus(e.target.value as 'draft' | 'published')}>
+            <option value="published">Published</option>
+            <option value="draft">Draft</option>
+          </Select>
+        </Field>
       </div>
 
       {error && <p className="text-xs text-red-600">{error}</p>}
@@ -812,10 +823,12 @@ function CreateCourse({ onCancel, onCreated }: { onCancel: () => void; onCreated
     <div className="rounded-2xl border border-brand-border bg-white p-5">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="font-semibold text-brand-blue-dark">New course</h3>
-        <button onClick={onCancel} className="text-brand-muted-soft hover:text-brand-muted"><X className="h-4 w-4" /></button>
+        <button onClick={onCancel} aria-label="Close" className="text-brand-muted-soft hover:text-brand-muted"><X className="h-4 w-4" aria-hidden="true" /></button>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && create()} placeholder="Course title" autoFocus className="flex-1 rounded-md border border-brand-border px-3 py-2 text-sm" />
+        <div className="min-w-0 flex-1">
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && create()} placeholder="Course title" aria-label="Course title" autoFocus />
+        </div>
         <button onClick={create} disabled={busy || !title.trim()} className="rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
           {busy ? 'Creating…' : 'Create'}
         </button>

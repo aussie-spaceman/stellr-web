@@ -54,10 +54,10 @@ export async function EntitlementsSummary({ memberId }: { memberId: string }) {
 
 function Stat({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
-    <div className="rounded-lg border border-brand-border bg-surface-muted px-4 py-3">
+    <div className="rounded-lg border border-brand-border bg-surface px-4 py-3">
       <p className="text-xs text-brand-muted-soft">{label}</p>
       <p className="mt-0.5 font-display text-2xl font-bold text-ink">{value}</p>
-      <p className="text-[11px] text-content-faint">{hint}</p>
+      <p className="text-xs text-content-faint">{hint}</p>
     </div>
   )
 }

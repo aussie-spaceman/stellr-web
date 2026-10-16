@@ -84,7 +84,7 @@ export function EventMerchandiseEditor({ eventSlug }: { eventSlug: string }) {
               <div>
                 <span
                   className={
-                    'mr-2 rounded px-1.5 py-0.5 text-[11px] ' +
+                    'mr-2 rounded px-1.5 py-0.5 text-xs ' +
                     (o.treatment === 'included' ? 'bg-amber-100 text-amber-800' : 'bg-brand-blue/10 text-brand-blue')
                   }
                 >
@@ -110,7 +110,7 @@ export function EventMerchandiseEditor({ eventSlug }: { eventSlug: string }) {
             setProductId(e.target.value)
             setVariantId('')
           }}
-          className="rounded-md border border-brand-border px-2 py-1 text-sm"
+          className="rounded-md border border-line-strong px-2 py-1 text-input mouse:text-sm"
         >
           <option value="">Product…</option>
           {products.map((p) => (
@@ -121,7 +121,7 @@ export function EventMerchandiseEditor({ eventSlug }: { eventSlug: string }) {
           value={variantId}
           onChange={(e) => setVariantId(e.target.value)}
           disabled={!product}
-          className="rounded-md border border-brand-border px-2 py-1 text-sm disabled:opacity-50"
+          className="rounded-md border border-line-strong px-2 py-1 text-input mouse:text-sm disabled:opacity-50"
         >
           <option value="">Variant…</option>
           {variants.map((v) => (
@@ -131,7 +131,7 @@ export function EventMerchandiseEditor({ eventSlug }: { eventSlug: string }) {
         <select
           value={treatment}
           onChange={(e) => setTreatment(e.target.value as 'included' | 'addon')}
-          className="rounded-md border border-brand-border px-2 py-1 text-sm"
+          className="rounded-md border border-line-strong px-2 py-1 text-input mouse:text-sm"
         >
           <option value="included">Included (free)</option>
           <option value="addon">Add-on (paid)</option>

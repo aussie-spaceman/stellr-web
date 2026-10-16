@@ -256,7 +256,7 @@ export default async function AccountPage({
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">My Account</h1>
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">My Account</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">Manage your Stellr membership and profile.</p>
       </div>
 

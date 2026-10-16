@@ -370,7 +370,7 @@ export default async function CompetitionsPage() {
       {/* ── Step 3 — See what's included ──────────────────────────────── */}
       <section className="section-padding bg-white">
         <div className="container-max">
-          <SectionHeading step="STEP 3" stepClassName="text-enviro-green" title={<>See what&rsquo;s included</>} className="mb-2" />
+          <SectionHeading step="STEP 3" stepClassName="text-enviro-green-text" title={<>See what&rsquo;s included</>} className="mb-2" />
           <p className="text-lg text-content-secondary max-w-3xl leading-relaxed">
             Core material is, and always will be, <strong className="text-ink">free</strong>. Unlock your
             membership — by participating in a competition — to gather the tools and resources to succeed.

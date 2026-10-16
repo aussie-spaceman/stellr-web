@@ -89,8 +89,8 @@ export function ManageWorkshop(props: {
               {(workshop.memberName ?? 'M').charAt(0).toUpperCase()}
             </span>
             <div className="flex items-center gap-2">
-              <h1 className="font-display text-[28px] font-bold tracking-[-0.02em]">{workshop.name}</h1>
-              <span className="rounded-pill bg-primary-soft px-2.5 py-0.5 text-[11px] font-bold text-primary">COACH</span>
+              <h1 className="font-display text-[28px] font-bold">{workshop.name}</h1>
+              <span className="rounded-pill bg-primary-soft px-2.5 py-0.5 text-xs font-bold text-primary">COACH</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -113,7 +113,7 @@ export function ManageWorkshop(props: {
             return (
               <button key={t.key} role="tab" aria-selected={active} onClick={() => setTab(t.key)} className={`relative -mb-px min-h-11 shrink-0 whitespace-nowrap pt-2 pb-3 text-sm transition-colors ${active ? 'font-bold text-white' : 'font-medium text-hero-dim hover:text-hero-lead'}`}>
                 {t.label}
-                {t.count ? <span className="ml-1.5 text-[11px] text-star-gold">{t.count}</span> : null}
+                {t.count ? <span className="ml-1.5 text-xs text-star-gold">{t.count}</span> : null}
                 {active && <span className="absolute inset-x-0 bottom-0 h-[3px] rounded-t bg-star-gold" />}
               </button>
             )
@@ -172,12 +172,12 @@ function SchedulePane({ sessions, tz, remaining, onScheduleAll, onScheduleOne, o
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-[10px] bg-surface">
                   <span className="font-display text-[15px] font-bold leading-none text-ink">{t.day}</span>
-                  <span className="text-[10px] uppercase text-content-muted">{t.month}</span>
+                  <span className="text-xs uppercase text-content-muted">{t.month}</span>
                 </div>
                 <div>
                   <p className="flex items-center gap-2 font-medium text-ink">
                     {s.title ?? 'Coaching session'}
-                    <span className={`rounded-pill px-2 py-0.5 text-[10px] font-bold ${badge.cls}`}>{badge.text}</span>
+                    <span className={`rounded-pill px-2 py-0.5 text-xs font-bold ${badge.cls}`}>{badge.text}</span>
                   </p>
                   <p className="text-[13px] text-content-secondary">{t.timeLine}</p>
                 </div>
@@ -239,7 +239,7 @@ function ResourcesPane({ resources, modules, tz, post }: { resources: ResourceRo
 
       {adding && (
         <div className="mb-4 flex items-center gap-2 rounded-[12px] bg-surface p-3">
-          <select value={moduleId} onChange={(e) => setModuleId(e.target.value)} className="flex-1 rounded-[9px] border border-line bg-white px-3 py-2 text-sm">
+          <select value={moduleId} onChange={(e) => setModuleId(e.target.value)} className="flex-1 rounded-[9px] border border-line-strong bg-white px-3 py-2 text-input mouse:text-sm">
             <option value="">Choose a course…</option>
             {available.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
           </select>
@@ -274,7 +274,7 @@ function ResourceManageRow({ r, tz, post }: { r: ResourceRow; tz: string; post: 
     <li className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
       <span className="flex items-center gap-2 font-medium text-ink">
         {r.title}
-        <span className={`rounded-pill px-2 py-0.5 text-[10px] font-bold ${mandatory ? 'bg-space-violet-chip text-space-violet-text' : 'bg-surface text-content-muted'}`}>
+        <span className={`rounded-pill px-2 py-0.5 text-xs font-bold ${mandatory ? 'bg-space-violet-chip text-space-violet-text' : 'bg-surface text-content-muted'}`}>
           {mandatory ? 'MANDATORY' : 'OPTIONAL'}
         </span>
       </span>
@@ -284,7 +284,7 @@ function ResourceManageRow({ r, tz, post }: { r: ResourceRow; tz: string; post: 
           Mandatory
         </label>
         {mandatory && (
-          <input type="date" value={due} onChange={(e) => { setDue(e.target.value); save(mandatory, e.target.value) }} className="rounded-[9px] border border-line px-2.5 py-1.5 text-[13px] text-content" />
+          <input type="date" value={due} onChange={(e) => { setDue(e.target.value); save(mandatory, e.target.value) }} className="rounded-[9px] border border-line-strong px-2.5 py-1.5 text-input mouse:text-sm text-content" />
         )}
         {!mandatory && due && <span className="text-[12px] text-content-faint">due {new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(new Date(due))}</span>}
         <button onClick={() => post({ action: 'unlinkTraining', moduleId: r.moduleId })} className="text-[13px] font-medium text-danger hover:underline">Remove</button>
@@ -314,14 +314,14 @@ function ActionsPane({ groups, tz, onAssign }: { groups: CohortActionGroup[]; tz
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-2 font-medium text-ink">
                     {g.title}
-                    <span className={`rounded-pill px-2 py-0.5 text-[10px] font-bold ${g.kind === 'training' ? 'bg-space-violet-chip text-space-violet-text' : 'bg-primary-soft text-primary'}`}>{g.kind === 'training' ? 'TRAINING' : 'TASK'}</span>
+                    <span className={`rounded-pill px-2 py-0.5 text-xs font-bold ${g.kind === 'training' ? 'bg-space-violet-chip text-space-violet-text' : 'bg-primary-soft text-primary'}`}>{g.kind === 'training' ? 'TRAINING' : 'TASK'}</span>
                   </p>
                   <p className="mt-0.5 text-[12.5px] text-content-muted">
                     {g.dueDate && <>due {new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(new Date(g.dueDate))}</>}
                     {g.remindBeforeHours ? ' · reminder on' : ''}
                   </p>
                 </div>
-                <span className={`shrink-0 rounded-pill px-2.5 py-0.5 text-[11px] font-semibold ${g.doneCount >= g.totalCount ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-pathway-amber-bg text-[#C2722A]'}`}>
+                <span className={`shrink-0 rounded-pill px-2.5 py-0.5 text-xs font-semibold ${g.doneCount >= g.totalCount ? 'bg-enviro-green-bg text-enviro-green-text' : 'bg-pathway-amber-bg text-gold-ink'}`}>
                   {g.doneCount >= g.totalCount ? 'Done' : 'To do'}{g.totalCount > 1 ? ` · ${g.doneCount}/${g.totalCount}` : ''}
                 </span>
               </li>

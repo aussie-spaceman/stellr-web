@@ -95,7 +95,7 @@ export function SpaceShell({ space, activeKey, children }: Props) {
 function RailGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="mt-5">
-      <p className="mb-1 px-1 text-[10.5px] font-subheading font-semibold uppercase tracking-[0.08em] text-brand-muted-soft">
+      <p className="mb-1 px-1 text-xs font-subheading font-semibold uppercase tracking-[0.08em] text-brand-muted-soft">
         {label}
       </p>
       <nav className="flex flex-col gap-0.5">{children}</nav>

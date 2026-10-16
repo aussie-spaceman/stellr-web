@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Field, Input } from '@stellr/web-ui'
 import { formatDateShort } from '@/lib/utils'
 import Link from 'next/link'
 
@@ -89,7 +90,7 @@ export function ActivityLogReview({ initialItems }: { initialItems: PendingItem[
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">Activity Log Review</h1>
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">Activity Log Review</h1>
         <p className="mt-1 text-sm text-brand-muted-soft">
           Members submit historical event activity for admin approval before it appears on their profile.
         </p>
@@ -135,45 +136,38 @@ export function ActivityLogReview({ initialItems }: { initialItems: PendingItem[
 
                 {/* Activity data */}
                 {isEditing ? (
-                  <div className="grid grid-cols-2 gap-3 bg-brand-canvas rounded-lg p-4 border border-brand-border">
-                    <div>
-                      <label className="block text-xs text-brand-muted-soft mb-1">Event Year</label>
-                      <input
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-brand-canvas rounded-lg p-4 border border-brand-border">
+                    <Field label="Event Year" labelSize="small">
+                      <Input
                         type="number"
+                        inputMode="numeric"
                         min={2000}
                         max={CURRENT_YEAR + 1}
                         value={editForm.event_year}
                         onChange={(e) => setEditForm((f) => ({ ...f, event_year: e.target.value }))}
-                        className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-brand-muted-soft mb-1">Event Location</label>
-                      <input
+                    </Field>
+                    <Field label="Event Location" labelSize="small">
+                      <Input
                         type="text"
                         value={editForm.event_location}
                         onChange={(e) => setEditForm((f) => ({ ...f, event_location: e.target.value }))}
-                        className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-brand-muted-soft mb-1">Team</label>
-                      <input
+                    </Field>
+                    <Field label="Team" labelSize="small">
+                      <Input
                         type="text"
                         value={editForm.team_name}
                         onChange={(e) => setEditForm((f) => ({ ...f, team_name: e.target.value }))}
-                        className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-brand-muted-soft mb-1">Awards</label>
-                      <input
+                    </Field>
+                    <Field label="Awards" labelSize="small">
+                      <Input
                         type="text"
                         value={editForm.award}
                         onChange={(e) => setEditForm((f) => ({ ...f, award: e.target.value }))}
-                        className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                       />
-                    </div>
+                    </Field>
                   </div>
                 ) : (
                   <div className="text-sm text-brand-muted space-y-1 pl-1">

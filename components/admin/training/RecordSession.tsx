@@ -20,7 +20,7 @@ interface RoomConfig {
 
 const STATUS_COPY: Record<string, { label: string; className: string }> = {
   available: { label: 'Recording saved to this lesson', className: 'text-enviro-green-text' },
-  pending: { label: 'Recording is processing…', className: 'text-pathway-amber-deep' },
+  pending: { label: 'Recording is processing…', className: 'text-gold-ink' },
   none: { label: 'No recording yet', className: 'text-content-faint' },
 }
 
@@ -128,7 +128,7 @@ export function RecordSession({
         title="Recording session (host)"
         description={
           config && !config.configured ? (
-            <span className="inline-flex items-center gap-1 font-medium text-pathway-amber-deep">
+            <span className="inline-flex items-center gap-1 font-medium text-gold-ink">
               <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" /> Dev room — recording capture needs JaaS configured
             </span>
           ) : undefined

@@ -26,7 +26,7 @@ export default async function AccessPage({ params }: { params: Promise<{ worksho
         <Link href={`/community/coaching/${workshopId}`} className="text-[13px] font-medium text-content-muted hover:text-primary">
           ← Back to workshop
         </Link>
-        <h1 className="mt-2 font-display text-[28px] font-bold tracking-[-0.02em] text-ink">Access &amp; sessions</h1>
+        <h1 className="mt-2 font-display text-[28px] font-bold text-ink">Access &amp; sessions</h1>
         <p className="mt-1 text-[15px] text-content-secondary">
           Your free coaching allowance, buying extra sessions, and requesting a time with {full.coachName ?? 'your coach'}.
         </p>

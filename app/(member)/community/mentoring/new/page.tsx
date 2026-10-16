@@ -23,7 +23,7 @@ export default async function NewCohortPage() {
       </Link>
       <div>
         <p className="font-subheading text-[13px] font-semibold uppercase tracking-[0.13em] text-space-violet">Mentor workspace</p>
-        <h1 className="mt-1 font-display text-[30px] font-bold tracking-[-0.02em] text-ink">Create a cohort</h1>
+        <h1 className="mt-1 font-display text-[30px] font-bold text-ink">Create a cohort</h1>
       </div>
       <CreateCohortForm modules={modules.map((m) => ({ id: m.id, title: m.title }))} isAdmin={member.isAdmin} />
     </div>

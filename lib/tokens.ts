@@ -10,21 +10,23 @@ export const tokens = {
     "utilityNavy": "#0A1B3C",
     "surface": "#F6F7FB",
     "white": "#FFFFFF",
-    "primary": "#3C6DF6",
+    "primary": "#3562E4",
     "primaryDeep": "#2C53C6",
     "donateGold": "#E0A23A",
     "starGold": "#FFC24B",
-    "spaceViolet": "#7C5CFC",
-    "enviroGreen": "#1FA97A",
+    "spaceViolet": "#6646E6",
+    "enviroGreen": "#189468",
     "pathwayAmber": "#E0922F",
     "pathwayAmberDeep": "#C2722A",
     "avatarTeal": "#16B6C4",
+    "goldInk": "#9E5B22",
+    "heroMuted": "#8E98C4",
     "text": {
       "primary": "#2A2F45",
       "body": "#454B68",
       "secondary": "#5A6178",
       "muted": "#6A708C",
-      "faint": "#8A90AD"
+      "faint": "#6A708C"
     },
     "border": "#E4E7F2",
     "borderLight": "#ECEEF6",
@@ -32,26 +34,26 @@ export const tokens = {
     "danger": "#B0554D"
   },
   "bracket": {
-    "school": "#3C6DF6",
+    "school": "#3562E4",
     "schoolTint": "#EAF0FE",
     "schoolDeep": "#2C53C6",
-    "college": "#7C5CFC",
+    "college": "#6646E6",
     "collegeTint": "#F4F0FF",
     "collegeDeep": "#5B3FD6",
     "adult": "#16B6C4",
     "adultTint": "#E4F7F9",
-    "adultDeep": "#0E8C99"
+    "adultDeep": "#0A7480"
   },
   "tier": {
     "explorer": "#7AA0FB",
-    "pathfinder": "#3C6DF6",
+    "pathfinder": "#3562E4",
     "scholar": "#1E3FA8",
     "alumni": "#A892FD",
-    "contributor": "#7C5CFC",
+    "contributor": "#6646E6",
     "counselor": "#4E2EC2",
     "educator": "#5FD3DD",
     "catalyst": "#16B6C4",
-    "innovator": "#0E8C99",
+    "innovator": "#0B7C88",
     "trailblazer": "#0A6470"
   },
   "themeTint": {
@@ -71,11 +73,11 @@ export const tokens = {
     "competitionBody": "Aileron"
   },
   "fontSize": {
-    "h1": "56px",
-    "h2": "32px",
+    "h1": "clamp(2.25rem, 1.6rem + 3vw, 3.5rem)",
+    "h2": "clamp(1.625rem, 1.35rem + 1.2vw, 2rem)",
     "h3": "18px",
     "eyebrow": "13px",
-    "lead": "18px",
+    "lead": "clamp(1rem, 0.95rem + 0.3vw, 1.125rem)",
     "body": "15px",
     "meta": "13px",
     "input": "16px"

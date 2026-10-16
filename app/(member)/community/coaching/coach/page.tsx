@@ -27,7 +27,7 @@ export default async function CoachDashboardPage() {
           <p className="font-subheading text-[13px] font-semibold uppercase tracking-[0.13em] text-space-violet">
             Coach workspace
           </p>
-          <h1 className="mt-1 font-display text-[34px] font-bold leading-tight tracking-[-0.02em] text-ink">
+          <h1 className="mt-1 font-display text-[34px] font-bold leading-tight text-ink">
             Your coaching workshops
           </h1>
         </div>
@@ -65,7 +65,7 @@ export default async function CoachDashboardPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-display text-[20px] font-bold text-ink">{c.name}</h3>
                     {needsScheduling && (
-                      <span className="rounded-pill bg-pathway-amber-bg px-2.5 py-0.5 text-[11px] font-bold text-[#C2722A]">NEEDS SCHEDULING</span>
+                      <span className="rounded-pill bg-pathway-amber-bg px-2.5 py-0.5 text-xs font-bold text-gold-ink">NEEDS SCHEDULING</span>
                     )}
                   </div>
                   <p className="mt-1 text-[13.5px] text-content-secondary">
@@ -83,7 +83,7 @@ export default async function CoachDashboardPage() {
 
       {completed.length > 0 && (
         <section>
-          <h2 className="mb-2 font-subheading text-[12px] font-semibold uppercase tracking-[0.1em] text-content-faint">Completed</h2>
+          <h2 className="mb-2 font-subheading text-[12px] font-semibold text-content-faint">Completed</h2>
           <ul className="divide-y divide-line-light rounded-card border border-line bg-white">
             {completed.map((c) => (
               <li key={c.id} className="flex items-center justify-between px-5 py-3.5">
@@ -99,7 +99,7 @@ export default async function CoachDashboardPage() {
 }
 
 function StatCard({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: string; tone: 'violet' | 'amber' | 'plain' }) {
-  const toneCls = tone === 'violet' ? 'text-space-violet' : tone === 'amber' ? 'text-pathway-amber' : 'text-content-secondary'
+  const toneCls = tone === 'violet' ? 'text-space-violet' : tone === 'amber' ? 'text-gold-ink' : 'text-content-secondary'
   return (
     <div className="rounded-card border border-line bg-white p-5">
       <p className={`flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.08em] ${toneCls}`}>{icon} {label}</p>

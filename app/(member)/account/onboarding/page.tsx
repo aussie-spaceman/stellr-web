@@ -54,7 +54,7 @@ export default async function OnboardingPage({
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
-        <h1 className="font-heading uppercase text-title text-brand-blue-dark">
+        <h1 className="font-heading text-ds-h2 text-brand-blue-dark">
           {volunteerFlow ? 'Join as a volunteer' : 'Complete your profile'}
         </h1>
         <p className="mt-2 text-sm text-brand-muted">

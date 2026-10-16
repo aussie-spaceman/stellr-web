@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Image from 'next/image'
 import { CarouselControls } from './CarouselControls'
 import { useAutoRotate } from './useAutoRotate'
 
 export interface StudentWorkSlide {
   src: string
+  /** Pre-sized WebP copies on the media host (lib/media-helpers sizedSrcSet). */
+  srcSet: string
   alt: string
 }
 
@@ -16,9 +17,11 @@ export interface StudentWorkSlide {
  * all, in order, and auto-cycles. Larger pools would pick a random six after
  * hydration so each visit shows a different mix without a mismatch.
  *
- * The slides are PNGs on the media host (up to ~600 KB each); next/image
- * serves them as AVIF/WebP at the width the frame needs. Rotation pauses on
- * hover, focus, a tap, the pause button, reduced motion, and off-screen.
+ * The slides are PNGs on the media host (up to ~600 KB each). They render from
+ * WebP copies cut once at upload, at 640/1080/1600 px, so the browser picks
+ * the width the frame needs without the next/image optimizer (whose resizes
+ * count against the Hobby team's monthly quota). Rotation pauses on hover,
+ * focus, a tap, the pause button, reduced motion, and off-screen.
  */
 const SHOW = 6
 const INTERVAL_MS = 5000
@@ -54,13 +57,16 @@ export function StudentWorkHero({ images, className = '' }: { images: StudentWor
         className="relative aspect-[16/9] w-full overflow-hidden rounded-2xl border border-line bg-midnight shadow-card-lift"
       >
         {slides.map((s, i) => (
-          <Image
+          // eslint-disable-next-line @next/next/no-img-element -- pre-sized srcset on the media host; next/image would re-encode it
+          <img
             key={s.src}
             src={s.src}
-            alt={s.alt}
-            fill
+            srcSet={s.srcSet}
             sizes="(min-width: 1024px) 540px, 100vw"
-            className={`object-contain transition-opacity duration-700 motion-reduce:transition-none ${i === rotate.index ? 'opacity-100' : 'opacity-0'}`}
+            alt={s.alt}
+            loading="lazy"
+            decoding="async"
+            className={`absolute inset-0 h-full w-full object-contain text-transparent transition-opacity duration-700 motion-reduce:transition-none ${i === rotate.index ? 'opacity-100' : 'opacity-0'}`}
             aria-hidden={i !== rotate.index}
           />
         ))}

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowRight, Users, Trophy, Rocket, GraduationCap, BookOpen, HeartHandshake, Microscope } from 'lucide-react'
 import { getFeaturedEvents, type StellarEvent } from '@/lib/sanity'
 import { EventCard } from '@/components/ui/EventCard'
+import { CARD_IMAGE_SIZES } from '@/components/ui/CoverImage'
 import { QuoteRotator } from '@/components/sections/QuoteRotator'
 import { ProofStrip } from '@/components/sections/ProofStrip'
 import { PHOTOS } from '@/lib/media-manifest'
@@ -209,7 +210,7 @@ export default async function HomePage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {events.map((event) => (
-              <EventCard key={event._id} event={event} />
+              <EventCard key={event._id} event={event} imageSizes={CARD_IMAGE_SIZES.threeUp} />
             ))}
           </div>
         </div>

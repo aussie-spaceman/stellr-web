@@ -340,6 +340,7 @@ export default async function CompetitionsPage() {
             <VideoTestimonial
               src={VIDEOS['testimonial-mia-cox'].src}
               poster={VIDEOS['testimonial-mia-cox'].poster}
+              posterSrcSet={VIDEOS['testimonial-mia-cox'].posterSrcSet}
               captionsSrc={VIDEOS['testimonial-mia-cox'].captions}
               title={VIDEOS['testimonial-mia-cox'].title}
             />

@@ -514,6 +514,7 @@ export default async function CampaignsPage() {
             <VideoTestimonial
               src={VIDEOS['testimonial-erin-henderson'].src}
               poster={VIDEOS['testimonial-erin-henderson'].poster}
+              posterSrcSet={VIDEOS['testimonial-erin-henderson'].posterSrcSet}
               captionsSrc={VIDEOS['testimonial-erin-henderson'].captions}
               title="Erin Henderson — Teacher, 2022"
             />

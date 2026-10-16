@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
 import { Play } from 'lucide-react'
 
 /**
@@ -15,12 +14,16 @@ import { Play } from 'lucide-react'
  * .poster.jpg + .en.vtt), resolved via `mediaUrl()` (lib/media-helpers). The
  * host is cross-origin, so the <video> is `crossOrigin="anonymous"` — without
  * it browsers refuse to load the captions <track>.
+ * The poster shows from `posterSrcSet`, WebP copies cut once at upload, so it
+ * never goes through the next/image optimizer (whose resizes count against
+ * the Hobby team's monthly quota).
  * `captionsSrc` is strongly recommended; if absent the component still renders
  * but logs a dev warning so a caption-less clip never ships unnoticed.
  */
 export function VideoTestimonial({
   src,
   poster,
+  posterSrcSet,
   captionsSrc,
   title = 'Stellr testimonial',
   captionsLabel = 'English',
@@ -28,6 +31,8 @@ export function VideoTestimonial({
 }: {
   src: string
   poster?: string
+  /** Pre-sized WebP copies of `poster` (VideoAsset.posterSrcSet). */
+  posterSrcSet?: string
   captionsSrc?: string
   title?: string
   captionsLabel?: string
@@ -51,10 +56,19 @@ export function VideoTestimonial({
           className="group absolute inset-0 h-full w-full cursor-pointer"
         >
           {poster ? (
-            // Through next/image: lazy-loaded (these sit below the fold on every
-            // page that uses them) and resized to the frame instead of the
+            // Lazy-loaded (these sit below the fold on every page that uses
+            // them), and from the srcset at the frame's width rather than the
             // full-size poster (up to ~240 KB).
-            <Image src={poster} alt="" fill sizes="(min-width: 1024px) 540px, 100vw" className="object-cover" />
+            // eslint-disable-next-line @next/next/no-img-element -- pre-sized srcset on the media host; next/image would re-encode it
+            <img
+              src={poster}
+              srcSet={posterSrcSet}
+              sizes="(min-width: 1024px) 540px, 100vw"
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
           ) : (
             <span className="absolute inset-0 bg-[linear-gradient(160deg,#20264F,#0E1330)]" />
           )}

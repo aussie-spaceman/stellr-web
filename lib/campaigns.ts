@@ -1,4 +1,5 @@
 import type { StellarEvent } from './sanity'
+import type { SanityImageProps } from './sanity-image-params'
 import { todayInAppZone } from './utils'
 import { gradeBand } from './grade-band'
 
@@ -194,8 +195,8 @@ export interface CampaignCardData {
   tagline?: string | null
   deadlineLabel: string
   registered?: boolean
-  /** Watermarked card-header image URL, computed server-side (urlFor + wmSrc). */
-  imageUrl?: string | null
+  /** Watermarked card-header image, built server-side (lib/sanity-image). */
+  image?: SanityImageProps | null
 }
 
 export function toCampaignCardData(e: StellarEvent): CampaignCardData {

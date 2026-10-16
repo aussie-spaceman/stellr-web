@@ -15,7 +15,6 @@ vi.mock('next/navigation', () => ({ notFound }))
 vi.mock('@/lib/sanity', () => ({
   getEventBySlug,
   urlFor: () => ({ width: () => ({ height: () => ({ url: () => '' }) }) }),
-  wmSrc: (s: string) => s,
 }))
 vi.mock('@/lib/schema-series', () => ({ getSeriesMembers: async () => [] }))
 vi.mock('@/lib/campaign-registrations', () => ({

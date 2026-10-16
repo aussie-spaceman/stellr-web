@@ -1,13 +1,16 @@
 import Link from 'next/link'
-import Image from 'next/image'
 import { ArrowRight, Rocket } from 'lucide-react'
-import { urlFor, wmSrc, type StellarEvent } from '@/lib/sanity'
+import type { StellarEvent } from '@/lib/sanity'
+import { sanityImage } from '@/lib/sanity-image'
+import { CoverImage, CARD_IMAGE_SIZES } from '@/components/ui/CoverImage'
 import { formatDate, formatDateRange, eventLastDay, registrationStatus } from '@/lib/utils'
 import { CardPills } from '@/components/ui/CardPills'
 import { gradeBand } from '@/lib/grade-band'
 
 interface EventCardProps {
   event: StellarEvent
+  /** The image's `sizes`: the grid the card sits in. Defaults to the /events board. */
+  imageSizes?: string
 }
 
 const statusConfig = {
@@ -16,7 +19,7 @@ const statusConfig = {
   closed: { label: 'Registration Closed', className: 'bg-red-100 text-red-700' },
 }
 
-export function EventCard({ event }: EventCardProps) {
+export function EventCard({ event, imageSizes = CARD_IMAGE_SIZES.eventsBoard }: EventCardProps) {
   const status = registrationStatus(event.registrationOpenDate, event.registrationCloseDate, eventLastDay(event))
   const { label, className } = statusConfig[status]
 
@@ -25,13 +28,7 @@ export function EventCard({ event }: EventCardProps) {
       {/* Image */}
       <div className="relative h-44 bg-gradient-to-br from-brand-blue-dark to-blue-900 flex items-center justify-center">
         {event.image ? (
-          <Image
-            src={wmSrc(urlFor(event.image).width(600).height(352).url())}
-            alt={event.title}
-            fill
-            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-            className="object-cover"
-          />
+          <CoverImage image={sanityImage(event.image, 'card', imageSizes)} alt={event.title} />
         ) : (
           <Rocket size={40} className="text-blue-300 opacity-60" />
         )}

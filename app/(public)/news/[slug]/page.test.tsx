@@ -18,7 +18,6 @@ vi.mock('@/lib/sanity', () => ({
   getNewsPostBySlug,
   getRelatedNewsPosts,
   urlFor: () => ({ width: () => ({ height: () => ({ url: () => '' }) }) }),
-  wmSrc: (s: string) => s,
 }))
 vi.mock('next-sanity', () => ({ PortableText: () => null }))
 vi.mock('@/components/forms/SubscribeForm', () => ({ SubscribeForm: () => null }))

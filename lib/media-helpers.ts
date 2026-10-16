@@ -30,6 +30,8 @@ export interface PhotoAsset extends BaseAsset {
 export interface VideoAsset extends BaseAsset {
   src: string // /videos/<file>.mp4
   poster: string // /videos/<file>.poster.jpg
+  /** Pre-sized WebP copies of the poster, as a width-descriptor srcset. */
+  posterSrcSet?: string
   captions: string // /videos/<file>.en.vtt (WebVTT, required)
   title: string
 }
@@ -99,6 +101,39 @@ export function mediaUrl(path: string): string {
  */
 export function mediaDownloadUrl(path: string): string {
   return MEDIA_BASE ? `${MEDIA_BASE}${path}?download=1` : path
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Pre-sized images. The student-work slides and the video posters skip
+ * next/image: every resize it makes counts against the Hobby team's monthly
+ * Image Optimization transformations, and these files never change. Instead
+ * scripts/upload-media.ts cuts WebP copies once, at upload, and stores each
+ * next to its original as `<name>-<width>.webp`:
+ *   /media/2026-10/student-work-2026-1.png → …/student-work-2026-1-640.webp
+ *   /videos/2026-10/<id>.poster.jpg        → …/<id>.poster-640.webp
+ * The script and the manifest both derive the widths from sizedWidths(), so
+ * the srcset names exactly the files that were uploaded.
+ * ───────────────────────────────────────────────────────────────────────── */
+export const SIZED_WIDTHS = [640, 1080, 1600]
+
+/** The widths cut from a source `sourceWidth` px wide: each SIZED_WIDTHS step
+ *  below it, then the source width itself in place of any larger step
+ *  (upscaling adds bytes, not detail). */
+export function sizedWidths(sourceWidth: number): number[] {
+  const below = SIZED_WIDTHS.filter((w) => w < sourceWidth)
+  return below.length < SIZED_WIDTHS.length ? [...below, sourceWidth] : below
+}
+
+/** The pre-sized copy's path: `/media/x.png` → `/media/x-640.webp`. */
+export function sizedPath(path: string, width: number): string {
+  return `${path.replace(/\.[^./]+$/, '')}-${width}.webp`
+}
+
+/** Width-descriptor srcset of an image's pre-sized copies on the media host. */
+export function sizedSrcSet(path: string, sourceWidth: number): string {
+  return sizedWidths(sourceWidth)
+    .map((w) => `${mediaUrl(sizedPath(path, w))} ${w}w`)
+    .join(', ')
 }
 
 /** True when an asset's bytes aren't ready yet → render a placeholder. */

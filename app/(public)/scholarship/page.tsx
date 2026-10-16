@@ -119,6 +119,7 @@ export default async function ScholarshipPage() {
             <VideoTestimonial
               src={VIDEOS['testimonial-mel-carson'].src}
               poster={VIDEOS['testimonial-mel-carson'].poster}
+              posterSrcSet={VIDEOS['testimonial-mel-carson'].posterSrcSet}
               captionsSrc={VIDEOS['testimonial-mel-carson'].captions}
               title={VIDEOS['testimonial-mel-carson'].title}
             />

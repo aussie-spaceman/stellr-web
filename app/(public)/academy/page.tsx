@@ -235,6 +235,7 @@ export default function AcademyPage() {
             <VideoTestimonial
               src={VIDEOS['testimonial-tom-wilson'].src}
               poster={VIDEOS['testimonial-tom-wilson'].poster}
+              posterSrcSet={VIDEOS['testimonial-tom-wilson'].posterSrcSet}
               captionsSrc={VIDEOS['testimonial-tom-wilson'].captions}
               title="Tom Wilson — Arizona Educator"
             />

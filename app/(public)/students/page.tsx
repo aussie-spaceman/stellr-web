@@ -238,7 +238,7 @@ export default function StudentsPage() {
           <div className="grid gap-6 sm:grid-cols-2">
             {[VIDEOS['testimonial-allyson-rose'], VIDEOS['testimonial-alvina-gakhokidze']].map((v) => (
               <figure key={v.id}>
-                <VideoTestimonial src={v.src} poster={v.poster} captionsSrc={v.captions} title={v.title} />
+                <VideoTestimonial src={v.src} poster={v.poster} posterSrcSet={v.posterSrcSet} captionsSrc={v.captions} title={v.title} />
                 <figcaption className="mt-3 text-sm font-semibold text-brand-blue-dark">{v.title}</figcaption>
               </figure>
             ))}

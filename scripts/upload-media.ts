@@ -13,6 +13,15 @@
  * length is skipped, so re-running after adding one file uploads one file.
  * Uploads use `addRandomSuffix: false` so the pathname is the URL.
  *
+ * Pre-sized copies: the student-work slides and the video posters (PRE_SIZE
+ * below) are served as they are, not through next/image, so each also gets
+ * WebP copies cut here with sharp, at the widths `sizedWidths()` picks for its
+ * source, stored next to it as `<name>-<width>.webp` (lib/media-helpers). The
+ * original is still uploaded and never altered. Re-encoding keeps whatever is
+ * in the pixels, so a watermark baked into a slide carries over. The copies
+ * are made in memory and go through the same pathname + size check, so a
+ * re-run with the same sharp version skips them.
+ *
  * Prerequisites:
  *   BLOB_READ_WRITE_TOKEN in .env.local (the CLI writes it when the store is
  *   connected: `vercel blob create-store stellr-media --access public`).
@@ -30,6 +39,8 @@ import * as dotenv from 'dotenv'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { head, list, put } from '@vercel/blob'
+import sharp from 'sharp'
+import { sizedPath, sizedWidths } from '../lib/media-helpers'
 
 const envPath = path.resolve(process.cwd(), '.env.local')
 dotenv.config(fs.existsSync(envPath) ? { path: envPath } : {})
@@ -52,9 +63,51 @@ const CONTENT_TYPES: Record<string, string> = {
   '.txt': 'text/plain',
 }
 
+// Images served pre-sized (see the header). Keep in step with the manifest
+// entries that carry a srcSet.
+const PRE_SIZE = [/^media\/[^/]+\/student-work-[^/]+\.png$/, /^videos\/[^/]+\/[^/]+\.poster\.jpg$/]
+
+// next/image's default quality, so the pages look as they did through the
+// optimizer.
+const WEBP_QUALITY = 75
+
 // Blob caches for a month by default; these filenames never change content
 // (a re-cut gets a new id in the manifest), so a year is safe.
 const CACHE_MAX_AGE = 60 * 60 * 24 * 365
+
+interface Upload {
+  pathname: string
+  size: number
+  contentType: string
+  body: () => fs.ReadStream | Buffer
+}
+
+/** The original, then its pre-sized WebP copies when PRE_SIZE matches it. */
+async function uploadsFor(root: string, file: string): Promise<Upload[]> {
+  const pathname = path.relative(root, file).split(path.sep).join('/')
+  const contentType = CONTENT_TYPES[path.extname(file).toLowerCase()]
+  if (!contentType) {
+    console.warn(`skip (unknown type): ${pathname}`)
+    return []
+  }
+  const uploads: Upload[] = [
+    { pathname, size: fs.statSync(file).size, contentType, body: () => fs.createReadStream(file) },
+  ]
+  if (!PRE_SIZE.some((re) => re.test(pathname))) return uploads
+
+  const { width } = await sharp(file).metadata()
+  if (!width) throw new Error(`no width in ${pathname}`)
+  for (const w of sizedWidths(width)) {
+    const buf = await sharp(file).resize({ width: w }).webp({ quality: WEBP_QUALITY, effort: 6 }).toBuffer()
+    uploads.push({ pathname: sizedPath(pathname, w), size: buf.length, contentType: 'image/webp', body: () => buf })
+  }
+  return uploads
+}
+
+// The pre-sized copies run 7–150 KB, which "0.1 MB" would hide.
+function formatBytes(n: number): string {
+  return n < 1e6 ? `${Math.round(n / 1e3)} KB` : `${(n / 1e6).toFixed(1)} MB`
+}
 
 function walk(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -102,31 +155,25 @@ async function main() {
 
   for (const s of subdirs) {
     for (const file of walk(path.join(root, s))) {
-      const pathname = path.relative(root, file).split(path.sep).join('/')
-      const size = fs.statSync(file).size
-      if (existing.get(pathname) === size) {
-        skipped++
-        continue
+      for (const u of await uploadsFor(root, file)) {
+        if (existing.get(u.pathname) === u.size) {
+          skipped++
+          continue
+        }
+        console.log(`${APPLY ? 'upload' : 'would upload'} ${u.pathname} (${formatBytes(u.size)})`)
+        uploaded++
+        bytes += u.size
+        if (!APPLY) continue
+        const result = await put(u.pathname, u.body(), {
+          access: 'public',
+          addRandomSuffix: false,
+          allowOverwrite: true,
+          contentType: u.contentType,
+          cacheControlMaxAge: CACHE_MAX_AGE,
+          multipart: u.size > 50 * 1024 * 1024,
+        })
+        baseUrl ??= result.url.slice(0, result.url.length - u.pathname.length - 1)
       }
-      const ext = path.extname(file).toLowerCase()
-      const contentType = CONTENT_TYPES[ext]
-      if (!contentType) {
-        console.warn(`skip (unknown type): ${pathname}`)
-        continue
-      }
-      console.log(`${APPLY ? 'upload' : 'would upload'} ${pathname} (${(size / 1e6).toFixed(1)} MB)`)
-      uploaded++
-      bytes += size
-      if (!APPLY) continue
-      const result = await put(pathname, fs.createReadStream(file), {
-        access: 'public',
-        addRandomSuffix: false,
-        allowOverwrite: true,
-        contentType,
-        cacheControlMaxAge: CACHE_MAX_AGE,
-        multipart: size > 50 * 1024 * 1024,
-      })
-      baseUrl ??= result.url.slice(0, result.url.length - pathname.length - 1)
     }
   }
 

@@ -178,6 +178,7 @@ export default function WhyStellrPage() {
               <VideoTestimonial
                 src={VIDEOS['testimonial-sepp-sprietsma'].src}
                 poster={VIDEOS['testimonial-sepp-sprietsma'].poster}
+                posterSrcSet={VIDEOS['testimonial-sepp-sprietsma'].posterSrcSet}
                 captionsSrc={VIDEOS['testimonial-sepp-sprietsma'].captions}
                 title={VIDEOS['testimonial-sepp-sprietsma'].title}
               />

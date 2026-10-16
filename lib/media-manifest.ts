@@ -24,6 +24,7 @@ import {
   PHOTO_WIDTHS,
   mediaDownloadUrl,
   mediaUrl,
+  sizedSrcSet,
   type AudioAsset,
   type CompetitionAsset,
   type PhotoAsset,
@@ -90,14 +91,18 @@ export const QUOTES: Record<string, QuoteAsset> = {
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Videos. Each lives under /videos/2026-10/ with its poster and WebVTT
- * captions (generated from the file itself and reviewed).
+ * captions (generated from the file itself and reviewed). The poster renders
+ * from its pre-sized WebP copies (lib/media-helpers sizedSrcSet), so
+ * `posterWidth` must be the uploaded poster's real pixel width.
  * ───────────────────────────────────────────────────────────────────────── */
-function video(id: string, title: string): VideoAsset {
+function video(id: string, title: string, posterWidth = 1280): VideoAsset {
+  const poster = `/videos/2026-10/${id}.poster.jpg`
   return {
     id,
     title,
     src: mediaUrl(`/videos/2026-10/${id}.mp4`),
-    poster: mediaUrl(`/videos/2026-10/${id}.poster.jpg`),
+    poster: mediaUrl(poster),
+    posterSrcSet: sizedSrcSet(poster, posterWidth),
     captions: mediaUrl(`/videos/2026-10/${id}.en.vtt`),
   }
 }
@@ -108,7 +113,7 @@ export const VIDEOS: Record<string, VideoAsset> = {
   'testimonial-mel-carson': video('testimonial-mel-carson', 'Mel Carson — previous participant'),
   'testimonial-allyson-rose': video('testimonial-allyson-rose', 'Allyson Rose — participant testimonial'),
   'testimonial-alvina-gakhokidze': video('testimonial-alvina-gakhokidze', 'Alvina Gakhokidze — former participant'),
-  'testimonial-maureen-lancaster': video('testimonial-maureen-lancaster', 'Maureen Lancaster — Willcox Unified School District'),
+  'testimonial-maureen-lancaster': video('testimonial-maureen-lancaster', 'Maureen Lancaster — Willcox Unified School District', 640),
   'testimonial-sepp-sprietsma': video('testimonial-sepp-sprietsma', 'Joseph “Sepp” Sprietsma — College Career Pathways'),
   'testimonial-erin-henderson': video('testimonial-erin-henderson', 'Erin Henderson — Teacher, 2022'),
   'testimonial-tom-wilson': video('testimonial-tom-wilson', 'Tom Wilson — educator testimonial'),
@@ -195,26 +200,36 @@ export const RFP_2026_PREVIEW_HREF = COMPETITION['space-rfp-2026-excerpt'].previ
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Student work shown in the rotating showcase on /competitions and
- * /curriculum: 2026 work only, each with its own description.
+ * /curriculum: 2026 work only, each with its own description. Each slide
+ * renders from its pre-sized WebP copies (lib/media-helpers sizedSrcSet), so
+ * the width passed to slide() must be the uploaded PNG's real pixel width.
  * ───────────────────────────────────────────────────────────────────────── */
 export interface StudentWorkImage {
   src: string
+  srcSet: string
   alt: string
 }
 
+function slide(path: string, width: number, alt: string): StudentWorkImage {
+  return { src: mediaUrl(path), srcSet: sizedSrcSet(path, width), alt }
+}
+
 export const STUDENT_WORK: StudentWorkImage[] = [
-  {
-    src: mediaUrl('/media/2026-10/student-work-2026-1.png'),
-    alt: 'Student proposal slide, Location Justification: a lunar south-pole temperature map with the chosen crater circled, beside notes on resources and sunlight',
-  },
-  {
-    src: mediaUrl('/media/2026-10/student-work-2026-2.png'),
-    alt: 'Student proposal slide, Food Supply: two-floor plan of hydroponic growing towers with notes on crops, algae and water use',
-  },
-  {
-    src: mediaUrl('/media/2026-10/student-work-2026-3.png'),
-    alt: 'Student proposal slide, Main Base Layout: a site plan and 3D floor model of a lunar base with an emergency bunker below the first floor',
-  },
+  slide(
+    '/media/2026-10/student-work-2026-1.png',
+    1600,
+    'Student proposal slide, Location Justification: a lunar south-pole temperature map with the chosen crater circled, beside notes on resources and sunlight',
+  ),
+  slide(
+    '/media/2026-10/student-work-2026-2.png',
+    1600,
+    'Student proposal slide, Food Supply: two-floor plan of hydroponic growing towers with notes on crops, algae and water use',
+  ),
+  slide(
+    '/media/2026-10/student-work-2026-3.png',
+    720,
+    'Student proposal slide, Main Base Layout: a site plan and 3D floor model of a lunar base with an emergency bunker below the first floor',
+  ),
 ]
 
 /* ─────────────────────────────────────────────────────────────────────────

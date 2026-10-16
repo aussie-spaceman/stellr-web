@@ -251,7 +251,7 @@ export default function MembershipExplorer({
         <section className="bg-white" style={{ padding: '48px 24px' }}>
           <div className="max-w-3xl mx-auto">
             <figure>
-              <VideoTestimonial src={video.src} poster={video.poster} captionsSrc={video.captions} title={video.title} />
+              <VideoTestimonial src={video.src} poster={video.poster} posterSrcSet={video.posterSrcSet} captionsSrc={video.captions} title={video.title} />
               <figcaption className="mt-3 text-center text-sm font-semibold text-ink">{video.title}</figcaption>
             </figure>
           </div>

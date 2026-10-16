@@ -1,7 +1,7 @@
 # Skills: CI waits in the desktop app — 2026-10-16
 
-Slug: `skills-ci-waits`. Handover: none; the PR body is the record. Doc snapshot: none.
-PR from `docs/skills-ci-waits` → `dev`. Migration: none.
+Slug: `skills-ci-waits`. Handover: none; the PR #440 body is the record. Doc snapshot: none.
+PR #440 → `dev`. Migration: none.
 
 ship, promote and close-out now say how to wait on CI in the Claude desktop app's Code tab, which forbids polling. Read the checks once; if they are pending, end the turn on one "CI finished" button whose message carries the next command (ship Phase 3, promote Steps 5 and 8, close-out step 6). Each skill also starts with a stranded-PR check that lists the close-out and promotion-record PRs still open against `dev` (ship Phase 0, promote Step 1, close-out step 3).
 
